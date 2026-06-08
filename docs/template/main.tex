@@ -1,0 +1,122 @@
+% Fact-checking Beamer slide template
+\documentclass[aspectratio=169,10pt]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[vietnamese]{babel}
+\usepackage{pgfpages}
+\usepackage{bm}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{groupplots}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{listings}
+\usepackage[most]{tcolorbox}
+
+\newtcbox{\code}{on line,
+    arc=2pt,
+    colback=gray!20,
+    colframe=gray!20,
+    boxrule=0pt,
+    boxsep=0pt,
+    left=2pt,
+    right=2pt,
+    top=2pt,
+    bottom=2pt,
+    fontupper=\ttfamily
+}
+
+\newtcolorbox{softbox}{
+    colback=black!3,
+    colframe=black!3,
+    arc=8pt,
+    boxrule=0pt,
+    left=10pt,
+    right=10pt,
+    top=8pt,
+    bottom=8pt,
+    fontupper=\itshape\color{black!80}
+}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\definecolor{termBG}{HTML}{0C1C23}
+\definecolor{termRed}{HTML}{FF5555}
+\definecolor{termYellow}{HTML}{F1FA8C}
+\definecolor{termWhite}{HTML}{F8F8F2}
+\definecolor{termGray}{HTML}{A9B7C6}
+
+\lstdefinestyle{terminalstyle}{
+    basicstyle=\ttfamily\scriptsize\color{termWhite},
+    backgroundcolor=\color{termBG},
+    breaklines=true,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    frame=single,
+    rulecolor=\color{termBG},
+    framesep=4pt,
+    numbers=none
+}
+
+\newcommand{\cred}[1]{\textcolor{termRed}{#1}}
+\newcommand{\cyellow}[1]{\textcolor{termYellow}{#1}}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    language=C++
+}
+\lstset{style=mystyle}
+
+\input{customize}
+
+\title[Fact-Checking Slides]{\large\textbf{Fact-Checking Slide Template}}
+\author[Your Name]{Your Name \inst{1}}
+\institute[]{
+\inst{1}Your University or Organization
+}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+    \titlepage
+\end{frame}
+
+\begin{frame}[t,allowframebreaks]
+    \frametitle{Outline}
+    \tableofcontents
+\end{frame}
+
+\input{example}
+
+\section*{Reference}
+\begin{frame}[t,allowframebreaks]
+    \footnotesize
+    \frametitle{Reference}
+    \bibliography{reference}
+\end{frame}
+
+\end{document}
