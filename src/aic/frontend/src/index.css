@@ -43,9 +43,9 @@
   /* Elevation & Shadows */
   --shadow-level-0: none;
   --shadow-level-1: 0 0.175px 1.041px rgba(0, 0, 0, 0.01),
-                    0 0.8px 2.925px rgba(0, 0, 0, 0.02),
-                    0 2.025px 7.847px rgba(0, 0, 0, 0.027),
-                    0 4px 18px rgba(0, 0, 0, 0.04);
+    0 0.8px 2.925px rgba(0, 0, 0, 0.02),
+    0 2.025px 7.847px rgba(0, 0, 0, 0.027),
+    0 4px 18px rgba(0, 0, 0, 0.04);
   --shadow-level-2: 0 23px 52px rgba(0, 0, 0, 0.05);
 
   /* Typography Fallbacks and Tracking */
@@ -66,6 +66,33 @@ body {
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Global UI scale: prefer `zoom` where supported, fall back to transform */
+html {
+  zoom: 0.8;
+  /* most browsers */
+}
+
+@supports not (zoom: 1) {
+  body {
+    transform: scale(0.8);
+    transform-origin: 0 0;
+    width: calc(100% / 0.8);
+  }
+}
+
+/* Also scale the React root element to ensure the UI shrinks visibly */
+#root {
+  zoom: 0.8 !important;
+}
+
+@supports not (zoom: 1) {
+  #root {
+    transform: scale(0.8) !important;
+    transform-origin: 0 0 !important;
+    width: calc(100% / 0.8) !important;
+  }
 }
 
 /* Typography styles matching DESIGN.md */
@@ -472,7 +499,8 @@ h3 {
 .frame-image-container {
   position: relative;
   width: 100%;
-  padding-top: 66.67%; /* 3:2 Aspect Ratio */
+  padding-top: 66.67%;
+  /* 3:2 Aspect Ratio */
   background-color: var(--color-canvas-soft);
   overflow: hidden;
 }
@@ -651,11 +679,23 @@ h3 {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
