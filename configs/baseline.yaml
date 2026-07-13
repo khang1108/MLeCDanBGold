@@ -1,0 +1,41 @@
+dataset:
+  version: "hcmai2026_v1"
+  frames_path: "data/metadata/frames.parquet"
+  enrichment_path: "artifacts/enrichment/frame_enrichment.parquet"
+
+models:
+  embedding:
+    name: "google/siglip2-base-patch16-224"
+    device: "cuda"
+    batch_size: 64
+
+  reranker:
+    enabled: true
+    name: "Qwen/Qwen3-VL-Reranker-2B"
+    device: "cuda"
+    batch_size: 8
+
+index:
+  type: "flat_ip"
+  path: "artifacts/indexes/visual.index"
+  mapping_path: "artifacts/embeddings/frame_mapping.parquet"
+
+search:
+  profiles:
+    fast:
+      visual_candidates: 100
+      rerank_count: 20
+      temporal_window_ms: 1000
+
+    accurate:
+      visual_candidates: 500
+      rerank_count: 100
+      temporal_window_ms: 3000
+
+  fusion:
+    method: "rrf"
+    rrf_k: 60
+
+api:
+  default_top_k: 20
+  maximum_top_k: 100

@@ -1,4 +1,68 @@
-# Frontend
-src/aic/frontend/build
-src/aic/frontend/node_modules
+# Python bytecode, caches, and test output
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Virtual environments and local configuration
+.venv/
+venv/
+env/
+ENV/
 .env
+.env.*
+!.env.example
+
+# Node.js and frontend build output
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+frontend/build/
+frontend/.cache/
+
+# Local datasets and generated AI artifacts
+data/
+artifacts/
+runs/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.index
+*.npy
+*.npz
+*.parquet
+
+# IDE and operating-system files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local logs and temporary files
+*.log
+*.tmp
+tmp/
+temp/
+
+# LaTeX auxiliary output
+*.aux
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.nav
+*.out
+*.snm
+*.toc
+*.synctex.gz
