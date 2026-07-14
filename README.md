@@ -1,157 +1,152 @@
 # HCMAI 2026 Frame Retrieval
 
-HCMAI is a research-oriented video frame retrieval system for the Ho Chi
-Minh City AI Challenge 2026. Given a natural-language query, the system
-retrieves the most relevant frame from a large video corpus and returns the
+HCMAI is a research-oriented video-frame retrieval project for the Ho Chi
+Minh City AI Challenge 2026. The target interaction is a Vietnamese or
+English natural-language query that returns the exact matching frame's
 official `video_id` and `frame_idx`.
 
-The repository is optimized for a hackathon workflow: fast experiments,
-reproducible evaluation, simple integration, and low online search latency.
-It is intentionally not designed as an enterprise application.
+The project is being built as a small, measurable hackathon baseline. The
+current code focuses on shared contracts, search orchestration, and reusable
+utilities. Retrieval models and offline corpus processing will be added behind
+those contracts.
 
-## Competition goals
+## Current status
 
-The system targets the following tasks:
+Implemented foundations:
 
-- Textual Known-Item Search (KIS).
-- Video KIS and temporal search.
-- Ad-hoc video search.
-- Video Question Answering (VQA).
+- Pydantic 2 schemas for frames, enrichment, retrieval, search, evaluation,
+  enums, and conversational feedback.
+- `SearchEngine` orchestration with configurable `accurate` and `fast`
+  profiles, optional reranking, response materialization, and latency fields.
+- Utility helpers for YAML/JSON/Parquet I/O, image loading, timing, and
+  logging.
+- A Node.js frontend that remains the intended user interface.
+- Lightweight schema tests and smoke-testable modules.
 
-The two competition profiles have different priorities:
+Still to implement:
 
-| Profile      | Main priority      | Typical behavior                           |
-| ------------ | ------------------ | ------------------------------------------ |
-| `accurate` | Retrieval accuracy | More candidates and deeper reranking       |
-| `fast`     | Online latency     | Fewer candidates and lightweight reranking |
+- Video discovery, frame extraction, and canonical metadata generation.
+- Multilingual image-text embeddings and FAISS candidate retrieval.
+- Captioning, OCR, ASR, score fusion, and multimodal reranking.
+- Offline evaluation runners and a production API boundary.
 
-## Retrieval approach
+## Target retrieval flow
 
 ```mermaid
 flowchart TD
-    Q["Text query"] --> E["Query encoder"]
+    Q["Vietnamese or English query"] --> E["Query encoding"]
     E --> R["Candidate retrieval"]
     R --> F["Score fusion"]
-    F --> M["Multimodal reranking"]
-    M --> T["Temporal refinement"]
-    T --> U["Ranked frames"]
+    F --> M["Optional multimodal reranking"]
+    M --> T["Optional temporal refinement"]
+    T --> U["video_id + frame_idx"]
 ```
 
-The current baseline is expected to use:
+The design keeps expensive offline work separate from online search. Model
+checkpoints, candidate counts, and search profile values belong in
+configuration, while frame identifiers and API shapes belong in the shared
+schemas.
 
-- A multilingual image-text encoder such as SigLIP 2.
-- FAISS for fast vector similarity search.
-- Offline frame captions to enrich semantic retrieval.
-- OCR and ASR as optional evidence channels.
-- A multimodal reranker such as Qwen3-VL-Reranker or BLIP-ITM.
-
-Models are configuration choices. Retrieval code should not hard-code a
-specific checkpoint.
-
-## Project principles
-
-- Keep the code simple enough to modify during the competition.
-- Prefer measurable experiments over speculative complexity.
-- Preserve exact `frame_id`, `video_id`, and `frame_idx` mappings.
-- Separate expensive offline processing from online search.
-- Store every experiment's configuration, metrics, and failures.
-- Follow PEP 8 for all Python code.
-- Avoid microservices, distributed databases, and unnecessary abstraction.
-
-## Target repository structure
+## Repository structure
 
 ```text
-src/
-└── aic/
-    ├── search.py                       # Main non-conversational pipeline
-    ├── common/
-    │   ├── config.py                   # YAML loading and shared settings
-    │   ├── schemas/
-    │   └── utils/
-    ├── data/
-    ├── retriever/
-    ├── enrichment/
-    ├── reranking/
-    ├── evaluation/
-    └── agents/
-        ├── __init__.py
-        └── kisc/
+frontend/                         Existing Node.js UI
+src/hcmai/
+├── search.py                     Search orchestration
+└── common/
+    ├── config.py                 Shared settings scaffolding
+    ├── schemas/                  Pydantic contracts
+    │   └── README.md              Schema documentation
+    └── utils/                    Generic helpers
+        └── README.md              Utility documentation
+configs/                          Experiment and search configuration
+data/                             Local corpus and metadata
+artifacts/                        Generated embeddings and indexes
+runs/                             Evaluation outputs
+tests/                            Contract tests and smoke tests
 ```
 
-The structure is a target, not a requirement to create empty directories.
-Add a directory or file only when its first implementation is needed.
-
-## Component ownership
-
-| Component                  | Primary owner     | Main responsibility                         |
-| -------------------------- | ----------------- | ------------------------------------------- |
-| Architecture and contracts | AI Tech Lead      | Schemas, orchestration, evaluation          |
-| Data pipeline              | Data Engineer     | Video discovery, frame extraction, metadata |
-| Dense retrieval            | AI Engineer 1     | Encoders, embeddings, FAISS indexing        |
-| Enrichment and reranking   | AI Engineer 2     | Captions, OCR, ASR, reranking               |
-| API and UI                 | Software Engineer | FastAPI and existing Node.js frontend       |
-
-Ownership prevents merge conflicts; it does not prevent collaboration.
-Changes to `src/aic/schemas.py` require Tech Lead review because all
-components depend on those contracts.
+The repository intentionally does not yet contain separate retriever,
+enrichment, reranking, evaluation, or backend packages. Add them when a real
+implementation is ready; do not create placeholder directories.
 
 ## Shared schemas
 
-Canonical Pydantic models live in [`src/aic/schemas.py`](src/aic/schemas.py).
-The current contracts cover:
+Use the contracts in [`src/hcmai/common/schemas`](src/hcmai/common/schemas)
+instead of local dictionaries or duplicate dataclasses. The package documents
+all models and enums in its [schema README](src/hcmai/common/schemas/README.md).
 
-- `FrameRecord` and `FrameEnrichment`.
-- `SearchRequest`, `SearchFilters`, and `SearchResponse`.
-- `RetrievalCandidate` and per-source scores.
-- `EvaluationQuery` and competition task metadata.
+Key identifiers are:
 
-Components must exchange these models or documented artifact tables. Do not
-create local variants of shared field names.
+- `frame_id`: globally unique and stable across pipeline reruns.
+- `video_id`: source video identifier.
+- `frame_idx`: authoritative frame index for submission.
+- `timestamp_ms`: presentation timestamp for previews and temporal search.
+
+`frame_idx` must not be inferred from `timestamp_ms * fps`; variable-frame-rate
+videos and decoder behavior can make that mapping incorrect.
+
+Example:
+
+```python
+from hcmai.common.schemas.search import SearchRequest
+
+request = SearchRequest(query="một người đang đi bộ", top_k=20)
+```
+
+## Utilities
+
+The [utility README](src/hcmai/common/utils/README.md) contains complete usage
+examples. The available helpers are:
+
+- `io.py`: `read_*` and `write_*` helpers for YAML, JSON, and Parquet.
+- `image.py`: `load_image` for fully loaded, detached Pillow images.
+- `timing.py`: `Timer` and `elapsed_ms` using a monotonic clock.
+- `logging.py`: `configure_logging` and `get_logger`.
+
+Install the libraries used by these helpers when needed:
+
+```bash
+pip install pyyaml pandas pyarrow pillow
+```
+
+The core project dependency is Pydantic 2. Update `pyproject.toml` whenever a
+new runtime dependency becomes part of the supported baseline.
 
 ## Offline artifact contracts
 
-Offline artifacts are generated before a user searches. They allow the data
-and AI pipelines to run independently without requiring a database.
+Use `frame_id` as the join key across all artifacts:
 
-| Artifact                                          | Format  | Purpose                             |
-| ------------------------------------------------- | ------- | ----------------------------------- |
-| `data/metadata/frames.parquet`                  | Parquet | Canonical searchable-frame metadata |
-| `artifacts/enrichment/frame_enrichment.parquet` | Parquet | Caption and OCR metadata            |
-| `artifacts/embeddings/visual_embeddings.npy`    | NumPy   | Frame embedding matrix              |
-| `artifacts/embeddings/frame_mapping.parquet`    | Parquet | Vector position to frame mapping    |
-| `artifacts/indexes/visual.index`                | FAISS   | Searchable vector index             |
+| Path | Format | Purpose |
+|---|---|---|
+| `data/metadata/frames.parquet` | Parquet | Canonical searchable-frame metadata |
+| `artifacts/enrichment/frame_enrichment.parquet` | Parquet | Caption/OCR/ASR evidence |
+| `artifacts/embeddings/visual_embeddings.npy` | NumPy | Visual embedding matrix |
+| `artifacts/embeddings/frame_mapping.parquet` | Parquet | Vector-to-frame mapping |
+| `artifacts/indexes/visual.index` | FAISS | Searchable vector index |
 
-`frame_id` is the join key across frame metadata, enrichment, embeddings,
-retrieval candidates, and API results.
+Datasets, embeddings, model weights, indexes, and experiment outputs are local
+artifacts and must not be committed to Git.
 
-Large data and generated artifacts must not be committed to Git.
+## Development principles
 
-The backend should expose `/openapi.json` so the Node.js frontend can keep its
-TypeScript API types synchronized with the Pydantic contracts.
+- Preserve exact frame mappings above all other optimizations.
+- Prefer measurable experiments and per-query failure analysis.
+- Keep one orchestration path for `accurate` and `fast` profiles.
+- Keep model loading and index loading at application startup, not per request.
+- Keep reusable logic in `src/hcmai`, not only in notebooks or scripts.
+- Preserve and integrate the existing frontend; do not replace it with
+  Streamlit or Gradio.
+- Avoid enterprise infrastructure and abstractions outside the MVP scope.
 
-## Evaluation
+## Verification
 
-Every retrieval experiment should report at least:
+Run lightweight checks before submitting changes:
 
-- Candidate `Recall@1`, `Recall@5`, `Recall@10`, and `Recall@100`.
-- Final `Recall@1`, `Recall@5`, and `Recall@10` after reranking.
-- Mean Reciprocal Rank (MRR).
-- P50 and P95 query latency.
-- Invalid frame mappings.
-
-Store each experiment under:
-
-```text
-runs/<experiment_name>/
-├── config.yaml
-├── metrics.json
-├── per_query.csv
-└── failures.csv
+```bash
+python -m compileall src
+PYTHONPATH=src pytest
 ```
 
-Keeping candidate and final metrics separate makes it possible to determine
-whether a failure came from retrieval or reranking.
-
-Python code must follow PEP 8, use type hints for public functions, and avoid
-performing expensive work at import time. Unit tests should use lightweight
-fixtures or fake components rather than loading full AI models.
+Unit tests should use small fixtures and fake retrieval components. They must
+not require downloading large models or loading the full video corpus.

@@ -3,223 +3,176 @@
 ## Mission
 
 Build a hackathon-oriented AI assistant for the Ho Chi Minh City AI Challenge
-2026. Given a Vietnamese or English natural-language query, retrieve the exact
-matching image frame from an approximately 80–100 GB video corpus and return
-the official `video_id` and `frame_idx`.
+2026. Given a Vietnamese or English natural-language query, the system should
+retrieve the exact matching video frame and return the official `video_id` and
+`frame_idx`.
 
-The system must support rapid research, evaluation, and model replacement.
-Accuracy is the first priority for the preliminary round; low retrieval
-latency becomes equally important for the live final round.
+The project is currently establishing a small, testable Python foundation.
+Prioritize correct frame mappings and measurable retrieval experiments before
+adding production infrastructure or model-specific complexity.
 
-## Priority order
+## Priorities
 
-When trade-offs are necessary, use this order:
-
-1. Preserve correct frame identifiers and source mappings.
-2. Keep experiments measurable and reproducible.
+1. Preserve exact `frame_id`, `video_id`, and `frame_idx` mappings.
+2. Keep contracts and experiments reproducible.
 3. Improve candidate recall and final ranking accuracy.
-4. Reduce warm-query latency for the final round.
-5. Improve code elegance only when it accelerates the work above.
+4. Reduce warm-query latency after the retrieval baseline is measured.
+5. Keep abstractions small and useful for the hackathon workflow.
 
-## Scope
+## Current scope
 
-The current MVP is text-to-frame retrieval using:
+The current implementation contains:
 
-- Multilingual image-text embeddings.
-- FAISS candidate retrieval.
-- Offline caption grounding.
-- Optional OCR and ASR evidence.
-- Multimodal candidate reranking.
-- A FastAPI backend and an existing Node.js frontend.
+- Pydantic 2 contracts in `src/hcmai/common/schemas/`.
+- A lightweight `SearchEngine` orchestration skeleton in
+  `src/hcmai/search.py`.
+- Shared configuration scaffolding in `src/hcmai/common/config.py`.
+- Generic file, image, timing, and logging helpers in
+  `src/hcmai/common/utils/`.
+- Contract tests in `tests/`.
+- An existing Node.js frontend in `frontend/`.
 
-Do not expand the MVP into a production platform. Authentication,
-microservices, distributed databases, Kubernetes, generalized plugin systems,
-and enterprise abstractions are out of scope unless explicitly requested.
+Concrete embedding, FAISS, enrichment, reranking, evaluation, and FastAPI
+components are planned work, not assumptions about the current codebase.
+Do not add authentication, microservices, Kubernetes, distributed databases,
+or generalized plugin systems unless explicitly requested.
 
 ## Repository layout
 
 ```text
-frontend/                   Existing Node.js UI
-backend/                    FastAPI entry point
-src/aic/schemas.py          Shared Pydantic contracts
-src/aic/search.py           Search orchestration
-src/aic/data/               Extraction and frame metadata
-src/aic/retriever/          Embeddings, FAISS, and score fusion
-src/aic/enrichment/         Captioning, OCR, and ASR
-src/aic/reranking/          Multimodal rerankers
-src/aic/evaluation/         Metrics and evaluation runner
-src/aic/utils/              Small generic helpers only
-scripts/                    Thin command-line entry points
-configs/                    Experiment and search configuration
-data/                       Local corpus and metadata
-artifacts/                  Generated embeddings and indexes
-runs/                       Experiment results
-tests/                      Contract, unit, and smoke tests
+frontend/                         Existing Node.js UI
+src/hcmai/
+├── search.py                     Search orchestration
+└── common/
+    ├── config.py                 Shared settings scaffolding
+    ├── schemas/                  Pydantic contracts and enums
+    │   └── README.md              Schema reference
+    └── utils/                    Generic I/O, image, timing, and logging
+        └── README.md              Utility usage guide
+configs/                          Experiment configuration
+data/                             Local corpus and metadata (not Git)
+artifacts/                        Generated embeddings and indexes (not Git)
+runs/                             Experiment outputs (not Git)
+tests/                            Contract and smoke tests
 ```
 
-This is a target structure. Do not create unused directories or placeholder
-modules. Keep each folder small and add files only when an implementation
-requires them.
-
-## Current state
-
-- `src/aic/schemas.py` is implemented with Pydantic 2 contracts.
-- `src/aic/__init__.py` exists.
-- Other components may not exist yet; inspect the repository before editing.
-- The user has an existing Node.js UI intended to live in `frontend/`.
-  Preserve it and do not replace it with Streamlit or Gradio.
-
-## Ownership boundaries
-
-| Area | Primary owner |
-|---|---|
-| Contracts, orchestration, evaluation | AI Tech Lead |
-| Frame extraction and metadata | Data Engineer |
-| Dense retrieval and FAISS | AI Engineer 1 |
-| Enrichment and reranking | AI Engineer 2 |
-| FastAPI and Node.js UI integration | Software Engineer |
-
-Avoid editing another owner's active component unless the task explicitly
-requires it. Shared-contract changes require Tech Lead approval.
+Add directories only when their first real implementation is needed. Reuse
+the existing frontend; do not replace it with Streamlit or Gradio.
 
 ## Canonical contracts
 
-`src/aic/schemas.py` is the source of truth for Python and API data shapes.
-Reuse its models instead of redefining dictionaries or duplicate dataclasses.
+The source of truth is `src/hcmai/common/schemas/`. Use those models rather
+than defining duplicate dictionaries or dataclasses.
+
+Important models include:
+
+- `FrameRecord` and `FrameEnrichment` for frame metadata and offline evidence.
+- `RetrievalCandidate` and `SearchScores` for retrieval-stage exchange.
+- `SearchRequest`, `SearchFilters`, `SearchResult`, and `SearchResponse` for
+  the search boundary.
+- `EvaluationQuery` for labelled offline evaluation data.
+- `ConversationTurn` and `FrameFeedback` for conversational KIS workflows.
 
 Important identifiers:
 
-- `frame_id`: globally unique and stable across pipeline reruns.
-- `video_id`: identifier of the source video.
-- `frame_idx`: authoritative frame index used for submission.
-- `timestamp_ms`: presentation timestamp used for preview and temporal search.
+- `frame_id` is globally unique and stable across pipeline reruns.
+- `video_id` identifies the source video.
+- `frame_idx` is the authoritative submission frame index.
+- `timestamp_ms` is used for preview and temporal search.
 
-Never infer `frame_idx` as `timestamp * fps`. Variable-frame-rate videos and
-decoder behavior can make that mapping incorrect.
+Never infer `frame_idx` from `timestamp_ms * fps`; variable-frame-rate videos
+and decoder behavior make that mapping unsafe. Unknown schema fields are
+intentionally rejected. If a contract changes, update its tests and related
+documentation in the same change.
 
-Unknown schema fields are intentionally rejected. If a new field is required,
-update the canonical schema, its tests, API examples, and affected artifact
-documentation together.
+## Utility conventions
 
-## Offline artifact contracts
+Use `src/hcmai/common/utils/` only for generic helpers:
 
-Use these default artifact roles unless the current code or task specifies an
-approved replacement:
+- `io.py`: YAML, JSON, and Parquet read/write helpers.
+- `image.py`: detached Pillow image loading.
+- `timing.py`: monotonic millisecond timing and `Timer`.
+- `logging.py`: explicit console/file logging configuration and named loggers.
 
-| Path | Producer | Consumers |
-|---|---|---|
-| `data/metadata/frames.parquet` | Data pipeline | Retrieval and enrichment |
-| `artifacts/enrichment/frame_enrichment.parquet` | Enrichment | Retrieval |
-| `artifacts/embeddings/visual_embeddings.npy` | Encoder | Index builder |
-| `artifacts/embeddings/frame_mapping.parquet` | Encoder | Vector search |
-| `artifacts/indexes/visual.index` | Index builder | Online search |
-
-Use `frame_id` as the join key. Images remain JPEG/WebP files, vectors remain
-NumPy arrays, and FAISS indexes remain FAISS artifacts. Do not store large
-binary data inside Git or force every artifact into Parquet.
-
-## Python standards
-
-All Python code must follow PEP 8.
-
-- Use four spaces for indentation.
-- Keep code lines at or below 79 characters when practical.
-- Use descriptive `snake_case` names for functions and variables.
-- Use `PascalCase` for classes and `UPPER_CASE` for constants.
-- Add type hints to public functions, methods, and return values.
-- Add concise docstrings to public modules, classes, and non-obvious methods.
-- Prefer `pathlib.Path` over manual path concatenation.
-- Use `from __future__ import annotations` in new Python modules.
-- Use Pydantic 2 APIs for shared schemas.
-- Avoid mutable default arguments; use `Field(default_factory=...)` or `None`.
-- Do not perform model downloads, GPU allocation, or corpus loading at import
-  time.
-
-Keep imports ordered as standard library, third-party packages, then local
-project modules. Use a formatter/linter when the project adds one, but do not
-introduce a large tooling stack solely for a small change.
+Model, retrieval, and domain-specific logic belongs outside `utils/`. See
+`src/hcmai/common/utils/README.md` for examples and optional dependencies.
 
 ## Architecture rules
 
-- `frontend/` communicates with `backend/` through the documented HTTP API.
-- `backend/` may import `aic`; `aic` must not import `backend` or `frontend`.
-- Scripts should parse arguments and call reusable functions from `aic`.
-- Notebooks may import `aic`, but reusable logic must not live only in a
-  notebook.
-- Retrieval stages exchange `RetrievalCandidate` or another approved schema.
-- Model checkpoints and candidate counts belong in configuration, not code.
+- Keep reusable logic in `src/hcmai`, not only in notebooks or scripts.
+- Scripts should parse arguments and call reusable package functions.
+- Retrieval stages should exchange `RetrievalCandidate` or another approved
+  schema.
+- Keep model checkpoints, candidate counts, and search profiles in
+  configuration rather than hard-coding them.
 - Load online models and indexes once at application startup, not per request.
-- Keep `utils/` limited to generic I/O, image, and timing helpers. Model or
-  retrieval logic belongs in its domain folder.
+- Avoid factories, registries, dependency-injection layers, and base classes
+  until two real implementations require them.
+- Preserve the boundary between the Python package and the existing frontend.
 
-Avoid base classes, factories, registries, and dependency-injection layers
-until at least two real implementations demonstrate the need.
+The intended profiles are `accurate` and `fast`, using one orchestration path
+with different configuration values. Do not duplicate the search pipeline for
+each profile.
 
-## Search profiles
+## Artifact conventions
 
-Use configuration-driven profiles:
+When the offline pipeline is implemented, prefer these roles:
 
-- `accurate`: larger candidate pool and deeper reranking.
-- `fast`: smaller candidate pool and latency-focused reranking.
+| Path | Role |
+|---|---|
+| `data/metadata/frames.parquet` | Canonical frame metadata |
+| `artifacts/enrichment/frame_enrichment.parquet` | Caption/OCR/ASR evidence |
+| `artifacts/embeddings/visual_embeddings.npy` | Visual vectors |
+| `artifacts/embeddings/frame_mapping.parquet` | Vector-to-frame mapping |
+| `artifacts/indexes/visual.index` | FAISS index |
 
-Do not duplicate the search pipeline for each profile. Both profiles must use
-the same orchestration with different configuration values.
+Join artifacts on `frame_id`. Do not commit datasets, embeddings, model
+weights, indexes, or experiment output.
 
-## Evaluation requirements
+## Python standards
 
-Every meaningful retrieval experiment should record:
+- Follow PEP 8 and use four spaces for indentation.
+- Use type hints and concise docstrings for public APIs.
+- Prefer `pathlib.Path` over manual path concatenation.
+- Use `from __future__ import annotations` in new modules.
+- Use Pydantic 2 APIs for shared contracts.
+- Keep imports ordered: standard library, third party, then local modules.
+- Do not download models, allocate GPUs, or load the corpus at import time.
+- Keep lines at or below 79 characters when practical.
 
-- Candidate Recall@K before reranking.
-- Final Recall@K after reranking.
-- MRR.
-- P50 and P95 latency.
-- Per-query predictions and failure categories.
-- The exact configuration and model checkpoint names.
+The project metadata currently declares only the core Pydantic dependency.
+When adding a runtime dependency, update `pyproject.toml` and document the
+installation or usage impact.
 
-Write small experiment outputs under `runs/<experiment_name>/`. Do not report
-only aggregate accuracy; preserving per-query results is necessary for failure
-analysis and paper ablations.
+## Evaluation and testing
 
-## Testing and verification
+Meaningful retrieval experiments should record candidate Recall@K, final
+Recall@K, MRR, P50/P95 latency, per-query predictions, failure categories,
+configuration, and checkpoint names under `runs/<experiment_name>/`.
 
 Before declaring a Python change complete:
 
 1. Compile or import the modified modules.
-2. Run the relevant unit or contract tests if they exist.
-3. Test a small fixture rather than the full corpus when possible.
-4. Verify that frame mappings remain valid.
-5. Run linting or formatting checks if configured in the repository.
+2. Run relevant tests.
+3. Exercise a small fixture instead of the full corpus when possible.
+4. Verify frame mappings remain valid.
+5. Run configured formatting or lint checks.
 
-Useful lightweight checks include:
+Useful checks are:
 
 ```bash
 python -m compileall src
-PYTHONPATH=src python -c "import aic"
+PYTHONPATH=src pytest
 ```
 
-Unit tests must not require downloading large models. Use fake retrievers,
-rerankers, and small in-memory frame records for orchestration tests.
+Tests must not download large models. Use fake retrievers, rerankers, and
+small in-memory frame records for orchestration tests.
 
 ## Change discipline
 
 - Inspect existing files before editing.
-- Preserve user changes and the existing frontend.
+- Preserve unrelated user changes and the existing frontend.
 - Keep changes scoped to the requested component.
-- Do not rename shared fields without updating every consumer and test.
-- Do not commit data, embeddings, model weights, or FAISS indexes.
-- Record assumptions when the corpus format or official frame mapping is not
-  known.
-- Prefer a working baseline and a measured ablation over a broad unfinished
-  implementation.
-
-## Definition of done
-
-A component change is complete when:
-
-- Its inputs and outputs match the shared contracts.
-- It can run on a small representative fixture.
-- Errors include enough context to identify the video, frame, or query.
-- Relevant tests or smoke checks pass.
-- Configuration and experiment metadata are recorded when model behavior
-  changes.
-- The README or contract documentation is updated when public behavior changes.
+- Update documentation when public behavior or contracts change.
+- Record assumptions when corpus formats or official mappings are unknown.
+- Prefer a working baseline and measured ablation over broad unfinished work.
