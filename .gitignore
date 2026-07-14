@@ -66,3 +66,7 @@ temp/
 *.snm
 *.toc
 *.synctex.gz
+
+.codex/
+.agents/
+aic/
