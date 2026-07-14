@@ -34,12 +34,13 @@ Still to implement:
 
 ```mermaid
 flowchart TD
-    Q["Vietnamese or English query"] --> E["Query encoding"]
-    E --> R["Candidate retrieval"]
-    R --> F["Score fusion"]
-    F --> M["Optional multimodal reranking"]
-    M --> T["Optional temporal refinement"]
-    T --> U["video_id + frame_idx"]
+    H["History + current turn"] --> S["Conversation state"]
+    S --> Q["Standalone query"]
+    Q --> R["Candidate retrieval"]
+    S --> R
+    R --> M["Conversation-aware reranking"]
+    M --> F["Apply feedback"]
+    F --> O["Results + updated state"]
 ```
 
 The design keeps expensive offline work separate from online search. Model
