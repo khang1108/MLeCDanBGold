@@ -20,10 +20,10 @@ The system targets the following tasks:
 
 The two competition profiles have different priorities:
 
-| Profile | Main priority | Typical behavior |
-|---|---|---|
-| `accurate` | Retrieval accuracy | More candidates and deeper reranking |
-| `fast` | Online latency | Fewer candidates and lightweight reranking |
+| Profile      | Main priority      | Typical behavior                           |
+| ------------ | ------------------ | ------------------------------------------ |
+| `accurate` | Retrieval accuracy | More candidates and deeper reranking       |
+| `fast`     | Online latency     | Fewer candidates and lightweight reranking |
 
 ## Retrieval approach
 
@@ -61,28 +61,21 @@ specific checkpoint.
 ## Target repository structure
 
 ```text
-hcmai/
-├── frontend/                   # Existing Node.js user interface
-├── backend/
-│   └── main.py                 # FastAPI entry point
-├── src/
-│   └── aic/
-│       ├── schemas.py          # Shared Pydantic contracts
-│       ├── search.py           # End-to-end search orchestration
-│       ├── data/               # Extraction and metadata loading
-│       ├── retriever/          # Embeddings, FAISS, and fusion
-│       ├── enrichment/         # Captioning, OCR, and ASR
-│       ├── reranking/          # Multimodal rerankers
-│       ├── evaluation/         # Metrics and evaluation runner
-│       └── utils/              # Small, generic helpers
-├── scripts/                    # Offline and command-line entry points
-├── configs/                    # Experiment and search profiles
-├── data/                       # Local datasets; not committed
-├── artifacts/                  # Generated models/indexes; not committed
-├── runs/                       # Experiment metrics and failure reports
-├── tests/
-├── AGENTS.md
-└── README.md
+src/
+└── aic/
+    ├── search.py                       # Main non-conversational pipeline
+    ├── common/
+    │   ├── config.py                   # YAML loading and shared settings
+    │   ├── schemas/
+    │   └── utils/
+    ├── data/
+    ├── retriever/
+    ├── enrichment/
+    ├── reranking/
+    ├── evaluation/
+    └── agents/
+        ├── __init__.py
+        └── kisc/
 ```
 
 The structure is a target, not a requirement to create empty directories.
@@ -90,13 +83,13 @@ Add a directory or file only when its first implementation is needed.
 
 ## Component ownership
 
-| Component | Primary owner | Main responsibility |
-|---|---|---|
-| Architecture and contracts | AI Tech Lead | Schemas, orchestration, evaluation |
-| Data pipeline | Data Engineer | Video discovery, frame extraction, metadata |
-| Dense retrieval | AI Engineer 1 | Encoders, embeddings, FAISS indexing |
-| Enrichment and reranking | AI Engineer 2 | Captions, OCR, ASR, reranking |
-| API and UI | Software Engineer | FastAPI and existing Node.js frontend |
+| Component                  | Primary owner     | Main responsibility                         |
+| -------------------------- | ----------------- | ------------------------------------------- |
+| Architecture and contracts | AI Tech Lead      | Schemas, orchestration, evaluation          |
+| Data pipeline              | Data Engineer     | Video discovery, frame extraction, metadata |
+| Dense retrieval            | AI Engineer 1     | Encoders, embeddings, FAISS indexing        |
+| Enrichment and reranking   | AI Engineer 2     | Captions, OCR, ASR, reranking               |
+| API and UI                 | Software Engineer | FastAPI and existing Node.js frontend       |
 
 Ownership prevents merge conflicts; it does not prevent collaboration.
 Changes to `src/aic/schemas.py` require Tech Lead review because all
@@ -120,13 +113,13 @@ create local variants of shared field names.
 Offline artifacts are generated before a user searches. They allow the data
 and AI pipelines to run independently without requiring a database.
 
-| Artifact | Format | Purpose |
-|---|---|---|
-| `data/metadata/frames.parquet` | Parquet | Canonical searchable-frame metadata |
-| `artifacts/enrichment/frame_enrichment.parquet` | Parquet | Caption and OCR metadata |
-| `artifacts/embeddings/visual_embeddings.npy` | NumPy | Frame embedding matrix |
-| `artifacts/embeddings/frame_mapping.parquet` | Parquet | Vector position to frame mapping |
-| `artifacts/indexes/visual.index` | FAISS | Searchable vector index |
+| Artifact                                          | Format  | Purpose                             |
+| ------------------------------------------------- | ------- | ----------------------------------- |
+| `data/metadata/frames.parquet`                  | Parquet | Canonical searchable-frame metadata |
+| `artifacts/enrichment/frame_enrichment.parquet` | Parquet | Caption and OCR metadata            |
+| `artifacts/embeddings/visual_embeddings.npy`    | NumPy   | Frame embedding matrix              |
+| `artifacts/embeddings/frame_mapping.parquet`    | Parquet | Vector position to frame mapping    |
+| `artifacts/indexes/visual.index`                | FAISS   | Searchable vector index             |
 
 `frame_id` is the join key across frame metadata, enrichment, embeddings,
 retrieval candidates, and API results.

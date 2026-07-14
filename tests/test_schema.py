@@ -5,7 +5,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from aic.schema import (
+from hcmai.schema import (
     SearchMode,
     SearchRequest,
     SearchResponse,
