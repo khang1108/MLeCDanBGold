@@ -28,7 +28,8 @@ frontend/build/
 frontend/.cache/
 
 # Local datasets and generated AI artifacts
-data/
+/data/
+/dataset/
 artifacts/
 runs/
 *.ckpt
@@ -40,6 +41,13 @@ runs/
 *.npy
 *.npz
 *.parquet
+
+# Local Kaggle subset tooling and generated packages
+/scripts/create_kaggle_subset.py
+/tests/test_kaggle_subset.py
+/create_kaggle_subset.py
+/kaggle_subset*
+/aic_subset*
 
 # IDE and operating-system files
 .vscode/
