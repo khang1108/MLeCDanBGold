@@ -9,7 +9,23 @@ description = "AIC Project"
 readme = "README.md"
 requires-python = ">= 3.11"
 dependencies = [
-    "pydantic>=2.0, <3.0"
+    "pydantic>=2.0, <3.0",
+    "pyyaml>=6.0",
+    "pandas>=2.0",
+    "pyarrow>=12.0",
+    "pillow>=9.0",
+    "numpy>=1.24",
+    "faiss-cpu>=1.7",
+]
+
+[project.optional-dependencies]
+embedding = [
+    "transformers>=4.30",
+    "torch>=2.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
 ]
 
 [tool.setuptools.packages.find]
