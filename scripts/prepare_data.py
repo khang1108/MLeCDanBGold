@@ -1,4 +1,29 @@
-"""Prepare canonical frame metadata from a mounted AIC dataset."""
+"""Prepare canonical frame metadata from a mounted AIC dataset.
+
+This CLI script is the main entry point for the offline data pipeline.
+It supports three exclusive modes:
+
+* **Full pipeline** (default): inventory → ingest → validate.
+* ``--inventory-only``: inspect the dataset without writing metadata.
+* ``--validate-only``: re-validate previously ingested metadata.
+
+All three required paths can be supplied via environment variables so
+that repeated invocations omit the flags:
+
+.. code-block:: bash
+
+    export HCMAI_DATASET_ROOT=/mnt/aic/dataset
+    export HCMAI_DATA_ROOT=data/aic2025
+    export HCMAI_DATASET_VERSION=aic2025_s1_v2
+
+    PYTHONPATH=src python scripts/prepare_data.py --limit 100
+    PYTHONPATH=src python scripts/prepare_data.py
+    PYTHONPATH=src python scripts/prepare_data.py --validate-only
+
+Exit codes:
+    0: Pipeline completed successfully (or inventory finished).
+    1: Validation failed or an unrecoverable error occurred.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +41,22 @@ from hcmai.data import (
 
 
 def _positive_int(value: str) -> int:
-    """Parse a positive command-line integer."""
+    """Parse and validate a positive integer from a CLI string argument.
+
+    Used as an ``argparse`` ``type`` callback so that invalid values are
+    rejected before ``parse_args`` returns.
+
+    Args:
+        value: Raw string supplied on the command line.
+
+    Returns:
+        The parsed integer, guaranteed to be greater than zero.
+
+    Raises:
+        argparse.ArgumentTypeError: If the string cannot be parsed as an
+            integer or the resulting value is less than one.
+        ValueError: If ``value`` cannot be converted to ``int``.
+    """
 
     parsed = int(value)
     if parsed < 1:
@@ -25,7 +65,24 @@ def _positive_int(value: str) -> int:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse data preparation arguments."""
+    """Parse and validate data-preparation command-line arguments.
+
+    Reads ``--dataset-root``, ``--output-root``, and
+    ``--dataset-version`` from the command line or their corresponding
+    environment variables.  Exits with an error message if any of the
+    three required values are missing.
+
+    Args:
+        argv: Explicit argument list used instead of ``sys.argv[1:]``.
+            Pass ``None`` (default) to read from the process arguments.
+
+    Returns:
+        Populated ``argparse.Namespace`` with all parsed arguments.
+
+    Raises:
+        SystemExit: If required arguments are missing or ``--help`` is
+            requested.
+    """
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -68,7 +125,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run inventory, ingestion, or validation."""
+    """Run the data pipeline in one of three exclusive modes.
+
+    Dispatches to ``inventory_corpus``, ``validate_dataset``, or the
+    full ``prepare_dataset`` pipeline based on the parsed CLI flags.
+    Prints a short status message to stdout on success and an error
+    description to stderr on failure.
+
+    Args:
+        argv: Explicit argument list forwarded to ``parse_args``.  Pass
+            ``None`` (default) to read from ``sys.argv[1:]``.
+
+    Returns:
+        ``0`` on success, ``1`` if validation failed or an unrecoverable
+        error was raised during data preparation.
+    """
 
     args = parse_args(argv)
     dataset_root = Path(args.dataset_root)

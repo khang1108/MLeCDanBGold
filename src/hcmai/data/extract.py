@@ -1,4 +1,39 @@
-"""Inventory and ingest a mounted AIC keyframe dataset."""
+"""Inventory and ingest a mounted AIC keyframe dataset.
+
+This module implements the core offline data pipeline that transforms a
+raw AIC 2025 S1 dataset (JPEG keyframes + Kaggle mapping CSVs) into a
+canonical ``frames.parquet`` file that downstream components (embeddings,
+reranker, API) can rely on.
+
+Mapping algorithm
+-----------------
+1. ``n`` in each CSV row points to the numeric image filename
+   (e.g. ``n=3`` → ``003.jpg``).
+2. ``frame_idx`` is taken verbatim from the CSV; it is **never**
+   re-computed from ``pts_time`` or FPS because variable-frame-rate
+   videos make that mapping unsafe.
+3. When multiple rows share the same ``frame_idx``, the row with the
+   smallest ``n`` is kept (``keep_smallest_n`` policy); discarded rows
+   are written to ``reports/mapping_collisions.csv``.
+4. Stable identifiers follow the formula
+   ``frame_id = f"{video_id}_{frame_idx:08d}"``.
+5. ``timestamp_ms = round(pts_time * 1000)`` is stored for preview and
+   temporal search only.
+
+Output layout
+-------------
+::
+
+    {output_root}/
+    ├── metadata/
+    │   ├── frames.parquet          # canonical FrameRecord table
+    │   └── shards/{video_id}.parquet  # per-video resume checkpoints
+    ├── thumbnails/{video_id}/{frame_id}.jpg
+    └── reports/
+        ├── corpus_inventory.json
+        ├── mapping_collisions.csv
+        └── extraction_report.json
+"""
 
 from __future__ import annotations
 
@@ -40,7 +75,19 @@ COLLISION_COLUMNS = (
 
 
 def _checked_root(value: PathValue) -> Path:
-    """Return an existing dataset directory."""
+    """Resolve and validate a dataset root directory.
+
+    Args:
+        value: Filesystem path to the dataset root directory. Accepts
+            any path-like object or string, including ``~`` expansions.
+
+    Returns:
+        Resolved absolute ``Path`` pointing to an existing directory.
+
+    Raises:
+        FileNotFoundError: If the resolved path does not exist or is
+            not a directory.
+    """
 
     root = Path(value).expanduser().resolve()
     if not root.is_dir():
@@ -49,7 +96,17 @@ def _checked_root(value: PathValue) -> Path:
 
 
 def _checked_version(value: str) -> str:
-    """Return a non-empty dataset version."""
+    """Strip and validate a dataset version string.
+
+    Args:
+        value: Raw dataset version label supplied by the caller.
+
+    Returns:
+        Stripped, non-empty version string.
+
+    Raises:
+        ValueError: If ``value`` is empty or consists only of whitespace.
+    """
 
     version = value.strip()
     if not version:
@@ -58,7 +115,17 @@ def _checked_version(value: str) -> str:
 
 
 def _checked_limit(value: int | None) -> int | None:
-    """Return a valid optional frame limit."""
+    """Validate an optional upper bound on the number of ingested frames.
+
+    Args:
+        value: Desired frame limit, or ``None`` to process all frames.
+
+    Returns:
+        The original ``value`` unchanged if it is ``None`` or positive.
+
+    Raises:
+        ValueError: If ``value`` is not ``None`` and is less than one.
+    """
 
     if value is not None and value < 1:
         raise ValueError("limit must be greater than zero")
@@ -66,14 +133,36 @@ def _checked_limit(value: int | None) -> int | None:
 
 
 def _mapping_files(root: Path) -> list[Path]:
-    """Return official mapping files in deterministic order."""
+    """Discover official Kaggle mapping CSV files in deterministic order.
+
+    Looks for all ``.csv`` files under
+    ``{root}/map-keyframes-aic25-b1/map-keyframes/``.
+
+    Args:
+        root: Resolved dataset root directory.
+
+    Returns:
+        Sorted list of ``Path`` objects for every mapping CSV found.
+        Returns an empty list if the mapping directory does not exist.
+    """
 
     directory = root / "map-keyframes-aic25-b1" / "map-keyframes"
     return sorted(path for path in directory.glob("*.csv") if path.is_file())
 
 
 def _keyframe_images(root: Path) -> list[Path]:
-    """Return all supported keyframe images."""
+    """Discover all supported keyframe image files under the dataset root.
+
+    Searches for files matching ``Keyframes_L*/keyframes/*/*`` whose
+    suffix is one of ``.jpg``, ``.jpeg``, ``.png``, or ``.webp``.
+
+    Args:
+        root: Resolved dataset root directory.
+
+    Returns:
+        Sorted list of resolved absolute ``Path`` objects for every
+        keyframe image found.
+    """
 
     return sorted(
         path.resolve()
@@ -83,7 +172,26 @@ def _keyframe_images(root: Path) -> list[Path]:
 
 
 def _read_mapping(path: Path) -> pd.DataFrame:
-    """Read and validate one official mapping CSV."""
+    """Read and validate one official Kaggle mapping CSV file.
+
+    Ensures the file contains the required columns ``n``, ``pts_time``,
+    ``fps``, and ``frame_idx``, that all values are finite numerics,
+    that ``n`` and ``frame_idx`` are integers, that ``n`` is strictly
+    monotonically increasing without duplicates, that ``frame_idx`` and
+    ``pts_time`` are non-decreasing, and that ``fps`` is constant.
+
+    Args:
+        path: Absolute path to the CSV mapping file for one video.
+
+    Returns:
+        Cleaned ``DataFrame`` with columns ``(n, pts_time, fps,
+        frame_idx)`` in their canonical dtypes, reset index.
+
+    Raises:
+        ValueError: If any required column is missing, any value is
+            non-finite or violates the monotonicity/uniqueness
+            constraints, or the file cannot be parsed.
+    """
 
     table = pd.read_csv(path)
     missing = [column for column in MAPPING_COLUMNS if column not in table]
@@ -127,7 +235,29 @@ def resolve_mapping_collisions(
     video_id: str,
     mapping: pd.DataFrame,
 ) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
-    """Keep the smallest n for each authoritative frame index."""
+    """Resolve duplicate ``frame_idx`` entries by keeping the smallest ``n``.
+
+    When the Kaggle mapping CSV contains multiple rows that share the
+    same ``frame_idx``, only the row with the smallest ``n`` (i.e. the
+    earliest numeric image filename) is retained as the canonical
+    representative.  All other rows are recorded as collision events.
+
+    Args:
+        video_id: Identifier of the video being processed (used only to
+            populate the collision records).
+        mapping: Raw mapping ``DataFrame`` for the video, containing at
+            least the columns ``n``, ``frame_idx``, ``pts_time``, and
+            ``fps``.  Must already be sorted by ``n`` in ascending order
+            as produced by ``_read_mapping``.
+
+    Returns:
+        A two-tuple ``(canonical, collisions)`` where:
+
+        * ``canonical`` – ``DataFrame`` with one row per unique
+          ``frame_idx``, retaining the row with the smallest ``n``.
+        * ``collisions`` – list of ``dict`` records describing each
+          discarded row, suitable for the collision report.
+    """
 
     canonical = mapping.drop_duplicates("frame_idx", keep="first").copy()
     canonical_by_idx = canonical.set_index("frame_idx")
@@ -160,7 +290,31 @@ def _load_mappings(
     list[dict[str, Any]],
     list[dict[str, str]],
 ]:
-    """Load mappings and resolve known frame-index collisions."""
+    """Load all mapping CSVs and resolve frame-index collisions.
+
+    For each CSV found by ``_mapping_files``, the file is read with
+    ``_read_mapping`` and collision-resolved with
+    ``resolve_mapping_collisions``.  Files that raise parsing or
+    validation errors are collected in the ``errors`` list rather than
+    raising immediately so that the caller can decide how to proceed.
+
+    Args:
+        root: Resolved dataset root directory.
+
+    Returns:
+        A five-tuple ``(paths, raw, canonical, collisions, errors)``
+        where:
+
+        * ``paths`` – list of all mapping ``Path`` objects discovered.
+        * ``raw`` – ``dict`` mapping ``video_id`` to the unresolved
+          ``DataFrame`` from each CSV.
+        * ``canonical`` – ``dict`` mapping ``video_id`` to the
+          collision-resolved ``DataFrame``.
+        * ``collisions`` – list of collision event ``dict`` records
+          across all videos.
+        * ``errors`` – list of ``dict`` records for files that could
+          not be read or validated.
+    """
 
     paths = _mapping_files(root)
     raw: dict[str, pd.DataFrame] = {}
@@ -193,7 +347,24 @@ def _select_rows(
     mappings: dict[str, pd.DataFrame],
     limit: int | None,
 ) -> dict[str, pd.DataFrame]:
-    """Select rows round-robin across videos."""
+    """Select mapping rows via round-robin sampling across all videos.
+
+    When ``limit`` is ``None``, the full mapping is returned unchanged.
+    Otherwise frames are chosen one-at-a-time from each video in
+    alphabetical order, cycling until ``limit`` rows have been selected.
+    This ensures that a small fixture covers many different videos rather
+    than exhausting a single video first.
+
+    Args:
+        mappings: Dict mapping each ``video_id`` to its canonical
+            mapping ``DataFrame``.
+        limit: Total number of rows to return across all videos, or
+            ``None`` to return all rows.
+
+    Returns:
+        Dict with the same keys as ``mappings`` but each ``DataFrame``
+        contains only the selected rows, with the index reset.
+    """
 
     if limit is None:
         return {video: table.copy() for video, table in mappings.items()}
@@ -221,7 +392,19 @@ def _select_rows(
 
 
 def _images_by_video(paths: list[Path]) -> dict[str, list[Path]]:
-    """Group keyframe paths by video ID."""
+    """Group keyframe image paths by their parent directory name (video ID).
+
+    The parent directory name is assumed to be the ``video_id``
+    (e.g. ``Keyframes_L21/keyframes/L21_V001/003.jpg`` → ``L21_V001``).
+
+    Args:
+        paths: Flat list of keyframe image paths as returned by
+            ``_keyframe_images``.
+
+    Returns:
+        Dict mapping each ``video_id`` to the list of image paths
+        belonging to that video.
+    """
 
     grouped: dict[str, list[Path]] = defaultdict(list)
     for path in paths:
@@ -232,7 +415,24 @@ def _images_by_video(paths: list[Path]) -> dict[str, list[Path]]:
 def _numeric_images(
     paths: list[Path],
 ) -> tuple[dict[int, Path], list[dict[str, Any]]]:
-    """Index numeric image names and report ambiguous files."""
+    """Build an integer-keyed index of image paths from numeric filenames.
+
+    Each file is expected to have a purely numeric stem (e.g. ``003.jpg``
+    → key ``3``).  Files with non-numeric stems or duplicate stems are
+    excluded from the index and recorded as errors.
+
+    Args:
+        paths: List of image paths for a single video, as returned by
+            ``_images_by_video``.
+
+    Returns:
+        A two-tuple ``(index, errors)`` where:
+
+        * ``index`` – ``dict`` mapping each integer ``n`` to its unique
+          ``Path``; entries with duplicate stems are omitted.
+        * ``errors`` – list of ``dict`` records describing non-numeric
+          stems or duplicate numeric stems.
+    """
 
     grouped: dict[int, list[Path]] = defaultdict(list)
     errors: list[dict[str, Any]] = []
@@ -261,7 +461,20 @@ def _numeric_images(
 
 
 def _sha256(path: Path) -> str:
-    """Return one file's SHA-256 digest."""
+    """Compute the SHA-256 hex digest of a file's contents.
+
+    Reads the file in 1 MiB chunks to avoid loading large files into
+    memory all at once.
+
+    Args:
+        path: Absolute path to the file to hash.
+
+    Returns:
+        Lowercase hex string of the SHA-256 digest (64 characters).
+
+    Raises:
+        OSError: If the file cannot be opened or read.
+    """
 
     digest = hashlib.sha256()
     with path.open("rb") as file:
@@ -274,7 +487,28 @@ def collision_report_rows(
     collisions: list[dict[str, Any]],
     images_by_video: dict[str, list[Path]],
 ) -> list[dict[str, Any]]:
-    """Add source paths and hashes to collision decisions."""
+    """Enrich collision records with resolved image paths and SHA-256 hashes.
+
+    For each collision event produced by ``resolve_mapping_collisions``,
+    this function resolves the canonical and discarded image paths from
+    ``images_by_video`` and computes their SHA-256 digests so that the
+    written CSV can be audited and replayed deterministically.
+
+    Args:
+        collisions: List of raw collision ``dict`` records as returned
+            by ``resolve_mapping_collisions``.  Each record must contain
+            ``video_id``, ``frame_idx``, ``canonical_n``,
+            ``discarded_n``, ``pts_time``, and ``fps``.
+        images_by_video: Dict mapping each ``video_id`` to the list of
+            image paths for that video.
+
+    Returns:
+        Sorted list of enriched collision ``dict`` records ordered by
+        ``(video_id, frame_idx, discarded_n)``.  Each record contains
+        all ``COLLISION_COLUMNS`` fields including
+        ``canonical_image_path``, ``canonical_sha256``,
+        ``discarded_image_path``, and ``discarded_sha256``.
+    """
 
     indexes = {
         video: _numeric_images(paths)[0]
@@ -309,7 +543,22 @@ def collision_report_rows(
 
 
 def _write_collision_report(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write deterministic collision decisions."""
+    """Write collision decisions to a CSV file atomically.
+
+    Creates the parent directory if necessary, writes to a temporary
+    file first, then replaces the target path in a single ``rename``
+    call to avoid partial writes.
+
+    Args:
+        path: Destination CSV path (e.g.
+            ``reports/mapping_collisions.csv``).
+        rows: List of enriched collision ``dict`` records as produced by
+            ``collision_report_rows``.  Each record must contain all
+            keys listed in ``COLLISION_COLUMNS``.
+
+    Raises:
+        OSError: If the file cannot be created or the rename fails.
+    """
 
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp.csv")
@@ -330,7 +579,25 @@ def _write_collision_report(path: Path, rows: list[dict[str, Any]]) -> None:
 def _inspect_images(
     paths: list[Path],
 ) -> tuple[Counter[str], Counter[str], list[dict[str, str]]]:
-    """Count image formats, resolutions, and corrupt files."""
+    """Scan keyframe images and gather format, resolution, and health stats.
+
+    Opens each image with Pillow to read its dimensions and calls
+    ``Image.verify()`` to detect corruption.  Images that raise an
+    ``OSError`` or ``ValueError`` are included in the corrupt list.
+
+    Args:
+        paths: Flat list of keyframe image paths to inspect.
+
+    Returns:
+        A three-tuple ``(formats, resolutions, corrupt)`` where:
+
+        * ``formats`` – ``Counter`` keyed by lowercase file extension
+          (without leading dot) mapping to image count.
+        * ``resolutions`` – ``Counter`` keyed by ``"{width}x{height}"``
+          strings mapping to image count.
+        * ``corrupt`` – list of ``dict`` records with ``path`` and
+          ``error`` keys for every image that could not be verified.
+    """
 
     formats: Counter[str] = Counter()
     resolutions: Counter[str] = Counter()
@@ -351,7 +618,25 @@ def _audit_samples(
     grouped_images: dict[str, list[Path]],
     limit: int | None,
 ) -> list[dict[str, Any]]:
-    """Return at most 50 deterministic mapping samples."""
+    """Return up to 50 deterministic round-robin samples for manual audit.
+
+    Selects rows via ``_select_rows`` capped at ``min(50, limit or 50)``
+    and enriches each row with the resolved image path and derived
+    ``frame_id``.  The result is sorted by ``(n, video_id)`` for
+    reproducibility.
+
+    Args:
+        mappings: Collision-resolved mapping ``DataFrame`` per video.
+        grouped_images: Dict mapping each ``video_id`` to its image
+            paths, as returned by ``_images_by_video``.
+        limit: Optional frame cap passed from the ingestion request.
+            At most ``min(50, limit)`` rows are returned.
+
+    Returns:
+        List of up to 50 ``dict`` records, each containing
+        ``video_id``, ``n``, ``frame_idx``, ``frame_id``,
+        ``timestamp_ms``, and ``image_path``.
+    """
 
     selected = _select_rows(mappings, min(50, limit or 50))
     samples = []
@@ -374,7 +659,17 @@ def _audit_samples(
 
 
 def _inventory_markdown(report: dict[str, Any]) -> str:
-    """Render a concise corpus inventory."""
+    """Render a concise Markdown summary of the corpus inventory report.
+
+    Args:
+        report: Inventory report ``dict`` as returned by
+            ``inventory_corpus``.  Must contain at least ``counts``,
+            ``mapping_coverage``, and ``dataset_version`` keys.
+
+    Returns:
+        Multi-line Markdown string suitable for writing to
+        ``corpus_inventory.md``.
+    """
 
     counts = report["counts"]
     coverage = report["mapping_coverage"]
@@ -401,7 +696,35 @@ def inventory_corpus(
     *,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    """Inventory mappings, keyframes, and optional source files."""
+    """Scan the dataset and produce a comprehensive corpus inventory.
+
+    Loads all mapping CSVs, discovers keyframe images and optional video
+    files, computes coverage statistics, detects corrupt or duplicate
+    images, and writes the following outputs:
+
+    * ``{output_root}/reports/corpus_inventory.json``
+    * ``{output_root}/reports/corpus_inventory.md``
+    * ``{output_root}/reports/mapping_collisions.csv``
+
+    This function does **not** write ``frames.parquet`` or thumbnails.
+
+    Args:
+        dataset_root: Root directory of the mounted AIC dataset.
+        output_root: Directory where report files are written.
+        dataset_version: Non-empty label identifying the dataset
+            release (stored in the report for traceability).
+        limit: Optional frame cap passed through to audit sample
+            generation.  Does not restrict the inventory scan itself.
+
+    Returns:
+        Inventory report ``dict`` containing counts, storage sizes,
+        image formats and resolutions, coverage ratios, collision
+        records, corrupt images, and audit samples.
+
+    Raises:
+        FileNotFoundError: If ``dataset_root`` does not exist.
+        ValueError: If ``dataset_version`` is empty.
+    """
 
     root = _checked_root(dataset_root)
     output = Path(output_root).expanduser().resolve()
@@ -549,7 +872,29 @@ def inventory_corpus(
 
 
 def _thumbnail(source: Path, target: Path, max_edge: int) -> tuple[int, int]:
-    """Validate an image and create its thumbnail."""
+    """Validate a source image and write a downscaled JPEG thumbnail.
+
+    Loads the full image to retrieve its dimensions, converts it to
+    ``RGB``, applies ``Image.thumbnail`` with LANCZOS resampling so the
+    longer edge is at most ``max_edge`` pixels, and saves the result as
+    JPEG at quality 85.  Writes to a temporary file first and then
+    replaces the target atomically.
+
+    Args:
+        source: Absolute path to the original keyframe image.
+        target: Desired output path for the thumbnail JPEG.
+        max_edge: Maximum pixel length of the longer edge in the
+            resized thumbnail.
+
+    Returns:
+        A two-tuple ``(width, height)`` of the **original** image
+        dimensions in pixels.
+
+    Raises:
+        OSError: If the source image cannot be opened or read.
+        Exception: Any Pillow or filesystem error; the incomplete
+            temporary file is removed before re-raising.
+    """
 
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(".tmp.jpg")
@@ -574,7 +919,36 @@ def _frame_records(
     thumbnail_root: Path,
     max_edge: int,
 ) -> list[dict[str, Any]]:
-    """Build canonical records for one video."""
+    """Build validated ``FrameRecord`` dicts for every frame of one video.
+
+    Iterates over each mapping row, resolves the corresponding image
+    path via ``_numeric_images``, creates a thumbnail with
+    ``_thumbnail``, then constructs and validates a ``FrameRecord``
+    instance.  All records are returned as plain ``dict`` objects ready
+    for assembly into a Parquet shard.
+
+    Args:
+        video_id: Identifier of the video being processed.
+        mapping: Collision-resolved mapping ``DataFrame`` for the video
+            with columns ``n``, ``pts_time``, ``fps``, ``frame_idx``.
+        image_paths: List of keyframe image paths belonging to the
+            video, as returned by ``_images_by_video``.
+        thumbnail_root: Root directory under which per-video thumbnail
+            sub-directories are created.
+        max_edge: Maximum pixel length of the longer thumbnail edge,
+            forwarded to ``_thumbnail``.
+
+    Returns:
+        Ordered list of ``dict`` records, one per mapping row, each
+        satisfying the ``FrameRecord`` schema.
+
+    Raises:
+        ValueError: If any image filename is ambiguous (duplicate numeric
+            stem within the video).
+        FileNotFoundError: If the image for a mapping row's ``n`` value
+            cannot be found in ``image_paths``.
+        OSError: If thumbnail creation fails for any frame.
+    """
 
     images, image_errors = _numeric_images(image_paths)
     if image_errors:
@@ -611,7 +985,27 @@ def _valid_shard(
     mapping: pd.DataFrame,
     max_edge: int,
 ) -> bool:
-    """Return whether a checkpoint matches its requested mapping."""
+    """Check whether an existing shard Parquet is consistent with the mapping.
+
+    A shard is considered valid when:
+
+    * It can be read and contains exactly the expected ``FRAME_COLUMNS``.
+    * ``frame_id`` values match ``{video_id}_{frame_idx:08d}`` for every
+      mapping row.
+    * ``timestamp_ms`` values match ``round(pts_time * 1000)``.
+    * Every referenced image and thumbnail file exists on disk.
+    * No thumbnail's longer edge exceeds ``max_edge``.
+
+    Args:
+        path: Path to the existing shard Parquet file.
+        video_id: Expected video identifier for all rows in the shard.
+        mapping: Canonical mapping ``DataFrame`` the shard must match.
+        max_edge: Thumbnail size constraint used during ingestion.
+
+    Returns:
+        ``True`` if the shard is fully valid and can be reused;
+        ``False`` if anything is missing, inconsistent, or unreadable.
+    """
 
     try:
         table = pd.read_parquet(path)
@@ -649,7 +1043,20 @@ def _valid_shard(
 
 
 def _write_parquet(table: pd.DataFrame, path: Path) -> None:
-    """Atomically write one Parquet table."""
+    """Write a ``DataFrame`` to a Parquet file atomically.
+
+    Writes to a temporary ``.tmp.parquet`` file first and then renames
+    it to ``path`` to prevent partial files from surviving a crash.
+    Creates the parent directory if it does not already exist.
+
+    Args:
+        table: ``DataFrame`` to serialize.  Written without an index.
+        path: Destination Parquet path.
+
+    Raises:
+        OSError: If the directory cannot be created, the write fails,
+            or the rename fails.
+    """
 
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp.parquet")
@@ -670,7 +1077,50 @@ def ingest_dataset(
     resume: bool = True,
     thumbnail_max_edge: int = 320,
 ) -> Path:
-    """Build canonical metadata with per-video checkpoints."""
+    """Build canonical frame metadata with per-video Parquet checkpoints.
+
+    For each video in the canonical mapping, either reuses an existing
+    valid shard (when ``resume=True``) or generates frame records from
+    scratch: resolves image paths, creates JPEG thumbnails, validates
+    each record against ``FrameRecord``, and persists a per-video shard
+    to ``{output_root}/metadata/shards/{video_id}.parquet``.
+
+    After all videos are processed, all shards are merged into a single
+    ``{output_root}/metadata/frames.parquet`` sorted by
+    ``(video_id, timestamp_ms, frame_idx)``.
+
+    Side effects:
+        * Writes or updates per-video shards.
+        * Writes ``{output_root}/metadata/frames.parquet``.
+        * Writes ``{output_root}/reports/mapping_collisions.csv``.
+        * Writes ``{output_root}/reports/extraction_report.json``.
+
+    Args:
+        dataset_root: Root directory of the mounted AIC dataset.
+        output_root: Directory for generated metadata, thumbnails,
+            and reports.
+        dataset_version: Non-empty label stored in the extraction
+            report for traceability.
+        limit: Maximum number of frames to process across all videos.
+            Frames are selected round-robin so the fixture covers many
+            videos. ``None`` processes the full dataset.
+        resume: When ``True`` (default), skip videos that already have
+            a valid shard on disk.  Set to ``False`` to rebuild all
+            shards from scratch.
+        thumbnail_max_edge: Maximum pixel length of the longer edge in
+            generated thumbnail JPEGs.  Defaults to 320.
+
+    Returns:
+        Path to the merged ``{output_root}/metadata/frames.parquet``
+        file.
+
+    Raises:
+        FileNotFoundError: If ``dataset_root`` does not exist or no
+            mapping CSV files are found.
+        ValueError: If ``dataset_version`` is empty,
+            ``thumbnail_max_edge`` is less than 1, or duplicate
+            canonical frame identifiers are detected after merging.
+    """
 
     root = _checked_root(dataset_root)
     output = Path(output_root).expanduser().resolve()
@@ -783,7 +1233,46 @@ def prepare_dataset(
     thumbnail_max_edge: int = 320,
     deep_validation: bool = False,
 ) -> Path:
-    """Run inventory, ingestion, and final validation."""
+    """Run the full offline data pipeline: inventory → ingest → validate.
+
+    This is the recommended entry point for preparing the canonical frame
+    metadata.  It sequentially calls:
+
+    1. ``inventory_corpus`` – scan the dataset and write summary reports.
+    2. ``ingest_dataset`` – build ``frames.parquet`` with per-video
+       checkpoints and JPEG thumbnails.
+    3. ``validate_dataset`` – verify the produced metadata against the
+       source mappings and write audit artifacts.
+
+    Args:
+        dataset_root: Root directory of the mounted AIC dataset.
+        output_root: Directory for generated metadata, thumbnails,
+            and all report files.
+        dataset_version: Non-empty label identifying the dataset
+            release, stored in all output reports.
+        limit: Maximum number of frames to ingest across all videos.
+            ``None`` processes the full dataset.  Useful for generating
+            a small fixture (e.g. ``limit=100``) before a full run.
+        resume: Skip videos with valid existing shards when ``True``
+            (default).  Set to ``False`` to rebuild all shards.
+        thumbnail_max_edge: Maximum pixel length of the longer edge in
+            generated thumbnail JPEGs.  Defaults to 320.
+        deep_validation: When ``True``, the final validation step also
+            verifies SHA-256 checksums of mapping CSVs and source images.
+            Defaults to ``False`` for faster iteration.
+
+    Returns:
+        Path to the final ``{output_root}/metadata/frames.parquet`` file
+        produced by ``ingest_dataset``.
+
+    Raises:
+        FileNotFoundError: If ``dataset_root`` does not exist or no
+            mapping CSV files are found.
+        ValueError: If ``dataset_version`` is empty,
+            ``thumbnail_max_edge`` is less than 1, duplicate canonical
+            frame identifiers are detected, or the final validation
+            step reports any error.
+    """
 
     inventory_corpus(
         dataset_root,

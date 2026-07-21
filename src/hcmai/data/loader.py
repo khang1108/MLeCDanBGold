@@ -1,4 +1,28 @@
-"""In-memory access to canonical frame metadata."""
+"""In-memory access to canonical frame metadata.
+
+This module provides ``FrameStore``, the single interface other pipeline
+components use to look up frame records at runtime.  It is designed to
+be instantiated **once at application startup** and kept alive for the
+entire process lifetime.
+
+Typical usage::
+
+    from hcmai.data import FrameStore
+
+    store = FrameStore("data/aic2025/metadata/frames.parquet")
+
+    # Single lookup
+    frame = store.get("L21_V001_00000090")
+
+    # Batch lookup (order preserved)
+    frames = store.get_many(["L21_V001_00000090", "L21_V002_00000120"])
+
+    # Temporal neighbours
+    neighbors = store.get_neighbors("L21_V001_00000090", window_ms=5_000)
+
+    # Filter IDs for the retrieval stage
+    ids = store.filter_frame_ids(SearchFilters(video_ids=["L21_V001"]))
+"""
 
 from __future__ import annotations
 
@@ -13,10 +37,41 @@ from hcmai.common.schemas.search import SearchFilters
 
 
 class FrameStore:
-    """Load frame metadata once and provide indexed access to its records."""
+    """In-memory index over canonical frame metadata.
+
+    Loads ``frames.parquet`` once at construction time and builds three
+    internal indexes for fast lookup:
+
+    * ``_records_by_id`` – ``dict[frame_id, FrameRecord]`` for O(1)
+      point lookups.
+    * ``_records_by_video`` – ``dict[video_id, tuple[FrameRecord]]``
+      sorted by ``(timestamp_ms, frame_idx, frame_id)`` for temporal
+      neighbour queries.
+    * ``_records`` – ``tuple[FrameRecord]`` in the original Parquet
+      row order, used by ``filter_frame_ids`` to return IDs in a
+      deterministic, reproducible sequence.
+
+    Attributes:
+        metadata_path: Resolved path to the ``frames.parquet`` file
+            that was loaded at construction time.
+    """
 
     def __init__(self, metadata_path: str | Path) -> None:
-        """Load and index frame records from a Parquet file."""
+        """Load ``frames.parquet`` and build all internal indexes.
+
+        Args:
+            metadata_path: Path to the canonical ``frames.parquet`` file
+                produced by ``ingest_dataset``.  Accepts a string or any
+                path-like object.
+
+        Raises:
+            FileNotFoundError: If ``metadata_path`` does not exist
+                (raised by ``pd.read_parquet`` internally).
+            ValueError: If the Parquet file contains duplicate
+                ``frame_id`` values.
+            pydantic.ValidationError: If any row in the file fails
+                ``FrameRecord`` validation inside ``_record_from_row``.
+        """
 
         self.metadata_path = Path(metadata_path)
         table = pd.read_parquet(self.metadata_path)
@@ -54,7 +109,25 @@ class FrameStore:
 
     @staticmethod
     def _record_from_row(row: dict[str, object]) -> FrameRecord:
-        """Validate one Parquet row against the canonical frame contract."""
+        """Validate one Parquet row and return a ``FrameRecord``.
+
+        Extracts only the fields declared in ``FrameRecord.model_fields``
+        from ``row``, converts pandas ``NA`` / ``NaN`` values for
+        nullable string columns (``thumbnail_path``, ``shot_id``) to
+        ``None``, and validates the result with Pydantic.
+
+        Args:
+            row: Plain ``dict`` produced by
+                ``DataFrame.to_dict(orient='records')``.
+                Keys may include additional columns that are ignored.
+
+        Returns:
+            Validated ``FrameRecord`` instance.
+
+        Raises:
+            pydantic.ValidationError: If any required field is missing or
+                has an incompatible type.
+        """
 
         values = {
             name: row[name]
@@ -67,7 +140,21 @@ class FrameStore:
         return FrameRecord.model_validate(values)
 
     def get(self, frame_id: str) -> FrameRecord:
-        """Return one frame or raise a contextual error for an unknown ID."""
+        """Return the ``FrameRecord`` for a given ``frame_id``.
+
+        Args:
+            frame_id: Globally unique frame identifier in the format
+                ``{video_id}_{frame_idx:08d}`` (e.g.
+                ``"L21_V001_00000090"``).
+
+        Returns:
+            The ``FrameRecord`` associated with ``frame_id``.
+
+        Raises:
+            KeyError: If ``frame_id`` is not present in the loaded
+                metadata, with a descriptive message that includes the
+                source file path.
+        """
 
         try:
             return self._records_by_id[frame_id]
@@ -77,7 +164,23 @@ class FrameStore:
             ) from None
 
     def get_many(self, frame_ids: Sequence[str]) -> list[FrameRecord]:
-        """Return frames in input order while preserving duplicate IDs."""
+        """Return ``FrameRecord`` objects for a sequence of frame IDs.
+
+        Preserves the order of ``frame_ids`` and allows duplicate IDs
+        (the same record is returned for each occurrence).
+
+        Args:
+            frame_ids: Ordered sequence of ``frame_id`` strings to look
+                up.  May contain duplicates.
+
+        Returns:
+            List of ``FrameRecord`` objects in the same order as
+            ``frame_ids``.
+
+        Raises:
+            KeyError: If any ``frame_id`` in the sequence is not present
+                in the loaded metadata.
+        """
 
         return [self.get(frame_id) for frame_id in frame_ids]
 
@@ -88,7 +191,29 @@ class FrameStore:
         window_ms: int,
         include_self: bool = False,
     ) -> list[FrameRecord]:
-        """Return same-video frames within an inclusive temporal window."""
+        """Return same-video frames within a symmetric temporal window.
+
+        Finds all frames in the same video whose ``timestamp_ms`` falls
+        within ``[target.timestamp_ms - window_ms,
+        target.timestamp_ms + window_ms]`` (inclusive on both ends).
+        The target frame itself is excluded by default.
+
+        Args:
+            frame_id: ``frame_id`` of the reference frame.
+            window_ms: Half-width of the temporal window in
+                milliseconds.  Must be greater than or equal to zero.
+            include_self: When ``True``, the reference frame is included
+                in the result.  Defaults to ``False``.
+
+        Returns:
+            List of ``FrameRecord`` objects for neighbour frames, sorted
+            by ``(timestamp_ms, frame_idx, frame_id)`` as stored in the
+            per-video index.
+
+        Raises:
+            KeyError: If ``frame_id`` is not present in the metadata.
+            ValueError: If ``window_ms`` is negative.
+        """
 
         if window_ms < 0:
             raise ValueError("window_ms must be greater than or equal to zero")
@@ -107,7 +232,27 @@ class FrameStore:
         self,
         filters: SearchFilters | None,
     ) -> list[str]:
-        """Return IDs matching video and inclusive time filters."""
+        """Return frame IDs matching the given search filters.
+
+        When ``filters`` is ``None``, all frame IDs are returned in the
+        original Parquet row order.  Otherwise, only IDs whose video and
+        timestamp satisfy every non-``None`` filter criterion are
+        included.
+
+        Note:
+            ``SearchFilters.min_score`` is intentionally ignored here
+            because relevance scores belong to the retrieval stage, not
+            the metadata layer.
+
+        Args:
+            filters: ``SearchFilters`` instance specifying optional
+                ``video_ids``, ``start_time_ms``, and ``end_time_ms``
+                constraints.  Pass ``None`` to return all IDs.
+
+        Returns:
+            Ordered list of ``frame_id`` strings satisfying all supplied
+            filter conditions, in Parquet row order.
+        """
 
         if filters is None:
             return [record.frame_id for record in self._records]

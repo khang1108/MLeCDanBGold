@@ -168,6 +168,81 @@ PYTHONPATH=src pytest
 Tests must not download large models. Use fake retrievers, rerankers, and
 small in-memory frame records for orchestration tests.
 
+## Research-first discipline
+
+This is a hackathon research project. Every hour spent on defensive engineering
+is an hour not spent on improving Recall@K or writing the paper. These rules are
+binding for all team members and all AI-generated code.
+
+### The single question before writing any code
+
+> "Does this line help us get a better number in the paper, or does it only make
+> the codebase more robust?"
+
+If the answer is only the latter, do not write it.
+
+### Hard size limits
+
+| Artifact | Hard limit | Rationale |
+|---|---|---|
+| Any new `.py` module | ≤ 200 lines | A teammate must understand it in ≤ 10 min |
+| Test file for that module | ≤ 100 lines | Smoke tests only; no production-grade coverage |
+| New function | ≤ 40 lines | One responsibility, readable at a glance |
+| PR / single change | ≤ 300 lines total | Keep reviews fast |
+
+Exceeding a limit requires an explicit written reason in the PR description.
+"AI generated it this way" is not a valid reason.
+
+### Experiment before module
+
+1. Prove an idea works in a Jupyter notebook first.
+2. Extract the working code into a `.py` module only when a second experiment
+   needs to reuse it.
+3. Never write a module in anticipation of future use.
+
+### Banned patterns in this codebase
+
+The following patterns are forbidden unless Pkhanggg approves them in writing:
+
+- Atomic temp-file writes (`write to .tmp then rename`) outside the data
+  ingestion pipeline that is already complete.
+- Per-file SHA-256 checksums computed at runtime.
+- Factories, registries, or plugin systems.
+- Abstract base classes with fewer than two concrete implementations.
+- Retry loops, circuit breakers, or backoff logic.
+- Docker, Kubernetes, or any container orchestration.
+- Authentication or user management of any kind.
+- Any new database (SQL or NoSQL). `frames.parquet` is the database.
+
+### The "two-file rule" for new research components
+
+Every new research component (embedder, retriever, reranker, evaluator) must fit
+in exactly two files:
+
+```text
+src/hcmai/<component>.py        ← implementation, ≤ 200 lines
+tests/test_<component>.py       ← smoke tests with tiny fixture, ≤ 100 lines
+```
+
+If you need a third file, you have over-engineered the component.
+
+### Experiment output contract
+
+Every experiment run must write a `runs/<name>/metrics.json` with at least:
+
+```json
+{
+  "recall_at_1": 0.0,
+  "recall_at_5": 0.0,
+  "mrr": 0.0,
+  "p50_latency_ms": 0.0,
+  "p95_latency_ms": 0.0,
+  "config": "<path to config file used>"
+}
+```
+
+No `metrics.json` means the experiment did not happen.
+
 ## Change discipline
 
 - Inspect existing files before editing.
@@ -176,3 +251,5 @@ small in-memory frame records for orchestration tests.
 - Update documentation when public behavior or contracts change.
 - Record assumptions when corpus formats or official mappings are unknown.
 - Prefer a working baseline and measured ablation over broad unfinished work.
+- If AI generated the change, the human author is still responsible for
+  understanding every line before merging.

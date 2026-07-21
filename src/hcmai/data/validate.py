@@ -1,4 +1,32 @@
-"""Validate canonical frame metadata and freeze data artifacts."""
+"""Validate canonical frame metadata and freeze data artifacts.
+
+This module provides ``validate_dataset``, a comprehensive quality gate
+that runs after ``ingest_dataset`` to ensure every ``FrameRecord`` in
+``frames.parquet`` satisfies the canonical schema, references existing
+files, and is consistent with the official Kaggle mapping CSVs.
+
+Validation layers
+-----------------
+1. **Schema** – every row is parsed by ``FrameRecord.model_validate``.
+2. **Identifiers** – global uniqueness of ``frame_id`` and per-video
+   ``frame_idx``, correct ID formula, and monotonic ordering.
+3. **Files** – source images exist with the expected dimensions;
+   thumbnails exist and are not larger than the originals.
+4. **Mapping cross-check** – each record can be joined back to an
+   authoritative CSV row; ``timestamp_ms`` and image ``n`` agree.
+5. **Extraction report** – ``processed_frames`` count matches metadata.
+
+Output artifacts
+----------------
+::
+
+    {output_root}/
+    ├── checksums.sha256
+    └── reports/
+        ├── validation_report.json
+        ├── corpus_report.md
+        └── audit_samples.csv
+"""
 
 from __future__ import annotations
 
@@ -39,7 +67,22 @@ def _add_error(
     message: str,
     **context: Any,
 ) -> None:
-    """Count an error and retain a bounded example."""
+    """Append a bounded error example and increment its error counter.
+
+    At most ``MAX_ERROR_EXAMPLES`` (200) error dicts are kept in
+    ``errors`` to prevent the report from growing without bound.  The
+    ``counts`` counter is always updated regardless of the cap.
+
+    Args:
+        errors: Mutable list that accumulates error example dicts.
+        counts: Mutable ``Counter`` tracking the number of occurrences
+            of each error code.
+        code: Short snake_case identifier for the error category
+            (e.g. ``"duplicate_frame_id"``).
+        message: Human-readable description of the error.
+        **context: Additional key-value pairs merged into the error dict
+            for debugging (e.g. ``frame_id=...``, ``path=...``).
+    """
 
     counts[code] += 1
     if len(errors) < MAX_ERROR_EXAMPLES:
@@ -47,7 +90,21 @@ def _add_error(
 
 
 def _native(value: Any) -> Any:
-    """Convert pandas scalars and missing values to Python values."""
+    """Convert a pandas scalar or missing value to a plain Python object.
+
+    Pandas operations often return numpy scalars (e.g. ``np.int64``) or
+    pandas NA types.  This helper converts ``NA``/``NaN`` to ``None``
+    and unwraps numpy scalars via their ``.item()`` method so that the
+    result is safe to pass to Pydantic validators.
+
+    Args:
+        value: Any scalar value, potentially a pandas or numpy type.
+
+    Returns:
+        ``None`` if ``value`` is a missing value recognised by
+        ``pd.isna``; the result of ``.item()`` if ``value`` exposes
+        that method (numpy scalar); otherwise ``value`` unchanged.
+    """
 
     try:
         if pd.isna(value):
@@ -63,7 +120,27 @@ def _read_records(
     errors: list[dict[str, Any]],
     counts: Counter[str],
 ) -> tuple[pd.DataFrame, list[FrameRecord]]:
-    """Read metadata and validate every row against FrameRecord."""
+    """Read ``frames.parquet`` and validate every row against ``FrameRecord``.
+
+    Attempts to read the Parquet file and then validates each row with
+    ``FrameRecord.model_validate(strict=True)``.  Rows that fail
+    validation are recorded via ``_add_error`` rather than raising so
+    that all schema errors are reported together.
+
+    Args:
+        path: Path to ``frames.parquet`` (typically
+            ``{output_root}/metadata/frames.parquet``).
+        errors: Mutable error list populated by ``_add_error``.
+        counts: Mutable error counter populated by ``_add_error``.
+
+    Returns:
+        A two-tuple ``(frames, records)`` where:
+
+        * ``frames`` – raw ``DataFrame`` (empty if the file cannot be
+          read).
+        * ``records`` – list of successfully validated ``FrameRecord``
+          objects (one per valid row).
+    """
 
     try:
         frames = pd.read_parquet(path).reset_index(drop=True)
@@ -125,7 +202,25 @@ def _validate_identifiers(
     errors: list[dict[str, Any]],
     counts: Counter[str],
 ) -> None:
-    """Validate stable IDs, uniqueness, and per-video order."""
+    """Validate identifier uniqueness, format correctness, and per-video order.
+
+    Checks the following invariants and records a bounded error for each
+    violation:
+
+    * ``frame_id`` values are globally unique across the whole table.
+    * ``(video_id, frame_idx)`` pairs are unique.
+    * Each ``frame_id`` equals ``f"{video_id}_{frame_idx:08d}"``.
+    * Within each video, frames are sorted by
+      ``(timestamp_ms, frame_idx)`` (monotonically non-decreasing).
+
+    Args:
+        frames: Raw ``DataFrame`` as returned by ``_read_records``.
+            May be empty.
+        records: List of validated ``FrameRecord`` objects from
+            ``_read_records``.
+        errors: Mutable error list populated by ``_add_error``.
+        counts: Mutable error counter populated by ``_add_error``.
+    """
 
     if "frame_id" in frames and frames["frame_id"].duplicated().any():
         _add_error(
@@ -170,7 +265,22 @@ def _validate_identifiers(
 
 
 def _resolve_path(value: str, roots: Iterable[Path]) -> Path:
-    """Resolve an absolute or root-relative artifact path."""
+    """Resolve an artifact path that may be absolute or root-relative.
+
+    If ``value`` is an absolute path it is returned directly.  Otherwise
+    each root in ``roots`` is tried in order and the first candidate
+    that exists on disk is returned.  If none exist, the first candidate
+    is returned as a best guess (so callers can produce a useful error
+    message).
+
+    Args:
+        value: Raw path string from a ``FrameRecord`` field.
+        roots: Iterable of base directories to prepend when the path is
+            not absolute (e.g. ``(dataset_root, output_root)``).
+
+    Returns:
+        Resolved ``Path`` object.  Not guaranteed to exist on disk.
+    """
 
     path = Path(value).expanduser()
     if path.is_absolute():
@@ -189,7 +299,28 @@ def _validate_files(
     errors: list[dict[str, Any]],
     counts: Counter[str],
 ) -> dict[str, Path]:
-    """Validate source images and thumbnails referenced by metadata."""
+    """Validate source images and thumbnails referenced by the metadata.
+
+    For each ``FrameRecord``, resolves ``image_path`` against
+    ``dataset_root`` and ``output_root``, checks that the file exists,
+    and verifies that its pixel dimensions match the metadata ``width``
+    and ``height`` fields.  Then checks that ``thumbnail_path`` is not
+    ``None``, that the thumbnail file exists, and that its dimensions do
+    not exceed the source image's dimensions.
+
+    Args:
+        records: Validated ``FrameRecord`` objects to inspect.
+        dataset_root: Dataset root directory used as a fallback base
+            path when ``image_path`` is not absolute.
+        output_root: Output root directory used as a fallback base path
+            when ``thumbnail_path`` is not absolute.
+        errors: Mutable error list populated by ``_add_error``.
+        counts: Mutable error counter populated by ``_add_error``.
+
+    Returns:
+        Dict mapping each ``frame_id`` to its resolved source image
+        ``Path`` (for use in ``_validate_mappings``).
+    """
 
     resolved = {}
     for record in records:
@@ -256,7 +387,21 @@ def _validate_collision_report(
     errors: list[dict[str, Any]],
     counts: Counter[str],
 ) -> None:
-    """Validate collision decisions against the source mapping."""
+    """Verify the on-disk collision CSV matches the recomputed expected rows.
+
+    Reads the CSV at ``path`` and performs a strict ``DataFrame``
+    equality check against ``expected_rows`` (recomputed from the source
+    mapping).  Any mismatch or parse error is recorded as a
+    ``collision_report_invalid`` error.
+
+    Args:
+        path: Path to the existing ``mapping_collisions.csv`` file.
+        expected_rows: List of enriched collision ``dict`` records as
+            produced by ``collision_report_rows`` from the current source
+            mapping.
+        errors: Mutable error list populated by ``_add_error``.
+        counts: Mutable error counter populated by ``_add_error``.
+    """
 
     try:
         actual = pd.read_csv(path, keep_default_na=False)
@@ -288,7 +433,34 @@ def _validate_mappings(
     errors: list[dict[str, Any]],
     counts: Counter[str],
 ) -> dict[str, Any]:
-    """Validate source coverage and metadata-to-mapping joins."""
+    """Cross-validate metadata records against the official Kaggle mapping CSVs.
+
+    Reloads all mapping CSVs, rebuilds the canonical mapping, and
+    checks that:
+
+    * Every video has one-to-one coverage between mapping rows and
+      keyframe images.
+    * The on-disk collision report matches the recomputed expected rows.
+    * Each ``FrameRecord`` can be joined to a canonical mapping row on
+      ``(video_id, frame_idx)``.
+    * The image filename stem matches the mapping row's ``n`` value.
+    * ``timestamp_ms`` matches ``round(pts_time * 1000)`` from the CSV.
+
+    Args:
+        dataset_root: Root directory of the mounted AIC dataset.
+        output_root: Output directory containing ``reports/`` artifacts.
+        records: Validated ``FrameRecord`` objects from ``_read_records``.
+        resolved_images: Dict mapping ``frame_id`` to the resolved source
+            image ``Path``, as returned by ``_validate_files``.
+        errors: Mutable error list populated by ``_add_error``.
+        counts: Mutable error counter populated by ``_add_error``.
+
+    Returns:
+        Summary ``dict`` with keys ``paths``, ``source_images``,
+        ``raw_rows``, ``canonical_rows``, ``image_count``,
+        ``collision_groups``, ``discarded_aliases``, and
+        ``collision_path`` for use in ``validate_dataset``.
+    """
 
     paths, raw, canonical, collisions, mapping_errors = _load_mappings(
         dataset_root
@@ -414,7 +586,23 @@ def _validate_extraction(
     errors: list[dict[str, Any]],
     counts: Counter[str],
 ) -> None:
-    """Check that metadata contains the requested successful extraction."""
+    """Verify that the extraction report is consistent with the metadata.
+
+    Reads ``{output_root}/reports/extraction_report.json`` and checks
+    that ``processed_frames`` matches the number of rows in the current
+    ``frames.parquet`` and that no ``failed_videos`` were recorded.
+    Silently returns if the report file does not exist (the step is
+    skipped for externally produced metadata).
+
+    Args:
+        output_root: Output root directory containing ``reports/``.
+        frame_count: Number of rows in the current ``frames.parquet``.
+        canonical_rows: Total canonical mapping rows across all videos,
+            used to compute the expected frame count when a ``limit``
+            was specified during ingestion.
+        errors: Mutable error list populated by ``_add_error``.
+        counts: Mutable error counter populated by ``_add_error``.
+    """
 
     path = output_root / "reports" / "extraction_report.json"
     if not path.is_file():
@@ -461,7 +649,36 @@ def _write_checksums(
     output_root: Path,
     deep: bool,
 ) -> int:
-    """Write canonical and optional source SHA-256 checksums."""
+    """Compute and write SHA-256 checksums for all validated artifacts.
+
+    Always includes ``metadata_path`` (the canonical Parquet file).
+    When ``deep=True``, also includes all mapping CSV files, the
+    collision report, and every source keyframe image.  Each line in the
+    output file follows the standard ``sha256sum`` format::
+
+        <hex_digest>  <label>\n
+
+    Labels are relative paths prefixed with ``output/`` for files under
+    ``output_root`` and ``dataset/`` for files under ``dataset_root``.
+
+    Args:
+        path: Destination path for the ``checksums.sha256`` file.
+        metadata_path: Path to ``frames.parquet`` (always hashed).
+        mapping_paths: List of mapping CSV ``Path`` objects discovered
+            by ``_load_mappings``.
+        image_paths: List of keyframe image ``Path`` objects (hashed
+            only when ``deep=True``).
+        collision_path: Path to ``mapping_collisions.csv`` (hashed
+            only when ``deep=True`` and the file exists).
+        dataset_root: Dataset root used to compute relative labels for
+            files that live outside ``output_root``.
+        output_root: Output root used to compute relative labels.
+        deep: When ``True``, hash mapping CSVs, source images, and the
+            collision report in addition to the metadata file.
+
+    Returns:
+        Total number of files whose checksums were written.
+    """
 
     inputs = {metadata_path.resolve()} if metadata_path.is_file() else set()
     if deep:
@@ -485,7 +702,22 @@ def _write_checksums(
 
 
 def _write_audit(path: Path, records: list[FrameRecord], limit: int) -> int:
-    """Write deterministic round-robin records for manual review."""
+    """Write a deterministic round-robin audit sample CSV for manual review.
+
+    Selects up to ``limit`` records spread evenly across all videos
+    using a round-robin strategy, then writes them to a CSV file with
+    the columns ``frame_id``, ``video_id``, ``frame_idx``,
+    ``timestamp_ms``, ``image_path``, and ``thumbnail_path``.
+
+    Args:
+        path: Destination path for the audit CSV file.
+        records: All validated ``FrameRecord`` objects from the metadata.
+        limit: Maximum number of records to write.  The actual count
+            may be less if ``len(records) < limit``.
+
+    Returns:
+        Number of records written to the CSV file.
+    """
 
     grouped: dict[str, list[FrameRecord]] = defaultdict(list)
     for record in records:
@@ -520,7 +752,20 @@ def _write_audit(path: Path, records: list[FrameRecord], limit: int) -> int:
 
 
 def _write_corpus_report(path: Path, report: dict[str, Any]) -> None:
-    """Write a concise validation and rebuild summary."""
+    """Write a concise Markdown validation and rebuild summary.
+
+    Produces a short Markdown file (``corpus_report.md``) showing the
+    validation status, canonical frame count, error count, and audit
+    sample count, plus the CLI commands needed to rebuild or re-validate
+    the dataset.
+
+    Args:
+        path: Destination path for the Markdown report file.
+        report: Validation report ``dict`` as assembled in
+            ``validate_dataset``.  Must contain ``valid``,
+            ``dataset_version``, ``row_count``, ``error_count``, and
+            ``audit_rows`` keys.
+    """
 
     status = "PASSED" if report["valid"] else "FAILED"
     path.write_text(
@@ -559,7 +804,46 @@ def validate_dataset(
     audit_limit: int = 50,
     metadata_path: PathValue | None = None,
 ) -> dict[str, Any]:
-    """Validate canonical metadata and write audit artifacts."""
+    """Validate canonical frame metadata and write all audit artifacts.
+
+    Runs five sequential validation layers (schema, identifiers, files,
+    mapping cross-check, extraction report) and writes four output
+    artifacts regardless of whether any errors were found:
+
+    * ``{output_root}/reports/validation_report.json``
+    * ``{output_root}/reports/corpus_report.md``
+    * ``{output_root}/reports/audit_samples.csv``
+    * ``{output_root}/checksums.sha256``
+
+    The ``valid`` key in the returned report is ``True`` only when all
+    five layers produce zero errors.
+
+    Args:
+        dataset_root: Root directory of the mounted AIC dataset.  Used
+            to reload mapping CSVs for the cross-validation step.
+        output_root: Directory containing the ingested metadata and
+            where audit artifacts are written.
+        dataset_version: Optional label stored verbatim in the report
+            for traceability.  ``None`` is allowed (the field is
+            included as ``null`` in the JSON output).
+        deep: When ``True``, the checksum file includes SHA-256 digests
+            for all mapping CSVs and source keyframe images in addition
+            to ``frames.parquet``.  Defaults to ``False``.
+        audit_limit: Maximum number of records to write to
+            ``audit_samples.csv``.  Defaults to 50.
+        metadata_path: Override the default metadata path
+            ``{output_root}/metadata/frames.parquet``.  Useful when
+            validating a specific shard or an externally produced file.
+
+    Returns:
+        Validation report ``dict`` with the following top-level keys:
+        ``valid``, ``status``, ``row_count``, ``error_count``,
+        ``error_counts``, ``errors``, ``outputs``, and various
+        mapping/checksum statistics.
+
+    Raises:
+        ValueError: If ``audit_limit`` is negative.
+    """
 
     if audit_limit < 0:
         raise ValueError("audit_limit must be non-negative")
