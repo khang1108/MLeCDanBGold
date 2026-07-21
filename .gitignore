@@ -76,5 +76,6 @@ temp/
 *.synctex.gz
 
 .codex/
+.claude/
 .agents/
 aic/

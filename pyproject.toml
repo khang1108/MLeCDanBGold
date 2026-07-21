@@ -15,6 +15,18 @@ dependencies = [
     "pyarrow>=14.0, <22.0",
     "pydantic>=2.0, <3.0",
     "pyyaml>=6.0, <7.0",
+    "numpy>=1.24",
+    "faiss-cpu>=1.7",
+]
+
+[project.optional-dependencies]
+embedding = [
+    "transformers>=4.30",
+    "torch>=2.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
 ]
 
 [tool.setuptools.packages.find]
