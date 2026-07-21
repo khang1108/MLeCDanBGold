@@ -56,6 +56,20 @@ Quy tắc rất ngắn gọn:
 Ví dụ: video `L21_V001`, `frame_idx=90` sẽ có
 `frame_id="L21_V001_00000090"`.
 
+## Cấu trúc thư mục `data/`
+
+Dữ liệu thô và kết quả ingest được tổ chức trong thư mục `data/` ở root dự án:
+
+```text
+data/
+├── map-keyframes/               # File CSV mapping từ Kaggle (e.g. L21_V001.csv)
+├── keyframes/                   # Các file ảnh keyframe (e.g. L21_V001/001.jpg)
+├── media-info/                  # Metadata video (JSON)
+├── metadata/                    # Canonical frames.parquet sinh ra từ prepare_data.py
+├── thumbnails/                  # Ảnh thumbnail 320px sinh ra từ prepare_data.py
+└── reports/                     # Báo cáo validation và inventory
+```
+
 ## Chuẩn bị dữ liệu
 
 Chạy fixture 100 frame trước:
@@ -64,8 +78,8 @@ Chạy fixture 100 frame trước:
 from hcmai.data import prepare_dataset
 
 frames_path = prepare_dataset(
-    dataset_root="dataset",
-    output_root="data/aic2025_fixture",
+    dataset_root="data",
+    output_root="data/aic_fixture",
     dataset_version="aic2025_s1_v2",
     limit=100,
 )
@@ -75,8 +89,8 @@ Khi fixture chạy ổn, bỏ `limit` để ingest toàn bộ dataset:
 
 ```python
 frames_path = prepare_dataset(
-    dataset_root="dataset",
-    output_root="data/aic2025",
+    dataset_root="data",
+    output_root="data/aic",
     dataset_version="aic2025_s1_v2",
 )
 ```
@@ -226,12 +240,36 @@ Chỉ bàn giao khi `report["valid"]` là `True`, không có collision chưa gi�
 đường dẫn ảnh hợp lệ và số lượng frame khớp extraction report.
 
 ## Lệnh CLI
-
-Có thể cấu hình bằng `HCMAI_DATASET_ROOT`, `HCMAI_DATA_ROOT` và
-`HCMAI_DATASET_VERSION`:
+Chạy từ thư mục gốc của dự án:
 
 ```bash
-PYTHONPATH=src python scripts/prepare_data.py --limit 100
+# 1. Test thử nghiệm 100 frame
+PYTHONPATH=src python scripts/prepare_data.py \
+  --dataset-root data \
+  --output-root data/aic_fixture \
+  --dataset-version aic2025_s1_v2 \
+  --limit 100
+
+# 2. Ingest toàn bộ dataset
+PYTHONPATH=src python scripts/prepare_data.py \
+  --dataset-root data \
+  --output-root data/aic \
+  --dataset-version aic2025_s1_v2
+
+# 3. Chỉ validate lại metadata đã ingest
+PYTHONPATH=src python scripts/prepare_data.py \
+  --dataset-root data \
+  --output-root data/aic \
+  --dataset-version aic2025_s1_v2 \
+  --validate-only
+```
+
+Hoặc thiết lập biến môi trường:
+
+```bash
+export HCMAI_DATASET_ROOT=data
+export HCMAI_DATA_ROOT=data/aic
+export HCMAI_DATASET_VERSION=aic2025_s1_v2
+
 PYTHONPATH=src python scripts/prepare_data.py
-PYTHONPATH=src python scripts/prepare_data.py --validate-only
 ```

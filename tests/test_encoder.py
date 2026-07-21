@@ -6,8 +6,8 @@ import pytest
 import numpy as np
 from PIL import Image
 
+from hcmai.common.config import EncoderConfig
 from hcmai.retriever.encoder import (
-    EncoderConfig,
     DenseEncoder,
     EncodingStats,
 )

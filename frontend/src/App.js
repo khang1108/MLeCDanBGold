@@ -17,7 +17,6 @@ const MOCK_FRAMES = [
   { id: 10, imageUrl: 'https://picsum.photos/seed/frame10/1024/768', caption: 'A modern skyscraper reflecting a bright blue sky on its glass windows.' },
   { id: 11, imageUrl: 'https://picsum.photos/seed/frame11/1024/768', caption: 'Chef garnishing a gourmet plate of pasta with fresh green basil leaves.' },
   { id: 12, imageUrl: 'https://picsum.photos/seed/frame12/1024/768', caption: 'A cozy coffee shop corner with a book and a steaming hot mug on a wooden table.' },
-  { id: 13, imageUrl: 'https://picsum.photos/seed/frame13/1024/768', caption: 'Fast-moving city traffic at night creating beautiful neon light trails.' },
   { id: 14, imageUrl: 'https://picsum.photos/seed/frame14/1024/768', caption: 'A hiker standing on a high peak looking out over a massive valley.' },
   { id: 15, imageUrl: 'https://picsum.photos/seed/frame15/1024/768', caption: 'A person wearing VR goggles interacting with virtual graphs in the air.' },
   { id: 16, imageUrl: 'https://picsum.photos/seed/frame16/1024/768', caption: 'Close-up of water droplets bead-forming on a fresh green leaf.' },

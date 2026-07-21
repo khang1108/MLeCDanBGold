@@ -9,11 +9,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from PIL import Image
 
-from hcmai.offline.embedding_pipeline import (
-    EmbeddingPipeline,
-    EmbeddingManifest,
-)
-from hcmai.retriever.encoder import EncoderConfig
+from hcmai.common.config import EncoderConfig
+from hcmai.embedding.embedding import EmbeddingPipeline
+from hcmai.embedding.models.metadata import EmbeddingMetadata
 
 
 @pytest.fixture
@@ -38,58 +36,53 @@ def temp_dirs():
         }
 
 
-class TestEmbeddingManifest:
-    """Test EmbeddingManifest serialization."""
+class TestEmbeddingMetadata:
+    """Test EmbeddingMetadata serialization."""
 
-    def test_manifest_creation(self):
-        """Test creating a manifest."""
-        manifest = EmbeddingManifest(
+    def test_to_dict(self):
+        """Test metadata conversion to dictionary."""
+        metadata = EmbeddingMetadata(
             dataset_version="test_v1",
-            model_name="google/siglip2",
+            model_name="siglip2",
             model_checkpoint=None,
             preprocessing_size=224,
             dtype="float32",
             embedding_dimension=768,
             total_frames=100,
-            successful_frames=95,
-            failed_frames=5,
+            successful_frames=98,
+            failed_frames=2,
             normalization="l2",
-            generated_at="2024-01-01T00:00:00",
+            generated_at="2026-01-01T00:00:00Z",
             device="cpu",
             batch_size=32,
-            processing_time_sec=60.0,
+            processing_time_sec=10.5,
         )
+        data = metadata.to_dict()
+        assert data["dataset_version"] == "test_v1"
+        assert data["total_frames"] == 100
+        assert data["successful_frames"] == 98
 
-        assert manifest.dataset_version == "test_v1"
-        assert manifest.successful_frames == 95
-        assert manifest.embedding_dimension == 768
-
-    def test_manifest_serialization(self):
-        """Test manifest to_dict and from_dict."""
-        manifest = EmbeddingManifest(
-            dataset_version="test_v1",
-            model_name="google/siglip2",
-            model_checkpoint=None,
-            preprocessing_size=224,
-            dtype="float32",
-            embedding_dimension=768,
-            total_frames=100,
-            successful_frames=100,
-            failed_frames=0,
-            normalization="l2",
-            generated_at="2024-01-01T00:00:00",
-            device="cpu",
-            batch_size=32,
-            processing_time_sec=60.0,
-        )
-
-        data = manifest.to_dict()
-        assert isinstance(data, dict)
-        assert data["embedding_dimension"] == 768
-
-        # Reconstruct from dict
-        manifest2 = EmbeddingManifest.from_dict(data)
-        assert manifest2.embedding_dimension == manifest.embedding_dimension
+    def test_from_dict(self):
+        """Test metadata creation from dictionary."""
+        data = {
+            "dataset_version": "test_v1",
+            "model_name": "siglip2",
+            "model_checkpoint": None,
+            "preprocessing_size": 224,
+            "dtype": "float32",
+            "embedding_dimension": 768,
+            "total_frames": 100,
+            "successful_frames": 98,
+            "failed_frames": 2,
+            "normalization": "l2",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "device": "cpu",
+            "batch_size": 32,
+            "processing_time_sec": 10.5,
+        }
+        metadata2 = EmbeddingMetadata.from_dict(data)
+        assert metadata2.dataset_version == "test_v1"
+        assert metadata2.total_frames == 100
 
 
 class TestEmbeddingPipeline:

@@ -12,7 +12,7 @@ from hcmai.common.utils.io import write_json, write_yaml
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
 from hcmai.retriever.dense import DenseRetriever
-from hcmai.retriever.config import RECALL_CUTOFFS, BenchmarkConfig
+from hcmai.common.config import RECALL_CUTOFFS, BenchmarkConfig
 
 logger = get_logger(__name__)
 

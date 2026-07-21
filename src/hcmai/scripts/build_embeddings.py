@@ -5,10 +5,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.io import read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.embedding.embedding import EmbeddingPipeline
-from hcmai.retriever.encoder import EncoderConfig
 from hcmai.scripts.parse import parse_arguments
 
 logger = get_logger(__name__)

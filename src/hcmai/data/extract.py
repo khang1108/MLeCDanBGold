@@ -135,26 +135,30 @@ def _checked_limit(value: int | None) -> int | None:
 def _mapping_files(root: Path) -> list[Path]:
     """Discover official Kaggle mapping CSV files in deterministic order.
 
-    Looks for all ``.csv`` files under
-    ``{root}/map-keyframes-aic25-b1/map-keyframes/``.
+    Checks standard sub-directories under ``root`` for mapping CSV files.
 
     Args:
         root: Resolved dataset root directory.
 
     Returns:
         Sorted list of ``Path`` objects for every mapping CSV found.
-        Returns an empty list if the mapping directory does not exist.
+        Returns an empty list if no mapping directory exists.
     """
-
-    directory = root / "map-keyframes-aic25-b1" / "map-keyframes"
+    candidates = [
+        root / "map-keyframes-aic25-b1" / "map-keyframes",
+        root / "map-keyframes",
+        root / "map-keyframes-aic25-b1",
+        root / "map_keyframes",
+    ]
+    directory = next((d for d in candidates if d.is_dir()), root)
     return sorted(path for path in directory.glob("*.csv") if path.is_file())
 
 
 def _keyframe_images(root: Path) -> list[Path]:
     """Discover all supported keyframe image files under the dataset root.
 
-    Searches for files matching ``Keyframes_L*/keyframes/*/*`` whose
-    suffix is one of ``.jpg``, ``.jpeg``, ``.png``, or ``.webp``.
+    Searches standard keyframe path patterns under ``root`` for image files
+    whose suffix is one of ``.jpg``, ``.jpeg``, ``.png``, or ``.webp``.
 
     Args:
         root: Resolved dataset root directory.
@@ -163,12 +167,23 @@ def _keyframe_images(root: Path) -> list[Path]:
         Sorted list of resolved absolute ``Path`` objects for every
         keyframe image found.
     """
-
-    return sorted(
-        path.resolve()
-        for path in root.glob("Keyframes_L*/keyframes/*/*")
-        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
-    )
+    patterns = [
+        "Keyframes_L*/keyframes/*/*",
+        "keyframes/*/*",
+        "keyframes/*",
+        "Keyframes_L*/*/*",
+    ]
+    images: list[Path] = []
+    for pattern in patterns:
+        found = [
+            path.resolve()
+            for path in root.glob(pattern)
+            if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+        ]
+        if found:
+            images = found
+            break
+    return sorted(images)
 
 
 def _read_mapping(path: Path) -> pd.DataFrame:

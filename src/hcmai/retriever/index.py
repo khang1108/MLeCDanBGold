@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import numpy as np
+import faiss
 import pandas as pd
+
 from pathlib import Path
 from typing import Any
 
 from hcmai.common.utils.io import read_json, write_json
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.metadata import IndexMetadata
+from hcmai.retriever.models import IndexMetadata
 
 logger = get_logger(__name__)
 
@@ -62,7 +64,6 @@ class VisualIndex:
         Returns:
             A ready-to-search :class:`VisualIndex`.
         """
-        import faiss
 
         if index_type != "flat_ip":
             raise ValueError(f"Unsupported index_type {index_type!r}; only 'flat_ip' is supported")
@@ -112,8 +113,6 @@ class VisualIndex:
         Returns:
             The directory the artifacts were written to.
         """
-        import faiss
-
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -141,7 +140,6 @@ class VisualIndex:
             ValueError: If the index vector count, mapping length, and metadata
                 ``vector_count`` disagree, or positions are not ``0..N-1``.
         """
-        import faiss
 
         index_dir = Path(index_dir)
         index = faiss.read_index(str(index_dir / INDEX_FILENAME))

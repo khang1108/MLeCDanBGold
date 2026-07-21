@@ -6,12 +6,13 @@ import json
 import sys
 from pathlib import Path
 
+from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas.evaluation import EvaluationQuery
 from hcmai.common.utils.io import read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.retriever.benchmark import RetrievalBenchmark
 from hcmai.retriever.dense import DenseRetriever
-from hcmai.retriever.encoder import DenseEncoder, EncoderConfig
+from hcmai.retriever.encoder import DenseEncoder
 from hcmai.retriever.index import VisualIndex
 from hcmai.scripts.parse import parse_arguments
 

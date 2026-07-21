@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image
 
+from typing import Any
+from PIL import Image
+from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.config import EncoderConfig
-from hcmai.retriever.stats import EncodingStats
+from hcmai.retriever.models import EncodingStats
 
 logger = get_logger(__name__)
+
+
+def _extract_tensor(outputs: Any) -> Any:
+    """Extract torch.Tensor from model output object or tuple."""
+    if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+        return outputs.pooler_output
+    if hasattr(outputs, "shape"):
+        return outputs
+    if isinstance(outputs, (tuple, list)):
+        return outputs[0]
+    return getattr(outputs, "last_hidden_state", outputs)
 
 
 class DenseEncoder:
@@ -41,7 +53,8 @@ class DenseEncoder:
                 dummy_image = Image.new("RGB", (224, 224))
                 inputs = self.processor(images=[dummy_image], return_tensors="pt").to(self.config.device)
                 outputs = self.model.get_image_features(**inputs)
-                self.embedding_dim = outputs.shape[-1]
+                tensor = _extract_tensor(outputs)
+                self.embedding_dim = tensor.shape[-1]
 
             logger.info(f"Model loaded. Embedding dimension: {self.embedding_dim}")
         except ImportError as e:
@@ -74,7 +87,8 @@ class DenseEncoder:
                 with torch.no_grad():
                     inputs = self.processor(images=batch, return_tensors="pt").to(self.config.device)
                     outputs = self.model.get_image_features(**inputs)
-                    embeddings = outputs.cpu().numpy()
+                    tensor = _extract_tensor(outputs)
+                    embeddings = tensor.cpu().numpy()
 
                 # Normalize embeddings to unit norm for IP similarity
                 embeddings = embeddings / (
@@ -121,7 +135,8 @@ class DenseEncoder:
                 with torch.no_grad():
                     inputs = self.processor(text=batch, return_tensors="pt").to(self.config.device)
                     outputs = self.model.get_text_features(**inputs)
-                    embeddings = outputs.cpu().numpy()
+                    tensor = _extract_tensor(outputs)
+                    embeddings = tensor.cpu().numpy()
 
                 # Normalize embeddings to unit norm for IP similarity
                 embeddings = embeddings / (
