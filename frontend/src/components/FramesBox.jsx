@@ -1,74 +1,125 @@
 import React from 'react';
 import FrameCard from './FrameCard';
 
-// 20 Mock Frames with diverse, high-quality images and descriptive captions
-const MOCK_FRAMES = [
-  { id: 1, imageUrl: 'https://picsum.photos/seed/frame1/1024/768', caption: 'A sleek red sports car racing down a scenic mountain highway during sunset.' },
-  { id: 2, imageUrl: 'https://picsum.photos/seed/frame2/1024/768', caption: 'Close-up of hands typing lines of clean code on a mechanical keyboard.' },
-  { id: 3, imageUrl: 'https://picsum.photos/seed/frame3/1024/768', caption: 'A golden retriever puppy jumping to catch a bright yellow tennis ball.' },
-  { id: 4, imageUrl: 'https://picsum.photos/seed/frame4/1024/768', caption: 'Aerial view of misty pine forests stretching across rolling green hills.' },
-  { id: 5, imageUrl: 'https://picsum.photos/seed/frame5/1024/768', caption: 'Two scientists in white lab coats analyzing biological samples under a microscope.' },
-  { id: 6, imageUrl: 'https://picsum.photos/seed/frame6/1024/768', caption: 'A barista pouring steamed milk to make latte art in a white ceramic cup.' },
-  { id: 7, imageUrl: 'https://picsum.photos/seed/frame7/1024/768', caption: 'Group of young professionals brainstorming in a modern glass conference room.' },
-  { id: 8, imageUrl: 'https://picsum.photos/seed/frame8/1024/768', caption: 'A close-up shot of a smartphone screen displaying a colorful dashboard app.' },
-  { id: 9, imageUrl: 'https://picsum.photos/seed/frame9/1024/768', caption: 'A dense flock of white seagulls soaring high over crashing ocean waves.' },
-  { id: 10, imageUrl: 'https://picsum.photos/seed/frame10/1024/768', caption: 'A modern skyscraper reflecting a bright blue sky on its glass windows.' },
-  { id: 11, imageUrl: 'https://picsum.photos/seed/frame11/1024/768', caption: 'Chef garnishing a gourmet plate of pasta with fresh green basil leaves.' },
-  { id: 12, imageUrl: 'https://picsum.photos/seed/frame12/1024/768', caption: 'A cozy coffee shop corner with a book and a steaming hot mug on a wooden table.' },
-  { id: 13, imageUrl: 'https://picsum.photos/seed/frame13/1024/768', caption: 'Fast-moving city traffic at night creating beautiful neon light trails.' },
-  { id: 14, imageUrl: 'https://picsum.photos/seed/frame14/1024/768', caption: 'A hiker standing on a high peak looking out over a massive valley.' },
-  { id: 15, imageUrl: 'https://picsum.photos/seed/frame15/1024/768', caption: 'A person wearing VR goggles interacting with virtual graphs in the air.' },
-  { id: 16, imageUrl: 'https://picsum.photos/seed/frame16/1024/768', caption: 'Close-up of water droplets bead-forming on a fresh green leaf.' },
-  { id: 17, imageUrl: 'https://picsum.photos/seed/frame17/1024/768', caption: 'A couple walking hand in hand down a quiet rain-slicked city street.' },
-  { id: 18, imageUrl: 'https://picsum.photos/seed/frame18/1024/768', caption: 'A vintage record player spinning a black vinyl record in warm light.' },
-  { id: 19, imageUrl: 'https://picsum.photos/seed/frame19/1024/768', caption: 'Stunning view of the Milky Way galaxy glowing bright over a dark desert.' },
-  { id: 20, imageUrl: 'https://picsum.photos/seed/frame20/1024/768', caption: 'A cute black cat sleeping curled up on a soft gray knitted blanket.' }
-];
+const FramesBox = ({ results, isLoading, error, latencyMs, onFrameClick }) => {
+  const skeletons = Array.from({ length: 8 });
 
-const FramesBox = ({ searchQuery, onFrameClick }) => {
-  // Filter frames based on the search query
-  const filteredFrames = MOCK_FRAMES.filter((frame) =>
-    frame.caption.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Determine different render states
+  const hasSearched = latencyMs !== null || error !== null;
 
   return (
     <section className="frames-container">
-      {filteredFrames.length > 0 ? (
-        <div className="frames-grid">
-          {filteredFrames.map((frame) => (
-            <FrameCard
-              key={frame.id}
-              index={frame.id}
-              imageUrl={frame.imageUrl}
-              caption={frame.caption}
-              onClick={() => onFrameClick(frame)}
-            />
-          ))}
-        </div>
-      ) : (
-        /* Empty State */
-        <div className="frames-empty-state">
+      {/* 1. Error State */}
+      {error && (
+        <div className="error-alert">
           <svg
-            className="frames-empty-icon"
+            className="error-icon"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
-            strokeWidth={1.2}
+            strokeWidth={2}
             stroke="currentColor"
           >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              d="m15.75 15.75-2.489-2.489m0 0a3.375 3.375 0 1 0-4.773-4.773 3.375 3.375 0 0 0 4.774 4.774ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+              d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
             />
           </svg>
-          <p className="body-md frames-empty-text">
-            No frames found matching your query
-          </p>
-          <p className="caption frames-empty-subtext">
-            Try adjusting your search terms or lowering the similarity threshold.
-          </p>
+          <div className="error-details">
+            <h4 className="error-title">Search Connection Error</h4>
+            <p className="error-message">{error}</p>
+          </div>
         </div>
+      )}
+
+      {/* 2. Latency Stats Banner */}
+      {!isLoading && !error && latencyMs && (
+        <div className="latency-banner">
+          <div className="latency-summary">
+            Found <span className="latency-highlight">{results.length}</span> frames in{" "}
+            <span className="latency-highlight">{latencyMs.total}ms</span>
+          </div>
+          <div className="latency-stages">
+            <span className="latency-stage-item">Query: {latencyMs.query_processing + latencyMs.query_encoding}ms</span>
+            <span className="latency-stage-divider">|</span>
+            <span className="latency-stage-item">Retrieval: {latencyMs.candidate_retrieval}ms</span>
+            <span className="latency-stage-divider">|</span>
+            <span className="latency-stage-item">Fusion: {latencyMs.fusion}ms</span>
+            {latencyMs.reranking > 0 && (
+              <>
+                <span className="latency-stage-divider">|</span>
+                <span className="latency-stage-item">Rerank: {latencyMs.reranking}ms</span>
+              </>
+            )}
+            <span className="latency-stage-divider">|</span>
+            <span className="latency-stage-item">Materialize: {latencyMs.materialization}ms</span>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Grid Display: Loading skeletons vs Real cards */}
+      {isLoading ? (
+        <div className="frames-grid">
+          {skeletons.map((_, i) => (
+            <div key={i} className="frame-card skeleton">
+              <div className="skeleton-header"></div>
+              <div className="skeleton-image"></div>
+              <div className="skeleton-caption"></div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        !error && (
+          results.length > 0 ? (
+            <div className="frames-grid">
+              {results.map((frame) => (
+                <FrameCard
+                  key={frame.frame_id}
+                  frame={frame}
+                  onClick={() => onFrameClick(frame)}
+                />
+              ))}
+            </div>
+          ) : (
+            /* Empty/Welcome States */
+            <div className="frames-empty-state">
+              <svg
+                className="frames-empty-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.2}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m15.75 15.75-2.489-2.489m0 0a3.375 3.375 0 1 0-4.773-4.773 3.375 3.375 0 0 0 4.774 4.774ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                />
+              </svg>
+              {hasSearched ? (
+                <>
+                  <p className="body-md frames-empty-text">
+                    No frames found matching your query
+                  </p>
+                  <p className="caption frames-empty-subtext">
+                    Try adjusting your search terms or lowering the similarity threshold.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="body-md frames-empty-text">
+                    Welcome to HCMAI Frame Search
+                  </p>
+                  <p className="caption frames-empty-subtext">
+                    Enter a natural language question or keywords above to query the video corpus.
+                  </p>
+                </>
+              )}
+            </div>
+          )
+        )
       )}
     </section>
   );

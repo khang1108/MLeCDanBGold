@@ -79,3 +79,6 @@ temp/
 .claude/
 .agents/
 aic/
+# Frontend
+frontend/build
+frontend/node_modules
