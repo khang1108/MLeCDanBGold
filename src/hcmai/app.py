@@ -3,47 +3,42 @@
 This module exposes the HTTP API boundary between the Python search engine
 and the Node.js frontend. It loads online models and frame indexes once at
 application startup during the lifespan context.
-
-API Endpoints:
-    GET  /health                  - System status and loaded dataset metadata.
-    POST /api/v1/search           - Execute a natural language frame search.
-    GET  /api/v1/frames/{frame_id} - Fetch frame metadata by unique frame_id.
-
-Usage:
-    uv run uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
 """
 
 from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas.frame import FrameRecord
-from hcmai.common.schemas.search import SearchRequest, SearchResponse
+from hcmai.common.schemas import (
+    ConversationSession,
+    FrameFeedback,
+    FrameRecord,
+    SearchRequest,
+    SearchResponse,
+    SubmissionResult,
+)
 from hcmai.data import FrameStore
+from hcmai.kisc import KiscSessionManager
 from hcmai.retriever.dense import DenseRetriever
 from hcmai.retriever.encoder import DenseEncoder
 from hcmai.retriever.index import VisualIndex
 from hcmai.search import SearchEngine
 
 
-def create_app(search_engine: SearchEngine | None = None) -> FastAPI:
-    """Create and configure the FastAPI application instance.
-
-    Args:
-        search_engine: Optional pre-configured ``SearchEngine`` instance.
-            If ``None``, the engine is initialized during application lifespan
-            using ``FrameStore`` and ``DenseRetriever``.
-
-    Returns:
-        Configured ``FastAPI`` application instance.
-    """
+def create_app(
+    search_engine: SearchEngine | None = None,
+    session_manager: KiscSessionManager | None = None,
+) -> FastAPI:
+    """Create and configure the FastAPI application instance."""
     engine_container: dict[str, SearchEngine | None] = {"engine": search_engine}
+    kisc_manager = session_manager or KiscSessionManager()
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
@@ -51,24 +46,18 @@ def create_app(search_engine: SearchEngine | None = None) -> FastAPI:
             metadata_path = os.getenv("HCMAI_METADATA_PATH", "data/aic/metadata/frames.parquet")
             index_path = os.getenv("HCMAI_INDEX_PATH", "artifacts/indexes/visual.index")
 
-            store = FrameStore(metadata_path)
-            encoder = DenseEncoder(EncoderConfig())
-            index = VisualIndex.load(index_path)
-            retriever = DenseRetriever(encoder=encoder, index=index)
+            store = FrameStore(metadata_path) if Path(metadata_path).is_file() else None
+            retriever = None
+            if Path(index_path).is_file():
+                encoder = DenseEncoder(EncoderConfig())
+                index = VisualIndex.load(index_path)
+                retriever = DenseRetriever(encoder=encoder, index=index)
 
-            engine_container["engine"] = SearchEngine(
-                frame_store=store,
-                retriever=retriever,
-            )
+            engine_container["engine"] = SearchEngine(frame_store=store, retriever=retriever)
 
         yield
 
-    app = FastAPI(
-        title="HCMAI 2026 Frame Retrieval API",
-        version="0.1.0",
-        lifespan=lifespan,
-    )
-
+    app = FastAPI(title="HCMAI 2026 Frame Retrieval API", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -79,19 +68,11 @@ def create_app(search_engine: SearchEngine | None = None) -> FastAPI:
 
     @app.get("/health")
     def health_check() -> dict[str, Any]:
-        """Return system health status and metadata readiness.
-
-        Returns:
-            Dictionary containing health status, frame store status, and total frames.
-        """
+        """Return system health status and metadata readiness."""
         engine = engine_container["engine"]
         store_loaded = engine is not None and getattr(engine, "frame_store", None) is not None
         retriever_loaded = engine is not None and getattr(engine, "retriever", None) is not None
-        total_frames = 0
-
-        if store_loaded and hasattr(engine.frame_store, "_records"):
-            total_frames = len(engine.frame_store._records)
-
+        total_frames = len(engine.frame_store._records) if store_loaded and hasattr(engine.frame_store, "_records") else 0
         return {
             "status": "ok",
             "frame_store_loaded": store_loaded,
@@ -101,52 +82,68 @@ def create_app(search_engine: SearchEngine | None = None) -> FastAPI:
 
     @app.post("/api/v1/search", response_model=SearchResponse)
     def search_frames(request: SearchRequest) -> SearchResponse:
-        """Execute a frame retrieval query and return ranked results.
-
-        Args:
-            request: ``SearchRequest`` schema containing query, top_k, and search_mode.
-
-        Returns:
-            ``SearchResponse`` schema containing ranked search results and latency.
-
-        Raises:
-            HTTPException: If the search engine is not initialized (503).
-        """
+        """Execute a frame retrieval query (supports both standard & KISC turns)."""
         engine = engine_container["engine"]
         if engine is None or getattr(engine, "retriever", None) is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Search engine or DenseRetriever not initialized",
             )
-        return engine.search(request)
+        return kisc_manager.process_search(request, engine)
+
+    @app.post("/api/v1/session", response_model=ConversationSession)
+    def create_session(problem_id: str | None = None) -> ConversationSession:
+        """Create a new KISC conversational session."""
+        return kisc_manager.create_session(problem_id=problem_id)
+
+    @app.get("/api/v1/session/{session_id}", response_model=ConversationSession)
+    def get_session(session_id: str) -> ConversationSession:
+        """Fetch KISC session history and cumulative feedback state."""
+        try:
+            return kisc_manager.get_session(session_id)
+        except KeyError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    @app.post("/api/v1/feedback", response_model=ConversationSession)
+    def update_feedback(session_id: str, feedback: FrameFeedback) -> ConversationSession:
+        """Update human frame feedback for a session."""
+        try:
+            return kisc_manager.update_feedback(session_id, feedback)
+        except KeyError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @app.get("/api/v1/frames/{frame_id}", response_model=FrameRecord)
     def get_frame(frame_id: str) -> FrameRecord:
-        """Fetch canonical metadata for a single frame by its frame_id.
-
-        Args:
-            frame_id: Globally unique frame identifier (e.g., ``"L21_V001_00000090"``).
-
-        Returns:
-            Validated ``FrameRecord`` instance.
-
-        Raises:
-            HTTPException: If frame store is uninitialized (503) or frame_id not found (404).
-        """
+        """Fetch canonical metadata for a single frame by frame_id."""
         engine = engine_container["engine"]
         if engine is None or getattr(engine, "frame_store", None) is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Frame store not loaded",
-            )
-
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Frame store not loaded")
         try:
             return engine.frame_store.get(frame_id)
         except KeyError as e:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e),
-            ) from e
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    @app.get("/api/v1/frames/{frame_id}/neighbors", response_model=list[FrameRecord])
+    def get_frame_neighbors(frame_id: str, window: int = Query(default=5, ge=1, le=50)) -> list[FrameRecord]:
+        """Fetch +/- N temporal neighbor frames surrounding a target frame."""
+        engine = engine_container["engine"]
+        if engine is None or getattr(engine, "frame_store", None) is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Frame store not loaded")
+        try:
+            return engine.frame_store.get_neighbors(frame_id, window=window, include_target=True)
+        except KeyError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    @app.post("/api/v1/submit", response_model=SubmissionResult)
+    def submit_frame(frame_id: str) -> SubmissionResult:
+        """Format a selected frame ID into official BTC competition submission code."""
+        engine = engine_container["engine"]
+        if engine is None or getattr(engine, "frame_store", None) is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Frame store not loaded")
+        try:
+            return kisc_manager.format_submission(frame_id, engine.frame_store)
+        except KeyError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     return app
 

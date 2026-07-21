@@ -170,3 +170,21 @@ Use `frame_id` as the join key across all artifacts:
 
 Datasets, embeddings, model weights, indexes, and experiment outputs are local
 artifacts and must not be committed to Git.
+
+## FastAPI Server API
+
+Launch the FastAPI application to serve the HTTP API for the Node.js frontend:
+
+```bash
+uv run uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Available API Endpoints:
+
+- `GET /health`: Health status and dataset readiness.
+- `POST /api/v1/search`: Frame search (supports standard search and conversational KISC turns).
+- `POST /api/v1/session`: Create a new KISC session.
+- `POST /api/v1/feedback`: Update accepted/rejected frame feedback lists.
+- `GET /api/v1/frames/{frame_id}`: Fetch canonical frame metadata.
+- `GET /api/v1/frames/{frame_id}/neighbors`: Fetch temporal +/- N neighbor frames.
+- `POST /api/v1/submit`: Generate official BTC competition submission code (`video_id,frame_idx`).

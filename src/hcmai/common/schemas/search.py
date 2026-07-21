@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from hcmai.common.schemas import ContractModel, NonEmptyString, SearchMode, SearchScores
-from pydantic import Field, field_validator, model_validator
 from typing import Self
+from pydantic import Field, field_validator, model_validator
+
+from hcmai.common.schemas import ContractModel, NonEmptyString, SearchMode, SearchScores
+from hcmai.common.schemas.conversation import FrameFeedback
+
 
 class SearchFilters(ContractModel):
     """Optional restrictions applied to a search request."""
@@ -42,6 +45,8 @@ class SearchRequest(ContractModel):
     top_k: int = Field(default=20, ge=1, le=100)
     search_mode: SearchMode = SearchMode.ACCURATE
     filters: SearchFilters | None = None
+    session_id: NonEmptyString | None = None
+    feedback: FrameFeedback | None = None
 
 
 class SearchLatency(ContractModel):
@@ -84,6 +89,9 @@ class SearchResponse(ContractModel):
     latency_ms: SearchLatency
     results: list[SearchResult] = Field(default_factory=list)
     warnings: list[NonEmptyString] = Field(default_factory=list)
+    session_id: NonEmptyString | None = None
+    turn_id: NonEmptyString | None = None
+    ai_message: NonEmptyString | None = None
 
     @model_validator(mode="after")
     def validate_result_count(self) -> Self:
@@ -96,3 +104,8 @@ class SearchResponse(ContractModel):
             raise ValueError("total_results must not be greater than top_k")
 
         return self
+
+
+# Type aliases for conversational KISC workflows
+MessageRequest = SearchRequest
+MessageResponse = SearchResponse

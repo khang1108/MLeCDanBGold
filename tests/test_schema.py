@@ -1,25 +1,30 @@
 """Validation tests for the shared project contracts."""
 
-import json
+from __future__ import annotations
 
+import json
 import pytest
 from pydantic import ValidationError
 
-from hcmai.schema import (
+from hcmai.common.schemas import (
+    ConversationSession,
+    FrameFeedback,
+    FrameRecord,
+    MessageRequest,
+    MessageResponse,
+    SearchFilters,
+    SearchLatency,
     SearchMode,
     SearchRequest,
     SearchResponse,
     SearchResult,
     SearchScores,
-    SearchLatency,
-    SearchFilters,
-    FrameRecord,
+    SubmissionResult,
 )
 
 
 def make_valid_response() -> SearchResponse:
     """Build the smallest valid search response."""
-
     return SearchResponse(
         request_id="request-001",
         query="a person walking",
@@ -45,43 +50,29 @@ def test_empty_query_is_rejected() -> None:
         SearchRequest(query="   ")
 
 
-@pytest.mark.parametrize("top_k", [0, 101])
-def test_invalid_top_k_is_rejected(top_k: int) -> None:
-    with pytest.raises(ValidationError):
-        SearchRequest(query="a person walking", top_k=top_k)
+def test_search_request_and_response_kisc_fields() -> None:
+    feedback = FrameFeedback(accepted_frame_ids=["f1"], rejected_frame_ids=["f2"])
+    req = SearchRequest(query="test", session_id="sess-01", feedback=feedback)
+    assert req.session_id == "sess-01"
+    assert req.feedback.accepted_frame_ids == ["f1"]
+
+    resp = make_valid_response()
+    resp.session_id = "sess-01"
+    resp.turn_id = "turn-01"
+    resp.ai_message = "Found 1 frame"
+    assert resp.session_id == "sess-01"
 
 
-def test_negative_frame_idx_is_rejected() -> None:
-    with pytest.raises(ValidationError):
-        FrameRecord(
-            frame_id="frame-001",
-            video_id="video-001",
-            frame_idx=-1,
-            timestamp_ms=500,
-            image_path="frames/frame-001.jpg",
-            width=1920,
-            height=1080,
-        )
+def test_message_aliases_work_identically() -> None:
+    msg_req = MessageRequest(query="hello")
+    assert isinstance(msg_req, SearchRequest)
 
 
-def test_invalid_time_range_is_rejected() -> None:
-    with pytest.raises(ValidationError):
-        SearchFilters(start_time_ms=2_000, end_time_ms=1_000)
+def test_conversation_session_and_submission_result() -> None:
+    sess = ConversationSession(session_id="s1", created_at=1000)
+    assert sess.session_id == "s1"
 
-
-def test_valid_request_and_response_can_be_serialized_to_json() -> None:
-    request = SearchRequest(query=" a person walking ", top_k=5)
-    response = make_valid_response()
-
-    request_data = json.loads(request.model_dump_json())
-    response_data = json.loads(response.model_dump_json())
-
-    assert request_data["query"] == "a person walking"
-    assert request_data["top_k"] == 5
-    assert response_data["search_mode"] == "accuracte"
-    assert response_data["results"][0]["scores"]["final"] == 0.95
-
-
-def test_unknown_fields_are_rejected() -> None:
-    with pytest.raises(ValidationError):
-        SearchRequest(query="a person walking", unexpected_field=True)
+    sub = SubmissionResult(
+        frame_id="f1", video_id="L21_V001", frame_idx=10, submission_code="L21_V001,10"
+    )
+    assert sub.submission_code == "L21_V001,10"

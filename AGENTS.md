@@ -83,7 +83,10 @@ Important identifiers:
 Never infer `frame_idx` from `timestamp_ms * fps`; variable-frame-rate videos
 and decoder behavior make that mapping unsafe. Unknown schema fields are
 intentionally rejected. If a contract changes, update its tests and related
-documentation in the same change.
+documentation in the same change. Always align with existing schemas in
+`src/hcmai/common/schemas/` by prioritizing extending existing schemas
+(e.g., `SearchRequest`, `SearchResponse`) with optional fields over creating
+new ones to prevent system bloat.
 
 ## Utility conventions
 

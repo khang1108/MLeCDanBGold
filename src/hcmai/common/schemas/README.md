@@ -49,14 +49,17 @@ whitespace from strings.
 - `SearchFilters`: optional video and time-range restrictions. Video IDs are
   deduplicated, and `end_time_ms` cannot precede `start_time_ms`.
 - `SearchRequest`: public search request containing a non-empty query, a
-  bounded `top_k`, search mode, and optional filters.
+  bounded `top_k`, search mode, optional filters, optional KISC `session_id`,
+  and human `feedback`.
 - `SearchLatency`: non-negative latency measurements for each search stage and
   the total request, in milliseconds.
 - `SearchResult`: one ranked result with the canonical frame identifiers,
   preview URLs, enrichment text, and scores.
 - `SearchResponse`: complete search response with request metadata, latency,
-  results, and warnings. `total_results` must match the result list and cannot
-  exceed `top_k`.
+  results, warnings, optional KISC `session_id`, `turn_id`, and `ai_message`.
+  `total_results` must match the result list and cannot exceed `top_k`.
+- `MessageRequest` & `MessageResponse`: type aliases for `SearchRequest` and
+  `SearchResponse` used in conversational KISC workflows.
 
 ### `evaluation.py`
 
@@ -66,9 +69,14 @@ whitespace from strings.
 
 ### `conversation.py`
 
-- `ConversationTurn`: one user or system message in a KIS conversation.
+- `ConversationTurn`: one user or system message in a KIS conversation with
+  turn ID, sender role (`user` or `ai`), and non-empty message.
 - `FrameFeedback`: human feedback represented as accepted and rejected frame
   ID lists.
+- `ConversationSession`: active KISC conversation session state containing
+  session ID, creation timestamp, turns, and cumulative feedback.
+- `SubmissionResult`: official competition submission output format containing
+  `frame_id`, `video_id`, `frame_idx`, and `submission_code`.
 
 ## Importing
 
