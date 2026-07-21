@@ -7,6 +7,8 @@ const ToolBox = ({
   setTemperature,
   filter,
   setFilter,
+  searchMode,
+  setSearchMode,
   onReset
 }) => {
   return (
@@ -60,6 +62,22 @@ const ToolBox = ({
           placeholder="e.g. keyframe_type:wide"
           className="toolbox-input"
         />
+      </div>
+
+      {/* Search Mode Select Section */}
+      <div className="toolbox-section">
+        <div className="toolbox-label-row">
+          <label htmlFor="search-mode-select" className="toolbox-label">Search Mode</label>
+        </div>
+        <select
+          id="search-mode-select"
+          value={searchMode}
+          onChange={(e) => setSearchMode(e.target.value)}
+          className="toolbox-input"
+        >
+          <option value="accurate">Accurate (Default)</option>
+          <option value="fast">Fast (Finalist)</option>
+        </select>
       </div>
 
       {/* Reset Parameters Button */}
