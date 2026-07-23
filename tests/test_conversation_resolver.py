@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-import hcmai.conversation_resolver as resolver_module
+import hcmai.agents.kisc.resolver as resolver_module
 from hcmai.common.schemas import ConversationState, ConversationTurn, FrameFeedback
-from hcmai.conversation_resolver import ConversationResolver, ConversationResolverError
+from hcmai.agents.kisc import ConversationResolver, ConversationResolverError
 def _payload(query, positive=(), negative=(), uncertain=(), accepted=(), rejected=()):
     return {
         "standalone_query": query, "positive_constraints": list(positive),
