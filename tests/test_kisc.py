@@ -1,85 +1,100 @@
-"""Smoke unit tests for KISC session manager and API endpoints."""
-
 from __future__ import annotations
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 from hcmai.app import create_app
-from hcmai.common.schemas import FrameRecord, RetrievalCandidate
+from hcmai.common.schemas import (
+    FrameFeedback,
+    FrameRecord,
+    RetrievalCandidate,
+    SearchRequest,
+)
 from hcmai.kisc import KiscSessionManager
 from hcmai.search import SearchEngine
 
-
-class MockFrameStore:
+class FakeStore:
     def __init__(self) -> None:
-        self.r1 = FrameRecord(
-            frame_id="L21_V001_00000090", video_id="L21_V001", frame_idx=90,
-            timestamp_ms=3600, image_path="k/090.jpg", width=1920, height=1080
-        )
-        self.r2 = FrameRecord(
-            frame_id="L21_V001_00000091", video_id="L21_V001", frame_idx=91,
-            timestamp_ms=3640, image_path="k/091.jpg", width=1920, height=1080
-        )
-        self._records = [self.r1, self.r2]
-
-    def get(self, frame_id: str) -> FrameRecord:
-        if frame_id == "L21_V001_00000090":
-            return self.r1
-        if frame_id == "L21_V001_00000091":
-            return self.r2
-        raise KeyError(f"Frame {frame_id} not found")
-
-    def get_neighbors(self, frame_id: str, window: int = 5, include_target: bool = True) -> list[FrameRecord]:
-        return [self.r1, self.r2]
-
-
-class MockRetriever:
-    def search(self, query: str, top_k: int = 10, filters: None = None) -> list[RetrievalCandidate]:
-        return [
-            RetrievalCandidate(frame_id="L21_V001_00000090", source_scores={"visual": 0.9}),
-            RetrievalCandidate(frame_id="L21_V001_00000091", source_scores={"visual": 0.8}),
+        self._records = [
+            FrameRecord(
+                frame_id=f"frame-{index}",
+                video_id="video-1",
+                frame_idx=index,
+                timestamp_ms=index * 40,
+                image_path=f"k/{index}.jpg",
+                width=8,
+                height=6,
+            )
+            for index in (1, 2)
         ]
 
+    def get(self, frame_id: str) -> FrameRecord:
+        return next(row for row in self._records if row.frame_id == frame_id)
+
+class FakeRetriever:
+    def search(self, query: str, top_k: int, filters=None):
+        values = (("frame-1", 0.9), ("frame-2", 0.8))
+        return [
+            RetrievalCandidate(frame_id=row, source_scores={"visual": score})
+            for row, score in values
+        ]
 
 @pytest.fixture
-def api_client() -> TestClient:
-    engine = SearchEngine(frame_store=MockFrameStore(), retriever=MockRetriever())
-    app = create_app(search_engine=engine, session_manager=KiscSessionManager())
-    with TestClient(app) as client:
-        yield client
+def protocol() -> tuple[KiscSessionManager, SearchEngine]:
+    manager = KiscSessionManager()
+    engine = SearchEngine(frame_store=FakeStore(), retriever=FakeRetriever())
+    return manager, engine
 
-
-def test_kisc_session_creation_and_feedback(api_client: TestClient) -> None:
-    resp = api_client.post("/api/v1/session")
-    assert resp.status_code == 200
-    sess_id = resp.json()["session_id"]
-
-    fb_resp = api_client.post(
-        "/api/v1/feedback",
-        params={"session_id": sess_id},
-        json={"accepted_frame_ids": ["f1"], "rejected_frame_ids": ["f2"]},
+def test_session_feedback_and_submission(protocol) -> None:
+    manager, engine = protocol
+    session = manager.create_session(problem_id="problem-7")
+    assert session.problem_id == "problem-7"
+    with pytest.raises(KeyError, match="not found"):
+        manager.get_session("missing")
+    manager.update_feedback(
+        session.session_id,
+        FrameFeedback(rejected_frame_ids=["frame-1"]),
     )
-    assert fb_resp.status_code == 200
-    assert fb_resp.json()["feedback"]["accepted_frame_ids"] == ["f1"]
+    updated = manager.update_feedback(
+        session.session_id,
+        FrameFeedback(accepted_frame_ids=["frame-1"]),
+    )
+    assert updated.feedback.accepted_frame_ids == ["frame-1"]
+    assert updated.feedback.rejected_frame_ids == []
+    submission = manager.format_submission("frame-1", engine.frame_store)
+    assert submission.submission_code == "video-1,1"
 
+def test_feedback_ranking_and_turn_correlation(protocol) -> None:
+    manager, engine = protocol
+    session = manager.create_session()
+    response = manager.process_search(
+        SearchRequest(
+            query="find it",
+            session_id=session.session_id,
+            feedback=FrameFeedback(accepted_frame_ids=["frame-2"]),
+        ),
+        engine,
+    )
+    assert [row.frame_id for row in response.results] == ["frame-2", "frame-1"]
+    assert [row.rank for row in response.results] == [1, 2]
+    assert response.turn_id == session.turns[0].turn_id
+    assert response.assistant_turn_id == session.turns[1].turn_id
+    assert session.turns[1].reply_to_turn_id == session.turns[0].turn_id
+    response = manager.process_search(
+        SearchRequest(
+            query="not frame one",
+            session_id=session.session_id,
+            feedback=FrameFeedback(rejected_frame_ids=["frame-1"]),
+        ),
+        engine,
+    )
+    assert [row.frame_id for row in response.results] == ["frame-2"]
 
-def test_kisc_search_turn_filters_rejected_frames(api_client: TestClient) -> None:
-    req = {
-        "query": "walking person",
-        "session_id": "s123",
-        "feedback": {"rejected_frame_ids": ["L21_V001_00000090"]},
-    }
-    resp = api_client.post("/api/v1/search", json=req)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["total_results"] == 1
-    assert data["results"][0]["frame_id"] == "L21_V001_00000091"
-
-
-def test_neighbors_and_submit_endpoints(api_client: TestClient) -> None:
-    n_resp = api_client.get("/api/v1/frames/L21_V001_00000090/neighbors?window=2")
-    assert n_resp.status_code == 200
-    assert len(n_resp.json()) == 2
-
-    s_resp = api_client.post("/api/v1/submit", params={"frame_id": "L21_V001_00000090"})
-    assert s_resp.status_code == 200
-    assert s_resp.json()["submission_code"] == "L21_V001,90"
+def test_unknown_search_session_returns_404(protocol) -> None:
+    manager, engine = protocol
+    app = create_app(search_engine=engine, session_manager=manager)
+    route = next(
+        route for route in app.routes
+        if getattr(route, "path", None) == "/api/v1/search"
+    )
+    with pytest.raises(HTTPException) as error:
+        route.endpoint(SearchRequest(query="find it", session_id="missing"))
+    assert error.value.status_code == 404

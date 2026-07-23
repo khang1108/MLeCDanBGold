@@ -70,9 +70,15 @@ def create_app(
     def health_check() -> dict[str, Any]:
         """Return system health status and metadata readiness."""
         engine = engine_container["engine"]
-        store_loaded = engine is not None and getattr(engine, "frame_store", None) is not None
-        retriever_loaded = engine is not None and getattr(engine, "retriever", None) is not None
-        total_frames = len(engine.frame_store._records) if store_loaded and hasattr(engine.frame_store, "_records") else 0
+        frame_store = getattr(engine, "frame_store", None)
+        retriever = getattr(engine, "retriever", None)
+        store_loaded = frame_store is not None
+        retriever_loaded = retriever is not None
+        total_frames = (
+            len(frame_store._records)
+            if store_loaded and hasattr(frame_store, "_records")
+            else 0
+        )
         return {
             "status": "ok",
             "frame_store_loaded": store_loaded,
@@ -89,7 +95,13 @@ def create_app(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Search engine or DenseRetriever not initialized",
             )
-        return kisc_manager.process_search(request, engine)
+        try:
+            return kisc_manager.process_search(request, engine)
+        except KeyError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
 
     @app.post("/api/v1/session", response_model=ConversationSession)
     def create_session(problem_id: str | None = None) -> ConversationSession:
