@@ -48,10 +48,11 @@ purpose:
 
 ## Encoder
 
-`encoder.py` provides `DenseEncoder`, which loads a SigLIP2-style vision-language
-model once at construction and exposes `encode_images` and `encode_text`.
-Embeddings are L2-normalized so inner product equals cosine similarity. For
-convenience it re-exports `EncoderConfig` and `EncodingStats`.
+`encoder.py` provides `DenseEncoder`, which loads a SigLIP2-style
+vision-language model once, on its first non-empty encoding call, and exposes
+`encode_images` and `encode_text`. Embeddings are L2-normalized so inner product
+equals cosine similarity. For convenience it re-exports `EncoderConfig` and
+`EncodingStats`.
 
 ```python
 from hcmai.retriever.encoder import DenseEncoder, EncoderConfig

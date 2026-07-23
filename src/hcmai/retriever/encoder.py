@@ -1,11 +1,12 @@
-"""Dense image-text encoder using SigLIP2 or other vision-language models."""
+"""Dense image-text encoder using SigLIP2-style models."""
 
 from __future__ import annotations
 
-import numpy as np
-
 from typing import Any
+
+import numpy as np
 from PIL import Image
+
 from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
@@ -15,9 +16,10 @@ logger = get_logger(__name__)
 
 
 def _extract_tensor(outputs: Any) -> Any:
-    """Extract torch.Tensor from model output object or tuple."""
-    if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-        return outputs.pooler_output
+    """Extract the pooled tensor from a Transformers model output."""
+    pooled = getattr(outputs, "pooler_output", None)
+    if pooled is not None:
+        return pooled
     if hasattr(outputs, "shape"):
         return outputs
     if isinstance(outputs, (tuple, list)):
@@ -26,135 +28,106 @@ def _extract_tensor(outputs: Any) -> Any:
 
 
 class DenseEncoder:
-    """Encode images and text to dense vectors using SigLIP2 or similar model."""
+    """Encode images and text into one normalized embedding space."""
 
     def __init__(self, config: EncoderConfig) -> None:
-        """Initialize the encoder with configuration.
-
-        Args:
-            config: EncoderConfig with model name, device, batch size, etc.
-        """
+        """Store configuration; load the model on the first encode call."""
         self.config = config
-        self.model = None
-        self.processor = None
+        self.model: Any | None = None
+        self.processor: Any | None = None
         self.embedding_dim = 0
 
-        # Load the model and processor
+    def _load_model(self) -> None:
+        """Load the processor and model exactly once."""
+        if self.model is not None and self.processor is not None:
+            return
         try:
-            import torch
-            from transformers import AutoProcessor, AutoModel
-
-            logger.info(f"Loading model: {self.config.model_name}")
-            self.processor = AutoProcessor.from_pretrained(self.config.model_name)
-            self.model     = AutoModel.from_pretrained(self.config.model_name).to(self.config.device)
-            self.model.eval()
-
-            with torch.no_grad():
-                dummy_image = Image.new("RGB", (224, 224))
-                inputs = self.processor(images=[dummy_image], return_tensors="pt").to(self.config.device)
-                outputs = self.model.get_image_features(**inputs)
-                tensor = _extract_tensor(outputs)
-                self.embedding_dim = tensor.shape[-1]
-
-            logger.info(f"Model loaded. Embedding dimension: {self.embedding_dim}")
-        except ImportError as e:
+            import torch  # noqa: F401
+            from transformers import AutoModel, AutoProcessor
+        except ImportError as error:
             raise ImportError(
-                f"Required dependencies not installed: {e}. "
-                "Install with: pip install transformers torch pillow"
-            )
+                "DenseEncoder requires transformers and torch; install the "
+                "project's embedding dependencies"
+            ) from error
 
-    def encode_images(self, images: list[Image.Image], stats: EncodingStats | None = None) -> np.ndarray:
-        """Encode a batch of images to dense vectors.
+        logger.info(f"Loading model: {self.config.model_name}")
+        processor = AutoProcessor.from_pretrained(self.config.model_name)
+        model = AutoModel.from_pretrained(self.config.model_name)
+        model = model.to(self.config.device)
+        model.eval()
+        self.processor = processor
+        self.model = model
+        self.embedding_dim = int(
+            getattr(model.config, "projection_dim", 0)
+        )
+        dimension = self.embedding_dim or "pending"
+        logger.info(
+            f"Model loaded. Embedding dimension: {dimension}"
+        )
 
-        Args:
-            images: List of PIL images to encode.
-            stats: Optional EncodingStats to accumulate timing/stats.
+    def _encode(
+        self,
+        items: list[Any],
+        input_name: str,
+        feature_method: str,
+        stats: EncodingStats | None,
+    ) -> np.ndarray:
+        """Encode one modality in configured batches."""
+        if not items:
+            return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
+        self._load_model()
+        assert self.model is not None and self.processor is not None
 
-        Returns:
-            Array of shape (len(images), embedding_dim).
-        """
         import torch
 
-        embeddings_list = []
-        total_time = 0.0
-        
-        # Process images in batches
-        for i in range(0, len(images), self.config.batch_size):
-            batch = images[i : i + self.config.batch_size]
+        embeddings_list: list[np.ndarray] = []
+        batch_times: list[float] = []
+        for start in range(0, len(items), self.config.batch_size):
+            batch = items[start : start + self.config.batch_size]
+            with Timer() as timer:
+                inputs = self.processor(
+                    **{input_name: batch},
+                    return_tensors="pt",
+                ).to(self.config.device)
+                with torch.inference_mode():
+                    outputs = getattr(self.model, feature_method)(**inputs)
+                tensor = _extract_tensor(outputs)
+                embeddings = tensor.detach().float().cpu().numpy()
+                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+                embeddings_list.append(embeddings / np.maximum(norms, 1e-8))
+            batch_times.append(timer.elapsed_ms)
 
-            # Use Timer context manager to measure batch processing time
-            with Timer() as batch_timer:
-                with torch.no_grad():
-                    inputs = self.processor(images=batch, return_tensors="pt").to(self.config.device)
-                    outputs = self.model.get_image_features(**inputs)
-                    tensor = _extract_tensor(outputs)
-                    embeddings = tensor.cpu().numpy()
-
-                # Normalize embeddings to unit norm for IP similarity
-                embeddings = embeddings / (
-                    np.linalg.norm(embeddings, axis=1, keepdims=True) + 1e-8
-                )
-                embeddings_list.append(embeddings)
-
-            batch_time = batch_timer.elapsed_ms
-            total_time += batch_time
-
-            if stats is not None:
-                stats.batch_times_ms.append(batch_time)
-
-        all_embeddings = np.vstack(embeddings_list).astype(self.config.dtype)
-
+        result = np.vstack(embeddings_list).astype(self.config.dtype)
+        self.embedding_dim = int(result.shape[1])
         if stats is not None:
-            stats.num_encoded += len(images)
-            stats.total_time_ms += total_time
+            stats.num_encoded += len(items)
+            stats.total_time_ms += sum(batch_times)
+            stats.batch_times_ms.extend(batch_times)
             stats.embedding_dim = self.embedding_dim
+        return result
 
-        return all_embeddings
+    def encode_images(
+        self,
+        images: list[Image.Image],
+        stats: EncodingStats | None = None,
+    ) -> np.ndarray:
+        """Encode PIL images as L2-normalized vectors."""
+        return self._encode(
+            images,
+            "images",
+            "get_image_features",
+            stats,
+        )
 
-    def encode_text(self, texts: list[str], stats: EncodingStats | None = None) -> np.ndarray:
-        """Encode a batch of text strings to dense vectors.
-
-        Args:
-            texts: List of text strings to encode.
-            stats: Optional EncodingStats to accumulate timing/stats.
-
-        Returns:
-            Array of shape (len(texts), embedding_dim).
-        """
-        import torch
-
-        embeddings_list = []
-        total_time = 0.0
-
-        # Process text in batches
-        for i in range(0, len(texts), self.config.batch_size):
-            batch = texts[i : i + self.config.batch_size]
-            
-            # Use Timer context manager to measure batch processing time
-            with Timer() as batch_timer:
-                with torch.no_grad():
-                    inputs = self.processor(text=batch, return_tensors="pt").to(self.config.device)
-                    outputs = self.model.get_text_features(**inputs)
-                    tensor = _extract_tensor(outputs)
-                    embeddings = tensor.cpu().numpy()
-
-                # Normalize embeddings to unit norm for IP similarity
-                embeddings = embeddings / (
-                    np.linalg.norm(embeddings, axis=1, keepdims=True) + 1e-8
-                )
-                embeddings_list.append(embeddings)
-
-            batch_time = batch_timer.elapsed_ms
-            total_time += batch_time
-
-            if stats is not None:
-                stats.batch_times_ms.append(batch_time)
-
-        all_embeddings = np.vstack(embeddings_list).astype(self.config.dtype)
-
-        if stats is not None:
-            stats.num_encoded += len(texts)
-            stats.total_time_ms += total_time
-            stats.embedding_dim = self.embedding_dim
-
-        return all_embeddings
+    def encode_text(
+        self,
+        texts: list[str],
+        stats: EncodingStats | None = None,
+    ) -> np.ndarray:
+        """Encode text strings as L2-normalized vectors."""
+        return self._encode(
+            texts,
+            "text",
+            "get_text_features",
+            stats,
+        )

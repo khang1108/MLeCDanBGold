@@ -267,17 +267,7 @@ class FrameStore:
         filters: SearchFilters | None,
     ) -> list[str]:
         """Return frame IDs matching the given search filters.
-
-        When ``filters`` is ``None``, all frame IDs are returned in the
-        original Parquet row order.  Otherwise, only IDs whose video and
-        timestamp satisfy every non-``None`` filter criterion are
-        included.
-
-        Note:
-            ``SearchFilters.min_score`` is intentionally ignored here
-            because relevance scores belong to the retrieval stage, not
-            the metadata layer.
-
+        
         Args:
             filters: ``SearchFilters`` instance specifying optional
                 ``video_ids``, ``start_time_ms``, and ``end_time_ms``

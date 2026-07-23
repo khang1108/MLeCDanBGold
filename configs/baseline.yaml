@@ -6,7 +6,7 @@ dataset:
 models:
   embedding:
     name: "google/siglip2-base-patch16-224"
-    device: "cuda"
+    device: "cpu"
     batch_size: 64
 
   reranker:
