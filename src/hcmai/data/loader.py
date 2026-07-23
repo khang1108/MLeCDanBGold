@@ -12,13 +12,17 @@ Typical usage::
     store = FrameStore("data/aic2025/metadata/frames.parquet")
 
     # Single lookup
-    frame = store.get("L21_V001_00000090")
+    frame = store.get("L21_V001_keyframe_000001")
 
     # Batch lookup (order preserved)
-    frames = store.get_many(["L21_V001_00000090", "L21_V002_00000120"])
+    frames = store.get_many(
+        ["L21_V001_keyframe_000001", "L21_V002_keyframe_000002"]
+    )
 
     # Temporal neighbours
-    neighbors = store.get_neighbors("L21_V001_00000090", window_ms=5_000)
+    neighbors = store.get_neighbors(
+        "L21_V001_keyframe_000001", window_ms=5_000
+    )
 
     # Filter IDs for the retrieval stage
     ids = store.filter_frame_ids(SearchFilters(video_ids=["L21_V001"]))
@@ -26,9 +30,11 @@ Typical usage::
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -43,13 +49,13 @@ class FrameStore:
     internal indexes for fast lookup:
 
     * ``_records_by_id`` – ``dict[frame_id, FrameRecord]`` for O(1)
-      point lookups.
+        point lookups.
     * ``_records_by_video`` – ``dict[video_id, tuple[FrameRecord]]``
-      sorted by ``(timestamp_ms, frame_idx, frame_id)`` for temporal
-      neighbour queries.
+        sorted by ``(timestamp_ms, frame_idx, frame_id)`` for temporal
+        neighbour queries.
     * ``_records`` – ``tuple[FrameRecord]`` in the original Parquet
-      row order, used by ``filter_frame_ids`` to return IDs in a
-      deterministic, reproducible sequence.
+        row order, used by ``filter_frame_ids`` to return IDs in a
+        deterministic, reproducible sequence.
 
     Attributes:
         metadata_path: Resolved path to the ``frames.parquet`` file
@@ -61,7 +67,7 @@ class FrameStore:
 
         Args:
             metadata_path: Path to the canonical ``frames.parquet`` file
-                produced by ``ingest_dataset``.  Accepts a string or any
+                produced by ``prepare_frames``. Accepts a string or any
                 path-like object.
 
         Raises:
@@ -75,9 +81,13 @@ class FrameStore:
 
         self.metadata_path = Path(metadata_path)
         table = pd.read_parquet(self.metadata_path)
+        rows = cast(
+            list[dict[str, object]],
+            table.to_dict(orient="records"),
+        )
         self._records = tuple(
             self._record_from_row(row)
-            for row in table.to_dict(orient="records")
+            for row in rows
         )
         self._records_by_id = {
             record.frame_id: record for record in self._records
@@ -106,6 +116,25 @@ class FrameStore:
             )
             for video_id, records in records_by_video.items()
         }
+        self._submission_pairs = {
+            (record.video_id, record.frame_idx) for record in self._records
+        }
+
+    @classmethod
+    def load(cls, metadata_path: str | Path) -> FrameStore:
+        """Load canonical frame metadata from Parquet."""
+
+        return cls(metadata_path)
+
+    def iter_frames(self) -> Iterator[FrameRecord]:
+        """Iterate canonical records in deterministic Parquet order."""
+
+        return iter(self._records)
+
+    def contains_submission(self, video_id: str, frame_idx: int) -> bool:
+        """Return whether an official submission pair exists."""
+
+        return (video_id, frame_idx) in self._submission_pairs
 
     @staticmethod
     def _record_from_row(row: dict[str, object]) -> FrameRecord:
@@ -134,8 +163,14 @@ class FrameStore:
             for name in FrameRecord.model_fields
             if name in row
         }
-        for name in ("thumbnail_path", "shot_id"):
-            if name in values and pd.isna(values[name]):
+        for name in ("keyframe_order", "thumbnail_path", "shot_id"):
+            value = values.get(name)
+            if (
+                value is None
+                or value is pd.NA
+                or isinstance(value, float)
+                and math.isnan(value)
+            ):
                 values[name] = None
         return FrameRecord.model_validate(values)
 
@@ -143,9 +178,8 @@ class FrameStore:
         """Return the ``FrameRecord`` for a given ``frame_id``.
 
         Args:
-            frame_id: Globally unique frame identifier in the format
-                ``{video_id}_{frame_idx:08d}`` (e.g.
-                ``"L21_V001_00000090"``).
+            frame_id: Globally unique internal key stored in the canonical
+                Parquet file. Its text is never parsed for official IDs.
 
         Returns:
             The ``FrameRecord`` associated with ``frame_id``.

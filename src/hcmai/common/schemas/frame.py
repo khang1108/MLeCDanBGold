@@ -9,6 +9,7 @@ class FrameRecord(ContractModel):
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
+    keyframe_order: int | None = Field(default=None, ge=1)
     timestamp_ms: int = Field(ge=0)
     image_path: NonEmptyString
     thumbnail_path: NonEmptyString | None = None

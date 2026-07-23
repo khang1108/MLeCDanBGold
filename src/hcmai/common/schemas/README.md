@@ -23,15 +23,15 @@ whitespace from strings.
   `caption`, `ocr`, or `asr`.
 - `QueryLanguage`: query language: Vietnamese (`vi`), English (`en`), or
   mixed (`mixed`).
-- `TaskType`: evaluation task: `textual_kis`, `video_kis`, `ad_hoc_search`,
-  or `vqa`.
+- `TaskType`: competition task: `kis`, `kisc`, `vqa`, or `trake`.
 - `QueryDifficulty`: evaluation difficulty: `easy`, `medium`, or `hard`.
 
 ### `frame.py`
 
 - `FrameRecord`: canonical metadata for one searchable frame. It preserves the
-  authoritative `frame_idx` and `timestamp_ms` rather than deriving one from
-  the other.
+  authoritative `frame_idx`, optional official `keyframe_order`, relative
+  `image_path`, source dimensions, and `timestamp_ms`. Submission identifiers
+  are never derived from another field.
 - `FrameEnrichment`: offline caption, OCR, ASR, object-label, model, and
   processing-status metadata associated with a `frame_id`. Duplicate object
   labels are removed while preserving order.
@@ -83,15 +83,15 @@ whitespace from strings.
 Import shared base types and the public package exports like this:
 
 ```python
-from aic.common.schemas import ContractModel, NonEmptyString
+from hcmai.common.schemas import ContractModel, NonEmptyString
 ```
 
 For models that are defined in a module but are not re-exported by
 `__init__.py`, import them from their defining module:
 
 ```python
-from aic.common.schemas.frame import FrameRecord
-from aic.common.schemas.search import SearchRequest, SearchResponse
+from hcmai.common.schemas.frame import FrameRecord
+from hcmai.common.schemas.search import SearchRequest, SearchResponse
 ```
 
 `__all__` in `__init__.py` documents the symbols intentionally re-exported

@@ -1,6 +1,9 @@
 # `hcmai` Package Reference
 
-The `hcmai` Python package provides the core video-frame retrieval pipeline for the Ho Chi Minh City AI Challenge 2026. It encapsulates data ingestion, candidate retrieval, search orchestration, conversational session management, and HTTP API endpoints behind canonical Pydantic contracts.
+The `hcmai` package provides the core video-frame retrieval pipeline for the
+Ho Chi Minh City AI Challenge 2026. It includes canonical frame preparation,
+candidate retrieval, search orchestration, conversational state, and HTTP API
+endpoints behind shared Pydantic contracts.
 
 ---
 
@@ -15,7 +18,7 @@ src/hcmai/
 │   ├── config.py   # Global configuration settings & Pydantic settings
 │   ├── schemas/    # Pydantic 2 data contracts (SearchRequest, FrameRecord, etc.)
 │   └── utils/      # Generic I/O, image loading, timing, and logging helpers
-├── data/           # Data ingestion, thumbnail generation, FrameStore metadata loader
+├── data/           # Canonical Parquet builder and FrameStore
 ├── embedding/      # Image embedding generation pipeline
 ├── retriever/      # FAISS visual index, DenseEncoder, DenseRetriever, benchmarking
 └── scripts/        # Internal pipeline build scripts
@@ -44,8 +47,13 @@ src/hcmai/
 - Supports `accurate` and `fast` search profiles.
 
 ### 4. Data Pipeline & Store (`hcmai.data`)
-- **`FrameStore`**: In-memory metadata store backed by `frames.parquet`. Provides fast $O(1)$ lookup by `frame_id` and temporal neighbor queries (`get_neighbors()`).
-- **Data Ingestion**: `prepare_dataset()` parses Kaggle mapping CSVs, generates 320px JPEG thumbnails, resolves frame index collisions, and validates dataset integrity.
+- **`FrameStore`**: In-memory metadata store backed by `frames.parquet`.
+  Supports lookup, deterministic iteration, submission-pair membership, and
+  temporal neighbors.
+- **Data Preparation**: `prepare_frames()` joins official mappings to
+  keyframe images and writes one validated canonical `frames.parquet`.
+- `frame_idx` always comes from the official mapping; consumers must not parse
+  `frame_id` or infer it from time/FPS.
 
 ### 5. Dense Retriever & Index (`hcmai.retriever`)
 - **`DenseRetriever`**: Pairs a text query encoder (`DenseEncoder`) with a FAISS index (`VisualIndex`) to execute vector similarity searches over keyframe embeddings.
@@ -66,7 +74,7 @@ from hcmai.search import SearchEngine
 from hcmai.common.schemas import SearchRequest
 
 # Load metadata store and initialize engine
-store = FrameStore("data/metadata/frames.parquet")
+store = FrameStore.load("data/metadata/frames.parquet")
 engine = SearchEngine(frame_store=store, retriever=dense_retriever)
 
 # Execute search

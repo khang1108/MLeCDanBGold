@@ -43,13 +43,11 @@ class QueryLanguage(str, Enum):
 
 
 class TaskType(str, Enum):
-    """Competition task represented by an evaluation query."""
-
-    TEXTUAL_KIS = "textual_kis"
-    VIDEO_KIS = "video_kis"
-    AD_HOC_SEARCH = "ad_hoc_search"
+    """Task type of each query."""
+    KIS = "kis"
+    KISC = "kisc"
     VQA = "vqa"
-
+    TRAKE = "trake"
 
 class QueryDifficulty(str, Enum):
     """Human-assigned difficulty of an evaluation query."""

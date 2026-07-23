@@ -21,6 +21,10 @@ pip install numpy pandas pyarrow pillow transformers torch
 resumes from a checkpoint of already-processed `frame_id`s, encodes images in
 batches, and writes artifacts under `<output_dir>/embeddings/`:
 
+Canonical `image_path` values are relative to the dataset root. Resolve them
+as `dataset_root / frame.image_path` when integrating the builder with an
+embedding consumer; do not rewrite the canonical Parquet with absolute paths.
+
 | File | Format | Purpose |
 |---|---|---|
 | `visual_embeddings.npy` | NumPy | L2-normalized visual embedding matrix |
