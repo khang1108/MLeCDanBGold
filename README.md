@@ -163,3 +163,8 @@ Available API Endpoints:
 - `GET /api/v1/frames/{frame_id}`: Fetch canonical frame metadata.
 - `GET /api/v1/frames/{frame_id}/neighbors`: Fetch temporal +/- N neighbor frames.
 - `POST /api/v1/submit`: Generate official BTC competition submission code (`video_id,frame_idx`).
+
+For KISC, create a session first, then pass its `session_id` to search and
+feedback requests. Unknown sessions return `404`; accepted results are promoted,
+rejected results are removed, and each response identifies both the user turn
+and its AI reply.

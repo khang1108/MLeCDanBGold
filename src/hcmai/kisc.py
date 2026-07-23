@@ -1,13 +1,10 @@
-"""Conversational Known-Item Search (KISC) state manager.
-
-Manages stateful conversation turns, human frame feedback (accepted and
-rejected frame IDs), and applies feedback filtering to search responses.
-"""
+"""State and protocol for conversational known-item search."""
 
 from __future__ import annotations
 
 import time
 import uuid
+from typing import Literal
 
 from hcmai.common.schemas import (
     ConversationSession,
@@ -15,162 +12,180 @@ from hcmai.common.schemas import (
     FrameFeedback,
     SearchRequest,
     SearchResponse,
+    SearchResult,
     SubmissionResult,
 )
 from hcmai.data import FrameStore
 from hcmai.search import SearchEngine
 
 
+def _now_ms() -> int:
+    """Return the current Unix timestamp in milliseconds."""
+    return int(time.time() * 1_000)
+
+
 class KiscSessionManager:
-    """In-memory session manager for KISC conversational searches."""
+    """Manage explicit in-memory KISC sessions and feedback."""
 
     def __init__(self) -> None:
-        """Initialize an empty session store."""
         self.sessions: dict[str, ConversationSession] = {}
 
-    def create_session(self, problem_id: str | None = None) -> ConversationSession:
-        """Create and register a new conversational KISC session.
+    def create_session(
+        self,
+        problem_id: str | None = None,
+    ) -> ConversationSession:
+        """Create and register a session for an optional problem.
 
         Args:
-            problem_id: Optional competition problem identifier.
+            problem_id (str): Unique ID of the problem
 
         Returns:
-            The created ``ConversationSession``.
+            A conversation session
         """
-        session_id = f"kisc_sess_{uuid.uuid4().hex[:8]}"
         session = ConversationSession(
-            session_id=session_id,
-            created_at=int(time.time() * 1000),
-            turns=[],
-            feedback=FrameFeedback(),
+            session_id=f"kisc_sess_{uuid.uuid4().hex[:8]}",
+            created_at=_now_ms(),
+            problem_id=problem_id,
         )
-        self.sessions[session_id] = session
+        self.sessions[session.session_id] = session
         return session
 
     def get_session(self, session_id: str) -> ConversationSession:
-        """Retrieve an active session by its ID.
+        """Return an existing session; KISC never creates one implicitly.
 
         Args:
-            session_id: Unique session string.
+            session_id (str): Unique ID of the session
 
         Returns:
-            The matching ``ConversationSession``.
+            A conversation session of session id.
 
         Raises:
-            KeyError: If session_id is not found.
+            KeyError: If not found a conversation with the given session_id.
         """
-        if session_id not in self.sessions:
-            raise KeyError(f"KISC session {session_id!r} not found")
-        return self.sessions[session_id]
+        try:
+            return self.sessions[session_id]
+        except KeyError as error:
+            raise KeyError(f"KISC session {session_id!r} not found") from error
 
     def update_feedback(
-        self, session_id: str, new_feedback: FrameFeedback
+        self,
+        session_id: str,
+        new_feedback: FrameFeedback,
     ) -> ConversationSession:
-        """Merge new human frame feedback into the cumulative feedback state.
-
-        Args:
-            session_id: Target session ID.
-            new_feedback: ``FrameFeedback`` object with accepted/rejected IDs.
-
-        Returns:
-            Updated ``ConversationSession``.
-        """
+        """Merge feedback using the latest decision for each frame."""
         session = self.get_session(session_id)
-
-        acc = list(
+        accepted = list(
             dict.fromkeys(
-                session.feedback.accepted_frame_ids + new_feedback.accepted_frame_ids
+                session.feedback.accepted_frame_ids
+                + new_feedback.accepted_frame_ids
             )
         )
-        rej = list(
+        rejected = list(
             dict.fromkeys(
-                session.feedback.rejected_frame_ids + new_feedback.rejected_frame_ids
+                session.feedback.rejected_frame_ids
+                + new_feedback.rejected_frame_ids
             )
         )
-
+        new_accepted = set(new_feedback.accepted_frame_ids)
+        new_rejected = set(new_feedback.rejected_frame_ids)
+        accepted = [item for item in accepted if item not in new_rejected]
+        rejected = [item for item in rejected if item not in new_accepted]
         session.feedback = FrameFeedback(
-            accepted_frame_ids=acc, rejected_frame_ids=rej
+            accepted_frame_ids=accepted,
+            rejected_frame_ids=rejected,
         )
         return session
 
+    def _append_turn(
+        self,
+        session: ConversationSession,
+        sender: Literal["user", "ai"],
+        message: str,
+        reply_to: str | None = None,
+    ) -> ConversationTurn:
+        """Append one server-ordered session turn."""
+        turn = ConversationTurn(
+            turn_id=f"turn_{len(session.turns) + 1:04d}",
+            sender=sender,
+            message=message,
+            created_at=_now_ms(),
+            reply_to_turn_id=reply_to,
+        )
+        session.turns.append(turn)
+        return turn
+
+    @staticmethod
+    def _apply_feedback(
+        results: list[SearchResult],
+        feedback: FrameFeedback,
+    ) -> list[SearchResult]:
+        """Remove rejected results, promote accepted ones, and reset ranks."""
+        rejected = set(feedback.rejected_frame_ids)
+        accepted_order = {
+            frame_id: index
+            for index, frame_id in enumerate(feedback.accepted_frame_ids)
+        }
+        kept = [
+            result for result in results
+            if result.frame_id not in rejected
+        ]
+        kept.sort(
+            key=lambda result: (
+                result.frame_id not in accepted_order,
+                accepted_order.get(result.frame_id, result.rank),
+            )
+        )
+        return [
+            result.model_copy(update={"rank": rank})
+            for rank, result in enumerate(kept, start=1)
+        ]
+
     def process_search(
-        self, request: SearchRequest, engine: SearchEngine
+        self,
+        request: SearchRequest,
+        engine: SearchEngine,
     ) -> SearchResponse:
-        """Process a search request, maintaining session turns and feedback.
+        """Execute stateless search or one turn in an existing session."""
+        if request.session_id is None:
+            return engine.search(request)
 
-        Args:
-            request: Extended ``SearchRequest`` containing query and optional KISC fields.
-            engine: Configured ``SearchEngine`` instance.
-
-        Returns:
-            ``SearchResponse`` with filtered results and attached session metadata.
-        """
-        session_id = request.session_id
-        session = None
-
-        if session_id:
-            if session_id not in self.sessions:
-                session = ConversationSession(
-                    session_id=session_id,
-                    created_at=int(time.time() * 1000),
-                    turns=[],
-                    feedback=FrameFeedback(),
-                )
-                self.sessions[session_id] = session
-            else:
-                session = self.sessions[session_id]
-
-            if request.feedback:
-                self.update_feedback(session_id, request.feedback)
-
-            turn_id = f"turn_{len(session.turns) + 1:02d}"
-            session.turns.append(
-                ConversationTurn(
-                    turn_id=turn_id, sender="user", message=request.query
-                )
+        session = self.get_session(request.session_id)
+        if request.feedback is not None:
+            session = self.update_feedback(
+                session.session_id,
+                request.feedback,
             )
-
+        user_turn = self._append_turn(session, "user", request.query)
         response = engine.search(request)
-
-        if session:
-            rejected = set(session.feedback.rejected_frame_ids)
-            if rejected:
-                response.results = [
-                    r for r in response.results if r.frame_id not in rejected
-                ]
-                response.total_results = len(response.results)
-
-            turn_id = f"turn_{len(session.turns) + 1:02d}"
-            ai_msg = f"Retrieved {response.total_results} frame candidates."
-            session.turns.append(
-                ConversationTurn(
-                    turn_id=turn_id, sender="ai", message=ai_msg
-                )
-            )
-
-            response.session_id = session.session_id
-            response.turn_id = turn_id
-            response.ai_message = ai_msg
-
-        return response
+        results = self._apply_feedback(response.results, session.feedback)
+        ai_message = f"Retrieved {len(results)} frame candidates."
+        ai_turn = self._append_turn(
+            session,
+            "ai",
+            ai_message,
+            reply_to=user_turn.turn_id,
+        )
+        payload = response.model_dump()
+        payload.update(
+            total_results=len(results),
+            results=results,
+            session_id=session.session_id,
+            turn_id=user_turn.turn_id,
+            assistant_turn_id=ai_turn.turn_id,
+            ai_message=ai_message,
+        )
+        return SearchResponse.model_validate(payload)
 
     def format_submission(
-        self, frame_id: str, store: FrameStore
+        self,
+        frame_id: str,
+        store: FrameStore,
     ) -> SubmissionResult:
-        """Format a target frame ID into the official BTC submission code.
-
-        Args:
-            frame_id: Target frame identifier string.
-            store: Loaded ``FrameStore`` containing metadata records.
-
-        Returns:
-            ``SubmissionResult`` containing video_id, frame_idx, and submission_code.
-        """
+        """Resolve one frame and format the official submission code."""
         record = store.get(frame_id)
-        code = f"{record.video_id},{record.frame_idx}"
         return SubmissionResult(
             frame_id=record.frame_id,
             video_id=record.video_id,
             frame_idx=record.frame_idx,
-            submission_code=code,
+            submission_code=f"{record.video_id},{record.frame_idx}",
         )

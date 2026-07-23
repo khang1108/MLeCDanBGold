@@ -40,7 +40,9 @@ src/hcmai/
   - `POST /api/v1/submit`: Format frame ID into official BTC submission code (`video_id,frame_idx`).
 
 ### 2. KISC State Manager (`hcmai.kisc`)
-- **`KiscSessionManager`**: Manages stateful `ConversationSession` instances in memory, accumulates human feedback (`accepted_frame_ids` and `rejected_frame_ids`), filters out rejected candidates from search results, and formats competition submission outputs.
+- **`KiscSessionManager`**: Requires explicit sessions, records correlated
+  user/AI turns, applies latest-decision feedback, promotes accepted frames,
+  removes rejected frames, and formats official submissions.
 
 ### 3. Search Orchestrator (`hcmai.search`)
 - **`SearchEngine`**: Orchestrates `candidate_retrieval`, optional `reranking`, and response `materialization` into `SearchResponse` objects with latency tracking.
