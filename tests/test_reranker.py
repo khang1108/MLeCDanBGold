@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 from hcmai.common.schemas import RetrievalCandidate
-from hcmai.reranker import MultimodalReranker, RerankerConfig
+from hcmai.reranking import MultimodalReranker, RerankerConfig
 
 class Store:
     def __init__(self, records):
