@@ -1,5 +1,11 @@
 from .base import *
-from .conversation import ConversationSession, ConversationTurn, FrameFeedback, SubmissionResult
+from .conversation import (
+    ConversationConstraint,
+    ConversationSession,
+    ConversationTurn,
+    FrameFeedback,
+    SubmissionResult,
+)
 from .enum import *
 from .frame import FrameEnrichment, FrameRecord
 from .retrieval import RetrievalCandidate, SearchScores
@@ -31,6 +37,7 @@ __all__ = [
     "SearchResponse",
     "MessageRequest",
     "MessageResponse",
+    "ConversationConstraint",
     "ConversationTurn",
     "FrameFeedback",
     "ConversationSession",
@@ -38,4 +45,3 @@ __all__ = [
     "FrameRecord",
     "FrameEnrichment",
 ]
-

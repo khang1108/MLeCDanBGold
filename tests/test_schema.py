@@ -1,78 +1,97 @@
-"""Validation tests for the shared project contracts."""
-
 from __future__ import annotations
-
-import json
 import pytest
 from pydantic import ValidationError
-
 from hcmai.common.schemas import (
+    ConversationConstraint,
     ConversationSession,
+    ConversationTurn,
     FrameFeedback,
-    FrameRecord,
     MessageRequest,
-    MessageResponse,
-    SearchFilters,
     SearchLatency,
     SearchMode,
     SearchRequest,
     SearchResponse,
-    SearchResult,
-    SearchScores,
     SubmissionResult,
 )
 
+def _response(**updates) -> SearchResponse:
+    payload = {
+        "request_id": "request-001",
+        "query": "a person walking",
+        "search_mode": SearchMode.ACCURATE,
+        "top_k": 1,
+        "total_results": 0,
+        "latency_ms": SearchLatency(total=25),
+        "results": [],
+    }
+    payload.update(updates)
+    return SearchResponse.model_validate(payload)
 
-def make_valid_response() -> SearchResponse:
-    """Build the smallest valid search response."""
-    return SearchResponse(
-        request_id="request-001",
-        query="a person walking",
-        search_mode=SearchMode.ACCURATE,
-        top_k=1,
-        total_results=1,
-        latency_ms=SearchLatency(total=25),
-        results=[
-            SearchResult(
-                rank=1,
-                frame_id="frame-001",
-                video_id="video-001",
-                frame_idx=10,
-                timestamp_ms=500,
-                scores=SearchScores(final=0.95),
-            )
-        ],
-    )
-
-
-def test_empty_query_is_rejected() -> None:
+def test_empty_query_and_stateless_feedback_are_rejected() -> None:
     with pytest.raises(ValidationError):
-        SearchRequest(query="   ")
+        SearchRequest(query=" ")
+    with pytest.raises(ValidationError, match="feedback requires session_id"):
+        SearchRequest(query="test", feedback=FrameFeedback())
 
+def test_feedback_is_deduplicated_and_disjoint() -> None:
+    feedback = FrameFeedback(accepted_frame_ids=["f1", "f1"])
+    assert feedback.accepted_frame_ids == ["f1"]
+    with pytest.raises(ValidationError, match="must be disjoint"):
+        FrameFeedback(
+            accepted_frame_ids=["f1"],
+            rejected_frame_ids=["f1"],
+        )
 
-def test_search_request_and_response_kisc_fields() -> None:
-    feedback = FrameFeedback(accepted_frame_ids=["f1"], rejected_frame_ids=["f2"])
-    req = SearchRequest(query="test", session_id="sess-01", feedback=feedback)
-    assert req.session_id == "sess-01"
-    assert req.feedback.accepted_frame_ids == ["f1"]
-
-    resp = make_valid_response()
-    resp.session_id = "sess-01"
-    resp.turn_id = "turn-01"
-    resp.ai_message = "Found 1 frame"
-    assert resp.session_id == "sess-01"
-
-
-def test_message_aliases_work_identically() -> None:
-    msg_req = MessageRequest(query="hello")
-    assert isinstance(msg_req, SearchRequest)
-
-
-def test_conversation_session_and_submission_result() -> None:
-    sess = ConversationSession(session_id="s1", created_at=1000)
-    assert sess.session_id == "s1"
-
-    sub = SubmissionResult(
-        frame_id="f1", video_id="L21_V001", frame_idx=10, submission_code="L21_V001,10"
+def test_conversation_turn_role_is_typed() -> None:
+    turn = ConversationTurn(
+        turn_id="turn-1",
+        sender="user",
+        message="find the red car",
+        created_at=100,
     )
-    assert sub.submission_code == "L21_V001,10"
+    assert turn.sender == "user"
+    with pytest.raises(ValidationError):
+        ConversationTurn.model_validate(
+            {**turn.model_dump(), "sender": "system"}
+        )
+    constraint = ConversationConstraint(
+        slot="color",
+        value="blue",
+        polarity="positive",
+        source_turn_id=turn.turn_id,
+    )
+    assert constraint.slot == "color"
+    with pytest.raises(ValidationError):
+        ConversationConstraint.model_validate(
+            {**constraint.model_dump(), "polarity": "maybe"}
+        )
+
+def test_kisc_response_requires_complete_turn_context() -> None:
+    response = _response(
+        session_id="session-1",
+        turn_id="turn-1",
+        assistant_turn_id="turn-2",
+        ai_message="Retrieved 0 frame candidates.",
+    )
+    assert response.assistant_turn_id == "turn-2"
+    with pytest.raises(ValidationError, match="complete turn metadata"):
+        _response(session_id="session-1", turn_id="turn-1")
+
+def test_alias_session_and_submission_contracts() -> None:
+    assert isinstance(MessageRequest(query="hello"), SearchRequest)
+    session = ConversationSession(
+        session_id="session-1",
+        created_at=100,
+        problem_id="problem-7",
+    )
+    assert session.problem_id == "problem-7"
+    valid = SubmissionResult(
+        frame_id="f1",
+        video_id="L21_V001",
+        frame_idx=10,
+        submission_code="L21_V001,10",
+    )
+    with pytest.raises(ValidationError, match="submission_code"):
+        SubmissionResult.model_validate(
+            {**valid.model_dump(), "submission_code": "L21_V001,11"}
+        )

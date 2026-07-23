@@ -50,13 +50,14 @@ whitespace from strings.
   deduplicated, and `end_time_ms` cannot precede `start_time_ms`.
 - `SearchRequest`: public search request containing a non-empty query, a
   bounded `top_k`, search mode, optional filters, optional KISC `session_id`,
-  and human `feedback`.
+  and human `feedback`. Feedback is valid only with a session ID.
 - `SearchLatency`: non-negative latency measurements for each search stage and
   the total request, in milliseconds.
 - `SearchResult`: one ranked result with the canonical frame identifiers,
   preview URLs, enrichment text, and scores.
 - `SearchResponse`: complete search response with request metadata, latency,
-  results, warnings, optional KISC `session_id`, `turn_id`, and `ai_message`.
+  results, warnings, and optional KISC context. Conversational responses contain
+  a session ID, user `turn_id`, `assistant_turn_id`, and `ai_message` together.
   `total_results` must match the result list and cannot exceed `top_k`.
 - `MessageRequest` & `MessageResponse`: type aliases for `SearchRequest` and
   `SearchResponse` used in conversational KISC workflows.
@@ -69,14 +70,19 @@ whitespace from strings.
 
 ### `conversation.py`
 
-- `ConversationTurn`: one user or system message in a KIS conversation with
-  turn ID, sender role (`user` or `ai`), and non-empty message.
-- `FrameFeedback`: human feedback represented as accepted and rejected frame
-  ID lists.
+- `ConversationConstraint`: one resolver fact with a semantic slot, value,
+  positive/negative/uncertain polarity, and source turn ID.
+- `ConversationTurn`: one user or AI message in a KIS conversation with
+  turn ID, typed sender (`user` or `ai`), timestamp, optional reply target, and
+  non-empty message.
+- `FrameFeedback`: ordered, deduplicated accepted/rejected frame IDs. One update
+  cannot contain the same frame in both decisions.
 - `ConversationSession`: active KISC conversation session state containing
-  session ID, creation timestamp, turns, and cumulative feedback.
+  session ID, optional problem ID, creation timestamp, turns, and cumulative
+  feedback.
 - `SubmissionResult`: official competition submission output format containing
-  `frame_id`, `video_id`, `frame_idx`, and `submission_code`.
+  `frame_id`, `video_id`, `frame_idx`, and a validated
+  `video_id,frame_idx` submission code.
 
 ## Importing
 

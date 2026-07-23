@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import Self
 from pydantic import Field, field_validator, model_validator
 
-from hcmai.common.schemas import ContractModel, NonEmptyString, SearchMode, SearchScores
+from hcmai.common.schemas import (
+    ContractModel,
+    NonEmptyString,
+    SearchMode,
+    SearchScores,
+)
 from hcmai.common.schemas.conversation import FrameFeedback
 
 
@@ -48,6 +53,13 @@ class SearchRequest(ContractModel):
     session_id: NonEmptyString | None = None
     feedback: FrameFeedback | None = None
 
+    @model_validator(mode="after")
+    def validate_kisc_context(self) -> Self:
+        """Require a session for stateful frame feedback."""
+        if self.feedback is not None and self.session_id is None:
+            raise ValueError("feedback requires session_id")
+        return self
+
 
 class SearchLatency(ContractModel):
     """Backend latency of each search stage in milliseconds."""
@@ -91,6 +103,7 @@ class SearchResponse(ContractModel):
     warnings: list[NonEmptyString] = Field(default_factory=list)
     session_id: NonEmptyString | None = None
     turn_id: NonEmptyString | None = None
+    assistant_turn_id: NonEmptyString | None = None
     ai_message: NonEmptyString | None = None
 
     @model_validator(mode="after")
@@ -102,6 +115,14 @@ class SearchResponse(ContractModel):
 
         if self.total_results > self.top_k:
             raise ValueError("total_results must not be greater than top_k")
+
+        context = (self.turn_id, self.assistant_turn_id, self.ai_message)
+        has_context = any(value is not None for value in context)
+        missing_context = any(value is None for value in context)
+        if self.session_id is None and has_context:
+            raise ValueError("KISC turn metadata requires session_id")
+        if self.session_id is not None and missing_context:
+            raise ValueError("KISC responses require complete turn metadata")
 
         return self
 
