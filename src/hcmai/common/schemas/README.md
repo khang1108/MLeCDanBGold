@@ -59,8 +59,6 @@ whitespace from strings.
   results, warnings, and optional KISC context. Conversational responses contain
   a session ID, user `turn_id`, `assistant_turn_id`, and `ai_message` together.
   `total_results` must match the result list and cannot exceed `top_k`.
-- `MessageRequest` & `MessageResponse`: type aliases for `SearchRequest` and
-  `SearchResponse` used in conversational KISC workflows.
 
 ### `evaluation.py`
 

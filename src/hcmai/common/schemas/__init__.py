@@ -10,8 +10,6 @@ from .enum import *
 from .frame import FrameEnrichment, FrameRecord
 from .retrieval import RetrievalCandidate, SearchScores
 from .search import (
-    MessageRequest,
-    MessageResponse,
     SearchFilters,
     SearchLatency,
     SearchRequest,
@@ -35,8 +33,6 @@ __all__ = [
     "SearchLatency",
     "SearchResult",
     "SearchResponse",
-    "MessageRequest",
-    "MessageResponse",
     "ConversationConstraint",
     "ConversationTurn",
     "FrameFeedback",

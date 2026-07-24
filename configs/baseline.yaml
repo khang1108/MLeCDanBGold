@@ -1,5 +1,6 @@
 dataset:
   version: "hcmai2026_v1"
+  root: "data"
   frames_path: "data/metadata/frames.parquet"
   enrichment_path: "artifacts/enrichment/frame_enrichment.parquet"
 

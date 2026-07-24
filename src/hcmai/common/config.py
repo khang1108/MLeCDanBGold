@@ -15,6 +15,7 @@ class DatasetConfig(BaseModel):
     """Configuration for corpus metadata and enrichment paths."""
 
     version: str = "hcmai2026_v1"
+    root: Path = Path("data")
     frames_path: Path = Path("data/metadata/frames.parquet")
     enrichment_path: Path = Path("artifacts/enrichment/frame_enrichment.parquet")
 

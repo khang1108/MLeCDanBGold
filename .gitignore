@@ -82,4 +82,6 @@ aic/
 # Frontend
 frontend/build
 frontend/node_modules
-src/hcmai/scripts/
+
+docs/papers/
+docs/slides/

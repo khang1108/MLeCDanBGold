@@ -14,8 +14,8 @@ from hcmai.data import FrameStore, prepare_frames
 @pytest.fixture
 def dataset(tmp_path: Path) -> Path:
     root = tmp_path / "btc"
-    mappings = root / "map-keyframes-aic25-b1" / "map-keyframes"
-    keyframes = root / "Keyframes_L21" / "keyframes"
+    mappings = root / "features" / "map-keyframes"
+    keyframes = root / "keyframes"
     mappings.mkdir(parents=True)
     rows = {
         "L21_V002": [(3, 0.3, 700), (1, 0.1, 700)],
@@ -73,7 +73,7 @@ def test_missing_image_fails_without_overwriting(
     output = tmp_path / "frames.parquet"
     prepare_frames(dataset, output)
     original = output.read_bytes()
-    image = dataset / "Keyframes_L21/keyframes/L21_V001/001.jpg"
+    image = dataset / "keyframes/L21_V001/001.jpg"
     image.unlink()
     with pytest.raises(ValueError, match="no image"):
         prepare_frames(dataset, output)
@@ -82,7 +82,7 @@ def test_missing_image_fails_without_overwriting(
 
 @pytest.mark.parametrize("value", [None, -1, 1.5])
 def test_invalid_frame_idx_fails(dataset: Path, tmp_path: Path, value) -> None:
-    mapping = dataset / "map-keyframes-aic25-b1/map-keyframes/L21_V001.csv"
+    mapping = dataset / "features/map-keyframes/L21_V001.csv"
     table = pd.read_csv(mapping)
     table["frame_idx"] = table["frame_idx"].astype(object)
     table.loc[0, "frame_idx"] = value
@@ -92,7 +92,7 @@ def test_invalid_frame_idx_fails(dataset: Path, tmp_path: Path, value) -> None:
 
 
 def test_duplicate_frame_id_fails(dataset: Path, tmp_path: Path) -> None:
-    mapping = dataset / "map-keyframes-aic25-b1/map-keyframes/L21_V001.csv"
+    mapping = dataset / "features/map-keyframes/L21_V001.csv"
     table = pd.read_csv(mapping)
     table.loc[1, "n"] = table.loc[0, "n"]
     table.to_csv(mapping, index=False)

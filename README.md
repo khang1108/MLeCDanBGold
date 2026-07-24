@@ -52,6 +52,7 @@ schemas.
 
 ```text
 frontend/                         Existing Node.js UI
+scripts/                          Root-level data and experiment CLIs
 src/hcmai/
 ├── app.py                        FastAPI boundary
 ├── search.py                     Search orchestration
@@ -109,7 +110,7 @@ examples. The available helpers are:
 Install the project and its declared dependencies:
 
 ```bash
-pip install -e .
+aic/bin/python -m pip install -e ".[embedding,dev]"
 ```
 
 Update `pyproject.toml` whenever a new runtime dependency becomes part of the
@@ -117,12 +118,18 @@ supported baseline.
 
 ## Data preparation
 
+If the dataset arrived as zip archives under `data/`, extract them first:
+
+```bash
+aic/bin/python scripts/extract_zips.py --data-dir data
+```
+
 Build the single canonical metadata artifact from the official mapping and
 provided keyframe images:
 
 ```bash
-PYTHONPATH=src python scripts/prepare_data.py \
-  --dataset-root /path/to/btc \
+PYTHONPATH=src aic/bin/python scripts/prepare_data.py \
+  --dataset-root data \
   --output data/metadata/frames.parquet
 ```
 
@@ -151,7 +158,8 @@ artifacts and must not be committed to Git.
 Launch the FastAPI application to serve the HTTP API for the Node.js frontend:
 
 ```bash
-uv run uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
+PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
+  --host 127.0.0.1 --port 8000 --reload
 ```
 
 Available API Endpoints:

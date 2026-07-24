@@ -27,6 +27,7 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 def _mapping_files(root: Path) -> list[Path]:
     candidates = (
+        root / "features" / "map-keyframes",
         root / "map-keyframes-aic25-b1" / "map-keyframes",
         root / "map-keyframes",
         root / "map_keyframes",
@@ -152,8 +153,10 @@ def prepare_frames(dataset_root: Path, output_path: Path) -> Path:
     root = Path(dataset_root).expanduser().resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"Dataset root does not exist: {root}")
+
     images = _images_by_video(root)
     records: list[dict[str, object]] = []
+
     for mapping_path in _mapping_files(root):
         records.extend(
             _records_for_video(

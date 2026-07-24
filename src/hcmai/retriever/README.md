@@ -12,7 +12,7 @@ importing a data-class module (`config.py`, `stats.py`, `metadata.py`) never
 pulls in a model runtime.
 
 ```bash
-pip install numpy pandas pyarrow faiss-cpu transformers torch pillow
+aic/bin/python -m pip install -e ".[embedding]"
 ```
 
 - `transformers`, `torch`, and `pillow` are used by `DenseEncoder`.

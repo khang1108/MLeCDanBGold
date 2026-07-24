@@ -1,18 +1,18 @@
-"""Generate and manage versioned, resumable frame embeddings using dense encoder."""
+"""Generate canonical visual embedding artifacts."""
 
 from __future__ import annotations
 
-import json
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from typing import Any, Optional
 
-from hcmai.common.utils.logging import get_logger
-from hcmai.common.utils.io import read_parquet, write_parquet, write_yaml
-from hcmai.common.utils.timing import Timer
-from hcmai.common.utils.image import load_image
 from hcmai.common.config import EncoderConfig
+from hcmai.common.utils.image import load_image
+from hcmai.common.utils.io import read_parquet, write_parquet, write_yaml
+from hcmai.common.utils.logging import get_logger
+from hcmai.common.utils.timing import Timer
 from hcmai.embedding.models import EmbeddingMetadata
 from hcmai.retriever.encoder import DenseEncoder, EncodingStats
 
@@ -20,150 +20,90 @@ logger = get_logger(__name__)
 
 
 class EmbeddingPipeline:
-    """Generate versioned, resumable frame embeddings from a corpus."""
+    """Encode canonical frame images and persist aligned artifacts."""
 
     def __init__(
         self,
         frames_path: Path | str,
+        dataset_root: Path | str,
         output_dir: Path | str,
         encoder_config: EncoderConfig,
         dataset_version: str = "hcmai2026",
-        checkpoint_file: Optional[Path | str] = None,
     ) -> None:
-        """Initialize the embedding pipeline.
-
-        Args:
-            frames_path: Path to frames.parquet containing FrameRecord objects.
-            output_dir: Directory where embeddings and metadata will be saved.
-            encoder_config: Configuration for the DenseEncoder.
-            dataset_version: Version identifier for the dataset.
-            checkpoint_file: Optional path to resume from a checkpoint.
-        """
+        """Configure paths and a lazy dense encoder."""
         self.frames_path = Path(frames_path)
+        self.dataset_root = Path(dataset_root).expanduser().resolve()
         self.output_dir = Path(output_dir)
         self.encoder_config = encoder_config
         self.dataset_version = dataset_version
-        self.checkpoint_file = Path(checkpoint_file) if checkpoint_file else None
-
         self.embeddings_dir = self.output_dir / "embeddings"
         self.embeddings_file = self.embeddings_dir / "visual_embeddings.npy"
         self.mapping_file = self.embeddings_dir / "frame_mapping.parquet"
         self.metadata_file = self.embeddings_dir / "metadata.yaml"
-
-        # Ensure directories exist
         self.embeddings_dir.mkdir(parents=True, exist_ok=True)
-
         self.encoder = DenseEncoder(encoder_config)
-        self.processed_frame_ids: set[str] = set()
         self.embeddings_list: list[np.ndarray] = []
         self.frame_mapping: list[dict[str, Any]] = []
         self.failed_frames: list[dict[str, Any]] = []
 
-    def run(self) -> EmbeddingMetadata:
-        """Execute the embedding pipeline end-to-end.
+    def _resolve_image(self, value: object) -> Path:
+        """Resolve one canonical image path without changing the Parquet."""
+        path = Path(str(value))
+        resolved = path if path.is_absolute() else self.dataset_root / path
+        return resolved.resolve()
 
-        Returns:
-            EmbeddingMetadata with statistics about the run.
-        """
-        logger.info(f"Starting embedding pipeline")
-        logger.info(f"Frames path: {self.frames_path}")
-        logger.info(f"Output dir: {self.output_dir}")
+    def _append_batch(
+        self,
+        images: list[Any],
+        records: list[dict[str, Any]],
+        stats: EncodingStats,
+    ) -> None:
+        """Encode a batch and append position-aligned mapping rows."""
+        embeddings = self.encoder.encode_images(images, stats)
+        for embedding, record in zip(embeddings, records):
+            position = len(self.embeddings_list)
+            self.embeddings_list.append(embedding[None, :])
+            self.frame_mapping.append(
+                {
+                    "frame_id": record["frame_id"],
+                    "video_id": record["video_id"],
+                    "frame_idx": int(record["frame_idx"]),
+                    "embedding_index": position,
+                    "timestamp_ms": int(record["timestamp_ms"]),
+                }
+            )
 
-        timer = Timer()
-
-        # Load frames
-        logger.info("Loading frames...")
-        frames_df = read_parquet(self.frames_path)
-        total_frames = len(frames_df)
-        logger.info(f"Loaded {total_frames} frames")
-
-        # Resume from checkpoint if available
-        if self.checkpoint_file and self.checkpoint_file.exists():
+    def _process_records(
+        self,
+        records: list[dict[str, Any]],
+        stats: EncodingStats,
+    ) -> None:
+        """Load valid images and encode them in configured batches."""
+        images: list[Any] = []
+        batch: list[dict[str, Any]] = []
+        for record in records:
             try:
-                checkpoint = json.loads(self.checkpoint_file.read_text())
-                self.processed_frame_ids = set(checkpoint.get("processed", []))
-                logger.info(f"Loaded checkpoint with {len(self.processed_frame_ids)} frames")
-            except Exception as e:
-                logger.warning(f"Failed to load checkpoint: {e}")
-
-        # Process frames in batches
-        remaining_frames = [
-            (idx, row)
-            for idx, row in frames_df.iterrows()
-            if row["frame_id"] not in self.processed_frame_ids
-        ]
-
-        logger.info(f"Processing {len(remaining_frames)} new frames")
-
-        # Collect images for batch encoding
-        batch_images = []
-        batch_frame_ids = []
-        batch_data = []
-        encoding_stats = EncodingStats()
-
-        for idx, row in remaining_frames:
-            frame_id = row["frame_id"]
-            
-            try:
-                image_path = row["image_path"]
-                image = load_image(image_path)
-                batch_images.append(image)
-                batch_frame_ids.append(frame_id)
-                batch_data.append(row.to_dict())
-
-                # Encode batch when full or at end
-                if len(batch_images) == self.encoder_config.batch_size or (idx == remaining_frames[-1][0]):
-                    embeddings = self.encoder.encode_images(batch_images, encoding_stats)
-                    for i, (frame_id, row) in enumerate(zip(batch_frame_ids, batch_data)):
-                        self.embeddings_list.append(embeddings[i : i + 1])
-                        mapping_entry = {
-                            "frame_id": frame_id,
-                            "video_id": row.get("video_id", ""),
-                            "frame_idx": row.get("frame_idx", 0),
-                            "embedding_index": len(self.embeddings_list) - 1,
-                            "timestamp_ms": row.get("timestamp_ms", 0),
-                        }
-                        self.frame_mapping.append(mapping_entry)
-                        self.processed_frame_ids.add(frame_id)
-                    batch_images = []
-                    batch_frame_ids = []
-                    batch_data = []
-
-            except Exception as e:
-                logger.error(f"Failed to process frame {frame_id}: {e}")
+                images.append(load_image(self._resolve_image(record["image_path"])))
+                batch.append(record)
+            except (OSError, ValueError) as error:
+                stats.num_failed += 1
                 self.failed_frames.append(
-                    {
-                        "frame_id": frame_id,
-                        "error": str(e),
-                        "image_path": row.get("image_path"),
-                    }
+                    {"frame_id": record["frame_id"], "error": str(error)}
                 )
+                continue
+            if len(images) == self.encoder_config.batch_size:
+                self._append_batch(images, batch, stats)
+                images, batch = [], []
+        if images:
+            self._append_batch(images, batch, stats)
 
-        timer.stop()
-        processing_time_sec = timer.elapsed_ms / 1000.0
-
-        # Save artifacts
-        logger.info("Saving embeddings and artifacts...")
-        if self.embeddings_list:
-            all_embeddings = np.vstack(self.embeddings_list)
-            np.save(self.embeddings_file, all_embeddings)
-            logger.info(
-                f"Saved {len(all_embeddings)} embeddings to {self.embeddings_file}"
-            )
-        else:
-            logger.warning("No embeddings to save")
-
-        if self.frame_mapping:
-            mapping_df = pd.DataFrame(self.frame_mapping)
-            write_parquet(mapping_df, self.mapping_file)
-            logger.info(
-                f"Saved {len(mapping_df)} mappings to {self.mapping_file}"
-            )
-        else:
-            logger.warning("No mapping to save")
-
-        # Create and save metadata
-        metadata = EmbeddingMetadata(
+    def _metadata(
+        self,
+        total_frames: int,
+        processing_time_sec: float,
+    ) -> EmbeddingMetadata:
+        """Build provenance for the generated corpus."""
+        return EmbeddingMetadata(
             dataset_version=self.dataset_version,
             model_name=self.encoder_config.model_name,
             model_checkpoint=None,
@@ -171,7 +111,7 @@ class EmbeddingPipeline:
             dtype=self.encoder_config.dtype,
             embedding_dimension=self.encoder.embedding_dim,
             total_frames=total_frames,
-            successful_frames=len(self.processed_frame_ids) + len(self.frame_mapping),
+            successful_frames=len(self.frame_mapping),
             failed_frames=len(self.failed_frames),
             normalization="l2",
             generated_at=pd.Timestamp.now().isoformat(),
@@ -180,20 +120,26 @@ class EmbeddingPipeline:
             processing_time_sec=processing_time_sec,
         )
 
+    def _save(self, metadata: EmbeddingMetadata) -> None:
+        """Persist embeddings, their exact frame mapping, and provenance."""
+        if self.embeddings_list:
+            np.save(self.embeddings_file, np.vstack(self.embeddings_list))
+            write_parquet(pd.DataFrame(self.frame_mapping), self.mapping_file)
         write_yaml(metadata.to_dict(), self.metadata_file)
-        logger.info(f"Metadata saved to {self.metadata_file}")
 
-        # Log statistics
-        logger.info("EMBEDDING PIPELINE COMPLETED")
-        logger.info(encoding_stats.report())
+    def run(self) -> EmbeddingMetadata:
+        """Generate embedding artifacts for every readable canonical frame."""
+        timer = Timer()
+        table = read_parquet(self.frames_path)
+        records = table.to_dict(orient="records")
+        stats = EncodingStats()
+        self._process_records(records, stats)
+        metadata = self._metadata(len(records), timer.stop() / 1000.0)
+        self._save(metadata)
         logger.info(
-            f"Total frames: {total_frames}, "
-            f"Successful: {metadata.successful_frames}, "
-            f"Failed: {metadata.failed_frames}"
+            "Embedding run: total=%d successful=%d failed=%d",
+            metadata.total_frames,
+            metadata.successful_frames,
+            metadata.failed_frames,
         )
-        logger.info(f"Processing time: {processing_time_sec:.2f}s")
-        logger.info(f"Embeddings saved to: {self.embeddings_file}")
-        logger.info(f"Mapping saved to: {self.mapping_file}")
-
         return metadata
-

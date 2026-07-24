@@ -20,8 +20,7 @@ src/hcmai/
 │   └── utils/      # Generic I/O, image loading, timing, and logging helpers
 ├── data/           # Canonical Parquet builder and FrameStore
 ├── embedding/      # Image embedding generation pipeline
-├── retriever/      # FAISS visual index, DenseEncoder, DenseRetriever, benchmarking
-└── scripts/        # Internal pipeline build scripts
+└── retriever/      # FAISS visual index, DenseEncoder, DenseRetriever, benchmarking
 ```
 
 ---
@@ -66,7 +65,8 @@ src/hcmai/
 
 ### Running the API Server
 ```bash
-uv run uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
+PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
+  --host 127.0.0.1 --port 8000 --reload
 ```
 
 ### Python Search Engine Orchestration

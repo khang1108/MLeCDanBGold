@@ -9,7 +9,7 @@ large datasets at import time.
 Install the optional libraries used by the helpers when needed:
 
 ```bash
-pip install pyyaml pandas pyarrow pillow
+aic/bin/python -m pip install -e .
 ```
 
 - `pyyaml` is used for YAML files.

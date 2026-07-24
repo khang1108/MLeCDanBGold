@@ -126,7 +126,3 @@ class SearchResponse(ContractModel):
 
         return self
 
-
-# Type aliases for conversational KISC workflows
-MessageRequest = SearchRequest
-MessageResponse = SearchResponse

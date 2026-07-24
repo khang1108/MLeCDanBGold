@@ -1,235 +1,87 @@
-"""Tests for the embedding pipeline."""
-
 from __future__ import annotations
 
-import pytest
-import pandas as pd
-import numpy as np
 from pathlib import Path
-from tempfile import TemporaryDirectory
+
+import numpy as np
+import pandas as pd
 from PIL import Image
 
 from hcmai.common.config import EncoderConfig
+from hcmai.embedding import embedding
 from hcmai.embedding.embedding import EmbeddingPipeline
-from hcmai.embedding.models.metadata import EmbeddingMetadata
+from hcmai.embedding.models import EmbeddingMetadata
 
 
-@pytest.fixture
-def encoder_config():
-    """Create encoder config for testing."""
-    return EncoderConfig(
-        model_name="google/siglip2-base-patch16-224",
-        device="cpu",
-        batch_size=2,
+class FakeEncoder:
+    """Small deterministic encoder that never loads a checkpoint."""
+
+    def __init__(self, _config: EncoderConfig) -> None:
+        self.embedding_dim = 3
+
+    def encode_images(self, images, stats) -> np.ndarray:
+        stats.num_encoded += len(images)
+        stats.embedding_dim = self.embedding_dim
+        return np.tile(
+            np.array([[1.0, 0.0, 0.0]], dtype="float32"),
+            (len(images), 1),
+        )
+
+
+def _corpus(tmp_path: Path) -> tuple[Path, Path]:
+    root = tmp_path / "dataset"
+    images = root / "keyframes" / "L21_V001"
+    images.mkdir(parents=True)
+    Image.new("RGB", (8, 6)).save(images / "001.jpg")
+    Image.new("RGB", (8, 6)).save(images / "002.jpg")
+    rows = [
+        {
+            "frame_id": f"frame-{order}",
+            "video_id": "L21_V001",
+            "frame_idx": order * 90,
+            "timestamp_ms": order * 3000,
+            "image_path": f"keyframes/L21_V001/{order:03d}.jpg",
+        }
+        for order in (1, 2, 3)
+    ]
+    frames_path = tmp_path / "frames.parquet"
+    pd.DataFrame(rows).to_parquet(frames_path, index=False)
+    return root, frames_path
+
+
+def test_pipeline_resolves_relative_paths_and_aligns_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dataset_root, frames_path = _corpus(tmp_path)
+    monkeypatch.setattr(embedding, "DenseEncoder", FakeEncoder)
+    pipeline = EmbeddingPipeline(
+        frames_path=frames_path,
+        dataset_root=dataset_root,
+        output_dir=tmp_path / "artifacts",
+        encoder_config=EncoderConfig(batch_size=2),
+        dataset_version="fixture-v1",
     )
 
+    metadata = pipeline.run()
+    vectors = np.load(pipeline.embeddings_file)
+    mapping = pd.read_parquet(pipeline.mapping_file)
 
-@pytest.fixture
-def temp_dirs():
-    """Create temporary directories for testing."""
-    with TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        yield {
-            "data": tmpdir / "data",
-            "artifacts": tmpdir / "artifacts",
-            "logs": tmpdir / "logs",
-        }
-
-
-class TestEmbeddingMetadata:
-    """Test EmbeddingMetadata serialization."""
-
-    def test_to_dict(self):
-        """Test metadata conversion to dictionary."""
-        metadata = EmbeddingMetadata(
-            dataset_version="test_v1",
-            model_name="siglip2",
-            model_checkpoint=None,
-            preprocessing_size=224,
-            dtype="float32",
-            embedding_dimension=768,
-            total_frames=100,
-            successful_frames=98,
-            failed_frames=2,
-            normalization="l2",
-            generated_at="2026-01-01T00:00:00Z",
-            device="cpu",
-            batch_size=32,
-            processing_time_sec=10.5,
-        )
-        data = metadata.to_dict()
-        assert data["dataset_version"] == "test_v1"
-        assert data["total_frames"] == 100
-        assert data["successful_frames"] == 98
-
-    def test_from_dict(self):
-        """Test metadata creation from dictionary."""
-        data = {
-            "dataset_version": "test_v1",
-            "model_name": "siglip2",
-            "model_checkpoint": None,
-            "preprocessing_size": 224,
-            "dtype": "float32",
-            "embedding_dimension": 768,
-            "total_frames": 100,
-            "successful_frames": 98,
-            "failed_frames": 2,
-            "normalization": "l2",
-            "generated_at": "2026-01-01T00:00:00Z",
-            "device": "cpu",
-            "batch_size": 32,
-            "processing_time_sec": 10.5,
-        }
-        metadata2 = EmbeddingMetadata.from_dict(data)
-        assert metadata2.dataset_version == "test_v1"
-        assert metadata2.total_frames == 100
+    assert vectors.shape == (2, 3)
+    assert mapping["frame_id"].tolist() == ["frame-1", "frame-2"]
+    assert mapping["embedding_index"].tolist() == [0, 1]
+    assert metadata.total_frames == 3
+    assert metadata.successful_frames == 2
+    assert metadata.failed_frames == 1
+    assert pipeline.metadata_file.is_file()
 
 
-class TestEmbeddingPipeline:
-    """Test the EmbeddingPipeline class."""
-
-    def test_pipeline_initialization(self, encoder_config, temp_dirs):
-        """Test pipeline initialization."""
-        frames_file = temp_dirs["data"] / "frames.parquet"
-        frames_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Create a minimal frames DataFrame
-        df = pd.DataFrame({
-            "frame_id": ["f001", "f002"],
-            "video_id": ["v001", "v001"],
-            "frame_idx": [0, 1],
-            "timestamp_ms": [0, 33],
-            "image_path": [
-                str(temp_dirs["data"] / "img001.jpg"),
-                str(temp_dirs["data"] / "img002.jpg"),
-            ],
-            "width": [1920, 1920],
-            "height": [1080, 1080],
-        })
-        df.to_parquet(frames_file)
-
-        pipeline = EmbeddingPipeline(
-            frames_path=frames_file,
-            output_dir=temp_dirs["artifacts"],
-            encoder_config=encoder_config,
-            dataset_version="test_v1",
-        )
-
-        assert pipeline.frames_path == frames_file
-        assert pipeline.output_dir == temp_dirs["artifacts"]
-        assert pipeline.dataset_version == "test_v1"
-
-    def test_pipeline_directory_structure(self, encoder_config, temp_dirs):
-        """Test that pipeline creates expected directory structure."""
-        frames_file = temp_dirs["data"] / "frames.parquet"
-        frames_file.parent.mkdir(parents=True, exist_ok=True)
-
-        df = pd.DataFrame({
-            "frame_id": ["f001"],
-            "video_id": ["v001"],
-            "frame_idx": [0],
-            "timestamp_ms": [0],
-            "image_path": [str(temp_dirs["data"] / "img001.jpg")],
-            "width": [1920],
-            "height": [1080],
-        })
-        df.to_parquet(frames_file)
-
-        pipeline = EmbeddingPipeline(
-            frames_path=frames_file,
-            output_dir=temp_dirs["artifacts"],
-            encoder_config=encoder_config,
-        )
-
-        assert pipeline.embeddings_dir.exists()
-        assert pipeline.embeddings_file.parent == pipeline.embeddings_dir
-        assert pipeline.mapping_file.parent == pipeline.embeddings_dir
-
-    def test_pipeline_empty_frames(self, encoder_config, temp_dirs):
-        """Test pipeline with empty frames list."""
-        frames_file = temp_dirs["data"] / "frames.parquet"
-        frames_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Create empty DataFrame
-        df = pd.DataFrame({
-            "frame_id": [],
-            "video_id": [],
-            "frame_idx": [],
-            "timestamp_ms": [],
-            "image_path": [],
-            "width": [],
-            "height": [],
-        })
-        df.to_parquet(frames_file)
-
-        pipeline = EmbeddingPipeline(
-            frames_path=frames_file,
-            output_dir=temp_dirs["artifacts"],
-            encoder_config=encoder_config,
-        )
-
-        assert pipeline.embeddings_list == []
-        assert pipeline.frame_mapping == []
-
-    def test_embedding_save_and_load(self, temp_dirs):
-        """Test saving and loading embeddings."""
-        embeddings_dir = temp_dirs["artifacts"] / "embeddings"
-        embeddings_dir.mkdir(parents=True, exist_ok=True)
-
-        embeddings_file = embeddings_dir / "visual_embeddings.npy"
-
-        # Create and save embeddings
-        embeddings = np.random.randn(10, 768).astype("float32")
-        np.save(embeddings_file, embeddings)
-
-        # Load embeddings
-        loaded = np.load(embeddings_file)
-
-        assert loaded.shape == (10, 768)
-        np.testing.assert_array_almost_equal(embeddings, loaded)
-
-    def test_checkpoint_save_load(self, encoder_config, temp_dirs):
-        """Test checkpoint saving and loading."""
-        frames_file = temp_dirs["data"] / "frames.parquet"
-        frames_file.parent.mkdir(parents=True, exist_ok=True)
-
-        df = pd.DataFrame({
-            "frame_id": ["f001", "f002"],
-            "video_id": ["v001", "v001"],
-            "frame_idx": [0, 1],
-            "timestamp_ms": [0, 33],
-            "image_path": [
-                str(temp_dirs["data"] / "img001.jpg"),
-                str(temp_dirs["data"] / "img002.jpg"),
-            ],
-            "width": [1920, 1920],
-            "height": [1080, 1080],
-        })
-        df.to_parquet(frames_file)
-
-        checkpoint_file = temp_dirs["artifacts"] / "checkpoint.json"
-
-        pipeline = EmbeddingPipeline(
-            frames_path=frames_file,
-            output_dir=temp_dirs["artifacts"],
-            encoder_config=encoder_config,
-            checkpoint_file=checkpoint_file,
-        )
-
-        # Simulate processing some frames
-        pipeline.processed_frame_ids = {"f001", "f002"}
-        pipeline.save_checkpoint()
-
-        assert checkpoint_file.exists()
-
-        # Load checkpoint
-        pipeline2 = EmbeddingPipeline(
-            frames_path=frames_file,
-            output_dir=temp_dirs["artifacts"],
-            encoder_config=encoder_config,
-            checkpoint_file=checkpoint_file,
-        )
-        pipeline2._load_checkpoint()
-
-        assert "f001" in pipeline2.processed_frame_ids
-        assert "f002" in pipeline2.processed_frame_ids
+def test_embedding_metadata_round_trip() -> None:
+    values = {
+        "dataset_version": "v1", "model_name": "fake",
+        "model_checkpoint": None, "preprocessing_size": 224,
+        "dtype": "float32", "embedding_dimension": 3,
+        "total_frames": 2, "successful_frames": 2, "failed_frames": 0,
+        "normalization": "l2", "generated_at": "2026-01-01",
+        "device": "cpu", "batch_size": 2, "processing_time_sec": 0.1,
+    }
+    assert EmbeddingMetadata.from_dict(values).to_dict() == values
