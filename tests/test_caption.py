@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import pandas as pd
 from PIL import Image
-from hcmai.caption import CaptionConfig, FrameCaptioner, generate_captions
+from hcmai.enrichment.caption import CaptionConfig, FrameCaptioner, generate_captions
 class Backend:
     instances = 0
 
