@@ -2,10 +2,9 @@
 
 This component directory is the task-board home for offline frame enrichment.
 Branch `feat/ai2-caption-baseline` introduces `CaptionConfig`,
-`FrameCaptioner`, and `generate_captions`, but the implementation currently
-lives at [`../caption.py`](../caption.py), not the intended
-`src/hcmai/enrichment/caption.py`. This documentation correction does not move
-source code. The branch is ready for engineering review, not merge.
+`FrameCaptioner`, and `generate_captions` at the canonical
+[`caption.py`](caption.py) ownership path. The branch is ready for engineering
+review, not merge.
 
 ## 1. Task identity
 
@@ -20,18 +19,17 @@ source code. The branch is ready for engineering review, not merge.
 | Branch | `feat/ai2-caption-baseline` |
 | Base | `main@9fbfaa2e0a2acb9b28e7c305528ccbadce34368f` |
 | Implementation commit documented | `fd97e2ffa4571c943883bf3dc9bc97f28a17e19b` |
-| Current source | [`src/hcmai/caption.py`](../caption.py) |
-| Intended component path | `src/hcmai/enrichment/caption.py` |
+| Canonical source | [`src/hcmai/enrichment/caption.py`](caption.py) |
 | Canonical test | [`tests/test_caption.py`](../../../tests/test_caption.py) |
 
 The task board requires Florence-2 to be loaded once, concise captions to be
 generated in configurable batches, and versioned status/error rows to resume
 without regenerating valid completed frames. Its stale planned paths
-`src/aic/enrichment/caption.py` maps by package root to the intended
-`src/hcmai/enrichment/caption.py`. The current implementation instead remains
-at `src/hcmai/caption.py`; that discrepancy is a merge-review item. The stale
-script plan is satisfied functionally by `python -m hcmai.caption`. No source
-move and no `src/aic` package are part of this documentation change.
+`src/aic/enrichment/caption.py` maps by package root to the implemented
+`src/hcmai/enrichment/caption.py`. The task-board-owned
+`scripts/generate_enrichment.py` wrapper is not present; the reusable module
+already provides equivalent CLI behavior through
+`python -m hcmai.enrichment.caption`, so no duplicate wrapper is added here.
 
 Task-board inputs are the DE-02 100-frame fixture, then canonical
 `frames.parquet`, image paths, and enrichment configuration. Required outputs
@@ -50,7 +48,7 @@ execution, or acceptance of caption quality for downstream search.
 
 ## 3. Implemented
 
-- [`CaptionConfig`](../caption.py) configures checkpoint,
+- [`CaptionConfig`](caption.py) configures checkpoint,
   revision, prompt, decoding, device, dtype/precision, image size, batch size,
   enrichment version, dataset version, and write interval.
 - `FrameCaptioner` lazily loads one processor/model pair and reuses it across
@@ -63,7 +61,7 @@ execution, or acceptance of caption quality for downstream search.
 - The module CLI provides the task-board executable behavior:
 
   ```bash
-  PYTHONPATH=src .venv/bin/python -m hcmai.caption \
+  PYTHONPATH=src .venv/bin/python -m hcmai.enrichment.caption \
     --config <caption-config> \
     --frames data/aic_fixture/metadata/frames.parquet \
     --output artifacts/enrichment/<enrichment-version>
@@ -151,7 +149,7 @@ modified by this branch.
 |---|---|
 | Merge target | Latest `main`, after compatibility review |
 | Current readiness | **READY FOR REVIEW — NOT READY TO MERGE** |
-| Blocking conditions | Source-path decision; 30-frame semantic review; downstream fusion decision; current-main compatibility |
+| Blocking conditions | 30-frame semantic review; downstream fusion decision; current-main compatibility |
 | Required approvals | AI2 owner for quality evidence; Tech Lead for integration/merge |
 | Downstream usage | Experimental fixture evidence only |
 
@@ -213,6 +211,5 @@ Ready for review does not mean ready to merge.
    contract/owner.
 3. **AI2 + AI1:** run a frozen-candidate caption retrieval/fusion experiment
    only after labels are available.
-4. **Tech Lead:** resolve the intended/current source-path discrepancy and
-   review current-main compatibility.
+4. **Tech Lead:** review current-main compatibility and merge readiness.
 5. **DE/AI2:** schedule full-corpus enrichment only after quality promotion.
