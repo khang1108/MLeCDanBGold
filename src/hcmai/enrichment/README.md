@@ -31,12 +31,17 @@ offline job:
 - configure checkpoint, revision, prompt, decoding, device, dtype, image size,
   batch size, enrichment version, dataset version, and write interval;
 - lazily load and reuse one processor/model pair;
+- resolve relative `image_path` values against an explicit dataset root;
 - preserve canonical `frame_id` ordering;
 - write one validated `FrameEnrichment` row per input frame;
 - isolate missing/corrupt-image and model failures with bounded errors;
+- normalize Parquet nulls before Pydantic validation;
 - retry failed, pending, malformed, empty-caption, or duplicated prior rows;
 - skip exactly one valid completed row on resume;
-- write `frame_enrichment.parquet`, `manifest.json`, and `failures.json`.
+- reject same-version resume when model, prompt, decoding, or effective
+  configuration differs from the retained manifest;
+- atomically replace Parquet, failure, and manifest checkpoints only after
+  their sibling temporary files are written successfully.
 
 The module and assigned wrapper share one CLI implementation:
 
@@ -44,6 +49,7 @@ The module and assigned wrapper share one CLI implementation:
 PYTHONPATH=src .venv/bin/python -m hcmai.enrichment.caption \
   --config <caption-config> \
   --frames <frames.parquet> \
+  --dataset-root <dataset-root> \
   --output artifacts/enrichment/<caption-version>
 
 PYTHONPATH=src .venv/bin/python scripts/generate_enrichment.py --help
@@ -106,7 +112,7 @@ production implementations.
 
 | Component | Command or evidence | Result | Does not prove |
 |---|---|---|---|
-| Caption tests | `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_caption.py tests/test_schema.py` | Lifecycle, batching, failures, IDs, schema, resume | Caption accuracy |
+| Caption tests | `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_caption.py tests/test_schema.py` | Paths, atomic writes, lifecycle, failures, IDs, config-safe resume | Caption accuracy |
 | Caption fixture | `artifacts/enrichment/florence2_native_base_ft_caption_v1/` | 100 complete and resumable | Full-corpus reliability |
 | OCR tests | `PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_ocr.py tests/test_schema.py` | Disablement, normalization, failures, IDs, report, resume | OCR accuracy |
 | OCR fixture | `artifacts/enrichment/florence2_ocr_v1/` | 100 complete and resumable | Safe downstream text |
