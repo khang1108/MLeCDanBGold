@@ -27,7 +27,15 @@ embedding = [
     "transformers>=4.30",
     "torch>=2.0",
 ]
+reranking = [
+    "accelerate>=1.12, <2.0",
+    "qwen-vl-utils>=0.0.14, <0.1",
+    "torch>=2.8, <3.0",
+    "torchvision>=0.23, <1.0",
+    "transformers>=4.57, <5.0",
+]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]

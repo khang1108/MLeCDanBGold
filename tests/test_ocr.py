@@ -59,7 +59,7 @@ def test_batch_normalization_contract_report_and_resume(tmp_path):
     table = pd.read_parquet(tmp_path / "out/frame_enrichment.parquet")
     assert Engine.instances == 1 and made[0].calls == [2, 2, 1]
     assert table.frame_id.tolist() == [f"f{i}" for i in range(5)]
-    assert table.loc[0, "ocr_text"] is None
+    assert pd.isna(table.loc[0, "ocr_text"])
     assert table.loc[1, "ocr_text"] == "Café Việt 12:30"
     assert table.caption.isna().all() and table.asr_text.isna().all()
     assert table.detailed_caption.isna().all() and table.status.eq("completed").all()
@@ -97,4 +97,4 @@ def test_missing_corrupt_batch_failure_retry_and_black(tmp_path):
     table = pd.read_parquet(tmp_path / "out/frame_enrichment.parquet")
     assert second["retried_frames"] == 5 and second["completed_frames"] == 5
     assert engine.calls == [2, 2, 1] and table.loc[3, "status"] == "completed"
-    assert table.loc[3, "ocr_text"] is None
+    assert pd.isna(table.loc[3, "ocr_text"])

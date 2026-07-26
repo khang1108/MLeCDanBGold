@@ -78,7 +78,7 @@ temp/
 .codex/
 .claude/
 .agents/
-aic/
+/aic
 # Frontend
 frontend/build
 frontend/node_modules
