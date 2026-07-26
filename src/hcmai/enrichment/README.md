@@ -54,16 +54,23 @@ execution, or acceptance of caption quality for downstream search.
 - `FrameCaptioner` lazily loads one processor/model pair and reuses it across
   batches. A fully resumed job does not call or load the backend.
 - `generate_captions` reads canonical Parquet records, preserves `frame_id`,
+  resolves relative `image_path` values against an explicit dataset root,
   isolates missing/corrupt-image and model failures, and reconstructs exactly
   one final row per input.
 - Completed rows require a non-empty caption; failed, incomplete, malformed,
-  pending, or duplicated prior rows are retried.
+  pending, or duplicated prior rows are retried. Parquet nulls are normalized
+  before validation so valid completed rows are skipped rather than retried.
+- A same-version resume fails fast when the model, revision, prompt, decoding,
+  or other effective configuration differs from the retained manifest.
+- Parquet, failure, and manifest checkpoints are written to sibling temporary
+  files and replace their targets only after a successful write.
 - The module CLI provides the task-board executable behavior:
 
   ```bash
   PYTHONPATH=src .venv/bin/python -m hcmai.enrichment.caption \
     --config <caption-config> \
     --frames data/aic_fixture/metadata/frames.parquet \
+    --dataset-root data/aic_fixture \
     --output artifacts/enrichment/<enrichment-version>
   ```
 
