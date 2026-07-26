@@ -18,8 +18,7 @@ models:
 
 index:
   type: "flat_ip"
-  path: "artifacts/indexes/visual.index"
-  mapping_path: "artifacts/embeddings/frame_mapping.parquet"
+  path: "artifacts/indexes/visual"
 
 search:
   profiles:

@@ -7,6 +7,7 @@ from hcmai.common.schemas import (
     ConversationTurn,
     FrameFeedback,
     MessageRequest,
+    MessageResponse,
     SearchLatency,
     SearchMode,
     SearchRequest,
@@ -32,6 +33,11 @@ def test_empty_query_and_stateless_feedback_are_rejected() -> None:
         SearchRequest(query=" ")
     with pytest.raises(ValidationError, match="feedback requires session_id"):
         SearchRequest(query="test", feedback=FrameFeedback())
+
+def test_search_mode_uses_the_public_spelling() -> None:
+    assert SearchRequest(query="test", search_mode="accurate").search_mode is SearchMode.ACCURATE
+    with pytest.raises(ValidationError):
+        SearchRequest(query="test", search_mode="accuracte")
 
 def test_feedback_is_deduplicated_and_disjoint() -> None:
     feedback = FrameFeedback(accepted_frame_ids=["f1", "f1"])
@@ -79,6 +85,7 @@ def test_kisc_response_requires_complete_turn_context() -> None:
 
 def test_alias_session_and_submission_contracts() -> None:
     assert isinstance(MessageRequest(query="hello"), SearchRequest)
+    assert MessageResponse is SearchResponse
     session = ConversationSession(
         session_id="session-1",
         created_at=100,

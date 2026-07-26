@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import pytest
 from fastapi import HTTPException
 from hcmai.app import create_app
@@ -45,7 +46,9 @@ def protocol() -> tuple[KiscSessionManager, SearchEngine]:
 
 def test_session_feedback_and_submission(protocol) -> None:
     manager, engine = protocol
+    assert manager.list_session_ids() == []
     session = manager.create_session(problem_id="problem-7")
+    assert manager.list_session_ids() == [session.session_id]
     assert session.problem_id == "problem-7"
     with pytest.raises(KeyError, match="not found"):
         manager.get_session("missing")
@@ -96,5 +99,7 @@ def test_unknown_search_session_returns_404(protocol) -> None:
         if getattr(route, "path", None) == "/api/v1/search"
     )
     with pytest.raises(HTTPException) as error:
-        route.endpoint(SearchRequest(query="find it", session_id="missing"))
+        asyncio.run(
+            route.endpoint(SearchRequest(query="find it", session_id="missing"))
+        )
     assert error.value.status_code == 404

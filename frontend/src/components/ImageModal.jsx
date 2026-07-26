@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 
 const ImageModal = ({ frame, onClose }) => {
   const [copied, setCopied] = useState(false);
-  const frameSuffix = String(frame.frame_idx % 100).padStart(2, '0');
-  const formattedIndex = `${frame.video_id} - 01 - ${frameSuffix}`;
+  const formattedIndex = `${frame.video_id} · frame ${frame.frame_idx}`;
+  const previewUrl = frame.frame_url || frame.thumbnail_url;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(frame.frame_id);
+    navigator.clipboard.writeText(`${frame.video_id},${frame.frame_idx}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
@@ -25,7 +25,11 @@ const ImageModal = ({ frame, onClose }) => {
       <div className="modal-card split-layout" onClick={(e) => e.stopPropagation()}>
         {/* Left Side: Media Viewer Column */}
         <div className="modal-viewer-column">
-          <img src={frame.frame_url} alt={formattedIndex} className="modal-viewer-image" />
+          {previewUrl ? (
+            <img src={previewUrl} alt={formattedIndex} className="modal-viewer-image" />
+          ) : (
+            <div className="frame-image-placeholder">Preview unavailable</div>
+          )}
         </div>
 
         {/* Right Side: Inspector Sidebar Column */}
@@ -37,8 +41,8 @@ const ImageModal = ({ frame, onClose }) => {
               <button
                 className={`inspector-copy-btn ${copied ? 'copied' : ''}`}
                 onClick={handleCopy}
-                title="Copy Frame ID"
-                aria-label="Copy Frame ID"
+                title="Copy official video_id,frame_idx"
+                aria-label="Copy official video and frame identifiers"
               >
                 {copied ? (
                   <svg className="copy-icon check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -63,7 +67,7 @@ const ImageModal = ({ frame, onClose }) => {
             {/* Caption Section */}
             <div className="inspector-section">
               <span className="inspector-section-label">Caption</span>
-              <p className="inspector-caption-text">{frame.caption}</p>
+              <p className="inspector-caption-text">{frame.caption || 'No caption available'}</p>
             </div>
 
             {/* Metadata Section */}
@@ -73,6 +77,14 @@ const ImageModal = ({ frame, onClose }) => {
                 <div className="inspector-meta-item">
                   <span className="meta-lbl">Frame ID</span>
                   <span className="meta-val monospace">{frame.frame_id}</span>
+                </div>
+                <div className="inspector-meta-item">
+                  <span className="meta-lbl">Video ID</span>
+                  <span className="meta-val monospace">{frame.video_id}</span>
+                </div>
+                <div className="inspector-meta-item">
+                  <span className="meta-lbl">Frame index</span>
+                  <span className="meta-val monospace">{frame.frame_idx}</span>
                 </div>
                 <div className="inspector-meta-item">
                   <span className="meta-lbl">Timestamp</span>

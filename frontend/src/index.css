@@ -527,6 +527,19 @@ select.toolbox-input {
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.frame-image-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md);
+  color: var(--color-ink-muted);
+  background-color: var(--color-canvas-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
 .frame-card:hover .frame-image {
   transform: scale(1.02);
 }
@@ -1096,6 +1109,7 @@ select.toolbox-input {
 }
 
 .modal-viewer-column {
+  position: relative;
   flex: 1;
   display: flex;
   justify-content: center;

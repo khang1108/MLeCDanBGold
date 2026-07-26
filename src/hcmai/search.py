@@ -82,11 +82,6 @@ class SearchEngine:
         profiles = search_config.get("profiles", {})
         mode = getattr(search_mode, "value", search_mode)
 
-        # The current schema contains a historical ``accuracte`` enum value.
-        # Accept it while configuration remains correctly spelled ``accurate``.
-        if mode == "accuracte":
-            mode = "accurate"
-
         profile = profiles.get(mode)
         if profile is None:
             profile = profiles.get("accurate", {})
@@ -164,7 +159,7 @@ class SearchEngine:
         if final is None:
             final = candidate.fusion_score
         if final is None:
-            final = 0.0
+            final = values.get("visual", 0.0)
 
         return SearchScores(
             visual=values.get("visual"),
