@@ -23,9 +23,9 @@ Outputs:
 artifacts/embeddings/visual_embeddings.npy
 artifacts/embeddings/frame_mapping.parquet
 artifacts/embeddings/metadata.yaml
-artifacts/indexes/visual.index
-artifacts/indexes/frame_mapping.parquet
-artifacts/indexes/metadata.json
+artifacts/indexes/visual/visual.index
+artifacts/indexes/visual/frame_mapping.parquet
+artifacts/indexes/visual/metadata.json
 ```
 
 The first non-empty batch loads the configured model checkpoint. Ensure the
@@ -39,7 +39,7 @@ PYTHONPATH=src aic/bin/python scripts/build_index.py \
   --config configs/baseline.yaml \
   --embeddings artifacts/embeddings/visual_embeddings.npy \
   --mapping artifacts/embeddings/frame_mapping.parquet \
-  --output artifacts/indexes
+  --output artifacts/indexes/visual
 ```
 
 ## Benchmark retrieval
@@ -47,7 +47,7 @@ PYTHONPATH=src aic/bin/python scripts/build_index.py \
 ```bash
 PYTHONPATH=src aic/bin/python scripts/build_benchmark.py \
   --config configs/baseline.yaml \
-  --index artifacts/indexes \
+  --index artifacts/indexes/visual \
   --queries data/eval/queries.jsonl \
   --output runs/dense_model_comparison
 ```
