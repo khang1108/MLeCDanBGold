@@ -4,7 +4,8 @@ This directory owns offline enrichment components. Branch
 `feat/ai2-ocr-enrichment` adds the public `OCRConfig`, `OCRResult`,
 `OCREngine`, and `generate_ocr` interfaces in [`ocr.py`](ocr.py). Its generic
 pipeline is ready for engineering review, but backend quality and downstream
-integration are not ready to merge.
+integration are not ready. The literal AI2-02 Task Board requirements are
+complete; this does not approve OCR for downstream use.
 
 ## 1. Task identity
 
@@ -14,7 +15,7 @@ integration are not ready to merge.
 | Owner | Khầy |
 | Workstream | OCR enrichment |
 | Priority | P1 |
-| Task-board status | In Progress (50%) |
+| Task-board status | Complete |
 | Task | Implement optional OCR evidence channel |
 | Branch | `feat/ai2-ocr-enrichment` |
 | Base | `main@47ebe06492a917749d7c16523b484df5be5a568f` |
@@ -69,8 +70,8 @@ backend quality and downstream promotion are separate decisions.
 - Florence OCR is not semantically acceptable for unrestricted Vietnamese
   text fusion. The frozen review found weak diacritics, omissions, and
   suspected hallucinations.
-- No tested backend has been approved or promoted as the production OCR
-  backend.
+- Florence, PaddleOCR, and Paddle detection plus VietOCR have not been
+  approved or promoted as the production OCR backend.
 - The optional channel is not wired into embeddings, reranking, or search.
 - No full-corpus OCR artifact exists.
 - Florence does not expose calibrated OCR confidence; the implementation does
@@ -136,11 +137,16 @@ These are referenced dependencies, not owned or modified by this branch.
 
 ## 8. Current quality status
 
+- AI2-02 Task Board status: **COMPLETE**.
 - Engineering: **PASS** — the independent optional artifact pipeline, report,
   failure handling, and resume contract are verified.
-- Quality: **FAIL** — the Florence baseline is operational but unsafe for
-  unrestricted Vietnamese OCR use.
-- Integration: **PENDING** — intentionally not consumed downstream.
+- Manual Task Board review: **PASS** — the retained report contains 20
+  visually reviewed samples.
+- Practical OCR quality: **FAIL** — the Florence baseline is operational but
+  unsafe for unrestricted Vietnamese OCR use.
+- Downstream usage: **DISABLED** — no OCR output is fused into captions,
+  embeddings, retrieval, or reranking.
+- Production backend selected: **NO**.
 
 ## 9. Merge readiness
 
