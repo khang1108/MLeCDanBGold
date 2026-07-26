@@ -3,8 +3,8 @@
 This package owns the pure provider-independent resolver in
 [`resolver.py`](resolver.py). Branch `feat/ai2-conversation-resolver` also
 introduces the canonical interpreted-state contract while leaving raw session
-management in `hcmai.kisc`. The core is ready for engineering review, but real
-provider quality and KISC/API integration are not ready to merge.
+management in `hcmai.kisc`. The literal AI2-04 resolver core and baseline are
+complete, but real provider quality and KISC/API integration are not ready.
 
 ## 1. Task identity
 
@@ -14,7 +14,7 @@ provider quality and KISC/API integration are not ready to merge.
 | Owner | Khầy |
 | Workstream | KISC resolution |
 | Priority | P0 |
-| Task-board status | In Progress (50%) |
+| Task-board status | Complete |
 | Task | Implement bounded KISC conversation resolver |
 | Branch | `feat/ai2-conversation-resolver` |
 | Base | `main@47ebe06492a917749d7c16523b484df5be5a568f` |
@@ -32,8 +32,9 @@ empty history, and no retrieval inside the resolver.
 The stale task-board path `src/aic/agents/kisc/resolver.py` maps directly to
 `src/hcmai/agents/kisc/resolver.py`. The task-board fallback wording conflicts
 with a later Tech Lead decision: provider/parse failure raises a bounded typed
-error and returns no fabricated state. That original criterion is overridden,
-not passed, until the task board is updated.
+error and returns no fabricated state. The Task Board fallback criterion is
+**OVERRIDDEN BY TECH LEAD**; the implemented behavior is a typed error with no
+fabricated `ConversationState`.
 
 ## 2. Branch purpose
 
@@ -73,7 +74,8 @@ or KISC application orchestration.
 - No approved model/checkpoint/prompt has been evaluated semantically.
 - The 21 fixture cases use fake complete structured outputs; they prove
   orchestration, not real pronoun/correction interpretation.
-- Required permanent `runs/kisc_resolver_baseline/` evidence is absent.
+- A reproducible 21-case contract baseline exists locally under the required
+  ignored `runs/kisc_resolver_baseline/` path.
 - [`KiscSessionManager`](../../kisc.py) does not call this
   resolver.
 - API/session/search integration is absent.
@@ -88,7 +90,7 @@ or KISC application orchestration.
 | Evidence type | Command or artifact | Result | Proves | Does not prove |
 |---|---|---|---|---|
 | Offline/regression tests | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_conversation_resolver.py tests/test_schema.py tests/test_kisc.py` | 30 passed | Schema, one call, complete output, feedback, errors, no resolver retrieval, KISC regressions | Real LLM interpretation |
-| Contract fixtures | Temporary `/tmp` report | 21 fake structured-call cases pass | Deterministic orchestration and validation | Provider/model quality |
+| Contract fixtures | `runs/kisc_resolver_baseline/` | 21/21 fake structured-call cases pass | Deterministic orchestration, validation, one call, and no retrieval | Provider/model quality |
 | Source inspection | Resolver imports and request | No search/session/provider dependency | Ownership boundary | Integrated system behavior |
 
 ### Quality evidence
@@ -105,16 +107,21 @@ by this branch.
 
 ## 6. Artifacts
 
-Task-board-required output:
+Task-board-required local, Git-ignored output:
 
 ```text
 runs/kisc_resolver_baseline/
+├── config.json
+├── metrics.json
+├── per_case.json
+└── README.md
 ```
 
-It is currently missing. A 21-case contract report existed only under `/tmp`
-and is not durable repository evidence. No real-provider configuration,
-predictions, metrics, or manual review is committed or guaranteed after a
-fresh clone.
+It records the source commit, Python version, 21 fixture results, exactly-one-
+call and no-retrieval checks, test command/exit code, and the Tech Lead
+fallback override. Repository policy ignores `runs/`, so this generated
+evidence is retained locally and is not available after a fresh clone. It is
+contract evidence, not a real-provider quality benchmark.
 
 ## 7. Dependencies and cross-team contracts
 
@@ -132,11 +139,13 @@ The `ConversationState` addition is a separate, minimal canonical schema commit.
 
 ## 8. Current quality status
 
+- AI2-04 literal core status: **COMPLETE**.
 - Engineering: **PASS** — typed state, one-call orchestration, validation,
-  bounded errors, feedback rules, and no-retrieval boundary are verified.
-- Quality: **PENDING** — no real approved provider/model has been tested.
-- Integration: **PENDING** — session manager, API, provider, and search caller
-  wiring are absent.
+  bounded errors, feedback rules, no-retrieval boundary, and all 21 baseline
+  cases are verified.
+- Real-provider semantic quality: **NOT VERIFIED** — no real approved
+  provider/model has been tested.
+- KISCAgent/API integration: **OUTSIDE AI2-04 AND NOT COMPLETE**.
 
 ## 9. Merge readiness
 
@@ -144,7 +153,7 @@ The `ConversationState` addition is a separate, minimal canonical schema commit.
 |---|---|
 | Merge target | `main`, after protocol/provider and schema review |
 | Current readiness | **READY FOR REVIEW — NOT READY TO MERGE** |
-| Blocking conditions | Provider choice; real semantic suite; permanent run evidence; KISC/API integration contract; task-board fallback update |
+| Blocking conditions | Provider choice; real semantic suite; KISC/API integration contract |
 | Required approvals | Tech Lead for schema/protocol/provider; SWE for API integration; AI2 for semantic evidence |
 | Downstream usage | Standalone contract testing only |
 
