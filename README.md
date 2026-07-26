@@ -110,7 +110,7 @@ examples. The available helpers are:
 Install the project and its declared dependencies:
 
 ```bash
-aic/bin/python -m pip install -e ".[embedding,dev]"
+aic/bin/python -m pip install -e ".[embedding,reranking,dev]"
 ```
 
 Update `pyproject.toml` whenever a new runtime dependency becomes part of the
