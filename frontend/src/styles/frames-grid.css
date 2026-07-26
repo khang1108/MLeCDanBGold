@@ -1,0 +1,185 @@
+/* ─────────────────────────────────────────────────────────── */
+/* FRAMESBOX COMPONENT                                         */
+/* ─────────────────────────────────────────────────────────── */
+.frames-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding-left: var(--spacing-lg);
+}
+
+.frames-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--spacing-sm);
+  width: 100%;
+}
+
+.frames-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xxl) var(--spacing-lg);
+  background-color: var(--color-surface);
+  border-radius: var(--rounded-xl);
+  border: 1px dashed var(--color-hairline);
+  text-align: center;
+  margin-top: var(--spacing-md);
+  min-height: 260px;
+}
+
+.frames-empty-icon {
+  width: 48px;
+  height: 48px;
+  color: var(--color-ink-faint);
+  margin-bottom: var(--spacing-md);
+}
+
+.frames-empty-text {
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  margin-bottom: 4px;
+}
+
+.frames-empty-subtext {
+  max-width: 280px;
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* FRAMECARD COMPONENT                                         */
+/* ─────────────────────────────────────────────────────────── */
+.frame-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: visible;
+  cursor: pointer;
+  border-radius: var(--rounded-lg);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  box-shadow: var(--shadow-level-0);
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.frame-card:hover {
+  box-shadow: var(--shadow-level-1);
+  transform: translateY(-2px);
+}
+
+.frame-card-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-hairline);
+  border-top-left-radius: calc(var(--rounded-lg) - 1px);
+  border-top-right-radius: calc(var(--rounded-lg) - 1px);
+  background-color: var(--color-surface);
+  display: flex;
+  align-items: center;
+}
+
+.frame-index-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  letter-spacing: 0.03em;
+}
+
+.frame-image-container {
+  position: relative;
+  width: 100%;
+  padding-top: 66.67%;
+  /* 3:2 Aspect Ratio */
+  background-color: var(--color-canvas-soft);
+  overflow: hidden;
+}
+
+.frame-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.frame-image-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md);
+  color: var(--color-ink-muted);
+  background-color: var(--color-canvas-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
+.frame-card:hover .frame-image {
+  transform: scale(1.02);
+}
+
+.frame-caption-container {
+  padding: 10px 12px;
+  background-color: var(--color-surface);
+  border-bottom-left-radius: calc(var(--rounded-lg) - 1px);
+  border-bottom-right-radius: calc(var(--rounded-lg) - 1px);
+  border-top: 1px solid var(--color-hairline);
+}
+
+.frame-caption-text {
+  font-weight: 500;
+  color: var(--color-ink-secondary);
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+/* Tooltip overlay styling */
+.frame-tooltip {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--color-ink);
+  color: var(--color-on-primary);
+  padding: 8px 12px;
+  border-radius: var(--rounded-md);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  width: 200px;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
+  box-shadow: var(--shadow-level-2);
+  z-index: 99;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.frame-card:hover .frame-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.frame-tooltip-arrow {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--color-ink);
+}
+

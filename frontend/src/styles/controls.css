@@ -1,0 +1,134 @@
+/* ─────────────────────────────────────────────────────────── */
+/* QUERY INPUT COMPONENT                                       */
+/* ─────────────────────────────────────────────────────────── */
+.query-form {
+  display: flex;
+  gap: var(--spacing-sm);
+  width: 100%;
+  margin: 0 auto;
+}
+
+.query-input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.query-search-icon {
+  position: absolute;
+  left: 16px;
+  width: 22px;
+  height: 22px;
+  color: var(--color-ink-muted);
+  pointer-events: none;
+}
+
+.query-input-field {
+  width: 100%;
+  padding-left: 48px;
+  padding-right: 16px;
+  height: 54px;
+  font-size: 17px;
+  box-shadow: var(--shadow-level-1);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+}
+
+.query-submit-btn {
+  height: 54px;
+  padding: 0 28px;
+  border-radius: var(--rounded-md);
+  display: flex;
+  align-items: center;
+  justifyContent: center;
+  font-weight: 600;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* TOOLBOX COMPONENT                                           */
+/* ─────────────────────────────────────────────────────────── */
+.toolbox-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  height: fit-content;
+  padding-right: var(--spacing-md);
+  border-right: 1px solid var(--color-hairline);
+  user-select: none;
+}
+
+.toolbox-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  width: 100%;
+}
+
+.toolbox-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.toolbox-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.toolbox-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.toolbox-slider {
+  width: 100%;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.toolbox-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: var(--rounded-md);
+  border: 1px solid var(--color-hairline);
+  outline: none;
+  font-family: var(--font-family);
+  background-color: var(--color-surface);
+  transition: border-color 0.15s ease;
+}
+
+.toolbox-input:focus {
+  border-color: var(--color-primary);
+}
+
+select.toolbox-input {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  padding-right: 32px;
+}
+
+.toolbox-reset-btn {
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: var(--spacing-sm);
+}
+

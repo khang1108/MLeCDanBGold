@@ -1,0 +1,273 @@
+/* ─────────────────────────────────────────────────────────── */
+/* ADDITIONAL STYLES FOR SKELETONS, LATENCY, METADATA & ERROR */
+/* ─────────────────────────────────────────────────────────── */
+
+/* 1. Latency stats banner */
+.latency-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  margin-bottom: var(--spacing-sm);
+  font-family: var(--font-family);
+  gap: var(--spacing-xs);
+  user-select: none;
+}
+
+.latency-summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+}
+
+.latency-highlight {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.latency-stages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  font-family: monospace;
+}
+
+.latency-stage-divider {
+  color: var(--color-hairline);
+}
+
+/* 2. Rank badge */
+.frame-rank-badge {
+  position: absolute;
+  top: 42px; /* header height + small space */
+  left: 10px;
+  background-color: rgba(15, 15, 15, 0.8);
+  color: #ffffff;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--rounded-sm);
+  z-index: 10;
+  font-family: monospace;
+}
+
+/* 3. Card footer with scores and timestamp */
+.frame-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px 10px 12px;
+  background-color: var(--color-surface);
+  border-top: none;
+  font-size: 12px;
+  margin-top: -2px; /* align overlap nicely */
+}
+
+.frame-score-badge-wrapper {
+  position: relative;
+}
+
+.frame-score-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  font-weight: 700;
+  border-radius: var(--rounded-md);
+  background-color: #ebf5fe;
+  color: var(--color-primary);
+  font-size: 12px;
+  cursor: help;
+  user-select: none;
+}
+
+.frame-score-badge:hover {
+  background-color: #d0e7fc;
+}
+
+.frame-time-badge {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  font-size: 12px;
+  background-color: var(--color-canvas-soft);
+  padding: 2px 6px;
+  border-radius: var(--rounded-sm);
+}
+
+/* 4. Score Breakdown Tooltip */
+.score-tooltip {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  background-color: #1f2937; /* Dark charcoal */
+  color: #f3f4f6;
+  padding: 10px 12px;
+  border-radius: var(--rounded-md);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  z-index: 100;
+  min-width: 140px;
+  display: none;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.frame-score-badge-wrapper:hover .score-tooltip {
+  display: block;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.score-tooltip-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #374151;
+  padding-bottom: 4px;
+}
+
+.score-tooltip-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.score-tooltip-table td {
+  padding: 2px 0;
+}
+
+.score-name {
+  color: #d1d5db;
+  text-align: left;
+}
+
+.score-value {
+  text-align: right;
+  font-weight: 600;
+  font-family: monospace;
+  color: #38bdf8; /* light blue */
+}
+
+.score-tooltip-divider td {
+  border-top: 1px solid #374151;
+  height: 2px;
+  padding: 0;
+}
+
+.score-tooltip-highlight {
+  font-weight: 700;
+}
+
+.score-tooltip-highlight .score-name {
+  color: #ffffff;
+}
+
+.score-tooltip-highlight .score-value {
+  color: #34d399; /* emerald green */
+}
+
+.score-tooltip-arrow {
+  position: absolute;
+  bottom: -4px;
+  left: 15px;
+  width: 8px;
+  height: 8px;
+  background-color: #1f2937;
+  transform: rotate(45deg);
+}
+
+/* 5. Skeleton Card Loading Animation */
+.frame-card.skeleton {
+  pointer-events: none;
+}
+
+.skeleton-header {
+  height: 32px;
+  background-color: var(--color-hairline);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.skeleton-image {
+  height: 120px;
+  background-color: var(--color-canvas-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-caption {
+  height: 38px;
+  background-color: var(--color-surface);
+  border-top: 1px solid var(--color-hairline);
+}
+
+.frame-card.skeleton .skeleton-header,
+.frame-card.skeleton .skeleton-image,
+.frame-card.skeleton .skeleton-caption {
+  animation: skeleton-pulse 1.4s infinite ease-in-out;
+  background-image: linear-gradient(
+    90deg,
+    rgba(240, 240, 240, 0) 0%,
+    rgba(224, 224, 224, 0.5) 50%,
+    rgba(240, 240, 240, 0) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@keyframes skeleton-pulse {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 6. Error Alert Layout */
+.error-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: #fdf2f2;
+  border: 1px solid #f8b4b4;
+  border-radius: var(--rounded-md);
+  color: #9b1c1c;
+  margin-bottom: var(--spacing-md);
+}
+
+.error-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: #e02424;
+}
+
+.error-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.error-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.error-message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #c81e1e;
+}
+
+/* 7. Image Modal UI upgrades */

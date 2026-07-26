@@ -1,0 +1,57 @@
+/* ─────────────────────────────────────────────────────────── */
+/* COPY BUTTONS & FEEDBACK EFFECTS                            */
+/* ─────────────────────────────────────────────────────────── */
+.card-copy-btn,
+.inspector-copy-btn {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: var(--rounded-sm);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+  opacity: 0.3;
+}
+
+/* Subtle reveal on card header hover */
+.frame-card-header:hover .card-copy-btn {
+  opacity: 0.8;
+}
+
+.inspector-header:hover .inspector-copy-btn {
+  opacity: 0.8;
+}
+
+.card-copy-btn:hover,
+.inspector-copy-btn:hover {
+  background-color: var(--color-canvas-soft);
+  color: var(--color-ink);
+  opacity: 1 !important;
+}
+
+.card-copy-btn.copied,
+.inspector-copy-btn.copied {
+  color: #10b981; /* green */
+  background-color: #ecfdf5;
+  opacity: 1 !important;
+}
+
+.copy-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.copy-icon.check {
+  stroke-width: 2.5;
+}
+
+.inspector-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+

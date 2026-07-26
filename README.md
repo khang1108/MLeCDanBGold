@@ -190,8 +190,9 @@ when the backend restarts.
 
 ## Frontend integration
 
-The React app calls `POST /api/v1/search` directly; it no longer contains mock
-frames. Configure a different backend in `frontend/.env` when needed:
+The React app creates a server-side KISC session on launch; it no longer
+contains mock frames or client-generated conversation IDs. Configure a
+different backend in `frontend/.env` when needed:
 
 ```bash
 cp frontend/.env.example frontend/.env
@@ -199,5 +200,10 @@ cd frontend
 npm start
 ```
 
-The default backend is `http://127.0.0.1:8000`. The UI submits only fields in
-the shared contract: `query`, `top_k`, and `search_mode`.
+The default backend is `http://127.0.0.1:8000`. The UI uses the published
+conversation routes: `POST /api/v1/session`, `GET /api/v1/sessions`,
+`GET /api/v1/session/{session_id}`, and `POST /api/v1/feedback`. Search sends
+`query`, `top_k`, `search_mode`, and the active `session_id`; when the visible
+feedback draft changed, it also sends the contract's
+`accepted_frame_ids`/`rejected_frame_ids` snapshot. The History menu lists the
+server's in-memory session IDs, so it resets when the backend restarts.
