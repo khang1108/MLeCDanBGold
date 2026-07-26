@@ -3,8 +3,8 @@
 This component directory is the task-board home for offline frame enrichment.
 Branch `feat/ai2-caption-baseline` introduces `CaptionConfig`,
 `FrameCaptioner`, and `generate_captions` at the canonical
-[`caption.py`](caption.py) ownership path. The branch is ready for engineering
-review, not merge.
+[`caption.py`](caption.py) ownership path. Its literal Task Board
+implementation is complete and ready for engineering review, not merge.
 
 ## 1. Task identity
 
@@ -14,7 +14,7 @@ review, not merge.
 | Owner | Khầy |
 | Workstream | Caption enrichment |
 | Priority | P0 |
-| Task-board status | In Progress (50%) |
+| Task-board status | Complete |
 | Task | Implement resumable frame-caption baseline |
 | Branch | `feat/ai2-caption-baseline` |
 | Base | `main@9fbfaa2e0a2acb9b28e7c305528ccbadce34368f` |
@@ -27,9 +27,9 @@ generated in configurable batches, and versioned status/error rows to resume
 without regenerating valid completed frames. Its stale planned paths
 `src/aic/enrichment/caption.py` maps by package root to the implemented
 `src/hcmai/enrichment/caption.py`. The task-board-owned
-`scripts/generate_enrichment.py` wrapper is not present; the reusable module
-already provides equivalent CLI behavior through
-`python -m hcmai.enrichment.caption`, so no duplicate wrapper is added here.
+[`scripts/generate_enrichment.py`](../../../scripts/generate_enrichment.py)
+is a thin entry point delegating to the same reusable module CLI; it contains
+no model or argument-parsing logic.
 
 Task-board inputs are the DE-02 100-frame fixture, then canonical
 `frames.parquet`, image paths, and enrichment configuration. Required outputs
@@ -65,6 +65,12 @@ execution, or acceptance of caption quality for downstream search.
     --config <caption-config> \
     --frames data/aic_fixture/metadata/frames.parquet \
     --output artifacts/enrichment/<enrichment-version>
+  ```
+
+- The assigned script entry point delegates to that same CLI:
+
+  ```bash
+  PYTHONPATH=src .venv/bin/python scripts/generate_enrichment.py --help
   ```
 
 - The real fixture used native
@@ -137,11 +143,14 @@ modified by this branch.
 
 ## 8. Current quality status
 
+- Task Board implementation status: **COMPLETE**.
 - Engineering: **PASS** — the task-board artifact, lifecycle, failure, and
-  resume contracts are reproduced on the 100-frame fixture.
-- Quality: **PENDING** — captions are non-empty, but semantic accuracy and
-  retrieval value have not passed an approved manual gate.
-- Integration: **PENDING** — the artifact is not consumed by the search path.
+  resume contracts and assigned script entry point are verified.
+- Practical caption quality: **PENDING MANUAL REVIEW** — captions are
+  non-empty, but semantic accuracy and retrieval value have not passed an
+  approved manual gate.
+- Integration: **NOT INTEGRATED** — the artifact is not consumed by the
+  search path.
 
 ## 9. Merge readiness
 
