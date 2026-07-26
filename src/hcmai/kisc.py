@@ -67,6 +67,10 @@ class KiscSessionManager:
         except KeyError as error:
             raise KeyError(f"KISC session {session_id!r} not found") from error
 
+    def list_session_ids(self) -> list[str]:
+        """Return all known session IDs in creation order."""
+        return list(self.sessions)
+
     def update_feedback(
         self,
         session_id: str,

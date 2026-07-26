@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+
+import httpx
 import pytest
-from fastapi.testclient import TestClient
-from pydantic import BaseModel
+from fastapi import FastAPI
 
 from hcmai.app import create_app
 from hcmai.common.schemas.frame import FrameRecord
@@ -48,44 +50,94 @@ class MockRetriever:
 
 
 @pytest.fixture
-def api_client() -> TestClient:
-    """Fixture providing a TestClient configured with a mock SearchEngine."""
+def api_app() -> FastAPI:
+    """Provide an ASGI app configured with a mock SearchEngine."""
     store = MockFrameStore()
     retriever = MockRetriever()
     engine = SearchEngine(frame_store=store, retriever=retriever)
-    app = create_app(search_engine=engine)
-    with TestClient(app) as client:
-        yield client
+    return create_app(search_engine=engine)
 
 
-def test_health_check_endpoint(api_client: TestClient) -> None:
+def request(app: FastAPI, method: str, path: str, **kwargs) -> httpx.Response:
+    """Send one request through the ASGI boundary without a live server."""
+    async def send() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            return await client.request(method, path, **kwargs)
+
+    return asyncio.run(send())
+
+
+def test_health_check_endpoint(api_app: FastAPI) -> None:
     """Test the GET /health endpoint."""
-    response = api_client.get("/health")
+    response = request(api_app, "GET", "/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
+    assert data["ready"] is True
     assert data["frame_store_loaded"] is True
     assert data["total_frames"] == 1
 
 
-def test_search_endpoint(api_client: TestClient) -> None:
+def test_search_endpoint(api_app: FastAPI) -> None:
     """Test the POST /api/v1/search endpoint."""
     payload = {"query": "một người đang đi bộ", "top_k": 5}
-    response = api_client.post("/api/v1/search", json=payload)
+    response = request(api_app, "POST", "/api/v1/search", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["query"] == "một người đang đi bộ"
     assert data["total_results"] == 1
     assert data["results"][0]["frame_id"] == "L21_V001_00000090"
     assert data["results"][0]["video_id"] == "L21_V001"
+    assert data["results"][0]["scores"]["final"] == 0.95
 
 
-def test_get_frame_endpoint(api_client: TestClient) -> None:
+def test_get_frame_endpoint(api_app: FastAPI) -> None:
     """Test the GET /api/v1/frames/{frame_id} endpoint."""
-    response = api_client.get("/api/v1/frames/L21_V001_00000090")
+    response = request(api_app, "GET", "/api/v1/frames/L21_V001_00000090")
     assert response.status_code == 200
     data = response.json()
     assert data["frame_id"] == "L21_V001_00000090"
 
-    notFoundResponse = api_client.get("/api/v1/frames/UNKNOWN_FRAME")
+    notFoundResponse = request(api_app, "GET", "/api/v1/frames/UNKNOWN_FRAME")
     assert notFoundResponse.status_code == 404
+
+
+def test_list_session_ids_endpoint(api_app: FastAPI) -> None:
+    """List every in-memory conversation ID in creation order."""
+    first = request(api_app, "POST", "/api/v1/session").json()["session_id"]
+    second = request(api_app, "POST", "/api/v1/session").json()["session_id"]
+
+    response = request(api_app, "GET", "/api/v1/sessions")
+
+    assert response.status_code == 200
+    assert response.json() == [first, second]
+
+
+def test_missing_artifacts_do_not_prevent_startup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """The API stays live and reports not-ready without local corpus files."""
+    monkeypatch.setenv("HCMAI_CONFIG_PATH", str(tmp_path / "missing.yaml"))
+    monkeypatch.setenv("HCMAI_METADATA_PATH", str(tmp_path / "missing.parquet"))
+    monkeypatch.setenv("HCMAI_INDEX_PATH", str(tmp_path / "missing-index"))
+    app = create_app()
+
+    async def inspect_health() -> dict:
+        async with app.router.lifespan_context(app):
+            route = next(
+                route for route in app.routes
+                if getattr(route, "path", None) == "/health"
+            )
+            return await route.endpoint()
+
+    health = asyncio.run(inspect_health())
+    assert health["status"] == "ok"
+    assert health["ready"] is False
+    assert health["frame_store_loaded"] is False
+    assert health["retriever_loaded"] is False
+    assert health["startup_messages"]

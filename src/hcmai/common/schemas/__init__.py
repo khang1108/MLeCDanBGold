@@ -18,6 +18,12 @@ from .search import (
     SearchResult,
 )
 
+# Backward-compatible names used by the earlier frontend/backend contract.
+# They intentionally point at the canonical search models instead of creating
+# a second request/response shape.
+MessageRequest = SearchRequest
+MessageResponse = SearchResponse
+
 __all__ = [
     "NonEmptyString",
     "ContractModel",
@@ -31,9 +37,11 @@ __all__ = [
     "SearchMode",
     "SearchFilters",
     "SearchRequest",
+    "MessageRequest",
     "SearchLatency",
     "SearchResult",
     "SearchResponse",
+    "MessageResponse",
     "ConversationConstraint",
     "ConversationState",
     "ConversationTurn",

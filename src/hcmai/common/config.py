@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings
 
 # Recall cut-offs frozen for baseline comparison
@@ -51,7 +51,10 @@ class RerankerConfig(BaseModel):
     """Configuration for the reranking stage."""
 
     enabled: bool = True
-    model_name: str = "Qwen/Qwen3-VL-Reranker-2B"
+    model_name: str = Field(
+        default="Qwen/Qwen3-VL-Reranker-2B",
+        validation_alias=AliasChoices("model_name", "name"),
+    )
     device: str = "cuda"
     batch_size: int = 8
 
@@ -64,11 +67,10 @@ class ModelConfig(BaseModel):
 
 
 class IndexConfig(BaseModel):
-    """Configuration for FAISS vector index."""
+    """Configuration for the self-contained FAISS artifact directory."""
 
     type: str = "flat_ip"
-    path: Path = Path("artifacts/indexes/visual.index")
-    mapping_path: Path = Path("artifacts/embeddings/frame_mapping.parquet")
+    path: Path = Path("artifacts/indexes/visual")
 
 
 class SearchProfile(BaseModel):
@@ -137,9 +139,9 @@ class AppConfig(BaseSettings):
     @classmethod
     def from_yaml(cls, path: str | Path) -> AppConfig:
         """Load configuration from a YAML file."""
-        from hcmai.common.utils.io import load_yaml
+        from hcmai.common.utils.io import read_yaml
 
-        data = load_yaml(path)
+        data = read_yaml(path)
         return cls.model_validate(data)
 
 

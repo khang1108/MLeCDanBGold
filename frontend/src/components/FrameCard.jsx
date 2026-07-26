@@ -3,13 +3,12 @@ import React, { useState } from 'react';
 const FrameCard = ({ frame, onClick }) => {
   const [copied, setCopied] = useState(false);
 
-  // Format index dynamically: L21_V0001 - 01 - XX
-  const frameSuffix = String(frame.frame_idx % 100).padStart(2, '0');
-  const formattedIndex = `${frame.video_id} - 01 - ${frameSuffix}`;
+  const formattedIndex = `${frame.video_id} · frame ${frame.frame_idx}`;
+  const previewUrl = frame.thumbnail_url || frame.frame_url;
 
   const handleCopy = (e) => {
     e.stopPropagation(); // prevent modal trigger
-    navigator.clipboard.writeText(frame.frame_id);
+    navigator.clipboard.writeText(`${frame.video_id},${frame.frame_idx}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
@@ -28,8 +27,8 @@ const FrameCard = ({ frame, onClick }) => {
         <button
           className={`card-copy-btn ${copied ? 'copied' : ''}`}
           onClick={handleCopy}
-          title="Copy Frame ID"
-          aria-label="Copy Frame ID"
+          title="Copy official video_id,frame_idx"
+          aria-label="Copy official video and frame identifiers"
         >
           {copied ? (
             <svg className="copy-icon check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -46,18 +45,22 @@ const FrameCard = ({ frame, onClick }) => {
 
       {/* 4. Image Container */}
       <div className="frame-image-container">
-        <img
-          src={frame.thumbnail_url}
-          alt={`Frame ${frame.frame_id}`}
-          className="frame-image"
-          loading="lazy"
-        />
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt={`Frame ${frame.frame_id}`}
+            className="frame-image"
+            loading="lazy"
+          />
+        ) : (
+          <div className="frame-image-placeholder">Preview unavailable</div>
+        )}
       </div>
 
       {/* 5. Frame Caption Truncated */}
       <div className="frame-caption-container">
         <p className="caption frame-caption-text">
-          {frame.caption}
+          {frame.caption || 'No caption available'}
         </p>
       </div>
 

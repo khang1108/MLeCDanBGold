@@ -2,9 +2,18 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 from hcmai.common.schemas import (
-    ConversationConstraint, ConversationSession, ConversationState,
-    ConversationTurn, FrameFeedback, MessageRequest, SearchLatency,
-    SearchMode, SearchRequest, SearchResponse, SubmissionResult,
+    ConversationConstraint,
+    ConversationSession,
+    ConversationState,
+    ConversationTurn,
+    FrameFeedback,
+    MessageRequest,
+    MessageResponse,
+    SearchLatency,
+    SearchMode,
+    SearchRequest,
+    SearchResponse,
+    SubmissionResult,
 )
 
 def _response(**updates) -> SearchResponse:
@@ -22,6 +31,11 @@ def test_empty_query_and_stateless_feedback_are_rejected() -> None:
         SearchRequest(query=" ")
     with pytest.raises(ValidationError, match="feedback requires session_id"):
         SearchRequest(query="test", feedback=FrameFeedback())
+
+def test_search_mode_uses_the_public_spelling() -> None:
+    assert SearchRequest(query="test", search_mode="accurate").search_mode is SearchMode.ACCURATE
+    with pytest.raises(ValidationError):
+        SearchRequest(query="test", search_mode="accuracte")
 
 def test_feedback_is_deduplicated_and_disjoint() -> None:
     feedback = FrameFeedback(accepted_frame_ids=["f1", "f1"])
@@ -87,6 +101,7 @@ def test_kisc_response_requires_complete_turn_context() -> None:
 
 def test_alias_session_and_submission_contracts() -> None:
     assert isinstance(MessageRequest(query="hello"), SearchRequest)
+    assert MessageResponse is SearchResponse
     session = ConversationSession(
         session_id="session-1", created_at=100, problem_id="problem-7")
     assert session.problem_id == "problem-7"

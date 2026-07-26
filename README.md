@@ -148,7 +148,11 @@ Use `frame_id` as the join key across all artifacts:
 | `artifacts/enrichment/frame_enrichment.parquet` | Parquet | Caption/OCR/ASR evidence            |
 | `artifacts/embeddings/visual_embeddings.npy`    | NumPy   | Visual embedding matrix             |
 | `artifacts/embeddings/frame_mapping.parquet`    | Parquet | Vector-to-frame mapping             |
-| `artifacts/indexes/visual.index`                | FAISS   | Searchable vector index             |
+| `artifacts/indexes/visual/`                     | Directory | FAISS index, mapping, and provenance |
+
+The visual index directory contains `visual.index`,
+`frame_mapping.parquet`, and `metadata.json`. Set `HCMAI_INDEX_PATH` to this
+directory, not to the `visual.index` file inside it.
 
 Datasets, embeddings, model weights, indexes, and experiment outputs are local
 artifacts and must not be committed to Git.
@@ -162,17 +166,38 @@ PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000 --reload
 ```
 
+The API can start without local metadata or index artifacts. In that state,
+`GET /health` returns `status: "ok"` and `ready: false`; search returns `503`
+until a retriever is available. Runtime paths can be overridden with
+`HCMAI_CONFIG_PATH`, `HCMAI_METADATA_PATH`, and `HCMAI_INDEX_PATH`.
+
 Available API Endpoints:
 
 - `GET /health`: Health status and dataset readiness.
 - `POST /api/v1/search`: Frame search (supports standard search and conversational KISC turns).
 - `POST /api/v1/session`: Create a new KISC session.
+- `GET /api/v1/sessions`: List all current KISC session IDs.
 - `POST /api/v1/feedback`: Update accepted/rejected frame feedback lists.
 - `GET /api/v1/frames/{frame_id}`: Fetch canonical frame metadata.
-- `GET /api/v1/frames/{frame_id}/neighbors`: Fetch temporal +/- N neighbor frames.
+- `GET /api/v1/frames/{frame_id}/neighbors?window_ms=5000`: Fetch temporal neighbors.
 - `POST /api/v1/submit`: Generate official BTC competition submission code (`video_id,frame_idx`).
 
 For KISC, create a session first, then pass its `session_id` to search and
 feedback requests. Unknown sessions return `404`; accepted results are promoted,
 rejected results are removed, and each response identifies both the user turn
-and its AI reply.
+and its AI reply. Sessions currently live in process memory, so the list resets
+when the backend restarts.
+
+## Frontend integration
+
+The React app calls `POST /api/v1/search` directly; it no longer contains mock
+frames. Configure a different backend in `frontend/.env` when needed:
+
+```bash
+cp frontend/.env.example frontend/.env
+cd frontend
+npm start
+```
+
+The default backend is `http://127.0.0.1:8000`. The UI submits only fields in
+the shared contract: `query`, `top_k`, and `search_mode`.

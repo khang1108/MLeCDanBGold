@@ -16,7 +16,7 @@ whitespace from strings.
 
 ### `enum.py`
 
-- `SearchMode`: search profile (`fast` or `accuracte`).
+- `SearchMode`: search profile (`fast` or `accurate`).
 - `ProcessingStatus`: offline processing state: `pending`, `processing`,
   `completed`, or `failed`.
 - `RetrievalSource`: evidence source used during retrieval: `visual`,

@@ -13,7 +13,7 @@ class SearchMode(str, Enum):
     """
 
     FAST = "fast"
-    ACCURATE = "accuracte"
+    ACCURATE = "accurate"
 
 
 class ProcessingStatus(str, Enum):

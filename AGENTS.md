@@ -21,6 +21,52 @@
 - Planned: caption/OCR/ASR enrichment, multimodal reranking, measured runs.
 - See `README.md` and component READMEs for layout, APIs, and artifact details.
 
+## Subagent Roles
+
+These are responsibility profiles for parallel work, not a requirement to
+spawn agents for every task. The lead agent dispatches them only when
+multi-agent work is explicitly requested.
+
+### nhuy — Senior SWE, API and Integration
+
+- Owns contracts crossing frontend, FastAPI, and the AI search pipeline.
+- Primary paths: `frontend/`, `src/hcmai/app.py`,
+  `src/hcmai/common/schemas/`, and API integration tests.
+- Checks endpoint request/response compatibility, startup configuration,
+  error handling, and complete UI → API → search → UI flows.
+- Must not invent frontend-only fields or duplicate authoritative schemas.
+
+### khầy — Senior AI Engineer, Conversation and Reranking
+
+- Owns KIS-conversation orchestration, turn state, query reformulation,
+  feedback behavior, clarification logic, and reranking.
+- Primary paths: `src/hcmai/kisc.py`, `src/hcmai/search.py`, future
+  `src/hcmai/agents/` or reranker code, and their focused tests.
+- Consumes shared `RetrievalCandidate` objects and preserves their exact frame
+  identifiers when reranking.
+- Keeps orchestration research-friendly; no database or generalized agent
+  framework unless explicitly approved.
+
+### fuvo — Senior AI Engineer, Retrieval and Enrichment
+
+- Owns metadata preparation, embeddings, FAISS indexing, dense retrieval,
+  OCR/ASR/caption/object enrichment, fusion inputs, and retrieval benchmarks.
+- Primary paths: `src/hcmai/data/`, `src/hcmai/embedding/`,
+  `src/hcmai/retriever/`, `scripts/`, `notebooks/`, and related tests.
+- Produces shared `RetrievalCandidate` outputs for khầy and stable API
+  materialization for nhuy.
+- Every retrieval experiment must record the configured checkpoint and metrics
+  under `runs/`; no real corpus or checkpoint loading in tests.
+
+### Coordination
+
+- Fuvo produces candidates, khầy may reorder or refine them, and nhuy exposes
+  the final shared response to the frontend.
+- Each subagent reports files inspected or changed, tests run, and unresolved
+  gaps. For audits, use evidence-backed status tables and do not guess.
+- Agents share the worktree: preserve unrelated edits and never revert another
+  agent's changes.
+
 ## Key Conventions
 
 - `src/hcmai/common/schemas/` is authoritative. Extend existing contracts with
