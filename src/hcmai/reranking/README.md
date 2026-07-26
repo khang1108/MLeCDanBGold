@@ -65,11 +65,10 @@ claim ranking improvement from unlabelled compatibility data.
 
 - No labelled query/gold-frame set exists; baseline and reranked Recall@1/MRR
   have not been measured.
-- Real Qwen latency exists only for one pair, three pairs, and one top-10
-  compatibility run. Depths 20/50/100 were tested only with a fake scorer.
-- Required `runs/reranker_baseline/` metrics and per-query results are absent.
-- The local top-20 snapshot has three unlabelled Vietnamese queries and cannot
-  support a quality claim.
+- The real depth benchmark uses only three unlabelled Vietnamese smoke
+  queries. It measures CPU operation and latency, not relevance quality.
+- Depth-10 scores were constant within each query on the repetitive fixture;
+  deeper candidate sets produced multiple scores but remain unlabelled.
 - The branch is not wired into application startup or production
   `SearchEngine`.
 - Current shared integration truncates to the rerank prefix and does not
@@ -87,7 +86,21 @@ claim ranking improvement from unlabelled compatibility data.
 | Offline/regression tests | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src <isolated-python> -m pytest -q -p no:cacheprovider tests/test_reranker.py tests/test_qwen_reranker.py tests/test_schema.py` | 21 passed | Identity/count, batching, scores, deterministic fallbacks, lifecycle, schema | Ranking quality |
 | Fake depth evidence | Temporary `/tmp` report | Depths 10/20/50/100 preserve count/IDs and batches for 3 queries | Functional bounded-depth behavior | Qwen latency or relevance |
 | Native load/pairs | Temporary `/tmp` report | Load 58.25 s; peak RSS 4.75 GB; one pair 2.28 s; three pairs 6.86 s; stable objects | CPU compatibility and one-load lifecycle | Production throughput |
-| Real top-10 | Temporary `/tmp` report | 10 IDs preserved; 21.55 s | End-to-end CPU top-10 plumbing | Recall/MRR or depth scaling |
+| Real depth latency | `runs/reranker_baseline/` | 3 queries × depths 10/20/50/100; 540 pairs; 0 failures; all IDs preserved; one load | Actual pinned-Qwen CPU depth latency | Recall/MRR or production GPU latency |
+
+Real BF16 CPU query-latency results (milliseconds):
+
+| Depth | P50 | P95 |
+|---:|---:|---:|
+| 10 | 20,508.6 | 21,733.6 |
+| 20 | 42,995.2 | 45,463.9 |
+| 50 | 118,570.0 | 123,809.0 |
+| 100 | 258,636.8 | 269,069.1 |
+
+The cached load took 2.86 seconds and peak process RSS was 4.80 GB. The
+earlier isolated load evidence measured 58.25 seconds, so load time is
+cache-sensitive. Model and processor identities remained stable and the
+native loader was invoked once.
 
 ### Quality evidence
 
@@ -104,17 +117,22 @@ neither file.
 
 ## 6. Artifacts
 
-Available local, ignored plumbing:
+Available local, ignored evidence:
 
 ```text
-artifacts/fixture/candidates_top20.jsonl   # 3 queries × 20, no labels
-data/aic_fixture/metadata/frames.parquet   # 100 canonical frames
+runs/reranker_baseline/
+├── config.json
+├── latency_metrics.json
+├── per_query_latency.csv
+├── failures.json
+└── README.md
 ```
 
-Real CPU and functional-depth evidence exists only in `/tmp`; it is not a
-permanent repository deliverable. The task-board-required
-`runs/reranker_baseline/` directory, labelled predictions, Recall@1/MRR, and
-real depth-20/50/100 latency reports are missing. No model files are committed.
+The run records the pinned checkpoint/revision, environment, frozen queries,
+all depth measurements, score ranges, candidate preservation, load count, and
+zero failures. Repository policy ignores `runs/`, so it is local evidence and
+is not available after a fresh clone. Labelled predictions and Recall@1/MRR
+remain missing. No model files are committed.
 
 ## 7. Dependencies and cross-team contracts
 
@@ -122,7 +140,7 @@ real depth-20/50/100 latency reports are missing. No model files are committed.
 |---|---|---|---|---|---|---|
 | Candidate contract/output | AI1-04 / Tech Lead schema | [`RetrievalCandidate`](../common/schemas/retrieval.py) | Bounded input/output | Contract available; labelled top-100 absent | Yes for evaluation | No |
 | Frame lookup | DE-03 | [`FrameStore`](../data/loader.py) | Resolve supplied IDs to images | Available | No | No |
-| Candidate snapshot | AI1 | `artifacts/fixture/candidates_top20.jsonl` | Plumbing smoke | Unlabelled depth 20 only | Yes for quality/depths | No |
+| Candidate snapshot | AI1 | Frozen 100-candidate smoke snapshot | CPU depth benchmark | Available but unlabelled | Yes for quality | No |
 | Search orchestration | Tech Lead | [`SearchEngine`](../search.py) | Future integration | Hook exists; policy defects unresolved | Yes for system use | No |
 | App startup/provider | SWE / Tech Lead | [`src/hcmai/app.py`](../app.py) | Construct shared online model once | Not implemented | Yes | No |
 | Evaluation governance | Tech Lead / AI1 | `EvaluationQuery` and approved gold set | Recall@1/MRR | Missing | Yes | No |
@@ -132,8 +150,12 @@ shared search, schemas, or application code.
 
 ## 8. Current quality status
 
+- AI2-owned latency requirement: **COMPLETE** — real Qwen CPU depths
+  10/20/50/100 are retained under `runs/reranker_baseline/`.
+- Recall@1/MRR requirement: **BLOCKED** — approved evaluation queries and
+  gold frame IDs are unavailable; no labels were invented.
 - Engineering: **PASS** — the standalone bounded contract and native CPU
-  scorer are verified.
+  scorer, one-load lifecycle, and real depths 10/20/50/100 are verified.
 - Quality: **BLOCKED** — there are no approved labels or Recall@1/MRR results.
 - Integration: **PENDING** — application and `SearchEngine` integration is
   Tech Lead/SWE-owned and absent.
@@ -144,7 +166,7 @@ shared search, schemas, or application code.
 |---|---|
 | Merge target | Latest `main`, after compatibility and integration review |
 | Current readiness | **READY FOR REVIEW — NOT READY TO MERGE** |
-| Blocking conditions | Gold labels; frozen top-100 set; Recall@1/MRR; real depth latency; integration policy; current-main compatibility |
+| Blocking conditions | Approved evaluation queries and gold frame IDs; frozen evaluation candidates; Recall@1/MRR; integration policy; current-main compatibility |
 | Required approvals | AI1/evaluation owner for candidates/labels; Tech Lead for SearchEngine; SWE for startup |
 | Downstream usage | Standalone experimental evaluation only |
 
@@ -192,7 +214,8 @@ Ready for review does not mean ready to merge.
 ## 12. Next actions
 
 1. **AI1 / evaluation owner:** provide frozen labelled top-100 candidates.
-2. **AI2:** run real Qwen quality and depth benchmarks on that exact set.
+2. **AI2:** run Recall@1/MRR on that exact labelled set; the unlabelled CPU
+   depth benchmark is complete.
 3. **Tech Lead:** freeze prefix-plus-tail, warnings, failure, and score policy
    for `SearchEngine`.
 4. **SWE / Tech Lead:** construct the shared model once at application startup.
