@@ -35,16 +35,28 @@ class FrameCaptioner:
     def __init__(self, config: CaptionConfig, model: Any = None, processor: Any = None,
                  batch_fn: Callable[[Sequence[Any]], Sequence[Any]] | None = None):
         self.config, self.model, self.processor = config, model, processor
-        self.batch_fn, self.resolved_revision, self._dtype = batch_fn, config.revision, None
+        self.batch_fn, self.resolved_revision, self._dtype = batch_fn, None, None
     def _load(self) -> None:
-        if self.model is not None and self.processor is not None: return
-        import torch
-        from transformers import AutoModelForImageTextToText, AutoProcessor
-        revision = {"revision": self.config.revision} if self.config.revision else {}
-        types = {"float16": torch.float16, "fp16": torch.float16, "bfloat16": torch.bfloat16, "bf16": torch.bfloat16}; self._dtype = types.get(self.config.dtype, torch.float32)
-        self.processor = self.processor or AutoProcessor.from_pretrained(self.config.model_checkpoint, **revision)
-        self.model = self.model or AutoModelForImageTextToText.from_pretrained(self.config.model_checkpoint, torch_dtype=self._dtype, **revision).to(self.config.device)
-        self.model.eval(); self.resolved_revision = getattr(getattr(self.model, "config", None), "_commit_hash", None) or self.config.revision
+        if self.model is None or self.processor is None:
+            import torch
+            from transformers import AutoModelForImageTextToText, AutoProcessor
+            revision = {"revision": self.config.revision} if self.config.revision else {}
+            types = {"float16": torch.float16, "fp16": torch.float16, "bfloat16": torch.bfloat16, "bf16": torch.bfloat16}; self._dtype = types.get(self.config.dtype, torch.float32)
+            self.processor = self.processor or AutoProcessor.from_pretrained(self.config.model_checkpoint, **revision)
+            self.model = self.model or AutoModelForImageTextToText.from_pretrained(self.config.model_checkpoint, torch_dtype=self._dtype, **revision).to(self.config.device)
+            self.model.eval()
+        self.resolved_revision = getattr(getattr(self.model, "config", None), "_commit_hash", None) or self.config.revision
+    def resolve_revision(self) -> str:
+        """Resolve the immutable model revision before writing reusable rows."""
+        if self.resolved_revision:
+            return self.resolved_revision
+        if self.batch_fn is not None:
+            self.resolved_revision = self.config.revision
+        else:
+            self._load()
+        if not self.resolved_revision:
+            raise ValueError("Cannot create resumable captions without a resolved model revision")
+        return self.resolved_revision
     def caption_batch(self, images: Sequence[Any]) -> list[Any]:
         """Return captions or per-image exceptions for one batch."""
         if self.batch_fn is not None: return list(self.batch_fn(images))
@@ -61,7 +73,9 @@ class FrameCaptioner:
         return [self.processor.post_process_generation(text, task=self.config.prompt, image_size=image.size).get(self.config.prompt, "") for text, image in zip(decoded, images)]
 def _valid(data: dict[str, Any], version: str) -> FrameEnrichment | None:
     try:
-        values, objects = dict(data), data.get("objects"); values["objects"] = objects.tolist() if hasattr(objects, "tolist") else objects or []
+        values, objects = dict(data), data.get("objects")
+        to_list = getattr(objects, "tolist", None)
+        values["objects"] = to_list() if callable(to_list) else objects or []
         nulls = ("caption", "detailed_caption", "ocr_text", "asr_text", "enrichment_version", "error_message")
         values.update({key: None for key in nulls if pd.isna(values.get(key))})
         row = FrameEnrichment.model_validate(values)
@@ -76,7 +90,8 @@ def _atomic(path: Path, writer: Callable[[Path], None]) -> None:
         writer(temporary); temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
-def _resume_guard(path: Path, old: dict[str, Any], config: CaptionConfig, root: Path) -> None:
+def _resume_guard(path: Path, old: dict[str, Any], config: CaptionConfig, root: Path,
+                  resolved_revision: str | None = None) -> None:
     if not path.exists(): return
     if not old: raise ValueError("Cannot safely resume: manifest.json is missing")
     if old.get("enrichment_version") != config.enrichment_version: return
@@ -84,6 +99,8 @@ def _resume_guard(path: Path, old: dict[str, Any], config: CaptionConfig, root: 
     if not isinstance(previous, dict): raise ValueError("Cannot safely resume: effective configuration is missing")
     changed = [key for key, value in current.items() if previous.get(key) != value]
     if old.get("dataset_root") != str(root): changed.append("dataset_root")
+    if resolved_revision is not None and old.get("resolved_model_revision") != resolved_revision:
+        changed.append("resolved_model_revision")
     if changed:
         raise ValueError(f"Cannot resume {config.enrichment_version!r}: changed {', '.join(sorted(set(changed)))}; use a new enrichment_version or output directory")
 def _resume(frames: list[dict[str, Any]], path: Path, config: CaptionConfig):
@@ -153,7 +170,7 @@ def _manifest(config: CaptionConfig, frames_path: Path, root: Path, rows: dict[s
     pick = lambda part: ordered[round((len(ordered) - 1) * part)] if ordered else 0.0
     return {"artifact_version": "frame_enrichment.v1", "enrichment_version": config.enrichment_version,
             "dataset_version": config.dataset_version, "input_parquet_path": str(frames_path), "dataset_root": str(root),
-            "model_checkpoint": config.model_checkpoint, "resolved_model_revision": captioner.resolved_revision or old.get("resolved_model_revision"),
+            "model_checkpoint": config.model_checkpoint, "resolved_model_revision": captioner.resolved_revision,
             "prompt": config.prompt, "decoding": config.decoding, "device": config.device,
             "precision": config.precision, "dtype": config.dtype, "image_size": config.image_size,
             "batch_size": config.batch_size, "input_frame_count": len(rows), "completed_count": complete,
@@ -171,9 +188,15 @@ def generate_captions(frames_path: str | Path, output_dir: str | Path, config: C
     if len(order) != len(set(order)): raise ValueError("input frames contain duplicate frame_id values")
     output, captioner = Path(output_dir), captioner or FrameCaptioner(config); output.mkdir(parents=True, exist_ok=True)
     manifest_path, parquet_path = output / "manifest.json", output / "frame_enrichment.parquet"
-    old = read_json(manifest_path) if manifest_path.exists() else {}; _resume_guard(parquet_path, old, config, root)
+    old = read_json(manifest_path) if manifest_path.exists() else {}
+    _resume_guard(parquet_path, old, config, root)
     rows, todo, skipped, retried = _resume(frames, parquet_path, config)
-    _atomic(manifest_path, lambda path: write_json({**old, "enrichment_version": config.enrichment_version, "effective_configuration": asdict(config), "dataset_root": str(root)}, path))
+    resolved_revision = captioner.resolve_revision()
+    _resume_guard(parquet_path, old, config, root, resolved_revision)
+    provisional = {**old, "enrichment_version": config.enrichment_version,
+                   "effective_configuration": asdict(config), "dataset_root": str(root),
+                   "resolved_model_revision": resolved_revision}
+    _atomic(manifest_path, lambda path: write_json(provisional, path))
     failures: dict[str, dict[str, str]] = {}
     latencies = _run(todo, order, rows, failures, captioner, config, output, root)
     _write(output, order, rows, failures)

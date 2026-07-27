@@ -26,7 +26,8 @@ def make_frames(root: Path, specs) -> Path:
                      "width": 8, "height": 8})
     frames = root / "frames.parquet"; pd.DataFrame(rows).to_parquet(frames); return frames
 def config() -> CaptionConfig:
-    return CaptionConfig(model_checkpoint="fake/model", batch_size=2, image_size=8,
+    return CaptionConfig(model_checkpoint="fake/model", revision="fixture-revision",
+                         batch_size=2, image_size=8,
                          write_interval=2, enrichment_version="caption_test", dataset_version="fixture_v1")
 def test_batch_order_contract_black_and_completed_resume(tmp_path):
     Backend.instances = 0
@@ -57,9 +58,20 @@ def test_batch_order_contract_black_and_completed_resume(tmp_path):
         cfg, batch_fn=unused), dataset_root=tmp_path)
     assert unused.calls == [] and second["skipped_count"] == 5
     assert second["completed_count"] == 5 and second["retried_count"] == 0
+    assert second["resolved_model_revision"] == "fixture-revision"
     for changed, name in ((replace(cfg, prompt="<DETAILED_CAPTION>"), "prompt"), (replace(cfg, model_checkpoint="other/model"), "model_checkpoint")):
         with pytest.raises(ValueError, match=name):
             generate_captions(frames, output, changed, dataset_root=tmp_path)
+def test_resume_rejects_a_different_resolved_revision(tmp_path):
+    frames, cfg, output = make_frames(tmp_path, [(0, 0, 0)]), config(), tmp_path / "out"
+    first_captioner = FrameCaptioner(cfg, batch_fn=Backend())
+    first_captioner.resolved_revision = "model-sha-one"
+    first = generate_captions(frames, output, cfg, first_captioner, dataset_root=tmp_path)
+    assert first["resolved_model_revision"] == "model-sha-one"
+    second_captioner = FrameCaptioner(cfg, batch_fn=Backend())
+    second_captioner.resolved_revision = "model-sha-two"
+    with pytest.raises(ValueError, match="resolved_model_revision"):
+        generate_captions(frames, output, cfg, second_captioner, dataset_root=tmp_path)
 def test_explicit_failures_retry_and_malformed_row(tmp_path):
     frames = make_frames(tmp_path, [(255, 0, 0), (0, 255, 0), "missing",
                                     "corrupt", (0, 0, 0)])
