@@ -23,14 +23,26 @@ Outputs:
 artifacts/embeddings/visual_embeddings.npy
 artifacts/embeddings/frame_mapping.parquet
 artifacts/embeddings/metadata.yaml
-artifacts/indexes/visual.index
-artifacts/indexes/frame_mapping.parquet
-artifacts/indexes/metadata.json
+artifacts/indexes/visual/visual.index
+artifacts/indexes/visual/frame_mapping.parquet
+artifacts/indexes/visual/metadata.json
 ```
 
 The first non-empty batch loads the configured model checkpoint. Ensure the
 machine has enough memory and that the checkpoint is already cached or network
 access is available.
+
+## Generate captions
+
+Caption generation reads dataset, model, decoding, and output settings from
+`configs/enrichment.yaml` by default:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py
+```
+
+Pass `--config`, `--frames`, `--dataset-root`, or `--output` only when a run
+needs to override those values.
 
 ## Rebuild only the index
 
@@ -39,7 +51,7 @@ PYTHONPATH=src aic/bin/python scripts/build_index.py \
   --config configs/baseline.yaml \
   --embeddings artifacts/embeddings/visual_embeddings.npy \
   --mapping artifacts/embeddings/frame_mapping.parquet \
-  --output artifacts/indexes
+  --output artifacts/indexes/visual
 ```
 
 ## Benchmark retrieval
@@ -47,7 +59,7 @@ PYTHONPATH=src aic/bin/python scripts/build_index.py \
 ```bash
 PYTHONPATH=src aic/bin/python scripts/build_benchmark.py \
   --config configs/baseline.yaml \
-  --index artifacts/indexes \
+  --index artifacts/indexes/visual \
   --queries data/eval/queries.jsonl \
   --output runs/dense_model_comparison
 ```

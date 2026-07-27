@@ -1,4 +1,4 @@
-from hcmai.enrichment.caption import main
+from hcmai.enrichment.caption.pipeline import main
 
 
 if __name__ == "__main__":

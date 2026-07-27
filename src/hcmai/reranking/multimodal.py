@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from numbers import Real
 from pathlib import Path
@@ -11,66 +11,8 @@ from typing import Any
 
 from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
 from hcmai.common.utils.image import load_image
-
-
-ScoreBatch = Callable[[str, Sequence[Any]], Sequence[Any]]
-
-
-@dataclass(frozen=True)
-class RerankerConfig:
-    """Configuration for the standalone bounded reranker."""
-
-    batch_size: int = 8
-    final_score_policy: str = "reranker"
-    failure_policy: str = "original_order"
-
-    def __post_init__(self) -> None:
-        if self.batch_size < 1:
-            raise ValueError("batch_size must be positive")
-        if self.final_score_policy != "reranker":
-            raise ValueError("only the reranker final-score policy is supported")
-        if self.failure_policy != "original_order":
-            raise ValueError("only original-order failure fallback is supported")
-
-
-def _finite(value: Any) -> bool:
-    return (
-        isinstance(value, Real)
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-    )
-
-
-def _existing_score(candidate: RetrievalCandidate) -> float | None:
-    visual = candidate.source_scores.get(RetrievalSource.VISUAL)
-    for value in (candidate.final_score, candidate.fusion_score, visual):
-        if value is not None and _finite(value):
-            return float(value)
-    return None
-
-
-def _replace(candidate: RetrievalCandidate, **updates: Any) -> RetrievalCandidate:
-    values = candidate.model_dump(mode="python")
-    values.update(updates)
-    return RetrievalCandidate.model_validate(values)
-
-
-def _fallback(
-    candidate: RetrievalCandidate,
-    category: str,
-    message: str,
-    *,
-    candidate_level: bool,
-) -> RetrievalCandidate:
-    metadata = dict(candidate.metadata)
-    metadata["reranker_fallback"] = {
-        "category": category[:80],
-        "message": (message.strip() or category)[:200],
-    }
-    updates: dict[str, Any] = {"metadata": metadata}
-    if candidate_level:
-        updates.update(reranker_score=None, final_score=_existing_score(candidate))
-    return _replace(candidate, **updates)
+from hcmai.reranking.config import RerankerConfig
+from hcmai.reranking.protocols import ScoreBatch
 
 
 class MultimodalReranker:
@@ -164,3 +106,42 @@ class MultimodalReranker:
                     copies[position], "InvalidScore", repr(value), candidate_level=True
                 )
         return self._ordered(copies)
+
+def _finite(value: Any) -> bool:
+    return (
+        isinstance(value, Real)
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def _existing_score(candidate: RetrievalCandidate) -> float | None:
+    visual = candidate.source_scores.get(RetrievalSource.VISUAL)
+    for value in (candidate.final_score, candidate.fusion_score, visual):
+        if value is not None and _finite(value):
+            return float(value)
+    return None
+
+
+def _replace(candidate: RetrievalCandidate, **updates: Any) -> RetrievalCandidate:
+    values = candidate.model_dump(mode="python")
+    values.update(updates)
+    return RetrievalCandidate.model_validate(values)
+
+
+def _fallback(
+    candidate: RetrievalCandidate,
+    category: str,
+    message: str,
+    *,
+    candidate_level: bool,
+) -> RetrievalCandidate:
+    metadata = dict(candidate.metadata)
+    metadata["reranker_fallback"] = {
+        "category": category[:80],
+        "message": (message.strip() or category)[:200],
+    }
+    updates: dict[str, Any] = {"metadata": metadata}
+    if candidate_level:
+        updates.update(reranker_score=None, final_score=_existing_score(candidate))
+    return _replace(candidate, **updates)

@@ -1,0 +1,9 @@
+{
+  "include": ["src", "scripts", "tests"],
+  "exclude": ["aic", "artifacts", "data", "runs"],
+  "venvPath": ".",
+  "venv": "aic",
+  "extraPaths": ["src"],
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "basic"
+}

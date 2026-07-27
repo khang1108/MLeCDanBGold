@@ -2,6 +2,7 @@ from .base import *
 from .conversation import (
     ConversationConstraint,
     ConversationSession,
+    ConversationState,
     ConversationTurn,
     FrameFeedback,
     SubmissionResult,
@@ -42,6 +43,7 @@ __all__ = [
     "SearchResponse",
     "MessageResponse",
     "ConversationConstraint",
+    "ConversationState",
     "ConversationTurn",
     "FrameFeedback",
     "ConversationSession",

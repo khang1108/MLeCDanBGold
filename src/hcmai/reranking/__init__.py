@@ -1,9 +1,12 @@
 """Public bounded reranking API."""
 
-from .multimodal import MultimodalReranker, RerankerConfig
-from .qwen import QwenRerankerConfig, QwenRerankerScorer
+from .config import QwenRerankerConfig, RerankerConfig
+from .multimodal import MultimodalReranker
+from .qwen import QwenRerankerScorer
 
 __all__ = [
-    "MultimodalReranker", "QwenRerankerConfig",
-    "QwenRerankerScorer", "RerankerConfig",
+    "MultimodalReranker",
+    "QwenRerankerConfig",
+    "QwenRerankerScorer",
+    "RerankerConfig",
 ]

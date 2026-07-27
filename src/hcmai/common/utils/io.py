@@ -8,7 +8,7 @@ import pandas as pd
 
 from os import PathLike
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 PathValue = str | PathLike[str]
@@ -27,6 +27,18 @@ def _prepare_output_path(path: PathValue) -> Path:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     return output_path
+
+
+def atomic_write(path: PathValue, writer: Callable[[Path], None]) -> None:
+    """Write a file through a sibling temporary path and replace on success."""
+
+    output_path = _prepare_output_path(path)
+    temporary = output_path.with_name(output_path.name + ".tmp")
+    try:
+        writer(temporary)
+        temporary.replace(output_path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read_yaml(path: PathValue) -> Any:
@@ -116,6 +128,7 @@ def write_parquet(
 
 
 __all__ = [
+    "atomic_write",
     "read_json",
     "read_parquet",
     "read_yaml",

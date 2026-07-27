@@ -4,9 +4,13 @@ import pytest
 import torch
 from PIL import Image
 from hcmai.common.schemas import RetrievalCandidate
-from hcmai.reranking import MultimodalReranker, RerankerConfig
+from hcmai.reranking import (
+    MultimodalReranker,
+    QwenRerankerConfig,
+    RerankerConfig,
+)
 from hcmai.reranking import qwen
-from hcmai.reranking.qwen import QwenRerankerConfig, QwenRerankerError, QwenRerankerScorer
+from hcmai.reranking.qwen import QwenRerankerError, QwenRerankerScorer
 class Processor:
     def __init__(self, malformed=False):
         self.tokenizer, self.calls, self.malformed = SimpleNamespace(

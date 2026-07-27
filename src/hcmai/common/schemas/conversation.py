@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal, Self
-
 from pydantic import Field, field_validator, model_validator
-
 from hcmai.common.schemas.base import ContractModel, NonEmptyString
 
 
@@ -26,6 +24,39 @@ class ConversationConstraint(ContractModel):
     value: NonEmptyString
     polarity: Literal["positive", "negative", "uncertain"]
     source_turn_id: NonEmptyString
+
+
+class ConversationState(ContractModel):
+    """Complete semantic interpretation of bounded conversation context."""
+
+    standalone_query: NonEmptyString
+    positive_constraints: list[NonEmptyString] = Field(default_factory=list)
+    negative_constraints: list[NonEmptyString] = Field(default_factory=list)
+    uncertain_constraints: list[NonEmptyString] = Field(default_factory=list)
+    accepted_frame_ids: list[NonEmptyString] = Field(default_factory=list)
+    rejected_frame_ids: list[NonEmptyString] = Field(default_factory=list)
+
+    @field_validator(
+        "positive_constraints",
+        "negative_constraints",
+        "uncertain_constraints",
+        "accepted_frame_ids",
+        "rejected_frame_ids",
+    )
+    @classmethod
+    def deduplicate_lists(cls, values: list[str]) -> list[str]:
+        """Deduplicate ordered state entries."""
+        return list(dict.fromkeys(values))
+
+    @model_validator(mode="after")
+    def validate_disjoint_feedback(self) -> Self:
+        """Require one final decision per frame."""
+        overlap = set(self.accepted_frame_ids) & set(self.rejected_frame_ids)
+        if overlap:
+            raise ValueError(
+                "accepted and rejected frame IDs must be disjoint"
+            )
+        return self
 
 
 class FrameFeedback(ContractModel):

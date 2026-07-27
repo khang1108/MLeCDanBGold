@@ -25,6 +25,7 @@ directories automatically.
 from pathlib import Path
 
 from hcmai.common.utils.io import (
+    atomic_write,
     read_json,
     read_parquet,
     read_yaml,
@@ -40,6 +41,11 @@ config = read_yaml(config_path)
 metrics_path = Path("runs/demo/metrics.json")
 write_json({"mrr": 0.82}, metrics_path)
 metrics = read_json(metrics_path)
+
+atomic_write(
+    "runs/demo/manifest.json",
+    lambda temporary: write_json({"status": "complete"}, temporary),
+)
 ```
 
 Parquet helpers use pandas-compatible tables:

@@ -5,7 +5,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from PIL import Image
-from hcmai.enrichment.caption import CaptionConfig, FrameCaptioner, _atomic, generate_captions
+from hcmai.common.utils.io import atomic_write
+from hcmai.enrichment.caption import CaptionConfig, FrameCaptioner, generate_captions
 class Backend:
     instances = 0
     def __init__(self, reject_red: bool = False):
@@ -26,9 +27,20 @@ def make_frames(root: Path, specs) -> Path:
                      "width": 8, "height": 8})
     frames = root / "frames.parquet"; pd.DataFrame(rows).to_parquet(frames); return frames
 def config() -> CaptionConfig:
-    return CaptionConfig(model_checkpoint="fake/model", revision="fixture-revision",
-                         batch_size=2, image_size=8,
-                         write_interval=2, enrichment_version="caption_test", dataset_version="fixture_v1")
+    return CaptionConfig(
+        model_checkpoint="fake/model",
+        revision="fixture-revision",
+        prompt="<CAPTION>",
+        decoding={"max_new_tokens": 8, "do_sample": False},
+        device="cpu",
+        precision="fp32",
+        dtype="float32",
+        batch_size=2,
+        image_size=8,
+        write_interval=2,
+        enrichment_version="caption_test",
+        dataset_version="fixture_v1",
+    )
 def test_batch_order_contract_black_and_completed_resume(tmp_path):
     Backend.instances = 0
     frames = make_frames(tmp_path, [(0, 0, 0), (1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)])
@@ -105,7 +117,7 @@ def test_explicit_failures_retry_and_malformed_row(tmp_path):
     def fail_write(path):
         path.write_bytes(b"partial"); raise OSError("disk full")
     with pytest.raises(OSError, match="disk full"):
-        _atomic(target, fail_write)
+        atomic_write(target, fail_write)
     assert target.read_bytes() == before and not (output / "manifest.json.tmp").exists()
     (output / "frame_enrichment.parquet").write_bytes(b"corrupt")
     with pytest.raises(RuntimeError, match="Cannot resume corrupted Parquet"):

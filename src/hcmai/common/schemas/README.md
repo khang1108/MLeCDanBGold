@@ -5,6 +5,12 @@ pipeline, evaluation tools, and public API. The schemas are intentionally
 strict: `ContractModel` rejects unknown fields and strips surrounding
 whitespace from strings.
 
+Only cross-module exchange contracts belong here. A configuration, backend
+protocol, intermediate result, or report model used by one feature stays in
+that feature package. In particular, caption/OCR types belong under
+`enrichment/`, and reranker configuration belongs under `reranking/`.
+`common.schemas` must not import feature modules.
+
 ## Modules and definitions
 
 ### `base.py`
@@ -70,6 +76,9 @@ whitespace from strings.
 
 - `ConversationConstraint`: one resolver fact with a semantic slot, value,
   positive/negative/uncertain polarity, and source turn ID.
+- `ConversationState`: complete interpreted KISC state containing the
+  standalone query, positive/negative/uncertain constraints, and accepted or
+  rejected frame IDs.
 - `ConversationTurn`: one user or AI message in a KIS conversation with
   turn ID, typed sender (`user` or `ai`), timestamp, optional reply target, and
   non-empty message.

@@ -14,14 +14,21 @@ src/hcmai/
 ├── app.py          # FastAPI application server and REST endpoints
 ├── kisc.py         # KISC conversational session & feedback state manager
 ├── search.py       # High-level SearchEngine orchestration
+├── agents/         # Bounded AI components, including KISC interpretation
 ├── common/         # Shared schemas, configuration, and generic utilities
 │   ├── config.py   # Global configuration settings & Pydantic settings
 │   ├── schemas/    # Pydantic 2 data contracts (SearchRequest, FrameRecord, etc.)
 │   └── utils/      # Generic I/O, image loading, timing, and logging helpers
 ├── data/           # Canonical Parquet builder and FrameStore
 ├── embedding/      # Image embedding generation pipeline
+├── enrichment/     # Feature-owned caption and OCR pipelines
+├── reranking/      # Bounded multimodal reranking and Qwen adapter
 └── retriever/      # FAISS visual index, DenseEncoder, DenseRetriever, benchmarking
 ```
+
+Feature-specific configuration, models, protocols, and helpers stay in their
+own package. Move a contract to `common` only when multiple domain packages
+exchange it; `common` must never depend on a feature package.
 
 ---
 
