@@ -1,7 +1,5 @@
 from __future__ import annotations
-
 import pytest
-
 import hcmai.agents.kisc.resolver as resolver_module
 from hcmai.agents.kisc import ConversationResolver, ConversationResolverError
 from hcmai.common.schemas import ConversationState, ConversationTurn, FrameFeedback
@@ -75,6 +73,8 @@ def test_resolver_contract_cases(case, has_history, current, prior, event, outpu
     expected_history = TURNS if has_history else []
     assert request["history"] == [turn.model_dump(mode="json") for turn in expected_history]
     assert request["current_message"] == current
+    assert request["feedback"] == (feedback.model_dump(mode="json") if feedback else None)
+    assert request["previous_state"] == (previous.model_dump(mode="json") if previous else None)
     if case == "accumulation":
         text = request["instruction"].lower()
         assert "standalone_query" in request["response_schema"]["properties"]
