@@ -10,19 +10,24 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Callable
 
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from hcmai.common.config import AppConfig
 from hcmai.common.schemas import (
     ConversationSession,
     FrameFeedback,
     FrameRecord,
+    KISCSearchRequest,
+    KISCSearchResponse,
     SearchRequest,
     SearchResponse,
     SubmissionResult,
+    VQARequest,
+    VQAResponse,
 )
 from hcmai.data import FrameStore
 from hcmai.kisc import KiscSessionManager
@@ -92,13 +97,20 @@ def _load_default_engine(messages: list[str]) -> SearchEngine:
 def create_app(
     search_engine: SearchEngine | None = None,
     session_manager: KiscSessionManager | None = None,
+    kisc_agent: Any | None = None,
+    vqa_provider: Callable[[FrameRecord, VQARequest], VQAResponse] | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     engine_container: dict[str, Any] = {
         "engine": search_engine,
         "startup_messages": [],
     }
+    provider_container = {
+        "kisc_agent": kisc_agent,
+        "vqa_provider": vqa_provider,
+    }
     kisc_manager = session_manager or KiscSessionManager()
+    dataset_root = Path(os.getenv("HCMAI_DATASET_ROOT", "data")).resolve()
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
@@ -137,6 +149,12 @@ def create_app(
             "frame_store_loaded": store_loaded,
             "retriever_loaded": retriever_loaded,
             "total_frames": total_frames,
+            "capabilities": {
+                "search": retriever_loaded,
+                "kisc": provider_container["kisc_agent"] is not None,
+                "vqa": provider_container["vqa_provider"] is not None,
+                "frame_assets": frame_store is not None,
+            },
             "startup_messages": engine_container["startup_messages"],
         }
 
@@ -161,6 +179,53 @@ def create_app(
     async def create_session(problem_id: str | None = None) -> ConversationSession:
         """Create a new KISC conversational session."""
         return kisc_manager.create_session(problem_id=problem_id)
+
+    @app.post("/api/v1/kisc/search", response_model=KISCSearchResponse)
+    async def search_kisc(request: KISCSearchRequest) -> KISCSearchResponse:
+        """Execute one stateless conversation-resolution and search turn."""
+        agent = provider_container["kisc_agent"]
+        if agent is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="KISC provider not initialized",
+            )
+        return agent.search(request)
+
+    @app.post("/api/v1/vqa", response_model=VQAResponse)
+    async def answer_vqa(request: VQARequest) -> VQAResponse:
+        """Answer one question through an injected frame-grounded provider."""
+        engine = engine_container["engine"]
+        store = getattr(engine, "frame_store", None)
+        provider = provider_container["vqa_provider"]
+        if store is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Frame store not loaded",
+            )
+        if provider is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="VQA provider not initialized",
+            )
+        try:
+            frame = store.get(request.frame_id)
+        except KeyError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(error)
+            ) from error
+        try:
+            response = provider(frame, request)
+            if (
+                response.frame_id != request.frame_id
+                or response.question != request.question
+            ):
+                raise ValueError("VQA provider changed request identity")
+            return response
+        except Exception as error:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"VQA provider failed: {type(error).__name__}",
+            ) from error
 
     @app.get("/api/v1/sessions", response_model=list[str])
     async def list_session_ids() -> list[str]:
@@ -196,6 +261,46 @@ def create_app(
             return engine.frame_store.get(frame_id)
         except KeyError as e:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    def frame_asset(frame_id: str, *, thumbnail: bool) -> FileResponse:
+        engine = engine_container["engine"]
+        store = getattr(engine, "frame_store", None)
+        if store is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Frame store not loaded",
+            )
+        try:
+            frame = store.get(frame_id)
+        except KeyError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(error)
+            ) from error
+        value = frame.thumbnail_path if thumbnail else frame.image_path
+        if thumbnail and value is None:
+            value = frame.image_path
+        path = Path(value).expanduser()
+        resolved = (
+            path.resolve()
+            if path.is_absolute()
+            else (dataset_root / path).resolve()
+        )
+        if not resolved.is_relative_to(dataset_root) or not resolved.is_file():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Frame asset not available",
+            )
+        return FileResponse(resolved)
+
+    @app.get("/api/v1/frames/{frame_id}/thumbnail")
+    async def get_frame_thumbnail(frame_id: str) -> FileResponse:
+        """Serve a frame thumbnail without exposing arbitrary file paths."""
+        return frame_asset(frame_id, thumbnail=True)
+
+    @app.get("/api/v1/frames/{frame_id}/image")
+    async def get_frame_image(frame_id: str) -> FileResponse:
+        """Serve a full frame without exposing arbitrary file paths."""
+        return frame_asset(frame_id, thumbnail=False)
 
     @app.get("/api/v1/frames/{frame_id}/neighbors", response_model=list[FrameRecord])
     async def get_frame_neighbors(

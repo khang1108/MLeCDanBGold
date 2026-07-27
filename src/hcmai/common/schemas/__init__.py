@@ -9,6 +9,7 @@ from .conversation import (
 )
 from .enum import *
 from .frame import FrameEnrichment, FrameRecord
+from .kisc import KISCSearchRequest, KISCSearchResponse
 from .retrieval import RetrievalCandidate, SearchScores
 from .search import (
     SearchFilters,
@@ -17,6 +18,7 @@ from .search import (
     SearchResponse,
     SearchResult,
 )
+from .vqa import VQAEvidence, VQARequest, VQAResponse
 
 # Backward-compatible names used by the earlier frontend/backend contract.
 # They intentionally point at the canonical search models instead of creating
@@ -50,4 +52,9 @@ __all__ = [
     "SubmissionResult",
     "FrameRecord",
     "FrameEnrichment",
+    "KISCSearchRequest",
+    "KISCSearchResponse",
+    "VQAEvidence",
+    "VQARequest",
+    "VQAResponse",
 ]

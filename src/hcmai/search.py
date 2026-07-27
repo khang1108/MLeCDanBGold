@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 from hashlib import sha1
 from time import perf_counter
 from typing import Any
+from urllib.parse import quote
 
 from hcmai.schema import (
     RetrievalCandidate,
@@ -54,10 +55,12 @@ class SearchEngine:
         reranking_ms = 0
         if self.reranker is not None and profile.get("rerank_count", 0) > 0:
             reranking_started = perf_counter()
+            values = list(candidates)
+            depth = int(profile["rerank_count"])
             candidates = self.reranker.rerank(
                 query=request.query,
-                candidates=list(candidates)[: int(profile["rerank_count"])],
-            )
+                candidates=values[:depth],
+            ) + values[depth:]
             reranking_ms = self._elapsed_ms(reranking_started)
 
         selected = list(candidates)[: request.top_k]
@@ -99,6 +102,7 @@ class SearchEngine:
         for rank, candidate in enumerate(candidates, start=1):
             frame = self._materialize_frame(candidate)
             scores = self._build_scores(candidate)
+            encoded_id = quote(candidate.frame_id, safe="")
             results.append(
                 SearchResult(
                     rank=rank,
@@ -106,8 +110,10 @@ class SearchEngine:
                     video_id=self._field(frame, "video_id", ""),
                     frame_idx=int(self._field(frame, "frame_idx", 0)),
                     timestamp_ms=int(self._field(frame, "timestamp_ms", 0)),
-                    thumbnail_url=self._field(frame, "thumbnail_url"),
-                    frame_url=self._field(frame, "frame_url"),
+                    thumbnail_url=self._field(frame, "thumbnail_url")
+                    or f"/api/v1/frames/{encoded_id}/thumbnail",
+                    frame_url=self._field(frame, "frame_url")
+                    or f"/api/v1/frames/{encoded_id}/image",
                     caption=self._field(frame, "caption"),
                     ocr_text=self._field(frame, "ocr_text"),
                     asr_text=self._field(frame, "asr_text"),

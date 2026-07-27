@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 const ImageModal = ({ frame, onClose }) => {
   const [copied, setCopied] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const formattedIndex = `${frame.video_id} · frame ${frame.frame_idx}`;
   const previewUrl = frame.frame_url || frame.thumbnail_url;
 
@@ -20,13 +21,20 @@ const ImageModal = ({ frame, onClose }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  useEffect(() => setImageFailed(false), [previewUrl]);
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card split-layout" onClick={(e) => e.stopPropagation()}>
         {/* Left Side: Media Viewer Column */}
         <div className="modal-viewer-column">
-          {previewUrl ? (
-            <img src={previewUrl} alt={formattedIndex} className="modal-viewer-image" />
+          {previewUrl && !imageFailed ? (
+            <img
+              src={previewUrl}
+              alt={formattedIndex}
+              className="modal-viewer-image"
+              onError={() => setImageFailed(true)}
+            />
           ) : (
             <div className="frame-image-placeholder">Preview unavailable</div>
           )}

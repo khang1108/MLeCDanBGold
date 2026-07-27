@@ -3,13 +3,10 @@ from __future__ import annotations
 from typing import Self
 from pydantic import Field, field_validator, model_validator
 
-from hcmai.common.schemas import (
-    ContractModel,
-    NonEmptyString,
-    SearchMode,
-    SearchScores,
-)
+from hcmai.common.schemas.base import ContractModel, NonEmptyString
 from hcmai.common.schemas.conversation import FrameFeedback
+from hcmai.common.schemas.enum import SearchMode
+from hcmai.common.schemas.retrieval import SearchScores
 
 
 class SearchFilters(ContractModel):
@@ -125,4 +122,3 @@ class SearchResponse(ContractModel):
             raise ValueError("KISC responses require complete turn metadata")
 
         return self
-

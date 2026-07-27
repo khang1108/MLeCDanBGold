@@ -66,6 +66,22 @@ that feature package. In particular, caption/OCR types belong under
   a session ID, user `turn_id`, `assistant_turn_id`, and `ai_message` together.
   `total_results` must match the result list and cannot exceed `top_k`.
 
+### `kisc.py`
+
+- `KISCSearchRequest`: browser-owned ordered history, current message, prior
+  interpreted state, feedback, search profile, and filters for one stateless
+  KISC turn.
+- `KISCSearchResponse`: complete interpreted state, resolution latency, and a
+  canonical nested `SearchResponse`.
+
+### `vqa.py`
+
+- `VQARequest`: canonical frame ID and one bounded natural-language question.
+- `VQAEvidence`: optional caption, OCR, ASR, and object evidence supplied to a
+  VQA provider.
+- `VQAResponse`: identity-preserving answer, grounding flag, provider name,
+  latency, evidence, and warnings.
+
 ### `evaluation.py`
 
 - `EvaluationQuery`: labelled query for offline evaluation. It contains the

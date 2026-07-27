@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 const FrameCard = ({ frame, onClick }) => {
   const [copied, setCopied] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
   const formattedIndex = `${frame.video_id} · frame ${frame.frame_idx}`;
   const previewUrl = frame.thumbnail_url || frame.frame_url;
@@ -45,12 +46,13 @@ const FrameCard = ({ frame, onClick }) => {
 
       {/* 4. Image Container */}
       <div className="frame-image-container">
-        {previewUrl ? (
+        {previewUrl && !imageFailed ? (
           <img
             src={previewUrl}
             alt={`Frame ${frame.frame_id}`}
             className="frame-image"
             loading="lazy"
+            onError={() => setImageFailed(true)}
           />
         ) : (
           <div className="frame-image-placeholder">Preview unavailable</div>

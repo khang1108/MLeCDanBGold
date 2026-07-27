@@ -175,10 +175,14 @@ Available API Endpoints:
 
 - `GET /health`: Health status and dataset readiness.
 - `POST /api/v1/search`: Frame search (supports standard search and conversational KISC turns).
+- `POST /api/v1/kisc/search`: Stateless resolve-then-search KISC turn.
+- `POST /api/v1/vqa`: Frame-grounded VQA provider boundary.
 - `POST /api/v1/session`: Create a new KISC session.
 - `GET /api/v1/sessions`: List all current KISC session IDs.
 - `POST /api/v1/feedback`: Update accepted/rejected frame feedback lists.
 - `GET /api/v1/frames/{frame_id}`: Fetch canonical frame metadata.
+- `GET /api/v1/frames/{frame_id}/thumbnail`: Safely serve a thumbnail.
+- `GET /api/v1/frames/{frame_id}/image`: Safely serve a full frame.
 - `GET /api/v1/frames/{frame_id}/neighbors?window_ms=5000`: Fetch temporal neighbors.
 - `POST /api/v1/submit`: Generate official BTC competition submission code (`video_id,frame_idx`).
 
@@ -201,3 +205,5 @@ npm start
 
 The default backend is `http://127.0.0.1:8000`. The UI submits only fields in
 the shared contract: `query`, `top_k`, and `search_mode`.
+Relative frame URLs returned by the API are resolved against this backend, so
+the browser never receives local filesystem paths.

@@ -1,13 +1,15 @@
 # KISC conversation resolver
 
 This package converts bounded conversation context into one complete
-`ConversationState`. It does not retrieve frames, call search tools, or manage
-session persistence.
+`ConversationState`, then optionally composes that resolver with the shared
+search engine for one stateless API turn.
 
 ## Ownership
 
 - `resolver.py` owns prompt instructions, structured-output validation, and
   newest-wins feedback checks.
+- `agent.py` owns the bounded resolve-once, search-once composition and
+  deterministic resolver fallback.
 - `hcmai.common.schemas.ConversationState` is shared because the resolver
   produces it for search orchestration.
 - `hcmai.kisc.KiscSessionManager` continues to own session turns and cumulative
@@ -15,6 +17,10 @@ session persistence.
 
 The provider is injected as one `structured_call`, which keeps model loading
 outside the resolver and makes offline tests deterministic.
+
+The public `POST /api/v1/kisc/search` contract keeps history and prior state in
+the client. Legacy in-memory session endpoints remain available for backward
+compatibility.
 
 ## Verification
 
