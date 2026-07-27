@@ -129,12 +129,14 @@ def _write(output, order, rows, failures):
                          columns=FrameEnrichment.model_fields)
     write_parquet(table, output / "frame_enrichment.parquet", index=False)
     write_json([failures[key] for key in order if key in failures], output / "failures.json")
-def _process(todo, rows, failures, evidence, engine, config):
+def _process(todo, rows, failures, evidence, engine, config, root: Path):
     for start in range(0, len(todo), config.batch_size):
         valid = []
         for frame in todo[start:start + config.batch_size]:
             try:
-                image = load_image(frame["image_path"], mode="RGB")
+                path = Path(str(frame["image_path"])).expanduser()
+                image_path = path if path.is_absolute() else root / path
+                image = load_image(image_path, mode="RGB")
                 if config.image_size: image.thumbnail((config.image_size, config.image_size))
                 valid.append((frame["frame_id"], image))
             except Exception as error:
@@ -150,7 +152,7 @@ def _process(todo, rows, failures, evidence, engine, config):
                 rows[frame_id], evidence[frame_id] = _parsed(frame_id, result, config)
             except Exception as error:
                 rows[frame_id], failures[frame_id] = _failure(frame_id, config, "backend", error)
-def _report(config, path, rows, evidence, failures, old, started, elapsed, input_count, processed, skipped, retried, revision, disabled):
+def _report(config, path, root, rows, evidence, failures, old, started, elapsed, input_count, processed, skipped, retried, revision, disabled):
     complete = sum(row.status == ProcessingStatus.COMPLETED for row in rows.values())
     text = sum(row.ocr_text is not None for row in rows.values())
     confidence = [v["confidence"] for v in evidence.values() if v.get("confidence") is not None]
@@ -158,7 +160,8 @@ def _report(config, path, rows, evidence, failures, old, started, elapsed, input
     summary = {"min": min(confidence), "max": max(confidence), "mean": sum(confidence) / len(confidence)} if confidence else None
     return {"report_version": "ocr_report.v1", "artifact_version": "frame_enrichment.v1",
         "enrichment_version": config.enrichment_version, "dataset_version": config.dataset_version,
-        "input_parquet_path": str(path), "backend": config.backend, "checkpoint": config.checkpoint, "resolved_revision": revision,
+        "input_parquet_path": str(path), "dataset_root": str(root),
+        "backend": config.backend, "checkpoint": config.checkpoint, "resolved_revision": revision,
         "enabled": config.enabled, "device": config.device, "dtype": config.dtype,
         "batch_size": config.batch_size, "runtime_settings": asdict(config),
         "total_frames": input_count, "processed_frames": processed, "completed_frames": complete,
@@ -174,9 +177,11 @@ def _report(config, path, rows, evidence, failures, old, started, elapsed, input
         "manual_review": old.get("manual_review", {"sample_count": 0, "status": "pending", "summary": "Human review pending."}),
         "known_limitations": ["Coverage is not OCR accuracy.", "Florence-2 has no calibrated OCR confidence."]}
 def generate_ocr(frames_path: str | Path, output_dir: str | Path, config: OCRConfig,
-                 engine: object | None = None, engine_factory: Callable[[OCRConfig], object] | None = None):
+                 engine: object | None = None, engine_factory: Callable[[OCRConfig], object] | None = None,
+                 *, dataset_root: str | Path = "."):
     """Generate or resume one deterministic independent OCR artifact."""
     started, began, path = datetime.now(timezone.utc), perf_counter(), Path(frames_path)
+    root = Path(dataset_root).expanduser().resolve()
     frames = pd.read_parquet(path).to_dict(orient="records")
     order = [frame["frame_id"] for frame in frames]
     if len(order) != len(set(order)): raise ValueError("input frames contain duplicate frame_id values")
@@ -190,10 +195,10 @@ def generate_ocr(frames_path: str | Path, output_dir: str | Path, config: OCRCon
     failures = {}
     if todo:
         engine = engine or (engine_factory or OCREngine)(config)
-        _process(todo, rows, failures, evidence, engine, config)
+        _process(todo, rows, failures, evidence, engine, config, root)
     _write(output, order, rows, failures)
     revision = getattr(engine, "resolved_revision", None) or old.get("resolved_revision") or config.revision
-    report = _report(config, path, rows, evidence, failures, old, started, perf_counter() - began,
+    report = _report(config, path, root, rows, evidence, failures, old, started, perf_counter() - began,
         len(frames), len(todo), skipped, retried, revision, len(frames) if not config.enabled else 0)
     write_json(report, report_path)
     write_json({k: v for k, v in report.items() if k != "raw_evidence"}, output / "manifest.json")

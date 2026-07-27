@@ -6,6 +6,7 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from numbers import Real
+from pathlib import Path
 from typing import Any
 
 from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
@@ -80,11 +81,13 @@ class MultimodalReranker:
         frame_store: Any,
         config: RerankerConfig,
         score_batch: ScoreBatch | None = None,
+        *,
+        dataset_root: str | Path = ".",
     ) -> None:
         self.frame_store = frame_store
         self.config = config
         self.score_batch = score_batch
-        self._backend_failure: tuple[str, str] | None = None
+        self.dataset_root = Path(dataset_root).expanduser().resolve()
 
     def _prepare(
         self, candidates: list[RetrievalCandidate]
@@ -94,7 +97,9 @@ class MultimodalReranker:
         for position, candidate in enumerate(copies):
             try:
                 frame = self.frame_store.get(candidate.frame_id)
-                image = load_image(frame.image_path, mode="RGB")
+                path = Path(str(frame.image_path)).expanduser()
+                image_path = path if path.is_absolute() else self.dataset_root / path
+                image = load_image(image_path, mode="RGB")
             except Exception as error:
                 copies[position] = _fallback(
                     candidate, type(error).__name__, str(error), candidate_level=True
@@ -106,11 +111,8 @@ class MultimodalReranker:
     def _score(
         self, query: str, prepared: list[tuple[int, Any]]
     ) -> tuple[list[tuple[int, Any]] | None, tuple[str, str] | None]:
-        if self._backend_failure is not None:
-            return None, self._backend_failure
         if self.score_batch is None:
-            self._backend_failure = ("BackendUnavailable", "score_batch is required")
-            return None, self._backend_failure
+            return None, ("BackendUnavailable", "score_batch is required")
         scored: list[tuple[int, Any]] = []
         for start in range(0, len(prepared), self.config.batch_size):
             batch = prepared[start : start + self.config.batch_size]
@@ -119,8 +121,7 @@ class MultimodalReranker:
                 if len(values) != len(batch):
                     raise ValueError("score backend returned the wrong result count")
             except Exception as error:
-                self._backend_failure = (type(error).__name__, str(error))
-                return None, self._backend_failure
+                return None, (type(error).__name__, str(error))
             scored.extend((position, value) for (position, _), value in zip(batch, values))
         return scored, None
 

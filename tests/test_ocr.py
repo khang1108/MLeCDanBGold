@@ -75,6 +75,15 @@ def test_batch_normalization_contract_report_and_resume(tmp_path):
         engine_factory=lambda _: pytest.fail("loaded"))
     assert resumed["skipped_frames"] == 5 and resumed["processed_frames"] == 0
     assert json.loads((tmp_path / "out/failures.json").read_text()) == []
+def test_relative_image_paths_resolve_against_dataset_root(tmp_path):
+    source = frames(tmp_path, [1])
+    table = pd.read_parquet(source)
+    table["image_path"] = "f0.png"
+    table.to_parquet(source, index=False)
+    report = generate_ocr(
+        source, tmp_path / "out", config(), engine=Engine(), dataset_root=tmp_path)
+    assert report["completed_frames"] == 1
+    assert report["dataset_root"] == str(tmp_path)
 @pytest.mark.parametrize("outputs", [
     [OCRResult(3)], [OCRResult("text", confidence=float("nan"))], [],
 ])

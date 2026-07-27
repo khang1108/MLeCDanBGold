@@ -40,10 +40,13 @@ def image(no, yes):
     item = Image.new("RGB", (2, 2))
     item.info["logits"] = (no, yes)
     return item
+def vision_info(pairs, **_):
+    images = [pair[1]["content"][-1]["image"] for pair in pairs]
+    return images, [], {}
 def scorer(model=None, processor=None, dtype="bfloat16"):
     return QwenRerankerScorer(
         QwenRerankerConfig(revision="pinned", dtype=dtype),
-        model or Model(), processor or Processor())
+        model or Model(), processor or Processor(), vision_info)
 def test_lazy_injected_lifecycle_order_types_and_native_policy():
     model, processor = Model(), Processor()
     value = scorer(model, processor)

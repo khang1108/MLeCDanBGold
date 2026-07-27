@@ -61,6 +61,13 @@ def test_success_identity_batches_scores_order_and_lifecycle(tmp_path):
     tied = MultimodalReranker(store, RerankerConfig(batch_size=20), Backend(lambda images: [1] * len(images)))
     assert [item.frame_id for item in tied.rerank("q", inputs)] == [item.frame_id for item in inputs]
     assert all(RetrievalCandidate.model_validate(item.model_dump()) for item in output)
+    relative_store = make_store(tmp_path, 1)
+    relative_store.records["f0"].image_path = Path("f0.png")
+    relative = MultimodalReranker(
+        relative_store, RerankerConfig(), Backend(lambda _: [1]),
+        dataset_root=tmp_path,
+    ).rerank("q", [candidate(0)])
+    assert relative[0].reranker_score == 1
 
 def test_candidate_failures_keep_alignment_and_black_image(tmp_path):
     store, inputs = make_store(tmp_path, 8), [candidate(i) for i in range(8)]
@@ -79,15 +86,18 @@ def test_candidate_failures_keep_alignment_and_black_image(tmp_path):
     assert store.calls == [item.frame_id for item in inputs]
 
 @pytest.mark.parametrize("error", [TimeoutError("late"), RuntimeError("CUDA out of memory"), Exception("model")])
-def test_backend_failure_is_request_fallback_and_cached(tmp_path, error):
+def test_backend_failure_is_request_fallback_and_not_cached(tmp_path, error):
     store, inputs, backend = make_store(tmp_path, 3), [candidate(i) for i in range(3)], Backend(error=error)
     reranker = MultimodalReranker(store, RerankerConfig(batch_size=3), backend)
-    first, second = reranker.rerank("q", inputs), reranker.rerank("q", inputs)
+    first = reranker.rerank("q", inputs)
+    backend.error, backend.result = None, lambda images: [0.5] * len(images)
+    second = reranker.rerank("q", inputs)
     assert [item.frame_id for item in first] == [item.frame_id for item in inputs]
     assert [item.frame_id for item in second] == [item.frame_id for item in inputs]
-    assert backend.calls == [("q", 3)]
+    assert backend.calls == [("q", 3), ("q", 3)]
     assert [item.final_score for item in first] == [item.final_score for item in inputs]
     assert all("reranker_fallback" in item.metadata for item in first)
+    assert all(item.reranker_score == 0.5 for item in second)
 
 def test_count_mismatch_and_duplicate_ids_preserve_request(tmp_path):
     store, inputs = make_store(tmp_path, 2), [candidate(0), candidate(0), candidate(1)]

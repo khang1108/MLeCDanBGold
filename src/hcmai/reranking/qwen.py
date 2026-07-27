@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -91,12 +91,14 @@ class QwenRerankerScorer:
         config: QwenRerankerConfig,
         model: Any | None = None,
         processor: Any | None = None,
+        vision_info: Callable[..., tuple[Any, Any, dict[str, Any]]] | None = None,
     ) -> None:
         if (model is None) != (processor is None):
             raise ValueError("model and processor must be injected together")
         self.config = config
         self.model = model
         self.processor = processor
+        self.vision_info = vision_info
         self._base_model: Any | None = None
         self._weights: Any | None = None
         self._load_failure: QwenRerankerError | None = None
@@ -130,12 +132,16 @@ class QwenRerankerScorer:
             raise failure from error
 
     def _encode(self, query: str, images: Sequence[Image.Image]) -> Mapping:
-        from qwen_vl_utils import process_vision_info
+        if self.vision_info is None:
+            from qwen_vl_utils import process_vision_info
+            vision_info = process_vision_info
+        else:
+            vision_info = self.vision_info
         pairs = [_messages(self.config, query, image) for image in images]
         text = self.processor.apply_chat_template(
             pairs, tokenize=False, add_generation_prompt=True
         )
-        vision, videos, video_kwargs = process_vision_info(
+        vision, videos, video_kwargs = vision_info(
             pairs, image_patch_size=16, return_video_kwargs=True,
             return_video_metadata=True,
         )
