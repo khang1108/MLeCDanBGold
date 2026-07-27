@@ -224,7 +224,7 @@ def _write(
 ) -> None:
     table = pd.DataFrame(
         [rows[k].model_dump(mode="json") for k in order if k in rows],
-        columns=FrameEnrichment.model_fields,
+        columns=list(FrameEnrichment.model_fields),
     )
     write_parquet(table, output / "frame_enrichment.parquet", index=False)
     write_json([failures[key] for key in order if key in failures], output / "failures.json")

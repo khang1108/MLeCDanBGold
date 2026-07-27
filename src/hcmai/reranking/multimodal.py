@@ -44,7 +44,7 @@ def _finite(value: Any) -> bool:
 def _existing_score(candidate: RetrievalCandidate) -> float | None:
     visual = candidate.source_scores.get(RetrievalSource.VISUAL)
     for value in (candidate.final_score, candidate.fusion_score, visual):
-        if _finite(value):
+        if value is not None and _finite(value):
             return float(value)
     return None
 
@@ -130,7 +130,7 @@ class MultimodalReranker:
         def key(item: tuple[int, RetrievalCandidate]) -> tuple[float, int, str]:
             position, candidate = item
             score = candidate.final_score
-            primary = -float(score) if _finite(score) else math.inf
+            primary = -float(score) if score is not None and _finite(score) else math.inf
             return primary, position, candidate.frame_id
 
         return [candidate for _, candidate in sorted(enumerate(candidates), key=key)]
