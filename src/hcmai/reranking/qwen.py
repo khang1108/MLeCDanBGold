@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from importlib import import_module
+from typing import Any, cast
 
 from PIL import Image
 
@@ -13,6 +14,7 @@ _SYSTEM = (
     "Judge whether the Document meets the requirements based on the Query "
     'and the Instruct provided. Note that the answer can only be "yes" or "no".'
 )
+VisionInfo = Callable[..., tuple[Any, Any, dict[str, Any]]]
 
 
 class QwenRerankerError(RuntimeError):
@@ -67,16 +69,15 @@ def _load_native(config: QwenRerankerConfig) -> tuple[Any, Any]:
     from huggingface_hub import snapshot_download
     from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
     snapshot = snapshot_download(config.checkpoint, revision=config.revision)
-    common = {"trust_remote_code": False}
     processor = AutoProcessor.from_pretrained(
-        snapshot, padding_side="left", **common)
+        snapshot, padding_side="left", trust_remote_code=False)
     model: Any = Qwen3VLForConditionalGeneration.from_pretrained(
         snapshot,
         dtype=_torch_dtype(config.dtype),
         attn_implementation="eager",
         device_map=None,
         low_cpu_mem_usage=True,
-        **common,
+        trust_remote_code=False,
     )
     return model.to(config.device).eval(), processor
 
@@ -93,7 +94,7 @@ class QwenRerankerScorer:
         config: QwenRerankerConfig,
         model: Any | None = None,
         processor: Any | None = None,
-        vision_info: Callable[..., tuple[Any, Any, dict[str, Any]]] | None = None,
+        vision_info: VisionInfo | None = None,
     ) -> None:
         if (model is None) != (processor is None):
             raise ValueError("model and processor must be injected together")
@@ -139,8 +140,8 @@ class QwenRerankerScorer:
         self, query: str, images: Sequence[Image.Image]
     ) -> Mapping[str, Any]:
         if self.vision_info is None:
-            from qwen_vl_utils import process_vision_info
-            vision_info = process_vision_info
+            module = import_module("qwen_vl_utils")
+            vision_info = cast(VisionInfo, module.process_vision_info)
         else:
             vision_info = self.vision_info
         pairs = [_messages(self.config, query, image) for image in images]
