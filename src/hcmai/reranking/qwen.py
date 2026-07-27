@@ -46,7 +46,9 @@ def _torch_dtype(name: str) -> Any:
     return {"bfloat16": torch.bfloat16, "float32": torch.float32}[name]
 
 
-def _messages(config: QwenRerankerConfig, query: str, image: Image.Image) -> list:
+def _messages(
+    config: QwenRerankerConfig, query: str, image: Image.Image
+) -> list[dict[str, Any]]:
     content = [
         {"type": "text", "text": f"<Instruct>: {config.instruction}"},
         {"type": "text", "text": "<Query>:"},
@@ -68,7 +70,7 @@ def _load_native(config: QwenRerankerConfig) -> tuple[Any, Any]:
     common = {"trust_remote_code": False}
     processor = AutoProcessor.from_pretrained(
         snapshot, padding_side="left", **common)
-    model = Qwen3VLForConditionalGeneration.from_pretrained(
+    model: Any = Qwen3VLForConditionalGeneration.from_pretrained(
         snapshot,
         dtype=_torch_dtype(config.dtype),
         attn_implementation="eager",
@@ -96,16 +98,18 @@ class QwenRerankerScorer:
         if (model is None) != (processor is None):
             raise ValueError("model and processor must be injected together")
         self.config = config
-        self.model = model
-        self.processor = processor
+        self.model: Any = model
+        self.processor: Any = processor
         self.vision_info = vision_info
-        self._base_model: Any | None = None
-        self._weights: Any | None = None
+        self._base_model: Any = None
+        self._weights: Any = None
         self._load_failure: QwenRerankerError | None = None
         self.resolved_revision: str | None = None
 
     def _setup(self) -> None:
         import torch
+        if self.model is None or self.processor is None:
+            raise QwenRerankerError("model and processor are not initialized")
         self.model.to(self.config.device).eval()
         vocab = self.processor.tokenizer.get_vocab()
         weight = self.model.lm_head.weight.detach()
@@ -131,7 +135,9 @@ class QwenRerankerScorer:
             self._load_failure = failure
             raise failure from error
 
-    def _encode(self, query: str, images: Sequence[Image.Image]) -> Mapping:
+    def _encode(
+        self, query: str, images: Sequence[Image.Image]
+    ) -> Mapping[str, Any]:
         if self.vision_info is None:
             from qwen_vl_utils import process_vision_info
             vision_info = process_vision_info
