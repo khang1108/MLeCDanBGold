@@ -18,10 +18,10 @@ reranker:
   max_length: 1024
   max_pixels: 262144
 
-# Set HCMAI_CONVERSATION_MODEL on the VM to enable this capability.
+# HCMAI_CONVERSATION_MODEL may override this pinned default on the VM.
 conversation:
-  checkpoint: null
-  revision: null
+  checkpoint: "zai-org/GLM-4.1V-9B-Thinking"
+  revision: "3c1471e51dc811b589d4d12b1c1c7c1c941267c2"
   device: "cuda"
   dtype: "bfloat16"
-  max_new_tokens: 512
+  max_new_tokens: 1024

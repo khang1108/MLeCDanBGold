@@ -34,7 +34,7 @@ reranking = [
     "qwen-vl-utils>=0.0.14, <0.1",
     "torch>=2.8, <3.0",
     "torchvision>=0.23, <1.0",
-    "transformers>=4.57, <5.0",
+    "transformers>=4.57.1, <5.0",
 ]
 dev = [
     "httpx>=0.28.1",
