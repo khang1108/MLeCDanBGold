@@ -7,10 +7,13 @@ import { useSessionHistory } from "./features/conversation/hooks/useSessionHisto
 import { useSearchWorkspace } from "./features/conversation/hooks/useSearchWorkspace";
 import FramesBox from "./features/frames/components/FramesBox";
 import ImageModal from "./features/frames/components/ImageModal";
+import TabNavigation from "./features/navigation/components/TabNavigation";
+import AdHocSearchWorkspace from "./features/search/components/AdHocSearchWorkspace";
 import OptionsDrawer from "./features/search-controls/components/OptionsDrawer";
 
 // App composes features; endpoint and state details live in their owning hooks.
 function App() {
+  const [activeTab, setActiveTab] = useState("conversation");
   const [query, setQuery] = useState("");
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
@@ -107,37 +110,57 @@ function App() {
 
   return (
     <div className="app-wrapper">
-      <main className="app-container conversation-app">
-        <div className="workspace-layout conversation-layout">
-          <ConversationPanel
-            toolbar={toolbar}
-            session={session}
-            sessionError={sessionError}
-            isPending={isPending}
-            debug={debug}
-            query={query}
-            setQuery={setQuery}
-            onSubmit={submit}
-            canSubmit={
-              Boolean(session) &&
-              (Boolean(query.trim()) || feedback.feedbackDirty)
-            }
-          />
-          <section className="results-workspace">
-            <FramesBox
-              results={results}
-              isLoading={isSearching}
-              error={error}
-              latencyMs={latencyMs}
-              warnings={warnings}
-              feedbackState={feedback.stateFor}
-              onPromising={(id) => feedback.toggle(id, "promising")}
-              onReject={(id) => feedback.toggle(id, "rejected")}
-              onFrameClick={setSelectedFrame}
-            />
-          </section>
+      <header className="app-header">
+        <div className="app-title-group">
+          <h1 className="app-title">HCMAI 2026 Frame Retrieval</h1>
         </div>
-      </main>
+        <TabNavigation activeTab={activeTab} onSelectTab={setActiveTab} />
+      </header>
+
+      {activeTab === "conversation" ? (
+        <main className="app-container conversation-app">
+          <div className="workspace-layout conversation-layout">
+            <ConversationPanel
+              toolbar={toolbar}
+              session={session}
+              sessionError={sessionError}
+              isPending={isPending}
+              debug={debug}
+              query={query}
+              setQuery={setQuery}
+              onSubmit={submit}
+              canSubmit={
+                Boolean(session) &&
+                (Boolean(query.trim()) || feedback.feedbackDirty)
+              }
+            />
+            <section className="results-workspace">
+              <FramesBox
+                results={results}
+                isLoading={isSearching}
+                error={error}
+                latencyMs={latencyMs}
+                warnings={warnings}
+                feedbackState={feedback.stateFor}
+                onPromising={(id) => feedback.toggle(id, "promising")}
+                onReject={(id) => feedback.toggle(id, "rejected")}
+                onFrameClick={setSelectedFrame}
+              />
+            </section>
+          </div>
+        </main>
+      ) : (
+        <main className="app-container adhoc-app">
+          <AdHocSearchWorkspace
+            topK={topK}
+            setTopK={setTopK}
+            searchMode={searchMode}
+            setSearchMode={setSearchMode}
+            onFrameClick={setSelectedFrame}
+          />
+        </main>
+      )}
+
       <OptionsDrawer
         isOpen={isOptionsOpen}
         onClose={() => setIsOptionsOpen(false)}
