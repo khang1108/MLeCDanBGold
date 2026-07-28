@@ -1,25 +1,26 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import ConversationPanel from './features/conversation/components/ConversationPanel';
-import { useRequestGuard } from './features/conversation/hooks/useRequestGuard';
-import { useConversationSession } from './features/conversation/hooks/useConversationSession';
-import { useFeedbackDraft } from './features/conversation/hooks/useFeedbackDraft';
-import { useSessionHistory } from './features/conversation/hooks/useSessionHistory';
-import { useSearchWorkspace } from './features/conversation/hooks/useSearchWorkspace';
-import FramesBox from './features/frames/components/FramesBox';
-import ImageModal from './features/frames/components/ImageModal';
-import OptionsDrawer from './features/search-controls/components/OptionsDrawer';
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import ConversationPanel from "./features/conversation/components/ConversationPanel";
+import { useRequestGuard } from "./features/conversation/hooks/useRequestGuard";
+import { useConversationSession } from "./features/conversation/hooks/useConversationSession";
+import { useFeedbackDraft } from "./features/conversation/hooks/useFeedbackDraft";
+import { useSessionHistory } from "./features/conversation/hooks/useSessionHistory";
+import { useSearchWorkspace } from "./features/conversation/hooks/useSearchWorkspace";
+import FramesBox from "./features/frames/components/FramesBox";
+import ImageModal from "./features/frames/components/ImageModal";
+import OptionsDrawer from "./features/search-controls/components/OptionsDrawer";
 
 // App composes features; endpoint and state details live in their owning hooks.
 function App() {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [topK, setTopK] = useState(20);
-  const [searchMode, setSearchMode] = useState('accurate');
+  const [searchMode, setSearchMode] = useState("accurate");
   const initialRequestRef = useRef(false);
   const { isPending, runRequest } = useRequestGuard();
-  const { session, sessionError, create, load, setSession } = useConversationSession(runRequest);
+  const { session, sessionError, create, load, setSession } =
+    useConversationSession(runRequest);
   const feedback = useFeedbackDraft(session, isPending);
   const history = useSessionHistory();
   const search = useSearchWorkspace({
@@ -32,14 +33,20 @@ function App() {
     setSession,
   });
   const {
-    results, warnings, latencyMs, lastRequestId, error, isSearching,
-    clear: clearResults, submit: submitSearch,
+    results,
+    warnings,
+    latencyMs,
+    lastRequestId,
+    error,
+    isSearching,
+    clear: clearResults,
+    submit: submitSearch,
   } = search;
 
   const resetWorkspace = useCallback(() => {
     clearResults();
     setSelectedFrame(null);
-    setQuery('');
+    setQuery("");
   }, [clearResults]);
 
   const createSession = useCallback(async () => {
@@ -50,17 +57,23 @@ function App() {
     }
   }, [create, resetWorkspace]);
 
-  const loadSession = useCallback(async (sessionId) => {
-    const next = await load(sessionId);
-    if (next) {
-      resetWorkspace();
-      setIsHistoryOpen(false);
-    }
-  }, [load, resetWorkspace]);
+  const loadSession = useCallback(
+    async (sessionId) => {
+      const next = await load(sessionId);
+      if (next) {
+        resetWorkspace();
+        setIsHistoryOpen(false);
+      }
+    },
+    [load, resetWorkspace],
+  );
 
-  const submit = useCallback(async (value) => {
-    if (await submitSearch(value)) setQuery('');
-  }, [submitSearch]);
+  const submit = useCallback(
+    async (value) => {
+      if (await submitSearch(value)) setQuery("");
+    },
+    [submitSearch],
+  );
 
   useEffect(() => {
     if (!initialRequestRef.current) {
@@ -105,7 +118,10 @@ function App() {
             query={query}
             setQuery={setQuery}
             onSubmit={submit}
-            canSubmit={Boolean(session) && (Boolean(query.trim()) || feedback.feedbackDirty)}
+            canSubmit={
+              Boolean(session) &&
+              (Boolean(query.trim()) || feedback.feedbackDirty)
+            }
           />
           <section className="results-workspace">
             <FramesBox
@@ -115,8 +131,8 @@ function App() {
               latencyMs={latencyMs}
               warnings={warnings}
               feedbackState={feedback.stateFor}
-              onPromising={(id) => feedback.toggle(id, 'promising')}
-              onReject={(id) => feedback.toggle(id, 'rejected')}
+              onPromising={(id) => feedback.toggle(id, "promising")}
+              onReject={(id) => feedback.toggle(id, "rejected")}
               onFrameClick={setSelectedFrame}
             />
           </section>
@@ -129,9 +145,17 @@ function App() {
         setTopK={setTopK}
         searchMode={searchMode}
         setSearchMode={setSearchMode}
-        onReset={() => { setTopK(20); setSearchMode('accurate'); }}
+        onReset={() => {
+          setTopK(20);
+          setSearchMode("accurate");
+        }}
       />
-      {selectedFrame && <ImageModal frame={selectedFrame} onClose={() => setSelectedFrame(null)} />}
+      {selectedFrame && (
+        <ImageModal
+          frame={selectedFrame}
+          onClose={() => setSelectedFrame(null)}
+        />
+      )}
     </div>
   );
 }
