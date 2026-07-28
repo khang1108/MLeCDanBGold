@@ -24,4 +24,4 @@ conversation:
   revision: "3c1471e51dc811b589d4d12b1c1c7c1c941267c2"
   device: "cuda"
   dtype: "bfloat16"
-  max_new_tokens: 1024
+  max_new_tokens: 256
