@@ -11,8 +11,11 @@ from typing import Any
 
 from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
 from hcmai.common.utils.image import load_image
+from hcmai.common.utils.logging import get_logger
 from hcmai.reranking.config import RerankerConfig
 from hcmai.reranking.protocols import ScoreBatch
+
+logger = get_logger(__name__)
 
 
 class MultimodalReranker:
@@ -58,13 +61,28 @@ class MultimodalReranker:
         scored: list[tuple[int, Any]] = []
         for start in range(0, len(prepared), self.config.batch_size):
             batch = prepared[start : start + self.config.batch_size]
+            batch_number = start // self.config.batch_size + 1
+            batch_total = math.ceil(len(prepared) / self.config.batch_size)
+            logger.info(
+                "Reranker inference batch started batch=%d/%d images=%d",
+                batch_number, batch_total, len(batch),
+            )
             try:
                 values = list(self.score_batch(query, [image for _, image in batch]))
                 if len(values) != len(batch):
                     raise ValueError("score backend returned the wrong result count")
             except Exception as error:
+                logger.warning(
+                    "Reranker inference failed batch=%d/%d error=%s: %s",
+                    batch_number, batch_total, type(error).__name__,
+                    _bounded_message(error),
+                )
                 return None, (type(error).__name__, str(error))
             scored.extend((position, value) for (position, _), value in zip(batch, values))
+            logger.info(
+                "Reranker inference batch completed batch=%d/%d scores=%d",
+                batch_number, batch_total, len(values),
+            )
         return scored, None
 
     @staticmethod
@@ -85,12 +103,21 @@ class MultimodalReranker:
         if not original:
             return []
         copies, prepared = self._prepare(original)
+        logger.info(
+            "Reranker images prepared loaded=%d missing=%d",
+            len(prepared), len(original) - len(prepared),
+        )
         try:
             scored, failure = self._score(query, prepared) if prepared else ([], None)
         finally:
             for _, image in prepared:
                 image.close()
         if failure is not None:
+            logger.warning(
+                "Reranking preserved dense order for all candidates "
+                "category=%s message=%s",
+                failure[0], _bounded_message(failure[1]),
+            )
             return [
                 _fallback(candidate, *failure, candidate_level=False)
                 for candidate in original
@@ -105,7 +132,16 @@ class MultimodalReranker:
                 copies[position] = _fallback(
                     copies[position], "InvalidScore", repr(value), candidate_level=True
                 )
-        return self._ordered(copies)
+        ordered = self._ordered(copies)
+        fallback_count = sum(
+            "reranker_fallback" in (candidate.metadata or {})
+            for candidate in ordered
+        )
+        logger.info(
+            "Reranking pipeline completed candidates=%d scored=%d fallbacks=%d",
+            len(ordered), len(scored or []), fallback_count,
+        )
+        return ordered
 
 def _finite(value: Any) -> bool:
     return (
@@ -113,6 +149,11 @@ def _finite(value: Any) -> bool:
         and not isinstance(value, bool)
         and math.isfinite(float(value))
     )
+
+
+def _bounded_message(value: object, limit: int = 160) -> str:
+    compact = " ".join(str(value).split())
+    return compact[:limit] or type(value).__name__
 
 
 def _existing_score(candidate: RetrievalCandidate) -> float | None:

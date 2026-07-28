@@ -7,9 +7,12 @@ from time import perf_counter
 from hcmai.common.schemas import SearchRequest
 from hcmai.common.schemas.conversation import ConversationState
 from hcmai.common.schemas.kisc import KISCSearchRequest, KISCSearchResponse
+from hcmai.common.utils.logging import get_logger
 from hcmai.search import SearchEngine
 
 from .resolver import ConversationResolver, ConversationResolverError
+
+logger = get_logger(__name__)
 
 
 class KISCAgent:
@@ -65,6 +68,14 @@ class KISCAgent:
         """Resolve context once, search once, and apply explicit feedback."""
         started = perf_counter()
         warnings: list[str] = []
+        logger.info(
+            "KISC turn started history=%d previous_state=%s accepted=%d "
+            "rejected=%d message=%r",
+            len(request.history), request.previous_state is not None,
+            len(request.feedback.accepted_frame_ids),
+            len(request.feedback.rejected_frame_ids), _preview(request.current_message),
+        )
+        logger.info("KISC conversation resolution started")
         try:
             state = self.resolver.resolve(
                 request.history,
@@ -75,7 +86,17 @@ class KISCAgent:
         except ConversationResolverError as error:
             state = self._fallback(request)
             warnings.append(f"Conversation fallback: {error}")
+            logger.warning("KISC conversation resolution fell back error=%s",
+                           _preview(str(error)))
         resolution_ms = max(0, int((perf_counter() - started) * 1_000))
+        logger.info(
+            "KISC conversation resolution completed elapsed_ms=%d "
+            "fallback=%s standalone_query=%r positive=%d negative=%d uncertain=%d",
+            resolution_ms, bool(warnings), _preview(state.standalone_query),
+            len(state.positive_constraints), len(state.negative_constraints),
+            len(state.uncertain_constraints),
+        )
+        logger.info("KISC frame search started")
         response = self.search_engine.search(
             SearchRequest(
                 query=state.standalone_query,
@@ -102,9 +123,20 @@ class KISCAgent:
         search = response.model_copy(
             update={"results": results, "total_results": len(results)}
         )
+        logger.info(
+            "KISC turn completed results=%d accepted_promoted=%d "
+            "rejected_filtered=%d search_ms=%d",
+            len(results), len(accepted), len(response.results) - len(results),
+            search.latency_ms.total,
+        )
         return KISCSearchResponse(
             interpreted_state=state,
             resolution_latency_ms=resolution_ms,
             search=search,
             warnings=warnings,
         )
+
+
+def _preview(value: str, limit: int = 160) -> str:
+    compact = " ".join(value.split())
+    return compact if len(compact) <= limit else compact[: limit - 1] + "…"

@@ -14,7 +14,10 @@ from PIL import Image
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import RerankResponse, TextEmbeddingResponse
+from hcmai.common.utils.logging import get_logger
 from hcmai.retriever.models import EncodingStats
+
+logger = get_logger(__name__)
 
 
 class InferenceClient:
@@ -57,13 +60,28 @@ class InferenceClient:
         return self._post("/v1/conversation/resolve", json=request)
 
     def _post(self, path: str, **kwargs: Any) -> Any:
+        started = perf_counter()
+        logger.info("Remote inference request started path=%s", path)
         try:
             response = self.client.post(path, **kwargs)
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
         except Exception as error:
             detail = _response_detail(error)
+            logger.warning(
+                "Remote inference request failed path=%s elapsed_ms=%d "
+                "error=%s detail=%s",
+                path, int((perf_counter() - started) * 1_000),
+                type(error).__name__, detail,
+            )
             raise InferenceClientError(f"{path} failed: {detail}") from error
+        logger.info(
+            "Remote inference request completed path=%s status=%d elapsed_ms=%d",
+            path,
+            response.status_code,
+            int((perf_counter() - started) * 1_000),
+        )
+        return payload
 
 
 class RemoteDenseEncoder:
@@ -90,10 +108,20 @@ class RemoteDenseEncoder:
         try:
             response = self.client.embed_text(texts)
             vectors = self._validate(response, len(texts))
-        except Exception:
+        except Exception as error:
             if self.fallback is None:
                 raise
-            return self.fallback.encode_text(texts, stats)
+            logger.warning(
+                "Remote embedding unavailable; using local fallback "
+                "texts=%d error=%s detail=%s",
+                len(texts), type(error).__name__, _response_detail(error),
+            )
+            vectors = self.fallback.encode_text(texts, stats)
+            logger.info(
+                "Local embedding fallback completed texts=%d dimension=%d",
+                len(texts), int(vectors.shape[1]),
+            )
+            return vectors
         if stats is not None:
             elapsed = (perf_counter() - started) * 1_000
             stats.num_encoded += len(texts)

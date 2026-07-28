@@ -78,7 +78,6 @@ class DenseRetriever:
         )  # Embed the query to get embedding vector
 
         self.last_query_encoding_ms = encode_timer.stop()
-
         # Restrict to positions allowed by video/time filters. When such a
         # filter is active we must scan the whole exact index to guarantee a
         # full top_k after filtering; otherwise top_k neighbours suffice.
@@ -100,6 +99,11 @@ class DenseRetriever:
         search_k = self.index.index.ntotal if allowed_positions is not None else top_k
 
         # Search the index, timed on its own.
+        logger.info(
+            "FAISS search started search_k=%d filtered_positions=%s",
+            search_k,
+            len(allowed_positions) if allowed_positions is not None else "all",
+        )
         search_timer = Timer()
         scores, positions = self.index.search(query_vector, search_k)
         self.last_index_search_ms = search_timer.stop()

@@ -13,6 +13,7 @@ from time import perf_counter
 from typing import Any
 from urllib.parse import quote
 
+from hcmai.common.utils.logging import get_logger
 from hcmai.schema import (
     RetrievalCandidate,
     SearchLatency,
@@ -21,6 +22,8 @@ from hcmai.schema import (
     SearchResult,
     SearchScores,
 )
+
+logger = get_logger(__name__)
 
 
 class SearchEngine:
@@ -40,43 +43,83 @@ class SearchEngine:
 
     def search(self, request: SearchRequest) -> SearchResponse:
         """Execute a search request using the configured search profile."""
-
         started = perf_counter()
         profile = self._get_profile(request.search_mode)
-
-        retrieval_started = perf_counter()
-        candidates = self.retriever.search(
-            query=request.query,
-            top_k=int(profile.get("visual_candidates", request.top_k)),
-            filters=request.filters,
+        request_id = self._request_id(request)
+        visual_count = int(profile.get("visual_candidates", request.top_k))
+        rerank_count = int(profile.get("rerank_count", 0))
+        logger.info(
+            "[%s] search started mode=%s top_k=%d candidates=%d rerank_count=%d "
+            "reranker=%s query=%r", request_id, request.search_mode.value,
+            request.top_k, visual_count, rerank_count, self.reranker is not None,
+            _preview(request.query),
         )
-        candidate_retrieval_ms = self._elapsed_ms(retrieval_started)
-
-        reranking_ms = 0
-        if self.reranker is not None and profile.get("rerank_count", 0) > 0:
-            reranking_started = perf_counter()
-            values = list(candidates)
-            depth = int(profile["rerank_count"])
-            candidates = self.reranker.rerank(
-                query=request.query,
-                candidates=values[:depth],
-            ) + values[depth:]
-            reranking_ms = self._elapsed_ms(reranking_started)
-
-        selected = list(candidates)[: request.top_k]
+        candidates, retrieval_ms, reranking_ms = self._rank_candidates(
+            request, request_id, visual_count, rerank_count
+        )
+        selected = candidates[: request.top_k]
         materialization_started = perf_counter()
+        logger.info(
+            "[%s] materialization started selected=%d", request_id, len(selected)
+        )
         response = self._build_response(request, selected)
         materialization_ms = self._elapsed_ms(materialization_started)
-
-        latency = response.latency_ms.model_copy(
-            update={
-                "candidate_retrieval": candidate_retrieval_ms,
-                "reranking": reranking_ms,
-                "materialization": materialization_ms,
-                "total": self._elapsed_ms(started),
-            }
+        latency = response.latency_ms.model_copy(update={
+            "candidate_retrieval": retrieval_ms,
+            "reranking": reranking_ms,
+            "materialization": materialization_ms,
+            "total": self._elapsed_ms(started),
+        })
+        response = response.model_copy(update={"latency_ms": latency})
+        logger.info(
+            "[%s] search completed results=%d total_ms=%d retrieval_ms=%d "
+            "reranking_ms=%d materialization_ms=%d top_frames=%s",
+            request_id,
+            response.total_results,
+            latency.total,
+            latency.candidate_retrieval,
+            latency.reranking,
+            latency.materialization,
+            [item.frame_id for item in response.results[:5]],
         )
-        return response.model_copy(update={"latency_ms": latency})
+        return response
+
+    def _rank_candidates(
+        self, request: SearchRequest, request_id: str,
+        visual_count: int, rerank_count: int,
+    ) -> tuple[list[RetrievalCandidate], int, int]:
+        retrieval_started = perf_counter()
+        logger.info("[%s] retrieval started", request_id)
+        candidates = list(self.retriever.search(
+            query=request.query, top_k=visual_count, filters=request.filters,
+        ))
+        retrieval_ms = self._elapsed_ms(retrieval_started)
+        logger.info(
+            "[%s] retrieval completed candidates=%d elapsed_ms=%d "
+            "encoding_ms=%.1f index_ms=%.1f", request_id, len(candidates),
+            retrieval_ms, float(getattr(self.retriever, "last_query_encoding_ms", 0)),
+            float(getattr(self.retriever, "last_index_search_ms", 0)),
+        )
+        logger.info("[%s] fusion skipped reason=single_visual_source", request_id)
+        if self.reranker is None or rerank_count <= 0:
+            reason = "not_configured" if self.reranker is None else "profile_disabled"
+            logger.info("[%s] reranking skipped reason=%s", request_id, reason)
+            return candidates, retrieval_ms, 0
+        started = perf_counter()
+        depth = min(rerank_count, len(candidates))
+        logger.info("[%s] reranking started candidates=%d", request_id, depth)
+        candidates = self.reranker.rerank(
+            query=request.query, candidates=candidates[:depth],
+        ) + candidates[depth:]
+        reranking_ms = self._elapsed_ms(started)
+        fallbacks = sum(
+            "reranker_fallback" in (item.metadata or {}) for item in candidates[:depth]
+        )
+        logger.info(
+            "[%s] reranking completed candidates=%d fallbacks=%d elapsed_ms=%d",
+            request_id, depth, fallbacks, reranking_ms,
+        )
+        return candidates, retrieval_ms, reranking_ms
 
     def _get_profile(self, search_mode: Any) -> Mapping[str, Any]:
         """Return the configured profile, with safe defaults for the skeleton."""
@@ -193,3 +236,9 @@ class SearchEngine:
     @staticmethod
     def _elapsed_ms(started: float) -> int:
         return max(0, int((perf_counter() - started) * 1_000))
+
+
+def _preview(value: str, limit: int = 160) -> str:
+    """Keep query logs useful without flooding the terminal."""
+    compact = " ".join(value.split())
+    return compact if len(compact) <= limit else compact[: limit - 1] + "…"

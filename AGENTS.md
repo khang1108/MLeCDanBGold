@@ -103,6 +103,7 @@ multi-agent work is explicitly requested.
 - Runs record Recall@1/5, MRR, P50/P95 latency, predictions, failures, config,
   and checkpoint under `runs/`. No `metrics.json` means no experiment.
 - Never commit datasets, weights, embeddings, indexes, or run outputs.
+- MUST NOT GUESS the information or intent. If you don't know anything, MUST QA with me to clarify
 
 ## File-Scoped Commands
 
@@ -117,3 +118,7 @@ multi-agent work is explicitly requested.
 - Inspect first and preserve unrelated work. Update tests/docs with public
   behavior or contract changes; record unknown corpus-format assumptions.
 - AI commits include `Co-Authored-By: <model name> <noreply@openai.com>`.
+
+## Infrastructure
+
+- We use ThunderCompute with **L40 GPU** or **A6000** **GPU**

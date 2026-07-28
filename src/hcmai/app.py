@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from hcmai.common.utils.logging import get_logger
+from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.common.config import AppConfig
 from hcmai.common.schemas import (
     ConversationSession,
@@ -43,6 +43,19 @@ from hcmai.retriever.index import VisualIndex
 from hcmai.search import SearchEngine
 
 logger = get_logger(__name__)
+
+
+def _configure_backend_logging() -> None:
+    """Make hcmai progress logs visible alongside Uvicorn output."""
+    level = os.getenv("HCMAI_LOG_LEVEL", "INFO").upper()
+    log_file = os.getenv("HCMAI_LOG_FILE") or None
+    configure_logging(level, log_file=log_file)
+    get_logger("hcmai").setLevel(level)
+    logger.info(
+        "Backend logging configured level=%s file=%s",
+        level,
+        log_file or "console-only",
+    )
 
 
 def _fallback_kisc_agent(engine: SearchEngine) -> KISCAgent:
@@ -125,7 +138,9 @@ def _load_default_engine(messages: list[str]) -> SearchEngine:
         try:
             # Initialize Frame Store for the application
             store = FrameStore(metadata_path)
-            logger.info("Loading FrameStore with metdata_path: %d", metadata_path)
+            logger.info(
+                "FrameStore loaded path=%s frames=%d", metadata_path, len(store._records)
+            )
         except Exception as error:
             messages.append(
                 f"Could not load metadata {metadata_path}: "
@@ -185,6 +200,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
+        _configure_backend_logging()
+        logger.info("Backend startup started")
         if engine_container["engine"] is None:
             engine_container["engine"] = _load_default_engine(
                 engine_container["startup_messages"]
@@ -196,6 +213,18 @@ def create_app(
             and getattr(engine, "retriever", None) is not None
         ):
             provider_container["kisc_agent"] = _default_kisc_agent(engine)
+        logger.info(
+            "Backend startup completed search=%s kisc=%s reranker=%s "
+            "remote_inference=%s vqa=%s messages=%d",
+            getattr(engine, "retriever", None) is not None,
+            provider_container["kisc_agent"] is not None,
+            getattr(engine, "reranker", None) is not None,
+            getattr(engine, "inference_client", None) is not None,
+            provider_container["vqa_provider"] is not None,
+            len(engine_container["startup_messages"]),
+        )
+        for message in engine_container["startup_messages"]:
+            logger.warning("Backend startup note: %s", message)
 
         try:
             yield
@@ -204,6 +233,7 @@ def create_app(
             client = getattr(engine, "inference_client", None)
             if client is not None:
                 client.client.close()
+            logger.info("Backend shutdown completed")
 
     app = FastAPI(
         title="HCMAI 2026 Frame Retrieval API", version="0.1.0", lifespan=lifespan
@@ -262,12 +292,17 @@ def create_app(
                 detail="Search engine or DenseRetriever not initialized",
             )
         try:
-            return kisc_manager.process_search(request, engine)
+            response = kisc_manager.process_search(request, engine)
         except KeyError as e:
+            logger.warning("API search request failed error=%s", e)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(e),
             ) from e
+        except Exception:
+            logger.exception("API search request failed unexpectedly")
+            raise
+        return response
 
     @app.post("/api/v1/session", response_model=ConversationSession)
     async def create_session(problem_id: str | None = None) -> ConversationSession:
@@ -283,7 +318,12 @@ def create_app(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="KISC provider not initialized",
             )
-        return agent.search(request)
+        try:
+            response = agent.search(request)
+        except Exception:
+            logger.exception("API KISC request failed unexpectedly")
+            raise
+        return response
 
     @app.post("/api/v1/vqa", response_model=VQAResponse)
     async def answer_vqa(request: VQARequest) -> VQAResponse:

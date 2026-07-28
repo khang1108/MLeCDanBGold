@@ -383,6 +383,8 @@ export HCMAI_CONFIG_PATH=configs/baseline.yaml
 export HCMAI_DATASET_ROOT=data
 export HCMAI_METADATA_PATH=data/metadata/frames.parquet
 export HCMAI_INDEX_PATH=artifacts/indexes/visual
+export HCMAI_LOG_LEVEL=INFO
+# export HCMAI_LOG_FILE=runs/backend.log  # optional
 ```
 
 `HCMAI_INDEX_PATH` must point to the index directory, not directly to
@@ -399,6 +401,10 @@ PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
 
 Use one worker because the frame store and FAISS index are initialized once per
 process. `--reload` is intended for local development.
+
+At `INFO`, the backend logs conversation resolution, remote inference, FAISS
+retrieval, reranker batches, fallbacks, candidate counts, and stage latency.
+Use `HCMAI_LOG_LEVEL=WARNING` to keep only failures and fallbacks.
 
 Interactive API documentation is available at:
 
