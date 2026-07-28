@@ -105,7 +105,10 @@ function App() {
             query={query}
             setQuery={setQuery}
             onSubmit={submit}
-            canSubmit={Boolean(session) && (Boolean(query.trim()) || feedback.feedbackDirty)}
+            canSubmit={Boolean(session) && (
+              Boolean(query.trim())
+              || (feedback.feedbackDirty && Boolean(session.interpreted_state))
+            )}
           />
           <section className="results-workspace">
             <FramesBox

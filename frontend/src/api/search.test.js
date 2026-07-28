@@ -101,14 +101,39 @@ test('posts canonical KISC and VQA requests', async () => {
     response(responses.shift())
   ));
 
-  await searchKisc({ currentMessage: ' red car ' });
+  await searchKisc({
+    history: [{
+      turn_id: 'turn_0001',
+      sender: 'user',
+      message: 'find a vehicle',
+      created_at: 1,
+      reply_to_turn_id: null,
+    }],
+    currentMessage: ' red car ',
+    previousState: {
+      standalone_query: 'find a vehicle',
+      positive_constraints: ['vehicle'],
+      negative_constraints: [],
+      uncertain_constraints: [],
+      accepted_frame_ids: [],
+      rejected_frame_ids: [],
+    },
+    feedback: {
+      accepted_frame_ids: ['f1'],
+      rejected_frame_ids: [],
+    },
+  });
   await answerFrameQuestion({
     frameId: 'f1',
     question: ' What is visible? ',
   });
 
   expect(global.fetch.mock.calls[0][0]).toContain('/api/v1/kisc/search');
-  expect(JSON.parse(global.fetch.mock.calls[0][1].body).current_message).toBe('red car');
+  const kiscBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+  expect(kiscBody.current_message).toBe('red car');
+  expect(kiscBody.history).toHaveLength(1);
+  expect(kiscBody.previous_state.standalone_query).toBe('find a vehicle');
+  expect(kiscBody.feedback.accepted_frame_ids).toEqual(['f1']);
   expect(global.fetch.mock.calls[1][0]).toContain('/api/v1/vqa');
   expect(JSON.parse(global.fetch.mock.calls[1][1].body)).toEqual({
     frame_id: 'f1',

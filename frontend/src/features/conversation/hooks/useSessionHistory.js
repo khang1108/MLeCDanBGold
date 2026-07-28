@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
-import { listSessions } from '../../../api/sessions';
+import { listConversationIds } from '../utils/conversationStorage';
 
-// Fetches the ID-only history endpoint when the popover is opened.
+// Lists conversations persisted by this browser for the stateless KISC API.
 export const useSessionHistory = () => {
   const [sessionIds, setSessionIds] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -11,7 +11,7 @@ export const useSessionHistory = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const ids = await listSessions();
+      const ids = listConversationIds();
       setSessionIds(Array.isArray(ids) ? ids : []);
     } catch (requestError) {
       setError(requestError.message || 'Could not load conversation history.');

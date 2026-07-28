@@ -1,8 +1,15 @@
 import { useCallback, useState } from 'react';
-import { searchFrames } from '../../../api/search';
-import { getSession, updateFeedback } from '../../../api/sessions';
+import { searchKisc } from '../../../api/search';
 
-// Manages transient result data; the active session remains server-owned elsewhere.
+const nextTurn = (sender, message, turns, createdAt = Date.now()) => ({
+  turn_id: `turn_${String(turns.length + 1).padStart(4, '0')}`,
+  sender,
+  message,
+  created_at: createdAt,
+  reply_to_turn_id: sender === 'ai' ? turns.at(-1)?.turn_id || null : null,
+});
+
+// Sends browser-owned conversation memory through the stateless KISC agent.
 export const useSearchWorkspace = ({ session, topK, searchMode, draftFeedback, feedbackDirty, runRequest, setSession }) => {
   const [results, setResults] = useState([]);
   const [warnings, setWarnings] = useState([]);
@@ -19,23 +26,40 @@ export const useSearchWorkspace = ({ session, topK, searchMode, draftFeedback, f
     const query = value.trim();
     if (!session || (!query && !feedbackDirty)) return false;
     setError(null);
-    setIsSearching(Boolean(query));
+    setIsSearching(true);
 
     const completed = await runRequest(async () => {
       try {
-        if (query) {
-          const response = await searchFrames({
-            query, topK, searchMode,
-            sessionId: session.session_id, feedback: feedbackDirty ? draftFeedback : undefined,
-          });
-          setResults(response.results);
-          setWarnings(response.warnings || []);
-          setLatencyMs(response.latency_ms);
-          setLastRequestId(response.request_id || null);
-          setSession(await getSession(session.session_id));
-          return true;
-        }
-        setSession(await updateFeedback(session.session_id, draftFeedback));
+        const currentMessage = query || session.interpreted_state?.standalone_query;
+        if (!currentMessage) return false;
+        const response = await searchKisc({
+          history: session.turns,
+          currentMessage,
+          previousState: session.interpreted_state,
+          feedback: draftFeedback,
+          topK,
+          searchMode,
+        });
+        const searchResponse = response.search;
+        setResults(searchResponse.results);
+        setWarnings(response.warnings || searchResponse.warnings || []);
+        setLatencyMs(searchResponse.latency_ms);
+        setLastRequestId(searchResponse.request_id || null);
+
+        const turns = [...session.turns];
+        if (query) turns.push(nextTurn('user', query, turns));
+        const message = `Retrieved ${searchResponse.results.length} frame candidates for “${response.interpreted_state.standalone_query}”.`;
+        const latestTime = turns.at(-1)?.created_at || 0;
+        turns.push(nextTurn('ai', message, turns, Math.max(Date.now(), latestTime + 1)));
+        setSession({
+          ...session,
+          turns,
+          feedback: {
+            accepted_frame_ids: response.interpreted_state.accepted_frame_ids,
+            rejected_frame_ids: response.interpreted_state.rejected_frame_ids,
+          },
+          interpreted_state: response.interpreted_state,
+        });
         return true;
       } catch (requestError) {
         setError(requestError.message || 'Could not contact the search API.');

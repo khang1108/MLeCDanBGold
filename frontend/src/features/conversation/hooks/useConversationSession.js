@@ -1,7 +1,11 @@
 import { useCallback, useState } from 'react';
-import { createSession, getSession } from '../../../api/sessions';
+import {
+  createConversation,
+  loadConversation,
+  saveConversation,
+} from '../utils/conversationStorage';
 
-// Owns only the active server session and its create/load errors.
+// Owns the browser-side KISC memory sent in full on every stateless agent turn.
 export const useConversationSession = (runRequest) => {
   const [session, setSession] = useState(null);
   const [sessionError, setSessionError] = useState(null);
@@ -9,7 +13,7 @@ export const useConversationSession = (runRequest) => {
   const create = useCallback(async () => runRequest(async () => {
     setSessionError(null);
     try {
-      const nextSession = await createSession();
+      const nextSession = createConversation();
       setSession(nextSession);
       return nextSession;
     } catch (error) {
@@ -21,7 +25,8 @@ export const useConversationSession = (runRequest) => {
   const load = useCallback(async (sessionId) => runRequest(async () => {
     setSessionError(null);
     try {
-      const nextSession = await getSession(sessionId);
+      const nextSession = loadConversation(sessionId);
+      if (!nextSession) throw new Error('Conversation was not found in this browser.');
       setSession(nextSession);
       return nextSession;
     } catch (error) {
@@ -30,5 +35,13 @@ export const useConversationSession = (runRequest) => {
     }
   }), [runRequest]);
 
-  return { session, sessionError, create, load, setSession };
+  const update = useCallback((next) => {
+    setSession((current) => {
+      const value = typeof next === 'function' ? next(current) : next;
+      if (value) saveConversation(value);
+      return value;
+    });
+  }, []);
+
+  return { session, sessionError, create, load, setSession: update };
 };
