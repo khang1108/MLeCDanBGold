@@ -20,12 +20,15 @@ class FakeBatch(dict):
 class FakeProcessor:
     def __call__(self, *, return_tensors: str, **inputs) -> FakeBatch:
         assert return_tensors == "pt"
+        self.inputs = inputs
         samples = next(iter(inputs.values()))
         return FakeBatch(sample_count=len(samples))
 
 
 class FakeModel:
-    config = SimpleNamespace(projection_dim=2)
+    config = SimpleNamespace(
+        projection_dim=2, text_config=SimpleNamespace(max_position_embeddings=64)
+    )
 
     def get_image_features(self, sample_count: int) -> torch.Tensor:
         return torch.tensor([[3.0, 4.0]] * sample_count)
@@ -72,8 +75,13 @@ def test_image_batches_are_normalized_and_recorded() -> None:
 
 
 def test_text_batches_are_normalized() -> None:
-    vectors = _encoder().encode_text(["one", "two", "three"])
+    encoder = _encoder()
+    vectors = encoder.encode_text(["one", "two", "three"])
     np.testing.assert_allclose(vectors, [[0.0, 1.0]] * 3)
+    assert isinstance(encoder.processor, FakeProcessor)
+    assert encoder.processor.inputs["padding"] == "max_length"
+    assert encoder.processor.inputs["max_length"] == 64
+    assert encoder.processor.inputs["truncation"] is True
 
 
 def test_empty_input_does_not_load_model() -> None:
@@ -85,11 +93,8 @@ def test_empty_input_does_not_load_model() -> None:
 
 def test_stats_report() -> None:
     stats = EncodingStats(
-        num_encoded=100,
-        num_failed=5,
-        total_time_ms=1000.0,
-        embedding_dim=768,
-        batch_times_ms=[10, 20, 15],
+        num_encoded=100, num_failed=5, total_time_ms=1000.0,
+        embedding_dim=768, batch_times_ms=[10, 20, 15],
     )
     assert stats.throughput_samples_per_sec == 100.0
     assert "failed=5" in stats.report()

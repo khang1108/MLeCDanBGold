@@ -81,7 +81,7 @@ def test_resolver_contract_cases(case, has_history, current, prior, event, outpu
         for phrase in ("complete conversationstate", "newest-wins",
                        "positive_constraints", "negative_constraints",
                        "uncertain_constraints", "do not retrieve", "use tools",
-                       "react", "chain-of-thought"):
+                       "react", "chain-of-thought", "concise english visual", "never invent"):
             assert phrase in text
         forbidden = {"SearchEngine", "KiscSessionManager", "SearchRequest"}
         assert not forbidden & set(vars(resolver_module))

@@ -93,10 +93,7 @@ class DenseEncoder:
         for start in range(0, len(items), self.config.batch_size):
             batch = items[start : start + self.config.batch_size]
             with Timer() as timer:
-                inputs = self.processor(
-                    **{input_name: batch},
-                    return_tensors="pt",
-                ).to(self.config.device)
+                inputs = self._processor_inputs(batch, input_name)
 
                 with torch.inference_mode():
                     outputs = getattr(self.model, feature_method)(**inputs)
@@ -118,6 +115,24 @@ class DenseEncoder:
             stats.batch_times_ms.extend(batch_times)
             stats.embedding_dim = self.embedding_dim
         return result
+
+    def _processor_inputs(self, batch: list[Any], input_name: str) -> Any:
+        """Prepare one modality with the checkpoint's required sequence shape."""
+        assert self.model is not None and self.processor is not None
+        options: dict[str, Any] = {
+            input_name: batch,
+            "return_tensors": "pt",
+        }
+        if input_name == "text":
+            text_config = getattr(self.model.config, "text_config", None)
+            options.update(
+                padding="max_length",
+                truncation=True,
+                max_length=int(
+                    getattr(text_config, "max_position_embeddings", 64)
+                ),
+            )
+        return self.processor(**options).to(self.config.device)
 
     def encode_images(
         self,

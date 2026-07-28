@@ -32,8 +32,8 @@ class QwenRerankerConfig:
     max_length: int = 1024
     max_pixels: int = 262144
     instruction: str = (
-        "Given a Vietnamese search query, determine whether the image is "
-        "relevant to the query."
+        "Given a natural-language video-frame search query, determine whether "
+        "the candidate image is relevant to the query."
     )
 
     def __post_init__(self) -> None:

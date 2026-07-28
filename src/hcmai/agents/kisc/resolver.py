@@ -26,7 +26,9 @@ uncertain_constraints. Current feedback is the newest event: accepted frames
 must leave rejected_frame_ids, and rejected frames must leave
 accepted_frame_ids. Return no search result, SearchRequest, retrieval action,
 tool action, plan, or chain-of-thought. Do not retrieve, use tools, use ReAct,
-or make recursive calls.
+or make recursive calls. Write standalone_query as a concise English visual
+search description. Translate the user's stated evidence faithfully, preserve
+names and numbers, and never invent an object, action, setting, or event.
 """.strip()
 
 

@@ -62,7 +62,7 @@ class StructuredConversationModel:
         text = self.processor.decode(generated, skip_special_tokens=True)
         return _conversation_state(text)
 
-    def _messages(self, request: dict[str, Any]) -> list[dict[str, str]]:
+    def _messages(self, request: dict[str, Any]) -> list[dict[str, Any]]:
         context = {
             key: request.get(key)
             for key in (
@@ -73,12 +73,18 @@ class StructuredConversationModel:
                 "response_schema",
             )
         }
+        user_text = (
+            json.dumps(context, ensure_ascii=False)
+            + "\nReturn only the complete JSON object. Do not use Markdown."
+        )
         messages = [
-            {"role": "system", "content": request["instruction"]},
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": request["instruction"]}],
+            },
             {
                 "role": "user",
-                "content": json.dumps(context, ensure_ascii=False)
-                + "\nReturn only the complete JSON object. Do not use Markdown.",
+                "content": [{"type": "text", "text": user_text}],
             },
         ]
         return messages

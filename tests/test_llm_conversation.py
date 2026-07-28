@@ -27,6 +27,8 @@ class FakeProcessor:
     def apply_chat_template(self, messages, **kwargs):
         self.messages = messages
         self.template_kwargs = kwargs
+        assert all(isinstance(message["content"], list) for message in messages)
+        assert messages[0]["content"][0]["type"] == "text"
         return FakeInputs(input_ids=np.asarray([[1, 2]]))
 
     def decode(self, _tokens, **_kwargs):
