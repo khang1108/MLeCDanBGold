@@ -19,43 +19,68 @@ PYTHONPATH=src aic/bin/uvicorn hcmai.llm.api:app \
   --host 127.0.0.1 --port 8100 --workers 1
 ```
 
-## VM deployment
+## One-time private bootstrap setup
 
-Thunder Compute v2 does not provide systemd or Docker, so this deployment uses
-`supervisord`. Connect to the running instance, clone the repository, and
-create a root-only secret file:
+Thunder Compute v2 does not provide systemd or Docker, so deployment uses
+`supervisord`. `deploy_cloudflared_private.sh` is intentionally ignored by Git.
+Paste the remotely-managed `eyJ...` token once into its
+`CLOUDFLARE_TUNNEL_TOKEN` variable and keep this private copy on the local
+machine.
+
+Configure the tunnel's Published application route once in Cloudflare:
+`api.iamphuckhang.dev` to `http://localhost:8100`. The tunnel, DNS route, and
+Access policy remain in Cloudflare after a Thunder instance is deleted.
+
+## Every throwaway VM
+
+From the local machine, copy the private bootstrap to the new instance and
+connect:
 
 ```bash
-git clone https://github.com/khang1108/Multimodal-Question-Answering.git \
-  /home/ubuntu/hcmai-bootstrap
-sudo install -m 600 /dev/null /root/hcmai-cloudflare.env
-sudo nano /root/hcmai-cloudflare.env
+tnr scp llm/deploy_cloudflared_private.sh 0:/home/ubuntu/
+tnr connect 0
 ```
 
-Populate it from `llm/.env.example` with newly rotated Cloudflare tunnel and API
-credentials. Then run:
+On the VM, run exactly one command:
 
 ```bash
-sudo bash -c '
-  set -a
-  source /root/hcmai-cloudflare.env
-  set +a
-  exec bash "$1"
-' _ "$PWD/llm/deploy_cloudflared_private.sh"
+sudo bash /home/ubuntu/deploy_cloudflared_private.sh
 ```
+
+The bootstrap clones the configured repository and branch into
+`/opt/hcmai/repo`, installs all required packages, downloads model checkpoints,
+starts the model API and tunnel, and verifies both processes. No manual clone,
+environment file, Tunnel ID, Cloudflare API token, or DNS API setup is needed
+on the VM. All repository commands run as the `hcmai` service user, so no Git
+login, global `safe.directory`, `user.name`, or `user.email` configuration is
+required for a public repository.
+
+On every bootstrap run, the deployment checkout is fetched and reset to the
+latest commit of the configured `origin` branch. Tracked edits made directly
+inside `/opt/hcmai/repo` are intentionally discarded; make changes locally,
+push them to `main`, and rerun the bootstrap to update and restart the service.
+The application virtual environment and downloaded checkpoint cache are reused.
 
 The first start downloads the configured model checkpoints and may take several
 minutes. The script keeps checkpoints under `/opt/hcmai/cache` on the persistent
 instance disk.
 
-The script publishes `api.iamphuckhang.dev` to loopback port `8100`. Protect
-that hostname with a Cloudflare Access Service Auth policy. The local HCMAI
-backend supplies `HCMAI_CF_ACCESS_CLIENT_ID` and
+In the tunnel's Cloudflare dashboard, add a Published application route from
+`api.iamphuckhang.dev` to `http://localhost:8100`. Protect that hostname with a
+Cloudflare Access Service Auth policy. The local HCMAI backend supplies
+`HCMAI_CF_ACCESS_CLIENT_ID` and
 `HCMAI_CF_ACCESS_CLIENT_SECRET`; never put them in the React frontend.
 
-Set `HCMAI_CONVERSATION_MODEL` in `/root/hcmai-cloudflare.env` and rerun the
-deployment script to enable the generic Transformers structured conversation
-model. Without it, KISC uses its existing deterministic fallback.
+The pinned conversation checkpoint in `llm/config.yaml` is used when
+`HCMAI_CONVERSATION_MODEL` is empty. Set that variable in the private bootstrap
+only to override the checkpoint. To disable hosted conversation inference, set
+`conversation.checkpoint` to `null`; KISC will then use its deterministic
+fallback.
+
+GLM-4.1V-9B-Thinking is loaded through its official multimodal processor and
+conditional-generation class. BF16 weights require substantial VRAM alongside
+the embedding and reranking models; use a sufficiently large GPU or add an
+explicit quantized profile before deploying on a 24 GB device.
 
 Check or restart the processes with:
 
@@ -65,6 +90,13 @@ sudo supervisorctl restart hcmai-llm hcmai-cloudflared
 curl -sS http://127.0.0.1:8100/ready | jq
 tail -f /opt/hcmai/logs/llm.log /opt/hcmai/logs/cloudflared.log
 ```
+
+The bootstrap installs Supervisor 4.3.0 in `/opt/hcmai/supervisor` and exposes
+its commands through `/usr/local/bin`. This avoids the Ubuntu Supervisor 4.2.1
+package importing the removed Python 3.12 `asynchat` module. If an older VM
+shows `ModuleNotFoundError: No module named 'asynchat'`, upload the latest local
+private bootstrap again and rerun it; the operation reuses the existing
+repository and application virtual environment.
 
 Thunder Compute has no native stopped-instance state. To stop GPU billing while
 preserving this setup, create a snapshot, wait until it is ready, and then
