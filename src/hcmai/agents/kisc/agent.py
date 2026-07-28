@@ -24,26 +24,34 @@ class KISCAgent:
     def _fallback(self, request: KISCSearchRequest) -> ConversationState:
         previous = request.previous_state
         query = request.current_message
+
         positive = []
         negative = []
         uncertain = []
+
         accepted: list[str] = []
         rejected: list[str] = []
+
         if previous is not None:
             query = f"{previous.standalone_query} {query}".strip()
+
             positive = list(previous.positive_constraints)
             negative = list(previous.negative_constraints)
             uncertain = list(previous.uncertain_constraints)
+
             accepted = list(previous.accepted_frame_ids)
             rejected = list(previous.rejected_frame_ids)
+
         for frame_id in request.feedback.accepted_frame_ids:
             rejected = [item for item in rejected if item != frame_id]
             if frame_id not in accepted:
                 accepted.append(frame_id)
+
         for frame_id in request.feedback.rejected_frame_ids:
             accepted = [item for item in accepted if item != frame_id]
             if frame_id not in rejected:
                 rejected.append(frame_id)
+
         return ConversationState(
             standalone_query=query,
             positive_constraints=positive,
@@ -78,8 +86,7 @@ class KISCAgent:
         )
         rejected = set(state.rejected_frame_ids)
         accepted = {
-            frame_id: index
-            for index, frame_id in enumerate(state.accepted_frame_ids)
+            frame_id: index for index, frame_id in enumerate(state.accepted_frame_ids)
         }
         results = [item for item in response.results if item.frame_id not in rejected]
         results.sort(

@@ -1,0 +1,27 @@
+server:
+  host: "127.0.0.1"
+  port: 8100
+
+embedding:
+  name: "google/siglip2-base-patch16-224"
+  device: "cuda"
+  batch_size: 32
+  image_size: 224
+  dtype: "float32"
+
+reranker:
+  checkpoint: "Qwen/Qwen3-VL-Reranker-2B"
+  revision: null
+  device: "cuda"
+  dtype: "bfloat16"
+  batch_size: 1
+  max_length: 1024
+  max_pixels: 262144
+
+# Set HCMAI_CONVERSATION_MODEL on the VM to enable this capability.
+conversation:
+  checkpoint: null
+  revision: null
+  device: "cuda"
+  dtype: "bfloat16"
+  max_new_tokens: 512

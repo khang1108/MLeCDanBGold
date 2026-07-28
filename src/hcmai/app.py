@@ -8,6 +8,7 @@ application startup during the lifespan context.
 from __future__ import annotations
 
 import os
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncGenerator, Callable
@@ -16,6 +17,7 @@ from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from hcmai.common.utils.logging import get_logger
 from hcmai.common.config import AppConfig
 from hcmai.common.schemas import (
     ConversationSession,
@@ -30,11 +32,33 @@ from hcmai.common.schemas import (
     VQAResponse,
 )
 from hcmai.data import FrameStore
+from hcmai.agents.kisc import ConversationResolver, KISCAgent
 from hcmai.kisc import KiscSessionManager
+from hcmai.llm import InferenceClient, RemoteDenseEncoder
+from hcmai.reranking import MultimodalReranker
+from hcmai.reranking.config import RerankerConfig as PipelineRerankerConfig
 from hcmai.retriever.dense import DenseRetriever
 from hcmai.retriever.encoder import DenseEncoder
 from hcmai.retriever.index import VisualIndex
 from hcmai.search import SearchEngine
+
+logger = get_logger(__name__)
+
+
+def _fallback_kisc_agent(engine: SearchEngine) -> KISCAgent:
+    """Build a usable agent whose resolver deliberately enters safe fallback."""
+
+    def unavailable_provider(_: dict[str, Any]) -> object:
+        raise RuntimeError("structured conversation provider not configured")
+
+    return KISCAgent(ConversationResolver(unavailable_provider), engine)
+
+
+def _default_kisc_agent(engine: SearchEngine) -> KISCAgent:
+    client = getattr(engine, "inference_client", None)
+    if client is None:
+        return _fallback_kisc_agent(engine)
+    return KISCAgent(ConversationResolver(client.resolve_conversation), engine)
 
 
 def _load_settings(messages: list[str]) -> AppConfig:
@@ -47,10 +71,45 @@ def _load_settings(messages: list[str]) -> AppConfig:
         return AppConfig.from_yaml(config_path)
     except Exception as error:
         messages.append(
-            f"Could not load config {config_path}: "
-            f"{type(error).__name__}: {error}"
+            f"Could not load config {config_path}: {type(error).__name__}: {error}"
         )
         return AppConfig()
+
+
+def _build_query_encoder(
+    settings: AppConfig,
+    index: VisualIndex,
+) -> tuple[Any, InferenceClient | None]:
+    local = DenseEncoder(settings.models.embedding)
+    if not settings.inference.enabled:
+        return local, None
+    client = InferenceClient(
+        os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url),
+        settings.inference.timeout_seconds,
+    )
+    fallback = local if settings.inference.local_embedding_fallback else None
+    remote = RemoteDenseEncoder(
+        client,
+        settings.models.embedding,
+        index.metadata.embedding_dim,
+        fallback,
+    )
+    return remote, client
+
+
+def _build_remote_reranker(
+    settings: AppConfig,
+    store: FrameStore | None,
+    client: InferenceClient | None,
+) -> MultimodalReranker | None:
+    if client is None or store is None or not settings.models.reranker.enabled:
+        return None
+    return MultimodalReranker(
+        store,
+        PipelineRerankerConfig(batch_size=settings.models.reranker.batch_size),
+        client.rerank,
+        dataset_root=settings.dataset.root,
+    )
 
 
 def _load_default_engine(messages: list[str]) -> SearchEngine:
@@ -64,7 +123,9 @@ def _load_default_engine(messages: list[str]) -> SearchEngine:
     store = None
     if metadata_path.is_file() and metadata_path.stat().st_size > 0:
         try:
+            # Initialize Frame Store for the application
             store = FrameStore(metadata_path)
+            logger.info("Loading FrameStore with metdata_path: %d", metadata_path)
         except Exception as error:
             messages.append(
                 f"Could not load metadata {metadata_path}: "
@@ -74,24 +135,28 @@ def _load_default_engine(messages: list[str]) -> SearchEngine:
         messages.append(f"Metadata not available at {metadata_path}")
 
     retriever = None
+    inference_client = None
     if index_dir.is_dir():
         try:
             index = VisualIndex.load(index_dir)
-            encoder = DenseEncoder(settings.models.embedding)
+            encoder, inference_client = _build_query_encoder(settings, index)
             retriever = DenseRetriever(encoder=encoder, index=index)
         except Exception as error:
             messages.append(
-                f"Could not load index {index_dir}: "
-                f"{type(error).__name__}: {error}"
+                f"Could not load index {index_dir}: {type(error).__name__}: {error}"
             )
     else:
         messages.append(f"Index directory not available at {index_dir}")
 
-    return SearchEngine(
+    reranker = _build_remote_reranker(settings, store, inference_client)
+    engine = SearchEngine(
         frame_store=store,
         retriever=retriever,
+        reranker=reranker,
         config=settings.model_dump(mode="python"),
     )
+    setattr(engine, "inference_client", inference_client)
+    return engine
 
 
 def create_app(
@@ -109,6 +174,12 @@ def create_app(
         "kisc_agent": kisc_agent,
         "vqa_provider": vqa_provider,
     }
+    if (
+        provider_container["kisc_agent"] is None
+        and search_engine is not None
+        and getattr(search_engine, "retriever", None) is not None
+    ):
+        provider_container["kisc_agent"] = _default_kisc_agent(search_engine)
     kisc_manager = session_manager or KiscSessionManager()
     dataset_root = Path(os.getenv("HCMAI_DATASET_ROOT", "data")).resolve()
 
@@ -118,17 +189,40 @@ def create_app(
             engine_container["engine"] = _load_default_engine(
                 engine_container["startup_messages"]
             )
+        engine = engine_container["engine"]
+        if (
+            provider_container["kisc_agent"] is None
+            and engine is not None
+            and getattr(engine, "retriever", None) is not None
+        ):
+            provider_container["kisc_agent"] = _default_kisc_agent(engine)
 
-        yield
+        try:
+            yield
+        finally:
+            engine = engine_container["engine"]
+            client = getattr(engine, "inference_client", None)
+            if client is not None:
+                client.client.close()
 
-    app = FastAPI(title="HCMAI 2026 Frame Retrieval API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="HCMAI 2026 Frame Retrieval API", version="0.1.0", lifespan=lifespan
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[
+            value.strip()
+            for value in os.getenv(
+                "HCMAI_CORS_ORIGINS",
+                "http://localhost:3000,http://127.0.0.1:3000",
+            ).split(",")
+            if value.strip()
+        ],
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    logger.info("Initializing FastAPI application for the backend service.")
 
     @app.get("/health")
     async def health_check() -> dict[str, Any]:
@@ -238,7 +332,9 @@ def create_app(
         try:
             return kisc_manager.get_session(session_id)
         except KeyError as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+            ) from e
 
     @app.post("/api/v1/feedback", response_model=ConversationSession)
     async def update_feedback(
@@ -249,18 +345,25 @@ def create_app(
         try:
             return kisc_manager.update_feedback(session_id, feedback)
         except KeyError as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+            ) from e
 
     @app.get("/api/v1/frames/{frame_id}", response_model=FrameRecord)
     async def get_frame(frame_id: str) -> FrameRecord:
         """Fetch canonical metadata for a single frame by frame_id."""
         engine = engine_container["engine"]
         if engine is None or getattr(engine, "frame_store", None) is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Frame store not loaded")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Frame store not loaded",
+            )
         try:
             return engine.frame_store.get(frame_id)
         except KeyError as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+            ) from e
 
     def frame_asset(frame_id: str, *, thumbnail: bool) -> FileResponse:
         engine = engine_container["engine"]
@@ -281,9 +384,7 @@ def create_app(
             value = frame.image_path
         path = Path(value).expanduser()
         resolved = (
-            path.resolve()
-            if path.is_absolute()
-            else (dataset_root / path).resolve()
+            path.resolve() if path.is_absolute() else (dataset_root / path).resolve()
         )
         if not resolved.is_relative_to(dataset_root) or not resolved.is_file():
             raise HTTPException(
@@ -310,7 +411,10 @@ def create_app(
         """Fetch same-video frames in a symmetric timestamp window."""
         engine = engine_container["engine"]
         if engine is None or getattr(engine, "frame_store", None) is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Frame store not loaded")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Frame store not loaded",
+            )
         try:
             return engine.frame_store.get_neighbors(
                 frame_id,
@@ -318,18 +422,25 @@ def create_app(
                 include_self=True,
             )
         except KeyError as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+            ) from e
 
     @app.post("/api/v1/submit", response_model=SubmissionResult)
     async def submit_frame(frame_id: str) -> SubmissionResult:
         """Format a selected frame ID into official BTC competition submission code."""
         engine = engine_container["engine"]
         if engine is None or getattr(engine, "frame_store", None) is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Frame store not loaded")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Frame store not loaded",
+            )
         try:
             return kisc_manager.format_submission(frame_id, engine.frame_store)
         except KeyError as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+            ) from e
 
     return app
 

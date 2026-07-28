@@ -84,11 +84,14 @@ def test_injected_providers_expose_search_kisc_and_vqa_contracts() -> None:
     assert answer.status_code == 200
     assert answer.json()["answer"] == "Provider answer."
 
-def test_provider_absence_is_explicit() -> None:
+def test_missing_structured_provider_uses_kisc_fallback() -> None:
     app = create_app(SearchEngine(Store(), Retriever()))
-    assert request(
+    response = request(
         app, "POST", "/api/v1/kisc/search", json={"current_message": "test"}
-    ).status_code == 503
+    )
+    assert response.status_code == 200
+    assert response.json()["interpreted_state"]["standalone_query"] == "test"
+    assert response.json()["warnings"][0].startswith("Conversation fallback:")
     assert request(
         app, "POST", "/api/v1/vqa",
         json={"frame_id": FRAME_ID, "question": "test"},

@@ -10,7 +10,7 @@ from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.encoder import DenseEncoder
+from hcmai.retriever.encoder import TextEncoder
 from hcmai.retriever.index import VisualIndex
 
 logger = get_logger(__name__)
@@ -24,7 +24,7 @@ class DenseRetriever:
     :class:`RetrievalCandidate` objects rather than raw FAISS tuples.
     """
 
-    def __init__(self, encoder: DenseEncoder, index: VisualIndex) -> None:
+    def __init__(self, encoder: TextEncoder, index: VisualIndex) -> None:
         """Pair an encoder with an index and reject mismatched artifacts.
 
         Raises:
@@ -38,7 +38,10 @@ class DenseRetriever:
                 f"Encoder/index model mismatch: encoder={encoder.config.model_name!r}, "
                 f"index={index.metadata.model_name!r}"
             )
-        if encoder.embedding_dim and index.metadata.embedding_dim != encoder.embedding_dim:
+        if (
+            encoder.embedding_dim
+            and index.metadata.embedding_dim != encoder.embedding_dim
+        ):
             raise ValueError(
                 f"Encoder/index dimension mismatch: encoder={encoder.embedding_dim}, "
                 f"index={index.metadata.embedding_dim}"
@@ -51,7 +54,9 @@ class DenseRetriever:
         self.last_query_encoding_ms = 0.0
         self.last_index_search_ms = 0.0
 
-    def search(self, query: str, top_k: int = 100, filters: Optional[SearchFilters] = None) -> list[RetrievalCandidate]:
+    def search(
+        self, query: str, top_k: int = 100, filters: Optional[SearchFilters] = None
+    ) -> list[RetrievalCandidate]:
         """Retrieve the top matching frames for a text query.
 
         Args:
@@ -62,11 +67,16 @@ class DenseRetriever:
         Returns:
             Score-sorted, deduplicated candidates with a visual score and rank.
         """
+
+        # Get frames mapping of the FAISS VectorDB
         mapping = self.index.mapping
 
         # Encode the query to a single normalized vector, timed on its own.
         encode_timer = Timer()
-        query_vector = self.encoder.encode_text([query])
+        query_vector = self.encoder.encode_text(
+            [query]
+        )  # Embed the query to get embedding vector
+
         self.last_query_encoding_ms = encode_timer.stop()
 
         # Restrict to positions allowed by video/time filters. When such a
@@ -80,7 +90,7 @@ class DenseRetriever:
         ):
             mask = pd.Series(True, index=mapping.index)
             if filters.video_ids:
-                mask &= mapping["video_id"].isin(set(filters.video_ids))
+                mask &= mapping["video_id"].isin(filters.video_ids)
             if filters.start_time_ms is not None:
                 mask &= mapping["timestamp_ms"] >= filters.start_time_ms
             if filters.end_time_ms is not None:

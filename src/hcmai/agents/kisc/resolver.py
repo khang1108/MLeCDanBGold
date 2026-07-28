@@ -69,9 +69,7 @@ def _request(
         "history": [turn.model_dump(mode="json") for turn in history],
         "current_message": current_message,
         "feedback": feedback.model_dump(mode="json") if feedback else None,
-        "previous_state": (
-            previous.model_dump(mode="json") if previous else None
-        ),
+        "previous_state": (previous.model_dump(mode="json") if previous else None),
         "response_schema": ConversationState.model_json_schema(),
     }
 
@@ -100,8 +98,6 @@ class ConversationResolver:
     """Resolve explicit bounded context with one injected structured call."""
 
     def __init__(self, structured_call: StructuredCall) -> None:
-        if not callable(structured_call):
-            raise TypeError("structured_call must be callable")
         self.structured_call = structured_call
 
     def resolve(
@@ -124,10 +120,7 @@ class ConversationResolver:
             ) from error
         state = _state_from_output(output)
         accepted, rejected = _merged_feedback(previous_state, feedback)
-        if (
-            state.accepted_frame_ids != accepted
-            or state.rejected_frame_ids != rejected
-        ):
+        if state.accepted_frame_ids != accepted or state.rejected_frame_ids != rejected:
             raise ConversationResolverError(
                 "structured output violated newest-wins feedback state"
             )

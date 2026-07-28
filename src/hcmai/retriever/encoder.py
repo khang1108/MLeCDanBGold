@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
+
 from PIL import Image
 
+from transformers import AutoModel, AutoProcessor
 from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
@@ -15,16 +17,17 @@ from hcmai.retriever.models import EncodingStats
 logger = get_logger(__name__)
 
 
-def _extract_tensor(outputs: Any) -> Any:
-    """Extract the pooled tensor from a Transformers model output."""
-    pooled = getattr(outputs, "pooler_output", None)
-    if pooled is not None:
-        return pooled
-    if hasattr(outputs, "shape"):
-        return outputs
-    if isinstance(outputs, (tuple, list)):
-        return outputs[0]
-    return getattr(outputs, "last_hidden_state", outputs)
+class TextEncoder(Protocol):
+    """Minimal query-encoding contract consumed by the dense retriever."""
+
+    config: EncoderConfig
+    embedding_dim: int
+
+    def encode_text(
+        self,
+        texts: list[str],
+        stats: EncodingStats | None = None,
+    ) -> np.ndarray: ...
 
 
 class DenseEncoder:
@@ -41,28 +44,23 @@ class DenseEncoder:
         """Load the processor and model exactly once."""
         if self.model is not None and self.processor is not None:
             return
-        try:
-            import torch  # noqa: F401
-            from transformers import AutoModel, AutoProcessor
-        except ImportError as error:
-            raise ImportError(
-                "DenseEncoder requires transformers and torch; install the "
-                "project's embedding dependencies"
-            ) from error
 
         logger.info(f"Loading model: {self.config.model_name}")
+
         processor = AutoProcessor.from_pretrained(self.config.model_name)
         model = AutoModel.from_pretrained(self.config.model_name)
         model = model.to(self.config.device)
         model.eval()
+
         self.processor = processor
         self.model = model
-        self.embedding_dim = int(
-            getattr(model.config, "projection_dim", 0)
-        )
+        self.embedding_dim = int(getattr(model.config, "projection_dim", 0))
+
         dimension = self.embedding_dim or "pending"
         logger.info(
-            f"Model loaded. Embedding dimension: {dimension}"
+            f"Successfully loaded model as %d and processor as %d. Embedding dimension: {dimension}",
+            self.config.model_name,
+            self.config.model_name,
         )
 
     def _encode(
@@ -72,7 +70,17 @@ class DenseEncoder:
         feature_method: str,
         stats: EncodingStats | None,
     ) -> np.ndarray:
-        """Encode one modality in configured batches."""
+        """Encode one modality in configured batches.
+
+        Args:
+            items (list[Any): A list of items to encode.
+            input_name (str): Type of input (images or text)
+            feature_method (str): Type of feature method of inference stage of model.
+            stats (EncodinggStats): Statistics of encoding.
+
+        Returns:
+            A corresponding vector embedding for the input.
+        """
         if not items:
             return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
         self._load_model()
@@ -89,16 +97,21 @@ class DenseEncoder:
                     **{input_name: batch},
                     return_tensors="pt",
                 ).to(self.config.device)
+
                 with torch.inference_mode():
                     outputs = getattr(self.model, feature_method)(**inputs)
+
                 tensor = _extract_tensor(outputs)
                 embeddings = tensor.detach().float().cpu().numpy()
+
                 norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+
                 embeddings_list.append(embeddings / np.maximum(norms, 1e-8))
             batch_times.append(timer.elapsed_ms)
 
         result = np.vstack(embeddings_list).astype(self.config.dtype)
         self.embedding_dim = int(result.shape[1])
+
         if stats is not None:
             stats.num_encoded += len(items)
             stats.total_time_ms += sum(batch_times)
@@ -131,3 +144,15 @@ class DenseEncoder:
             "get_text_features",
             stats,
         )
+
+
+def _extract_tensor(outputs: Any) -> Any:
+    """Extract the pooled tensor from a Transformers model output."""
+    pooled = getattr(outputs, "pooler_output", None)
+    if pooled is not None:
+        return pooled
+    if hasattr(outputs, "shape"):
+        return outputs
+    if isinstance(outputs, (tuple, list)):
+        return outputs[0]
+    return getattr(outputs, "last_hidden_state", outputs)

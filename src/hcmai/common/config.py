@@ -115,6 +115,15 @@ class ApiConfig(BaseModel):
     maximum_top_k: int = 100
 
 
+class InferenceConfig(BaseModel):
+    """Connection from the local data plane to the private GPU service."""
+
+    enabled: bool = False
+    base_url: str = "https://api.iamphuckhang.dev"
+    timeout_seconds: float = Field(default=10, gt=0, le=120)
+    local_embedding_fallback: bool = True
+
+
 class BenchmarkConfig(BaseModel):
     """Configuration recorded alongside benchmark results for reproducibility."""
 
@@ -135,6 +144,7 @@ class AppConfig(BaseSettings):
     index: IndexConfig = Field(default_factory=IndexConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
+    inference: InferenceConfig = Field(default_factory=InferenceConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> AppConfig:

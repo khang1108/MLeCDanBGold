@@ -6,6 +6,7 @@
   Vietnamese/English queries.
 - Return exact official `video_id` and `frame_idx`; optimize Recall@K, ranking,
   reproducibility, and warm-query latency with small research-friendly code.
+- Beside develop an AI assistant to win the challenge, we also need to find research gaps in this domain to publis papers (max 2) at SoICT conference.
 
 ## Package Managers
 
@@ -14,12 +15,14 @@
 - Frontend: use `npm` in `frontend/`; preserve the existing React application.
 - Add supported runtime dependencies to `pyproject.toml`.
 
-## Current System
+## Folder and File Aware
 
-- Implemented: Pydantic contracts, frame preparation/`FrameStore`, embeddings,
-  lazy dense encoder, FAISS retrieval/benchmark, KISC, search, and FastAPI.
-- Planned: caption/OCR/ASR enrichment, multimodal reranking, measured runs.
-- See `README.md` and component READMEs for layout, APIs, and artifact details.
+- `agents/`: to find source code of KISC agent
+- `data/`: to find functions/classes used to load/modify dataset
+- `common/`: to find API schemas, or base models/classes used in the project
+- `embeddings/`: to find embedding module/services used in the project
+- `retriever/`: to find retrieve module/services used in the project
+- `hcmai.common.utils/`: to find helpers functions used in the projects
 
 ## Subagent Roles
 
@@ -103,11 +106,11 @@ multi-agent work is explicitly requested.
 
 ## File-Scoped Commands
 
-| Task | Command |
-|---|---|
-| Compile | `aic/bin/python -m py_compile src/hcmai/<file>.py` |
-| Test | `PYTHONPATH=src aic/bin/pytest tests/test_<component>.py` |
-| Typecheck | `pyright src/hcmai/<file>.py` |
+| Task      | Command                                                     |
+| --------- | ----------------------------------------------------------- |
+| Compile   | `aic/bin/python -m py_compile src/hcmai/<file>.py`        |
+| Test      | `PYTHONPATH=src aic/bin/pytest tests/test_<component>.py` |
+| Typecheck | `pyright src/hcmai/<file>.py`                             |
 
 ## Change and Commit Discipline
 

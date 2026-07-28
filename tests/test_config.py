@@ -10,6 +10,8 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.dataset.frames_path.as_posix() == "data/metadata/frames.parquet"
     assert config.index.path.as_posix() == "artifacts/indexes/visual"
     assert config.models.reranker.model_name == "Qwen/Qwen3-VL-Reranker-2B"
+    assert config.inference.base_url == "https://api.iamphuckhang.dev"
+    assert config.inference.local_embedding_fallback is True
 
 
 def test_enrichment_config_is_loaded_from_root_yaml() -> None:

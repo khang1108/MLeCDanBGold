@@ -20,6 +20,8 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "fastapi>=0.139.2",
     "uvicorn>=0.51.0",
+    "httpx>=0.28.1",
+    "python-multipart>=0.0.20",
 ]
 
 [project.optional-dependencies]

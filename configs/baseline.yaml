@@ -39,3 +39,9 @@ search:
 api:
   default_top_k: 20
   maximum_top_k: 100
+
+inference:
+  enabled: true
+  base_url: "https://api.iamphuckhang.dev"
+  timeout_seconds: 10
+  local_embedding_fallback: true

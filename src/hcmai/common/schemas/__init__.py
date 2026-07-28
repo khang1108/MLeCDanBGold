@@ -10,6 +10,15 @@ from .conversation import (
 from .enum import *
 from .frame import FrameEnrichment, FrameRecord
 from .kisc import KISCSearchRequest, KISCSearchResponse
+from .inference import (
+    ConversationInferenceRequest,
+    InferenceReadiness,
+    ModelStatus,
+    RerankItem,
+    RerankResponse,
+    TextEmbeddingRequest,
+    TextEmbeddingResponse,
+)
 from .retrieval import RetrievalCandidate, SearchScores
 from .search import (
     SearchFilters,
@@ -54,6 +63,13 @@ __all__ = [
     "FrameEnrichment",
     "KISCSearchRequest",
     "KISCSearchResponse",
+    "ConversationInferenceRequest",
+    "InferenceReadiness",
+    "ModelStatus",
+    "RerankItem",
+    "RerankResponse",
+    "TextEmbeddingRequest",
+    "TextEmbeddingResponse",
     "VQAEvidence",
     "VQARequest",
     "VQAResponse",
