@@ -13,7 +13,9 @@ const TabNavigation = ({ activeTab, onSelectTab }) => {
       </button>
       <button
         type="button"
-        className={`tab-button ${activeTab === "ad_hoc" ? "active" : ""}`}
+        className={`tab-button ${
+          activeTab === "ad_hoc" || activeTab === "adhoc" ? "active" : ""
+        }`}
         onClick={() => onSelectTab("ad_hoc")}
       >
         Ad-hoc Search

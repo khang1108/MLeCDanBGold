@@ -16,6 +16,9 @@ const ConversationPanel = ({
   setQuery,
   onSubmit,
   canSubmit,
+  queryInputRef,
+  onFocusQueryInput,
+  onBlurQueryInput,
 }) => (
   <aside className="conversation-panel">
     <ConversationToolbar
@@ -36,6 +39,9 @@ const ConversationPanel = ({
       onSubmit={onSubmit}
       isSubmitting={isPending}
       canSubmit={canSubmit}
+      inputRef={queryInputRef}
+      onFocus={onFocusQueryInput}
+      onBlur={onBlurQueryInput}
     />
   </aside>
 );

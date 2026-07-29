@@ -30,6 +30,15 @@ export const requestJson = async (path, { method = 'GET', body, signal } = {}) =
     throw error;
   }
 
+  if (response.status === 204 || response.status === 205) {
+    if (!response.ok) {
+      const error = new Error(`Request failed with HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return null;
+  }
+
   let payload;
   try {
     payload = await response.json();
