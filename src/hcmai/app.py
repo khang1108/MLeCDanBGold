@@ -11,7 +11,7 @@ import os
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,8 +28,6 @@ from hcmai.common.schemas import (
     SearchRequest,
     SearchResponse,
     SubmissionResult,
-    VQARequest,
-    VQAResponse,
 )
 from hcmai.data import FrameStore
 from hcmai.agents.kisc import ConversationResolver, KISCAgent
@@ -178,17 +176,13 @@ def create_app(
     search_engine: SearchEngine | None = None,
     session_manager: KiscSessionManager | None = None,
     kisc_agent: Any | None = None,
-    vqa_provider: Callable[[FrameRecord, VQARequest], VQAResponse] | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     engine_container: dict[str, Any] = {
         "engine": search_engine,
         "startup_messages": [],
     }
-    provider_container = {
-        "kisc_agent": kisc_agent,
-        "vqa_provider": vqa_provider,
-    }
+    provider_container = {"kisc_agent": kisc_agent}
     if (
         provider_container["kisc_agent"] is None
         and search_engine is not None
@@ -215,12 +209,11 @@ def create_app(
             provider_container["kisc_agent"] = _default_kisc_agent(engine)
         logger.info(
             "Backend startup completed search=%s kisc=%s reranker=%s "
-            "remote_inference=%s vqa=%s messages=%d",
+            "remote_inference=%s messages=%d",
             getattr(engine, "retriever", None) is not None,
             provider_container["kisc_agent"] is not None,
             getattr(engine, "reranker", None) is not None,
             getattr(engine, "inference_client", None) is not None,
-            provider_container["vqa_provider"] is not None,
             len(engine_container["startup_messages"]),
         )
         for message in engine_container["startup_messages"]:
@@ -276,7 +269,6 @@ def create_app(
             "capabilities": {
                 "search": retriever_loaded,
                 "kisc": provider_container["kisc_agent"] is not None,
-                "vqa": provider_container["vqa_provider"] is not None,
                 "frame_assets": frame_store is not None,
             },
             "startup_messages": engine_container["startup_messages"],
@@ -324,42 +316,6 @@ def create_app(
             logger.exception("API KISC request failed unexpectedly")
             raise
         return response
-
-    @app.post("/api/v1/vqa", response_model=VQAResponse)
-    async def answer_vqa(request: VQARequest) -> VQAResponse:
-        """Answer one question through an injected frame-grounded provider."""
-        engine = engine_container["engine"]
-        store = getattr(engine, "frame_store", None)
-        provider = provider_container["vqa_provider"]
-        if store is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Frame store not loaded",
-            )
-        if provider is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="VQA provider not initialized",
-            )
-        try:
-            frame = store.get(request.frame_id)
-        except KeyError as error:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=str(error)
-            ) from error
-        try:
-            response = provider(frame, request)
-            if (
-                response.frame_id != request.frame_id
-                or response.question != request.question
-            ):
-                raise ValueError("VQA provider changed request identity")
-            return response
-        except Exception as error:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"VQA provider failed: {type(error).__name__}",
-            ) from error
 
     @app.get("/api/v1/sessions", response_model=list[str])
     async def list_session_ids() -> list[str]:

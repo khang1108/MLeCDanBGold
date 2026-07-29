@@ -4,7 +4,7 @@ import httpx
 from hcmai.agents.kisc import ConversationResolver, KISCAgent
 from hcmai.app import create_app
 from hcmai.common.schemas import (
-    FrameRecord, RetrievalCandidate, RetrievalSource, VQAEvidence, VQAResponse,
+    FrameRecord, RetrievalCandidate, RetrievalSource,
 )
 from hcmai.search import SearchEngine
 
@@ -42,13 +42,6 @@ def conversation(request):
         "rejected_frame_ids": feedback.get("rejected_frame_ids", []),
     }
 
-def vqa(frame, request):
-    return VQAResponse(
-        request_id="vqa-test", frame_id=frame.frame_id,
-        question=request.question, answer="Provider answer.", grounded=True,
-        model_name="test-provider", latency_ms=1, evidence=VQAEvidence(),
-    )
-
 def request(app, method, path, **kwargs):
     async def send():
         transport = httpx.ASGITransport(app=app)
@@ -58,14 +51,14 @@ def request(app, method, path, **kwargs):
             return await client.request(method, path, **kwargs)
     return asyncio.run(send())
 
-def test_injected_providers_expose_search_kisc_and_vqa_contracts() -> None:
+def test_injected_provider_exposes_search_and_kisc_contracts() -> None:
     store, retriever = Store(), Retriever()
     engine = SearchEngine(store, retriever)
     agent = KISCAgent(ConversationResolver(conversation), engine)
-    app = create_app(engine, kisc_agent=agent, vqa_provider=vqa)
+    app = create_app(engine, kisc_agent=agent)
     health = request(app, "GET", "/health").json()
     assert health["capabilities"] == {
-        "search": True, "kisc": True, "vqa": True, "frame_assets": True,
+        "search": True, "kisc": True, "frame_assets": True,
     }
     search = request(app, "POST", "/api/v1/search", json={"query": "red car"})
     assert search.status_code == 200
@@ -77,12 +70,6 @@ def test_injected_providers_expose_search_kisc_and_vqa_contracts() -> None:
     )
     assert kisc.status_code == 200
     assert kisc.json()["interpreted_state"]["standalone_query"] == "red car"
-    answer = request(
-        app, "POST", "/api/v1/vqa",
-        json={"frame_id": FRAME_ID, "question": "What is visible?"},
-    )
-    assert answer.status_code == 200
-    assert answer.json()["answer"] == "Provider answer."
 
 def test_missing_structured_provider_uses_kisc_fallback() -> None:
     app = create_app(SearchEngine(Store(), Retriever()))
@@ -92,7 +79,3 @@ def test_missing_structured_provider_uses_kisc_fallback() -> None:
     assert response.status_code == 200
     assert response.json()["interpreted_state"]["standalone_query"] == "test"
     assert response.json()["warnings"][0].startswith("Conversation fallback:")
-    assert request(
-        app, "POST", "/api/v1/vqa",
-        json={"frame_id": FRAME_ID, "question": "test"},
-    ).status_code == 503

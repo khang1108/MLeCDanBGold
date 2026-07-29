@@ -70,18 +70,3 @@ export const searchKisc = async ({
   }
   return { ...payload, search: withAssetUrls(payload.search) };
 };
-
-export const answerFrameQuestion = async ({ frameId, question, signal }) => {
-  const payload = await requestJson('/api/v1/vqa', {
-    method: 'POST',
-    body: {
-      frame_id: frameId,
-      question: question.trim(),
-    },
-    signal,
-  });
-  if (!payload?.frame_id || typeof payload.answer !== 'string') {
-    throw new Error('VQA server returned an invalid response contract');
-  }
-  return payload;
-};
