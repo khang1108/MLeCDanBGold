@@ -60,20 +60,6 @@ export const useSearchWorkspace = ({ session, topK, draftFeedback, feedbackDirty
           },
           interpreted_state: response.interpreted_state,
         });
-        if (query) {
-          const response = await searchFrames({
-            query, topK, searchMode,
-            sessionId: activeSession.session_id, feedback: feedbackDirty ? draftFeedback : undefined,
-          });
-          setResults(response.results);
-          setWarnings(response.warnings || []);
-          setLatencyMs(response.latency_ms);
-          setLastRequestId(response.request_id || null);
-          setSession(await getSession(activeSession.session_id));
-          return true;
-        }
-        setSession(await updateFeedback(activeSession.session_id, draftFeedback));
-        return true;
       } catch (requestError) {
         setError(requestError.message || 'Could not contact the search API.');
         return false;
