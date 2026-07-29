@@ -135,6 +135,22 @@ def test_list_session_ids_endpoint(api_app: FastAPI) -> None:
     assert response.json() == [first, second]
 
 
+def test_delete_session_endpoint(api_app: FastAPI) -> None:
+    """Delete an exact session and report an unknown ID."""
+    session_id = request(
+        api_app, "POST", "/api/v1/session"
+    ).json()["session_id"]
+
+    deleted = request(api_app, "DELETE", f"/api/v1/session/{session_id}")
+
+    assert deleted.status_code == 204
+    assert deleted.content == b""
+    assert request(api_app, "GET", "/api/v1/sessions").json() == []
+    missing = request(api_app, "DELETE", f"/api/v1/session/{session_id}")
+    assert missing.status_code == 404
+    assert session_id in missing.json()["detail"]
+
+
 def test_missing_artifacts_do_not_prevent_startup(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

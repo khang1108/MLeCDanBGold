@@ -376,6 +376,20 @@ def create_app(
                 status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
             ) from e
 
+    @app.delete(
+        "/api/v1/session/{session_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    async def delete_session(session_id: str) -> None:
+        """Delete one KISC conversation session by its exact ID."""
+        try:
+            kisc_manager.delete_session(session_id)
+        except KeyError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(error),
+            ) from error
+
     @app.post("/api/v1/feedback", response_model=ConversationSession)
     async def update_feedback(
         session_id: str,

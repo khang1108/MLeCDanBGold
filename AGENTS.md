@@ -68,6 +68,71 @@
 - VKIS and conversational KIS remain product/research requirements until an
   official 2026 competition source confirms their scoring and submission rules.
 
+## DOs and DON'Ts
+
+### DOs
+
+- Inspect the relevant code, tests, artifacts, and official competition source
+  before proposing or implementing a change.
+- Distinguish confirmed 2025 rules, user-provided 2026 working definitions, and
+  unresolved 2026 assumptions in code, reports, and experiments.
+- Ask the user when a missing rule, corpus detail, or product decision would
+  materially change the implementation or evaluation.
+- Preserve the canonical `frame_id` → `video_id` → `frame_idx` mapping through
+  retrieval, reranking, temporal alignment, UI display, and submission export.
+- Optimize and report the official Mean Top-k R-Score at
+  `{1,5,20,50,100}` alongside task metrics, Recall, MRR, and P50/P95 latency.
+- Use the `fast` profile for the default competition path and measure
+  query-to-first-useful-results plus end-to-end operator throughput.
+- Route standalone Textual KIS and initial VKIS descriptions directly to
+  retrieval; invoke conversation resolution only for context-dependent turns.
+- Handle feedback-only KISC turns deterministically and keep accepted/rejected
+  frame state outside generative model control.
+- Retrieve temporal windows for TRAKE, preserve same-video and event-order
+  constraints, and jointly align the complete event sequence.
+- Reuse authoritative schemas and shared `RetrievalCandidate` objects across
+  data preparation, retrieval, reranking, orchestration, API, and frontend.
+- Keep experiments reproducible with pinned checkpoints, configs, predictions,
+  failures, official metrics, and latency measurements under `runs/`.
+- Use fake models and tiny fixtures in tests; update focused tests and docs when
+  public behavior or competition contracts change.
+- Preserve unrelated worktree changes and keep changes within the requested
+  files and task scope.
+- Treat GLM-class thinking models as offline teachers or measured accurate-mode
+  components unless they satisfy the competition latency and reliability budget.
+
+### DON'Ts
+
+- Do not guess competition rules, scorer normalization, dataset structure,
+  frame sampling policy, or user intent.
+- Do not infer `frame_idx` from timestamps, FPS, filenames, array positions, or
+  neighboring frames.
+- Do not route every query through KISC, an LLM, a VLM, or `/resolve`.
+- Do not place unbounded reasoning, model loading, network calls, or synchronous
+  generation on the default critical path without a timeout and deterministic
+  fallback.
+- Do not treat TRAKE events as unrelated static-image queries or combine event
+  frames from different predicted videos in one row.
+- Do not allow a reranker, resolver, or VQA provider to rewrite candidate/frame
+  identity.
+- Do not duplicate authoritative schemas, invent frontend-only fields, or add
+  parallel contracts for the same task.
+- Do not rewrite stable mapping, embedding, or FAISS artifact foundations
+  without an evidence-backed compatibility or performance reason.
+- Do not call a component competition-ready solely because its schema, mock
+  test, or endpoint exists; require an end-to-end path and recorded metrics.
+- Do not optimize only Recall@1/5 or report a retrieval improvement without the
+  official score and latency trade-off.
+- Do not commit datasets, videos, frames, model weights, embeddings, indexes,
+  run outputs, credentials, Cloudflare tokens, or private deployment scripts.
+- Do not add auth, databases, microservices, containers, retries, circuit
+  breakers, generalized plugin systems, premature factories/DI, or base classes
+  without explicit approval and demonstrated need.
+- Do not download checkpoints, load the real corpus, or depend on live remote
+  services in unit tests.
+- Do not expand a research prototype into production code before it has a
+  notebook result and a second demonstrated use.
+
 ## Package Managers
 
 - Python: use the repository virtual environment at `aic/`; install with

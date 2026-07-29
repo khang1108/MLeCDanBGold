@@ -71,6 +71,11 @@ class KiscSessionManager:
         """Return all known session IDs in creation order."""
         return list(self.sessions)
 
+    def delete_session(self, session_id: str) -> None:
+        """Delete one existing session by its exact ID."""
+        self.get_session(session_id)
+        del self.sessions[session_id]
+
     def update_feedback(
         self,
         session_id: str,
