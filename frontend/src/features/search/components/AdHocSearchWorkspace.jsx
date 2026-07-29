@@ -8,6 +8,7 @@ import GifLoaderOverlay from "./GifLoaderOverlay";
 const AdHocSearchWorkspace = ({
   topK,
   setTopK,
+  queryType,
   onFrameClick,
   queryInputRef,
   onFocusQueryInput,
@@ -32,6 +33,7 @@ const AdHocSearchWorkspace = ({
         const response = await searchFrames({
           query: trimmed,
           topK,
+          queryType,
         });
         setResults(response.results || []);
         setWarnings(response.warnings || []);
@@ -42,7 +44,7 @@ const AdHocSearchWorkspace = ({
         setIsSearching(false);
       }
     },
-    [isSearching, query, topK],
+    [isSearching, query, queryType, topK],
   );
 
   const handleResetOptions = useCallback(() => {

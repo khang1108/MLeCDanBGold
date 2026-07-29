@@ -3,10 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 export const useVimMode = ({
   activeTab,
   setActiveTab,
-  searchMode,
-  setSearchMode,
   topK,
   setTopK,
+  queryType,
+  setQueryType,
   onNewSession,
   onToggleHistory,
   onToggleOptions,
@@ -62,7 +62,23 @@ export const useVimMode = ({
 
       // --- NORMAL MODE KEYBINDINGS ---
 
-      // 1. Tab -> Switch between Conversation & AdHoc tabs
+      // 1. Keys 1 -> 5: Select Query Type ('kis', 'kisc', 'vkis', 'vqa', 'trake')
+      if (["1", "2", "3", "4", "5"].includes(event.key)) {
+        event.preventDefault();
+        const typeMap = {
+          1: "kis",
+          2: "kisc",
+          3: "vkis",
+          4: "vqa",
+          5: "trake",
+        };
+        if (typeMap[event.key]) {
+          setQueryType?.(typeMap[event.key]);
+        }
+        return;
+      }
+
+      // 2. Tab -> Switch between Conversation & AdHoc tabs
       if (event.key === "Tab") {
         event.preventDefault();
         setActiveTab((prev) =>
@@ -71,24 +87,17 @@ export const useVimMode = ({
         return;
       }
 
-      // 2. / -> Focus search query input and enter INSERT mode
+      // 3. / -> Focus search query input and enter INSERT mode
       if (event.key === "/") {
         event.preventDefault();
         enterInsertMode();
         return;
       }
 
-      // 3. t -> Open Top-K quick edit dialog
+      // 4. t -> Open Top-K quick edit dialog
       if (event.key.toLowerCase() === "t") {
         event.preventDefault();
         setIsTopKOpen(true);
-        return;
-      }
-
-      // 4. a -> Toggle Search Mode ('accurate' <-> 'fast')
-      if (event.key.toLowerCase() === "a") {
-        event.preventDefault();
-        setSearchMode((prev) => (prev === "accurate" ? "fast" : "accurate"));
         return;
       }
 
@@ -134,7 +143,7 @@ export const useVimMode = ({
     onToggleHistory,
     onToggleOptions,
     setActiveTab,
-    setSearchMode,
+    setQueryType,
   ]);
 
   return {

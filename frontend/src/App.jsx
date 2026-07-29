@@ -17,6 +17,7 @@ import { useVimMode } from "./features/vim/hooks/useVimMode";
 import VimModeBadge from "./features/vim/components/VimModeBadge";
 import TopKPromptModal from "./features/vim/components/TopKPromptModal";
 import VimHelpModal from "./features/vim/components/VimHelpModal";
+import QueryTypeBadge from "./features/search/components/QueryTypeBadge";
 import { deleteSession } from "./api/sessions";
 import "./styles/gif-loader.css";
 import "./styles/vim.css";
@@ -31,8 +32,7 @@ function App() {
   const [deleteTargetId, setDeleteTargetId] = useState(null);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [topK, setTopK] = useState(20);
-  const initialRequestRef = useRef(false);
-  const [searchMode, setSearchMode] = useState("accurate");
+  const [queryType, setQueryType] = useState("kis");
   const queryInputRef = useRef(null);
   const adhocQueryInputRef = useRef(null);
   const { isHealthy, healthData, isChecking } = useHealthCheck();
@@ -44,6 +44,7 @@ function App() {
   const search = useSearchWorkspace({
     session,
     topK,
+    queryType,
     draftFeedback: feedback.draftFeedback,
     feedbackDirty: feedback.feedbackDirty,
     runRequest,
@@ -88,10 +89,10 @@ function App() {
   const vim = useVimMode({
     activeTab,
     setActiveTab,
-    searchMode,
-    setSearchMode,
     topK,
     setTopK,
+    queryType,
+    setQueryType,
     onNewSession: createSession,
     onToggleHistory: () => {
       if (isHistoryOpen) setIsHistoryOpen(false);
@@ -181,6 +182,7 @@ function App() {
             healthData={healthData}
             isChecking={isChecking}
           />
+          <QueryTypeBadge queryType={queryType} setQueryType={setQueryType} />
           <VimModeBadge
             mode={vim.mode}
             onToggleMode={() =>
@@ -230,6 +232,7 @@ function App() {
           <AdHocSearchWorkspace
             topK={topK}
             setTopK={setTopK}
+            queryType={queryType}
             onFrameClick={setSelectedFrame}
             queryInputRef={adhocQueryInputRef}
             onFocusQueryInput={() => vim.setMode("INSERT")}
