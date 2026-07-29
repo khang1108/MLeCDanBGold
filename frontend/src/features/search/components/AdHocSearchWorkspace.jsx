@@ -11,6 +11,9 @@ const AdHocSearchWorkspace = ({
   searchMode,
   setSearchMode,
   onFrameClick,
+  queryInputRef,
+  onFocusQueryInput,
+  onBlurQueryInput,
 }) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -69,11 +72,14 @@ const AdHocSearchWorkspace = ({
             />
           </svg>
           <input
+            ref={queryInputRef}
             type="text"
             className="input-text query-input-field"
-            placeholder="Search frames by keyword or visual description..."
+            placeholder="Search frames by keyword or press '/' to search..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onFocus={onFocusQueryInput}
+            onBlur={onBlurQueryInput}
             disabled={isSearching}
           />
         </div>

@@ -1,7 +1,16 @@
 import React from "react";
 
 // Lets Send submit either a text query or a dirty feedback-only draft.
-const QueryInput = ({ query, setQuery, onSubmit, isSubmitting, canSubmit }) => (
+const QueryInput = ({
+  query,
+  setQuery,
+  onSubmit,
+  isSubmitting,
+  canSubmit,
+  inputRef,
+  onFocus,
+  onBlur,
+}) => (
   <form
     onSubmit={(event) => {
       event.preventDefault();
@@ -25,10 +34,13 @@ const QueryInput = ({ query, setQuery, onSubmit, isSubmitting, canSubmit }) => (
         />
       </svg>
       <input
+        ref={inputRef}
         type="text"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Ask a question or refine the current search..."
+        onFocus={onFocus}
+        onBlur={onBlur}
+        placeholder="Ask a question or press '/' to search..."
         className="input-text query-input-field"
         disabled={isSubmitting}
       />

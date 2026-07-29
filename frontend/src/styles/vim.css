@@ -1,0 +1,167 @@
+/* ─────────────────────────────────────────────────────────── */
+/* VIM MODE & KEYBINDINGS STYLES                               */
+/* ─────────────────────────────────────────────────────────── */
+
+.vim-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  transition: all 0.2s ease;
+  user-select: none;
+  cursor: pointer;
+}
+
+.vim-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Normal mode - Blue */
+.vim-badge.mode-normal {
+  background-color: rgba(0, 117, 222, 0.12);
+  color: #0075de;
+  border: 1px solid rgba(0, 117, 222, 0.3);
+}
+
+.vim-badge.mode-normal .vim-dot {
+  background-color: #0075de;
+  box-shadow: 0 0 6px rgba(0, 117, 222, 0.6);
+}
+
+/* Insert mode - Green */
+.vim-badge.mode-insert {
+  background-color: rgba(26, 174, 57, 0.12);
+  color: #1aae39;
+  border: 1px solid rgba(26, 174, 57, 0.3);
+}
+
+.vim-badge.mode-insert .vim-dot {
+  background-color: #1aae39;
+  box-shadow: 0 0 6px rgba(26, 174, 57, 0.6);
+}
+
+/* TopK Prompt Modal */
+.vim-prompt-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg, 16px);
+  box-shadow: var(--shadow-level-2);
+  width: min(90vw, 360px);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: scaleIn 0.18s cubic-bezier(0.2, 0.8, 0.2, 1.15);
+}
+
+.vim-prompt-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vim-prompt-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-primary);
+  text-transform: uppercase;
+}
+
+.vim-prompt-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.vim-prompt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vim-prompt-input {
+  width: 100%;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  padding: 10px;
+  border-radius: var(--rounded-md, 8px);
+}
+
+.vim-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Vim Help Cheat Sheet Modal */
+.vim-help-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg, 16px);
+  box-shadow: var(--shadow-level-2);
+  width: min(90vw, 540px);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: scaleIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1.15);
+}
+
+.vim-help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.vim-help-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.vim-shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+}
+
+.vim-shortcuts-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.vim-shortcuts-table td {
+  padding: 10px 0;
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.vim-kbd {
+  display: inline-block;
+  padding: 3px 8px;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-ink);
+  background-color: var(--color-canvas-soft, #f6f5f4);
+  border: 1px solid var(--color-hairline, #e6e6e6);
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+}

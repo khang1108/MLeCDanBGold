@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import ConversationPanel from "./features/conversation/components/ConversationPanel";
 import { useRequestGuard } from "./features/conversation/hooks/useRequestGuard";
 import { useConversationSession } from "./features/conversation/hooks/useConversationSession";
@@ -13,8 +13,13 @@ import OptionsDrawer from "./features/search-controls/components/OptionsDrawer";
 import { useHealthCheck } from "./features/health/hooks/useHealthCheck";
 import HealthBadge from "./features/health/components/HealthBadge";
 import DeleteSessionModal from "./features/conversation/components/DeleteSessionModal";
+import { useVimMode } from "./features/vim/hooks/useVimMode";
+import VimModeBadge from "./features/vim/components/VimModeBadge";
+import TopKPromptModal from "./features/vim/components/TopKPromptModal";
+import VimHelpModal from "./features/vim/components/VimHelpModal";
 import { deleteSession } from "./api/sessions";
 import "./styles/gif-loader.css";
+import "./styles/vim.css";
 
 // App composes features; endpoint and state details live in their owning hooks.
 function App() {
@@ -27,6 +32,8 @@ function App() {
   const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [topK, setTopK] = useState(20);
   const [searchMode, setSearchMode] = useState("accurate");
+  const queryInputRef = useRef(null);
+  const adhocQueryInputRef = useRef(null);
   const { isHealthy, healthData, isChecking } = useHealthCheck();
   const { isPending, runRequest } = useRequestGuard();
   const { session, sessionError, create, load, setSession } =
@@ -77,6 +84,32 @@ function App() {
     },
     [load, resetWorkspace],
   );
+
+  const vim = useVimMode({
+    activeTab,
+    setActiveTab,
+    searchMode,
+    setSearchMode,
+    topK,
+    setTopK,
+    onNewSession: createSession,
+    onToggleHistory: () => {
+      if (isHistoryOpen) setIsHistoryOpen(false);
+      else {
+        setIsHistoryOpen(true);
+        history.loadHistory();
+      }
+    },
+    onToggleOptions: () => setIsOptionsOpen((prev) => !prev),
+    onCloseAllModals: () => {
+      setIsOptionsOpen(false);
+      setIsHistoryOpen(false);
+      setSelectedFrame(null);
+      setDeleteTargetId(null);
+    },
+    queryInputRef,
+    adhocQueryInputRef,
+  });
 
   const handleDeleteRequest = useCallback((targetId) => {
     setDeleteTargetId(targetId);
@@ -149,6 +182,14 @@ function App() {
             healthData={healthData}
             isChecking={isChecking}
           />
+          <VimModeBadge
+            mode={vim.mode}
+            onToggleMode={() =>
+              vim.mode === "NORMAL"
+                ? vim.enterInsertMode()
+                : vim.enterNormalMode()
+            }
+          />
         </div>
         <TabNavigation activeTab={activeTab} onSelectTab={setActiveTab} />
       </header>
@@ -166,6 +207,9 @@ function App() {
               setQuery={setQuery}
               onSubmit={submit}
               canSubmit={Boolean(query.trim()) || feedback.feedbackDirty}
+              queryInputRef={queryInputRef}
+              onFocusQueryInput={() => vim.setMode("INSERT")}
+              onBlurQueryInput={() => vim.setMode("NORMAL")}
             />
             <section className="results-workspace">
               <FramesBox
@@ -190,6 +234,9 @@ function App() {
             searchMode={searchMode}
             setSearchMode={setSearchMode}
             onFrameClick={setSelectedFrame}
+            queryInputRef={adhocQueryInputRef}
+            onFocusQueryInput={() => vim.setMode("INSERT")}
+            onBlurQueryInput={() => vim.setMode("NORMAL")}
           />
         </main>
       )}
@@ -217,6 +264,16 @@ function App() {
         onConfirm={handleConfirmDelete}
         onClose={() => setDeleteTargetId(null)}
         isDeleting={isDeletingSession}
+      />
+      <TopKPromptModal
+        isOpen={vim.isTopKOpen}
+        currentTopK={topK}
+        onSave={setTopK}
+        onClose={() => vim.setIsTopKOpen(false)}
+      />
+      <VimHelpModal
+        isOpen={vim.isHelpOpen}
+        onClose={() => vim.setIsHelpOpen(false)}
       />
     </div>
   );
