@@ -252,12 +252,13 @@ and CaptionStore indexing:
 ```bash
 sudo bash /home/ubuntu/deploy_cloudflared_private.sh \
   --caption true \
-  --embedding true
+  --caption-embedding true
 ```
 
-The private bootstrap also accepts `--reranker true` and
-`--conversation true`. All four model flags default to `false`, and disabled
-models are not loaded into VRAM.
+The private bootstrap also accepts `--visual-embedding true`,
+`--reranker true`, and `--conversation true`. All five model flags default to
+`false`, and disabled models are not loaded into VRAM. Visual embedding uses
+SigLIP2; caption embedding uses BGE-M3.
 
 The script clones the configured repository into `/opt/hcmai/repo`, installs
 the Python environment and a Python 3.12-compatible Supervisor, downloads the

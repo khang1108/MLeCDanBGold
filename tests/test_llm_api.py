@@ -184,7 +184,8 @@ def test_runtime_does_not_construct_or_require_disabled_models():
     runtime = LLMRuntime(
         LLMServiceConfig(),
         enable_caption=False,
-        enable_embedding=False,
+        enable_visual_embedding=False,
+        enable_caption_embedding=False,
         enable_reranker=False,
         enable_conversation=False,
     )

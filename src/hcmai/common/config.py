@@ -39,10 +39,12 @@ class DatasetConfig(BaseModel):
 class EncoderConfig(BaseModel):
     """Configuration for the dense visual encoder."""
 
+    backend: Literal["siglip", "bge_m3"] = "siglip"
     model_name: str = "google/siglip2-base-patch16-224"
     device: str = "cpu"
     batch_size: int = 32
     image_size: int = 224
+    max_length: int = 8192
     dtype: str = "float32"
     precision: str = "fp32"
 
@@ -54,10 +56,12 @@ class EncoderConfig(BaseModel):
             data["model_name"] = data["name"]
         default_inst = cls()
         return cls(
+            backend=data.get("backend", default_inst.backend),
             model_name=data.get("model_name", default_inst.model_name),
             device=data.get("device", default_inst.device),
             batch_size=data.get("batch_size", default_inst.batch_size),
             image_size=data.get("image_size", default_inst.image_size),
+            max_length=data.get("max_length", default_inst.max_length),
             dtype=data.get("dtype", default_inst.dtype),
             precision=data.get("precision", default_inst.precision),
         )

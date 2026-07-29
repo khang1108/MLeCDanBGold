@@ -74,7 +74,10 @@ PYTHONPATH=src aic/bin/python scripts/build_caption_index.py \
 It writes `caption_embeddings.npy`, `dense.index`,
 `frame_mapping.parquet`, and `metadata.json` under the output directory.
 With hosted inference enabled, caption text is embedded remotely in batches of
-at most 64 while all vectors, mappings, and FAISS files remain local.
+at most 64 with the configured BGE-M3 encoder while all vectors, mappings, and
+FAISS files remain local. Changing from the prior SigLIP2 caption encoder
+requires rebuilding this entire caption index; the two vector spaces are not
+compatible.
 
 ## Rebuild only the index
 

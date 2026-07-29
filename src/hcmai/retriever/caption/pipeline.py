@@ -10,7 +10,7 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.data import CaptionStore, FrameStore
 from hcmai.llm.config import LLMServiceConfig
 from hcmai.retriever.caption.retriever import build_caption_index
-from hcmai.retriever.dense import DenseEncoder, DenseIndex, TextEncoder
+from hcmai.retriever.dense import DenseIndex, TextEncoder, create_text_encoder
 
 logger = get_logger(__name__)
 
@@ -54,7 +54,7 @@ def build_caption_artifacts(
                 "batch_size": settings.inference.local_fallback_batch_size,
             }
         )
-        local = DenseEncoder(local_config)
+        local = create_text_encoder(local_config)
         if settings.inference.enabled:
             from hcmai.llm.client import InferenceClient, RemoteDenseEncoder
 

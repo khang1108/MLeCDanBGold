@@ -42,7 +42,11 @@ from hcmai.reranking import (
     RerankerConfig as PipelineRerankerConfig,
 )
 from hcmai.retriever.caption import CaptionRetriever
-from hcmai.retriever.dense import DenseEncoder, DenseIndex, DenseRetriever
+from hcmai.retriever.dense import (
+    DenseIndex,
+    DenseRetriever,
+    create_text_encoder,
+)
 from hcmai.retriever.fusion import RRFFusionRetriever
 from hcmai.search import SearchEngine
 
@@ -196,7 +200,7 @@ def _build_query_encoder(
             "batch_size": settings.inference.local_fallback_batch_size,
         }
     )
-    local = DenseEncoder(local_config)
+    local = create_text_encoder(local_config)
     if client is None:
         return local
     fallback = local if settings.inference.local_embedding_fallback else None

@@ -14,7 +14,7 @@ from hcmai.enrichment.caption.backend import FrameCaptioner
 from hcmai.llm.config import LLMServiceConfig
 from hcmai.llm.conversation import StructuredConversationModel
 from hcmai.reranking.qwen import QwenRerankerConfig, QwenRerankerScorer
-from hcmai.retriever.dense import DenseEncoder
+from hcmai.retriever.dense import DenseEncoder, create_text_encoder
 
 
 class LLMRuntime:
@@ -30,25 +30,25 @@ class LLMRuntime:
         conversation: Any | None = None,
         *,
         enable_caption: bool = True,
-        enable_embedding: bool = True,
+        enable_visual_embedding: bool = True,
+        enable_caption_embedding: bool = True,
         enable_reranker: bool = True,
         enable_conversation: bool = True,
     ) -> None:
         self.config = config
         self.enable_caption = enable_caption
-        self.enable_embedding = enable_embedding
+        self.enable_visual_embedding = enable_visual_embedding
+        self.enable_caption_embedding = enable_caption_embedding
         self.enable_reranker = enable_reranker
         self.enable_conversation = enable_conversation
         self.visual_encoder = visual_encoder or (
-            DenseEncoder(config.visual_embedding) if enable_embedding else None
+            DenseEncoder(config.visual_embedding)
+            if enable_visual_embedding
+            else None
         )
         self.caption_encoder = caption_encoder or (
-            (
-                self.visual_encoder
-                if config.caption_embedding == config.visual_embedding
-                else DenseEncoder(config.caption_embedding)
-            )
-            if enable_embedding
+            create_text_encoder(config.caption_embedding)
+            if enable_caption_embedding
             else None
         )
         self.captioner = captioner or (
@@ -78,7 +78,12 @@ class LLMRuntime:
         return cls(
             config,
             enable_caption=_env_bool("HCMAI_ENABLE_CAPTION"),
-            enable_embedding=_env_bool("HCMAI_ENABLE_EMBEDDING"),
+            enable_visual_embedding=_env_bool(
+                "HCMAI_ENABLE_VISUAL_EMBEDDING"
+            ),
+            enable_caption_embedding=_env_bool(
+                "HCMAI_ENABLE_CAPTION_EMBEDDING"
+            ),
             enable_reranker=_env_bool("HCMAI_ENABLE_RERANKER"),
             enable_conversation=_env_bool("HCMAI_ENABLE_CONVERSATION"),
         )
@@ -143,7 +148,8 @@ class LLMRuntime:
         )
         return InferenceReadiness(
             ready=(not self.enable_caption or generator_loaded)
-            and (not self.enable_embedding or visual_loaded and caption_loaded)
+            and (not self.enable_visual_embedding or visual_loaded)
+            and (not self.enable_caption_embedding or caption_loaded)
             and (not self.enable_reranker or reranker_loaded)
             and (not self.enable_conversation or conversation_loaded),
             models={
@@ -158,12 +164,12 @@ class LLMRuntime:
                     ),
                 ),
                 "visual_embedding": ModelStatus(
-                    enabled=self.enable_embedding,
+                    enabled=self.enable_visual_embedding,
                     loaded=visual_loaded,
                     checkpoint=self.config.visual_embedding.model_name,
                 ),
                 "caption_embedding": ModelStatus(
-                    enabled=self.enable_embedding,
+                    enabled=self.enable_caption_embedding,
                     loaded=caption_loaded,
                     checkpoint=self.config.caption_embedding.model_name,
                 ),

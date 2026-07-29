@@ -54,8 +54,7 @@ Importing this package does not load model weights. In production:
 
 1. `LLMRuntime.from_environment()` reads `llm/config.yaml`.
 2. The FastAPI lifespan calls `runtime.load()` once.
-3. The visual encoder, caption encoder, reranker, and configured conversation
-   model stay in memory.
+3. Only enabled model groups stay in memory.
 4. Every request reuses those instances.
 
 Run exactly one Uvicorn worker. Additional workers duplicate all model weights
@@ -70,7 +69,7 @@ Conversation inference is optional when `conversation.checkpoint` is `null`.
 The checked-in [`llm/config.yaml`](../../../llm/config.yaml) configures:
 
 - `google/siglip2-base-patch16-224` for visual-query embeddings;
-- `google/siglip2-base-patch16-224` as the caption control encoder;
+- `BAAI/bge-m3` for multilingual caption/query dense embeddings;
 - `Qwen/Qwen3-VL-Reranker-2B` for image-query reranking;
 - `zai-org/GLM-4.1V-9B-Thinking` for KISC state resolution.
 
@@ -80,6 +79,8 @@ Relevant environment variables are:
 | --- | --- | --- |
 | `HCMAI_LLM_CONFIG` | GPU service | YAML path; defaults to `llm/config.yaml` |
 | `HCMAI_CONVERSATION_MODEL` | GPU service | Non-empty checkpoint override |
+| `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load SigLIP2 visual/query encoder |
+| `HCMAI_ENABLE_CAPTION_EMBEDDING` | GPU service | Load BGE-M3 caption/query encoder |
 | `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted API base URL |
 | `HCMAI_CF_ACCESS_CLIENT_ID` | Local backend | Cloudflare service credential |
 | `HCMAI_CF_ACCESS_CLIENT_SECRET` | Local backend | Cloudflare service credential |

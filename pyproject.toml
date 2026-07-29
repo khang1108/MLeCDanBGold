@@ -26,6 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 embedding = [
+    "sentence-transformers>=3.0, <6.0",
     "transformers>=4.30",
     "torch>=2.0",
 ]

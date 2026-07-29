@@ -36,8 +36,10 @@ def test_llm_config_is_the_model_authority() -> None:
     )
     assert (
         config.caption_embedding.model_name
-        == "google/siglip2-base-patch16-224"
+        == "BAAI/bge-m3"
     )
+    assert config.visual_embedding.backend == "siglip"
+    assert config.caption_embedding.backend == "bge_m3"
     assert config.reranker.checkpoint == "Qwen/Qwen3-VL-Reranker-2B"
 
 

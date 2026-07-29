@@ -48,13 +48,14 @@ default to `false`. For caption generation and CaptionStore indexing:
 ```bash
 sudo bash /home/ubuntu/deploy_cloudflared_private.sh \
   --caption true \
-  --embedding true
+  --caption-embedding true
 ```
 
-Available flags are `--caption`, `--embedding`, `--reranker`, and
-`--conversation`; each accepts exactly `true` or `false`. Disabled models are
-not constructed, downloaded, or loaded into VRAM. Use `--help` to print the
-current options.
+Available flags are `--caption`, `--visual-embedding`,
+`--caption-embedding`, `--reranker`, and `--conversation`; each accepts exactly
+`true` or `false`. Visual embedding hosts SigLIP2. Caption embedding hosts
+BGE-M3. Disabled models are not constructed, downloaded, or loaded into VRAM.
+Use `--help` to print the current options.
 
 The bootstrap clones the configured repository and branch into
 `/opt/hcmai/repo`, installs all required packages, downloads model checkpoints,
