@@ -1,15 +1,27 @@
-import { createSession, getSession, listSessions, updateFeedback } from './sessions';
+import { createSession, deleteSession, getSession, listSessions, updateFeedback } from './sessions';
 
 const response = (payload, status = 200) => ({ ok: status >= 200 && status < 300, status, json: jest.fn().mockResolvedValue(payload) });
 afterEach(() => jest.restoreAllMocks());
 
 test('uses the published session, history, and feedback routes', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({ session_id: 'kisc_sess_1234' }));
-  await createSession('problem A'); await listSessions(); await getSession('kisc_sess_1234'); await updateFeedback('kisc_sess_1234', { accepted_frame_ids: ['frame_A'], rejected_frame_ids: [] });
+  jest.spyOn(global, 'fetch')
+    .mockResolvedValueOnce(response({ session_id: 'kisc_sess_1234' }))
+    .mockResolvedValueOnce(response(['kisc_sess_1234']))
+    .mockResolvedValueOnce(response({ session_id: 'kisc_sess_1234' }))
+    .mockResolvedValueOnce(response({ session_id: 'kisc_sess_1234' }))
+    .mockResolvedValueOnce({ ok: true, status: 204, json: jest.fn() });
+
+  await createSession('problem A');
+  await listSessions();
+  await getSession('kisc_sess_1234');
+  await updateFeedback('kisc_sess_1234', { accepted_frame_ids: ['frame_A'], rejected_frame_ids: [] });
+  await deleteSession('kisc_sess_1234');
+
   expect(global.fetch).toHaveBeenNthCalledWith(1, 'http://127.0.0.1:8000/api/v1/session?problem_id=problem%20A', expect.objectContaining({ method: 'POST' }));
   expect(global.fetch).toHaveBeenNthCalledWith(2, 'http://127.0.0.1:8000/api/v1/sessions', expect.objectContaining({ method: 'GET' }));
   expect(global.fetch).toHaveBeenNthCalledWith(3, 'http://127.0.0.1:8000/api/v1/session/kisc_sess_1234', expect.objectContaining({ method: 'GET' }));
   expect(global.fetch).toHaveBeenNthCalledWith(4, 'http://127.0.0.1:8000/api/v1/feedback?session_id=kisc_sess_1234', expect.objectContaining({ method: 'POST', body: JSON.stringify({ accepted_frame_ids: ['frame_A'], rejected_frame_ids: [] }) }));
+  expect(global.fetch).toHaveBeenNthCalledWith(5, 'http://127.0.0.1:8000/api/v1/session/kisc_sess_1234', expect.objectContaining({ method: 'DELETE' }));
 });
 
 test('normalizes FastAPI, malformed JSON, and network errors', async () => {

@@ -10,6 +10,7 @@ const ConversationToolbar = ({
   onOptions,
   onToggleHistory,
   onSelectHistory,
+  onDeleteHistory,
 }) => (
   <div className="conversation-utility-bar">
     <div className="history-control">
@@ -25,6 +26,7 @@ const ConversationToolbar = ({
           {...history}
           activeId={sessionId}
           onSelect={onSelectHistory}
+          onDeleteRequest={onDeleteHistory}
           disabled={isPending}
         />
       )}

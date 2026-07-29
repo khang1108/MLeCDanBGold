@@ -20,5 +20,9 @@ export const useSessionHistory = () => {
     }
   }, []);
 
-  return { sessionIds, isLoading, error, loadHistory, setError };
+  const removeSessionId = useCallback((targetId) => {
+    setSessionIds((prev) => prev.filter((id) => id !== targetId));
+  }, []);
+
+  return { sessionIds, isLoading, error, loadHistory, removeSessionId, setError };
 };

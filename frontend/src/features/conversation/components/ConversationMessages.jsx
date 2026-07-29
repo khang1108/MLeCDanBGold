@@ -20,11 +20,11 @@ const ConversationMessages = ({ session, sessionError, isPending }) => {
       aria-live="polite"
     >
       {!session && (
-        <div className="conversation-empty">
-          <p>
+        <div className="conversation-empty conversation-welcome">
+          <p className="welcome-subtitle">
             {isPending
               ? "Creating conversation…"
-              : "A conversation is required before searching."}
+              : "Type a query below or click '+ New' to start a session."}
           </p>
           {sessionError && (
             <p className="conversation-error" role="alert">

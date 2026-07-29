@@ -15,9 +15,10 @@ export const useSearchWorkspace = ({ session, topK, searchMode, draftFeedback, f
     setResults([]); setWarnings([]); setLatencyMs(null); setLastRequestId(null); setError(null);
   }, []);
 
-  const submit = useCallback(async (value) => {
-    const query = value.trim();
-    if (!session || (!query && !feedbackDirty)) return false;
+  const submit = useCallback(async (value, overrideSession) => {
+    const activeSession = overrideSession || session;
+    const query = typeof value === 'string' ? value.trim() : '';
+    if (!activeSession || (!query && !feedbackDirty)) return false;
     setError(null);
     setIsSearching(Boolean(query));
 
@@ -26,16 +27,16 @@ export const useSearchWorkspace = ({ session, topK, searchMode, draftFeedback, f
         if (query) {
           const response = await searchFrames({
             query, topK, searchMode,
-            sessionId: session.session_id, feedback: feedbackDirty ? draftFeedback : undefined,
+            sessionId: activeSession.session_id, feedback: feedbackDirty ? draftFeedback : undefined,
           });
           setResults(response.results);
           setWarnings(response.warnings || []);
           setLatencyMs(response.latency_ms);
           setLastRequestId(response.request_id || null);
-          setSession(await getSession(session.session_id));
+          setSession(await getSession(activeSession.session_id));
           return true;
         }
-        setSession(await updateFeedback(session.session_id, draftFeedback));
+        setSession(await updateFeedback(activeSession.session_id, draftFeedback));
         return true;
       } catch (requestError) {
         setError(requestError.message || 'Could not contact the search API.');

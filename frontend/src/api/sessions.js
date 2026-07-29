@@ -17,3 +17,10 @@ export const updateFeedback = (sessionId, feedback, signal) => (
     method: 'POST', body: feedback, signal,
   })
 );
+
+export const deleteSession = (sessionId, signal) => (
+  requestJson(`/api/v1/session/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+    signal,
+  })
+);

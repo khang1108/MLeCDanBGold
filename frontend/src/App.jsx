@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import ConversationPanel from "./features/conversation/components/ConversationPanel";
 import { useRequestGuard } from "./features/conversation/hooks/useRequestGuard";
 import { useConversationSession } from "./features/conversation/hooks/useConversationSession";
@@ -10,6 +10,10 @@ import ImageModal from "./features/frames/components/ImageModal";
 import TabNavigation from "./features/navigation/components/TabNavigation";
 import AdHocSearchWorkspace from "./features/search/components/AdHocSearchWorkspace";
 import OptionsDrawer from "./features/search-controls/components/OptionsDrawer";
+import { useHealthCheck } from "./features/health/hooks/useHealthCheck";
+import HealthBadge from "./features/health/components/HealthBadge";
+import DeleteSessionModal from "./features/conversation/components/DeleteSessionModal";
+import { deleteSession } from "./api/sessions";
 import "./styles/gif-loader.css";
 
 // App composes features; endpoint and state details live in their owning hooks.
@@ -19,9 +23,11 @@ function App() {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [topK, setTopK] = useState(20);
   const [searchMode, setSearchMode] = useState("accurate");
-  const initialRequestRef = useRef(false);
+  const { isHealthy, healthData, isChecking } = useHealthCheck();
   const { isPending, runRequest } = useRequestGuard();
   const { session, sessionError, create, load, setSession } =
     useConversationSession(runRequest);
@@ -72,19 +78,42 @@ function App() {
     [load, resetWorkspace],
   );
 
-  const submit = useCallback(
-    async (value) => {
-      if (await submitSearch(value)) setQuery("");
+  const handleDeleteRequest = useCallback((targetId) => {
+    setDeleteTargetId(targetId);
+  }, []);
+
+  const handleConfirmDelete = useCallback(
+    async (targetId) => {
+      setIsDeletingSession(true);
+      try {
+        await deleteSession(targetId);
+        history.removeSessionId(targetId);
+        if (session?.session_id === targetId) {
+          setSession(null);
+          resetWorkspace();
+        }
+        setDeleteTargetId(null);
+      } catch (err) {
+        // preserve modal for retry if deletion fails
+      } finally {
+        setIsDeletingSession(false);
+      }
     },
-    [submitSearch],
+    [history, resetWorkspace, session?.session_id, setSession],
   );
 
-  useEffect(() => {
-    if (!initialRequestRef.current) {
-      initialRequestRef.current = true;
-      createSession();
-    }
-  }, [createSession]);
+  const submit = useCallback(
+    async (value) => {
+      let activeSession = session;
+      if (!activeSession) {
+        activeSession = await create();
+      }
+      if (activeSession && (await submitSearch(value, activeSession))) {
+        setQuery("");
+      }
+    },
+    [create, session, submitSearch],
+  );
 
   const toolbar = {
     history: { ...history, isOpen: isHistoryOpen },
@@ -98,6 +127,7 @@ function App() {
       }
     },
     onSelectHistory: loadSession,
+    onDeleteHistory: handleDeleteRequest,
   };
   const debug = {
     requestId: lastRequestId,
@@ -114,6 +144,11 @@ function App() {
       <header className="app-header">
         <div className="app-title-group">
           <h1 className="app-title">HCMAI 2026 Frame Retrieval</h1>
+          <HealthBadge
+            isHealthy={isHealthy}
+            healthData={healthData}
+            isChecking={isChecking}
+          />
         </div>
         <TabNavigation activeTab={activeTab} onSelectTab={setActiveTab} />
       </header>
@@ -130,10 +165,7 @@ function App() {
               query={query}
               setQuery={setQuery}
               onSubmit={submit}
-              canSubmit={
-                Boolean(session) &&
-                (Boolean(query.trim()) || feedback.feedbackDirty)
-              }
+              canSubmit={Boolean(query.trim()) || feedback.feedbackDirty}
             />
             <section className="results-workspace">
               <FramesBox
@@ -180,6 +212,12 @@ function App() {
           onClose={() => setSelectedFrame(null)}
         />
       )}
+      <DeleteSessionModal
+        sessionId={deleteTargetId}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTargetId(null)}
+        isDeleting={isDeletingSession}
+      />
     </div>
   );
 }

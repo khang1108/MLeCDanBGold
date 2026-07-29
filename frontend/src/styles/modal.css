@@ -118,3 +118,93 @@
   }
 }
 
+/* Delete Confirmation Modal Styles */
+.delete-modal-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg, 16px);
+  box-shadow: var(--shadow-level-2);
+  width: min(90vw, 420px);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: scaleIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1.15);
+}
+
+.delete-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.delete-modal-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-warning {
+  width: 20px;
+  height: 20px;
+}
+
+.delete-modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.delete-modal-body {
+  font-size: 14px;
+  color: var(--color-ink-secondary);
+  line-height: 1.5;
+}
+
+.delete-session-highlight {
+  color: var(--color-ink);
+  word-break: break-all;
+}
+
+.delete-modal-warning {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+
+.delete-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.btn-danger-subtle {
+  background-color: #fee2e2;
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  padding: 8px 16px;
+  border-radius: var(--rounded-md, 6px);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-danger-subtle:hover:not(:disabled) {
+  background-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.btn-danger-subtle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
