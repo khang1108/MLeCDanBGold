@@ -10,6 +10,7 @@ import ImageModal from "./features/frames/components/ImageModal";
 import TabNavigation from "./features/navigation/components/TabNavigation";
 import AdHocSearchWorkspace from "./features/search/components/AdHocSearchWorkspace";
 import OptionsDrawer from "./features/search-controls/components/OptionsDrawer";
+import "./styles/gif-loader.css";
 
 // App composes features; endpoint and state details live in their owning hooks.
 function App() {

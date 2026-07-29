@@ -14,6 +14,46 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+*,
+*::before,
+*::after,
+html,
+body,
+div,
+span,
+form,
+label,
+input,
+textarea,
+select,
+option,
+optgroup,
+button,
+a,
+p,
+svg,
+path,
+.query-input-field,
+.toolbox-input,
+.toolbox-slider,
+.btn-primary,
+.btn-utility,
+.tab-button,
+.frame-card,
+.conversation-action-btn,
+.history-item,
+.frame-feedback-btn {
+  cursor: url("../../public/nino_cursor_24.png") 12 12, url("../../public/nino_cursor_24.png") 12 12, auto !important;
+}
+
+input::-webkit-slider-thumb {
+  cursor: url("../../public/nino_cursor_24.png") 12 12, url("../../public/nino_cursor_24.png") 12 12, auto !important;
+}
+
+input::-moz-range-thumb {
+  cursor: url("../../public/nino_cursor_24.png") 12 12, url("../../public/nino_cursor_24.png") 12 12, auto !important;
+}
+
 /* Keep the workspace at the browser's natural scale. */
 html,
 #root {
@@ -191,4 +231,3 @@ h3 {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-ink-faint);
 }
-

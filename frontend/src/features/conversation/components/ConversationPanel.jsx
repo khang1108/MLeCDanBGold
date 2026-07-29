@@ -3,6 +3,7 @@ import ConversationToolbar from "./ConversationToolbar";
 import ConversationMessages from "./ConversationMessages";
 import ConversationDebug from "./ConversationDebug";
 import QueryInput from "../../search-controls/components/QueryInput";
+import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 
 // Assembles the narrow conversation column from focused presentation components.
 const ConversationPanel = ({
@@ -22,6 +23,7 @@ const ConversationPanel = ({
       sessionId={session?.session_id}
       isPending={isPending}
     />
+    <GifLoaderOverlay isVisible={isPending} />
     <ConversationMessages
       session={session}
       sessionError={sessionError}

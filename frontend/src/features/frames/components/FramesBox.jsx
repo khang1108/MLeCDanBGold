@@ -14,20 +14,7 @@ const FramesBox = ({
   onFrameClick,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
-  if (isLoading)
-    return (
-      <section className="frames-container">
-        <div className="frames-grid">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div key={index} className="frame-card skeleton">
-              <div className="skeleton-header" />
-              <div className="skeleton-image" />
-              <div className="skeleton-caption" />
-            </div>
-          ))}
-        </div>
-      </section>
-    );
+  if (isLoading) return null;
   return (
     <section className="frames-container">
       {error && (

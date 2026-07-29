@@ -2,6 +2,7 @@ import React, { useCallback, useState } from "react";
 import { searchFrames } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
+import GifLoaderOverlay from "./GifLoaderOverlay";
 
 // Tab 2: Simple ad-hoc query workspace with top query bar and split options/results layout.
 const AdHocSearchWorkspace = ({
@@ -98,6 +99,7 @@ const AdHocSearchWorkspace = ({
         </aside>
 
         <section className="adhoc-results">
+          <GifLoaderOverlay isVisible={isSearching} />
           <FramesBox
             results={results}
             isLoading={isSearching}

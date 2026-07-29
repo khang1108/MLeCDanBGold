@@ -1,0 +1,52 @@
+/* Clean Raw GIF Loader Overlay Styles */
+.gif-loader-overlay {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 32px;
+  width: 100%;
+  animation: gifFadeIn 0.25s ease-out forwards;
+}
+
+@keyframes gifFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.gif-loader-img {
+  max-width: 280px;
+  max-height: 280px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.gif-loader-placeholder {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 120px;
+  width: 100%;
+}
+
+.gif-spinner-ring {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--color-accent, #8b5cf6);
+  border-radius: 50%;
+  animation: spinnerRotate 0.8s linear infinite;
+}
+
+@keyframes spinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
