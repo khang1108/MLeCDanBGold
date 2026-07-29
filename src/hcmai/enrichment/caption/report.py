@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from hcmai.common.schemas import FrameEnrichment, ProcessingStatus
-from hcmai.enrichment.caption.backend import FrameCaptioner
+from hcmai.enrichment.caption.backend import CaptionBackend
 from hcmai.enrichment.caption.config import CaptionConfig, ENRICHMENT_VERSION
 
 
@@ -30,7 +30,7 @@ def build_manifest(
     frames_path: Path,
     root: Path,
     rows: dict[str, FrameEnrichment],
-    captioner: FrameCaptioner,
+    captioner: CaptionBackend,
     started: datetime,
     elapsed: float,
     latencies: list[float],

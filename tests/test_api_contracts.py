@@ -58,7 +58,12 @@ def test_injected_provider_exposes_search_and_kisc_contracts() -> None:
     app = create_app(engine, kisc_agent=agent)
     health = request(app, "GET", "/health").json()
     assert health["capabilities"] == {
-        "search": True, "kisc": True, "frame_assets": True,
+        "search": True,
+        "kisc": True,
+        "frame_assets": True,
+        "query_types": {
+            "kis": True, "vkis": True, "vqa": False, "trake": False,
+        },
     }
     search = request(app, "POST", "/api/v1/search", json={"query": "red car"})
     assert search.status_code == 200
@@ -79,3 +84,14 @@ def test_missing_structured_provider_uses_kisc_fallback() -> None:
     assert response.status_code == 200
     assert response.json()["interpreted_state"]["standalone_query"] == "test"
     assert response.json()["warnings"][0].startswith("Conversation fallback:")
+
+
+def test_kisc_endpoint_rejects_standalone_query_type() -> None:
+    app = create_app(SearchEngine(Store(), Retriever()))
+    response = request(
+        app,
+        "POST",
+        "/api/v1/kisc/search",
+        json={"query_type": "kis", "current_message": "test"},
+    )
+    assert response.status_code == 422

@@ -13,7 +13,12 @@ import numpy as np
 from PIL import Image
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas import RerankResponse, TextEmbeddingResponse
+from hcmai.common.schemas import (
+    CaptionResponse,
+    InferenceReadiness,
+    RerankResponse,
+    TextEmbeddingResponse,
+)
 from hcmai.common.utils.logging import get_logger
 from hcmai.retriever.dense.models import EncodingStats
 
@@ -45,6 +50,25 @@ class InferenceClient:
         )
         return TextEmbeddingResponse.model_validate(payload)
 
+    def readiness(self) -> InferenceReadiness:
+        return InferenceReadiness.model_validate(self._request("GET", "/ready"))
+
+    def caption(self, images: Sequence[Image.Image]) -> CaptionResponse:
+        item_ids = [str(index) for index in range(len(images))]
+        files = [
+            ("images", (f"{item_id}.jpg", _jpeg(image), "image/jpeg"))
+            for item_id, image in zip(item_ids, images)
+        ]
+        payload = self._post(
+            "/v1/captions",
+            data={"item_ids": json.dumps(item_ids)},
+            files=files,
+        )
+        response = CaptionResponse.model_validate(payload)
+        if [item.item_id for item in response.items] != item_ids:
+            raise InferenceClientError("captioner changed item identity or order")
+        return response
+
     def rerank(self, query: str, images: Sequence[Image.Image]) -> list[float]:
         item_ids = [str(index) for index in range(len(images))]
         files = [
@@ -65,10 +89,13 @@ class InferenceClient:
         return self._post("/v1/conversation/resolve", json=request)
 
     def _post(self, path: str, **kwargs: Any) -> Any:
+        return self._request("POST", path, **kwargs)
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         started = perf_counter()
         logger.info("Remote inference request started path=%s", path)
         try:
-            response = self.client.post(path, **kwargs)
+            response = self.client.request(method, path, **kwargs)
             response.raise_for_status()
             payload = response.json()
         except Exception as error:
@@ -111,10 +138,13 @@ class RemoteDenseEncoder:
     ) -> np.ndarray:
         if not texts:
             return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
-        started = perf_counter()
+        started, batches = perf_counter(), []
         try:
-            response = self.client.embed_text(texts, self.source)
-            vectors = self._validate(response, len(texts))
+            for start in range(0, len(texts), min(self.config.batch_size, 64)):
+                batch = texts[start : start + min(self.config.batch_size, 64)]
+                response = self.client.embed_text(batch, self.source)
+                batches.append(self._validate(response, len(batch)))
+            vectors = np.vstack(batches)
         except Exception as error:
             if self.fallback is None:
                 raise
@@ -123,12 +153,7 @@ class RemoteDenseEncoder:
                 "texts=%d error=%s detail=%s",
                 len(texts), type(error).__name__, _response_detail(error),
             )
-            vectors = self.fallback.encode_text(texts, stats)
-            logger.info(
-                "Local embedding fallback completed texts=%d dimension=%d",
-                len(texts), int(vectors.shape[1]),
-            )
-            return vectors
+            return self.fallback.encode_text(texts, stats)
         if stats is not None:
             elapsed = (perf_counter() - started) * 1_000
             stats.num_encoded += len(texts)
@@ -142,6 +167,8 @@ class RemoteDenseEncoder:
     ) -> np.ndarray:
         if response.model != self.config.model_name:
             raise InferenceClientError("remote embedding checkpoint mismatch")
+        if self.embedding_dim == 0:
+            self.embedding_dim = response.dimension
         if response.dimension != self.embedding_dim or not response.normalized:
             raise InferenceClientError("remote embedding metadata mismatch")
         vectors = np.asarray(response.embeddings, dtype=self.config.dtype)
@@ -150,6 +177,34 @@ class RemoteDenseEncoder:
         if not np.all(np.isfinite(vectors)):
             raise InferenceClientError("remote embedding contains non-finite values")
         return vectors
+
+
+class RemoteFrameCaptioner:
+    """Adapt the hosted caption endpoint to the enrichment batch contract."""
+
+    def __init__(self, client: InferenceClient, config: Any) -> None:
+        self.client = client
+        self.config = config
+        self.resolved_revision: str | None = None
+
+    def resolve_revision(self) -> str:
+        status = self.client.readiness().models.get("caption_generation")
+        if status is None or not status.loaded:
+            raise InferenceClientError("remote caption model is not ready")
+        if status.checkpoint != self.config.model_checkpoint:
+            raise InferenceClientError("remote caption checkpoint mismatch")
+        if not status.revision:
+            raise InferenceClientError("remote caption revision is unresolved")
+        self.resolved_revision = status.revision
+        return status.revision
+
+    def caption_batch(self, images: Sequence[Image.Image]) -> list[str]:
+        response = self.client.caption(images)
+        if response.model != self.config.model_checkpoint:
+            raise InferenceClientError("remote caption checkpoint mismatch")
+        if self.resolved_revision and response.revision != self.resolved_revision:
+            raise InferenceClientError("remote caption revision changed")
+        return [item.caption for item in response.items]
 
 
 class InferenceClientError(RuntimeError):

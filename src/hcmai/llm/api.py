@@ -12,6 +12,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from PIL import Image
 
 from hcmai.common.schemas import (
+    CaptionItem,
+    CaptionResponse,
     ConversationInferenceRequest,
     ConversationState,
     InferenceReadiness,
@@ -33,6 +35,12 @@ def create_llm_app(runtime: LLMRuntime | None = None) -> FastAPI:
     )
     app.state.runtime = owned
     app.add_api_route("/health", health, methods=["GET"])
+    app.add_api_route(
+        "/v1/captions",
+        caption,
+        methods=["POST"],
+        response_model=CaptionResponse,
+    )
     app.add_api_route(
         "/ready", ready, methods=["GET"], response_model=InferenceReadiness
     )
@@ -91,13 +99,43 @@ async def embed(
     )
 
 
+async def caption(
+    request: Request,
+    item_ids: str = Form(),
+    images: list[UploadFile] = File(),
+) -> CaptionResponse:
+    identifiers, decoded = _decode_images(item_ids, images, maximum=64)
+    started = perf_counter()
+    runtime = request.app.state.runtime
+    try:
+        captions = runtime.caption(decoded)
+        if len(captions) != len(identifiers):
+            raise ValueError("captioner returned the wrong result count")
+        if any(not value for value in captions):
+            raise ValueError("captioner returned an empty caption")
+    except Exception as error:
+        raise _unavailable("Caption inference failed", error) from error
+    finally:
+        for image in decoded:
+            image.close()
+    return CaptionResponse(
+        model=runtime.config.caption_generation.model_checkpoint,
+        revision=runtime.captioner.resolved_revision,
+        items=[
+            CaptionItem(item_id=item_id, caption=value)
+            for item_id, value in zip(identifiers, captions)
+        ],
+        latency_ms=(perf_counter() - started) * 1_000,
+    )
+
+
 async def rerank(
     request: Request,
     query: str = Form(min_length=1),
     item_ids: str = Form(),
     images: list[UploadFile] = File(),
 ) -> RerankResponse:
-    identifiers, decoded = _decode_images(item_ids, images)
+    identifiers, decoded = _decode_images(item_ids, images, maximum=100)
     started = perf_counter()
     runtime = request.app.state.runtime
     try:
@@ -131,7 +169,7 @@ async def resolve(
 
 
 def _decode_images(
-    item_ids: str, uploads: list[UploadFile]
+    item_ids: str, uploads: list[UploadFile], *, maximum: int
 ) -> tuple[list[str], list[Image.Image]]:
     try:
         identifiers = json.loads(item_ids)
@@ -139,8 +177,10 @@ def _decode_images(
         raise HTTPException(status_code=400, detail="item_ids must be JSON") from error
     if not isinstance(identifiers, list) or len(identifiers) != len(uploads):
         raise HTTPException(status_code=400, detail="item/image count mismatch")
-    if not identifiers or len(identifiers) > 100:
-        raise HTTPException(status_code=400, detail="rerank batch must contain 1..100")
+    if not identifiers or len(identifiers) > maximum:
+        raise HTTPException(
+            status_code=400, detail=f"image batch must contain 1..{maximum}"
+        )
     identifiers = [str(value).strip() for value in identifiers]
     if any(not value for value in identifiers) or len(set(identifiers)) != len(identifiers):
         raise HTTPException(status_code=400, detail="item_ids must be unique strings")

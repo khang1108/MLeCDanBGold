@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncGenerator
@@ -46,6 +47,65 @@ from hcmai.retriever.fusion import RRFFusionRetriever
 from hcmai.search import SearchEngine
 
 logger = get_logger(__name__)
+
+
+class _UnsupportedSearchTaskError(ValueError):
+    """Raised when a non-standalone task reaches the standalone router."""
+
+
+class _UnavailableSearchPipelineError(RuntimeError):
+    """Raised when a known standalone task has no executable pipeline."""
+
+
+class _SearchEngineUnavailableError(RuntimeError):
+    """Raised when the shared frame-search pipeline is not ready."""
+
+
+class _StandaloneSearchRouter:
+    """Dispatch standalone task types without leaking routing into pipelines."""
+
+    def __init__(
+        self,
+        frame_search: Callable[[SearchRequest], SearchResponse],
+    ) -> None:
+        self._pipelines: dict[
+            TaskType, Callable[[SearchRequest], SearchResponse] | None
+        ] = {
+            TaskType.KIS: frame_search,
+            TaskType.VKIS: frame_search,
+            TaskType.VQA: None,
+            TaskType.TRAKE: None,
+        }
+
+    def dispatch(self, request: SearchRequest) -> SearchResponse:
+        """Run the selected standalone pipeline when it is available."""
+
+        if request.query_type not in self._pipelines:
+            raise _UnsupportedSearchTaskError(
+                f"query_type {request.query_type.value!r} is not a "
+                "standalone search task"
+            )
+        pipeline = self._pipelines[request.query_type]
+        if pipeline is None:
+            raise _UnavailableSearchPipelineError(
+                f"pipeline for query_type {request.query_type.value!r} "
+                "is not available"
+            )
+        logger.info(
+            "Routing standalone query_type=%s pipeline=frame_search",
+            request.query_type.value,
+        )
+        return pipeline(request)
+
+    def capabilities(self, frame_search_ready: bool) -> dict[str, bool]:
+        """Report which standalone task pipelines can currently execute."""
+
+        return {
+            task_type.value: (
+                pipeline is not None and frame_search_ready
+            )
+            for task_type, pipeline in self._pipelines.items()
+        }
 
 
 def _configure_backend_logging() -> None:
@@ -345,6 +405,16 @@ def create_app(
     kisc_manager = session_manager or KiscSessionManager()
     dataset_root = Path(os.getenv("HCMAI_DATASET_ROOT", "data")).resolve()
 
+    def run_frame_search(request: SearchRequest) -> SearchResponse:
+        engine = engine_container["engine"]
+        if engine is None or getattr(engine, "retriever", None) is None:
+            raise _SearchEngineUnavailableError(
+                "Search engine or DenseRetriever not initialized"
+            )
+        return kisc_manager.process_search(request, engine)
+
+    search_router = _StandaloneSearchRouter(run_frame_search)
+
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         _configure_backend_logging()
@@ -432,34 +502,31 @@ def create_app(
                 "search": retriever_loaded,
                 "kisc": provider_container["kisc_agent"] is not None,
                 "frame_assets": frame_store is not None,
+                "query_types": search_router.capabilities(retriever_loaded),
             },
             "startup_messages": engine_container["startup_messages"],
         }
 
     @app.post("/api/v1/search", response_model=SearchResponse)
     async def search_frames(request: SearchRequest) -> SearchResponse:
-        """Execute one standalone KIS or VKIS frame-retrieval query."""
-        if request.query_type is TaskType.KISC:
+        """Dispatch one of the four standalone competition task types."""
+        try:
+            response = search_router.dispatch(request)
+        except _UnsupportedSearchTaskError as error:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="query_type 'kisc' must use /api/v1/kisc/search",
-            )
-        if request.query_type in {TaskType.VQA, TaskType.TRAKE}:
+                detail=str(error),
+            ) from error
+        except _UnavailableSearchPipelineError as error:
             raise HTTPException(
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail=(
-                    f"query_type {request.query_type.value!r} is not "
-                    "implemented by the frame-search endpoint"
-                ),
-            )
-        engine = engine_container["engine"]
-        if engine is None or getattr(engine, "retriever", None) is None:
+                detail=str(error),
+            ) from error
+        except _SearchEngineUnavailableError as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Search engine or DenseRetriever not initialized",
-            )
-        try:
-            response = kisc_manager.process_search(request, engine)
+                detail=str(error),
+            ) from error
         except KeyError as e:
             logger.warning("API search request failed error=%s", e)
             raise HTTPException(

@@ -94,6 +94,12 @@ def test_health_check_endpoint(api_app: FastAPI) -> None:
     assert data["ready"] is True
     assert data["frame_store_loaded"] is True
     assert data["total_frames"] == 1
+    assert data["capabilities"]["query_types"] == {
+        "kis": True,
+        "vkis": True,
+        "vqa": False,
+        "trake": False,
+    }
 
 
 def test_search_materializes_configured_text_evidence() -> None:
@@ -139,13 +145,18 @@ def test_search_endpoint(api_app: FastAPI) -> None:
 
 
 @pytest.mark.parametrize(
-    ("query_type", "expected_status"),
-    [("kisc", 422), ("vqa", 501), ("trake", 501)],
+    ("query_type", "expected_status", "expected_detail"),
+    [
+        ("kisc", 422, "not a standalone search task"),
+        ("vqa", 501, "pipeline for query_type 'vqa' is not available"),
+        ("trake", 501, "pipeline for query_type 'trake' is not available"),
+    ],
 )
-def test_search_endpoint_rejects_wrong_task_router(
+def test_search_endpoint_routes_or_rejects_each_task_type(
     api_app: FastAPI,
     query_type: str,
     expected_status: int,
+    expected_detail: str,
 ) -> None:
     response = request(
         api_app,
@@ -154,6 +165,7 @@ def test_search_endpoint_rejects_wrong_task_router(
         json={"query": "test", "query_type": query_type},
     )
     assert response.status_code == expected_status
+    assert expected_detail in response.json()["detail"]
 
 
 def test_search_endpoint_logs_every_pipeline_stage(

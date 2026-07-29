@@ -37,9 +37,11 @@ exchange it; `common` must never depend on a feature package.
 ### 1. HTTP API Server (`hcmai.app`)
 - **FastAPI Application**: Exposes REST endpoints for the Node.js frontend.
 - **Key Endpoints**:
-  - `GET /health`: Health status & loaded dataset frame count.
-  - `POST /api/v1/search`: Standalone KIS/VKIS frame search selected by
-    `query_type`.
+  - `GET /health`: Health status, loaded frame count, and per-query-type
+    pipeline readiness.
+  - `POST /api/v1/search`: Routes standalone KIS, VKIS, VQA, and TRAKE
+    requests by `query_type`. KIS/VKIS currently share frame search; VQA/TRAKE
+    return `501` until their task-specific contracts and orchestrators exist.
   - `POST /api/v1/kisc/search`: Context-dependent conversational search.
   - `POST /api/v1/session`: Create a new KISC conversation session.
   - `POST /api/v1/feedback`: Update accepted/rejected human frame feedback.

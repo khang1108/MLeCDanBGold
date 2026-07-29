@@ -10,6 +10,23 @@ from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.io import read_yaml
 
 
+class HostedCaptionConfig(BaseModel):
+    """Caption model settings owned by the hosted inference service."""
+
+    model_checkpoint: str = "microsoft/Florence-2-base-ft"
+    revision: str | None = None
+    prompt: str = "<CAPTION>"
+    decoding: dict = Field(
+        default_factory=lambda: {
+            "max_new_tokens": 64,
+            "num_beams": 3,
+            "do_sample": False,
+        }
+    )
+    device: str = "cuda"
+    dtype: str = "bfloat16"
+
+
 class ServiceConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = Field(default=8100, ge=1, le=65535)
@@ -35,6 +52,9 @@ class HostedConversationConfig(BaseModel):
 
 class LLMServiceConfig(BaseModel):
     server: ServiceConfig = Field(default_factory=ServiceConfig)
+    caption_generation: HostedCaptionConfig = Field(
+        default_factory=HostedCaptionConfig
+    )
     visual_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     reranker: HostedRerankerConfig = Field(default_factory=HostedRerankerConfig)

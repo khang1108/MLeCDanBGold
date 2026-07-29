@@ -11,6 +11,8 @@ from .enum import *
 from .frame import FrameEnrichment, FrameRecord
 from .kisc import KISCSearchRequest, KISCSearchResponse
 from .inference import (
+    CaptionItem,
+    CaptionResponse,
     ConversationInferenceRequest,
     InferenceReadiness,
     ModelStatus,
@@ -63,6 +65,8 @@ __all__ = [
     "KISCSearchRequest",
     "KISCSearchResponse",
     "ConversationInferenceRequest",
+    "CaptionItem",
+    "CaptionResponse",
     "InferenceReadiness",
     "ModelStatus",
     "RerankItem",

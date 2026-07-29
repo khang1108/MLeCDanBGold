@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from hcmai.common.config import AppConfig
@@ -45,7 +46,37 @@ def build_caption_artifacts(
         "Canonical frame metadata",
     )
     output = Path(output_dir or settings.index.caption_path)
-    selected_encoder = encoder or DenseEncoder(models.caption_embedding)
+    selected_encoder = encoder
+    if selected_encoder is None:
+        local_config = models.caption_embedding.model_copy(
+            update={
+                "device": settings.inference.local_fallback_device,
+                "batch_size": settings.inference.local_fallback_batch_size,
+            }
+        )
+        local = DenseEncoder(local_config)
+        if settings.inference.enabled:
+            from hcmai.llm.client import InferenceClient, RemoteDenseEncoder
+
+            client = InferenceClient(
+                os.getenv(
+                    "HCMAI_INFERENCE_BASE_URL",
+                    settings.inference.base_url,
+                ),
+                settings.inference.timeout_seconds,
+            )
+            fallback = (
+                local if settings.inference.local_embedding_fallback else None
+            )
+            selected_encoder = RemoteDenseEncoder(
+                client,
+                models.caption_embedding,
+                embedding_dim=0,
+                fallback=fallback,
+                source="caption",
+            )
+        else:
+            selected_encoder = local
     if selected_encoder.config.model_name != models.caption_embedding.model_name:
         raise ValueError(
             "Caption encoder does not match llm/config.yaml: "

@@ -246,11 +246,18 @@ tnr scp llm/deploy_cloudflared_private.sh <instance-id>:/home/ubuntu/
 tnr connect <instance-id>
 ```
 
-Then run this single command inside the VM:
+Then run the model set needed for the current session. For caption generation
+and CaptionStore indexing:
 
 ```bash
-sudo bash /home/ubuntu/deploy_cloudflared_private.sh
+sudo bash /home/ubuntu/deploy_cloudflared_private.sh \
+  --caption true \
+  --embedding true
 ```
+
+The private bootstrap also accepts `--reranker true` and
+`--conversation true`. All four model flags default to `false`, and disabled
+models are not loaded into VRAM.
 
 The script clones the configured repository into `/opt/hcmai/repo`, installs
 the Python environment and a Python 3.12-compatible Supervisor, downloads the
@@ -502,8 +509,8 @@ until a retriever is available. Runtime paths can be overridden with
 ### Available API endpoints
 
 - `GET /health`: Health status and dataset readiness.
-- `POST /api/v1/search`: Standalone KIS/VKIS frame search selected by
-  `query_type`.
+- `POST /api/v1/search`: Dispatch standalone `kis`, `vkis`, `vqa`, or `trake`
+  requests by `query_type`.
 - `POST /api/v1/kisc/search`: Stateless resolve-then-search KISC turn.
 - `POST /api/v1/session`: Create a new KISC session.
 - `GET /api/v1/sessions`: List all current KISC session IDs.
@@ -515,9 +522,12 @@ until a retriever is available. Runtime paths can be overridden with
 - `POST /api/v1/submit`: Generate official BTC competition submission code (`video_id,frame_idx`).
 
 The accepted query-type enum is `kis`, `kisc`, `vkis`, `vqa`, and `trake`.
-KISC uses `/api/v1/kisc/search`; VQA and TRAKE return `501` until their
-task-specific orchestrators exist. Sessions currently live in process memory,
-so the list resets when the backend restarts.
+KISC uses `/api/v1/kisc/search`. The standalone router currently maps KIS and
+VKIS to frame search; VQA and TRAKE dispatch to reserved task slots and return
+`501` until their task-specific contracts and orchestrators exist. The
+`capabilities.query_types` object in `/health` reports this readiness.
+Sessions currently live in process memory, so the list resets when the backend
+restarts.
 
 ## Frontend integration
 

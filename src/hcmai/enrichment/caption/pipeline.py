@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,8 +11,9 @@ from typing import Any, cast
 import pandas as pd
 
 from hcmai.common.utils.io import atomic_write, read_json, write_json
+from hcmai.common.config import AppConfig
 from hcmai.enrichment.caption.artifacts import write_caption_artifacts
-from hcmai.enrichment.caption.backend import FrameCaptioner
+from hcmai.enrichment.caption.backend import CaptionBackend, FrameCaptioner
 from hcmai.enrichment.caption.config import (
     DEFAULT_ENRICHMENT_CONFIG,
     CaptionConfig,
@@ -21,12 +23,13 @@ from hcmai.enrichment.caption.config import (
 from hcmai.enrichment.caption.report import build_manifest
 from hcmai.enrichment.caption.resume import guard_resume, resume_rows
 from hcmai.enrichment.caption.runner import run_batches
+from hcmai.llm.config import LLMServiceConfig
 
 def generate_captions(
     frames_path: str | Path,
     output_dir: str | Path,
     config: CaptionConfig,
-    captioner: FrameCaptioner | None = None,
+    captioner: CaptionBackend | None = None,
     *,
     dataset_root: str | Path = "."
 ) -> dict[str, Any]:
@@ -80,15 +83,42 @@ def main() -> int:
     """Run caption enrichment from YAML."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=DEFAULT_ENRICHMENT_CONFIG)
+    parser.add_argument("--app-config", default="configs/baseline.yaml")
+    parser.add_argument("--model-config", default="llm/config.yaml")
     parser.add_argument("--frames")
     parser.add_argument("--dataset-root")
     parser.add_argument("--output")
     args = parser.parse_args()
     job = CaptionJobConfig.from_yaml(args.config)
+    settings = AppConfig.from_yaml(args.app_config)
+    captioner = None
+    if settings.inference.enabled:
+        from hcmai.llm.client import InferenceClient, RemoteFrameCaptioner
+
+        models = LLMServiceConfig.from_yaml(args.model_config)
+        hosted = models.caption_generation
+        expected = {
+            "model_checkpoint": job.caption.model_checkpoint,
+            "revision": job.caption.revision,
+            "prompt": job.caption.prompt,
+            "decoding": job.caption.decoding,
+        }
+        actual = {key: getattr(hosted, key) for key in expected}
+        if actual != expected:
+            raise ValueError(
+                "Caption generation settings differ between enrichment and "
+                "llm model configuration"
+            )
+        client = InferenceClient(
+            os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url),
+            settings.inference.timeout_seconds,
+        )
+        captioner = RemoteFrameCaptioner(client, job.caption)
     manifest = generate_captions(
         args.frames or job.frames_path,
         args.output or job.output_dir,
         job.caption,
+        captioner,
         dataset_root=args.dataset_root or job.dataset_root,
     )
     keys = "completed_count", "failed_count", "skipped_count", "retried_count"

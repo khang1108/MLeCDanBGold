@@ -2,6 +2,17 @@ server:
   host: "127.0.0.1"
   port: 8100
 
+caption_generation:
+  model_checkpoint: "microsoft/Florence-2-base-ft"
+  revision: null
+  prompt: "<CAPTION>"
+  decoding:
+    max_new_tokens: 64
+    num_beams: 3
+    do_sample: false
+  device: "cuda"
+  dtype: "bfloat16"
+
 visual_embedding:
   name: "google/siglip2-base-patch16-224"
   device: "cuda"

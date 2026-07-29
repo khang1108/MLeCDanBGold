@@ -43,6 +43,11 @@ Caption generation reads dataset, model, decoding, and output settings from
 PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py
 ```
 
+When `inference.enabled` is true in `configs/baseline.yaml`, the command sends
+bounded JPEG batches to the hosted `/v1/captions` endpoint. It validates the
+hosted checkpoint and immutable revision before writing resumable local
+artifacts. Set `HCMAI_INFERENCE_BASE_URL` to override the configured URL.
+
 Pass `--config`, `--frames`, `--dataset-root`, or `--output` only when a run
 needs to override those values.
 
@@ -68,6 +73,8 @@ PYTHONPATH=src aic/bin/python scripts/build_caption_index.py \
 
 It writes `caption_embeddings.npy`, `dense.index`,
 `frame_mapping.parquet`, and `metadata.json` under the output directory.
+With hosted inference enabled, caption text is embedded remotely in batches of
+at most 64 while all vectors, mappings, and FAISS files remain local.
 
 ## Rebuild only the index
 

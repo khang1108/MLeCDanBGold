@@ -7,6 +7,7 @@ FAISS index, mappings, embeddings, or frontend.
 
 - `GET /health`
 - `GET /ready`
+- `POST /v1/captions` (multipart JPEG frames)
 - `POST /v1/embeddings/text`
 - `POST /v1/rerank` (multipart JPEG candidates)
 - `POST /v1/conversation/resolve`
@@ -41,11 +42,19 @@ tnr scp llm/deploy_cloudflared_private.sh 0:/home/ubuntu/
 tnr connect 0
 ```
 
-On the VM, run exactly one command:
+On the VM, enable only the models needed by the session. All model flags
+default to `false`. For caption generation and CaptionStore indexing:
 
 ```bash
-sudo bash /home/ubuntu/deploy_cloudflared_private.sh
+sudo bash /home/ubuntu/deploy_cloudflared_private.sh \
+  --caption true \
+  --embedding true
 ```
+
+Available flags are `--caption`, `--embedding`, `--reranker`, and
+`--conversation`; each accepts exactly `true` or `false`. Disabled models are
+not constructed, downloaded, or loaded into VRAM. Use `--help` to print the
+current options.
 
 The bootstrap clones the configured repository and branch into
 `/opt/hcmai/repo`, installs all required packages, downloads model checkpoints,
@@ -64,6 +73,12 @@ The application virtual environment and downloaded checkpoint cache are reused.
 The first start downloads the configured model checkpoints and may take several
 minutes. The script keeps checkpoints under `/opt/hcmai/cache` on the persistent
 instance disk.
+
+The ignored private bootstrap may contain
+`HCMAI_CF_ACCESS_CLIENT_ID` and `HCMAI_CF_ACCESS_CLIENT_SECRET` so its public
+`/ready` verification can pass a Cloudflare Access Service Auth policy. These
+credentials are not injected into the hosted model process and must still be
+configured separately on the local data machine.
 
 In the tunnel's Cloudflare dashboard, add a Published application route from
 `api.iamphuckhang.dev` to `http://localhost:8100`. Protect that hostname with a
