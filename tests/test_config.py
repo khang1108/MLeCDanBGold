@@ -46,7 +46,11 @@ def test_llm_config_is_the_model_authority() -> None:
 def test_enrichment_config_is_loaded_from_root_yaml() -> None:
     config = CaptionJobConfig.from_yaml()
 
-    assert config.caption.model_checkpoint == "microsoft/Florence-2-base-ft"
+    assert (
+        config.caption.model_checkpoint
+        == "florence-community/Florence-2-base-ft"
+    )
+    assert config.caption.revision == "269c8d8afb3ab2b993c43f6670f6eb879f764370"
     assert config.caption.decoding["num_beams"] == 3
     assert config.caption.dataset_version == "hcmai2026_v1"
     assert config.frames_path == Path.cwd() / "data/metadata/frames.parquet"

@@ -13,8 +13,8 @@ from hcmai.common.utils.io import read_yaml
 class HostedCaptionConfig(BaseModel):
     """Caption model settings owned by the hosted inference service."""
 
-    model_checkpoint: str = "microsoft/Florence-2-base-ft"
-    revision: str | None = None
+    model_checkpoint: str = "florence-community/Florence-2-base-ft"
+    revision: str | None = "269c8d8afb3ab2b993c43f6670f6eb879f764370"
     prompt: str = "<CAPTION>"
     decoding: dict = Field(
         default_factory=lambda: {

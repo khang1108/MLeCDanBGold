@@ -53,7 +53,7 @@ flowchart TB
         VENC --> VEMB["artifacts/embeddings/<br/>visual_embeddings.npy"]
         VEMB --> VIDX["artifacts/indexes/visual/<br/>dense.index + mapping + metadata"]
 
-        VDATA --> CAPGEN["Caption generation<br/>microsoft/Florence-2-base-ft"]
+        VDATA --> CAPGEN["Caption generation<br/>florence-community/Florence-2-base-ft"]
         CAPGEN --> CAPSTORE["artifacts/enrichment/caption/<br/>frame_enrichment.parquet"]
         CAPSTORE --> CAPENC["Caption TextEncoder<br/>benchmark: SigLIP2 / E5 / BGE-M3"]
         CAPENC --> CAPEMB["artifacts/indexes/caption/<br/>caption_embeddings.npy"]

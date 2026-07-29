@@ -3,8 +3,8 @@ server:
   port: 8100
 
 caption_generation:
-  model_checkpoint: "microsoft/Florence-2-base-ft"
-  revision: null
+  model_checkpoint: "florence-community/Florence-2-base-ft"
+  revision: "269c8d8afb3ab2b993c43f6670f6eb879f764370"
   prompt: "<CAPTION>"
   decoding:
     max_new_tokens: 64
