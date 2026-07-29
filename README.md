@@ -22,6 +22,8 @@ Implemented foundations:
 - Visual embedding, FAISS index, and dense-retrieval foundations.
 - Caption and OCR enrichment pipelines, Caption/OCR/ASR evidence stores, plus
   caption indexing and optional visual-caption RRF retrieval.
+- Resumable multilingual transcription with speaker-labelled, per-video
+  Parquet artifacts.
 - A FastAPI application and the existing Node.js frontend.
 - Utility helpers for YAML/JSON/Parquet I/O, image loading, timing, and
   logging.
@@ -137,6 +139,7 @@ src/hcmai/
 ├── search.py                     Search orchestration
 ├── kisc.py                       Conversational state
 ├── data/                         Canonical builder and FrameStore
+├── transcripts/                  ASR pipeline and TranscriptStore
 ├── embedding/                    Visual embedding pipeline
 ├── retriever/                    Dense, caption, fusion, and evaluation packages
 ├── reranking/                    Multimodal pipeline and model backends
@@ -342,6 +345,22 @@ relative to `dataset-root`, and official `frame_idx` values come directly
 from the mapping. See the [data pipeline guide](src/hcmai/data/README.md) for
 the input layout, schema, and `FrameStore` examples.
 
+## Transcript preparation
+
+Install the optional ASR dependencies, then smoke-test two videos:
+
+```bash
+pip install -e '.[transcripts]'
+export HF_TOKEN="hf_..."
+PYTHONPATH=src python scripts/prepare_transcripts.py \
+  --videos-root /path/to/videos \
+  --output artifacts/transcripts \
+  --limit 2
+```
+
+The command writes one speaker-labelled transcript Parquet per video. Pass
+`--no-resume` to reprocess existing outputs.
+
 ## Offline artifact contracts
 
 Use `frame_id` as the join key across all artifacts:
@@ -352,6 +371,7 @@ Use `frame_id` as the join key across all artifacts:
 | `artifacts/enrichment/caption/frame_enrichment.parquet` | Parquet   | Per-frame caption evidence               |
 | `artifacts/enrichment/ocr/frame_enrichment.parquet`     | Parquet   | Per-frame OCR evidence                   |
 | `artifacts/enrichment/asr/frame_enrichment.parquet`     | Parquet   | Per-frame ASR evidence                   |
+| `artifacts/transcripts/<group>/<video_id>.parquet`      | Parquet   | Timestamped transcript per video         |
 | `artifacts/embeddings/visual_embeddings.npy`            | NumPy     | Visual embedding matrix                  |
 | `artifacts/embeddings/frame_mapping.parquet`            | Parquet   | Visual vector-to-frame mapping           |
 | `artifacts/indexes/visual/`                             | Directory | Visual FAISS index, mapping, provenance  |

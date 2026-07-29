@@ -67,6 +67,34 @@ class EncoderConfig(BaseModel):
         )
 
 
+class ASRConfig(BaseModel):
+    """Configuration for offline video transcription."""
+
+    model_name: str = "Qwen/Qwen3-ASR-1.7B-hf"
+    device: str = "cuda"
+    dtype: str = "bfloat16"
+    language: str | None = None
+    prompt: str | None = None
+    max_new_tokens: int = 256
+    batch_size: int = Field(default=8, gt=0)
+    attn_implementation: str | None = None
+    compile_model: bool = False
+    audio_sample_rate: int = 16_000
+    vad_threshold: float = Field(default=0.5, ge=0, le=1)
+    min_speech_duration_ms: int = 250
+    min_silence_duration_ms: int = 500
+    speech_pad_ms: int = 200
+    max_segment_seconds: int = 30
+
+
+class DiarizationConfig(BaseModel):
+    """Configuration for offline speaker diarization."""
+
+    model_name: str = "pyannote/speaker-diarization-community-1"
+    device: str = "cuda"
+    audio_sample_rate: int = 16_000
+
+
 class IndexConfig(BaseModel):
     """Configuration for the self-contained FAISS artifact directory."""
 

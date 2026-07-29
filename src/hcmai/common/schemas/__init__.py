@@ -29,6 +29,7 @@ from .search import (
     SearchResponse,
     SearchResult,
 )
+from .transcript import TranscriptSegment
 from .vqa import VQAEvidence, VQARequest, VQAResponse
 
 # Backward-compatible names used by the earlier frontend/backend contract.
@@ -76,4 +77,5 @@ __all__ = [
     "VQAEvidence",
     "VQARequest",
     "VQAResponse",
+    "TranscriptSegment",
 ]
