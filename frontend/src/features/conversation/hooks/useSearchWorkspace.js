@@ -10,7 +10,7 @@ const nextTurn = (sender, message, turns, createdAt = Date.now()) => ({
 });
 
 // Sends browser-owned conversation memory through the stateless KISC agent.
-export const useSearchWorkspace = ({ session, topK, searchMode, draftFeedback, feedbackDirty, runRequest, setSession }) => {
+export const useSearchWorkspace = ({ session, topK, draftFeedback, feedbackDirty, runRequest, setSession }) => {
   const [results, setResults] = useState([]);
   const [warnings, setWarnings] = useState([]);
   const [latencyMs, setLatencyMs] = useState(null);
@@ -38,7 +38,6 @@ export const useSearchWorkspace = ({ session, topK, searchMode, draftFeedback, f
           previousState: session.interpreted_state,
           feedback: draftFeedback,
           topK,
-          searchMode,
         });
         const searchResponse = response.search;
         setResults(searchResponse.results);
@@ -69,7 +68,7 @@ export const useSearchWorkspace = ({ session, topK, searchMode, draftFeedback, f
       }
     });
     return completed || false;
-  }, [draftFeedback, feedbackDirty, runRequest, searchMode, session, setSession, topK]);
+  }, [draftFeedback, feedbackDirty, runRequest, session, setSession, topK]);
 
   return { results, warnings, latencyMs, lastRequestId, error, isSearching, clear, submit };
 };

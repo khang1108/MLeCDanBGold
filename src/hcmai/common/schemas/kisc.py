@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import Field, model_validator
 
 from .base import ContractModel, NonEmptyString
 from .conversation import ConversationState, ConversationTurn, FrameFeedback
-from .enum import SearchMode
+from .enum import TaskType
 from .search import SearchFilters, SearchResponse
 
 
 class KISCSearchRequest(ContractModel):
     """One complete browser-owned conversational search turn."""
 
+    query_type: Literal[TaskType.KISC] = TaskType.KISC
     history: list[ConversationTurn] = Field(default_factory=list)
     current_message: NonEmptyString = Field(max_length=1_000)
     previous_state: ConversationState | None = None
     feedback: FrameFeedback = Field(default_factory=FrameFeedback)
     top_k: int = Field(default=20, ge=1, le=100)
-    search_mode: SearchMode = SearchMode.ACCURATE
     filters: SearchFilters | None = None
 
     @model_validator(mode="after")

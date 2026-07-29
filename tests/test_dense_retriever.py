@@ -12,8 +12,7 @@ faiss = pytest.importorskip("faiss")
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.schemas.search import SearchFilters
-from hcmai.retriever.dense import DenseRetriever
-from hcmai.retriever.index import VisualIndex
+from hcmai.retriever.dense import DenseIndex, DenseRetriever
 
 MODEL_NAME = "google/siglip2-base-patch16-224"
 
@@ -54,7 +53,7 @@ def corpus():
 @pytest.fixture
 def index(corpus):
     embeddings, mapping = corpus
-    return VisualIndex.build(embeddings, mapping, dataset_version="test_v1", model_name=MODEL_NAME)
+    return DenseIndex.build(embeddings, mapping, dataset_version="test_v1", model_name=MODEL_NAME)
 
 
 class TestConstruction:

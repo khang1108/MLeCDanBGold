@@ -9,17 +9,17 @@ from hcmai.common.schemas import (
     MessageRequest,
     MessageResponse,
     SearchLatency,
-    SearchMode,
     SearchRequest,
     SearchResponse,
     SubmissionResult,
+    TaskType,
 )
 
 def _response(**updates) -> SearchResponse:
     payload = {
         "request_id": "request-001",
         "query": "a person walking",
-        "search_mode": SearchMode.ACCURATE,
+        "query_type": TaskType.KIS,
         "top_k": 1,
         "total_results": 0,
         "latency_ms": SearchLatency(total=25),
@@ -34,10 +34,24 @@ def test_empty_query_and_stateless_feedback_are_rejected() -> None:
     with pytest.raises(ValidationError, match="feedback requires session_id"):
         SearchRequest(query="test", feedback=FrameFeedback())
 
-def test_search_mode_uses_the_public_spelling() -> None:
-    assert SearchRequest(query="test", search_mode="accurate").search_mode is SearchMode.ACCURATE
+def test_retired_search_mode_is_rejected() -> None:
     with pytest.raises(ValidationError):
-        SearchRequest(query="test", search_mode="accuracte")
+        SearchRequest.model_validate(
+            {"query": "test", "search_mode": "accurate"}
+        )
+
+def test_query_type_is_typed_and_defaults_to_kis() -> None:
+    assert SearchRequest(query="test").query_type is TaskType.KIS
+    assert (
+        SearchRequest.model_validate(
+            {"query": "test", "query_type": "vkis"}
+        ).query_type
+        is TaskType.VKIS
+    )
+    with pytest.raises(ValidationError):
+        SearchRequest.model_validate(
+            {"query": "test", "query_type": "unknown"}
+        )
 
 def test_feedback_is_deduplicated_and_disjoint() -> None:
     feedback = FrameFeedback(accepted_frame_ids=["f1", "f1"])

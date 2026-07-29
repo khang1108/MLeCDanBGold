@@ -1,4 +1,4 @@
-"""Exact FAISS ``IndexFlatIP`` over normalized visual frame embeddings."""
+"""Modality-neutral exact FAISS index over normalized frame embeddings."""
 
 from __future__ import annotations
 
@@ -12,18 +12,18 @@ from typing import Any
 from hcmai.common.utils.io import read_json, write_json
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.models import IndexMetadata
+from hcmai.retriever.dense.models import IndexMetadata
 
 logger = get_logger(__name__)
 
 # Artifact filenames written under an index directory, kept together so the
 # builder, loader, and downstream retriever agree on the on-disk layout.
-INDEX_FILENAME      = "visual.index"
-MAPPING_FILENAME    = "frame_mapping.parquet"
-METADATA_FILENAME   = "metadata.json"
+INDEX_FILENAME = "dense.index"
+MAPPING_FILENAME = "frame_mapping.parquet"
+METADATA_FILENAME = "metadata.json"
 
 
-class VisualIndex:
+class DenseIndex:
     """Build, persist, load, and search an exact inner-product frame index.
 
     Vectors are assumed to be L2-normalized, so inner-product scores are
@@ -50,7 +50,7 @@ class VisualIndex:
         dataset_version: str,
         model_name: str,
         index_type: str = "flat_ip",
-    ) -> VisualIndex:
+    ) -> DenseIndex:
         """Build an exact ``IndexFlatIP`` from normalized embeddings.
 
         Args:
@@ -62,7 +62,7 @@ class VisualIndex:
             index_type: Index family; only ``flat_ip`` is supported.
 
         Returns:
-            A ready-to-search :class:`VisualIndex`.
+            A ready-to-search :class:`DenseIndex`.
         """
 
         if index_type != "flat_ip":
@@ -129,11 +129,11 @@ class VisualIndex:
         return output_dir
 
     @classmethod
-    def load(cls, index_dir: Path | str) -> VisualIndex:
+    def load(cls, index_dir: Path | str) -> DenseIndex:
         """Load an index directory and reject mismatched artifacts.
 
         Args:
-            index_dir: Directory containing ``visual.index``,
+            index_dir: Directory containing ``dense.index``,
                 ``frame_mapping.parquet``, and ``metadata.json``.
 
         Raises:

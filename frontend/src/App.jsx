@@ -20,7 +20,6 @@ function App() {
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [topK, setTopK] = useState(20);
-  const [searchMode, setSearchMode] = useState("accurate");
   const initialRequestRef = useRef(false);
   const { isPending, runRequest } = useRequestGuard();
   const { session, sessionError, create, load, setSession } =
@@ -30,7 +29,6 @@ function App() {
   const search = useSearchWorkspace({
     session,
     topK,
-    searchMode,
     draftFeedback: feedback.draftFeedback,
     feedbackDirty: feedback.feedbackDirty,
     runRequest,
@@ -102,7 +100,6 @@ function App() {
   const debug = {
     requestId: lastRequestId,
     topK,
-    searchMode,
     resultCount: results.length,
     committedFeedback: feedback.committedFeedback,
     draftFeedback: feedback.draftFeedback,
@@ -155,8 +152,6 @@ function App() {
           <AdHocSearchWorkspace
             topK={topK}
             setTopK={setTopK}
-            searchMode={searchMode}
-            setSearchMode={setSearchMode}
             onFrameClick={setSelectedFrame}
           />
         </main>
@@ -167,11 +162,8 @@ function App() {
         onClose={() => setIsOptionsOpen(false)}
         topK={topK}
         setTopK={setTopK}
-        searchMode={searchMode}
-        setSearchMode={setSearchMode}
         onReset={() => {
           setTopK(20);
-          setSearchMode("accurate");
         }}
       />
       {selectedFrame && (

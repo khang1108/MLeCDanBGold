@@ -16,6 +16,8 @@ def parse_arguments(command: str) -> argparse.Namespace:
     """Parse arguments for one supported root-level script."""
     parser = argparse.ArgumentParser(description=DESCRIPTIONS[command])
     parser.add_argument("--config", required=True)
+    if command in {"build_embeddings", "build_index"}:
+        parser.add_argument("--model-config", default="llm/config.yaml")
     if command == "build_embeddings":
         parser.add_argument("--frames")
         parser.add_argument("--dataset-root")

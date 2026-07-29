@@ -1,8 +1,7 @@
 """Public bounded reranking API."""
 
-from .config import QwenRerankerConfig, RerankerConfig
-from .multimodal import MultimodalReranker
-from .qwen import QwenRerankerScorer
+from hcmai.reranking.multimodal import MultimodalReranker, RerankerConfig
+from hcmai.reranking.qwen import QwenRerankerConfig, QwenRerankerScorer
 
 __all__ = [
     "MultimodalReranker",

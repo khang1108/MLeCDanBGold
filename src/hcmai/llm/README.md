@@ -54,7 +54,8 @@ Importing this package does not load model weights. In production:
 
 1. `LLMRuntime.from_environment()` reads `llm/config.yaml`.
 2. The FastAPI lifespan calls `runtime.load()` once.
-3. The encoder, reranker, and configured conversation model stay in memory.
+3. The visual encoder, caption encoder, reranker, and configured conversation
+   model stay in memory.
 4. Every request reuses those instances.
 
 Run exactly one Uvicorn worker. Additional workers duplicate all model weights
@@ -68,7 +69,8 @@ Conversation inference is optional when `conversation.checkpoint` is `null`.
 
 The checked-in [`llm/config.yaml`](../../../llm/config.yaml) configures:
 
-- `google/siglip2-base-patch16-224` for text embeddings;
+- `google/siglip2-base-patch16-224` for visual-query embeddings;
+- `google/siglip2-base-patch16-224` as the caption control encoder;
 - `Qwen/Qwen3-VL-Reranker-2B` for image-query reranking;
 - `zai-org/GLM-4.1V-9B-Thinking` for KISC state resolution.
 
@@ -86,8 +88,8 @@ An empty `HCMAI_CONVERSATION_MODEL` does not disable conversation inference; it
 leaves the YAML checkpoint unchanged. Set `conversation.checkpoint: null` in
 the YAML to disable it explicitly.
 
-The remote embedding checkpoint, vector dimension, normalization, and dtype
-must remain compatible with the existing FAISS artifacts. A different text
+Each remote embedding checkpoint, vector dimension, normalization, and dtype
+must remain compatible with its visual or caption FAISS artifact. A different text
 encoder cannot safely query an index created in another embedding space.
 
 ## API

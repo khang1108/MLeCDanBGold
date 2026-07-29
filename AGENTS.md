@@ -82,7 +82,7 @@
   retrieval, reranking, temporal alignment, UI display, and submission export.
 - Optimize and report the official Mean Top-k R-Score at
   `{1,5,20,50,100}` alongside task metrics, Recall, MRR, and P50/P95 latency.
-- Use the `fast` profile for the default competition path and measure
+- Use one benchmark-selected competition pipeline and measure
   query-to-first-useful-results plus end-to-end operator throughput.
 - Route standalone Textual KIS and initial VKIS descriptions directly to
   retrieval; invoke conversation resolution only for context-dependent turns.
@@ -98,7 +98,7 @@
   public behavior or competition contracts change.
 - Preserve unrelated worktree changes and keep changes within the requested
   files and task scope.
-- Treat GLM-class thinking models as offline teachers or measured accurate-mode
+- Treat GLM-class thinking models as offline teachers or optional measured
   components unless they satisfy the competition latency and reliability budget.
 
 ### DON'Ts
@@ -216,16 +216,16 @@ multi-agent work is explicitly requested.
   retrieval. Route only context-dependent conversational refinements through a
   resolver. Do not route TRAKE through the KISC agent.
 - Treat query-to-first-useful-results and operator throughput as competition
-  KPIs. The `fast` profile is the default competition path. Any generative or
+  KPIs. The selected competition path is configured once. Any generative or
   remote stage on that path needs measured warm P50/P95 latency, a bounded
   timeout, and a deterministic fallback before it can be enabled by default.
 - Resolve canonical relative `image_path` values against the dataset root
   without rewriting `frames.parquet`.
 - Artifact flow is `frames.parquet` → normalized `.npy` + mapping Parquet →
-  exact FAISS `visual.index`; YAML/JSON stores provenance, not vectors.
+  exact FAISS `dense.index`; YAML/JSON stores provenance, not vectors.
 - Join artifacts on `frame_id`; exchange retrieval data via shared schemas.
-- Keep checkpoints, candidate counts, and `fast`/`accurate` profiles in config;
-  use one pipeline with different values.
+- Keep all selected model checkpoints in `llm/config.yaml` and candidate
+  counts in `configs/baseline.yaml`; do not expose runtime search profiles.
 - Load models/indexes once, never at import or per request. `DenseEncoder`
   lazily loads on its first non-empty encode call.
 - Keep reusable logic in `src/hcmai`, CLIs thin, domain logic out of

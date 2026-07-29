@@ -7,8 +7,8 @@ This module re-exports them to preserve backward compatibility.
 from __future__ import annotations
 
 from hcmai.common.config import RECALL_CUTOFFS, BenchmarkConfig, EncoderConfig
-from hcmai.retriever.models.metadata import IndexMetadata
-from hcmai.retriever.models.stats import EncodingStats
+from hcmai.retriever.dense.models.metadata import IndexMetadata
+from hcmai.retriever.dense.models.stats import EncodingStats
 
 __all__ = [
     "EncoderConfig",

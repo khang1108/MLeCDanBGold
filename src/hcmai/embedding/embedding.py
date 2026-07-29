@@ -14,7 +14,7 @@ from hcmai.common.utils.io import read_parquet, write_parquet, write_yaml
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
 from hcmai.embedding.models import EmbeddingMetadata
-from hcmai.retriever.encoder import DenseEncoder, EncodingStats
+from hcmai.retriever.dense import DenseEncoder, EncodingStats
 
 logger = get_logger(__name__)
 

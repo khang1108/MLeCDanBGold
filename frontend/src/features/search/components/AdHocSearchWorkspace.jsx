@@ -8,8 +8,6 @@ import GifLoaderOverlay from "./GifLoaderOverlay";
 const AdHocSearchWorkspace = ({
   topK,
   setTopK,
-  searchMode,
-  setSearchMode,
   onFrameClick,
 }) => {
   const [query, setQuery] = useState("");
@@ -31,7 +29,6 @@ const AdHocSearchWorkspace = ({
         const response = await searchFrames({
           query: trimmed,
           topK,
-          searchMode,
         });
         setResults(response.results || []);
         setWarnings(response.warnings || []);
@@ -42,13 +39,12 @@ const AdHocSearchWorkspace = ({
         setIsSearching(false);
       }
     },
-    [isSearching, query, searchMode, topK],
+    [isSearching, query, topK],
   );
 
   const handleResetOptions = useCallback(() => {
     setTopK(20);
-    setSearchMode("accurate");
-  }, [setSearchMode, setTopK]);
+  }, [setTopK]);
 
   return (
     <div className="adhoc-workspace">
@@ -92,8 +88,6 @@ const AdHocSearchWorkspace = ({
           <ToolBox
             topK={topK}
             setTopK={setTopK}
-            searchMode={searchMode}
-            setSearchMode={setSearchMode}
             onReset={handleResetOptions}
           />
         </aside>

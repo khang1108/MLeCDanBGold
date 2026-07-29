@@ -2,35 +2,20 @@ dataset:
   version: "hcmai2026_v1"
   root: "data"
   frames_path: "data/metadata/frames.parquet"
-  enrichment_path: "artifacts/enrichment/frame_enrichment.parquet"
-
-models:
-  embedding:
-    name: "google/siglip2-base-patch16-224"
-    device: "cpu"
-    batch_size: 64
-
-  reranker:
-    enabled: true
-    name: "Qwen/Qwen3-VL-Reranker-2B"
-    device: "cuda"
-    batch_size: 8
+  enrichment:
+    caption_path: "artifacts/enrichment/caption/frame_enrichment.parquet"
+    ocr_path: "artifacts/enrichment/ocr/frame_enrichment.parquet"
+    asr_path: "artifacts/enrichment/asr/frame_enrichment.parquet"
 
 index:
   type: "flat_ip"
   path: "artifacts/indexes/visual"
+  caption_path: "artifacts/indexes/caption"
 
 search:
-  profiles:
-    fast:
-      visual_candidates: 100
-      rerank_count: 20
-      temporal_window_ms: 1000
-
-    accurate:
-      visual_candidates: 500
-      rerank_count: 100
-      temporal_window_ms: 3000
+  candidate_count: 500
+  rerank_count: 100
+  temporal_window_ms: 3000
 
   fusion:
     method: "rrf"
@@ -45,3 +30,5 @@ inference:
   base_url: "https://api.iamphuckhang.dev"
   timeout_seconds: 120
   local_embedding_fallback: true
+  local_fallback_device: "cpu"
+  local_fallback_batch_size: 32

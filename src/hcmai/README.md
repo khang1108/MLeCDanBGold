@@ -38,7 +38,9 @@ exchange it; `common` must never depend on a feature package.
 - **FastAPI Application**: Exposes REST endpoints for the Node.js frontend.
 - **Key Endpoints**:
   - `GET /health`: Health status & loaded dataset frame count.
-  - `POST /api/v1/search`: Frame search (supports single queries and KISC turns).
+  - `POST /api/v1/search`: Standalone KIS/VKIS frame search selected by
+    `query_type`.
+  - `POST /api/v1/kisc/search`: Context-dependent conversational search.
   - `POST /api/v1/session`: Create a new KISC conversation session.
   - `POST /api/v1/feedback`: Update accepted/rejected human frame feedback.
   - `GET /api/v1/frames/{frame_id}`: Fetch single frame metadata.
@@ -52,7 +54,7 @@ exchange it; `common` must never depend on a feature package.
 
 ### 3. Search Orchestrator (`hcmai.search`)
 - **`SearchEngine`**: Orchestrates `candidate_retrieval`, optional `reranking`, and response `materialization` into `SearchResponse` objects with latency tracking.
-- Supports `accurate` and `fast` search profiles.
+- Uses one benchmark-selected competition configuration.
 
 ### 4. Data Pipeline & Store (`hcmai.data`)
 - **`FrameStore`**: In-memory metadata store backed by `frames.parquet`.
@@ -64,7 +66,7 @@ exchange it; `common` must never depend on a feature package.
   `frame_id` or infer it from time/FPS.
 
 ### 5. Dense Retriever & Index (`hcmai.retriever`)
-- **`DenseRetriever`**: Pairs a text query encoder (`DenseEncoder`) with a FAISS index (`VisualIndex`) to execute vector similarity searches over keyframe embeddings.
+- **`DenseRetriever`**: Pairs a text query encoder (`DenseEncoder`) with a FAISS index (`DenseIndex`) to execute vector similarity searches over keyframe embeddings.
 
 ---
 
@@ -87,7 +89,9 @@ store = FrameStore.load("data/metadata/frames.parquet")
 engine = SearchEngine(frame_store=store, retriever=dense_retriever)
 
 # Execute search
-request = SearchRequest(query="một người đang đi bộ", top_k=10)
+request = SearchRequest(
+    query="một người đang đi bộ", query_type="kis", top_k=10
+)
 response = engine.search(request)
 
 for result in response.results:

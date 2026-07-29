@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from PIL import Image
 
-from hcmai.reranking.config import QwenRerankerConfig
+from hcmai.reranking.qwen.config import QwenRerankerConfig
 
 _SYSTEM = (
     "Judge whether the Document meets the requirements based on the Query "

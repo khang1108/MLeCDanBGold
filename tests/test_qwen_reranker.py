@@ -9,7 +9,7 @@ from hcmai.reranking import (
     QwenRerankerConfig,
     RerankerConfig,
 )
-from hcmai.reranking import qwen
+from hcmai.reranking.qwen import scorer as qwen
 from hcmai.reranking.qwen import QwenRerankerError, QwenRerankerScorer
 class Processor:
     def __init__(self, malformed=False):

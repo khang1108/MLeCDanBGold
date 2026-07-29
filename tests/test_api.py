@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import cast
 
 import httpx
 import pytest
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 
 from hcmai.app import create_app
 from hcmai.common.schemas.frame import FrameRecord
+from hcmai.common.schemas.enum import RetrievalSource
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.search import SearchEngine
 
@@ -44,10 +47,20 @@ class MockRetriever:
         return [
             RetrievalCandidate(
                 frame_id="L21_V001_00000090",
-                source_scores={"visual": 0.95},
+                source_scores={RetrievalSource.VISUAL: 0.95},
                 final_score=0.95,
             )
         ]
+
+
+class MockEvidenceStore:
+    """Return one fixed text value for any known frame."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def get_text(self, frame_id: str) -> str:
+        return self.text
 
 
 @pytest.fixture
@@ -83,17 +96,64 @@ def test_health_check_endpoint(api_app: FastAPI) -> None:
     assert data["total_frames"] == 1
 
 
+def test_search_materializes_configured_text_evidence() -> None:
+    stores = {
+        RetrievalSource.CAPTION: MockEvidenceStore("A person cooking."),
+        RetrievalSource.OCR: MockEvidenceStore("BƠ"),
+        RetrievalSource.ASR: MockEvidenceStore("Cho bơ vào chảo."),
+    }
+    engine = SearchEngine(
+        MockFrameStore(), MockRetriever(), evidence_stores=stores
+    )
+    app = create_app(search_engine=engine)
+
+    health = request(app, "GET", "/health").json()
+    result = request(
+        app, "POST", "/api/v1/search", json={"query": "cooking"}
+    ).json()["results"][0]
+
+    assert health["evidence_stores"] == {
+        "caption": True, "ocr": True, "asr": True
+    }
+    assert (result["caption"], result["ocr_text"], result["asr_text"]) == (
+        "A person cooking.", "BƠ", "Cho bơ vào chảo."
+    )
+
+
 def test_search_endpoint(api_app: FastAPI) -> None:
     """Test the POST /api/v1/search endpoint."""
-    payload = {"query": "một người đang đi bộ", "top_k": 5}
+    payload = {
+        "query": "một người đang đi bộ",
+        "query_type": "vkis",
+        "top_k": 5,
+    }
     response = request(api_app, "POST", "/api/v1/search", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["query"] == "một người đang đi bộ"
+    assert data["query_type"] == "vkis"
     assert data["total_results"] == 1
     assert data["results"][0]["frame_id"] == "L21_V001_00000090"
     assert data["results"][0]["video_id"] == "L21_V001"
     assert data["results"][0]["scores"]["final"] == 0.95
+
+
+@pytest.mark.parametrize(
+    ("query_type", "expected_status"),
+    [("kisc", 422), ("vqa", 501), ("trake", 501)],
+)
+def test_search_endpoint_rejects_wrong_task_router(
+    api_app: FastAPI,
+    query_type: str,
+    expected_status: int,
+) -> None:
+    response = request(
+        api_app,
+        "POST",
+        "/api/v1/search",
+        json={"query": "test", "query_type": query_type},
+    )
+    assert response.status_code == expected_status
 
 
 def test_search_endpoint_logs_every_pipeline_stage(
@@ -163,10 +223,10 @@ def test_missing_artifacts_do_not_prevent_startup(
 
     async def inspect_health() -> dict:
         async with app.router.lifespan_context(app):
-            route = next(
+            route = cast(APIRoute, next(
                 route for route in app.routes
                 if getattr(route, "path", None) == "/health"
-            )
+            ))
             return await route.endpoint()
 
     health = asyncio.run(inspect_health())

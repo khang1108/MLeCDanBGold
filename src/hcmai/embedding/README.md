@@ -39,7 +39,7 @@ skipped rather than aborting the run.
 from pathlib import Path
 
 from hcmai.embedding.embedding import EmbeddingPipeline
-from hcmai.retriever.encoder import EncoderConfig
+from hcmai.common.config import EncoderConfig
 
 pipeline = EmbeddingPipeline(
     frames_path=Path("data/metadata/frames.parquet"),

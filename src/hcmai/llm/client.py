@@ -15,7 +15,7 @@ from PIL import Image
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import RerankResponse, TextEmbeddingResponse
 from hcmai.common.utils.logging import get_logger
-from hcmai.retriever.models import EncodingStats
+from hcmai.retriever.dense.models import EncodingStats
 
 logger = get_logger(__name__)
 
@@ -36,8 +36,13 @@ class InferenceClient:
             headers=headers,
         )
 
-    def embed_text(self, texts: list[str]) -> TextEmbeddingResponse:
-        payload = self._post("/v1/embeddings/text", json={"texts": texts})
+    def embed_text(
+        self, texts: list[str], source: str = "visual"
+    ) -> TextEmbeddingResponse:
+        payload = self._post(
+            "/v1/embeddings/text",
+            json={"source": source, "texts": texts},
+        )
         return TextEmbeddingResponse.model_validate(payload)
 
     def rerank(self, query: str, images: Sequence[Image.Image]) -> list[float]:
@@ -93,11 +98,13 @@ class RemoteDenseEncoder:
         config: EncoderConfig,
         embedding_dim: int,
         fallback: Any | None = None,
+        source: str = "visual",
     ) -> None:
         self.client = client
         self.config = config
         self.embedding_dim = embedding_dim
         self.fallback = fallback
+        self.source = source
 
     def encode_text(
         self, texts: list[str], stats: EncodingStats | None = None
@@ -106,7 +113,7 @@ class RemoteDenseEncoder:
             return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
         started = perf_counter()
         try:
-            response = self.client.embed_text(texts)
+            response = self.client.embed_text(texts, self.source)
             vectors = self._validate(response, len(texts))
         except Exception as error:
             if self.fallback is None:

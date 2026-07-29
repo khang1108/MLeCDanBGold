@@ -9,10 +9,8 @@ from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas.evaluation import EvaluationQuery
 from hcmai.common.utils.io import read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.retriever.benchmark import RetrievalBenchmark
-from hcmai.retriever.dense import DenseRetriever
-from hcmai.retriever.encoder import DenseEncoder
-from hcmai.retriever.index import VisualIndex
+from hcmai.retriever.dense import DenseEncoder, DenseIndex, DenseRetriever
+from hcmai.retriever.evaluation import RetrievalBenchmark
 from script_args import parse_arguments
 
 logger = get_logger(__name__)
@@ -33,7 +31,7 @@ def main() -> int:
         model = config.get("models", {}).get("embedding", {})
         retriever = DenseRetriever(
             DenseEncoder(EncoderConfig.from_dict(model)),
-            VisualIndex.load(Path(args.index)),
+            DenseIndex.load(Path(args.index)),
         )
         benchmark = RetrievalBenchmark(
             retriever,

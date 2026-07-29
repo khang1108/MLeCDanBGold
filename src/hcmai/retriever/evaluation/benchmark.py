@@ -1,4 +1,4 @@
-"""Freeze a reproducible dense-retrieval baseline and record its metrics."""
+"""Run a reproducible dense-retrieval baseline and record its metrics."""
 
 from __future__ import annotations
 

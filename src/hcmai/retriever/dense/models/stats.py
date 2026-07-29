@@ -1,4 +1,4 @@
-"""Runtime statistics (outputs/measurements) for the retriever pipeline.
+"""Runtime statistics for dense encoding.
 
 Stats are produced while running models, kept separate from configuration
 inputs (``config.py``) and artifact provenance metadata (``metadata.py``).

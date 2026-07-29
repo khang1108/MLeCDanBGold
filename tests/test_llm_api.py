@@ -3,6 +3,7 @@ import asyncio
 import io
 import json
 from types import SimpleNamespace
+from typing import cast
 
 import httpx
 import numpy as np
@@ -13,6 +14,7 @@ from hcmai.common.schemas import InferenceReadiness, ModelStatus
 from hcmai.llm.api import create_llm_app
 from hcmai.llm.client import InferenceClient, RemoteDenseEncoder
 from hcmai.llm.config import LLMServiceConfig
+from hcmai.llm.runtime import LLMRuntime
 class FakeRuntime:
     config = LLMServiceConfig()
     reranker = SimpleNamespace(resolved_revision="test")
@@ -22,10 +24,10 @@ class FakeRuntime:
 
     def readiness(self):
         return InferenceReadiness(
-            ready=True, models={"embedding": ModelStatus(loaded=True)}
+            ready=True, models={"visual_embedding": ModelStatus(loaded=True)}
         )
 
-    def embed_text(self, texts):
+    def embed_text(self, texts, source="visual"):
         return np.asarray([[0.0, 1.0]] * len(texts), dtype=np.float32)
 
     def rerank(self, query, images):
@@ -54,9 +56,12 @@ def request(app, method, path, **kwargs):
             return await client.request(method, path, **kwargs)
     return asyncio.run(send())
 def test_inference_endpoints_preserve_order_and_contracts():
-    app = create_llm_app(FakeRuntime())
+    app = create_llm_app(cast(LLMRuntime, FakeRuntime()))
     embedding = request(
-        app, "POST", "/v1/embeddings/text", json={"texts": ["one", "two"]}
+        app,
+        "POST",
+        "/v1/embeddings/text",
+        json={"source": "caption", "texts": ["one", "two"]},
     )
     assert embedding.status_code == 200
     assert embedding.json()["embeddings"] == [[0.0, 1.0], [0.0, 1.0]]
@@ -79,7 +84,8 @@ def test_inference_endpoints_preserve_order_and_contracts():
     assert resolved.status_code == 200
     assert resolved.json()["standalone_query"] == "xe đỏ"
 def test_remote_encoder_validates_model_and_dimension():
-    def handler(_):
+    def handler(request):
+        assert json.loads(request.content)["source"] == "caption"
         return httpx.Response(200, json={
             "model": "model", "dimension": 2, "normalized": True,
             "embeddings": [[0.0, 1.0]], "latency_ms": 1,
@@ -89,6 +95,9 @@ def test_remote_encoder_validates_model_and_dimension():
     )
     client = InferenceClient("https://model.test", client=http)
     encoder = RemoteDenseEncoder(
-        client, EncoderConfig(model_name="model"), embedding_dim=2
+        client,
+        EncoderConfig(model_name="model"),
+        embedding_dim=2,
+        source="caption",
     )
     np.testing.assert_allclose(encoder.encode_text(["query"]), [[0.0, 1.0]])

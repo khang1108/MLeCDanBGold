@@ -186,7 +186,7 @@ Cách này giảm chi phí, đơn giản hóa pipeline và phù hợp hackathon.
 | `artifacts/enrichment/frame_enrichment.parquet` | AI Engineer 2 | BM25, fusion, UI | Join bằng `frame_id`; model/version rõ |
 | `artifacts/embeddings/visual_embeddings.npy` | Dense encoder | Index builder | Row count và dimension đúng |
 | `artifacts/embeddings/frame_mapping.parquet` | Dense encoder | FAISS retriever | `vector_position` liên tục và đúng frame |
-| `artifacts/indexes/visual.index` | Index builder | Online search | `ntotal` khớp mapping |
+| `artifacts/indexes/dense.index` | Index builder | Online search | `ntotal` khớp mapping |
 | BM25 index + manifest | AI Engineer 1 | Hybrid retrieval | Dataset/enrichment version tương thích |
 | Dataset snapshot manifest | Data Engineer | Mọi pipeline | Hash và version thống nhất |
 | `runs/<experiment>/` | Evaluation | Tech Lead/paper | Config, metrics, predictions, failures |

@@ -10,8 +10,8 @@ from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.encoder import TextEncoder
-from hcmai.retriever.index import VisualIndex
+from hcmai.retriever.dense.encoder import TextEncoder
+from hcmai.retriever.dense.index import DenseIndex
 
 logger = get_logger(__name__)
 
@@ -24,7 +24,12 @@ class DenseRetriever:
     :class:`RetrievalCandidate` objects rather than raw FAISS tuples.
     """
 
-    def __init__(self, encoder: TextEncoder, index: VisualIndex) -> None:
+    def __init__(
+        self,
+        encoder: TextEncoder,
+        index: DenseIndex,
+        source: RetrievalSource = RetrievalSource.VISUAL,
+    ) -> None:
         """Pair an encoder with an index and reject mismatched artifacts.
 
         Raises:
@@ -49,6 +54,7 @@ class DenseRetriever:
 
         self.encoder = encoder
         self.index = index
+        self.source = source
         # Query-encoding and index-search latency are recorded separately so
         # callers can attribute cost to the encoder versus the search.
         self.last_query_encoding_ms = 0.0
@@ -130,8 +136,8 @@ class DenseRetriever:
             candidates.append(
                 RetrievalCandidate(
                     frame_id=frame_id,
-                    source_scores={RetrievalSource.VISUAL: score},
-                    source_ranks={RetrievalSource.VISUAL: len(candidates) + 1},
+                    source_scores={self.source: score},
+                    source_ranks={self.source: len(candidates) + 1},
                     metadata={
                         "frame": {
                             "frame_id": frame_id,

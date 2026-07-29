@@ -18,7 +18,6 @@ const withAssetUrls = (payload) => ({
 export const searchFrames = async ({
   query,
   topK,
-  searchMode,
   sessionId,
   feedback,
   signal,
@@ -26,7 +25,6 @@ export const searchFrames = async ({
   const body = {
     query: query.trim(),
     top_k: topK,
-    search_mode: searchMode,
   };
   if (sessionId) body.session_id = sessionId;
   if (feedback) body.feedback = feedback;
@@ -48,7 +46,6 @@ export const searchKisc = async ({
   previousState = null,
   feedback = {},
   topK = 20,
-  searchMode = 'accurate',
   filters = null,
   signal,
 }) => {
@@ -60,7 +57,6 @@ export const searchKisc = async ({
       previous_state: previousState,
       feedback,
       top_k: topK,
-      search_mode: searchMode,
       filters,
     },
     signal,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field, field_validator
 
 from .base import ContractModel, NonEmptyString
@@ -9,8 +11,9 @@ from .conversation import ConversationState, ConversationTurn, FrameFeedback
 
 
 class TextEmbeddingRequest(ContractModel):
-    """Ordered text batch sent to the SigLIP-compatible encoder."""
+    """Ordered text batch routed to one configured retrieval encoder."""
 
+    source: Literal["visual", "caption"] = "visual"
     texts: list[NonEmptyString] = Field(min_length=1, max_length=64)
 
 
@@ -70,7 +73,7 @@ class ModelStatus(ContractModel):
 
 
 class InferenceReadiness(ContractModel):
-    """Readiness snapshot for the three bounded inference capabilities."""
+    """Readiness snapshot for all configured inference capabilities."""
 
     ready: bool
     models: dict[str, ModelStatus]

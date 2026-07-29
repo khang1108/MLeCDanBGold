@@ -1,4 +1,4 @@
-"""Provenance metadata (artifact descriptors) for the retriever pipeline.
+"""Provenance metadata for dense retrieval artifacts.
 
 Metadata records describe an artifact that was produced and are serialized
 next to it, kept separate from configuration inputs (``config.py``) and runtime

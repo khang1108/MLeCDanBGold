@@ -35,7 +35,8 @@ class HostedConversationConfig(BaseModel):
 
 class LLMServiceConfig(BaseModel):
     server: ServiceConfig = Field(default_factory=ServiceConfig)
-    embedding: EncoderConfig = Field(default_factory=EncoderConfig)
+    visual_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
+    caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     reranker: HostedRerankerConfig = Field(default_factory=HostedRerankerConfig)
     conversation: HostedConversationConfig = Field(
         default_factory=HostedConversationConfig
@@ -44,6 +45,7 @@ class LLMServiceConfig(BaseModel):
     @classmethod
     def from_yaml(cls, path: str | Path) -> LLMServiceConfig:
         data = read_yaml(path)
-        if "embedding" in data:
-            data["embedding"] = EncoderConfig.from_dict(data["embedding"])
+        for field in ("visual_embedding", "caption_embedding"):
+            if field in data:
+                data[field] = EncoderConfig.from_dict(data[field])
         return cls.model_validate(data)

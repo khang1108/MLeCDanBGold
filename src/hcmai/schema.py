@@ -7,7 +7,6 @@ from hcmai.common.schemas.enum import (
     QueryDifficulty,
     QueryLanguage,
     RetrievalSource,
-    SearchMode,
     TaskType,
 )
 from hcmai.common.schemas.evaluation import EvaluationQuery
@@ -30,7 +29,6 @@ __all__ = [
     "QueryDifficulty",
     "QueryLanguage",
     "RetrievalSource",
-    "SearchMode",
     "TaskType",
     "EvaluationQuery",
     "FrameEnrichment",

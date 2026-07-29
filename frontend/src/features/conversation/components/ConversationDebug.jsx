@@ -5,7 +5,6 @@ const ConversationDebug = ({
   session,
   requestId,
   topK,
-  searchMode,
   resultCount,
   committedFeedback,
   draftFeedback,
@@ -26,8 +25,6 @@ const ConversationDebug = ({
         <dd>{latest("ai")}</dd>
         <dt>Request</dt>
         <dd>{requestId || "—"}</dd>
-        <dt>Mode</dt>
-        <dd>{searchMode}</dd>
         <dt>Top K</dt>
         <dd>{topK}</dd>
         <dt>Results</dt>

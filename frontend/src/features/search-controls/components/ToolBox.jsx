@@ -1,7 +1,7 @@
 import React from "react";
 
-// Contains only published search controls: Top K and profile mode.
-const ToolBox = ({ topK, setTopK, searchMode, setSearchMode, onReset }) => (
+// Contains the only user-tunable search control.
+const ToolBox = ({ topK, setTopK, onReset }) => (
   <aside className="toolbox-sidebar">
     <div className="toolbox-section">
       <div className="toolbox-label-row">
@@ -20,22 +20,6 @@ const ToolBox = ({ topK, setTopK, searchMode, setSearchMode, onReset }) => (
         onChange={(event) => setTopK(Number(event.target.value))}
         className="toolbox-slider"
       />
-    </div>
-    <div className="toolbox-section">
-      <div className="toolbox-label-row">
-        <label htmlFor="search-mode-select" className="toolbox-label">
-          Search Mode
-        </label>
-      </div>
-      <select
-        id="search-mode-select"
-        value={searchMode}
-        onChange={(event) => setSearchMode(event.target.value)}
-        className="toolbox-input"
-      >
-        <option value="accurate">Accurate (Default)</option>
-        <option value="fast">Fast (Finalist)</option>
-      </select>
     </div>
     <button className="btn-utility toolbox-reset-btn" onClick={onReset}>
       Reset Parameters

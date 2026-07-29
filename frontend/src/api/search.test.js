@@ -15,7 +15,6 @@ test('posts the canonical stateful search request', async () => {
   await expect(searchFrames({
     query: ' red boat ',
     topK: 20,
-    searchMode: 'accurate',
     sessionId: 'kisc_sess_1234',
     feedback: {
       accepted_frame_ids: ['frame_A'],
@@ -30,7 +29,6 @@ test('posts the canonical stateful search request', async () => {
       body: JSON.stringify({
         query: 'red boat',
         top_k: 20,
-        search_mode: 'accurate',
         session_id: 'kisc_sess_1234',
         feedback: {
           accepted_frame_ids: ['frame_A'],
@@ -54,7 +52,6 @@ test('resolves API-relative frame asset URLs', async () => {
   const payload = await searchFrames({
     query: 'red car',
     topK: 1,
-    searchMode: 'fast',
   });
 
   expect(payload.results[0].thumbnail_url).toBe(
@@ -73,7 +70,6 @@ test('surfaces the backend error message', async () => {
   await expect(searchFrames({
     query: 'red car',
     topK: 20,
-    searchMode: 'fast',
   })).rejects.toThrow('Search engine is not initialized');
 });
 
@@ -85,7 +81,6 @@ test('rejects a malformed successful search response', async () => {
   await expect(searchFrames({
     query: 'boat',
     topK: 20,
-    searchMode: 'fast',
   })).rejects.toThrow('invalid response contract');
 });
 

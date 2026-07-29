@@ -45,7 +45,6 @@ __all__ = [
     "QueryDifficulty",
     "SearchScores",
     "RetrievalCandidate",
-    "SearchMode",
     "SearchFilters",
     "SearchRequest",
     "MessageRequest",

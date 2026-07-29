@@ -143,7 +143,7 @@ The existing Node.js frontend is preserved. It gains a typed API client, query c
 | `artifacts/enrichment/<version>/frame_enrichment.parquet` | Enrichment | Fusion and result materialization | Joinable by `frame_id`; version and failures recorded |
 | `artifacts/embeddings/<version>/visual_embeddings.npy` | Dense encoder | Index builder | Row count, dimension, dtype, normalization, and checkpoint recorded |
 | `artifacts/embeddings/<version>/frame_mapping.parquet` | Dense encoder | Index builder and retriever | `vector_position` is continuous and maps each vector to one frame |
-| `artifacts/indexes/<version>/visual.index` | Index builder | Online retriever | Index size equals mapping rows and manifest versions agree |
+| `artifacts/indexes/<version>/dense.index` | Index builder | Online retriever | Index size equals mapping rows and manifest versions agree |
 | `runs/<experiment>/` | Evaluation runner | Tech Lead and paper | Exact config, metrics, predictions, latency, and failure cases retained |
 
 This file-based design is intentional. Large images stay as image files, numerical vectors stay as NumPy arrays, and FAISS indexes stay as FAISS artifacts. Parquet stores structured metadata efficiently. A relational or vector database is unnecessary for the initial corpus because online retrieval already happens through FAISS and metadata can be cached in memory. The team should measure a bottleneck before adding database complexity.
@@ -224,7 +224,7 @@ The outputs are `visual_embeddings.npy`, `frame_mapping.parquet`, `manifest.json
 
 AI1-03 builds the retrieval index from normalized embeddings. The required first implementation is `IndexFlatIP`, serialized with the compatible mapping and manifest. Load-time validation checks dataset, checkpoint, dimension, normalization, and vector count. The benchmark records build time, artifact size, and CPU or GPU search latency when available. IVF or PQ is postponed until the exact baseline is measured.
 
-The outputs are `visual.index`, the matching mapping, and a manifest under a versioned index directory, plus implementation and tests in `src/aic/retriever/index.py` and `tests/test_faiss_index.py`. Acceptance requires index count equality, valid returned positions, self-retrieval of fixture images at or near rank one, and a clear error on incompatible artifacts. This P0 task is estimated at eight hours and scheduled for Days 2–3.
+The outputs are `dense.index`, the matching mapping, and a manifest under a versioned index directory, plus implementation and tests in `src/aic/retriever/index.py` and `tests/test_faiss_index.py`. Acceptance requires index count equality, valid returned positions, self-retrieval of fixture images at or near rank one, and a clear error on incompatible artifacts. This P0 task is estimated at eight hours and scheduled for Days 2–3.
 
 #### AI1-04: Implement DenseRetriever contract
 
@@ -256,7 +256,7 @@ The OCR fields join into the enrichment artifact, and `ocr_report.json` records 
 
 AI2-03 improves final ordering of already retrieved candidates. Khầy scores query-image pairs using the configured Qwen3-VL reranker or approved fallback, resolves candidate images through `FrameStore`, preserves IDs and candidate count, adds reranker and final scores, and sorts deterministically. The implementation handles missing images, corrupt files, out-of-memory, and timeouts by returning a defined fallback order.
 
-The deliverables are `src/aic/reranking/multimodal.py`, `tests/test_reranker.py`, and a reproducible baseline run. Acceptance requires identity preservation, deterministic output, measured Recall@1 or MRR impact on identical candidates, latency at rerank depths 10, 20, 50, and 100, and one-time model loading. This P0 task is estimated at ten hours and scheduled for Days 2–4. It depends on Fuvo’s candidates and Nhố’s `FrameStore`; it must never perform corpus-wide retrieval.
+The deliverables are `src/hcmai/reranking/multimodal/reranker.py`, `tests/test_reranker.py`, and a reproducible baseline run. Acceptance requires identity preservation, deterministic output, measured Recall@1 or MRR impact on identical candidates, latency at rerank depths 10, 20, 50, and 100, and one-time model loading. This P0 task is estimated at ten hours and scheduled for Days 2–4. It depends on Fuvo’s candidates and Nhố’s `FrameStore`; it must never perform corpus-wide retrieval.
 
 #### AI2-04: Implement bounded KISC conversation resolver
 

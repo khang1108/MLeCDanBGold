@@ -8,15 +8,20 @@ identifiers.
 
 ```text
 reranking/
-├── config.py       # Generic and Qwen-specific configuration
-├── protocols.py    # Model-agnostic scoring boundary
-├── multimodal.py   # Bounded candidate reranking and fallback policy
-└── qwen.py         # Lazy native Qwen3-VL relevance scorer
+├── multimodal/
+│   ├── config.py       # Candidate-pipeline configuration
+│   ├── protocols.py    # Model-agnostic scoring boundary
+│   └── reranker.py     # Bounded reranking and fallback policy
+└── qwen/
+    ├── config.py       # Qwen checkpoint/runtime configuration
+    └── scorer.py       # Lazy native Qwen3-VL relevance scorer
 ```
 
 Configuration and scoring protocols are owned by this package because they
 are used only by reranking. Input and output candidates use the shared
-`hcmai.common.schemas.RetrievalCandidate` contract.
+`hcmai.common.schemas.RetrievalCandidate` contract. The root
+`hcmai.reranking` package re-exports the public classes; a new model backend
+gets its own folder rather than another flat root-level module.
 
 ## Components
 

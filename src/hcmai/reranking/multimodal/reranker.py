@@ -12,8 +12,8 @@ from typing import Any
 from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.logging import get_logger
-from hcmai.reranking.config import RerankerConfig
-from hcmai.reranking.protocols import ScoreBatch
+from hcmai.reranking.multimodal.config import RerankerConfig
+from hcmai.reranking.multimodal.protocols import ScoreBatch
 
 logger = get_logger(__name__)
 

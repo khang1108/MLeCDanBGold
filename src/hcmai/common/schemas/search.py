@@ -5,7 +5,7 @@ from pydantic import Field, field_validator, model_validator
 
 from hcmai.common.schemas.base import ContractModel, NonEmptyString
 from hcmai.common.schemas.conversation import FrameFeedback
-from hcmai.common.schemas.enum import SearchMode
+from hcmai.common.schemas.enum import TaskType
 from hcmai.common.schemas.retrieval import SearchScores
 
 
@@ -44,8 +44,8 @@ class SearchRequest(ContractModel):
     """Public request accepted by the frame search endpoint."""
 
     query: NonEmptyString = Field(max_length=1_000)
+    query_type: TaskType = TaskType.KIS
     top_k: int = Field(default=20, ge=1, le=100)
-    search_mode: SearchMode = SearchMode.ACCURATE
     filters: SearchFilters | None = None
     session_id: NonEmptyString | None = None
     feedback: FrameFeedback | None = None
@@ -92,7 +92,7 @@ class SearchResponse(ContractModel):
 
     request_id: NonEmptyString
     query: NonEmptyString
-    search_mode: SearchMode
+    query_type: TaskType
     top_k: int = Field(ge=1, le=100)
     total_results: int = Field(ge=0)
     latency_ms: SearchLatency

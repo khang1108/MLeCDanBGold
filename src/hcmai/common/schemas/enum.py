@@ -4,17 +4,6 @@ from enum import Enum
 
 from hcmai.common.schemas import NonEmptyString, ContractModel
 
-class SearchMode(str, Enum):
-    """Supported Search Profiles
-
-    Args:
-        FAST: We use this mode only when we are at the Finalist Round :33
-        ACCURATE: Normal mode, set as Default
-    """
-
-    FAST = "fast"
-    ACCURATE = "accurate"
-
 
 class ProcessingStatus(str, Enum):
     """Status of an offline processing operation."""
@@ -44,10 +33,13 @@ class QueryLanguage(str, Enum):
 
 class TaskType(str, Enum):
     """Task type of each query."""
+
     KIS = "kis"
     KISC = "kisc"
+    VKIS = "vkis"
     VQA = "vqa"
     TRAKE = "trake"
+
 
 class QueryDifficulty(str, Enum):
     """Human-assigned difficulty of an evaluation query."""

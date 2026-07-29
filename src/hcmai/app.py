@@ -18,26 +18,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.common.config import AppConfig
+from hcmai.common.config import AppConfig, EncoderConfig
 from hcmai.common.schemas import (
     ConversationSession,
     FrameFeedback,
     FrameRecord,
     KISCSearchRequest,
     KISCSearchResponse,
+    RetrievalSource,
     SearchRequest,
     SearchResponse,
     SubmissionResult,
+    TaskType,
 )
-from hcmai.data import FrameStore
+from hcmai.data import ASRStore, CaptionStore, FrameStore, OCRStore
 from hcmai.agents.kisc import ConversationResolver, KISCAgent
 from hcmai.kisc import KiscSessionManager
 from hcmai.llm import InferenceClient, RemoteDenseEncoder
-from hcmai.reranking import MultimodalReranker
-from hcmai.reranking.config import RerankerConfig as PipelineRerankerConfig
-from hcmai.retriever.dense import DenseRetriever
-from hcmai.retriever.encoder import DenseEncoder
-from hcmai.retriever.index import VisualIndex
+from hcmai.llm.config import LLMServiceConfig
+from hcmai.reranking import (
+    MultimodalReranker,
+    RerankerConfig as PipelineRerankerConfig,
+)
+from hcmai.retriever.caption import CaptionRetriever
+from hcmai.retriever.dense import DenseEncoder, DenseIndex, DenseRetriever
+from hcmai.retriever.fusion import RRFFusionRetriever
 from hcmai.search import SearchEngine
 
 logger = get_logger(__name__)
@@ -87,45 +92,175 @@ def _load_settings(messages: list[str]) -> AppConfig:
         return AppConfig()
 
 
-def _build_query_encoder(
-    settings: AppConfig,
-    index: VisualIndex,
-) -> tuple[Any, InferenceClient | None]:
-    local = DenseEncoder(settings.models.embedding)
+def _load_model_settings(messages: list[str]) -> LLMServiceConfig:
+    """Load the single authoritative model-serving configuration."""
+
+    path = Path(os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml"))
+    if not path.is_file():
+        messages.append(f"Model config not found at {path}; using defaults")
+        return LLMServiceConfig()
+    try:
+        return LLMServiceConfig.from_yaml(path)
+    except Exception as error:
+        messages.append(
+            f"Could not load model config {path}: "
+            f"{type(error).__name__}: {error}"
+        )
+        return LLMServiceConfig()
+
+
+def _build_inference_client(settings: AppConfig) -> InferenceClient | None:
     if not settings.inference.enabled:
-        return local, None
-    client = InferenceClient(
+        return None
+    return InferenceClient(
         os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url),
         settings.inference.timeout_seconds,
     )
+
+
+def _build_query_encoder(
+    settings: AppConfig,
+    config: EncoderConfig,
+    index: DenseIndex,
+    client: InferenceClient | None,
+    source: str,
+) -> Any:
+    if index.metadata.model_name != config.model_name:
+        raise ValueError(
+            f"{source} index model {index.metadata.model_name!r} does not "
+            f"match llm config {config.model_name!r}"
+        )
+    local_config = config.model_copy(
+        update={
+            "device": settings.inference.local_fallback_device,
+            "batch_size": settings.inference.local_fallback_batch_size,
+        }
+    )
+    local = DenseEncoder(local_config)
+    if client is None:
+        return local
     fallback = local if settings.inference.local_embedding_fallback else None
-    remote = RemoteDenseEncoder(
+    return RemoteDenseEncoder(
         client,
-        settings.models.embedding,
+        config,
         index.metadata.embedding_dim,
         fallback,
+        source=source,
     )
-    return remote, client
 
 
 def _build_remote_reranker(
     settings: AppConfig,
+    models: LLMServiceConfig,
     store: FrameStore | None,
     client: InferenceClient | None,
 ) -> MultimodalReranker | None:
-    if client is None or store is None or not settings.models.reranker.enabled:
+    if client is None or store is None or settings.search.rerank_count <= 0:
         return None
     return MultimodalReranker(
         store,
-        PipelineRerankerConfig(batch_size=settings.models.reranker.batch_size),
+        PipelineRerankerConfig(batch_size=models.reranker.batch_size),
         client.rerank,
         dataset_root=settings.dataset.root,
     )
 
 
+def _load_evidence_stores(
+    settings: AppConfig,
+    messages: list[str],
+) -> dict[RetrievalSource, Any]:
+    """Load available text artifacts without blocking visual search startup."""
+
+    configured = (
+        (
+            RetrievalSource.CAPTION,
+            CaptionStore,
+            settings.dataset.enrichment.caption_path,
+        ),
+        (RetrievalSource.OCR, OCRStore, settings.dataset.enrichment.ocr_path),
+        (RetrievalSource.ASR, ASRStore, settings.dataset.enrichment.asr_path),
+    )
+    stores: dict[RetrievalSource, Any] = {}
+    for source, store_type, path in configured:
+        if path is None:
+            continue
+        if not path.is_file() or path.stat().st_size == 0:
+            messages.append(f"{source.value.upper()} artifact not available at {path}")
+            continue
+        try:
+            stores[source] = store_type(path)
+            logger.info(
+                "%sStore loaded path=%s frames=%d",
+                source.value.upper(),
+                path,
+                len(stores[source]),
+            )
+        except Exception as error:
+            messages.append(
+                f"Could not load {source.value} artifact {path}: "
+                f"{type(error).__name__}: {error}"
+            )
+    return stores
+
+
+def _with_caption_retrieval(
+    settings: AppConfig,
+    models: LLMServiceConfig,
+    visual: DenseRetriever,
+    visual_index: DenseIndex,
+    client: InferenceClient | None,
+    messages: list[str],
+) -> DenseRetriever | RRFFusionRetriever:
+    """Add compatible caption retrieval without breaking visual-only startup."""
+
+    caption_dir = Path(
+        os.getenv("HCMAI_CAPTION_INDEX_PATH", str(settings.index.caption_path))
+    )
+    if not caption_dir.is_dir():
+        messages.append(f"Caption index directory not available at {caption_dir}")
+        return visual
+    if settings.search.fusion.method != "rrf":
+        messages.append(
+            f"Unsupported fusion method {settings.search.fusion.method!r}; "
+            "caption retrieval disabled"
+        )
+        return visual
+    try:
+        caption_index = DenseIndex.load(caption_dir)
+        if caption_index.metadata.dataset_version != visual_index.metadata.dataset_version:
+            raise ValueError("visual and caption index dataset versions differ")
+        caption_config = models.caption_embedding
+        caption_encoder = _build_query_encoder(
+            settings,
+            caption_config,
+            caption_index,
+            client,
+            "caption",
+        )
+        caption = CaptionRetriever(caption_encoder, caption_index)
+        logger.info(
+            "Caption retrieval enabled path=%s model=%s dimension=%d rrf_k=%d",
+            caption_dir,
+            caption_config.model_name,
+            caption_index.metadata.embedding_dim,
+            settings.search.fusion.rrf_k,
+        )
+        return RRFFusionRetriever(
+            [visual, caption],
+            settings.search.fusion,
+        )
+    except Exception as error:
+        messages.append(
+            f"Could not enable caption retrieval from {caption_dir}: "
+            f"{type(error).__name__}: {error}"
+        )
+        return visual
+
+
 def _load_default_engine(messages: list[str]) -> SearchEngine:
     """Load available artifacts without preventing the API from starting."""
     settings = _load_settings(messages)
+    models = _load_model_settings(messages)
     metadata_path = Path(
         os.getenv("HCMAI_METADATA_PATH", str(settings.dataset.frames_path))
     )
@@ -148,12 +283,26 @@ def _load_default_engine(messages: list[str]) -> SearchEngine:
         messages.append(f"Metadata not available at {metadata_path}")
 
     retriever = None
-    inference_client = None
+    inference_client = _build_inference_client(settings)
     if index_dir.is_dir():
         try:
-            index = VisualIndex.load(index_dir)
-            encoder, inference_client = _build_query_encoder(settings, index)
-            retriever = DenseRetriever(encoder=encoder, index=index)
+            index = DenseIndex.load(index_dir)
+            encoder = _build_query_encoder(
+                settings,
+                models.visual_embedding,
+                index,
+                inference_client,
+                "visual",
+            )
+            visual = DenseRetriever(encoder=encoder, index=index)
+            retriever = _with_caption_retrieval(
+                settings,
+                models,
+                visual,
+                index,
+                inference_client,
+                messages,
+            )
         except Exception as error:
             messages.append(
                 f"Could not load index {index_dir}: {type(error).__name__}: {error}"
@@ -161,12 +310,16 @@ def _load_default_engine(messages: list[str]) -> SearchEngine:
     else:
         messages.append(f"Index directory not available at {index_dir}")
 
-    reranker = _build_remote_reranker(settings, store, inference_client)
+    reranker = _build_remote_reranker(
+        settings, models, store, inference_client
+    )
+    evidence_stores = _load_evidence_stores(settings, messages)
     engine = SearchEngine(
         frame_store=store,
         retriever=retriever,
         reranker=reranker,
         config=settings.model_dump(mode="python"),
+        evidence_stores=evidence_stores,
     )
     setattr(engine, "inference_client", inference_client)
     return engine
@@ -253,6 +406,7 @@ def create_app(
         engine = engine_container["engine"]
         frame_store = getattr(engine, "frame_store", None)
         retriever = getattr(engine, "retriever", None)
+        evidence_stores = getattr(engine, "evidence_stores", {})
         store_loaded = frame_store is not None
         retriever_loaded = retriever is not None
         total_frames = (
@@ -266,6 +420,14 @@ def create_app(
             "frame_store_loaded": store_loaded,
             "retriever_loaded": retriever_loaded,
             "total_frames": total_frames,
+            "evidence_stores": {
+                source.value: source in evidence_stores
+                for source in (
+                    RetrievalSource.CAPTION,
+                    RetrievalSource.OCR,
+                    RetrievalSource.ASR,
+                )
+            },
             "capabilities": {
                 "search": retriever_loaded,
                 "kisc": provider_container["kisc_agent"] is not None,
@@ -276,7 +438,20 @@ def create_app(
 
     @app.post("/api/v1/search", response_model=SearchResponse)
     async def search_frames(request: SearchRequest) -> SearchResponse:
-        """Execute a frame retrieval query (supports both standard & KISC turns)."""
+        """Execute one standalone KIS or VKIS frame-retrieval query."""
+        if request.query_type is TaskType.KISC:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="query_type 'kisc' must use /api/v1/kisc/search",
+            )
+        if request.query_type in {TaskType.VQA, TaskType.TRAKE}:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail=(
+                    f"query_type {request.query_type.value!r} is not "
+                    "implemented by the frame-search endpoint"
+                ),
+            )
         engine = engine_container["engine"]
         if engine is None or getattr(engine, "retriever", None) is None:
             raise HTTPException(

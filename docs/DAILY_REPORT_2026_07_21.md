@@ -59,10 +59,10 @@
 ## 🟡 2. Những công việc CÒN THIẾU & Kế hoạch Phát triển Tiếp theo (Future Roadmap)
 
 ### 2.1. Sinh Visual Embeddings & Xây dựng FAISS Vector Index (Ưu tiên 1)
-- **Hiện trạng**: Thuật toán `DenseRetriever` và `VisualIndex` đã hoàn chỉnh nhưng đang chờ file chỉ mục trên ổ đĩa.
+- **Hiện trạng**: Thuật toán `DenseRetriever` và `DenseIndex` đã hoàn chỉnh nhưng đang chờ file chỉ mục trên ổ đĩa.
 - **Kế hoạch**:
   1. Chạy script `scripts/build_embeddings.py` trích xuất visual vectors (mô hình SigLIP/CLIP) cho 177,321 keyframes.
-  2. Chạy script `scripts/build_index.py` tạo file chỉ mục `artifacts/indexes/visual.index` để FastAPI server tự động nạp khi startup.
+  2. Chạy script `scripts/build_index.py` tạo file chỉ mục `artifacts/indexes/dense.index` để FastAPI server tự động nạp khi startup.
 
 ### 2.2. Tích hợp Multimodal / Conversational Reranker (Ưu tiên 2)
 - **Hiện trạng**: Xử lý feedback KISC hiện tại dừng ở mức **Hard Negative Filter** (loại bỏ các frame bị reject).

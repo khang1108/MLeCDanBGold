@@ -12,6 +12,7 @@ frame mapping, and builds the FAISS index.
 ```bash
 PYTHONPATH=src aic/bin/python scripts/build_embeddings.py \
   --config configs/baseline.yaml \
+  --model-config llm/config.yaml \
   --dataset-root data \
   --frames data/metadata/frames.parquet \
   --output artifacts
@@ -23,14 +24,15 @@ Outputs:
 artifacts/embeddings/visual_embeddings.npy
 artifacts/embeddings/frame_mapping.parquet
 artifacts/embeddings/metadata.yaml
-artifacts/indexes/visual/visual.index
+artifacts/indexes/visual/dense.index
 artifacts/indexes/visual/frame_mapping.parquet
 artifacts/indexes/visual/metadata.json
 ```
 
-The first non-empty batch loads the configured model checkpoint. Ensure the
-machine has enough memory and that the checkpoint is already cached or network
-access is available.
+The dataset and index paths come from `configs/baseline.yaml`; the visual
+checkpoint comes from `llm/config.yaml`. The first non-empty batch loads that
+checkpoint. Ensure the machine has enough memory and that the checkpoint is
+already cached or network access is available.
 
 ## Generate captions
 
@@ -44,11 +46,35 @@ PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py
 Pass `--config`, `--frames`, `--dataset-root`, or `--output` only when a run
 needs to override those values.
 
+## Build caption embeddings and index
+
+After caption generation completes, build the caption retrieval artifacts:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/build_caption_index.py
+```
+
+The command reads caption/frame/index paths from `configs/baseline.yaml` and
+the caption encoder from `llm/config.yaml`. Override them only when needed:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/build_caption_index.py \
+  --config configs/baseline.yaml \
+  --model-config llm/config.yaml \
+  --captions artifacts/enrichment/caption/frame_enrichment.parquet \
+  --frames data/metadata/frames.parquet \
+  --output artifacts/indexes/caption
+```
+
+It writes `caption_embeddings.npy`, `dense.index`,
+`frame_mapping.parquet`, and `metadata.json` under the output directory.
+
 ## Rebuild only the index
 
 ```bash
 PYTHONPATH=src aic/bin/python scripts/build_index.py \
   --config configs/baseline.yaml \
+  --model-config llm/config.yaml \
   --embeddings artifacts/embeddings/visual_embeddings.npy \
   --mapping artifacts/embeddings/frame_mapping.parquet \
   --output artifacts/indexes/visual

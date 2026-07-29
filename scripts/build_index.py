@@ -8,7 +8,8 @@ import numpy as np
 
 from hcmai.common.utils.io import read_parquet, read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.retriever.index import VisualIndex
+from hcmai.llm.config import LLMServiceConfig
+from hcmai.retriever.dense import DenseIndex
 from script_args import parse_arguments
 
 logger = get_logger(__name__)
@@ -22,14 +23,14 @@ def main() -> int:
         config = read_yaml(Path(args.config))
         embeddings = np.load(Path(args.embeddings))
         mapping = read_parquet(Path(args.mapping))
-        model = config.get("models", {}).get("embedding", {})
-        index = VisualIndex.build(
+        models = LLMServiceConfig.from_yaml(args.model_config)
+        index = DenseIndex.build(
             embeddings,
             mapping,
             dataset_version=config.get("dataset", {}).get(
                 "version", "unknown"
             ),
-            model_name=model.get("name", "unknown"),
+            model_name=models.visual_embedding.model_name,
             index_type=config.get("index", {}).get("type", "flat_ip"),
         )
         index.save(Path(args.output))

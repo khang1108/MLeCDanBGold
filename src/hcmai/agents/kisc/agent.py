@@ -5,6 +5,7 @@ from __future__ import annotations
 from time import perf_counter
 
 from hcmai.common.schemas import SearchRequest
+from hcmai.common.schemas.enum import TaskType
 from hcmai.common.schemas.conversation import ConversationState
 from hcmai.common.schemas.kisc import KISCSearchRequest, KISCSearchResponse
 from hcmai.common.utils.logging import get_logger
@@ -100,8 +101,8 @@ class KISCAgent:
         response = self.search_engine.search(
             SearchRequest(
                 query=state.standalone_query,
+                query_type=TaskType.KISC,
                 top_k=request.top_k,
-                search_mode=request.search_mode,
                 filters=request.filters,
             )
         )

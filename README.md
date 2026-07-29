@@ -17,9 +17,11 @@ Implemented foundations:
   enums, and conversational feedback.
 - A deterministic `official mapping + keyframes → frames.parquet` builder and
   an in-memory `FrameStore`.
-- `SearchEngine` orchestration with configurable `accurate` and `fast`
-  profiles, optional reranking, response materialization, and latency fields.
+- `SearchEngine` orchestration with one selected competition configuration,
+  optional reranking, response materialization, and latency fields.
 - Visual embedding, FAISS index, and dense-retrieval foundations.
+- Caption and OCR enrichment pipelines, Caption/OCR/ASR evidence stores, plus
+  caption indexing and optional visual-caption RRF retrieval.
 - A FastAPI application and the existing Node.js frontend.
 - Utility helpers for YAML/JSON/Parquet I/O, image loading, timing, and
   logging.
@@ -27,24 +29,101 @@ Implemented foundations:
 
 Still to implement:
 
-- Captioning, OCR, ASR, score fusion, and multimodal reranking.
+- Add OCR/ASR retrievers and benchmark multimodal fusion weights.
+- Benchmark and select the highest-scoring caption text encoder that satisfies
+  the competition latency budget.
 - Reproducible offline evaluation runners and measured retrieval experiments.
 
-## Target retrieval flow
+## Data and retrieval flow
+
+The diagram distinguishes the active visual path, reusable components that
+still need online wiring, and planned retrieval stages. Every artifact is
+joined through the canonical `frame_id`; final submission identifiers always
+come from `frames.parquet`.
 
 ```mermaid
-flowchart TD
-    H["History + current turn"] --> S["Conversation state"]
-    S --> Q["Standalone query"]
-    Q --> R["Candidate retrieval"]
-    S --> R
-    R --> M["Conversation-aware reranking"]
-    M --> F["Apply feedback"]
-    F --> O["Results + updated state"]
+flowchart TB
+    subgraph OFFLINE["Offline ingestion and indexing"]
+        direction LR
+        MAP["Official frame mappings"] --> META["data/metadata/<br/>frames.parquet"]
+        KEY["Keyframe images"] --> META
+
+        META --> VDATA["Frame images"]
+        VDATA --> VENC["SigLIP2<br/>image encoder"]
+        VENC --> VEMB["artifacts/embeddings/<br/>visual_embeddings.npy"]
+        VEMB --> VIDX["artifacts/indexes/visual/<br/>dense.index + mapping + metadata"]
+
+        VDATA --> CAPGEN["Caption generation<br/>microsoft/Florence-2-base-ft"]
+        CAPGEN --> CAPSTORE["artifacts/enrichment/caption/<br/>frame_enrichment.parquet"]
+        CAPSTORE --> CAPENC["Caption TextEncoder<br/>benchmark: SigLIP2 / E5 / BGE-M3"]
+        CAPENC --> CAPEMB["artifacts/indexes/caption/<br/>caption_embeddings.npy"]
+        CAPEMB --> CAPIDX["artifacts/indexes/caption/<br/>dense.index + mapping + metadata"]
+
+        VDATA --> OCRGEN["OCR generation<br/>florence-community/Florence-2-base-ft"]
+        OCRGEN --> OCRSTORE["artifacts/enrichment/ocr/<br/>frame_enrichment.parquet"]
+
+        VIDEO["Video audio"] --> ASRGEN["ASR pipeline"]
+        ASRGEN --> ASRSTORE["artifacts/enrichment/asr/<br/>frame_enrichment.parquet"]
+    end
+
+    subgraph ONLINE["Online query path"]
+        direction LR
+        UI["React UI"] --> API["FastAPI"]
+        API --> RESOLVE["KISC resolve<br/>standalone query"]
+
+        RESOLVE --> VQENC["SigLIP2<br/>text query encoder"]
+        VQENC --> VRET["DenseRetriever<br/>source: visual"]
+        VIDX --> VRET
+
+        RESOLVE --> CQENC["Caption query encoder<br/>same checkpoint as caption index"]
+        CQENC --> CRET["CaptionRetriever<br/>enabled for a compatible index"]
+        CAPIDX --> CRET
+
+        RESOLVE -.-> ORET["OCR text retriever<br/>planned"]
+        OCRSTORE -.-> ORET
+        RESOLVE -.-> ARET["ASR text retriever<br/>planned"]
+        ASRSTORE -.-> ARET
+
+        VRET --> FUSION["RRFFusionRetriever<br/>union by frame_id"]
+        CRET --> FUSION
+        ORET -.-> FUSION
+        ARET -.-> FUSION
+        FUSION --> RERANK["Optional multimodal<br/>reranking"]
+        RERANK --> MATERIALIZE["SearchEngine materialization<br/>exact video_id + frame_idx"]
+        META --> MATERIALIZE
+
+        CAPSTORE --> EVIDENCE["Caption / OCR / ASR<br/>evidence lookup"]
+        OCRSTORE --> EVIDENCE
+        ASRSTORE --> EVIDENCE
+        EVIDENCE --> MATERIALIZE
+
+        MATERIALIZE --> RESPONSE["Search response"]
+        RESPONSE --> UI
+    end
+
+    classDef active fill:#dcfce7,stroke:#15803d,color:#14532d;
+    classDef component fill:#fef3c7,stroke:#d97706,color:#78350f;
+    classDef planned fill:#f3f4f6,stroke:#6b7280,color:#374151,stroke-dasharray:5 5;
+
+    style OFFLINE fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a;
+    style ONLINE fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a;
+    linkStyle default stroke:#64748b,stroke-width:1.5px;
+
+    class MAP,KEY,META,VDATA,VENC,VEMB,VIDX,CAPGEN,CAPSTORE,OCRGEN,OCRSTORE,ASRSTORE,UI,API,RESOLVE,VQENC,VRET,CQENC,CRET,FUSION,EVIDENCE,RERANK,MATERIALIZE,RESPONSE active;
+    class CAPENC,CAPEMB,CAPIDX component;
+    class VIDEO,ASRGEN,ORET,ARET planned;
 ```
 
+Green nodes are active when their compatible artifacts are available. Amber
+nodes have artifact contracts or reusable code but still require a benchmark
+decision. Dashed gray nodes are planned. The caption encoder is deliberately
+marked as a benchmark choice: `SigLIP2`, `multilingual-e5-small`, and `BGE-M3`
+must be measured before selecting the competition checkpoint. Until a
+separate text encoder is configured, caption fusion only activates when its
+index matches the current query-encoder checkpoint and dataset version.
+
 The design keeps expensive offline work separate from online search. Model
-checkpoints, candidate counts, and search profile values belong in
+checkpoints and candidate counts belong in
 configuration, while frame identifiers and API shapes belong in the shared
 schemas.
 
@@ -59,7 +138,8 @@ src/hcmai/
 ├── kisc.py                       Conversational state
 ├── data/                         Canonical builder and FrameStore
 ├── embedding/                    Visual embedding pipeline
-├── retriever/                    Dense retrieval and FAISS index
+├── retriever/                    Dense, caption, fusion, and evaluation packages
+├── reranking/                    Multimodal pipeline and model backends
 └── common/
     ├── config.py                 Shared settings scaffolding
     ├── schemas/                  Pydantic contracts
@@ -73,48 +153,11 @@ runs/                             Evaluation outputs
 tests/                            Contract tests and smoke tests
 ```
 
-## Shared schemas
-
-Use the contracts in [`src/hcmai/common/schemas`](src/hcmai/common/schemas)
-instead of local dictionaries or duplicate dataclasses. The package documents
-all models and enums in its [schema README](src/hcmai/common/schemas/README.md).
-
-Key identifiers are:
-
-- `frame_id`: globally unique and stable across pipeline reruns.
-- `video_id`: source video identifier.
-- `frame_idx`: authoritative frame index for submission.
-- `timestamp_ms`: presentation timestamp for previews and temporal search.
-
-`frame_idx` must not be inferred from `timestamp_ms * fps`; variable-frame-rate
-videos and decoder behavior can make that mapping incorrect.
-
-Example:
-
-```python
-from hcmai.common.schemas.search import SearchRequest
-
-request = SearchRequest(query="một người đang đi bộ", top_k=20)
-```
-
-## Utilities
-
-The [utility README](src/hcmai/common/utils/README.md) contains complete usage
-examples. The available helpers are:
-
-- `io.py`: `read_*` and `write_*` helpers for YAML, JSON, and Parquet.
-- `image.py`: `load_image` for fully loaded, detached Pillow images.
-- `timing.py`: `Timer` and `elapsed_ms` using a monotonic clock.
-- `logging.py`: `configure_logging` and `get_logger`.
-
 Install the project and its declared dependencies:
 
 ```bash
 aic/bin/python -m pip install -e ".[embedding,reranking,dev]"
 ```
-
-Update `pyproject.toml` whenever a new runtime dependency becomes part of the
-supported baseline.
 
 ## Host the AI models on a temporary GPU VM
 
@@ -134,6 +177,10 @@ Cloudflare Access + Tunnel (api.iamphuckhang.dev)
         v
 Temporary GPU model API (localhost:8100 on the VM)
 ```
+
+`configs/baseline.yaml` owns dataset, artifact, search, fusion, API, and
+inference-connection settings. `llm/config.yaml` is the single authority for
+visual embedding, caption embedding, reranking, and conversation checkpoints.
 
 This keeps the roughly 100 GB retrieval artifacts off the VM. Deleting the VM
 therefore loses only the installed environment and downloaded model cache, not
@@ -291,17 +338,28 @@ the input layout, schema, and `FrameStore` examples.
 
 Use `frame_id` as the join key across all artifacts:
 
-| Path                                              | Format    | Purpose                              |
-| ------------------------------------------------- | --------- | ------------------------------------ |
-| `data/metadata/frames.parquet`                  | Parquet   | Canonical searchable-frame metadata  |
-| `artifacts/enrichment/frame_enrichment.parquet` | Parquet   | Caption/OCR/ASR evidence             |
-| `artifacts/embeddings/visual_embeddings.npy`    | NumPy     | Visual embedding matrix              |
-| `artifacts/embeddings/frame_mapping.parquet`    | Parquet   | Vector-to-frame mapping              |
-| `artifacts/indexes/visual/`                     | Directory | FAISS index, mapping, and provenance |
+| Path                                                      | Format    | Purpose                                  |
+| --------------------------------------------------------- | --------- | ---------------------------------------- |
+| `data/metadata/frames.parquet`                          | Parquet   | Canonical searchable-frame metadata      |
+| `artifacts/enrichment/caption/frame_enrichment.parquet` | Parquet   | Per-frame caption evidence               |
+| `artifacts/enrichment/ocr/frame_enrichment.parquet`     | Parquet   | Per-frame OCR evidence                   |
+| `artifacts/enrichment/asr/frame_enrichment.parquet`     | Parquet   | Per-frame ASR evidence                   |
+| `artifacts/embeddings/visual_embeddings.npy`            | NumPy     | Visual embedding matrix                  |
+| `artifacts/embeddings/frame_mapping.parquet`            | Parquet   | Visual vector-to-frame mapping           |
+| `artifacts/indexes/visual/`                             | Directory | Visual FAISS index, mapping, provenance  |
+| `artifacts/indexes/caption/caption_embeddings.npy`      | NumPy     | Caption embedding matrix                 |
+| `artifacts/indexes/caption/`                            | Directory | Caption FAISS index, mapping, provenance |
 
-The visual index directory contains `visual.index`,
-`frame_mapping.parquet`, and `metadata.json`. Set `HCMAI_INDEX_PATH` to this
-directory, not to the `visual.index` file inside it.
+Each index directory contains `dense.index`, `frame_mapping.parquet`, and
+`metadata.json`; the caption directory additionally contains
+`caption_embeddings.npy`. Set `HCMAI_INDEX_PATH` to the visual index directory,
+not to the `dense.index` file inside it.
+
+After caption enrichment finishes, build the configured caption index with:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/build_caption_index.py
+```
 
 Datasets, embeddings, model weights, indexes, and experiment outputs are local
 artifacts and must not be committed to Git.
@@ -362,7 +420,7 @@ The default artifact paths come from `configs/baseline.yaml`:
 ```text
 data/metadata/frames.parquet
 artifacts/indexes/visual/
-├── visual.index
+├── dense.index
 ├── frame_mapping.parquet
 └── metadata.json
 ```
@@ -371,7 +429,7 @@ Confirm that these files exist before starting:
 
 ```bash
 ls -lh data/metadata/frames.parquet
-ls -lh artifacts/indexes/visual/visual.index
+ls -lh artifacts/indexes/visual/dense.index
 ls -lh artifacts/indexes/visual/frame_mapping.parquet
 ls -lh artifacts/indexes/visual/metadata.json
 ```
@@ -388,7 +446,7 @@ export HCMAI_LOG_LEVEL=INFO
 ```
 
 `HCMAI_INDEX_PATH` must point to the index directory, not directly to
-`visual.index`.
+`dense.index`.
 
 ### 3. Start FastAPI
 
@@ -444,10 +502,9 @@ until a retriever is available. Runtime paths can be overridden with
 ### Available API endpoints
 
 - `GET /health`: Health status and dataset readiness.
-- `POST /api/v1/search`: Frame search for standard and conversational KISC
-  turns.
+- `POST /api/v1/search`: Standalone KIS/VKIS frame search selected by
+  `query_type`.
 - `POST /api/v1/kisc/search`: Stateless resolve-then-search KISC turn.
-- `POST /api/v1/vqa`: Frame-grounded VQA provider boundary.
 - `POST /api/v1/session`: Create a new KISC session.
 - `GET /api/v1/sessions`: List all current KISC session IDs.
 - `POST /api/v1/feedback`: Update accepted/rejected frame feedback lists.
@@ -457,11 +514,10 @@ until a retriever is available. Runtime paths can be overridden with
 - `GET /api/v1/frames/{frame_id}/neighbors?window_ms=5000`: Fetch temporal neighbors.
 - `POST /api/v1/submit`: Generate official BTC competition submission code (`video_id,frame_idx`).
 
-For KISC, create a session first, then pass its `session_id` to search and
-feedback requests. Unknown sessions return `404`; accepted results are promoted,
-rejected results are removed, and each response identifies both the user turn
-and its AI reply. Sessions currently live in process memory, so the list resets
-when the backend restarts.
+The accepted query-type enum is `kis`, `kisc`, `vkis`, `vqa`, and `trake`.
+KISC uses `/api/v1/kisc/search`; VQA and TRAKE return `501` until their
+task-specific orchestrators exist. Sessions currently live in process memory,
+so the list resets when the backend restarts.
 
 ## Frontend integration
 
@@ -478,7 +534,7 @@ npm start
 The default backend is `http://127.0.0.1:8000`. The UI uses the published
 conversation routes: `POST /api/v1/session`, `GET /api/v1/sessions`,
 `GET /api/v1/session/{session_id}`, and `POST /api/v1/feedback`. Search sends
-`query`, `top_k`, `search_mode`, and the active `session_id`; when the visible
+`query_type`, `query`, `top_k`, and the active `session_id`; when the visible
 feedback draft changed, it also sends the contract's
 `accepted_frame_ids`/`rejected_frame_ids` snapshot. The History menu lists the
 server's in-memory session IDs, so it resets when the backend restarts.

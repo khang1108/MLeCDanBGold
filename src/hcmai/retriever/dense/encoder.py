@@ -12,7 +12,7 @@ from transformers import AutoModel, AutoProcessor
 from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.models import EncodingStats
+from hcmai.retriever.dense.models import EncodingStats
 
 logger = get_logger(__name__)
 

@@ -9,7 +9,7 @@ import torch
 from PIL import Image
 
 from hcmai.common.config import EncoderConfig
-from hcmai.retriever.encoder import DenseEncoder, EncodingStats
+from hcmai.retriever.dense import DenseEncoder, EncodingStats
 
 
 class FakeBatch(dict):

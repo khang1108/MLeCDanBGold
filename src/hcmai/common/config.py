@@ -3,12 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
-from pydantic import AliasChoices, BaseModel, Field
+from typing import Any, Literal
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
 # Recall cut-offs frozen for baseline comparison
 RECALL_CUTOFFS: tuple[int, ...] = (1, 5, 10, 100)
+
+
+class EnrichmentArtifactsConfig(BaseModel):
+    """Paths to source-specific frame-enrichment artifacts."""
+
+    caption_path: Path | None = Path(
+        "artifacts/enrichment/caption/frame_enrichment.parquet"
+    )
+    ocr_path: Path | None = Path(
+        "artifacts/enrichment/ocr/frame_enrichment.parquet"
+    )
+    asr_path: Path | None = Path(
+        "artifacts/enrichment/asr/frame_enrichment.parquet"
+    )
 
 
 class DatasetConfig(BaseModel):
@@ -17,7 +31,9 @@ class DatasetConfig(BaseModel):
     version: str = "hcmai2026_v1"
     root: Path = Path("data")
     frames_path: Path = Path("data/metadata/frames.parquet")
-    enrichment_path: Path = Path("artifacts/enrichment/frame_enrichment.parquet")
+    enrichment: EnrichmentArtifactsConfig = Field(
+        default_factory=EnrichmentArtifactsConfig
+    )
 
 
 class EncoderConfig(BaseModel):
@@ -47,64 +63,27 @@ class EncoderConfig(BaseModel):
         )
 
 
-class RerankerConfig(BaseModel):
-    """Configuration for the reranking stage."""
-
-    enabled: bool = True
-    model_name: str = Field(
-        default="Qwen/Qwen3-VL-Reranker-2B",
-        validation_alias=AliasChoices("model_name", "name"),
-    )
-    device: str = "cuda"
-    batch_size: int = 8
-
-
-class ModelConfig(BaseModel):
-    """Container for visual embedding and reranking models."""
-
-    embedding: EncoderConfig = Field(default_factory=EncoderConfig)
-    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
-
-
 class IndexConfig(BaseModel):
     """Configuration for the self-contained FAISS artifact directory."""
 
     type: str = "flat_ip"
     path: Path = Path("artifacts/indexes/visual")
-
-
-class SearchProfile(BaseModel):
-    """Parameters for a specific search profile (fast vs accurate)."""
-
-    visual_candidates: int = 100
-    rerank_count: int = 20
-    temporal_window_ms: int = 1000
+    caption_path: Path = Path("artifacts/indexes/caption")
 
 
 class FusionConfig(BaseModel):
     """Fusion configuration for multi-modal candidate merging."""
 
-    method: str = "rrf"
-    rrf_k: int = 60
+    method: Literal["rrf"] = "rrf"
+    rrf_k: int = Field(default=60, gt=0)
 
 
 class SearchConfig(BaseModel):
-    """Search pipeline configuration containing profiles and fusion settings."""
+    """Single search configuration selected for the competition pipeline."""
 
-    profiles: dict[str, SearchProfile] = Field(
-        default_factory=lambda: {
-            "fast": SearchProfile(
-                visual_candidates=100,
-                rerank_count=20,
-                temporal_window_ms=1000,
-            ),
-            "accurate": SearchProfile(
-                visual_candidates=500,
-                rerank_count=100,
-                temporal_window_ms=3000,
-            ),
-        }
-    )
+    candidate_count: int = Field(default=500, ge=1)
+    rerank_count: int = Field(default=100, ge=0)
+    temporal_window_ms: int = Field(default=3000, ge=0)
     fusion: FusionConfig = Field(default_factory=FusionConfig)
 
 
@@ -122,6 +101,8 @@ class InferenceConfig(BaseModel):
     base_url: str = "https://api.iamphuckhang.dev"
     timeout_seconds: float = Field(default=10, gt=0, le=120)
     local_embedding_fallback: bool = True
+    local_fallback_device: str = "cpu"
+    local_fallback_batch_size: int = Field(default=32, ge=1)
 
 
 class BenchmarkConfig(BaseModel):
@@ -140,7 +121,6 @@ class AppConfig(BaseSettings):
     """Central settings for the HCMAI 2026 search pipeline."""
 
     dataset: DatasetConfig = Field(default_factory=DatasetConfig)
-    models: ModelConfig = Field(default_factory=ModelConfig)
     index: IndexConfig = Field(default_factory=IndexConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)

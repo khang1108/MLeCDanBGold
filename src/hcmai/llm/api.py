@@ -79,11 +79,11 @@ async def embed(
     started = perf_counter()
     runtime = request.app.state.runtime
     try:
-        vectors = runtime.embed_text(list(payload.texts))
+        vectors = runtime.embed_text(list(payload.texts), payload.source)
     except Exception as error:
         raise _unavailable("Embedding inference failed", error) from error
     return TextEmbeddingResponse(
-        model=runtime.config.embedding.model_name,
+        model=getattr(runtime.config, f"{payload.source}_embedding").model_name,
         dimension=int(vectors.shape[1]),
         normalized=True,
         embeddings=vectors.tolist(),

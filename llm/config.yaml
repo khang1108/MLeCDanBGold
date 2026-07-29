@@ -2,7 +2,15 @@ server:
   host: "127.0.0.1"
   port: 8100
 
-embedding:
+visual_embedding:
+  name: "google/siglip2-base-patch16-224"
+  device: "cuda"
+  batch_size: 32
+  image_size: 224
+  dtype: "float32"
+
+caption_embedding:
+  # Compatible control until multilingual E5/BGE-M3 wins the local benchmark.
   name: "google/siglip2-base-patch16-224"
   device: "cuda"
   batch_size: 32

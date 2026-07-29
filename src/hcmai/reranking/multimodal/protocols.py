@@ -1,4 +1,4 @@
-"""Interfaces implemented or consumed by reranking backends."""
+"""Scoring interface consumed by multimodal reranking."""
 
 from __future__ import annotations
 

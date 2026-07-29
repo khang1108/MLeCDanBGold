@@ -97,4 +97,4 @@ def test_checked_in_glm_config_is_valid_and_pinned():
     config = LLMServiceConfig.from_yaml("llm/config.yaml")
     assert config.conversation.checkpoint == "zai-org/GLM-4.1V-9B-Thinking"
     assert config.conversation.revision
-    assert config.conversation.max_new_tokens == 1024
+    assert config.conversation.max_new_tokens == 256

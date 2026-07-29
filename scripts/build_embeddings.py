@@ -8,12 +8,12 @@ from typing import Any
 
 import numpy as np
 
-from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.io import read_parquet, read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.embedding.embedding import EmbeddingPipeline
 from hcmai.embedding.models import EmbeddingMetadata
-from hcmai.retriever.index import INDEX_FILENAME, VisualIndex
+from hcmai.llm.config import LLMServiceConfig
+from hcmai.retriever.dense import INDEX_FILENAME, DenseIndex
 from script_args import parse_arguments
 
 logger = get_logger(__name__)
@@ -46,7 +46,7 @@ def _build_index(
         raise RuntimeError("No embeddings were generated")
     embeddings = np.load(pipeline.embeddings_file, mmap_mode="r")
     mapping = read_parquet(pipeline.mapping_file)
-    index = VisualIndex.build(
+    index = DenseIndex.build(
         embeddings,
         mapping,
         dataset_version=metadata.dataset_version,
@@ -76,13 +76,12 @@ def _run(args: Any) -> None:
     if not dataset_root.is_dir():
         raise FileNotFoundError(f"Dataset root not found: {dataset_root}")
     output_dir = Path(args.output)
+    model_config = LLMServiceConfig.from_yaml(args.model_config)
     pipeline = EmbeddingPipeline(
         frames_path=frames_path,
         dataset_root=dataset_root,
         output_dir=output_dir,
-        encoder_config=EncoderConfig.from_dict(
-            config.get("models", {}).get("embedding", {})
-        ),
+        encoder_config=model_config.visual_embedding,
         dataset_version=dataset.get("version", "unknown"),
     )
     metadata = pipeline.run()

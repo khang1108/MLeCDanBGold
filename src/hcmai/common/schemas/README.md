@@ -22,14 +22,13 @@ that feature package. In particular, caption/OCR types belong under
 
 ### `enum.py`
 
-- `SearchMode`: search profile (`fast` or `accurate`).
 - `ProcessingStatus`: offline processing state: `pending`, `processing`,
   `completed`, or `failed`.
 - `RetrievalSource`: evidence source used during retrieval: `visual`,
   `caption`, `ocr`, or `asr`.
 - `QueryLanguage`: query language: Vietnamese (`vi`), English (`en`), or
   mixed (`mixed`).
-- `TaskType`: competition task: `kis`, `kisc`, `vqa`, or `trake`.
+- `TaskType`: frontend query type: `kis`, `kisc`, `vkis`, `vqa`, or `trake`.
 - `QueryDifficulty`: evaluation difficulty: `easy`, `medium`, or `hard`.
 
 ### `frame.py`
@@ -54,9 +53,9 @@ that feature package. In particular, caption/OCR types belong under
 
 - `SearchFilters`: optional video and time-range restrictions. Video IDs are
   deduplicated, and `end_time_ms` cannot precede `start_time_ms`.
-- `SearchRequest`: public search request containing a non-empty query, a
-  bounded `top_k`, search mode, optional filters, optional KISC `session_id`,
-  and human `feedback`. Feedback is valid only with a session ID.
+- `SearchRequest`: public search request containing a typed `query_type`, a
+  non-empty query, bounded `top_k`, optional filters, optional KISC
+  `session_id`, and human `feedback`. Feedback is valid only with a session ID.
 - `SearchLatency`: non-negative latency measurements for each search stage and
   the total request, in milliseconds.
 - `SearchResult`: one ranked result with the canonical frame identifiers,
@@ -68,8 +67,8 @@ that feature package. In particular, caption/OCR types belong under
 
 ### `kisc.py`
 
-- `KISCSearchRequest`: browser-owned ordered history, current message, prior
-  interpreted state, feedback, search profile, and filters for one stateless
+- `KISCSearchRequest`: typed `kisc` request with browser-owned ordered
+  history, current message, prior interpreted state, feedback, and filters for one stateless
   KISC turn.
 - `KISCSearchResponse`: complete interpreted state, resolution latency, and a
   canonical nested `SearchResponse`.
