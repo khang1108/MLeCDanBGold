@@ -16,7 +16,7 @@ Run locally with one worker so model memory is not duplicated:
 
 ```bash
 HCMAI_LLM_CONFIG=llm/config.yaml \
-PYTHONPATH=src aic/bin/uvicorn hcmai.llm.api:app \
+PYTHONPATH=src aic/bin/uvicorn hcmai.llm.service.api:app \
   --host 127.0.0.1 --port 8100 --workers 1
 ```
 

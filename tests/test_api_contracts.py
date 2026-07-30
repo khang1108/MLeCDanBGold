@@ -6,7 +6,7 @@ from hcmai.app import create_app
 from hcmai.common.schemas import (
     FrameRecord, RetrievalCandidate, RetrievalSource,
 )
-from hcmai.search import SearchEngine
+from hcmai.orchestration import SearchEngine
 
 FRAME_ID = "TEST_V001_keyframe_000001"
 
@@ -22,7 +22,7 @@ class Store:
         raise KeyError(frame_id)
 
 class Retriever:
-    def search(self, query, top_k=20, filters=None):
+    def search(self, query, top_k=20, filters=None, query_type=None):
         return [RetrievalCandidate(
             frame_id=FRAME_ID,
             source_scores={RetrievalSource.VISUAL: 0.9}, final_score=0.9,
@@ -76,14 +76,13 @@ def test_injected_provider_exposes_search_and_kisc_contracts() -> None:
     assert kisc.status_code == 200
     assert kisc.json()["interpreted_state"]["standalone_query"] == "red car"
 
-def test_missing_structured_provider_uses_kisc_fallback() -> None:
+def test_missing_structured_provider_disables_kisc() -> None:
     app = create_app(SearchEngine(Store(), Retriever()))
     response = request(
         app, "POST", "/api/v1/kisc/search", json={"current_message": "test"}
     )
-    assert response.status_code == 200
-    assert response.json()["interpreted_state"]["standalone_query"] == "test"
-    assert response.json()["warnings"][0].startswith("Conversation fallback:")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "KISC provider not initialized"
 
 
 def test_kisc_endpoint_rejects_standalone_query_type() -> None:

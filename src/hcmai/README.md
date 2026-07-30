@@ -11,10 +11,11 @@ endpoints behind shared Pydantic contracts.
 
 ```text
 src/hcmai/
-├── app.py          # FastAPI application server and REST endpoints
-├── kisc.py         # KISC conversational session & feedback state manager
-├── search.py       # High-level SearchEngine orchestration
-├── agents/         # Bounded AI components, including KISC interpretation
+├── app.py          # FastAPI lifecycle and router assembly
+├── bootstrap/      # Configured model, index, and store initialization
+├── orchestration/  # High-level SearchEngine pipeline
+├── routers/        # FastAPI endpoint groups
+├── agents/         # Bounded AI components and KISC session handling
 ├── common/         # Shared schemas, configuration, and generic utilities
 │   ├── config.py   # Global configuration settings & Pydantic settings
 │   ├── schemas/    # Pydantic 2 data contracts (SearchRequest, FrameRecord, etc.)
@@ -49,12 +50,12 @@ exchange it; `common` must never depend on a feature package.
   - `GET /api/v1/frames/{frame_id}/neighbors`: Temporal $\pm N$ neighbor frame expansion.
   - `POST /api/v1/submit`: Format frame ID into official BTC submission code (`video_id,frame_idx`).
 
-### 2. KISC State Manager (`hcmai.kisc`)
+### 2. KISC State Manager (`hcmai.agents.kisc`)
 - **`KiscSessionManager`**: Requires explicit sessions, records correlated
   user/AI turns, applies latest-decision feedback, promotes accepted frames,
   removes rejected frames, and formats official submissions.
 
-### 3. Search Orchestrator (`hcmai.search`)
+### 3. Search Orchestrator (`hcmai.orchestration`)
 - **`SearchEngine`**: Orchestrates `candidate_retrieval`, optional `reranking`, and response `materialization` into `SearchResponse` objects with latency tracking.
 - Uses one benchmark-selected competition configuration.
 
@@ -83,7 +84,7 @@ PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
 ### Python Search Engine Orchestration
 ```python
 from hcmai.data import FrameStore
-from hcmai.search import SearchEngine
+from hcmai.orchestration import SearchEngine
 from hcmai.common.schemas import SearchRequest
 
 # Load metadata store and initialize engine

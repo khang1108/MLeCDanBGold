@@ -3,9 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+from PIL import Image
 
+from hcmai.common.schemas import VQAEvidence
 from hcmai.llm.config import HostedConversationConfig, LLMServiceConfig
-from hcmai.llm.conversation import StructuredConversationModel, _load_backend
+from hcmai.llm.models.conversation import StructuredConversationModel, _load_backend
 
 STATE = {
     "standalone_query": "người đàn ông mặc áo đỏ",
@@ -47,6 +49,18 @@ class FakeModel:
         return np.asarray([[1, 2, 3]])
 
 
+class FakeVQAProcessor(FakeProcessor):
+    def apply_chat_template(self, messages, **kwargs):
+        self.messages = messages
+        self.template_kwargs = kwargs
+        assert messages[0]["content"][0]["type"] == "image"
+        assert isinstance(messages[0]["content"][0]["image"], Image.Image)
+        return FakeInputs(input_ids=np.asarray([[1, 2]]))
+
+    def decode(self, _tokens, **_kwargs):
+        return "<think>visual reasoning</think>\nMàu đỏ"
+
+
 def test_structured_model_extracts_complete_state_after_reasoning():
     processor, model = FakeProcessor(), FakeModel()
     config = HostedConversationConfig(checkpoint="test/model", max_new_tokens=1024)
@@ -64,6 +78,21 @@ def test_structured_model_extracts_complete_state_after_reasoning():
     assert processor.template_kwargs["tokenize"] is True
     assert model.generate_kwargs["max_new_tokens"] == 1024
     assert hosted.revision == "resolved"
+
+
+def test_vqa_uses_image_and_returns_only_short_final_answer():
+    processor, model = FakeVQAProcessor(), FakeModel()
+    hosted = StructuredConversationModel(
+        HostedConversationConfig(checkpoint="test/model"),
+        backend_loader=lambda _: (processor, model),
+    )
+    answer = hosted.answer_vqa(
+        "Màu gì?",
+        Image.new("RGB", (2, 2), "red"),
+        VQAEvidence(caption="Một hình vuông màu đỏ."),
+    )
+    assert answer == "Màu đỏ"
+    assert "Một hình vuông màu đỏ." in processor.messages[0]["content"][1]["text"]
 
 
 def test_glm_backend_uses_official_multimodal_classes(monkeypatch):

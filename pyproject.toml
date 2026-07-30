@@ -22,6 +22,7 @@ dependencies = [
     "uvicorn>=0.51.0",
     "httpx>=0.28.1",
     "python-multipart>=0.0.20",
+    "tqdm>=4.66, <5.0",
 ]
 
 [project.optional-dependencies]

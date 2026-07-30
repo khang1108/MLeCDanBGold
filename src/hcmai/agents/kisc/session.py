@@ -16,7 +16,7 @@ from hcmai.common.schemas import (
     SubmissionResult,
 )
 from hcmai.data import FrameStore
-from hcmai.search import SearchEngine
+from hcmai.orchestration import SearchEngine
 
 
 def _now_ms() -> int:

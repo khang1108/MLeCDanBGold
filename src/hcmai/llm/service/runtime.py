@@ -9,10 +9,10 @@ from typing import Any, Sequence
 import numpy as np
 from PIL import Image
 
-from hcmai.common.schemas import InferenceReadiness, ModelStatus
+from hcmai.common.schemas import InferenceReadiness, ModelStatus, VQAEvidence
 from hcmai.enrichment.caption.backend import FrameCaptioner
 from hcmai.llm.config import LLMServiceConfig
-from hcmai.llm.conversation import StructuredConversationModel
+from hcmai.llm.models.conversation import StructuredConversationModel
 from hcmai.reranking.qwen import QwenRerankerConfig, QwenRerankerScorer
 from hcmai.retriever.dense import DenseEncoder, create_text_encoder
 
@@ -129,6 +129,13 @@ class LLMRuntime:
         if self.conversation is None:
             raise RuntimeError("conversation model is disabled")
         return self.conversation(request)
+
+    def answer_vqa(
+        self, question: str, image: Image.Image, evidence: VQAEvidence
+    ) -> str:
+        if self.conversation is None:
+            raise RuntimeError("vision-language model is disabled")
+        return self.conversation.answer_vqa(question, image, evidence)
 
     def readiness(self) -> InferenceReadiness:
         generator_loaded = (

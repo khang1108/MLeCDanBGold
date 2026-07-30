@@ -4,11 +4,38 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+from hcmai.common.schemas.enum import RetrievalSource, TaskType
 
 # Recall cut-offs frozen for baseline comparison
 RECALL_CUTOFFS: tuple[int, ...] = (1, 5, 10, 100)
+FUSION_SOURCES: tuple[RetrievalSource, ...] = tuple(RetrievalSource)
+TEXT_RETRIEVAL_SOURCES: tuple[RetrievalSource, ...] = (
+    RetrievalSource.CAPTION,
+    RetrievalSource.OCR,
+    RetrievalSource.ASR,
+)
+
+
+def _equal_fusion_weights() -> dict[TaskType, dict[RetrievalSource, float]]:
+    """Return neutral weights until each task has labeled validation queries."""
+
+    return {
+        task: {source: 1.0 for source in FUSION_SOURCES}
+        for task in TaskType
+    }
+
+
+def _text_embedding_filenames() -> dict[RetrievalSource, str]:
+    """Return default artifact names for frame-aligned text embeddings."""
+
+    return {
+        RetrievalSource.CAPTION: "caption_embeddings.npy",
+        RetrievalSource.OCR: "ocr_embeddings.npy",
+        RetrievalSource.ASR: "asr_embeddings.npy",
+    }
 
 
 class EnrichmentArtifactsConfig(BaseModel):
@@ -101,6 +128,29 @@ class IndexConfig(BaseModel):
     type: str = "flat_ip"
     path: Path = Path("artifacts/indexes/visual")
     caption_path: Path = Path("artifacts/indexes/caption")
+    ocr_path: Path = Path("artifacts/indexes/ocr")
+    asr_path: Path = Path("artifacts/indexes/asr")
+    text_embedding_filenames: dict[RetrievalSource, str] = Field(
+        default_factory=_text_embedding_filenames
+    )
+
+    @field_validator("text_embedding_filenames")
+    @classmethod
+    def validate_text_embedding_filenames(
+        cls,
+        filenames: dict[RetrievalSource, str],
+    ) -> dict[RetrievalSource, str]:
+        if set(filenames) != set(TEXT_RETRIEVAL_SOURCES):
+            raise ValueError(
+                "text_embedding_filenames must configure caption, ocr, and asr"
+            )
+        for filename in filenames.values():
+            path = Path(filename)
+            if path.name != filename or path.suffix != ".npy":
+                raise ValueError(
+                    "text embedding filenames must be plain .npy filenames"
+                )
+        return filenames
 
 
 class FusionConfig(BaseModel):
@@ -108,6 +158,26 @@ class FusionConfig(BaseModel):
 
     method: Literal["rrf"] = "rrf"
     rrf_k: int = Field(default=60, gt=0)
+    task_weights: dict[TaskType, dict[RetrievalSource, float]] = Field(
+        default_factory=_equal_fusion_weights
+    )
+
+    @model_validator(mode="after")
+    def validate_task_weights(self) -> FusionConfig:
+        """Require an explicit positive weight for every task and modality."""
+
+        if set(self.task_weights) != set(TaskType):
+            raise ValueError("fusion task_weights must configure every TaskType")
+        expected = set(FUSION_SOURCES)
+        for task, weights in self.task_weights.items():
+            if set(weights) != expected:
+                raise ValueError(
+                    f"fusion task_weights[{task.value!r}] must configure "
+                    "visual, caption, ocr, and asr"
+                )
+            if any(weight <= 0 for weight in weights.values()):
+                raise ValueError("fusion weights must be greater than zero")
+        return self
 
 
 class SearchConfig(BaseModel):
@@ -132,9 +202,6 @@ class InferenceConfig(BaseModel):
     enabled: bool = False
     base_url: str = "https://api.iamphuckhang.dev"
     timeout_seconds: float = Field(default=10, gt=0, le=120)
-    local_embedding_fallback: bool = True
-    local_fallback_device: str = "cpu"
-    local_fallback_batch_size: int = Field(default=32, ge=1)
 
 
 class BenchmarkConfig(BaseModel):

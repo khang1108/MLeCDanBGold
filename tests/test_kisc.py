@@ -1,7 +1,9 @@
 from __future__ import annotations
 import asyncio
+
+import httpx
 import pytest
-from fastapi import HTTPException
+
 from hcmai.app import create_app
 from hcmai.common.schemas import (
     FrameFeedback,
@@ -9,8 +11,8 @@ from hcmai.common.schemas import (
     RetrievalCandidate,
     SearchRequest,
 )
-from hcmai.kisc import KiscSessionManager
-from hcmai.search import SearchEngine
+from hcmai.agents.kisc import KiscSessionManager
+from hcmai.orchestration import SearchEngine
 
 class FakeStore:
     def __init__(self) -> None:
@@ -31,7 +33,7 @@ class FakeStore:
         return next(row for row in self._records if row.frame_id == frame_id)
 
 class FakeRetriever:
-    def search(self, query: str, top_k: int, filters=None):
+    def search(self, query: str, top_k: int, filters=None, query_type=None):
         values = (("frame-1", 0.9), ("frame-2", 0.8))
         return [
             RetrievalCandidate(frame_id=row, source_scores={"visual": score})
@@ -94,12 +96,15 @@ def test_feedback_ranking_and_turn_correlation(protocol) -> None:
 def test_unknown_search_session_returns_404(protocol) -> None:
     manager, engine = protocol
     app = create_app(search_engine=engine, session_manager=manager)
-    route = next(
-        route for route in app.routes
-        if getattr(route, "path", None) == "/api/v1/search"
-    )
-    with pytest.raises(HTTPException) as error:
-        asyncio.run(
-            route.endpoint(SearchRequest(query="find it", session_id="missing"))
-        )
-    assert error.value.status_code == 404
+
+    async def post() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            return await client.post(
+                "/api/v1/search",
+                json={"query": "find it", "session_id": "missing"},
+            )
+
+    assert asyncio.run(post()).status_code == 404

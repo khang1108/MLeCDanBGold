@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from hcmai.common.config import FusionConfig
+from hcmai.common.schemas import TaskType
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.schemas.search import SearchFilters
 
@@ -32,8 +33,9 @@ class RRFFusionRetriever:
         query: str,
         top_k: int = 100,
         filters: SearchFilters | None = None,
+        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalCandidate]:
-        """Retrieve from every source, merge exact frame IDs, and return top-K."""
+        """Retrieve, merge exact frame IDs, and apply task-specific weights."""
 
         pool: dict[str, RetrievalCandidate] = {}
         for retriever in self.retrievers:
@@ -54,12 +56,13 @@ class RRFFusionRetriever:
             for item in self.retrievers
         )
 
+        weights = self.config.task_weights[query_type]
         fused = [
             candidate.model_copy(
                 update={
                     "fusion_score": sum(
-                        1.0 / (self.config.rrf_k + rank)
-                        for rank in candidate.source_ranks.values()
+                        weights[source] / (self.config.rrf_k + rank)
+                        for source, rank in candidate.source_ranks.items()
                     )
                 }
             )

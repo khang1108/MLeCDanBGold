@@ -36,11 +36,11 @@ corpus to a disposable VM.
 
 | File | Responsibility |
 | --- | --- |
-| `api.py` | Private FastAPI endpoints, request limits, error translation |
-| `client.py` | Local synchronous client and remote dense-encoder adapter |
+| `service/api.py` | Private FastAPI endpoints, request limits, error translation |
+| `service/runtime.py` | Single-process ownership and lifecycle of hosted models |
+| `client/inference.py` | Local synchronous client and remote model adapters |
 | `config.py` | Typed model and service configuration loaded from YAML |
-| `conversation.py` | Structured conversation inference and JSON extraction |
-| `runtime.py` | Single-process ownership and lifecycle of all hosted models |
+| `models/conversation.py` | Structured conversation inference and JSON extraction |
 | `__init__.py` | Public client exports used by the local backend |
 
 The authoritative request and response models are in
@@ -160,7 +160,7 @@ start the service from the repository root:
 aic/bin/python -m pip install -e ".[embedding,dev]"
 
 HCMAI_LLM_CONFIG=llm/config.yaml \
-PYTHONPATH=src aic/bin/python -m uvicorn hcmai.llm.api:app \
+PYTHONPATH=src aic/bin/python -m uvicorn hcmai.llm.service.api:app \
   --host 127.0.0.1 --port 8100 --workers 1
 ```
 
@@ -181,10 +181,13 @@ load the real corpus.
   relevant frame that dense retrieval did not include.
 - Frame loading, exact `frame_id`/`video_id`/`frame_idx` mapping, and final
   response materialization stay local.
+- `/v1/vqa` answers one question about one supplied canonical frame and accepts
+  optional caption, OCR, ASR, and object evidence. It reuses the configured
+  GLM vision model and preserves request/frame identity.
 
-When configured, `RemoteDenseEncoder` can fall back to the local encoder after
-a transport or validation failure. Conversation failures use the deterministic
-KISC fallback, while reranker failures preserve dense-retrieval order.
+The configured competition path is fail-fast: embedding, conversation, image
+loading, invalid reranker scores, and remote inference failures abort the
+request instead of silently switching models or preserving an older ranking.
 
 ## Troubleshooting
 

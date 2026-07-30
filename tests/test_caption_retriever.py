@@ -5,10 +5,22 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from hcmai.common.schemas import RetrievalSource
-from hcmai.data import CaptionStore, FrameStore
-from hcmai.retriever.caption import CaptionRetriever, build_caption_index
+from hcmai.data import ASRStore, CaptionStore, FrameStore, OCRStore
+from hcmai.retriever.caption import (
+    ASRRetriever,
+    CaptionRetriever,
+    OCRRetriever,
+    build_text_index,
+)
+
+_CASES = [
+    (RetrievalSource.CAPTION, "caption", CaptionStore, CaptionRetriever),
+    (RetrievalSource.OCR, "ocr_text", OCRStore, OCRRetriever),
+    (RetrievalSource.ASR, "asr_text", ASRStore, ASRRetriever),
+]
 
 
 class FakeEncoder:
@@ -26,9 +38,15 @@ class FakeEncoder:
         return np.asarray(vectors, dtype=np.float32)
 
 
-def test_caption_index_round_trip_and_source_identity(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("source", "field", "store_type", "retriever_type"),
+    _CASES,
+)
+def test_text_index_round_trip_and_source_identity(
+    tmp_path: Path, source, field, store_type, retriever_type
+) -> None:
     frames_path = tmp_path / "frames.parquet"
-    captions_path = tmp_path / "captions.parquet"
+    evidence_path = tmp_path / f"{source.value}.parquet"
     pd.DataFrame(
         [
             {
@@ -47,28 +65,28 @@ def test_caption_index_round_trip_and_source_identity(tmp_path: Path) -> None:
         [
             {
                 "frame_id": "frame-1",
-                "caption": "A cook holds a pan.",
+                field: "A cook holds a pan.",
                 "model_name": "fixture",
             },
             {
                 "frame_id": "frame-2",
-                "caption": "A dog runs outside.",
+                field: "A dog runs outside.",
                 "model_name": "fixture",
             },
         ]
-    ).to_parquet(captions_path, index=False)
+    ).to_parquet(evidence_path, index=False)
 
-    index = build_caption_index(
-        CaptionStore(captions_path),
-        FrameStore(frames_path),
-        FakeEncoder(),
-        tmp_path / "caption-index",
+    store = store_type(evidence_path)
+    output = tmp_path / f"{source.value}-index"
+    index = build_text_index(
+        store, FrameStore(frames_path), FakeEncoder(), output,
+        embeddings_filename=f"{source.value}_embeddings.npy",
         dataset_version="fixture-v1",
     )
-    result = CaptionRetriever(FakeEncoder(), index).search("cook", top_k=1)[0]
+    result = retriever_type(FakeEncoder(), index).search("cook", top_k=1)[0]
 
     assert result.frame_id == "frame-1"
-    assert result.source_ranks == {RetrievalSource.CAPTION: 1}
-    assert result.source_scores[RetrievalSource.CAPTION] == 1.0
-    assert (tmp_path / "caption-index/caption_embeddings.npy").is_file()
-    assert (tmp_path / "caption-index/dense.index").is_file()
+    assert result.source_ranks == {source: 1}
+    assert result.source_scores[source] == 1.0
+    assert (output / f"{source.value}_embeddings.npy").is_file()
+    assert (output / "dense.index").is_file()

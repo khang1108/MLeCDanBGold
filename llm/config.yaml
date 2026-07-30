@@ -4,7 +4,7 @@ server:
 
 caption_generation:
   model_checkpoint: "florence-community/Florence-2-base-ft"
-  revision: "269c8d8afb3ab2b993c43f6670f6eb879f764370"
+  revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
   prompt: "<CAPTION>"
   decoding:
     max_new_tokens: 64

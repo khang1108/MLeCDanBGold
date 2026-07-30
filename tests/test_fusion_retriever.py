@@ -1,9 +1,7 @@
-"""Smoke tests for visual-caption reciprocal rank fusion."""
-
-from __future__ import annotations
+"""Smoke tests for four-source weighted reciprocal-rank fusion."""
 
 from hcmai.common.config import FusionConfig
-from hcmai.common.schemas import RetrievalSource
+from hcmai.common.schemas import RetrievalSource, TaskType
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.retriever.fusion import RRFFusionRetriever
@@ -54,7 +52,7 @@ def test_rrf_unions_disjoint_frames_and_rewards_source_agreement() -> None:
     results = retriever.search("cook", top_k=3, filters=filters)
 
     assert [item.frame_id for item in results] == [
-        "shared", "caption-only", "visual-only"
+        "shared", "caption-only", "visual-only",
     ]
     assert results[0].source_ranks == {
         RetrievalSource.VISUAL: 1,
@@ -65,3 +63,37 @@ def test_rrf_unions_disjoint_frames_and_rewards_source_agreement() -> None:
     assert retriever.last_query_encoding_ms == 7.0
     assert retriever.last_index_search_ms == 10.0
     assert retriever.config is config
+
+
+def test_rrf_uses_task_specific_weights_across_all_modalities() -> None:
+    retrievers = [
+        FakeRetriever(
+            [_candidate("visual", RetrievalSource.VISUAL, 1, 0.9)],
+            encode_ms=0,
+            search_ms=0,
+        ),
+        *[
+            FakeRetriever(
+                [_candidate("text-shared", source, 1, 0.9)],
+                encode_ms=0,
+                search_ms=0,
+            )
+            for source in (
+                RetrievalSource.CAPTION,
+                RetrievalSource.OCR,
+                RetrievalSource.ASR,
+            )
+        ],
+    ]
+    task_weights = FusionConfig().task_weights
+    task_weights[TaskType.VQA] = {
+        source: (5.0 if source == RetrievalSource.VISUAL else 1.0)
+        for source in RetrievalSource
+    }
+    fusion = RRFFusionRetriever(retrievers, FusionConfig(task_weights=task_weights))
+    kis = fusion.search("query", top_k=2, query_type=TaskType.KIS)
+    vqa = fusion.search("query", top_k=2, query_type=TaskType.VQA)
+
+    assert kis[0].frame_id == "text-shared"
+    assert vqa[0].frame_id == "visual"
+    assert vqa[0].fusion_score == 5 / 61

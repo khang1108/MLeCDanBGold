@@ -6,6 +6,9 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from PIL import Image
+
+from hcmai.common.schemas import VQAEvidence
 from hcmai.llm.config import HostedConversationConfig
 
 BackendLoader = Callable[[HostedConversationConfig], tuple[Any, Any]]
@@ -42,10 +45,36 @@ class StructuredConversationModel:
         )
 
     def __call__(self, request: dict[str, Any]) -> dict[str, Any]:
+        text = self._generate(self._messages(request))
+        return _conversation_state(text)
+
+    def answer_vqa(
+        self,
+        question: str,
+        image: Image.Image,
+        evidence: VQAEvidence,
+    ) -> str:
+        """Answer one frame-grounded question with the shared vision model."""
+        context = evidence.model_dump(exclude_none=True)
+        prompt = (
+            f"Question: {question}\n"
+            f"Retrieved evidence: {json.dumps(context, ensure_ascii=False)}\n"
+            "Answer from the image and evidence. Return only the final answer "
+            "in the question's language, with no reasoning, at most 100 characters."
+        )
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": prompt},
+            ],
+        }]
+        return _short_answer(self._generate(messages))
+
+    def _generate(self, messages: list[dict[str, Any]]) -> str:
         self.load()
         if self.model is None or self.processor is None:
             raise RuntimeError("conversation checkpoint is not configured")
-        messages = self._messages(request)
         inputs = self.processor.apply_chat_template(
             messages,
             tokenize=True,
@@ -59,8 +88,7 @@ class StructuredConversationModel:
             do_sample=False,
         )
         generated = output[0, inputs["input_ids"].shape[1] :]
-        text = self.processor.decode(generated, skip_special_tokens=True)
-        return _conversation_state(text)
+        return self.processor.decode(generated, skip_special_tokens=True)
 
     def _messages(self, request: dict[str, Any]) -> list[dict[str, Any]]:
         context = {
@@ -152,3 +180,13 @@ def _conversation_state(text: str) -> dict[str, Any]:
         if isinstance(value, dict) and _STATE_FIELDS <= value.keys():
             return value
     raise ValueError("conversation model did not return a complete state object")
+
+
+def _short_answer(text: str) -> str:
+    value = text.rsplit("</think>", 1)[-1].strip()
+    if value.startswith("```") and value.endswith("```"):
+        value = value[3:-3].strip()
+    value = " ".join(value.split())
+    if not value:
+        raise ValueError("VQA model returned an empty answer")
+    return value[:100].rstrip()

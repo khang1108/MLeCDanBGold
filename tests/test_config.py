@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from hcmai.common.config import AppConfig
+from hcmai.common.schemas import RetrievalSource, TaskType
 from hcmai.enrichment.caption import CaptionJobConfig
 from hcmai.llm.config import LLMServiceConfig
 
@@ -20,11 +21,20 @@ def test_baseline_config_matches_runtime_contract() -> None:
     )
     assert config.index.path.as_posix() == "artifacts/indexes/visual"
     assert config.index.caption_path.as_posix() == "artifacts/indexes/caption"
+    assert config.index.ocr_path.as_posix() == "artifacts/indexes/ocr"
+    assert config.index.asr_path.as_posix() == "artifacts/indexes/asr"
+    assert config.index.text_embedding_filenames == {
+        RetrievalSource.CAPTION: "caption_embeddings.npy",
+        RetrievalSource.OCR: "ocr_embeddings.npy",
+        RetrievalSource.ASR: "asr_embeddings.npy",
+    }
+    assert config.search.fusion.task_weights[TaskType.KIS] == {
+        source: 1.0 for source in RetrievalSource
+    }
     assert config.search.candidate_count == 500
     assert config.search.rerank_count == 100
     assert config.search.temporal_window_ms == 3000
     assert config.inference.base_url == "https://api.iamphuckhang.dev"
-    assert config.inference.local_embedding_fallback is True
 
 
 def test_llm_config_is_the_model_authority() -> None:
@@ -50,7 +60,7 @@ def test_enrichment_config_is_loaded_from_root_yaml() -> None:
         config.caption.model_checkpoint
         == "florence-community/Florence-2-base-ft"
     )
-    assert config.caption.revision == "269c8d8afb3ab2b993c43f6670f6eb879f764370"
+    assert config.caption.revision == "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
     assert config.caption.decoding["num_beams"] == 3
     assert config.caption.dataset_version == "hcmai2026_v1"
     assert config.frames_path == Path.cwd() / "data/metadata/frames.parquet"

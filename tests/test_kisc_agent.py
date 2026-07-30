@@ -1,7 +1,10 @@
 """Smoke tests for stateless KISC orchestration."""
 
+import pytest
+
 from hcmai.agents.kisc import (
     ConversationResolver,
+    ConversationResolverError,
     KISCAgent,
 )
 from hcmai.common.schemas import (
@@ -10,15 +13,15 @@ from hcmai.common.schemas import (
     RetrievalCandidate,
 )
 from hcmai.common.schemas.kisc import KISCSearchRequest
-from hcmai.search import SearchEngine
+from hcmai.orchestration import SearchEngine
 
 
-def test_resolver_failure_preserves_state_and_applies_newest_feedback() -> None:
+def test_resolver_failure_aborts_turn() -> None:
     def fail(_):
         raise RuntimeError("provider unavailable")
 
     class Retriever:
-        def search(self, query, top_k=20, filters=None):
+        def search(self, query, top_k=20, filters=None, query_type=None):
             return [
                 RetrievalCandidate(
                     frame_id=f"f{index}", final_score=1.0 - index * 0.1,
@@ -41,22 +44,12 @@ def test_resolver_failure_preserves_state_and_applies_newest_feedback() -> None:
         uncertain_constraints=["mũ"],
         accepted_frame_ids=["f1"],
     )
-    response = agent.search(
-        KISCSearchRequest(
+    with pytest.raises(ConversationResolverError, match="provider failed"):
+        agent.search(KISCSearchRequest(
             current_message="đang chạy",
             previous_state=previous,
             feedback=FrameFeedback(
                 rejected_frame_ids=["f1"]
             ),
             top_k=2,
-        )
-    )
-    state = response.interpreted_state
-    assert state.standalone_query == "người áo đỏ đang chạy"
-    assert state.positive_constraints == ["người"]
-    assert state.negative_constraints == ["xe"]
-    assert state.uncertain_constraints == ["mũ"]
-    assert state.accepted_frame_ids == []
-    assert state.rejected_frame_ids == ["f1"]
-    assert response.search.total_results == 1
-    assert response.warnings[0].startswith("Conversation fallback:")
+        ))

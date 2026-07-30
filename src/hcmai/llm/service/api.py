@@ -21,8 +21,10 @@ from hcmai.common.schemas import (
     RerankResponse,
     TextEmbeddingRequest,
     TextEmbeddingResponse,
+    VQAEvidence,
+    VQAResponse,
 )
-from hcmai.llm.runtime import LLMRuntime
+from hcmai.llm.service.runtime import LLMRuntime
 
 
 def create_llm_app(runtime: LLMRuntime | None = None) -> FastAPI:
@@ -58,6 +60,9 @@ def create_llm_app(runtime: LLMRuntime | None = None) -> FastAPI:
         resolve,
         methods=["POST"],
         response_model=ConversationState,
+    )
+    app.add_api_route(
+        "/v1/vqa", vqa, methods=["POST"], response_model=VQAResponse
     )
     return app
 
@@ -166,6 +171,39 @@ async def resolve(
         return ConversationState.model_validate(output)
     except Exception as error:
         raise _unavailable("Conversation inference failed", error) from error
+
+
+async def vqa(
+    request: Request,
+    request_id: str = Form(min_length=1),
+    frame_id: str = Form(min_length=1),
+    question: str = Form(min_length=1, max_length=1_000),
+    evidence: str = Form(default="{}"),
+    image: UploadFile = File(),
+) -> VQAResponse:
+    try:
+        context = VQAEvidence.model_validate_json(evidence)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail="invalid VQA evidence") from error
+    _, decoded = _decode_images(json.dumps([frame_id]), [image], maximum=1)
+    started = perf_counter()
+    runtime = request.app.state.runtime
+    try:
+        answer = runtime.answer_vqa(question, decoded[0], context)
+    except Exception as error:
+        raise _unavailable("VQA inference failed", error) from error
+    finally:
+        decoded[0].close()
+    return VQAResponse(
+        request_id=request_id,
+        frame_id=frame_id,
+        question=question,
+        answer=answer,
+        grounded=True,
+        model_name=runtime.config.conversation.checkpoint,
+        latency_ms=max(0, int((perf_counter() - started) * 1_000)),
+        evidence=context,
+    )
 
 
 def _decode_images(

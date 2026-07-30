@@ -9,7 +9,7 @@ from numbers import Real
 from pathlib import Path
 from typing import Any
 
-from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
+from hcmai.common.schemas import RetrievalCandidate
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.logging import get_logger
 from hcmai.reranking.multimodal.config import RerankerConfig
@@ -39,25 +39,23 @@ class MultimodalReranker:
     ) -> tuple[list[RetrievalCandidate], list[tuple[int, Any]]]:
         copies = [_replace(candidate) for candidate in candidates]
         prepared: list[tuple[int, Any]] = []
-        for position, candidate in enumerate(copies):
-            try:
+        try:
+            for position, candidate in enumerate(copies):
                 frame = self.frame_store.get(candidate.frame_id)
                 path = Path(str(frame.image_path)).expanduser()
                 image_path = path if path.is_absolute() else self.dataset_root / path
-                image = load_image(image_path, mode="RGB")
-            except Exception as error:
-                copies[position] = _fallback(
-                    candidate, type(error).__name__, str(error), candidate_level=True
-                )
-            else:
-                prepared.append((position, image))
+                prepared.append((position, load_image(image_path, mode="RGB")))
+        except Exception:
+            for _, image in prepared:
+                image.close()
+            raise
         return copies, prepared
 
     def _score(
         self, query: str, prepared: list[tuple[int, Any]]
-    ) -> tuple[list[tuple[int, Any]] | None, tuple[str, str] | None]:
+    ) -> list[tuple[int, Any]]:
         if self.score_batch is None:
-            return None, ("BackendUnavailable", "score_batch is required")
+            raise RuntimeError("score_batch is required")
         scored: list[tuple[int, Any]] = []
         for start in range(0, len(prepared), self.config.batch_size):
             batch = prepared[start : start + self.config.batch_size]
@@ -67,23 +65,15 @@ class MultimodalReranker:
                 "Reranker inference batch started batch=%d/%d images=%d",
                 batch_number, batch_total, len(batch),
             )
-            try:
-                values = list(self.score_batch(query, [image for _, image in batch]))
-                if len(values) != len(batch):
-                    raise ValueError("score backend returned the wrong result count")
-            except Exception as error:
-                logger.warning(
-                    "Reranker inference failed batch=%d/%d error=%s: %s",
-                    batch_number, batch_total, type(error).__name__,
-                    _bounded_message(error),
-                )
-                return None, (type(error).__name__, str(error))
+            values = list(self.score_batch(query, [image for _, image in batch]))
+            if len(values) != len(batch):
+                raise ValueError("score backend returned the wrong result count")
             scored.extend((position, value) for (position, _), value in zip(batch, values))
             logger.info(
                 "Reranker inference batch completed batch=%d/%d scores=%d",
                 batch_number, batch_total, len(values),
             )
-        return scored, None
+        return scored
 
     @staticmethod
     def _ordered(candidates: list[RetrievalCandidate]) -> list[RetrievalCandidate]:
@@ -108,38 +98,21 @@ class MultimodalReranker:
             len(prepared), len(original) - len(prepared),
         )
         try:
-            scored, failure = self._score(query, prepared) if prepared else ([], None)
+            scored = self._score(query, prepared)
         finally:
             for _, image in prepared:
                 image.close()
-        if failure is not None:
-            logger.warning(
-                "Reranking preserved dense order for all candidates "
-                "category=%s message=%s",
-                failure[0], _bounded_message(failure[1]),
+        for position, value in scored:
+            if not _finite(value):
+                raise ValueError(f"reranker returned invalid score: {value!r}")
+            score = float(value)
+            copies[position] = _replace(
+                copies[position], reranker_score=score, final_score=score
             )
-            return [
-                _fallback(candidate, *failure, candidate_level=False)
-                for candidate in original
-            ]
-        for position, value in scored or []:
-            if _finite(value):
-                score = float(value)
-                copies[position] = _replace(
-                    copies[position], reranker_score=score, final_score=score
-                )
-            else:
-                copies[position] = _fallback(
-                    copies[position], "InvalidScore", repr(value), candidate_level=True
-                )
         ordered = self._ordered(copies)
-        fallback_count = sum(
-            "reranker_fallback" in (candidate.metadata or {})
-            for candidate in ordered
-        )
         logger.info(
-            "Reranking pipeline completed candidates=%d scored=%d fallbacks=%d",
-            len(ordered), len(scored or []), fallback_count,
+            "Reranking pipeline completed candidates=%d scored=%d",
+            len(ordered), len(scored),
         )
         return ordered
 
@@ -151,38 +124,7 @@ def _finite(value: Any) -> bool:
     )
 
 
-def _bounded_message(value: object, limit: int = 160) -> str:
-    compact = " ".join(str(value).split())
-    return compact[:limit] or type(value).__name__
-
-
-def _existing_score(candidate: RetrievalCandidate) -> float | None:
-    visual = candidate.source_scores.get(RetrievalSource.VISUAL)
-    for value in (candidate.final_score, candidate.fusion_score, visual):
-        if value is not None and _finite(value):
-            return float(value)
-    return None
-
-
 def _replace(candidate: RetrievalCandidate, **updates: Any) -> RetrievalCandidate:
     values = candidate.model_dump(mode="python")
     values.update(updates)
     return RetrievalCandidate.model_validate(values)
-
-
-def _fallback(
-    candidate: RetrievalCandidate,
-    category: str,
-    message: str,
-    *,
-    candidate_level: bool,
-) -> RetrievalCandidate:
-    metadata = dict(candidate.metadata)
-    metadata["reranker_fallback"] = {
-        "category": category[:80],
-        "message": (message.strip() or category)[:200],
-    }
-    updates: dict[str, Any] = {"metadata": metadata}
-    if candidate_level:
-        updates.update(reranker_score=None, final_score=_existing_score(candidate))
-    return _replace(candidate, **updates)

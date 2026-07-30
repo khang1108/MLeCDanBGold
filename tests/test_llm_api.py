@@ -12,14 +12,14 @@ from PIL import Image
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import InferenceReadiness, ModelStatus
-from hcmai.llm.api import create_llm_app
 from hcmai.llm.client import (
     InferenceClient,
     RemoteDenseEncoder,
     RemoteFrameCaptioner,
 )
 from hcmai.llm.config import LLMServiceConfig
-from hcmai.llm.runtime import LLMRuntime
+from hcmai.llm.service.api import create_llm_app
+from hcmai.llm.service.runtime import LLMRuntime
 class FakeRuntime:
     config = LLMServiceConfig()
     reranker = SimpleNamespace(resolved_revision="test")
@@ -52,6 +52,11 @@ class FakeRuntime:
             "accepted_frame_ids": [],
             "rejected_frame_ids": [],
         }
+
+    def answer_vqa(self, question, image, evidence):
+        assert question == "What color?"
+        assert evidence.caption == "A red square."
+        return "red"
 def _jpeg(red):
     output = io.BytesIO()
     Image.new("RGB", (2, 2), (red, 0, 0)).save(output, "JPEG")
@@ -103,6 +108,22 @@ def test_inference_endpoints_preserve_order_and_contracts():
     )
     assert resolved.status_code == 200
     assert resolved.json()["standalone_query"] == "xe đỏ"
+
+    answered = request(
+        app,
+        "POST",
+        "/v1/vqa",
+        data={
+            "request_id": "q1",
+            "frame_id": "f1",
+            "question": "What color?",
+            "evidence": json.dumps({"caption": "A red square."}),
+        },
+        files=[("image", ("f1.jpg", _jpeg(200), "image/jpeg"))],
+    )
+    assert answered.status_code == 200
+    assert answered.json()["answer"] == "red"
+    assert answered.json()["frame_id"] == "f1"
 def test_remote_encoder_validates_model_and_dimension():
     def handler(request):
         assert json.loads(request.content)["source"] == "caption"

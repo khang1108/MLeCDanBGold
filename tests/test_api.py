@@ -15,7 +15,7 @@ from hcmai.app import create_app
 from hcmai.common.schemas.frame import FrameRecord
 from hcmai.common.schemas.enum import RetrievalSource
 from hcmai.common.schemas.retrieval import RetrievalCandidate
-from hcmai.search import SearchEngine
+from hcmai.orchestration import SearchEngine
 
 
 class MockFrameStore:
@@ -43,7 +43,9 @@ class MockFrameStore:
 class MockRetriever:
     """Mock Retriever for testing API search."""
 
-    def search(self, query: str, top_k: int = 10, filters: None = None) -> list[RetrievalCandidate]:
+    def search(
+        self, query: str, top_k: int = 10, filters=None, query_type=None
+    ) -> list[RetrievalCandidate]:
         return [
             RetrievalCandidate(
                 frame_id="L21_V001_00000090",
@@ -223,11 +225,11 @@ def test_delete_session_endpoint(api_app: FastAPI) -> None:
     assert session_id in missing.json()["detail"]
 
 
-def test_missing_artifacts_do_not_prevent_startup(
+def test_missing_required_config_aborts_startup(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    """The API stays live and reports not-ready without local corpus files."""
+    """The competition pipeline never substitutes defaults for missing config."""
     monkeypatch.setenv("HCMAI_CONFIG_PATH", str(tmp_path / "missing.yaml"))
     monkeypatch.setenv("HCMAI_METADATA_PATH", str(tmp_path / "missing.parquet"))
     monkeypatch.setenv("HCMAI_INDEX_PATH", str(tmp_path / "missing-index"))
@@ -241,9 +243,5 @@ def test_missing_artifacts_do_not_prevent_startup(
             ))
             return await route.endpoint()
 
-    health = asyncio.run(inspect_health())
-    assert health["status"] == "ok"
-    assert health["ready"] is False
-    assert health["frame_store_loaded"] is False
-    assert health["retriever_loaded"] is False
-    assert health["startup_messages"]
+    with pytest.raises(FileNotFoundError, match="Config not found"):
+        asyncio.run(inspect_health())

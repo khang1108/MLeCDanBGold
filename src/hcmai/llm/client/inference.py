@@ -1,4 +1,4 @@
-"""Synchronous clients adapting remote inference to existing pipeline contracts."""
+"""Synchronous clients adapting remote inference to pipeline contracts."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ from hcmai.common.schemas import (
     InferenceReadiness,
     RerankResponse,
     TextEmbeddingResponse,
+    VQAEvidence,
+    VQAResponse,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.retriever.dense.models import EncodingStats
@@ -88,6 +90,32 @@ class InferenceClient:
     def resolve_conversation(self, request: dict[str, Any]) -> object:
         return self._post("/v1/conversation/resolve", json=request)
 
+    def answer_vqa(
+        self,
+        request_id: str,
+        frame_id: str,
+        question: str,
+        image: Image.Image,
+        evidence: VQAEvidence | None = None,
+    ) -> VQAResponse:
+        context = evidence or VQAEvidence()
+        payload = self._post(
+            "/v1/vqa",
+            data={
+                "request_id": request_id,
+                "frame_id": frame_id,
+                "question": question,
+                "evidence": context.model_dump_json(),
+            },
+            files=[("image", (f"{frame_id}.jpg", _jpeg(image), "image/jpeg"))],
+        )
+        response = VQAResponse.model_validate(payload)
+        if response.request_id != request_id or response.frame_id != frame_id:
+            raise InferenceClientError("VQA provider changed request/frame identity")
+        if response.question != question:
+            raise InferenceClientError("VQA provider changed the question")
+        return response
+
     def _post(self, path: str, **kwargs: Any) -> Any:
         return self._request("POST", path, **kwargs)
 
@@ -117,20 +145,18 @@ class InferenceClient:
 
 
 class RemoteDenseEncoder:
-    """Use hosted text embeddings with one configured local fallback."""
+    """Use hosted text embeddings and fail on remote contract violations."""
 
     def __init__(
         self,
         client: InferenceClient,
         config: EncoderConfig,
         embedding_dim: int,
-        fallback: Any | None = None,
         source: str = "visual",
     ) -> None:
         self.client = client
         self.config = config
         self.embedding_dim = embedding_dim
-        self.fallback = fallback
         self.source = source
 
     def encode_text(
@@ -139,21 +165,11 @@ class RemoteDenseEncoder:
         if not texts:
             return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
         started, batches = perf_counter(), []
-        try:
-            for start in range(0, len(texts), min(self.config.batch_size, 64)):
-                batch = texts[start : start + min(self.config.batch_size, 64)]
-                response = self.client.embed_text(batch, self.source)
-                batches.append(self._validate(response, len(batch)))
-            vectors = np.vstack(batches)
-        except Exception as error:
-            if self.fallback is None:
-                raise
-            logger.warning(
-                "Remote embedding unavailable; using local fallback "
-                "texts=%d error=%s detail=%s",
-                len(texts), type(error).__name__, _response_detail(error),
-            )
-            return self.fallback.encode_text(texts, stats)
+        for start in range(0, len(texts), min(self.config.batch_size, 64)):
+            batch = texts[start : start + min(self.config.batch_size, 64)]
+            response = self.client.embed_text(batch, self.source)
+            batches.append(self._validate(response, len(batch)))
+        vectors = np.vstack(batches)
         if stats is not None:
             elapsed = (perf_counter() - started) * 1_000
             stats.num_encoded += len(texts)
@@ -208,7 +224,7 @@ class RemoteFrameCaptioner:
 
 
 class InferenceClientError(RuntimeError):
-    """Bounded remote inference failure consumed by existing fallbacks."""
+    """Bounded remote inference or contract failure."""
 
 
 def _jpeg(image: Image.Image) -> bytes:

@@ -13,16 +13,16 @@ from time import perf_counter
 from typing import Any
 from urllib.parse import quote
 
-from hcmai.common.schemas import RetrievalSource
-from hcmai.common.utils.logging import get_logger
-from hcmai.schema import (
+from hcmai.common.schemas import (
     RetrievalCandidate,
+    RetrievalSource,
     SearchLatency,
     SearchRequest,
     SearchResponse,
     SearchResult,
     SearchScores,
 )
+from hcmai.common.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -98,6 +98,7 @@ class SearchEngine:
         logger.info("[%s] retrieval started", request_id)
         candidates = list(self.retriever.search(
             query=request.query, top_k=candidate_count, filters=request.filters,
+            query_type=request.query_type,
         ))
         retrieval_ms = self._elapsed_ms(retrieval_started)
         logger.info(
@@ -135,12 +136,9 @@ class SearchEngine:
             query=request.query, candidates=candidates[:depth],
         ) + candidates[depth:]
         reranking_ms = self._elapsed_ms(started)
-        fallbacks = sum(
-            "reranker_fallback" in (item.metadata or {}) for item in candidates[:depth]
-        )
         logger.info(
-            "[%s] reranking completed candidates=%d fallbacks=%d elapsed_ms=%d",
-            request_id, depth, fallbacks, reranking_ms,
+            "[%s] reranking completed candidates=%d elapsed_ms=%d",
+            request_id, depth, reranking_ms,
         )
         return candidates, retrieval_ms, reranking_ms
 

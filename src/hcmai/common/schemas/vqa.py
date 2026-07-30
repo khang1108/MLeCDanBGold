@@ -29,7 +29,7 @@ class VQAResponse(ContractModel):
     request_id: NonEmptyString
     frame_id: NonEmptyString
     question: NonEmptyString
-    answer: NonEmptyString
+    answer: NonEmptyString = Field(max_length=100)
     grounded: bool
     model_name: NonEmptyString | None = None
     latency_ms: int = Field(ge=0)
