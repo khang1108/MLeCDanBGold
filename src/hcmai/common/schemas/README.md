@@ -41,6 +41,11 @@ that feature package. In particular, caption/OCR types belong under
   processing-status metadata associated with a `frame_id`. Duplicate object
   labels are removed while preserving order.
 
+### `transcript.py`
+
+- `TranscriptSegment`: canonical text, language, dominant speaker, and
+  millisecond boundaries for one ordered spoken segment in a source video.
+
 ### `retrieval.py`
 
 - `RetrievalCandidate`: internal candidate passed between retrieval stages. It

@@ -37,6 +37,14 @@ reranking = [
     "torchvision>=0.23, <1.0",
     "transformers>=4.57.1, <5.0",
 ]
+transcripts = [
+    "av>=14, <19",
+    "silero-vad>=6.2, <7.0",
+    "pyannote.audio>=4.0.7, <5.0",
+    "torch>=2.6, <2.10",
+    "torchaudio>=2.6, <2.10",
+    "transformers>=5.13, <6.0",
+]
 dev = [
     "httpx>=0.28.1",
     "pytest>=7.0",
