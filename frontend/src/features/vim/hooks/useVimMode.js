@@ -1,18 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 export const useVimMode = ({
-  activeTab,
-  setActiveTab,
-  searchMode,
-  setSearchMode,
-  topK,
-  setTopK,
-  onNewSession,
-  onToggleHistory,
   onToggleOptions,
   onCloseAllModals,
   queryInputRef,
-  adhocQueryInputRef,
 }) => {
   const [mode, setMode] = useState("NORMAL"); // 'NORMAL' | 'INSERT'
   const [isTopKOpen, setIsTopKOpen] = useState(false);
@@ -21,17 +12,14 @@ export const useVimMode = ({
   const enterInsertMode = useCallback(() => {
     setMode("INSERT");
     setTimeout(() => {
-      const targetRef =
-        activeTab === "ad_hoc" ? adhocQueryInputRef : queryInputRef;
-      targetRef?.current?.focus();
+      queryInputRef?.current?.focus();
     }, 10);
-  }, [activeTab, adhocQueryInputRef, queryInputRef]);
+  }, [queryInputRef]);
 
   const enterNormalMode = useCallback(() => {
     setMode("NORMAL");
     queryInputRef?.current?.blur();
-    adhocQueryInputRef?.current?.blur();
-  }, [adhocQueryInputRef, queryInputRef]);
+  }, [queryInputRef]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -62,58 +50,28 @@ export const useVimMode = ({
 
       // --- NORMAL MODE KEYBINDINGS ---
 
-      // 1. Tab -> Switch between Conversation & AdHoc tabs
-      if (event.key === "Tab") {
-        event.preventDefault();
-        setActiveTab((prev) =>
-          prev === "conversation" ? "ad_hoc" : "conversation",
-        );
-        return;
-      }
-
-      // 2. / -> Focus search query input and enter INSERT mode
+      // 1. / -> Focus search query input and enter INSERT mode
       if (event.key === "/") {
         event.preventDefault();
         enterInsertMode();
         return;
       }
 
-      // 3. t -> Open Top-K quick edit dialog
+      // 2. t -> Open Top-K quick edit dialog
       if (event.key.toLowerCase() === "t") {
         event.preventDefault();
         setIsTopKOpen(true);
         return;
       }
 
-      // 4. a -> Toggle Search Mode ('accurate' <-> 'fast')
-      if (event.key.toLowerCase() === "a") {
-        event.preventDefault();
-        setSearchMode((prev) => (prev === "accurate" ? "fast" : "accurate"));
-        return;
-      }
-
-      // 5. n -> Create new conversation session
-      if (event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        onNewSession?.();
-        return;
-      }
-
-      // 6. h -> Toggle History popover
-      if (event.key.toLowerCase() === "h") {
-        event.preventDefault();
-        onToggleHistory?.();
-        return;
-      }
-
-      // 7. o -> Toggle Options drawer
+      // 3. o -> Toggle Options drawer
       if (event.key.toLowerCase() === "o") {
         event.preventDefault();
         onToggleOptions?.();
         return;
       }
 
-      // 8. ? -> Open Vim Shortcuts Help Cheat Sheet
+      // 4. ? -> Open Vim Shortcuts Help Cheat Sheet
       if (event.key === "?") {
         event.preventDefault();
         setIsHelpOpen((prev) => !prev);
@@ -130,11 +88,7 @@ export const useVimMode = ({
     isTopKOpen,
     mode,
     onCloseAllModals,
-    onNewSession,
-    onToggleHistory,
     onToggleOptions,
-    setActiveTab,
-    setSearchMode,
   ]);
 
   return {

@@ -1,175 +1,31 @@
-import React, { useCallback, useRef, useState } from "react";
-import ConversationPanel from "./features/conversation/components/ConversationPanel";
-import { useRequestGuard } from "./features/conversation/hooks/useRequestGuard";
-import { useConversationSession } from "./features/conversation/hooks/useConversationSession";
-import { useFeedbackDraft } from "./features/conversation/hooks/useFeedbackDraft";
-import { useSessionHistory } from "./features/conversation/hooks/useSessionHistory";
-import { useSearchWorkspace } from "./features/conversation/hooks/useSearchWorkspace";
-import FramesBox from "./features/frames/components/FramesBox";
+import React, { useRef, useState } from "react";
 import ImageModal from "./features/frames/components/ImageModal";
-import TabNavigation from "./features/navigation/components/TabNavigation";
 import AdHocSearchWorkspace from "./features/search/components/AdHocSearchWorkspace";
 import OptionsDrawer from "./features/search-controls/components/OptionsDrawer";
 import { useHealthCheck } from "./features/health/hooks/useHealthCheck";
 import HealthBadge from "./features/health/components/HealthBadge";
-import DeleteSessionModal from "./features/conversation/components/DeleteSessionModal";
 import { useVimMode } from "./features/vim/hooks/useVimMode";
 import VimModeBadge from "./features/vim/components/VimModeBadge";
 import TopKPromptModal from "./features/vim/components/TopKPromptModal";
 import VimHelpModal from "./features/vim/components/VimHelpModal";
-import { deleteSession } from "./api/sessions";
 import "./styles/gif-loader.css";
 import "./styles/vim.css";
 
-// App composes features; endpoint and state details live in their owning hooks.
+// App exposes only the standalone ad-hoc competition search workspace.
 function App() {
-  const [activeTab, setActiveTab] = useState("conversation");
-  const [query, setQuery] = useState("");
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [deleteTargetId, setDeleteTargetId] = useState(null);
-  const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [topK, setTopK] = useState(20);
-  const initialRequestRef = useRef(false);
-  const [searchMode, setSearchMode] = useState("accurate");
   const queryInputRef = useRef(null);
-  const adhocQueryInputRef = useRef(null);
   const { isHealthy, healthData, isChecking } = useHealthCheck();
-  const { isPending, runRequest } = useRequestGuard();
-  const { session, sessionError, create, load, setSession } =
-    useConversationSession(runRequest);
-  const feedback = useFeedbackDraft(session, isPending);
-  const history = useSessionHistory();
-  const search = useSearchWorkspace({
-    session,
-    topK,
-    draftFeedback: feedback.draftFeedback,
-    feedbackDirty: feedback.feedbackDirty,
-    runRequest,
-    setSession,
-  });
-  const {
-    results,
-    warnings,
-    latencyMs,
-    lastRequestId,
-    error,
-    isSearching,
-    clear: clearResults,
-    submit: submitSearch,
-  } = search;
-
-  const resetWorkspace = useCallback(() => {
-    clearResults();
-    setSelectedFrame(null);
-    setQuery("");
-  }, [clearResults]);
-
-  const createSession = useCallback(async () => {
-    const next = await create();
-    if (next) {
-      resetWorkspace();
-      setIsHistoryOpen(false);
-    }
-  }, [create, resetWorkspace]);
-
-  const loadSession = useCallback(
-    async (sessionId) => {
-      const next = await load(sessionId);
-      if (next) {
-        resetWorkspace();
-        setIsHistoryOpen(false);
-      }
-    },
-    [load, resetWorkspace],
-  );
-
   const vim = useVimMode({
-    activeTab,
-    setActiveTab,
-    searchMode,
-    setSearchMode,
-    topK,
-    setTopK,
-    onNewSession: createSession,
-    onToggleHistory: () => {
-      if (isHistoryOpen) setIsHistoryOpen(false);
-      else {
-        setIsHistoryOpen(true);
-        history.loadHistory();
-      }
-    },
-    onToggleOptions: () => setIsOptionsOpen((prev) => !prev),
+    onToggleOptions: () => setIsOptionsOpen((previous) => !previous),
     onCloseAllModals: () => {
       setIsOptionsOpen(false);
-      setIsHistoryOpen(false);
       setSelectedFrame(null);
-      setDeleteTargetId(null);
     },
     queryInputRef,
-    adhocQueryInputRef,
   });
-
-  const handleDeleteRequest = useCallback((targetId) => {
-    setDeleteTargetId(targetId);
-  }, []);
-
-  const handleConfirmDelete = useCallback(
-    async (targetId) => {
-      setIsDeletingSession(true);
-      try {
-        await deleteSession(targetId);
-        history.removeSessionId(targetId);
-        if (session?.session_id === targetId) {
-          setSession(null);
-          resetWorkspace();
-        }
-        setDeleteTargetId(null);
-      } catch (err) {
-        // preserve modal for retry if deletion fails
-      } finally {
-        setIsDeletingSession(false);
-      }
-    },
-    [history, resetWorkspace, session?.session_id, setSession],
-  );
-
-  const submit = useCallback(
-    async (value) => {
-      let activeSession = session;
-      if (!activeSession) {
-        activeSession = await create();
-      }
-      if (activeSession && (await submitSearch(value, activeSession))) {
-        setQuery("");
-      }
-    },
-    [create, session, submitSearch],
-  );
-
-  const toolbar = {
-    history: { ...history, isOpen: isHistoryOpen },
-    onNew: createSession,
-    onOptions: () => setIsOptionsOpen(true),
-    onToggleHistory: () => {
-      if (isHistoryOpen) setIsHistoryOpen(false);
-      else {
-        setIsHistoryOpen(true);
-        history.loadHistory();
-      }
-    },
-    onSelectHistory: loadSession,
-    onDeleteHistory: handleDeleteRequest,
-  };
-  const debug = {
-    requestId: lastRequestId,
-    topK,
-    resultCount: results.length,
-    committedFeedback: feedback.committedFeedback,
-    draftFeedback: feedback.draftFeedback,
-    feedbackDirty: feedback.feedbackDirty,
-  };
 
   return (
     <div className="app-wrapper">
@@ -190,62 +46,25 @@ function App() {
             }
           />
         </div>
-        <TabNavigation activeTab={activeTab} onSelectTab={setActiveTab} />
       </header>
 
-      {activeTab === "conversation" ? (
-        <main className="app-container conversation-app">
-          <div className="workspace-layout conversation-layout">
-            <ConversationPanel
-              toolbar={toolbar}
-              session={session}
-              sessionError={sessionError}
-              isPending={isPending}
-              debug={debug}
-              query={query}
-              setQuery={setQuery}
-              onSubmit={submit}
-              canSubmit={Boolean(query.trim()) || feedback.feedbackDirty}
-              queryInputRef={queryInputRef}
-              onFocusQueryInput={() => vim.setMode("INSERT")}
-              onBlurQueryInput={() => vim.setMode("NORMAL")}
-            />
-            <section className="results-workspace">
-              <FramesBox
-                results={results}
-                isLoading={isSearching}
-                error={error}
-                latencyMs={latencyMs}
-                warnings={warnings}
-                feedbackState={feedback.stateFor}
-                onPromising={(id) => feedback.toggle(id, "promising")}
-                onReject={(id) => feedback.toggle(id, "rejected")}
-                onFrameClick={setSelectedFrame}
-              />
-            </section>
-          </div>
-        </main>
-      ) : (
-        <main className="app-container adhoc-app">
-          <AdHocSearchWorkspace
-            topK={topK}
-            setTopK={setTopK}
-            onFrameClick={setSelectedFrame}
-            queryInputRef={adhocQueryInputRef}
-            onFocusQueryInput={() => vim.setMode("INSERT")}
-            onBlurQueryInput={() => vim.setMode("NORMAL")}
-          />
-        </main>
-      )}
+      <main className="app-container adhoc-app">
+        <AdHocSearchWorkspace
+          topK={topK}
+          setTopK={setTopK}
+          onFrameClick={setSelectedFrame}
+          queryInputRef={queryInputRef}
+          onFocusQueryInput={() => vim.setMode("INSERT")}
+          onBlurQueryInput={() => vim.setMode("NORMAL")}
+        />
+      </main>
 
       <OptionsDrawer
         isOpen={isOptionsOpen}
         onClose={() => setIsOptionsOpen(false)}
         topK={topK}
         setTopK={setTopK}
-        onReset={() => {
-          setTopK(20);
-        }}
+        onReset={() => setTopK(20)}
       />
       {selectedFrame && (
         <ImageModal
@@ -253,12 +72,6 @@ function App() {
           onClose={() => setSelectedFrame(null)}
         />
       )}
-      <DeleteSessionModal
-        sessionId={deleteTargetId}
-        onConfirm={handleConfirmDelete}
-        onClose={() => setDeleteTargetId(null)}
-        isDeleting={isDeletingSession}
-      />
       <TopKPromptModal
         isOpen={vim.isTopKOpen}
         currentTopK={topK}
