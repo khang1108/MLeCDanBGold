@@ -41,6 +41,10 @@ class StandaloneSearchDispatcher:
         }
 
     def dispatch(self, request: SearchRequest) -> SearchResponse:
+        if request.session_id is not None or request.feedback is not None:
+            raise _UnsupportedSearchTaskError(
+                "session_id and feedback are not supported by standalone search"
+            )
         if request.query_type not in self._pipelines:
             raise _UnsupportedSearchTaskError(
                 f"query_type {request.query_type.value!r} is not a "

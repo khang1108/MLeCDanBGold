@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
 from hcmai.common.schemas import FrameRecord, SubmissionResult
-from hcmai.agents.kisc import KiscSessionManager
 
 
 def _frame_store(engine_container: dict[str, Any]) -> Any:
@@ -25,7 +24,6 @@ def _frame_store(engine_container: dict[str, Any]) -> Any:
 
 def create_frames_router(
     engine_container: dict[str, Any],
-    manager: KiscSessionManager,
     dataset_root: Path,
 ) -> APIRouter:
     """Create routes that materialize only canonical frame identities."""
@@ -99,7 +97,13 @@ def create_frames_router(
     async def submit_frame(frame_id: str) -> SubmissionResult:
         store = _frame_store(engine_container)
         try:
-            return manager.format_submission(frame_id, store)
+            record = store.get(frame_id)
+            return SubmissionResult(
+                frame_id=record.frame_id,
+                video_id=record.video_id,
+                frame_idx=record.frame_idx,
+                submission_code=f"{record.video_id},{record.frame_idx}",
+            )
         except KeyError as error:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

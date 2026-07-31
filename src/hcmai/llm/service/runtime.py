@@ -9,10 +9,19 @@ from typing import Any, Sequence
 import numpy as np
 from PIL import Image
 
-from hcmai.common.schemas import InferenceReadiness, ModelStatus, VQAEvidence
+from hcmai.common.schemas import (
+    InferenceReadiness,
+    ModelStatus,
+    QuerySuggestion,
+    VQAEvidence,
+)
 from hcmai.enrichment.caption.backend import FrameCaptioner
-from hcmai.llm.config import LLMServiceConfig
+from hcmai.llm.config import HostedConversationConfig, LLMServiceConfig
 from hcmai.llm.models.conversation import StructuredConversationModel
+from hcmai.llm.models.query_suggestion import (
+    parse_suggestions,
+    suggestion_messages,
+)
 from hcmai.reranking.qwen import QwenRerankerConfig, QwenRerankerScorer
 from hcmai.retriever.dense import DenseEncoder, create_text_encoder
 
@@ -28,12 +37,14 @@ class LLMRuntime:
         captioner: Any | None = None,
         reranker: Any | None = None,
         conversation: Any | None = None,
+        query_suggester: Any | None = None,
         *,
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
         enable_caption_embedding: bool = True,
         enable_reranker: bool = True,
         enable_conversation: bool = True,
+        enable_query_suggestions: bool | None = None,
     ) -> None:
         self.config = config
         self.enable_caption = enable_caption
@@ -41,6 +52,15 @@ class LLMRuntime:
         self.enable_caption_embedding = enable_caption_embedding
         self.enable_reranker = enable_reranker
         self.enable_conversation = enable_conversation
+        configured_suggestions = (
+            config.query_suggestions.enabled
+            and config.query_suggestions.active_provider == "gpu_inference"
+        )
+        self.enable_query_suggestions = (
+            configured_suggestions
+            if enable_query_suggestions is None
+            else enable_query_suggestions and configured_suggestions
+        )
         self.visual_encoder = visual_encoder or (
             DenseEncoder(config.visual_embedding)
             if enable_visual_embedding
@@ -64,6 +84,7 @@ class LLMRuntime:
             if enable_conversation
             else None
         )
+        self.query_suggester = query_suggester or self._query_suggestion_model()
 
     @classmethod
     def from_environment(cls) -> LLMRuntime:
@@ -86,6 +107,10 @@ class LLMRuntime:
             ),
             enable_reranker=_env_bool("HCMAI_ENABLE_RERANKER"),
             enable_conversation=_env_bool("HCMAI_ENABLE_CONVERSATION"),
+            enable_query_suggestions=_env_bool(
+                "HCMAI_ENABLE_QUERY_SUGGESTIONS",
+                default=config.query_suggestions.enabled,
+            ),
         )
 
     def load(self) -> None:
@@ -103,6 +128,11 @@ class LLMRuntime:
             self.reranker._ensure_loaded()
         if self.conversation is not None:
             self.conversation.load()
+        if (
+            self.query_suggester is not None
+            and self.query_suggester is not self.conversation
+        ):
+            self.query_suggester.load()
 
     def embed_text(self, texts: list[str], source: str = "visual") -> np.ndarray:
         encoder = (
@@ -130,6 +160,18 @@ class LLMRuntime:
             raise RuntimeError("conversation model is disabled")
         return self.conversation(request)
 
+    def suggest_queries(self, query: str, count: int) -> list[QuerySuggestion]:
+        if self.query_suggester is None:
+            raise RuntimeError("query-suggestion model is disabled")
+        config = self.config.query_suggestions
+        text = self.query_suggester.generate(
+            suggestion_messages(query, count),
+            max_new_tokens=config.generation.max_new_tokens,
+            temperature=config.generation.temperature,
+            top_p=config.generation.top_p,
+        )
+        return parse_suggestions(text, query, count)
+
     def answer_vqa(
         self, question: str, image: Image.Image, evidence: VQAEvidence
     ) -> str:
@@ -153,12 +195,17 @@ class LLMRuntime:
         conversation_loaded = (
             self.conversation is not None and self.conversation.model is not None
         )
+        suggestions_loaded = (
+            self.query_suggester is not None
+            and getattr(self.query_suggester, "model", None) is not None
+        )
         return InferenceReadiness(
             ready=(not self.enable_caption or generator_loaded)
             and (not self.enable_visual_embedding or visual_loaded)
             and (not self.enable_caption_embedding or caption_loaded)
             and (not self.enable_reranker or reranker_loaded)
-            and (not self.enable_conversation or conversation_loaded),
+            and (not self.enable_conversation or conversation_loaded)
+            and (not self.enable_query_suggestions or suggestions_loaded),
             models={
                 "caption_generation": ModelStatus(
                     enabled=self.enable_caption,
@@ -200,12 +247,45 @@ class LLMRuntime:
                         else None
                     ),
                 ),
+                "query_suggestions": ModelStatus(
+                    enabled=self.enable_query_suggestions,
+                    loaded=suggestions_loaded,
+                    checkpoint=(
+                        self.config.query_suggestions.gpu_inference.checkpoint
+                        if self.enable_query_suggestions
+                        else None
+                    ),
+                    revision=(
+                        self.query_suggester.revision
+                        if self.query_suggester is not None
+                        else None
+                    ),
+                ),
             },
         )
 
+    def _query_suggestion_model(self) -> Any | None:
+        if not self.enable_query_suggestions:
+            return None
+        values = self.config.query_suggestions.gpu_inference
+        if self.conversation is not None and all(
+            getattr(self.config.conversation, field) == getattr(values, field)
+            for field in ("checkpoint", "revision", "device", "dtype")
+        ):
+            return self.conversation
+        return StructuredConversationModel(HostedConversationConfig(
+            checkpoint=values.checkpoint,
+            revision=values.revision,
+            device=values.device,
+            dtype=values.dtype,
+            max_new_tokens=(
+                self.config.query_suggestions.generation.max_new_tokens
+            ),
+        ))
 
-def _env_bool(name: str) -> bool:
-    value = os.getenv(name, "true").strip().lower()
+
+def _env_bool(name: str, default: bool = True) -> bool:
+    value = os.getenv(name, str(default)).strip().lower()
     if value not in {"true", "false"}:
         raise ValueError(f"{name} must be true or false")
     return value == "true"

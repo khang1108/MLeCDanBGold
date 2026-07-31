@@ -43,17 +43,15 @@ exchange it; `common` must never depend on a feature package.
   - `POST /api/v1/search`: Routes standalone KIS, VKIS, VQA, and TRAKE
     requests by `query_type`. KIS/VKIS currently share frame search; VQA/TRAKE
     return `501` until their task-specific contracts and orchestrators exist.
-  - `POST /api/v1/kisc/search`: Context-dependent conversational search.
-  - `POST /api/v1/session`: Create a new KISC conversation session.
-  - `POST /api/v1/feedback`: Update accepted/rejected human frame feedback.
+  - `POST /api/v1/query-suggestions`: Generate 5–10 optional operator query
+    suggestions through the single provider selected in `llm/config.yaml`.
   - `GET /api/v1/frames/{frame_id}`: Fetch single frame metadata.
   - `GET /api/v1/frames/{frame_id}/neighbors`: Temporal $\pm N$ neighbor frame expansion.
   - `POST /api/v1/submit`: Format frame ID into official BTC submission code (`video_id,frame_idx`).
 
-### 2. KISC State Manager (`hcmai.agents.kisc`)
-- **`KiscSessionManager`**: Requires explicit sessions, records correlated
-  user/AI turns, applies latest-decision feedback, promotes accepted frames,
-  removes rejected frames, and formats official submissions.
+### 2. Retained KISC Research Code (`hcmai.agents.kisc`)
+- KISC code remains available for experiments but is not mounted by the
+  application or connected to standalone competition search.
 
 ### 3. Search Orchestrator (`hcmai.orchestration`)
 - **`SearchEngine`**: Orchestrates `candidate_retrieval`, optional `reranking`, and response `materialization` into `SearchResponse` objects with latency tracking.

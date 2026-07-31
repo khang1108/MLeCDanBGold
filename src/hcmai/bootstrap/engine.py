@@ -17,6 +17,7 @@ from hcmai.reranking import MultimodalReranker
 from hcmai.reranking import RerankerConfig as PipelineRerankerConfig
 from hcmai.retriever.dense import DenseIndex, DenseRetriever, create_text_encoder
 from hcmai.retriever.fusion import RRFFusionRetriever
+from hcmai.query_suggestions import build_query_suggestion_service
 
 from .artifacts import load_evidence_stores, load_text_indexes
 
@@ -169,4 +170,9 @@ def load_default_engine(messages: list[str]) -> SearchEngine:
         evidence_stores=load_evidence_stores(settings, messages),
     )
     setattr(engine, "inference_client", client)
+    setattr(
+        engine,
+        "query_suggestion_service",
+        build_query_suggestion_service(models.query_suggestions, client),
+    )
     return engine

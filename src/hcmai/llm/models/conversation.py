@@ -45,7 +45,7 @@ class StructuredConversationModel:
         )
 
     def __call__(self, request: dict[str, Any]) -> dict[str, Any]:
-        text = self._generate(self._messages(request))
+        text = self.generate(self._messages(request))
         return _conversation_state(text)
 
     def answer_vqa(
@@ -69,9 +69,16 @@ class StructuredConversationModel:
                 {"type": "text", "text": prompt},
             ],
         }]
-        return _short_answer(self._generate(messages))
+        return _short_answer(self.generate(messages))
 
-    def _generate(self, messages: list[dict[str, Any]]) -> str:
+    def generate(
+        self,
+        messages: list[dict[str, Any]],
+        max_new_tokens: int | None = None,
+        temperature: float = 0.0,
+        top_p: float = 1.0,
+    ) -> str:
+        """Generate bounded text for one trusted structured prompt."""
         self.load()
         if self.model is None or self.processor is None:
             raise RuntimeError("conversation checkpoint is not configured")
@@ -82,10 +89,15 @@ class StructuredConversationModel:
             return_dict=True,
             return_tensors="pt",
         ).to(getattr(self.model, "device", self.config.device))
+        generation = {
+            "max_new_tokens": max_new_tokens or self.config.max_new_tokens,
+            "do_sample": temperature > 0,
+        }
+        if temperature > 0:
+            generation.update({"temperature": temperature, "top_p": top_p})
         output = self.model.generate(
             **inputs,
-            max_new_tokens=self.config.max_new_tokens,
-            do_sample=False,
+            **generation,
         )
         generated = output[0, inputs["input_ids"].shape[1] :]
         return self.processor.decode(generated, skip_special_tokens=True)

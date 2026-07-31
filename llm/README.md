@@ -11,6 +11,14 @@ FAISS index, mappings, embeddings, or frontend.
 - `POST /v1/embeddings/text`
 - `POST /v1/rerank` (multipart JPEG candidates)
 - `POST /v1/conversation/resolve`
+- `POST /v1/query-suggestions`
+
+The public backend exposes `POST /api/v1/query-suggestions`. Its active
+provider, model, timeout, and generation settings live under
+`query_suggestions` in `llm/config.yaml`. Select `gpu_inference` to call this
+private service or `openai_compatible` to call a configured third-party API.
+Third-party credentials are read only from the environment variable named by
+`api_key_env`; never store the key in YAML or the frontend.
 
 Run locally with one worker so model memory is not duplicated:
 

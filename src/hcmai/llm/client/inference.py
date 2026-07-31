@@ -16,6 +16,8 @@ from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import (
     CaptionResponse,
     InferenceReadiness,
+    QuerySuggestionInferenceRequest,
+    QuerySuggestionResponse,
     RerankResponse,
     TextEmbeddingResponse,
     VQAEvidence,
@@ -89,6 +91,27 @@ class InferenceClient:
 
     def resolve_conversation(self, request: dict[str, Any]) -> object:
         return self._post("/v1/conversation/resolve", json=request)
+
+    def suggest_queries(
+        self,
+        request: QuerySuggestionInferenceRequest,
+        endpoint_path: str = "/v1/query-suggestions",
+        timeout_seconds: float | None = None,
+    ) -> QuerySuggestionResponse:
+        payload = self._post(
+            endpoint_path,
+            json=request.model_dump(mode="json"),
+            timeout=timeout_seconds,
+        )
+        response = QuerySuggestionResponse.model_validate(payload)
+        if (
+            response.request_id != request.request_id
+            or response.original_query != request.query
+        ):
+            raise InferenceClientError(
+                "query-suggestion provider changed request identity"
+            )
+        return response
 
     def answer_vqa(
         self,

@@ -95,3 +95,4 @@ frontend/node_modules
 docs/papers/
 docs/slides/
 llm/deploy_cloudflared_private.sh
+tests/

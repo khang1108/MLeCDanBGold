@@ -45,3 +45,28 @@ conversation:
   device: "cuda"
   dtype: "bfloat16"
   max_new_tokens: 256
+
+# Operator-facing query suggestions. Change only active_provider to switch
+# between the owned GPU service and an OpenAI-compatible third-party API.
+query_suggestions:
+  enabled: true
+  active_provider: "gpu_inference"
+  default_count: 8
+  generation:
+    max_new_tokens: 512
+    temperature: 0.0
+    top_p: 1.0
+
+  gpu_inference:
+    endpoint_path: "/v1/query-suggestions"
+    checkpoint: "zai-org/GLM-4.1V-9B-Thinking"
+    revision: "3c1471e51dc811b589d4d12b1c1c7c1c941267c2"
+    device: "cuda"
+    dtype: "bfloat16"
+    timeout_seconds: 10.0
+
+  openai_compatible:
+    base_url: "https://api.example.com/v1"
+    api_key_env: "HCMAI_QUERY_SUGGESTION_API_KEY"
+    model: "configure-when-active"
+    timeout_seconds: 10.0

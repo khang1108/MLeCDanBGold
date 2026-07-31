@@ -22,6 +22,12 @@ from .inference import (
     TextEmbeddingResponse,
 )
 from .retrieval import RetrievalCandidate, SearchScores
+from .query_suggestion import (
+    QuerySuggestion,
+    QuerySuggestionInferenceRequest,
+    QuerySuggestionRequest,
+    QuerySuggestionResponse,
+)
 from .search import (
     SearchFilters,
     SearchLatency,
@@ -48,6 +54,10 @@ __all__ = [
     "QueryDifficulty",
     "SearchScores",
     "RetrievalCandidate",
+    "QuerySuggestion",
+    "QuerySuggestionInferenceRequest",
+    "QuerySuggestionRequest",
+    "QuerySuggestionResponse",
     "SearchFilters",
     "SearchRequest",
     "MessageRequest",

@@ -16,15 +16,14 @@ from typing import Any, AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from hcmai.agents.kisc import KiscSessionManager
-from hcmai.bootstrap import default_kisc_agent, load_default_engine
+from hcmai.bootstrap import load_default_engine
 from hcmai.common.schemas import SearchRequest, SearchResponse
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration import SearchEngine
 from hcmai.routers import (
     StandaloneSearchDispatcher,
     create_frames_router,
-    create_kisc_router,
+    create_query_suggestion_router,
     create_search_router,
     create_system_router,
 )
@@ -48,22 +47,17 @@ def _configure_backend_logging() -> None:
 
 def create_app(
     search_engine: SearchEngine | None = None,
-    session_manager: KiscSessionManager | None = None,
-    kisc_agent: Any | None = None,
+    query_suggestion_service: Any | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     engine_container: dict[str, Any] = {
         "engine": search_engine,
         "startup_messages": [],
     }
-    provider_container = {"kisc_agent": kisc_agent}
-    if (
-        provider_container["kisc_agent"] is None
-        and search_engine is not None
-        and getattr(search_engine, "retriever", None) is not None
-    ):
-        provider_container["kisc_agent"] = default_kisc_agent(search_engine)
-    kisc_manager = session_manager or KiscSessionManager()
+    suggestion_container = {
+        "service": query_suggestion_service
+        or getattr(search_engine, "query_suggestion_service", None)
+    }
     dataset_root = Path(os.getenv("HCMAI_DATASET_ROOT", "data")).resolve()
 
     def run_frame_search(request: SearchRequest) -> SearchResponse:
@@ -72,7 +66,7 @@ def create_app(
             raise SearchEngineUnavailableError(
                 "Search engine or DenseRetriever not initialized"
             )
-        return kisc_manager.process_search(request, engine)
+        return engine.search(request)
 
     search_dispatcher = StandaloneSearchDispatcher(run_frame_search)
 
@@ -85,17 +79,14 @@ def create_app(
                 engine_container["startup_messages"]
             )
         engine = engine_container["engine"]
-        if (
-            provider_container["kisc_agent"] is None
-            and engine is not None
-            and getattr(engine, "retriever", None) is not None
-        ):
-            provider_container["kisc_agent"] = default_kisc_agent(engine)
+        if suggestion_container["service"] is None:
+            suggestion_container["service"] = getattr(
+                engine, "query_suggestion_service", None
+            )
         logger.info(
-            "Backend startup completed search=%s kisc=%s reranker=%s "
+            "Backend startup completed search=%s reranker=%s "
             "remote_inference=%s messages=%d",
             getattr(engine, "retriever", None) is not None,
-            provider_container["kisc_agent"] is not None,
             getattr(engine, "reranker", None) is not None,
             getattr(engine, "inference_client", None) is not None,
             len(engine_container["startup_messages"]),
@@ -108,6 +99,11 @@ def create_app(
         finally:
             engine = engine_container["engine"]
             client = getattr(engine, "inference_client", None)
+            service = suggestion_container["service"]
+            provider = getattr(service, "provider", None)
+            close = getattr(provider, "close", None)
+            if close is not None:
+                close()
             if client is not None:
                 client.client.close()
             logger.info("Backend shutdown completed")
@@ -134,15 +130,13 @@ def create_app(
     app.include_router(
         create_system_router(
             engine_container,
-            provider_container,
             search_dispatcher,
+            suggestion_container,
         )
     )
     app.include_router(create_search_router(search_dispatcher))
-    app.include_router(create_kisc_router(kisc_manager, provider_container))
-    app.include_router(
-        create_frames_router(engine_container, kisc_manager, dataset_root)
-    )
+    app.include_router(create_query_suggestion_router(suggestion_container))
+    app.include_router(create_frames_router(engine_container, dataset_root))
 
     return app
 

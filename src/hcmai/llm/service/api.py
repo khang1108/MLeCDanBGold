@@ -17,6 +17,8 @@ from hcmai.common.schemas import (
     ConversationInferenceRequest,
     ConversationState,
     InferenceReadiness,
+    QuerySuggestionInferenceRequest,
+    QuerySuggestionResponse,
     RerankItem,
     RerankResponse,
     TextEmbeddingRequest,
@@ -63,6 +65,12 @@ def create_llm_app(runtime: LLMRuntime | None = None) -> FastAPI:
     )
     app.add_api_route(
         "/v1/vqa", vqa, methods=["POST"], response_model=VQAResponse
+    )
+    app.add_api_route(
+        "/v1/query-suggestions",
+        suggest_queries,
+        methods=["POST"],
+        response_model=QuerySuggestionResponse,
     )
     return app
 
@@ -171,6 +179,28 @@ async def resolve(
         return ConversationState.model_validate(output)
     except Exception as error:
         raise _unavailable("Conversation inference failed", error) from error
+
+
+async def suggest_queries(
+    payload: QuerySuggestionInferenceRequest,
+    request: Request,
+) -> QuerySuggestionResponse:
+    started = perf_counter()
+    runtime = request.app.state.runtime
+    try:
+        suggestions = runtime.suggest_queries(payload.query, payload.count)
+    except Exception as error:
+        raise _unavailable("Query suggestion inference failed", error) from error
+    config = runtime.config.query_suggestions.gpu_inference
+    return QuerySuggestionResponse(
+        request_id=payload.request_id,
+        original_query=payload.query,
+        suggestions=suggestions,
+        provider="gpu_inference",
+        model=config.checkpoint,
+        revision=getattr(runtime.query_suggester, "revision", config.revision),
+        generation_latency_ms=(perf_counter() - started) * 1_000,
+    )
 
 
 async def vqa(

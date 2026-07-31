@@ -12,8 +12,8 @@ from hcmai.routers.search import StandaloneSearchDispatcher
 
 def create_system_router(
     engine_container: dict[str, Any],
-    provider_container: dict[str, Any],
     dispatcher: StandaloneSearchDispatcher,
+    suggestion_container: dict[str, Any],
 ) -> APIRouter:
     """Create health routes over the shared application runtime."""
 
@@ -27,6 +27,7 @@ def create_system_router(
         evidence_stores = getattr(engine, "evidence_stores", {})
         store_loaded = frame_store is not None
         retriever_loaded = retriever is not None
+        suggestion_service = suggestion_container.get("service")
         total_frames = (
             len(frame_store._records)
             if store_loaded and hasattr(frame_store, "_records")
@@ -48,7 +49,12 @@ def create_system_router(
             },
             "capabilities": {
                 "search": retriever_loaded,
-                "kisc": provider_container["kisc_agent"] is not None,
+                "query_suggestions": {
+                    "enabled": suggestion_service is not None,
+                    "provider": getattr(
+                        suggestion_service, "provider_name", None
+                    ),
+                },
                 "frame_assets": frame_store is not None,
                 "query_types": dispatcher.capabilities(retriever_loaded),
             },
