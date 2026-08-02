@@ -3,6 +3,7 @@
 @import './base.css';
 @import './layout.css';
 @import './controls.css';
+@import './query-suggestions.css';
 @import './frames-grid.css';
 @import './modal.css';
 @import './frames-status.css';

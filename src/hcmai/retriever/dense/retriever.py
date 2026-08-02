@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 from typing import Optional
 
-from hcmai.common.schemas import RetrievalSource
+from hcmai.common.schemas import RetrievalSource, TaskType
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.utils.logging import get_logger
@@ -20,7 +20,7 @@ class DenseRetriever:
     """Encode a text query, search the FAISS index, and return candidates.
 
     The retriever exposes the ``search(query, top_k, filters)`` contract that
-    :class:`hcmai.search.SearchEngine` depends on, returning shared
+    :class:`hcmai.orchestration.SearchEngine` depends on, returning shared
     :class:`RetrievalCandidate` objects rather than raw FAISS tuples.
     """
 
@@ -61,7 +61,11 @@ class DenseRetriever:
         self.last_index_search_ms = 0.0
 
     def search(
-        self, query: str, top_k: int = 100, filters: Optional[SearchFilters] = None
+        self,
+        query: str,
+        top_k: int = 100,
+        filters: Optional[SearchFilters] = None,
+        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalCandidate]:
         """Retrieve the top matching frames for a text query.
 

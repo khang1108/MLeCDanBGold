@@ -1,14 +1,19 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { fetchQuerySuggestions } from "../../../api/querySuggestions";
 import { searchFrames } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "./GifLoaderOverlay";
+import QuerySuggestions from "./QuerySuggestions";
 
-// Tab 2: Simple ad-hoc query workspace with top query bar and split options/results layout.
+const QUERY_PREFIX = /^\/(kis|kisc|vkis|vqa|trake)\b\s*/i;
+
+// Standalone competition search workspace with query suggestions and frame results.
 const AdHocSearchWorkspace = ({
   topK,
   setTopK,
-  queryType,
+  suggestionCount,
+  setSuggestionCount,
   onFrameClick,
   queryInputRef,
   onFocusQueryInput,
@@ -20,6 +25,54 @@ const AdHocSearchWorkspace = ({
   const [latencyMs, setLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionError, setSuggestionError] = useState(null);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestionQueryType, setSuggestionQueryType] = useState("kis");
+  const suggestionSequence = useRef(0);
+  const suggestionAbortController = useRef(null);
+
+  useEffect(
+    () => () => suggestionAbortController.current?.abort(),
+    [],
+  );
+
+  const loadSuggestions = useCallback(
+    (searchQuery, requestSequence) => {
+      const controller = new AbortController();
+      suggestionAbortController.current = controller;
+      setIsSuggesting(true);
+
+      fetchQuerySuggestions({
+        query: searchQuery,
+        count: suggestionCount,
+        signal: controller.signal,
+      })
+        .then((response) => {
+          if (suggestionSequence.current !== requestSequence) return;
+          setSuggestions(response.suggestions);
+          setSuggestionError(null);
+        })
+        .catch((requestError) => {
+          if (
+            requestError?.name === "AbortError" ||
+            suggestionSequence.current !== requestSequence
+          ) {
+            return;
+          }
+          setSuggestions([]);
+          setSuggestionError(
+            requestError.message || "Failed to generate query suggestions",
+          );
+        })
+        .finally(() => {
+          if (suggestionSequence.current === requestSequence) {
+            setIsSuggesting(false);
+          }
+        });
+    },
+    [suggestionCount],
+  );
 
   const handleSubmit = useCallback(
     async (event) => {
@@ -27,29 +80,94 @@ const AdHocSearchWorkspace = ({
       const trimmed = query.trim();
       if (!trimmed || isSearching) return;
 
+      const prefixMatch = trimmed.match(QUERY_PREFIX);
+      if (!prefixMatch) {
+        setError(
+          "Start your query with /kis, /kisc, /vkis, /vqa, or /trake.",
+        );
+        return;
+      }
+
+      const queryType = prefixMatch[1].toLowerCase();
+      const searchQuery = trimmed.slice(prefixMatch[0].length).trim();
+      if (!searchQuery) {
+        setError(`Enter a query after /${queryType}.`);
+        return;
+      }
+
       setIsSearching(true);
       setError(null);
+
       try {
         const response = await searchFrames({
-          query: trimmed,
+          query: searchQuery,
           topK,
           queryType,
         });
         setResults(response.results || []);
         setWarnings(response.warnings || []);
         setLatencyMs(response.latency_ms || null);
-      } catch (err) {
-        setError(err.message || "Failed to contact search API");
+      } catch (requestError) {
+        setError(requestError.message || "Failed to contact search API");
       } finally {
         setIsSearching(false);
       }
     },
-    [isSearching, query, queryType, topK],
+    [isSearching, query, topK],
+  );
+
+  const handleSuggest = useCallback(() => {
+    const trimmed = query.trim();
+    if (!trimmed || isSuggesting || isSearching) return;
+
+    const prefixMatch = trimmed.match(QUERY_PREFIX);
+    if (!prefixMatch) {
+      setSuggestions([]);
+      setSuggestionError(
+        "Start your query with /kis, /kisc, /vkis, /vqa, or /trake.",
+      );
+      return;
+    }
+
+    const queryType = prefixMatch[1].toLowerCase();
+    const searchQuery = trimmed.slice(prefixMatch[0].length).trim();
+    if (!searchQuery) {
+      setSuggestions([]);
+      setSuggestionError(`Enter a query after /${queryType}.`);
+      return;
+    }
+
+    suggestionAbortController.current?.abort();
+    const requestSequence = suggestionSequence.current + 1;
+    suggestionSequence.current = requestSequence;
+    setSuggestionQueryType(queryType);
+    setSuggestions([]);
+    setSuggestionError(null);
+    loadSuggestions(searchQuery, requestSequence);
+  }, [isSearching, isSuggesting, loadSuggestions, query]);
+  const handleSuggestionSelect = useCallback(
+    (suggestedQuery) => {
+      const trimmed = suggestedQuery.trim();
+      setQuery(
+        QUERY_PREFIX.test(trimmed)
+          ? trimmed
+          : `/${suggestionQueryType} ${trimmed}`,
+      );
+      window.requestAnimationFrame(() => {
+        queryInputRef.current?.focus();
+        queryInputRef.current?.setSelectionRange(
+          queryInputRef.current.value.length,
+          queryInputRef.current.value.length,
+        );
+      });
+    },
+    [queryInputRef, suggestionQueryType],
   );
 
   const handleResetOptions = useCallback(() => {
     setTopK(20);
-  }, [setTopK]);
+    setSuggestionCount(5);
+  }, [setSuggestionCount, setTopK]);
 
   return (
     <div className="adhoc-workspace">
@@ -73,7 +191,7 @@ const AdHocSearchWorkspace = ({
             ref={queryInputRef}
             type="text"
             className="input-text query-input-field"
-            placeholder="Search frames by keyword or press '/' to search..."
+            placeholder="Start with /kis, /kisc, /vkis, /vqa, or /trake"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onFocus={onFocusQueryInput}
@@ -81,6 +199,14 @@ const AdHocSearchWorkspace = ({
             disabled={isSearching}
           />
         </div>
+        <button
+          type="button"
+          className="btn-utility query-suggest-btn"
+          disabled={isSearching || isSuggesting || !query.trim()}
+          onClick={handleSuggest}
+        >
+          {isSuggesting ? "Suggesting..." : "Suggest"}
+        </button>
         <button
           type="submit"
           className="btn-primary query-submit-btn"
@@ -90,12 +216,21 @@ const AdHocSearchWorkspace = ({
         </button>
       </form>
 
+      <QuerySuggestions
+        suggestions={suggestions}
+        isLoading={isSuggesting}
+        error={suggestionError}
+        onSelect={handleSuggestionSelect}
+      />
+
       <div className="adhoc-workspace-body">
         <aside className="adhoc-sidebar">
           <h3 className="adhoc-sidebar-title">Options</h3>
           <ToolBox
             topK={topK}
             setTopK={setTopK}
+            suggestionCount={suggestionCount}
+            setSuggestionCount={setSuggestionCount}
             onReset={handleResetOptions}
           />
         </aside>

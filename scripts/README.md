@@ -43,31 +43,48 @@ Caption generation reads dataset, model, decoding, and output settings from
 PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py
 ```
 
+When `inference.enabled` is true in `configs/baseline.yaml`, the command sends
+bounded JPEG batches to the hosted `/v1/captions` endpoint. It validates the
+hosted checkpoint and immutable revision before writing resumable local
+artifacts. Set `HCMAI_INFERENCE_BASE_URL` to override the configured URL.
+The `Generating captions` progress bar includes already completed frames when
+resuming and reports the current failure count.
+
 Pass `--config`, `--frames`, `--dataset-root`, or `--output` only when a run
 needs to override those values.
 
-## Build caption embeddings and index
+## Build caption, OCR, and ASR text indexes
 
-After caption generation completes, build the caption retrieval artifacts:
+Build each frame-aligned text source with the BGE-M3 configuration:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_caption_index.py
+PYTHONPATH=src aic/bin/python scripts/build_caption_index.py --source caption
+PYTHONPATH=src aic/bin/python scripts/build_caption_index.py --source ocr
+PYTHONPATH=src aic/bin/python scripts/build_caption_index.py --source asr
 ```
 
-The command reads caption/frame/index paths from `configs/baseline.yaml` and
-the caption encoder from `llm/config.yaml`. Override them only when needed:
+The command reads the selected enrichment and index paths from
+`configs/baseline.yaml`, including `index.text_embedding_filenames`, and the
+shared text encoder from `llm/config.yaml`. Override them only when needed:
 
 ```bash
 PYTHONPATH=src aic/bin/python scripts/build_caption_index.py \
+  --source asr \
   --config configs/baseline.yaml \
   --model-config llm/config.yaml \
-  --captions artifacts/enrichment/caption/frame_enrichment.parquet \
+  --enrichment artifacts/enrichment/asr/frame_enrichment.parquet \
   --frames data/metadata/frames.parquet \
-  --output artifacts/indexes/caption
+  --output artifacts/indexes/asr
 ```
 
-It writes `caption_embeddings.npy`, `dense.index`,
+It writes the configured text embedding filename, `dense.index`,
 `frame_mapping.parquet`, and `metadata.json` under the output directory.
+With hosted inference enabled, all three text channels are embedded remotely in
+batches of
+at most 64 with the configured BGE-M3 encoder while all vectors, mappings, and
+FAISS files remain local. Each source preserves the canonical frame mapping.
+The ASR smoke test uses a tiny frame-aligned transcript artifact and does not
+decode or generate transcripts for the full video corpus.
 
 ## Rebuild only the index
 

@@ -37,6 +37,22 @@ class TextEmbeddingResponse(ContractModel):
         return values
 
 
+class CaptionItem(ContractModel):
+    """One caller-owned image and its generated caption."""
+
+    item_id: NonEmptyString
+    caption: NonEmptyString
+
+
+class CaptionResponse(ContractModel):
+    """Ordered captions returned by the hosted vision-language model."""
+
+    model: NonEmptyString
+    revision: NonEmptyString
+    items: list[CaptionItem]
+    latency_ms: float = Field(ge=0)
+
+
 class RerankItem(ContractModel):
     """One caller-owned item and its model relevance score."""
 
@@ -67,6 +83,7 @@ class ConversationInferenceRequest(ContractModel):
 class ModelStatus(ContractModel):
     """Readiness and provenance for one hosted model."""
 
+    enabled: bool = True
     loaded: bool
     checkpoint: str | None = None
     revision: str | None = None

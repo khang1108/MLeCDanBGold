@@ -6,10 +6,12 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from tqdm.auto import tqdm
+
 from hcmai.common.schemas import FrameEnrichment, ProcessingStatus
 from hcmai.common.utils.image import load_image
 from hcmai.enrichment.caption.artifacts import write_caption_artifacts
-from hcmai.enrichment.caption.backend import FrameCaptioner
+from hcmai.enrichment.caption.backend import CaptionBackend
 from hcmai.enrichment.caption.config import CaptionConfig, ENRICHMENT_VERSION
 
 
@@ -41,12 +43,19 @@ def run_batches(
     order: list[str],
     rows: dict[str, FrameEnrichment],
     failures: dict[str, dict[str, str]],
-    captioner: FrameCaptioner,
+    captioner: CaptionBackend,
     config: CaptionConfig,
     output: Path,
     root: Path,
 ) -> list[float]:
     latencies, since_write = [], 0
+    progress = tqdm(
+        total=len(order),
+        initial=len(order) - len(todo),
+        desc="Generating captions",
+        unit="frame",
+        dynamic_ncols=True,
+    )
     for start in range(0, len(todo), config.batch_size):
         chunk, valid = todo[start : start + config.batch_size], []
         for frame in chunk:
@@ -92,4 +101,7 @@ def run_batches(
         if since_write >= config.write_interval:
             write_caption_artifacts(output, order, rows, failures)
             since_write = 0
+        progress.update(len(chunk))
+        progress.set_postfix(failed=len(failures), refresh=False)
+    progress.close()
     return latencies

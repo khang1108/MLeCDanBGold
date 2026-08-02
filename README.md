@@ -22,6 +22,8 @@ Implemented foundations:
 - Visual embedding, FAISS index, and dense-retrieval foundations.
 - Caption and OCR enrichment pipelines, Caption/OCR/ASR evidence stores, plus
   caption indexing and optional visual-caption RRF retrieval.
+- Resumable multilingual transcription with speaker-labelled, per-video
+  Parquet artifacts.
 - A FastAPI application and the existing Node.js frontend.
 - Utility helpers for YAML/JSON/Parquet I/O, image loading, timing, and
   logging.
@@ -53,7 +55,7 @@ flowchart TB
         VENC --> VEMB["artifacts/embeddings/<br/>visual_embeddings.npy"]
         VEMB --> VIDX["artifacts/indexes/visual/<br/>dense.index + mapping + metadata"]
 
-        VDATA --> CAPGEN["Caption generation<br/>microsoft/Florence-2-base-ft"]
+        VDATA --> CAPGEN["Caption generation<br/>florence-community/Florence-2-base-ft"]
         CAPGEN --> CAPSTORE["artifacts/enrichment/caption/<br/>frame_enrichment.parquet"]
         CAPSTORE --> CAPENC["Caption TextEncoder<br/>benchmark: SigLIP2 / E5 / BGE-M3"]
         CAPENC --> CAPEMB["artifacts/indexes/caption/<br/>caption_embeddings.npy"]
@@ -137,6 +139,7 @@ src/hcmai/
 ├── search.py                     Search orchestration
 ├── kisc.py                       Conversational state
 ├── data/                         Canonical builder and FrameStore
+├── transcripts/                  ASR pipeline and TranscriptStore
 ├── embedding/                    Visual embedding pipeline
 ├── retriever/                    Dense, caption, fusion, and evaluation packages
 ├── reranking/                    Multimodal pipeline and model backends
@@ -246,11 +249,19 @@ tnr scp llm/deploy_cloudflared_private.sh <instance-id>:/home/ubuntu/
 tnr connect <instance-id>
 ```
 
-Then run this single command inside the VM:
+Then run the model set needed for the current session. For caption generation
+and CaptionStore indexing:
 
 ```bash
-sudo bash /home/ubuntu/deploy_cloudflared_private.sh
+sudo bash /home/ubuntu/deploy_cloudflared_private.sh \
+  --caption true \
+  --caption-embedding true
 ```
+
+The private bootstrap also accepts `--visual-embedding true`,
+`--reranker true`, and `--conversation true`. All five model flags default to
+`false`, and disabled models are not loaded into VRAM. Visual embedding uses
+SigLIP2; caption embedding uses BGE-M3.
 
 The script clones the configured repository into `/opt/hcmai/repo`, installs
 the Python environment and a Python 3.12-compatible Supervisor, downloads the
@@ -265,29 +276,6 @@ The first launch can take several minutes because it downloads the model
 checkpoints. The default conversation checkpoint comes from `llm/config.yaml`;
 leave `HCMAI_CONVERSATION_MODEL` empty in the private script unless an explicit
 override is required.
-
-### 4. Verify the model service
-
-Inside the VM:
-
-```bash
-nvidia-smi
-sudo supervisorctl status
-curl -sS http://127.0.0.1:8100/ready | jq
-```
-
-Both `hcmai-llm` and `hcmai-cloudflared` should report `RUNNING`, and `/ready`
-should report that the configured models are ready. If startup fails, inspect:
-
-```bash
-tail -f /opt/hcmai/logs/llm.log /opt/hcmai/logs/cloudflared.log
-```
-
-On the local data machine, copy `.env.example` to `.env`, fill in
-`HCMAI_CF_ACCESS_CLIENT_ID` and `HCMAI_CF_ACCESS_CLIENT_SECRET`, export those
-values, and follow [Initialize the local FastAPI backend](#initialize-the-local-fastapi-backend).
-The React UI still calls `http://127.0.0.1:8000`; only the local backend calls
-`https://api.iamphuckhang.dev`.
 
 ### 5. Finish the session and stop GPU billing
 
@@ -308,10 +296,6 @@ tnr snapshot create --instance-id <instance-id> --name hcmai-model-host
 tnr snapshot list
 ```
 
-Snapshots retain storage costs and are restored by selecting the snapshot as
-the template during the next `tnr create`. See [`llm/README.md`](llm/README.md)
-for process restart commands and model-service details.
-
 ## Data preparation
 
 If the dataset arrived as zip archives under `data/`, extract them first:
@@ -329,40 +313,23 @@ PYTHONPATH=src aic/bin/python scripts/prepare_data.py \
   --output data/metadata/frames.parquet
 ```
 
-The MVP command produces only `frames.parquet`. Paths stored in it are
-relative to `dataset-root`, and official `frame_idx` values come directly
-from the mapping. See the [data pipeline guide](src/hcmai/data/README.md) for
-the input layout, schema, and `FrameStore` examples.
+## Transcript preparation
 
-## Offline artifact contracts
-
-Use `frame_id` as the join key across all artifacts:
-
-| Path                                                      | Format    | Purpose                                  |
-| --------------------------------------------------------- | --------- | ---------------------------------------- |
-| `data/metadata/frames.parquet`                          | Parquet   | Canonical searchable-frame metadata      |
-| `artifacts/enrichment/caption/frame_enrichment.parquet` | Parquet   | Per-frame caption evidence               |
-| `artifacts/enrichment/ocr/frame_enrichment.parquet`     | Parquet   | Per-frame OCR evidence                   |
-| `artifacts/enrichment/asr/frame_enrichment.parquet`     | Parquet   | Per-frame ASR evidence                   |
-| `artifacts/embeddings/visual_embeddings.npy`            | NumPy     | Visual embedding matrix                  |
-| `artifacts/embeddings/frame_mapping.parquet`            | Parquet   | Visual vector-to-frame mapping           |
-| `artifacts/indexes/visual/`                             | Directory | Visual FAISS index, mapping, provenance  |
-| `artifacts/indexes/caption/caption_embeddings.npy`      | NumPy     | Caption embedding matrix                 |
-| `artifacts/indexes/caption/`                            | Directory | Caption FAISS index, mapping, provenance |
-
-Each index directory contains `dense.index`, `frame_mapping.parquet`, and
-`metadata.json`; the caption directory additionally contains
-`caption_embeddings.npy`. Set `HCMAI_INDEX_PATH` to the visual index directory,
-not to the `dense.index` file inside it.
-
-After caption enrichment finishes, build the configured caption index with:
+Install the optional ASR dependencies, then smoke-test two videos:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_caption_index.py
+pip install -e '.[transcripts]'
+export HF_TOKEN="hf_..."
+PYTHONPATH=src python scripts/prepare_transcripts.py \
+  --videos-root /path/to/videos \
+  --output artifacts/transcripts \
+  --limit 2
 ```
 
-Datasets, embeddings, model weights, indexes, and experiment outputs are local
-artifacts and must not be committed to Git.
+The command writes one speaker-labelled transcript Parquet per video. Pass
+`--no-resume` to reprocess existing outputs. See the
+[transcript pipeline guide](src/hcmai/transcripts/README.md) for artifact
+schemas, diarization behavior, and configuration.
 
 ## Initialize the local FastAPI backend
 
@@ -394,18 +361,6 @@ cp .env.example .env
 nano .env
 ```
 
-Its model-service configuration should look like:
-
-```dotenv
-HCMAI_INFERENCE_BASE_URL=https://api.iamphuckhang.dev
-HCMAI_CF_ACCESS_CLIENT_ID=<cloudflare-access-client-id>
-HCMAI_CF_ACCESS_CLIENT_SECRET=<cloudflare-access-client-secret>
-HCMAI_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-```
-
-The Access credentials belong only in the local backend environment. Never put
-them in `frontend/.env`, commit them, or expose them to browser code.
-
 The application reads process environment variables; it does not automatically
 load the root `.env` file. Export it in every new backend terminal:
 
@@ -424,30 +379,6 @@ artifacts/indexes/visual/
 ├── frame_mapping.parquet
 └── metadata.json
 ```
-
-Confirm that these files exist before starting:
-
-```bash
-ls -lh data/metadata/frames.parquet
-ls -lh artifacts/indexes/visual/dense.index
-ls -lh artifacts/indexes/visual/frame_mapping.parquet
-ls -lh artifacts/indexes/visual/metadata.json
-```
-
-For a non-default layout, export one or more overrides after loading `.env`:
-
-```bash
-export HCMAI_CONFIG_PATH=configs/baseline.yaml
-export HCMAI_DATASET_ROOT=data
-export HCMAI_METADATA_PATH=data/metadata/frames.parquet
-export HCMAI_INDEX_PATH=artifacts/indexes/visual
-export HCMAI_LOG_LEVEL=INFO
-# export HCMAI_LOG_FILE=runs/backend.log  # optional
-```
-
-`HCMAI_INDEX_PATH` must point to the index directory, not directly to
-`dense.index`.
-
 ### 3. Start FastAPI
 
 Keep the GPU VM and Cloudflare Tunnel running, then launch the local backend:
@@ -455,19 +386,6 @@ Keep the GPU VM and Cloudflare Tunnel running, then launch the local backend:
 ```bash
 PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000 --reload
-```
-
-Use one worker because the frame store and FAISS index are initialized once per
-process. `--reload` is intended for local development.
-
-At `INFO`, the backend logs conversation resolution, remote inference, FAISS
-retrieval, reranker batches, fallbacks, candidate counts, and stage latency.
-Use `HCMAI_LOG_LEVEL=WARNING` to keep only failures and fallbacks.
-
-Interactive API documentation is available at:
-
-```text
-http://127.0.0.1:8000/docs
 ```
 
 ### 4. Verify backend readiness
@@ -489,38 +407,6 @@ A search-ready backend reports:
 }
 ```
 
-The real response also includes frame count, capabilities, and
-`startup_messages`. If `ready` is `false`, inspect `startup_messages` first;
-the usual causes are a missing `frames.parquet`, an incorrect index directory,
-or an incomplete index artifact.
-
-The API can start without local metadata or index artifacts. In that state,
-`GET /health` returns `status: "ok"` and `ready: false`; search returns `503`
-until a retriever is available. Runtime paths can be overridden with
-`HCMAI_CONFIG_PATH`, `HCMAI_METADATA_PATH`, and `HCMAI_INDEX_PATH`.
-
-### Available API endpoints
-
-- `GET /health`: Health status and dataset readiness.
-- `POST /api/v1/search`: Standalone KIS/VKIS frame search selected by
-  `query_type`.
-- `POST /api/v1/kisc/search`: Stateless resolve-then-search KISC turn.
-- `POST /api/v1/session`: Create a new KISC session.
-- `GET /api/v1/sessions`: List all current KISC session IDs.
-- `POST /api/v1/feedback`: Update accepted/rejected frame feedback lists.
-- `GET /api/v1/frames/{frame_id}`: Fetch canonical frame metadata.
-- `GET /api/v1/frames/{frame_id}/thumbnail`: Safely serve a thumbnail.
-- `GET /api/v1/frames/{frame_id}/image`: Safely serve a full frame.
-- `GET /api/v1/frames/{frame_id}/neighbors?window_ms=5000`: Fetch temporal neighbors.
-- `POST /api/v1/submit`: Generate official BTC competition submission code (`video_id,frame_idx`).
-
-The accepted query-type enum is `kis`, `kisc`, `vkis`, `vqa`, and `trake`.
-KISC uses `/api/v1/kisc/search`; VQA and TRAKE return `501` until their
-task-specific orchestrators exist. Sessions currently live in process memory,
-so the list resets when the backend restarts.
-
-## Frontend integration
-
 The React app creates a server-side KISC session on launch; it no longer
 contains mock frames or client-generated conversation IDs. Configure a
 different backend in `frontend/.env` when needed:
@@ -530,11 +416,3 @@ cp frontend/.env.example frontend/.env
 cd frontend
 npm start
 ```
-
-The default backend is `http://127.0.0.1:8000`. The UI uses the published
-conversation routes: `POST /api/v1/session`, `GET /api/v1/sessions`,
-`GET /api/v1/session/{session_id}`, and `POST /api/v1/feedback`. Search sends
-`query_type`, `query`, `top_k`, and the active `session_id`; when the visible
-feedback draft changed, it also sends the contract's
-`accepted_frame_ids`/`rejected_frame_ids` snapshot. The History menu lists the
-server's in-memory session IDs, so it resets when the backend restarts.

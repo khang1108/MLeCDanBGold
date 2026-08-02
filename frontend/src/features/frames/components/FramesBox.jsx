@@ -14,6 +14,7 @@ const FramesBox = ({
   onFrameClick,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
+  const hasFeedback = Boolean(feedbackState && onPromising && onReject);
   if (isLoading) return null;
   return (
     <section className="frames-container">
@@ -69,34 +70,39 @@ const FramesBox = ({
           </ul>
         </div>
       )}
-      {!error &&
-        (results.length ? (
-          <div className="frames-grid">
-            {results.map((frame) => (
-              <FrameCard
-                key={frame.frame_id}
-                frame={frame}
-                feedbackState={feedbackState(frame.frame_id)}
-                onPromising={onPromising}
-                onReject={onReject}
-                onClick={() => onFrameClick(frame)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="frames-empty-state">
-            <p className="body-md frames-empty-text">
-              {hasSearched
-                ? "No frames found matching your query"
-                : "Welcome to HCMAI Frame Search"}
-            </p>
-            <p className="caption frames-empty-subtext">
-              {hasSearched
-                ? "Try adjusting your search terms or lowering the similarity threshold."
-                : "Enter a natural language question or keywords above to query the video corpus."}
-            </p>
-          </div>
-        ))}
+      <div className="frames-scroll-region">
+        {!error &&
+          (results.length ? (
+            <div className="frames-grid">
+              {results.map((frame) => (
+                <FrameCard
+                  key={frame.frame_id}
+                  frame={frame}
+                  // Keep feedback optional so Ad-hoc search can render without it.
+                  feedbackState={
+                    hasFeedback ? feedbackState(frame.frame_id) : null
+                  }
+                  onPromising={hasFeedback ? onPromising : undefined}
+                  onReject={hasFeedback ? onReject : undefined}
+                  onClick={() => onFrameClick(frame)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="frames-empty-state">
+              <p className="body-md frames-empty-text">
+                {hasSearched
+                  ? "No frames found matching your query"
+                  : "Welcome to HCMAI Frame Search"}
+              </p>
+              <p className="caption frames-empty-subtext">
+                {hasSearched
+                  ? "Try adjusting your search terms or lowering the similarity threshold."
+                  : "Enter a natural language question or keywords above to query the video corpus."}
+              </p>
+            </div>
+          ))}
+      </div>
     </section>
   );
 };

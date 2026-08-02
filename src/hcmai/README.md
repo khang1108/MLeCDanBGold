@@ -11,10 +11,11 @@ endpoints behind shared Pydantic contracts.
 
 ```text
 src/hcmai/
-├── app.py          # FastAPI application server and REST endpoints
-├── kisc.py         # KISC conversational session & feedback state manager
-├── search.py       # High-level SearchEngine orchestration
-├── agents/         # Bounded AI components, including KISC interpretation
+├── app.py          # FastAPI lifecycle and router assembly
+├── bootstrap/      # Configured model, index, and store initialization
+├── orchestration/  # High-level SearchEngine pipeline
+├── routers/        # FastAPI endpoint groups
+├── agents/         # Bounded AI components and KISC session handling
 ├── common/         # Shared schemas, configuration, and generic utilities
 │   ├── config.py   # Global configuration settings & Pydantic settings
 │   ├── schemas/    # Pydantic 2 data contracts (SearchRequest, FrameRecord, etc.)
@@ -37,22 +38,22 @@ exchange it; `common` must never depend on a feature package.
 ### 1. HTTP API Server (`hcmai.app`)
 - **FastAPI Application**: Exposes REST endpoints for the Node.js frontend.
 - **Key Endpoints**:
-  - `GET /health`: Health status & loaded dataset frame count.
-  - `POST /api/v1/search`: Standalone KIS/VKIS frame search selected by
-    `query_type`.
-  - `POST /api/v1/kisc/search`: Context-dependent conversational search.
-  - `POST /api/v1/session`: Create a new KISC conversation session.
-  - `POST /api/v1/feedback`: Update accepted/rejected human frame feedback.
+  - `GET /health`: Health status, loaded frame count, and per-query-type
+    pipeline readiness.
+  - `POST /api/v1/search`: Routes standalone KIS, VKIS, VQA, and TRAKE
+    requests by `query_type`. KIS/VKIS currently share frame search; VQA/TRAKE
+    return `501` until their task-specific contracts and orchestrators exist.
+  - `POST /api/v1/query-suggestions`: Generate 5–10 optional operator query
+    suggestions through the single provider selected in `llm/config.yaml`.
   - `GET /api/v1/frames/{frame_id}`: Fetch single frame metadata.
   - `GET /api/v1/frames/{frame_id}/neighbors`: Temporal $\pm N$ neighbor frame expansion.
   - `POST /api/v1/submit`: Format frame ID into official BTC submission code (`video_id,frame_idx`).
 
-### 2. KISC State Manager (`hcmai.kisc`)
-- **`KiscSessionManager`**: Requires explicit sessions, records correlated
-  user/AI turns, applies latest-decision feedback, promotes accepted frames,
-  removes rejected frames, and formats official submissions.
+### 2. Retained KISC Research Code (`hcmai.agents.kisc`)
+- KISC code remains available for experiments but is not mounted by the
+  application or connected to standalone competition search.
 
-### 3. Search Orchestrator (`hcmai.search`)
+### 3. Search Orchestrator (`hcmai.orchestration`)
 - **`SearchEngine`**: Orchestrates `candidate_retrieval`, optional `reranking`, and response `materialization` into `SearchResponse` objects with latency tracking.
 - Uses one benchmark-selected competition configuration.
 
@@ -81,7 +82,7 @@ PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
 ### Python Search Engine Orchestration
 ```python
 from hcmai.data import FrameStore
-from hcmai.search import SearchEngine
+from hcmai.orchestration import SearchEngine
 from hcmai.common.schemas import SearchRequest
 
 # Load metadata store and initialize engine

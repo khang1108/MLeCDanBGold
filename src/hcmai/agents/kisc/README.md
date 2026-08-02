@@ -8,11 +8,11 @@ search engine for one stateless API turn.
 
 - `resolver.py` owns prompt instructions, structured-output validation, and
   newest-wins feedback checks.
-- `agent.py` owns the bounded resolve-once, search-once composition and
-  deterministic resolver fallback.
+- `agent.py` owns the bounded resolve-once, search-once composition. Provider
+  or validation failures abort the turn.
 - `hcmai.common.schemas.ConversationState` is shared because the resolver
   produces it for search orchestration.
-- `hcmai.kisc.KiscSessionManager` continues to own session turns and cumulative
+- `hcmai.agents.kisc.KiscSessionManager` continues to own session turns and cumulative
   frame feedback.
 
 The provider is injected as one `structured_call`, which keeps model loading

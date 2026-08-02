@@ -40,7 +40,7 @@ const TopKPromptModal = ({ isOpen, currentTopK, onSave, onClose }) => {
             ref={inputRef}
             type="number"
             min="1"
-            max="200"
+            max="100"
             value={val}
             onChange={(e) => setVal(e.target.value)}
             className="input-text vim-prompt-input"

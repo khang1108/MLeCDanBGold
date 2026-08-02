@@ -52,6 +52,12 @@ runs/
 # Local deployment secrets; the checked-in LLM script reads these from env.
 /llm/.env
 
+# Local ASR evaluation and benchmark code
+/src/hcmai/transcripts/evaluate.py
+/scripts/evaluate_transcripts.py
+/tests/test_asr_evaluation.py
+/src/hcmai/transcripts/PIPELINE_OPTIONS.md
+
 # IDE and operating-system files
 .vscode/
 .idea/
@@ -89,3 +95,4 @@ frontend/node_modules
 docs/papers/
 docs/slides/
 llm/deploy_cloudflared_private.sh
+tests/

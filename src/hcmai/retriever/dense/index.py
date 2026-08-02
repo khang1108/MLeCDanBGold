@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import faiss
 import pandas as pd
+from tqdm.auto import tqdm
 
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,7 @@ class DenseIndex:
         dataset_version: str,
         model_name: str,
         index_type: str = "flat_ip",
+        show_progress: bool = False,
     ) -> DenseIndex:
         """Build an exact ``IndexFlatIP`` from normalized embeddings.
 
@@ -89,7 +91,17 @@ class DenseIndex:
         logger.info(f"Building IndexFlatIP: {vector_count} vectors, dim={embedding_dim}")
         timer = Timer()
         index = faiss.IndexFlatIP(embedding_dim)
-        index.add(vectors)
+        with tqdm(
+            total=vector_count,
+            desc="Building FAISS index",
+            unit="vector",
+            dynamic_ncols=True,
+            disable=not show_progress,
+        ) as progress:
+            for start in range(0, vector_count, 50_000):
+                batch = vectors[start : start + 50_000]
+                index.add(batch)
+                progress.update(len(batch))
         build_time_sec = timer.stop() / 1000.0
 
         metadata = IndexMetadata(

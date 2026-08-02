@@ -41,6 +41,11 @@ that feature package. In particular, caption/OCR types belong under
   processing-status metadata associated with a `frame_id`. Duplicate object
   labels are removed while preserving order.
 
+### `transcript.py`
+
+- `TranscriptSegment`: canonical text, language, dominant speaker, and
+  millisecond boundaries for one ordered spoken segment in a source video.
+
 ### `retrieval.py`
 
 - `RetrievalCandidate`: internal candidate passed between retrieval stages. It
@@ -53,9 +58,11 @@ that feature package. In particular, caption/OCR types belong under
 
 - `SearchFilters`: optional video and time-range restrictions. Video IDs are
   deduplicated, and `end_time_ms` cannot precede `start_time_ms`.
-- `SearchRequest`: public search request containing a typed `query_type`, a
-  non-empty query, bounded `top_k`, optional filters, optional KISC
-  `session_id`, and human `feedback`. Feedback is valid only with a session ID.
+- `SearchRequest`: public standalone-search request containing a typed
+  `query_type`, a non-empty query, bounded `top_k`, optional filters, optional
+  legacy session context, and human `feedback`. Feedback is valid only with a
+  session ID. The HTTP router accepts KIS, VKIS, VQA, and TRAKE here; KISC uses
+  `KISCSearchRequest`.
 - `SearchLatency`: non-negative latency measurements for each search stage and
   the total request, in milliseconds.
 - `SearchResult`: one ranked result with the canonical frame identifiers,

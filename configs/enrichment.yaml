@@ -5,8 +5,8 @@ dataset:
 
 caption:
   output_dir: "artifacts/enrichment/caption"
-  model_checkpoint: "microsoft/Florence-2-base-ft"
-  revision: null
+  model_checkpoint: "florence-community/Florence-2-base-ft"
+  revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
   prompt: "<CAPTION>"
   decoding:
     max_new_tokens: 64
@@ -16,6 +16,6 @@ caption:
   precision: "fp32"
   dtype: "float32"
   image_size: 768
-  batch_size: 4
+  batch_size: 32
   enrichment_version: "caption_v1"
-  write_interval: 25
+  write_interval: 2000

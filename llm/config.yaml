@@ -2,7 +2,19 @@ server:
   host: "127.0.0.1"
   port: 8100
 
+caption_generation:
+  model_checkpoint: "florence-community/Florence-2-base-ft"
+  revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
+  prompt: "<CAPTION>"
+  decoding:
+    max_new_tokens: 64
+    num_beams: 3
+    do_sample: false
+  device: "cuda"
+  dtype: "bfloat16"
+
 visual_embedding:
+  backend: "siglip"
   name: "google/siglip2-base-patch16-224"
   device: "cuda"
   batch_size: 32
@@ -10,11 +22,11 @@ visual_embedding:
   dtype: "float32"
 
 caption_embedding:
-  # Compatible control until multilingual E5/BGE-M3 wins the local benchmark.
-  name: "google/siglip2-base-patch16-224"
+  backend: "bge_m3"
+  name: "BAAI/bge-m3"
   device: "cuda"
-  batch_size: 32
-  image_size: 224
+  batch_size: 16
+  max_length: 8192
   dtype: "float32"
 
 reranker:
@@ -33,3 +45,28 @@ conversation:
   device: "cuda"
   dtype: "bfloat16"
   max_new_tokens: 256
+
+# Operator-facing query suggestions. Change only active_provider to switch
+# between the owned GPU service and an OpenAI-compatible third-party API.
+query_suggestions:
+  enabled: true
+  active_provider: "gpu_inference"
+  default_count: 8
+  generation:
+    max_new_tokens: 512
+    temperature: 0.0
+    top_p: 1.0
+
+  gpu_inference:
+    endpoint_path: "/v1/query-suggestions"
+    checkpoint: "zai-org/GLM-4.1V-9B-Thinking"
+    revision: "3c1471e51dc811b589d4d12b1c1c7c1c941267c2"
+    device: "cuda"
+    dtype: "bfloat16"
+    timeout_seconds: 10.0
+
+  openai_compatible:
+    base_url: "https://api.example.com/v1"
+    api_key_env: "HCMAI_QUERY_SUGGESTION_API_KEY"
+    model: "configure-when-active"
+    timeout_seconds: 10.0

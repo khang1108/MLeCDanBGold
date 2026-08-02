@@ -36,11 +36,11 @@ corpus to a disposable VM.
 
 | File | Responsibility |
 | --- | --- |
-| `api.py` | Private FastAPI endpoints, request limits, error translation |
-| `client.py` | Local synchronous client and remote dense-encoder adapter |
+| `service/api.py` | Private FastAPI endpoints, request limits, error translation |
+| `service/runtime.py` | Single-process ownership and lifecycle of hosted models |
+| `client/inference.py` | Local synchronous client and remote model adapters |
 | `config.py` | Typed model and service configuration loaded from YAML |
-| `conversation.py` | Structured conversation inference and JSON extraction |
-| `runtime.py` | Single-process ownership and lifecycle of all hosted models |
+| `models/conversation.py` | Structured conversation inference and JSON extraction |
 | `__init__.py` | Public client exports used by the local backend |
 
 The authoritative request and response models are in
@@ -54,8 +54,7 @@ Importing this package does not load model weights. In production:
 
 1. `LLMRuntime.from_environment()` reads `llm/config.yaml`.
 2. The FastAPI lifespan calls `runtime.load()` once.
-3. The visual encoder, caption encoder, reranker, and configured conversation
-   model stay in memory.
+3. Only enabled model groups stay in memory.
 4. Every request reuses those instances.
 
 Run exactly one Uvicorn worker. Additional workers duplicate all model weights
@@ -70,7 +69,7 @@ Conversation inference is optional when `conversation.checkpoint` is `null`.
 The checked-in [`llm/config.yaml`](../../../llm/config.yaml) configures:
 
 - `google/siglip2-base-patch16-224` for visual-query embeddings;
-- `google/siglip2-base-patch16-224` as the caption control encoder;
+- `BAAI/bge-m3` for multilingual caption/query dense embeddings;
 - `Qwen/Qwen3-VL-Reranker-2B` for image-query reranking;
 - `zai-org/GLM-4.1V-9B-Thinking` for KISC state resolution.
 
@@ -80,6 +79,8 @@ Relevant environment variables are:
 | --- | --- | --- |
 | `HCMAI_LLM_CONFIG` | GPU service | YAML path; defaults to `llm/config.yaml` |
 | `HCMAI_CONVERSATION_MODEL` | GPU service | Non-empty checkpoint override |
+| `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load SigLIP2 visual/query encoder |
+| `HCMAI_ENABLE_CAPTION_EMBEDDING` | GPU service | Load BGE-M3 caption/query encoder |
 | `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted API base URL |
 | `HCMAI_CF_ACCESS_CLIENT_ID` | Local backend | Cloudflare service credential |
 | `HCMAI_CF_ACCESS_CLIENT_SECRET` | Local backend | Cloudflare service credential |
@@ -159,7 +160,7 @@ start the service from the repository root:
 aic/bin/python -m pip install -e ".[embedding,dev]"
 
 HCMAI_LLM_CONFIG=llm/config.yaml \
-PYTHONPATH=src aic/bin/python -m uvicorn hcmai.llm.api:app \
+PYTHONPATH=src aic/bin/python -m uvicorn hcmai.llm.service.api:app \
   --host 127.0.0.1 --port 8100 --workers 1
 ```
 
@@ -180,10 +181,13 @@ load the real corpus.
   relevant frame that dense retrieval did not include.
 - Frame loading, exact `frame_id`/`video_id`/`frame_idx` mapping, and final
   response materialization stay local.
+- `/v1/vqa` answers one question about one supplied canonical frame and accepts
+  optional caption, OCR, ASR, and object evidence. It reuses the configured
+  GLM vision model and preserves request/frame identity.
 
-When configured, `RemoteDenseEncoder` can fall back to the local encoder after
-a transport or validation failure. Conversation failures use the deterministic
-KISC fallback, while reranker failures preserve dense-retrieval order.
+The configured competition path is fail-fast: embedding, conversation, image
+loading, invalid reranker scores, and remote inference failures abort the
+request instead of silently switching models or preserving an older ranking.
 
 ## Troubleshooting
 

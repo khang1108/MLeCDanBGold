@@ -1,14 +1,42 @@
 from __future__ import annotations
 
-from hcmai.enrichment.caption.config import CaptionConfig
-from typing import Callable, Any, Sequence
+from typing import Callable, Any, Protocol, Sequence
+
+
+class CaptionModelConfig(Protocol):
+    @property
+    def model_checkpoint(self) -> str: ...
+
+    @property
+    def revision(self) -> str | None: ...
+
+    @property
+    def prompt(self) -> str: ...
+
+    @property
+    def decoding(self) -> dict[str, Any]: ...
+
+    @property
+    def device(self) -> str: ...
+
+    @property
+    def dtype(self) -> str: ...
+
+
+class CaptionBackend(Protocol):
+    resolved_revision: str | None
+
+    def resolve_revision(self) -> str: ...
+
+    def caption_batch(self, images: Sequence[Any]) -> list[Any]: ...
+
 
 class FrameCaptioner:
     """Lazy, single-instance caption model boundary."""
 
     def __init__(
         self,
-        config: CaptionConfig,
+        config: CaptionModelConfig,
         model: Any = None,
         processor: Any = None,
         batch_fn: Callable[[Sequence[Any]], Sequence[Any]] | None = None,

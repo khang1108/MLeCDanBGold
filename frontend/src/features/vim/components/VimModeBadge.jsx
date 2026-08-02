@@ -10,7 +10,7 @@ const VimModeBadge = ({ mode, onToggleMode }) => {
       onClick={onToggleMode}
       title={
         isNormal
-          ? "NORMAL mode active. Press '/' to insert, 'Tab' to switch tabs, 't' for Top-K, 'a' for Mode, '?' for help."
+          ? "NORMAL mode active. Press '/' to insert, 't' for Top-K, '?' for help."
           : "INSERT mode active. Press 'Esc' to exit to NORMAL mode."
       }
     >

@@ -30,6 +30,14 @@ class TextEncoder(Protocol):
     ) -> np.ndarray: ...
 
 
+class HostedTextEncoder(TextEncoder, Protocol):
+    """Text encoder that can be eagerly warmed by the hosted runtime."""
+
+    model: Any | None
+
+    def _load_model(self) -> None: ...
+
+
 class DenseEncoder:
     """Encode images and text into one normalized embedding space."""
 
@@ -171,3 +179,12 @@ def _extract_tensor(outputs: Any) -> Any:
     if isinstance(outputs, (tuple, list)):
         return outputs[0]
     return getattr(outputs, "last_hidden_state", outputs)
+
+
+def create_text_encoder(config: EncoderConfig) -> HostedTextEncoder:
+    """Create the explicitly configured text-embedding implementation."""
+    if config.backend == "bge_m3":
+        from hcmai.retriever.dense.bge import BGETextEncoder
+
+        return BGETextEncoder(config)
+    return DenseEncoder(config)

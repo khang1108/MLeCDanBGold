@@ -11,7 +11,7 @@ reranking/
 ├── multimodal/
 │   ├── config.py       # Candidate-pipeline configuration
 │   ├── protocols.py    # Model-agnostic scoring boundary
-│   └── reranker.py     # Bounded reranking and fallback policy
+│   └── reranker.py     # Bounded fail-fast reranking
 └── qwen/
     ├── config.py       # Qwen checkpoint/runtime configuration
     └── scorer.py       # Lazy native Qwen3-VL relevance scorer
@@ -27,15 +27,15 @@ gets its own folder rather than another flat root-level module.
 
 - `MultimodalReranker` resolves images for the supplied candidates, invokes a
   `ScoreBatch`, maps scores back in input order, and returns validated copies.
-- `RerankerConfig` controls batch and fallback policy.
+- `RerankerConfig` controls batching and final-score policy.
 - `QwenRerankerScorer` lazily loads one Qwen3-VL model/processor pair and
   returns the official yes/no relevance probability.
 - `QwenRerankerConfig` records checkpoint, revision, device, dtype, token, and
   image limits.
 
-Missing images use candidate-level fallback. Backend failures preserve the
-original order and existing score. Candidate count and exact `frame_id`,
-`video_id`, and `frame_idx` mappings must never change.
+Missing images, backend failures, count mismatches, and invalid scores abort
+the request. Candidate count and exact `frame_id`, `video_id`, and `frame_idx`
+mappings must never change.
 
 ## Dependency direction
 

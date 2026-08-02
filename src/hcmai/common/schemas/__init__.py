@@ -11,6 +11,8 @@ from .enum import *
 from .frame import FrameEnrichment, FrameRecord
 from .kisc import KISCSearchRequest, KISCSearchResponse
 from .inference import (
+    CaptionItem,
+    CaptionResponse,
     ConversationInferenceRequest,
     InferenceReadiness,
     ModelStatus,
@@ -20,6 +22,12 @@ from .inference import (
     TextEmbeddingResponse,
 )
 from .retrieval import RetrievalCandidate, SearchScores
+from .query_suggestion import (
+    QuerySuggestion,
+    QuerySuggestionInferenceRequest,
+    QuerySuggestionRequest,
+    QuerySuggestionResponse,
+)
 from .search import (
     SearchFilters,
     SearchLatency,
@@ -27,6 +35,7 @@ from .search import (
     SearchResponse,
     SearchResult,
 )
+from .transcript import TranscriptSegment
 from .vqa import VQAEvidence, VQARequest, VQAResponse
 
 # Backward-compatible names used by the earlier frontend/backend contract.
@@ -45,6 +54,10 @@ __all__ = [
     "QueryDifficulty",
     "SearchScores",
     "RetrievalCandidate",
+    "QuerySuggestion",
+    "QuerySuggestionInferenceRequest",
+    "QuerySuggestionRequest",
+    "QuerySuggestionResponse",
     "SearchFilters",
     "SearchRequest",
     "MessageRequest",
@@ -63,6 +76,8 @@ __all__ = [
     "KISCSearchRequest",
     "KISCSearchResponse",
     "ConversationInferenceRequest",
+    "CaptionItem",
+    "CaptionResponse",
     "InferenceReadiness",
     "ModelStatus",
     "RerankItem",
@@ -72,4 +87,5 @@ __all__ = [
     "VQAEvidence",
     "VQARequest",
     "VQAResponse",
+    "TranscriptSegment",
 ]

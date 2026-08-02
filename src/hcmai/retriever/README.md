@@ -3,20 +3,25 @@
 This package groups retrieval work by capability so each modality or retrieval
 stage has a clear owner:
 
-```text
-retriever/
-├── dense/
-│   ├── encoder.py       # SigLIP2-style image/text encoding
-│   ├── index.py         # Modality-neutral exact FAISS index
-│   ├── retriever.py     # Online dense retrieval contract
-│   └── models/          # Dense artifact metadata and encoding stats
-├── caption/
-│   ├── pipeline.py      # Configured caption artifact build
-│   └── retriever.py     # Caption corpus, index builder, and retriever
-├── fusion/
-│   └── rrf.py           # Cross-source candidate union and RRF
-└── evaluation/
-    └── benchmark.py     # Reproducible retrieval experiments
+```mermaid
+flowchart TD
+    ROOT["retriever/"]
+
+    ROOT --> DENSE["dense/"]
+    DENSE --> ENCODER["encoder.py<br/>SigLIP2 image/text encoding"]
+    DENSE --> INDEX["index.py<br/>Modality-neutral exact FAISS index"]
+    DENSE --> DRETRIEVER["retriever.py<br/>Online dense retrieval contract"]
+    DENSE --> MODELS["models/<br/>Artifact metadata and encoding stats"]
+
+    ROOT --> TEXT["caption/"]
+    TEXT --> PIPELINE["pipeline.py<br/>Caption/OCR/ASR artifact builds"]
+    TEXT --> TRETRIEVER["retriever.py<br/>Frame-text indexes and retrievers"]
+
+    ROOT --> FUSION["fusion/"]
+    FUSION --> RRF["rrf.py<br/>Four-source task-weighted RRF"]
+
+    ROOT --> EVALUATION["evaluation/"]
+    EVALUATION --> BENCHMARK["benchmark.py<br/>Reproducible experiments"]
 ```
 
 The root `hcmai.retriever` package re-exports the small public API. New
@@ -102,26 +107,127 @@ index.save("artifacts/indexes")
 
 `dense/retriever.py` provides `DenseRetriever`, which pairs an encoder with an
 index and exposes the `search(query, top_k, filters)` contract used by
-`hcmai.search.SearchEngine`. It rejects an encoder/index model or dimension
+`hcmai.orchestration.SearchEngine`. It rejects an encoder/index model or dimension
 mismatch, returns score-sorted, deduplicated `RetrievalCandidate` objects, and
 records query-encoding and index-search latency separately. Video/time filters
 trigger a full-index scan so a full `top_k` survives filtering; a `min_score`
 filter is applied as a threshold.
 
-`caption/pipeline.py` loads the pipeline and model configs used by
-`scripts/build_caption_index.py`. `caption/retriever.py` builds a caption
-index by joining every usable caption back to the canonical `FrameStore`, then
-exposes it through `CaptionRetriever`. `fusion/rrf.py` provides
-`RRFFusionRetriever`: it searches
-independent retrievers, unions candidates by exact `frame_id`, accumulates
-their source scores/ranks, and returns the RRF-ranked top-K. Disjoint visual or
-caption hits remain in the pool; frames retrieved by both sources receive
-contributions from both ranks.
+`caption/pipeline.py` and `scripts/build_caption_index.py` build separate
+caption, OCR, and frame-aligned ASR indexes with the shared BGE-M3 text encoder.
+Every usable text row is joined back to the canonical `FrameStore`. Text vector
+filenames are selected by `index.text_embedding_filenames` in
+`configs/baseline.yaml`, not hard-coded by the retriever module.
 
-At application startup, caption fusion is optional. It activates only when the
-caption index has the same dataset version and is compatible with the
-configured query encoder; missing or incompatible caption artifacts leave the
-visual path available.
+All four indexes are required by the selected competition retrieval path and
+must have the same dataset version. A missing, incompatible, or stale text
+index leaves search unavailable; it does not silently fall back to visual-only
+retrieval. The initial weights are equal and explicitly untuned.
+
+## Four-modal candidate fusion
+
+The same natural-language query and filters are sent to four independent
+retrievers. Each branch searches only its own embedding space:
+
+```mermaid
+flowchart LR
+    Q["Query + filters"]
+
+    Q --> V["SigLIP2 visual index"]
+    Q --> C["BGE-M3 caption index"]
+    Q --> O["BGE-M3 OCR index"]
+    Q --> A["BGE-M3 ASR index"]
+
+    V --> VR["Visual ranks"]
+    C --> CR["Caption ranks"]
+    O --> OR["OCR ranks"]
+    A --> AR["ASR ranks"]
+
+    VR --> U["Union by exact frame_id"]
+    CR --> U
+    OR --> U
+    AR --> U
+
+    U --> F["Task-weighted RRF ranking"]
+    F --> R["Multimodal reranking pool"]
+```
+
+- **Visual** searches SigLIP2 frame embeddings using the SigLIP2 text-query
+  encoder.
+- **Caption** searches generated frame captions embedded with BGE-M3.
+- **OCR** searches visible text embedded with BGE-M3.
+- **ASR** searches transcript text already aligned to canonical frames and
+  embedded with BGE-M3. It is not a raw-audio embedding branch.
+
+Every branch emits shared `RetrievalCandidate` objects. A source stores its raw
+similarity under `source_scores[source]` and its one-based position under
+`source_ranks[source]`. These raw scores remain inspectable, but fusion never
+adds or compares SigLIP2 similarity directly with BGE-M3 similarity.
+
+### Candidate union
+
+`RRFFusionRetriever` requests `top_k` candidates from every branch and unions
+them by the exact canonical `frame_id`.
+
+- A frame returned by only one modality stays in the candidate pool.
+- If several modalities return the same frame, their source scores and ranks
+  are merged into one candidate.
+- A source may contribute at most once to a frame; duplicate source evidence is
+  rejected.
+- Fusion does not rewrite `frame_id`, `video_id`, `frame_idx`, timestamp, or
+  canonical frame metadata.
+
+For example, if one frame is visual rank 2, caption rank 5, and absent from OCR
+and ASR, the merged candidate contains:
+
+```python
+source_ranks = {
+    RetrievalSource.VISUAL: 2,
+    RetrievalSource.CAPTION: 5,
+}
+```
+
+Absence from a source contributes neither a score nor a penalty.
+
+### Task-weighted reciprocal-rank score
+
+For task `t`, candidate frame `d`, configured RRF constant `k`, and sources
+that retrieved the frame:
+
+$$
+\operatorname{WRRF}_{t}(d)
+=
+\sum_{s \in S(d)}
+\frac{w_{t,s}}{k + r_s(d)}
+$$
+
+The task comes from `SearchRequest.query_type`; it is not a user-selectable
+search profile. `FusionConfig.task_weights` requires positive visual, caption,
+OCR, and ASR weights for every configured task. The current baseline uses:
+
+```yaml
+task_weights:
+  kis:   {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+  kisc:  {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+  vkis:  {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+  vqa:   {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+  trake: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+```
+
+These equal weights are neutral placeholders, not optimized ratios. Multiplying
+all four weights for one task by the same constant does not change its ranking.
+Future tuning should therefore search relative weights on labeled development
+queries and select them using the official Mean Top-k R-Score.
+
+After computing the fusion score, candidates are ordered by:
+
+1. descending weighted-RRF score;
+2. best individual source rank;
+3. stable lexical `frame_id`.
+
+The fused top candidates are passed to the configured multimodal reranker. The
+reranker may reorder them using the query and frame evidence, but it must not
+create or rewrite candidate/frame identity.
 
 ## Benchmark
 
