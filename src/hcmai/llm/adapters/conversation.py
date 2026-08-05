@@ -8,7 +8,7 @@ from typing import Any
 
 from PIL import Image
 
-from hcmai.common.schemas import VQAEvidence
+from hcmai.common.schemas import VQAInferenceEvidence
 from hcmai.llm.config import HostedConversationConfig
 
 BackendLoader = Callable[[HostedConversationConfig], tuple[Any, Any]]
@@ -52,7 +52,7 @@ class StructuredConversationModel:
         self,
         question: str,
         image: Image.Image,
-        evidence: VQAEvidence,
+        evidence: VQAInferenceEvidence,
     ) -> str:
         """Answer one frame-grounded question with the shared vision model."""
         context = evidence.model_dump(exclude_none=True)

@@ -35,8 +35,17 @@ from .search import (
     SearchResponse,
     SearchResult,
 )
+from .task import TaskRequest, TaskResponse
+from .trake import TRAKERequest, TRAKEResponse, TRAKESubmission
 from .transcript import TranscriptSegment
-from .vqa import VQAEvidence, VQARequest, VQAResponse
+from .vqa import (
+    VQAInferenceEvidence,
+    VQAInferenceRequest,
+    VQAInferenceResponse,
+    VQARequest,
+    VQAResponse,
+    VQASubmission,
+)
 
 # Backward-compatible names used by the earlier frontend/backend contract.
 # They intentionally point at the canonical search models instead of creating
@@ -51,6 +60,7 @@ __all__ = [
     "RetrievalSource",
     "QueryLanguage",
     "TaskType",
+    "ExecutionProfile",
     "QueryDifficulty",
     "SearchScores",
     "RetrievalCandidate",
@@ -84,8 +94,16 @@ __all__ = [
     "RerankResponse",
     "TextEmbeddingRequest",
     "TextEmbeddingResponse",
-    "VQAEvidence",
+    "VQAInferenceEvidence",
+    "VQAInferenceRequest",
+    "VQAInferenceResponse",
     "VQARequest",
     "VQAResponse",
+    "VQASubmission",
+    "TRAKERequest",
+    "TRAKEResponse",
+    "TRAKESubmission",
+    "TaskRequest",
+    "TaskResponse",
     "TranscriptSegment",
 ]

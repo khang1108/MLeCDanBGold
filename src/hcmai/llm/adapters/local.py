@@ -13,7 +13,7 @@ from hcmai.common.schemas import (
     InferenceReadiness,
     ModelStatus,
     QuerySuggestion,
-    VQAEvidence,
+    VQAInferenceEvidence,
 )
 from hcmai.embedding.pipeline import EmbeddingService
 from hcmai.enrichment.pipeline import EnrichmentService
@@ -177,7 +177,7 @@ class LocalAdapter:
         return parse_suggestions(text, query, count)
 
     def answer_vqa(
-        self, question: str, image: Image.Image, evidence: VQAEvidence
+        self, question: str, image: Image.Image, evidence: VQAInferenceEvidence
     ) -> str:
         if self.conversation is None:
             raise RuntimeError("vision-language model is disabled")

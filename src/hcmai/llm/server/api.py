@@ -23,8 +23,8 @@ from hcmai.common.schemas import (
     RerankResponse,
     TextEmbeddingRequest,
     TextEmbeddingResponse,
-    VQAEvidence,
-    VQAResponse,
+    VQAInferenceEvidence,
+    VQAInferenceResponse,
 )
 from hcmai.llm.pipeline import LLMService
 
@@ -64,7 +64,7 @@ def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
         response_model=ConversationState,
     )
     app.add_api_route(
-        "/v1/vqa", vqa, methods=["POST"], response_model=VQAResponse
+        "/v1/vqa", vqa, methods=["POST"], response_model=VQAInferenceResponse
     )
     app.add_api_route(
         "/v1/query-suggestions",
@@ -210,9 +210,9 @@ async def vqa(
     question: str = Form(min_length=1, max_length=1_000),
     evidence: str = Form(default="{}"),
     image: UploadFile = File(),
-) -> VQAResponse:
+) -> VQAInferenceResponse:
     try:
-        context = VQAEvidence.model_validate_json(evidence)
+        context = VQAInferenceEvidence.model_validate_json(evidence)
     except Exception as error:
         raise HTTPException(status_code=400, detail="invalid VQA evidence") from error
     _, decoded = _decode_images(json.dumps([frame_id]), [image], maximum=1)
@@ -224,7 +224,7 @@ async def vqa(
         raise _unavailable("VQA inference failed", error) from error
     finally:
         decoded[0].close()
-    return VQAResponse(
+    return VQAInferenceResponse(
         request_id=request_id,
         frame_id=frame_id,
         question=question,

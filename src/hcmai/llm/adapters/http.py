@@ -18,8 +18,8 @@ from hcmai.common.schemas import (
     QuerySuggestionResponse,
     RerankResponse,
     TextEmbeddingResponse,
-    VQAEvidence,
-    VQAResponse,
+    VQAInferenceEvidence,
+    VQAInferenceResponse,
 )
 from hcmai.common.utils.logging import get_logger
 
@@ -116,9 +116,9 @@ class InferenceClient:
         frame_id: str,
         question: str,
         image: Image.Image,
-        evidence: VQAEvidence | None = None,
-    ) -> VQAResponse:
-        context = evidence or VQAEvidence()
+        evidence: VQAInferenceEvidence | None = None,
+    ) -> VQAInferenceResponse:
+        context = evidence or VQAInferenceEvidence()
         payload = self._post(
             "/v1/vqa",
             data={
@@ -129,7 +129,7 @@ class InferenceClient:
             },
             files=[("image", (f"{frame_id}.jpg", _jpeg(image), "image/jpeg"))],
         )
-        response = VQAResponse.model_validate(payload)
+        response = VQAInferenceResponse.model_validate(payload)
         if response.request_id != request_id or response.frame_id != frame_id:
             raise InferenceClientError("VQA provider changed request/frame identity")
         if response.question != question:
