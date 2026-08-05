@@ -68,9 +68,11 @@ class DenseRetriever:
         query_batch: QueryEmbeddingBatch,
         top_k: int = 100,
         filters: Optional[SearchFilters] = None,
+        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalResult]:
         """Search pre-encoded queries with one FAISS batch call."""
 
+        del query_type
         self._validate_query_batch(query_batch)
         mapping = self.index.mapping
         allowed_positions = _allowed_positions(mapping, filters)
@@ -109,11 +111,10 @@ class DenseRetriever:
     ) -> list[RetrievalResult]:
         """Encode and retrieve an ordered batch without per-query calls."""
 
-        del query_type
         if not queries:
             return []
         batch = self.encode(queries)
-        results = self.search_vectors(batch, top_k, filters)
+        results = self.search_vectors(batch, top_k, filters, query_type)
         return [
             result.model_copy(
                 update={

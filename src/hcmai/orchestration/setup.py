@@ -137,19 +137,27 @@ def _load_retrieval(
                 "HCMAI_ASR_INDEX_PATH", str(settings.index.asr_path)
             )),
         }
-        text_indexes = {
-            source: RetrievalService.load_index(path)
-            for source, path in paths.items()
-        }
+        text_indexes = {}
+        for source, path in paths.items():
+            if not path.is_dir():
+                if source in settings.search.fusion.required_sources:
+                    raise FileNotFoundError(
+                        f"Required {source.value} index not available at {path}"
+                    )
+                messages.append(
+                    f"{source.value.upper()} index not available at {path}"
+                )
+                continue
+            text_indexes[source] = RetrievalService.load_index(path)
         if any(
             index.metadata.dataset_version != visual.metadata.dataset_version
             for index in text_indexes.values()
         ):
             raise ValueError("visual and text index dataset versions differ")
+        if not text_indexes:
+            return RetrievalService.from_index(visual, visual_encoder)
         sample = next(iter(text_indexes.values()))
-        text_encoder = _query_encoder(
-            models.caption_embedding, sample, llm, "caption"
-        )
+        text_encoder = _query_encoder(models.caption_embedding, sample, llm, "text")
         return RetrievalService.from_indexes(
             visual, visual_encoder, text_indexes, text_encoder,
             settings.search.fusion,

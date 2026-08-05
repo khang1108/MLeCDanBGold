@@ -26,6 +26,9 @@ search:
   fusion:
     method: "rrf"
     rrf_k: 60
+    modality_max_workers: 4
+    required_sources: [visual]
+    normalize_active_weights: true
     # Neutral starting point only. Tune per task on labeled validation queries.
     task_weights:
       kis: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}

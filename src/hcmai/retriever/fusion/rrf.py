@@ -6,10 +6,19 @@ from collections.abc import Sequence
 from typing import Any
 
 from hcmai.common.config import FusionConfig
-from hcmai.common.schemas import RetrievalResult, RetrievalTrace, TaskType
+from hcmai.common.schemas import (
+    RetrievalResult,
+    RetrievalSource,
+    RetrievalTrace,
+    TaskType,
+)
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.observability.tracing import StageTimer
+from hcmai.retriever.concurrent import (
+    ModalitySearchExecutor,
+    ModalitySearchJob,
+)
 
 
 class RRFFusionRetriever:
@@ -19,6 +28,7 @@ class RRFFusionRetriever:
         self,
         retrievers: Sequence[Any],
         config: FusionConfig,
+        executor: ModalitySearchExecutor | None = None,
     ) -> None:
         if len(retrievers) < 2:
             raise ValueError("RRF fusion requires at least two retrievers")
@@ -26,6 +36,20 @@ class RRFFusionRetriever:
             raise ValueError(f"Unsupported fusion method {config.method!r}")
         self.retrievers = tuple(retrievers)
         self.config = config
+        configured_sources = {
+            source
+            for retriever in self.retrievers
+            if (source := getattr(retriever, "source", None)) is not None
+        }
+        missing_required = config.required_sources - configured_sources
+        if configured_sources and missing_required:
+            names = ", ".join(
+                sorted(source.value for source in missing_required)
+            )
+            raise ValueError(f"Required retrieval sources are not configured: {names}")
+        self._executor = executor or ModalitySearchExecutor(
+            config.modality_max_workers
+        )
 
     def search(
         self,
@@ -62,7 +86,7 @@ class RRFFusionRetriever:
 
         batches: dict[str, Any] = {}
         encoding_trace = RetrievalTrace()
-        modality_results: list[tuple[Any, list[RetrievalResult]]] = []
+        jobs: list[ModalitySearchJob] = []
         for retriever in self.retrievers:
             family = retriever.source_family
             if family not in batches:
@@ -74,18 +98,58 @@ class RRFFusionRetriever:
                     ),
                     prefix=family,
                 )
-            modality_results.append(
-                (retriever, retriever.search_vectors(batches[family], top_k, filters))
+            jobs.append(
+                ModalitySearchJob(
+                    source=retriever.source,
+                    query_batch=batches[family],
+                    index=retriever,
+                    top_k=top_k,
+                    filters=filters,
+                    query_type=query_type,
+                )
             )
+
+        modality_results = self._executor.search(
+            jobs,
+            self.config.required_sources,
+        )
+        retrievers_by_source = {
+            retriever.source: retriever for retriever in self.retrievers
+        }
+        active_sources = {
+            result.source for result in modality_results if result.succeeded
+        }
 
         results: list[RetrievalResult] = []
         for query_index in range(len(queries)):
-            children = [
-                (retriever, query_results[query_index])
-                for retriever, query_results in modality_results
-            ]
+            children: list[tuple[Any, RetrievalResult]] = []
+            trace = encoding_trace
+            warnings: list[str] = []
+            for modality in modality_results:
+                if modality.succeeded:
+                    result = modality.query_results[query_index]
+                    children.append((retrievers_by_source[modality.source], result))
+                    trace = trace.merged(
+                        result.trace,
+                        prefix=modality.source.value,
+                    )
+                else:
+                    if modality.failure_trace is not None:
+                        trace = trace.merged(
+                            modality.failure_trace,
+                            prefix=modality.source.value,
+                        )
+                    if modality.warning is not None:
+                        warnings.append(modality.warning)
             results.append(
-                self._fuse(children, top_k, query_type, encoding_trace)
+                self._fuse(
+                    children,
+                    top_k,
+                    query_type,
+                    trace,
+                    warnings=warnings,
+                    active_sources=active_sources,
+                )
             )
         return results
 
@@ -122,14 +186,18 @@ class RRFFusionRetriever:
         top_k: int,
         query_type: TaskType,
         trace: RetrievalTrace,
+        *,
+        warnings: list[str] | None = None,
+        active_sources: set[RetrievalSource] | None = None,
     ) -> RetrievalResult:
         """Fuse one query's modality results without changing identity."""
 
-        warnings = [
+        result_warnings = [
             warning
             for _, result in child_results
             for warning in result.warnings
         ]
+        result_warnings.extend(warnings or [])
         fusion_timer = StageTimer("fusion")
         pool: dict[str, RetrievalCandidate] = {}
         for _, result in child_results:
@@ -141,7 +209,10 @@ class RRFFusionRetriever:
                     else _merge(existing, candidate)
                 )
 
-        weights = self.config.task_weights[query_type]
+        weights = self._active_weights(
+            query_type,
+            active_sources or _result_sources(child_results),
+        )
         fused = [
             candidate.model_copy(
                 update={
@@ -161,8 +232,39 @@ class RRFFusionRetriever:
         return RetrievalResult(
             candidates=fused[:top_k],
             trace=trace,
-            warnings=warnings,
+            warnings=result_warnings,
         )
+
+    def _active_weights(
+        self,
+        query_type: TaskType,
+        active_sources: set[RetrievalSource],
+    ) -> dict[RetrievalSource, float]:
+        weights = self.config.task_weights[query_type]
+        configured_sources = {
+            source
+            for retriever in self.retrievers
+            if (source := getattr(retriever, "source", None)) is not None
+        }
+        if not configured_sources:
+            configured_sources = active_sources
+        active_weights = {
+            source: weights[source]
+            for source in active_sources
+        }
+        if (
+            not self.config.normalize_active_weights
+            or active_sources == configured_sources
+            or not active_weights
+        ):
+            return active_weights
+        configured_total = sum(weights[source] for source in configured_sources)
+        active_total = sum(active_weights.values())
+        scale = configured_total / active_total
+        return {
+            source: weight * scale
+            for source, weight in active_weights.items()
+        }
 
 
 def _merge(
@@ -191,6 +293,17 @@ def _merge(
         },
         deep=True,
     )
+
+
+def _result_sources(
+    child_results: list[tuple[Any, RetrievalResult]],
+) -> set[RetrievalSource]:
+    return {
+        source
+        for _, result in child_results
+        for candidate in result.candidates
+        for source in candidate.source_ranks
+    }
 
 
 def _sort_key(candidate: RetrievalCandidate) -> tuple[float, int, str]:
