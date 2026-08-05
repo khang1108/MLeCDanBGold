@@ -85,11 +85,7 @@ class RetrievalService:
     def visual_index(self) -> DenseIndex:
         """Expose the visual index for full-frame rescoring such as TRAKE."""
 
-        retrievers = getattr(self._retriever, "retrievers", (self._retriever,))
-        for retriever in retrievers:
-            if getattr(retriever, "source_family", None) == "visual":
-                return cast(DenseIndex, retriever.index)
-        raise RuntimeError("No visual index is configured for retrieval")
+        return cast(DenseIndex, self._retriever_for("visual").index)
 
     def search(
         self,
@@ -118,12 +114,17 @@ class RetrievalService:
     ) -> QueryEmbeddingBatch:
         """Expose a reusable query batch for task pipelines such as TRAKE."""
 
+        return cast(Any, self._retriever_for(source_family)).encode(texts)
+
+    def _retriever_for(self, source_family: SourceFamily) -> Any:
+        """Return the one configured retriever owning an embedding family."""
+
         retrievers = getattr(self._retriever, "retrievers", (self._retriever,))
         for retriever in retrievers:
             if getattr(retriever, "source_family", None) == source_family:
-                return cast(Any, retriever).encode(texts)
+                return retriever
         raise RuntimeError(
-            f"No {source_family!r} query encoder is configured for retrieval"
+            f"No {source_family!r} retriever is configured for retrieval"
         )
 
     @staticmethod

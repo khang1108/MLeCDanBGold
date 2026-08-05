@@ -4,12 +4,6 @@ from __future__ import annotations
 
 from hashlib import sha1
 
-from hcmai.agents.trake import (
-    TrakePath,
-    event_video_scores,
-    rank_paths,
-    split_delimited,
-)
 from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
     TaskRequest,
@@ -21,6 +15,13 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.retriever.pipeline import RetrievalService
+from hcmai.agents.trake import (
+    event_video_scores,
+    rank_paths,
+    split_delimited,
+    TrakeParserError,
+    TrakeQueryParser,
+)
 
 logger = get_logger(__name__)
 
@@ -34,11 +35,11 @@ class TRAKEPipeline:
         self,
         retrieval: RetrievalService | None,
         config: SearchConfig,
-        lambda_gap: float = 1e-5,
+        parser: TrakeQueryParser | None = None,
     ) -> None:
         self.retrieval = retrieval
         self.config = config
-        self.lambda_gap = lambda_gap
+        self.parser = parser
 
     def execute(self, request: TaskRequest) -> TRAKEResponse:
         if not isinstance(request, TRAKERequest):
@@ -46,17 +47,28 @@ class TRAKEPipeline:
         if self.retrieval is None:
             raise TaskPipelineDependencyError("Retriever not loaded")
 
-        events = request.events or split_delimited(request.query)
+        if request.events is not None:
+            events = request.events
+        elif self.parser is None:
+            events = split_delimited(request.query)
+        else:
+            try:
+                events = self.parser.parse(request.query).events
+            except TrakeParserError as error:
+                # A provider outage and an unparsable query leave the caller the
+                # same remedy: send 'events' or a '|'-delimited query.
+                raise ValueError(f"TRAKE query parsing failed: {error}") from error
         if events is None or len(events) < 2:
             raise ValueError(
                 "TRAKE needs at least two ordered events; send 'events' or a "
                 "'|'-delimited query"
             )
-        request_id = _request_id(request)
+        digest = sha1(f"trake\0{request.query}\0{request.top_k}".encode())
+        request_id = f"trake-{digest.hexdigest()[:12]}"
         videos = event_video_scores(
             self.retrieval, events, self.config.candidate_count
         )
-        rows = rank_paths(videos, self.lambda_gap, request.top_k)
+        rows = rank_paths(videos, max_rows=request.top_k)
         logger.info(
             "[%s] trake completed events=%d videos=%d rows=%d",
             request_id,
@@ -71,22 +83,12 @@ class TRAKEPipeline:
             top_k=request.top_k,
             total_results=len(rows),
             submissions=[
-                _submission(row, rank) for rank, row in enumerate(rows, start=1)
+                TRAKESubmission(
+                    rank=rank,
+                    video_id=row.video_id,
+                    frame_ids=list(row.frame_ids),
+                    frame_idxs=list(row.frame_idx),
+                )
+                for rank, row in enumerate(rows, start=1)
             ],
         )
-
-
-def _submission(row: TrakePath, rank: int) -> TRAKESubmission:
-    """Materialize one aligned path through its canonical frame identities."""
-
-    return TRAKESubmission(
-        rank=rank,
-        video_id=row.video_id,
-        frame_ids=list(row.frame_ids),
-        frame_idxs=list(row.frame_idx),
-    )
-
-
-def _request_id(request: TRAKERequest) -> str:
-    payload = f"trake\0{request.query}\0{request.top_k}".encode()
-    return f"trake-{sha1(payload).hexdigest()[:12]}"

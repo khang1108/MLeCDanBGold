@@ -162,6 +162,8 @@ class SearchService:
             return pipeline.execute(request)
         except TaskPipelineDependencyError as error:
             raise SearchServiceUnavailableError(str(error)) from error
+        except ValueError as error:
+            raise UnsupportedSearchTaskError(str(error)) from error
 
     def _default_registry(self) -> PipelineRegistry:
         task_types = (TaskType.KIS, TaskType.VKIS, TaskType.KISC)
