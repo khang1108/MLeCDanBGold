@@ -18,10 +18,9 @@ logger = get_logger(__name__)
 class VideoEventScores:
     """One shortlisted video's event-to-frame similarities.
 
-    Frames are in canonical ``frame_idx`` order, so column ``t`` of
-    :attr:`scores` belongs to ``frame_ids[t]``, ``frame_idx[t]`` and
-    ``timestamps_ms[t]``. Every value is read from the index mapping, never
-    inferred from FPS.
+    Column ``t`` of :attr:`scores` belongs to ``frame_ids[t]``,
+    ``frame_idx[t]`` and ``timestamps_ms[t]``, all read from the index mapping
+    in canonical order and never inferred from FPS.
     """
 
     video_id: str
@@ -40,8 +39,7 @@ def event_video_scores(
 
     Args:
         retrieval: :class:`RetrievalService`-shaped object providing
-            ``search(query, top_k)`` for the shortlist, ``encode_text_batch``
-            for the event vectors, and ``visual_index`` for exact rescoring.
+            ``search``, ``encode_text_batch`` and ``visual_index``.
         events: Ordered TRAKE events, already split and translated.
         top_k: Frames kept per event when shortlisting videos.
 
@@ -63,10 +61,10 @@ def event_video_scores(
         mapping.loc[mapping["frame_id"].isin(frame_ids), "video_id"].unique()
     )
     shortlist_ms = timer.stop()
-    timer = Timer()
+    timer.start()
     scores, positions = index.search(
         retrieval.encode_text_batch(list(events), "visual").vectors,
-        index.index.ntotal,
+        len(mapping),
     )
     full = np.empty_like(scores)
     np.put_along_axis(full, positions, scores, axis=1)

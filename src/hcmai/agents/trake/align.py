@@ -13,9 +13,8 @@ from .shortlist import VideoEventScores
 class TrakePath:
     """One video's best strictly chronological event path.
 
-    ``frame_idx`` holds exactly one canonical frame index per event, in event
-    order, ready for a ``<video_name>,<frame_1>,...,<frame_N>`` submission row.
-    ``frame_ids`` are the matching internal identities, in the same order.
+    ``frame_idx`` and ``frame_ids`` hold one canonical frame per event, in
+    event order, ready for a ``<video_name>,<frame_1>,...,<frame_N>`` row.
     """
 
     video_id: str
@@ -30,24 +29,18 @@ def align_video(
     """Return the best monotonic event-to-frame paths of one shortlisted video.
 
     Maximizes ``sum_j S[j, t_j] - lambda_gap * (tau_t_N - tau_t_1)`` over
-    ``t_1 < ... < t_N``, because the per-step gap penalties telescope. Runs in
-    ``O(N * M)`` via a running prefix max: ``-lambda * tau_t`` is constant in
-    ``t'``, so each step only needs the best ``D[j-1][t'] + lambda * tau_t'``
-    seen so far.
+    ``t_1 < ... < t_N`` in ``O(N * M)``: the gap penalties telescope, so a
+    running prefix max over ``D[j-1][t'] + lambda * tau_t'`` is enough.
 
     Args:
-        video: One video's ``N x M`` event/frame similarities in canonical
-            frame order.
-        lambda_gap: Time-gap penalty per millisecond. This is a calibration
-            knob, not a constant: tune it on a labeled TRAKE validation set,
-            since its scale depends on the similarity range and clip pacing.
+        video: One video's ``N x M`` similarities in canonical frame order.
+        lambda_gap: Time-gap penalty per millisecond. A calibration knob:
+            tune it on a labeled TRAKE validation set.
         paths: How many paths to return, best first, for submission padding.
 
     Returns:
-        Up to ``paths`` paths, best score first, or an empty list when the
-        video has fewer keyframes than events so no increasing path exists.
-        Path ``i`` is the best path ending at the ``i``-th best final frame,
-        so two paths of one video may share a prefix.
+        Up to ``paths`` paths, best first, empty when ``M < N``. Path ``i``
+        ends at the ``i``-th best final frame, so paths may share a prefix.
     """
     scores = np.asarray(video.scores, dtype=np.float64)
     n_events, n_frames = scores.shape
@@ -61,8 +54,7 @@ def align_video(
     for event in range(1, n_events):
         shifted = current + weighted_time
         running = np.maximum.accumulate(shifted)
-        # Latest position achieving the prefix max; ties keep the closest
-        # predecessor, which is the shortest gap.
+        # Latest position achieving the prefix max: ties keep the shortest gap.
         argmax = np.maximum.accumulate(np.where(shifted == running, frames, 0))
         current = np.full(n_frames, -np.inf)
         current[1:] = scores[event, 1:] - weighted_time[1:] + running[:-1]

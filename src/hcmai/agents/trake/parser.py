@@ -8,15 +8,11 @@ from pydantic import ValidationError
 
 import re
 
-from hcmai.common.schemas import TrakeParseResponse
+from hcmai.common.schemas import TRAKEParseResponse
 from hcmai.common.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-StructuredCall = Callable[[dict[str, Any]], object]
-
-# Events feed the SigLIP2 visual index, whose text tower is English-centric,
-# so the parser translates like the KISC resolver already does.
 _INSTRUCTION = """
 Split one Vietnamese or English TRAKE video query into an ordered list of
 atomic visual events. Keep the events in the exact chronological order the
@@ -76,24 +72,25 @@ def split_delimited(query: str) -> list[str] | None:
 class TrakeQueryParser:
     """Split one TRAKE query into ordered English atomic events."""
 
-    def __init__(self, structured_call: StructuredCall) -> None:
+    def __init__(
+        self, structured_call: Callable[[dict[str, Any]], object]
+    ) -> None:
         self.structured_call = structured_call
 
     def parse(
         self, raw_query: str, event_count: int | None = None
-    ) -> TrakeParseResponse:
+    ) -> TRAKEParseResponse:
         """Return the ordered events of one TRAKE query.
 
         Args:
             raw_query: One query as written in the query pack.
             event_count: Expected event count when the pack states it
-                separately. Defaults to the count of "|"-delimited segments,
-                which is authoritative for a batch run.
+                separately. Defaults to the count of "|"-delimited segments.
 
         Raises:
             TrakeParserError: If the query is empty or neither the provider nor
-                the delimited split yields the expected event count. A row with
-                the wrong count is invalid, so it never silently truncates.
+                the delimited split yields the expected event count, since a
+                row with the wrong count is invalid.
         """
         query = raw_query.strip()
         if not query:
@@ -109,9 +106,7 @@ class TrakeQueryParser:
                     f"model returned {len(events)} events, expected {expected}"
                 )
         except TrakeParserError as error:
-            # ponytail: the fallback keeps a batch row valid but leaves events
-            # untranslated, so the English-only visual channel degrades. Remove
-            # it once the provider has measured reliability.
+            # The fallback keeps a row valid but leaves events untranslated.
             if delimited is None or (
                 expected is not None and len(delimited) != expected
             ):
@@ -122,7 +117,7 @@ class TrakeQueryParser:
                 error,
             )
             events = delimited
-        return TrakeParseResponse(events=events)
+        return TRAKEParseResponse(events=events)
 
     def _from_model(self, query: str) -> list[str]:
         request = {"instruction": _INSTRUCTION, "raw_query": query}
@@ -134,8 +129,8 @@ class TrakeQueryParser:
                 f"structured provider failed: {detail or type(error).__name__}"
             ) from error
         try:
-            return TrakeParseResponse.model_validate(output).events
+            return TRAKEParseResponse.model_validate(output).events
         except ValidationError as error:
             raise TrakeParserError(
-                "structured output failed TrakeParseResponse validation"
+                "structured output failed TRAKEParseResponse validation"
             ) from error

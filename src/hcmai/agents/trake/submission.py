@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-import csv
 from collections.abc import Sequence
 from pathlib import Path
+
+import csv
+import math
 
 from hcmai.common.utils.logging import get_logger
 
@@ -21,10 +23,10 @@ def rank_paths(
 ) -> list[TrakePath]:
     """Rank aligned paths, one video per row before any video repeats.
 
-    Every video contributes its best path first, sorted by ``score``, because
-    a wrong video scores zero for the whole row and ``R@k`` only keeps the best
-    row inside each cutoff. Only once the best paths run out do leading videos
-    contribute their second-best path, and so on, until ``max_rows`` rows exist.
+    Every video contributes its best path first, sorted by ``score``, because a
+    wrong video scores zero for the whole row and ``R@k`` keeps only the best
+    row inside each cutoff. Leading videos contribute a second-best path only
+    once the best paths run out.
 
     Args:
         videos: Shortlisted videos with their event/frame score matrices.
@@ -32,12 +34,11 @@ def rank_paths(
         max_rows: Official per-query row limit.
 
     Returns:
-        At most ``max_rows`` paths, best first. Fewer only when the shortlisted
-        videos cannot yield that many increasing paths.
+        At most ``max_rows`` paths, best first.
     """
     if not videos:
         return []
-    depth = -(-max_rows // len(videos))
+    depth = math.ceil(max_rows / len(videos))
     per_video = [align_video(video, lambda_gap, depth) for video in videos]
     rows: list[TrakePath] = []
     for level in range(depth):
@@ -57,16 +58,9 @@ def write_submission(rows: Sequence[TrakePath], output_path: str | Path) -> Path
     """Write ranked TRAKE paths as one official per-query CSV.
 
     Emits headerless UTF-8 rows of ``<video_name>,<frame_1>,...,<frame_N>``.
-    ``frame_idx`` values already come from the canonical frame mapping, so this
-    only drops the ``.mp4`` extension to get the official video name.
-
-    Args:
-        rows: Ranked paths from :func:`rank_paths`.
-        output_path: Destination file, for example
-            ``submission/query-1-trake.csv``. Parent directories are created.
-
-    Returns:
-        The written path.
+    ``frame_idx`` already comes from the canonical mapping, so this only drops
+    the ``.mp4`` extension to get the official video name. Parent directories
+    of ``output_path`` are created.
 
     Raises:
         ValueError: If the rows disagree on event count, since a row with the
