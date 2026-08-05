@@ -1,8 +1,10 @@
 # `hcmai` Package Reference
 
-HCMAI is a modular monolith for multimodal video-frame retrieval. Each
-capability exposes one public service from its top-level `pipeline.py`; model
-and provider implementations stay behind feature-owned adapters.
+HCMAI is a modular monolith for multimodal video-frame retrieval. Each domain
+service package shown below exposes one public service from its top-level
+`pipeline.py`; model and provider implementations stay behind feature-owned
+adapters. `api`, `common`, research agents, and the internal baseline evaluator
+are explicit exceptions.
 
 ## Package layout
 
@@ -21,8 +23,7 @@ src/hcmai/
 ├── enrichment/               # Caption/OCR EnrichmentService
 ├── transcripts/              # TranscriptService and ASR adapters
 ├── llm/                      # LLMService and local/HTTP adapters
-├── query_suggestions/        # QuerySuggestionService
-├── evaluation/               # EvaluationService
+├── query_suggestions/        # SuggestionService and provider adapters
 ├── agents/kisc/              # Bounded conversational KIS research code
 └── common/                   # Shared config, schemas, and generic utilities
 ```
@@ -62,6 +63,11 @@ Offline research jobs call their owning service directly, for example
 `DataService` for frame preparation, `EmbeddingService` for vector artifacts,
 and `RetrievalService` for index construction. This keeps experiments modular
 without adding a production-style dependency-injection framework.
+
+There is no public `EvaluationService` yet. The existing
+`retriever/evaluation/benchmark.py` is an internal dense-baseline tool; an
+end-to-end evaluator remains deferred until its contract and second use are
+demonstrated.
 
 ## Canonical identity invariant
 

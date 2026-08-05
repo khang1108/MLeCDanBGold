@@ -1,9 +1,16 @@
-d
-
 # Canonical frame data
 
-The MVP pipeline has one job: join the official BTC mapping to the provided
-keyframe images and write one canonical `frames.parquet`.
+`hcmai.data` owns canonical frame preparation and lookup. Other components use
+`DataService` from `pipeline.py`; store implementations remain internal.
+
+```text
+data/
+├── pipeline.py              # DataService public facade
+├── prepare.py               # Canonical frames.parquet builder
+└── stores/
+    ├── frame.py             # FrameStore
+    └── evidence.py          # Caption/OCR/ASR evidence stores
+```
 
 ## Purpose
 
@@ -68,9 +75,9 @@ The same implementation is available as a Python API:
 ```python
 from pathlib import Path
 
-from hcmai.data import prepare_frames
+from hcmai.data.pipeline import DataService
 
-frames_path = prepare_frames(
+frames_path = DataService.prepare(
     dataset_root=Path("data"),
     output_path=Path("data/metadata/frames.parquet"),
 )
@@ -98,10 +105,10 @@ rows with separate `frame_id` values.
 AI indexing can iterate records in deterministic Parquet order:
 
 ```python
-from hcmai.data import FrameStore
+from hcmai.data.pipeline import DataService
 
-store = FrameStore.load("data/metadata/frames.parquet")
-for frame in store.iter_frames():
+data = DataService.load("data/metadata/frames.parquet")
+for frame in data.iter_frames():
     image_path = dataset_root / frame.image_path
     build_embedding(frame.frame_id, image_path)
 ```
@@ -109,7 +116,11 @@ for frame in store.iter_frames():
 Backend lookup preserves the official mapping:
 
 ```python
-frame = store.get(retrieved_frame_id)
+frame = data.get_frame(retrieved_frame_id)
 submission = (frame.video_id, frame.frame_idx)
-assert store.contains_submission(*submission)
+assert data.contains_submission(*submission)
 ```
+
+Production code outside this package must not import `stores/` or
+`prepare.py` directly. Focused unit tests may use those internals with tiny
+fixtures.

@@ -1,7 +1,18 @@
 # Canonical transcript data
 
-Pipeline đọc audio từ video, chia các vùng có lời nói và ghi riêng một file
-Parquet cho mỗi video.
+`hcmai.transcripts` đọc audio từ video, chia các vùng có lời nói và ghi riêng
+một file Parquet cho mỗi video. Caller dùng `TranscriptService` trong
+`pipeline.py`; ASR và diarization cụ thể nằm sau các adapter nội bộ.
+
+```text
+transcripts/
+├── pipeline.py              # TranscriptService public facade
+├── prepare.py               # Job implementation
+├── store.py                 # TranscriptStore
+└── adapters/
+    ├── asr.py
+    └── diarization.py
+```
 
 ## Công nghệ
 
@@ -91,9 +102,9 @@ chỉ giữ speaker chiếm nhiều thời gian nhất.
 ## Đọc transcript
 
 ```python
-from hcmai.transcripts import TranscriptStore
+from hcmai.transcripts.pipeline import TranscriptService
 
-store = TranscriptStore("artifacts/transcripts")
+store = TranscriptService.load_store("artifacts/transcripts")
 
 segment = store.get("L21_V001_segment_000000")
 segments = store.get_many(["L21_V001_segment_000000"])
@@ -114,3 +125,7 @@ Parquet một lần và cung cấp các hàm:
 | `get_in_range(video_id, start_ms, end_ms)` | Tìm segment giao với một khoảng thời gian | `list[TranscriptSegment]` |
 
 Video không tồn tại hoặc không có segment phù hợp trả về danh sách rỗng.
+
+Code production bên ngoài component không import `adapters/`, `prepare.py`,
+hay `store.py` trực tiếp. Script chuẩn gọi `TranscriptService.from_configs()`
+rồi `prepare()` để model chỉ được tạo một lần cho cả job.
