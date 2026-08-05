@@ -89,6 +89,9 @@ class InferenceClient:
             raise InferenceClientError("reranker changed item identity or order")
         return [item.score for item in response.items]
 
+    def parse_trake_query(self, request: dict[str, Any]) -> object:
+        return self._post("/v1/trake/parse", json=request)
+
     def resolve_conversation(self, request: dict[str, Any]) -> object:
         return self._post("/v1/conversation/resolve", json=request)
 

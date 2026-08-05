@@ -12,14 +12,14 @@ from hcmai.common.schemas import VQAEvidence
 from hcmai.llm.config import HostedConversationConfig
 
 BackendLoader = Callable[[HostedConversationConfig], tuple[Any, Any]]
-_STATE_FIELDS = {
+_STATE_FIELDS = frozenset({
     "standalone_query",
     "positive_constraints",
     "negative_constraints",
     "uncertain_constraints",
     "accepted_frame_ids",
     "rejected_frame_ids",
-}
+})
 
 
 class StructuredConversationModel:
@@ -46,7 +46,16 @@ class StructuredConversationModel:
 
     def __call__(self, request: dict[str, Any]) -> dict[str, Any]:
         text = self.generate(self._messages(request))
-        return _conversation_state(text)
+        return json_object(text, _STATE_FIELDS)
+
+    def structured_json(self, instruction: str, message: str) -> dict[str, Any]:
+        """Return one JSON object for a bounded non-conversation prompt.
+
+        The prompt reuses the conversation message layout unchanged, so the
+        caller's text travels under ``current_message``.
+        """
+        request = {"instruction": instruction, "current_message": message}
+        return json_object(self.generate(self._messages(request)))
 
     def answer_vqa(
         self,
@@ -180,7 +189,10 @@ def _model_options(config: HostedConversationConfig, dtype: Any) -> dict[str, An
     return options
 
 
-def _conversation_state(text: str) -> dict[str, Any]:
+def json_object(
+    text: str, required: frozenset[str] = frozenset()
+) -> dict[str, Any]:
+    """Return the first JSON object in model output holding every required key."""
     decoder = json.JSONDecoder()
     for start, character in enumerate(text):
         if character != "{":
@@ -189,9 +201,9 @@ def _conversation_state(text: str) -> dict[str, Any]:
             value, _ = decoder.raw_decode(text[start:])
         except json.JSONDecodeError:
             continue
-        if isinstance(value, dict) and _STATE_FIELDS <= value.keys():
+        if isinstance(value, dict) and required <= value.keys():
             return value
-    raise ValueError("conversation model did not return a complete state object")
+    raise ValueError("model did not return a complete JSON object")
 
 
 def _short_answer(text: str) -> str:

@@ -23,6 +23,8 @@ from hcmai.common.schemas import (
     RerankResponse,
     TextEmbeddingRequest,
     TextEmbeddingResponse,
+    TrakeParseInferenceRequest,
+    TrakeParseResponse,
     VQAEvidence,
     VQAResponse,
 )
@@ -62,6 +64,12 @@ def create_llm_app(runtime: LLMRuntime | None = None) -> FastAPI:
         resolve,
         methods=["POST"],
         response_model=ConversationState,
+    )
+    app.add_api_route(
+        "/v1/trake/parse",
+        parse_trake,
+        methods=["POST"],
+        response_model=TrakeParseResponse,
     )
     app.add_api_route(
         "/v1/vqa", vqa, methods=["POST"], response_model=VQAResponse
@@ -179,6 +187,18 @@ async def resolve(
         return ConversationState.model_validate(output)
     except Exception as error:
         raise _unavailable("Conversation inference failed", error) from error
+
+
+async def parse_trake(
+    payload: TrakeParseInferenceRequest, request: Request
+) -> TrakeParseResponse:
+    try:
+        output = request.app.state.runtime.parse_trake(
+            payload.model_dump(mode="json")
+        )
+        return TrakeParseResponse.model_validate(output)
+    except Exception as error:
+        raise _unavailable("TRAKE parsing failed", error) from error
 
 
 async def suggest_queries(

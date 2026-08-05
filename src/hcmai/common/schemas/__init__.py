@@ -35,6 +35,7 @@ from .search import (
     SearchResponse,
     SearchResult,
 )
+from .trake import TrakeParseInferenceRequest, TrakeParseResponse
 from .transcript import TranscriptSegment
 from .vqa import VQAEvidence, VQARequest, VQAResponse
 
@@ -87,5 +88,7 @@ __all__ = [
     "VQAEvidence",
     "VQARequest",
     "VQAResponse",
+    "TrakeParseInferenceRequest",
+    "TrakeParseResponse",
     "TranscriptSegment",
 ]
