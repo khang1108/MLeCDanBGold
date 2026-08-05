@@ -6,7 +6,9 @@ retrieval or reranking internals themselves.
 
 ```text
 orchestration/
-├── pipeline.py              # SearchService public task router
+├── pipeline.py              # SearchService public facade
+├── task_router.py           # Task-pipeline registry
+├── pipelines/               # Executable task-specific adapters
 ├── setup.py                 # Single application composition root
 ├── ranking.py               # Bounded retrieval/reranking sequence
 └── materializer.py          # Canonical SearchResponse construction
@@ -22,10 +24,10 @@ FastAPI or KISC
     → DataService-backed canonical materialization
 ```
 
-`SearchService` routes Textual KIS, initial VKIS, and resolved KISC queries.
-It recognizes VQA and TRAKE but raises `SearchPipelineUnavailableError` until
-their real end-to-end stages exist. The comments in `_validate_task` document
-the intended stages; do not replace them with placeholder services.
+`SearchService` resolves each request through `PipelineRegistry`. The current
+`KISPipeline` preserves Textual KIS, initial VKIS, and resolved legacy KISC
+behavior. Missing VQA and TRAKE registrations raise
+`SearchPipelineUnavailableError` until their real end-to-end pipelines exist.
 
 `setup.py` loads configuration and artifacts once, constructs the selected
 services, and injects them into `SearchService`. Cross-component imports in

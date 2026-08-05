@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from time import perf_counter
 from typing import Any
 
 from hcmai.common.config import SearchConfig
@@ -20,13 +19,15 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.llm.pipeline import LLMService
-from hcmai.orchestration.materializer import SearchMaterializer
-from hcmai.orchestration.ranking import elapsed_ms, rank_candidates, request_id
+from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
+from hcmai.orchestration.pipelines.kis import KISPipeline
+from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.query_suggestions.pipeline import SuggestionService
 from hcmai.reranking.pipeline import RerankingService
 from hcmai.retriever.pipeline import RetrievalService
 
 logger = get_logger(__name__)
+
 
 class UnsupportedSearchTaskError(ValueError):
     """A request cannot be handled by the search application boundary."""
@@ -51,6 +52,7 @@ class SearchService:
         config: SearchConfig | None = None,
         suggestion_service: SuggestionService | None = None,
         llm: LLMService | None = None,
+        pipeline_registry: PipelineRegistry | None = None,
     ) -> None:
         self.data = data
         self.retrieval = retrieval
@@ -58,7 +60,11 @@ class SearchService:
         self.config = config or SearchConfig()
         self.suggestion_service = suggestion_service
         self.llm = llm
-        self.materializer = SearchMaterializer(data) if data is not None else None
+        self.pipeline_registry = (
+            pipeline_registry
+            if pipeline_registry is not None
+            else self._default_registry()
+        )
 
     @classmethod
     def load(cls, messages: list[str]) -> SearchService:
@@ -100,6 +106,14 @@ class SearchService:
         data_ready = self.data is not None
         retrieval_ready = self.retrieval is not None
         suggestions_ready = self.suggestion_service is not None
+        task_capabilities = self.pipeline_registry.capability_report(
+            (TaskType.KIS, TaskType.VKIS, TaskType.VQA, TaskType.TRAKE)
+        )
+        task_capabilities = {
+            task_type: registered and data_ready and retrieval_ready
+            for task_type, registered in task_capabilities.items()
+        }
+        search_ready = any(task_capabilities.values())
         return {
             "status": "ok",
             "ready": data_ready and retrieval_ready,
@@ -115,7 +129,7 @@ class SearchService:
                 )
             },
             "capabilities": {
-                "search": retrieval_ready,
+                "search": search_ready,
                 "query_suggestions": {
                     "enabled": suggestions_ready,
                     "provider": (
@@ -124,12 +138,7 @@ class SearchService:
                     ),
                 },
                 "frame_assets": data_ready,
-                "query_types": {
-                    TaskType.KIS.value: retrieval_ready,
-                    TaskType.VKIS.value: retrieval_ready,
-                    TaskType.VQA.value: False,
-                    TaskType.TRAKE.value: False,
-                },
+                "query_types": task_capabilities,
             },
             "startup_messages": list(startup_messages),
         }
@@ -141,60 +150,27 @@ class SearchService:
             self.llm.close()
 
     def search(self, request: SearchRequest) -> SearchResponse:
-        self._validate_task(request.query_type)
-        if self.data is None or self.materializer is None:
-            raise SearchServiceUnavailableError("Frame store not loaded")
-        if self.retrieval is None:
-            raise SearchServiceUnavailableError("Retriever not loaded")
-        started = perf_counter()
-        request_id_value = request_id(request)
-        candidate_count = max(request.top_k, self.config.candidate_count)
-        logger.info(
-            "[%s] search started query_type=%s top_k=%d candidates=%d",
-            request_id_value, request.query_type.value, request.top_k, candidate_count,
-        )
-        candidates, retrieval_ms, reranking_ms = rank_candidates(
-            request,
-            self.retrieval,
-            self.reranking,
-            candidate_count=candidate_count,
-            rerank_count=self.config.rerank_count,
-            request_id=request_id_value,
-        )
-        materialization_started = perf_counter()
-        logger.info(
-            "[%s] materialization started selected=%d",
-            request_id_value, min(request.top_k, len(candidates)),
-        )
-        response = self.materializer.build_response(
-            request, candidates[: request.top_k], request_id_value
-        )
-        latency = response.latency_ms.model_copy(update={
-            "candidate_retrieval": retrieval_ms,
-            "reranking": reranking_ms,
-            "materialization": elapsed_ms(materialization_started),
-            "total": elapsed_ms(started),
-        })
-        response = response.model_copy(update={"latency_ms": latency})
-        logger.info(
-            "[%s] search completed results=%d",
-            request_id_value,
-            response.total_results,
-        )
-        return response
+        try:
+            pipeline = self.pipeline_registry.get(request.query_type)
+        except KeyError as error:
+            raise SearchPipelineUnavailableError(
+                f"pipeline for query_type {request.query_type.value!r} "
+                "is not available"
+            ) from error
+        try:
+            return pipeline.execute(request)
+        except TaskPipelineDependencyError as error:
+            raise SearchServiceUnavailableError(str(error)) from error
 
-    @staticmethod
-    def _validate_task(query_type: TaskType) -> None:
-        if query_type is TaskType.VQA:
-            # VQA: retrieval -> evidence selection -> answer -> frame binding.
-            raise SearchPipelineUnavailableError(
-                "pipeline for query_type 'vqa' is not available"
+    def _default_registry(self) -> PipelineRegistry:
+        task_types = (TaskType.KIS, TaskType.VKIS, TaskType.KISC)
+        return PipelineRegistry(
+            KISPipeline(
+                task_type,
+                self.data,
+                self.retrieval,
+                self.reranking,
+                self.config,
             )
-        if query_type is TaskType.TRAKE:
-            # TRAKE: event retrieval -> same-video joint temporal alignment.
-            raise SearchPipelineUnavailableError(
-                "pipeline for query_type 'trake' is not available"
-            )
-        if query_type not in {TaskType.KIS, TaskType.VKIS, TaskType.KISC}:
-            message = f"query_type {query_type.value!r} is not supported"
-            raise UnsupportedSearchTaskError(message)
+            for task_type in task_types
+        )
