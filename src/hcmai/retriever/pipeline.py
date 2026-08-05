@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from hcmai.retriever.dense.retriever import DenseRetriever
 from hcmai.retriever.fusion.rrf import RRFFusionRetriever
 from hcmai.retriever.models.contracts import Retriever
 from hcmai.retriever.models.metadata import IndexMetadata
+from hcmai.retriever.query_batch import QueryEmbeddingBatch, SourceFamily
 from hcmai.retriever.text.artifacts import build_text_artifacts
 from hcmai.retriever.text.retriever import (
     ASRRetriever,
@@ -87,6 +89,32 @@ class RetrievalService:
         query_type: TaskType = TaskType.KIS,
     ) -> RetrievalResult:
         return self._retriever.search(query, top_k, filters, query_type)
+
+    def search_batch(
+        self,
+        queries: list[str],
+        top_k: int = 100,
+        filters: SearchFilters | None = None,
+        query_type: TaskType = TaskType.KIS,
+    ) -> list[RetrievalResult]:
+        """Retrieve multiple ordered queries with batched encoder calls."""
+
+        return self._retriever.search_batch(queries, top_k, filters, query_type)
+
+    def encode_text_batch(
+        self,
+        texts: list[str],
+        source_family: SourceFamily = "text",
+    ) -> QueryEmbeddingBatch:
+        """Expose a reusable query batch for task pipelines such as TRAKE."""
+
+        retrievers = getattr(self._retriever, "retrievers", (self._retriever,))
+        for retriever in retrievers:
+            if getattr(retriever, "source_family", None) == source_family:
+                return cast(Any, retriever).encode(texts)
+        raise RuntimeError(
+            f"No {source_family!r} query encoder is configured for retrieval"
+        )
 
     @staticmethod
     def load_index(index_dir: str | Path) -> DenseIndex:

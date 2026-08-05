@@ -16,3 +16,11 @@ class Retriever(Protocol):
         filters: SearchFilters | None = None,
         query_type: TaskType = TaskType.KIS,
     ) -> RetrievalResult: ...
+
+    def search_batch(
+        self,
+        queries: list[str],
+        top_k: int = 100,
+        filters: SearchFilters | None = None,
+        query_type: TaskType = TaskType.KIS,
+    ) -> list[RetrievalResult]: ...

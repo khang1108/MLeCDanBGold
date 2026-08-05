@@ -36,8 +36,69 @@ class RRFFusionRetriever:
     ) -> RetrievalResult:
         """Retrieve, merge exact frame IDs, and apply task-specific weights."""
 
+        return self.search_batch([query], top_k, filters, query_type)[0]
+
+    def search_batch(
+        self,
+        queries: list[str],
+        top_k: int = 100,
+        filters: SearchFilters | None = None,
+        query_type: TaskType = TaskType.KIS,
+    ) -> list[RetrievalResult]:
+        """Encode each source family once and fuse every query in order."""
+
+        if not queries:
+            return []
+        if not all(
+            hasattr(retriever, "encode")
+            and hasattr(retriever, "search_vectors")
+            and hasattr(retriever, "source_family")
+            for retriever in self.retrievers
+        ):
+            return [
+                self._search_legacy(query, top_k, filters, query_type)
+                for query in queries
+            ]
+
+        batches: dict[str, Any] = {}
+        encoding_trace = RetrievalTrace()
+        modality_results: list[tuple[Any, list[RetrievalResult]]] = []
+        for retriever in self.retrievers:
+            family = retriever.source_family
+            if family not in batches:
+                batch = retriever.encode(queries)
+                batches[family] = batch
+                encoding_trace = encoding_trace.merged(
+                    RetrievalTrace(
+                        stages={batch.encoding_trace.stage: batch.encoding_trace}
+                    ),
+                    prefix=family,
+                )
+            modality_results.append(
+                (retriever, retriever.search_vectors(batches[family], top_k, filters))
+            )
+
+        results: list[RetrievalResult] = []
+        for query_index in range(len(queries)):
+            children = [
+                (retriever, query_results[query_index])
+                for retriever, query_results in modality_results
+            ]
+            results.append(
+                self._fuse(children, top_k, query_type, encoding_trace)
+            )
+        return results
+
+    def _search_legacy(
+        self,
+        query: str,
+        top_k: int,
+        filters: SearchFilters | None,
+        query_type: TaskType,
+    ) -> RetrievalResult:
+        """Support existing retriever adapters without a batch interface."""
+
         child_results: list[tuple[Any, RetrievalResult]] = []
-        warnings: list[str] = []
         trace = RetrievalTrace()
         for index, retriever in enumerate(self.retrievers):
             raw_result = retriever.search(query, top_k, filters, query_type)
@@ -47,13 +108,28 @@ class RRFFusionRetriever:
                 else RetrievalResult(candidates=raw_result)
             )
             child_results.append((retriever, result))
-            warnings.extend(result.warnings)
             source = getattr(getattr(retriever, "source", None), "value", None)
             trace = trace.merged(
                 result.trace,
                 prefix=source or f"retriever_{index}",
             )
 
+        return self._fuse(child_results, top_k, query_type, trace)
+
+    def _fuse(
+        self,
+        child_results: list[tuple[Any, RetrievalResult]],
+        top_k: int,
+        query_type: TaskType,
+        trace: RetrievalTrace,
+    ) -> RetrievalResult:
+        """Fuse one query's modality results without changing identity."""
+
+        warnings = [
+            warning
+            for _, result in child_results
+            for warning in result.warnings
+        ]
         fusion_timer = StageTimer("fusion")
         pool: dict[str, RetrievalCandidate] = {}
         for _, result in child_results:
