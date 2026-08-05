@@ -10,10 +10,9 @@ import numpy as np
 
 from hcmai.common.utils.io import read_parquet, read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.embedding.embedding import EmbeddingPipeline
-from hcmai.embedding.models import EmbeddingMetadata
-from hcmai.llm.config import LLMServiceConfig
-from hcmai.retriever.dense import INDEX_FILENAME, DenseIndex
+from hcmai.embedding.pipeline import EmbeddingService
+from hcmai.llm.pipeline import LLMServiceConfig
+from hcmai.retriever.pipeline import RetrievalService
 from script_args import parse_arguments
 
 logger = get_logger(__name__)
@@ -26,9 +25,9 @@ def _index_output_dir(config: dict[str, Any], output_dir: Path) -> Path:
         return output_dir / "indexes"
     path = Path(configured)
     if path.suffix:
-        if path.name != INDEX_FILENAME:
+        if path.name != RetrievalService.INDEX_FILENAME:
             raise ValueError(
-                f"index.path filename must be {INDEX_FILENAME!r}, "
+                f"index.path filename must be {RetrievalService.INDEX_FILENAME!r}, "
                 f"got {path.name!r}"
             )
         return path.parent
@@ -36,17 +35,17 @@ def _index_output_dir(config: dict[str, Any], output_dir: Path) -> Path:
 
 
 def _build_index(
-    pipeline: EmbeddingPipeline,
-    metadata: EmbeddingMetadata,
+    run: Any,
     config: dict[str, Any],
     output_dir: Path,
 ) -> None:
     """Build FAISS from one completed embedding run."""
-    if not pipeline.frame_mapping:
+    if not run.generated_count:
         raise RuntimeError("No embeddings were generated")
-    embeddings = np.load(pipeline.embeddings_file, mmap_mode="r")
-    mapping = read_parquet(pipeline.mapping_file)
-    index = DenseIndex.build(
+    embeddings = np.load(run.embeddings_file, mmap_mode="r")
+    mapping = read_parquet(run.mapping_file)
+    metadata = run.metadata
+    index = RetrievalService.build_index(
         embeddings,
         mapping,
         dataset_version=metadata.dataset_version,
@@ -55,7 +54,10 @@ def _build_index(
     )
     index_dir = _index_output_dir(config, output_dir)
     index.save(index_dir)
-    logger.info("FAISS index saved to %s", index_dir / INDEX_FILENAME)
+    logger.info(
+        "FAISS index saved to %s",
+        index_dir / RetrievalService.INDEX_FILENAME,
+    )
 
 
 def _run(args: Any) -> None:
@@ -77,15 +79,14 @@ def _run(args: Any) -> None:
         raise FileNotFoundError(f"Dataset root not found: {dataset_root}")
     output_dir = Path(args.output)
     model_config = LLMServiceConfig.from_yaml(args.model_config)
-    pipeline = EmbeddingPipeline(
+    run = EmbeddingService.build_visual_artifacts(
         frames_path=frames_path,
         dataset_root=dataset_root,
         output_dir=output_dir,
         encoder_config=model_config.visual_embedding,
         dataset_version=dataset.get("version", "unknown"),
     )
-    metadata = pipeline.run()
-    _build_index(pipeline, metadata, config, output_dir)
+    _build_index(run, config, output_dir)
 
 
 def main() -> int:

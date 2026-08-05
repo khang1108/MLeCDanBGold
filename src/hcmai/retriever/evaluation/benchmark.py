@@ -11,7 +11,7 @@ from hcmai.common.schemas.evaluation import EvaluationQuery
 from hcmai.common.utils.io import write_json, write_yaml
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.dense import DenseRetriever
+from hcmai.retriever.pipeline import RetrievalService
 from hcmai.common.config import RECALL_CUTOFFS, BenchmarkConfig
 
 logger = get_logger(__name__)
@@ -26,7 +26,7 @@ class RetrievalBenchmark:
 
     def __init__(
         self,
-        retriever: DenseRetriever,
+        retriever: RetrievalService,
         queries: list[EvaluationQuery],
         output_dir: Path | str,
         *,
@@ -47,7 +47,7 @@ class RetrievalBenchmark:
             ``metrics.json``.
         """
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        metadata = self.retriever.index.metadata
+        metadata = self.retriever.index_metadata
 
         # Reset GPU peak memory tracking so the reported figure reflects only
         # this benchmark run; ignored when CUDA is unavailable.

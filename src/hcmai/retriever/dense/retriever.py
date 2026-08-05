@@ -10,7 +10,7 @@ from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.dense.encoder import TextEncoder
+from hcmai.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retriever.dense.index import DenseIndex
 
 logger = get_logger(__name__)
@@ -26,7 +26,7 @@ class DenseRetriever:
 
     def __init__(
         self,
-        encoder: TextEncoder,
+        encoder: TextEmbeddingAdapter,
         index: DenseIndex,
         source: RetrievalSource = RetrievalSource.VISUAL,
     ) -> None:

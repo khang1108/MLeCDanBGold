@@ -1,5 +1,3 @@
-from __future__ import annotations
+"""Contracts and entities for the embedding capability."""
 
-from hcmai.embedding.models.metadata import EmbeddingMetadata
-
-__all__ = ["EmbeddingMetadata"]
+__all__: list[str] = []

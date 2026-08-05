@@ -16,7 +16,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence, cast
 
 import gdown
 from tqdm import tqdm
@@ -32,7 +32,8 @@ def patch_gdown_tree_parser(exclude_folders: tuple[str, ...]) -> None:
         exclude_folders: Tuple of lower-cased directory names to skip during
             Google Drive folder traversal.
     """
-    globs = gdown.download_folder.__globals__
+    download_folder = cast(Any, getattr(gdown, "download_folder"))
+    globs = download_folder.__globals__
     parse_embedded = globs["_parse_embedded_folder_view"]
     GoogleDriveFile = globs["_GoogleDriveFile"]
 
@@ -147,7 +148,8 @@ def download_dataset(
     patch_gdown_tree_parser(exclude_normalized)
 
     print("\nPhase 1: Traversing Google Drive folder structure...")
-    files_to_download = gdown.download_folder(
+    download_folder = cast(Any, getattr(gdown, "download_folder"))
+    files_to_download: list[Any] = download_folder(
         url=folder_url,
         output=str(output_path),
         skip_download=True,
@@ -190,7 +192,8 @@ def download_dataset(
 
         for attempt in range(1, max_retries + 1):
             try:
-                gdown.download(
+                download = cast(Any, getattr(gdown, "download"))
+                download(
                     url=url,
                     output=str(local_path),
                     quiet=True,

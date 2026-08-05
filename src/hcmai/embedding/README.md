@@ -1,65 +1,83 @@
 # Embedding
 
-This package generates the offline visual-embedding corpus that the
-[retriever](../retriever) indexes and searches. It reads canonical frame
-metadata, resolves relative image paths against the dataset root, encodes each
-frame with the dense encoder, and writes versioned artifacts.
+`hcmai.embedding` owns visual and text encoding. Other components use the
+public `EmbeddingService`; checkpoint- and provider-specific implementations
+remain private adapters.
 
-## Dependencies
-
-```bash
-aic/bin/python -m pip install -e ".[embedding]"
+```text
+embedding/
+├── pipeline.py                 # EmbeddingService public facade
+├── artifacts.py                # Offline visual artifact builder
+├── models/
+│   ├── contracts.py            # Text/Image adapter protocols
+│   ├── artifacts.py            # EmbeddingRun result entity
+│   ├── metadata.py             # Artifact provenance
+│   └── stats.py                # Encoding measurements
+└── adapters/
+    ├── siglip.py               # Local image and text encoder
+    ├── bge.py                  # Local evidence-text encoder
+    └── remote.py               # Remote text encoder
 ```
 
-`numpy`, `pandas`, and a Parquet engine such as `pyarrow` are always needed;
-`transformers`, `torch`, and `pillow` are used through `DenseEncoder`.
+`models/` contains contracts and data only. Model loading and framework code
+belong in `adapters/`. Adapters load lazily on the first non-empty request.
 
-## Pipeline
+## Public service
 
-`embedding.py` provides `EmbeddingPipeline`. Given a `frames.parquet` of
-`FrameRecord` rows, a dataset root, and an `EncoderConfig`, `run()` resolves
-and encodes images in batches, then writes artifacts under
-`<output_dir>/embeddings/`:
+```python
+from hcmai.embedding.pipeline import EmbeddingService
 
-Canonical `image_path` values are relative to the dataset root. Resolve them
-as `dataset_root / frame.image_path` when integrating the builder with an
-embedding consumer; do not rewrite the canonical Parquet with absolute paths.
+vectors = embedding_service.encode_visual_query(["một người đang đi bộ"])
+evidence_vectors = embedding_service.encode_evidence_query(["biển số xe"])
+```
 
-| File | Format | Purpose |
-|---|---|---|
-| `visual_embeddings.npy` | NumPy | L2-normalized visual embedding matrix |
-| `frame_mapping.parquet` | Parquet | `embedding_index` → frame identifiers |
-| `metadata.yaml` | YAML | Corpus provenance (`EmbeddingMetadata`) |
+`EmbeddingService` owns the configured adapter instances and exposes:
 
-The embedding and mapping filenames match the offline artifact contracts in the
-root [`README`](../../../README.md). Frames that fail to load are collected and
-skipped rather than aborting the run.
+- `encode_visual_images` for canonical frame images;
+- `encode_visual_query` for queries against the visual index;
+- `encode_evidence_query` for caption, OCR, and ASR indexes;
+- `build_visual_artifacts` for the offline corpus job.
+
+Cross-component production code must not import an embedding adapter directly.
+Composition code creates adapters through the service factory methods; unit
+tests may inject fake adapters through the constructor.
+
+## Offline artifacts
 
 ```python
 from pathlib import Path
 
-from hcmai.embedding.embedding import EmbeddingPipeline
 from hcmai.common.config import EncoderConfig
+from hcmai.embedding.pipeline import EmbeddingService
 
-pipeline = EmbeddingPipeline(
+run = EmbeddingService.build_visual_artifacts(
     frames_path=Path("data/metadata/frames.parquet"),
     dataset_root=Path("data"),
     output_dir=Path("artifacts"),
     encoder_config=EncoderConfig(device="cuda"),
     dataset_version="hcmai2026",
 )
-metadata = pipeline.run()
 ```
 
-## Metadata
+The builder writes these versioned files under `<output_dir>/embeddings/`:
 
-`metadata.py` holds `EmbeddingMetadata`, the provenance record for a generated
-corpus (dataset version, model, preprocessing size, dtype, embedding dimension,
-frame counts, normalization, device, batch size, processing time). It is kept
-apart from `embedding.py` so the descriptor lives separately from the code that
-reads frames and writes artifacts. `to_dict`/`from_dict` round-trip through YAML
-or JSON.
+| File | Purpose |
+|---|---|
+| `visual_embeddings.npy` | L2-normalized visual embedding matrix |
+| `frame_mapping.parquet` | `embedding_index` to canonical frame mapping |
+| `metadata.yaml` | Model, dataset, shape, normalization, and run provenance |
 
-The encoder and its `EncoderConfig`/`EncodingStats` are imported from the
-[retriever](../retriever) package rather than duplicated here. Root-level
-commands are documented in the [scripts guide](../../../scripts/README.md).
+Canonical `image_path` values stay relative to the dataset root. The builder
+resolves them at read time and never rewrites `frames.parquet`. Frames that
+cannot be loaded are recorded and skipped rather than changing the identity of
+the remaining rows.
+
+## Verification
+
+```bash
+PYTHONPATH=src aic/bin/pytest \
+  tests/test_embedding_pipeline.py \
+  tests/test_encoder.py \
+  tests/test_bge_encoder.py
+pyright src/hcmai/embedding
+```

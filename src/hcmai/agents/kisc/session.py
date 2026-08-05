@@ -15,8 +15,7 @@ from hcmai.common.schemas import (
     SearchResult,
     SubmissionResult,
 )
-from hcmai.data import FrameStore
-from hcmai.orchestration import SearchEngine
+from hcmai.orchestration.pipeline import SearchService
 
 
 def _now_ms() -> int:
@@ -152,11 +151,11 @@ class KiscSessionManager:
     def process_search(
         self,
         request: SearchRequest,
-        engine: SearchEngine,
+        service: SearchService,
     ) -> SearchResponse:
         """Execute stateless search or one turn in an existing session."""
         if request.session_id is None:
-            return engine.search(request)
+            return service.search(request)
 
         session = self.get_session(request.session_id)
         if request.feedback is not None:
@@ -165,7 +164,7 @@ class KiscSessionManager:
                 request.feedback,
             )
         user_turn = self._append_turn(session, "user", request.query)
-        response = engine.search(request)
+        response = service.search(request)
         results = self._apply_feedback(response.results, session.feedback)
         ai_message = f"Retrieved {len(results)} frame candidates."
         ai_turn = self._append_turn(
@@ -188,13 +187,7 @@ class KiscSessionManager:
     def format_submission(
         self,
         frame_id: str,
-        store: FrameStore,
+        service: SearchService,
     ) -> SubmissionResult:
         """Resolve one frame and format the official submission code."""
-        record = store.get(frame_id)
-        return SubmissionResult(
-            frame_id=record.frame_id,
-            video_id=record.video_id,
-            frame_idx=record.frame_idx,
-            submission_code=f"{record.video_id},{record.frame_idx}",
-        )
+        return service.submission(frame_id)

@@ -1,0 +1,94 @@
+"""Canonical retrieval-candidate response materialization."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from urllib.parse import quote
+
+from hcmai.common.schemas import (
+    RetrievalCandidate,
+    RetrievalSource,
+    SearchLatency,
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+    SearchScores,
+)
+from hcmai.data.pipeline import DataService
+
+
+class SearchMaterializer:
+    """Resolve every public identity through the canonical data authority."""
+
+    def __init__(self, data: DataService) -> None:
+        self.data = data
+
+    def build_response(
+        self,
+        request: SearchRequest,
+        candidates: Sequence[RetrievalCandidate],
+        request_id: str,
+    ) -> SearchResponse:
+        results = [
+            self.build_result(candidate, rank)
+            for rank, candidate in enumerate(candidates, start=1)
+        ]
+        return SearchResponse(
+            request_id=request_id,
+            query=request.query,
+            query_type=request.query_type,
+            top_k=request.top_k,
+            total_results=len(results),
+            latency_ms=SearchLatency(total=0),
+            results=results,
+        )
+
+    def build_result(
+        self, candidate: RetrievalCandidate, rank: int
+    ) -> SearchResult:
+        frame = self.data.get_frame(candidate.frame_id)
+        encoded_id = quote(candidate.frame_id, safe="")
+        fields = {
+            RetrievalSource.CAPTION: "caption",
+            RetrievalSource.OCR: "ocr_text",
+            RetrievalSource.ASR: "asr_text",
+        }
+        text = {
+            field: self.data.get_evidence(candidate.frame_id, source)
+            for source, field in fields.items()
+        }
+        return SearchResult(
+            rank=rank,
+            frame_id=candidate.frame_id,
+            video_id=frame.video_id,
+            frame_idx=frame.frame_idx,
+            timestamp_ms=frame.timestamp_ms,
+            thumbnail_url=f"/api/v1/frames/{encoded_id}/thumbnail",
+            frame_url=f"/api/v1/frames/{encoded_id}/image",
+            caption=text["caption"],
+            ocr_text=text["ocr_text"],
+            asr_text=text["asr_text"],
+            scores=_build_scores(candidate),
+        )
+
+def _build_scores(candidate: RetrievalCandidate) -> SearchScores:
+    values = {
+        getattr(key, "value", key): value
+        for key, value in candidate.source_scores.items()
+    }
+    final = candidate.final_score
+    if final is None:
+        final = candidate.reranker_score
+    if final is None:
+        final = candidate.fusion_score
+    if final is None:
+        final = values.get("visual", 0.0)
+    return SearchScores(
+        visual=values.get("visual"),
+        caption=values.get("caption"),
+        ocr=values.get("ocr"),
+        asr=values.get("asr"),
+        fusion=candidate.fusion_score,
+        reranker=candidate.reranker_score,
+        final=final,
+    )

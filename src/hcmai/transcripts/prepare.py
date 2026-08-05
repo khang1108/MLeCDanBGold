@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 
 from hcmai.common.schemas import TranscriptSegment
-from hcmai.transcripts.asr import ASREngine
-from hcmai.transcripts.diarization import DiarizationEngine
+from hcmai.transcripts.adapters.asr import ASRAdapter
+from hcmai.transcripts.adapters.diarization import DiarizationAdapter
 
 TRANSCRIPT_DTYPES = {
     "segment_id": "string",
@@ -44,7 +44,7 @@ def _table(
     table = (
         pd.DataFrame(
             [record.model_dump(mode="python") for record in records],
-            columns=TRANSCRIPT_DTYPES,
+            columns=list(TRANSCRIPT_DTYPES),
         )
         if records
         else pd.DataFrame({
@@ -64,7 +64,7 @@ def _write_parquet(table: pd.DataFrame, path: Path) -> None:
 
 
 def _prepare_video(
-    engine: ASREngine, diarizer: DiarizationEngine,
+    engine: ASRAdapter, diarizer: DiarizationAdapter,
     video: Path, output: Path,
 ) -> None:
     """Write one speaker-labelled transcript output."""
@@ -118,8 +118,8 @@ def _count_outputs(paths: list[Path]) -> tuple[int, int, int]:
 def _process_video(
     video: Path,
     output_root: Path,
-    engine: ASREngine,
-    diarizer: DiarizationEngine,
+    engine: ASRAdapter,
+    diarizer: DiarizationAdapter,
     resume: bool,
 ) -> Path:
     """Prepare one transcript artifact for a video."""
@@ -133,8 +133,8 @@ def _process_video(
 
 
 def prepare_transcripts(
-    videos_root: str | Path, output_path: str | Path, engine: ASREngine,
-    *, diarizer: DiarizationEngine, resume: bool = True,
+    videos_root: str | Path, output_path: str | Path, engine: ASRAdapter,
+    *, diarizer: DiarizationAdapter, resume: bool = True,
     limit: int | None = None,
 ) -> TranscriptReport:
     """Write resumable speaker-labelled transcripts for each video."""

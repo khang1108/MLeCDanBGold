@@ -6,7 +6,7 @@ import argparse
 
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.common.schemas import RetrievalSource
-from hcmai.retriever.caption import build_text_artifacts
+from hcmai.retriever.pipeline import RetrievalService
 
 logger = get_logger(__name__)
 
@@ -42,7 +42,7 @@ def main() -> int:
     args = _arguments()
     configure_logging(args.log_level)
     try:
-        build_text_artifacts(
+        RetrievalService.build_text_artifacts(
             args.config,
             args.model_config,
             source=RetrievalSource(args.source),
