@@ -5,12 +5,17 @@ from __future__ import annotations
 import pandas as pd
 from typing import Optional
 
-from hcmai.common.schemas import RetrievalSource, TaskType
+from hcmai.common.schemas import (
+    RetrievalResult,
+    RetrievalSource,
+    RetrievalTrace,
+    TaskType,
+)
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.utils.logging import get_logger
-from hcmai.common.utils.timing import Timer
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
+from hcmai.observability.tracing import StageTimer
 from hcmai.retriever.dense.index import DenseIndex
 
 logger = get_logger(__name__)
@@ -55,10 +60,6 @@ class DenseRetriever:
         self.encoder = encoder
         self.index = index
         self.source = source
-        # Query-encoding and index-search latency are recorded separately so
-        # callers can attribute cost to the encoder versus the search.
-        self.last_query_encoding_ms = 0.0
-        self.last_index_search_ms = 0.0
 
     def search(
         self,
@@ -66,7 +67,7 @@ class DenseRetriever:
         top_k: int = 100,
         filters: Optional[SearchFilters] = None,
         query_type: TaskType = TaskType.KIS,
-    ) -> list[RetrievalCandidate]:
+    ) -> RetrievalResult:
         """Retrieve the top matching frames for a text query.
 
         Args:
@@ -82,12 +83,11 @@ class DenseRetriever:
         mapping = self.index.mapping
 
         # Encode the query to a single normalized vector, timed on its own.
-        encode_timer = Timer()
+        encode_timer = StageTimer("query_encoding")
         query_vector = self.encoder.encode_text(
             [query]
         )  # Embed the query to get embedding vector
-
-        self.last_query_encoding_ms = encode_timer.stop()
+        encode_trace = encode_timer.finish()
         # Restrict to positions allowed by video/time filters. When such a
         # filter is active we must scan the whole exact index to guarantee a
         # full top_k after filtering; otherwise top_k neighbours suffice.
@@ -114,9 +114,9 @@ class DenseRetriever:
             search_k,
             len(allowed_positions) if allowed_positions is not None else "all",
         )
-        search_timer = Timer()
+        search_timer = StageTimer("index_search")
         scores, positions = self.index.search(query_vector, search_k)
-        self.last_index_search_ms = search_timer.stop()
+        search_trace = search_timer.finish()
 
         min_score = filters.min_score if filters is not None else None
 
@@ -157,7 +157,15 @@ class DenseRetriever:
 
         logger.info(
             f"Retrieved {len(candidates)} candidates for query "
-            f"(encode={self.last_query_encoding_ms:.1f}ms, "
-            f"search={self.last_index_search_ms:.1f}ms)"
+            f"(encode={encode_trace.duration_ms:.1f}ms, "
+            f"search={search_trace.duration_ms:.1f}ms)"
         )
-        return candidates
+        return RetrievalResult(
+            candidates=candidates,
+            trace=RetrievalTrace(
+                stages={
+                    encode_trace.stage: encode_trace,
+                    search_trace.stage: search_trace,
+                }
+            ),
+        )

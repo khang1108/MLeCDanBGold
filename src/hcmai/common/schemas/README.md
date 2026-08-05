@@ -55,6 +55,17 @@ that feature package. In particular, caption/OCR types belong under
   optional metadata. Source ranks must be positive one-based integers.
 - `SearchScores`: scores exposed for a returned frame, including visual,
   caption, OCR, ASR, fusion, reranker, and final scores.
+- `RetrievalResult`: one request-owned candidate list, retrieval trace, and
+  warning list. Sequence access remains available for compatibility, while
+  production callers consume `.candidates` and `.trace` explicitly.
+
+### `telemetry.py`
+
+- `StageTrace`: one stage's monotonic start/end, duration, status, attempt
+  count, cache state, and optional error category.
+- `PipelineTrace`: uniquely named stages with deterministic merge and duration
+  aggregation helpers.
+- `RetrievalTrace`: request-scoped retrieval specialization of `PipelineTrace`.
 
 ### `search.py`
 

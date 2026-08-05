@@ -6,9 +6,10 @@ from collections.abc import Sequence
 from typing import Any
 
 from hcmai.common.config import FusionConfig
-from hcmai.common.schemas import TaskType
+from hcmai.common.schemas import RetrievalResult, RetrievalTrace, TaskType
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.schemas.search import SearchFilters
+from hcmai.observability.tracing import StageTimer
 
 
 class RRFFusionRetriever:
@@ -25,8 +26,6 @@ class RRFFusionRetriever:
             raise ValueError(f"Unsupported fusion method {config.method!r}")
         self.retrievers = tuple(retrievers)
         self.config = config
-        self.last_query_encoding_ms = 0.0
-        self.last_index_search_ms = 0.0
 
     def search(
         self,
@@ -34,27 +33,37 @@ class RRFFusionRetriever:
         top_k: int = 100,
         filters: SearchFilters | None = None,
         query_type: TaskType = TaskType.KIS,
-    ) -> list[RetrievalCandidate]:
+    ) -> RetrievalResult:
         """Retrieve, merge exact frame IDs, and apply task-specific weights."""
 
+        child_results: list[tuple[Any, RetrievalResult]] = []
+        warnings: list[str] = []
+        trace = RetrievalTrace()
+        for index, retriever in enumerate(self.retrievers):
+            raw_result = retriever.search(query, top_k, filters, query_type)
+            result = (
+                raw_result
+                if isinstance(raw_result, RetrievalResult)
+                else RetrievalResult(candidates=raw_result)
+            )
+            child_results.append((retriever, result))
+            warnings.extend(result.warnings)
+            source = getattr(getattr(retriever, "source", None), "value", None)
+            trace = trace.merged(
+                result.trace,
+                prefix=source or f"retriever_{index}",
+            )
+
+        fusion_timer = StageTimer("fusion")
         pool: dict[str, RetrievalCandidate] = {}
-        for retriever in self.retrievers:
-            for candidate in retriever.search(query, top_k, filters):
+        for _, result in child_results:
+            for candidate in result.candidates:
                 existing = pool.get(candidate.frame_id)
                 pool[candidate.frame_id] = (
                     candidate.model_copy(deep=True)
                     if existing is None
                     else _merge(existing, candidate)
                 )
-
-        self.last_query_encoding_ms = sum(
-            float(getattr(item, "last_query_encoding_ms", 0.0))
-            for item in self.retrievers
-        )
-        self.last_index_search_ms = sum(
-            float(getattr(item, "last_index_search_ms", 0.0))
-            for item in self.retrievers
-        )
 
         weights = self.config.task_weights[query_type]
         fused = [
@@ -69,7 +78,15 @@ class RRFFusionRetriever:
             for candidate in pool.values()
         ]
         fused.sort(key=_sort_key)
-        return fused[:top_k]
+        fusion_trace = fusion_timer.finish()
+        trace = trace.merged(
+            RetrievalTrace(stages={fusion_trace.stage: fusion_trace})
+        )
+        return RetrievalResult(
+            candidates=fused[:top_k],
+            trace=trace,
+            warnings=warnings,
+        )
 
 
 def _merge(

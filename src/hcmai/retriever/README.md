@@ -21,22 +21,27 @@ retriever/
 ```
 
 Embedding models and their adapters belong to `hcmai.embedding`, not this
-package. Shared inputs and outputs use `SearchFilters`, `TaskType`, and
-`RetrievalCandidate` from `hcmai.common.schemas`.
+package. Shared inputs and outputs use `SearchFilters`, `TaskType`,
+`RetrievalCandidate`, and `RetrievalResult` from `hcmai.common.schemas`.
 
 ## Public service
 
 ```python
 from hcmai.retriever.pipeline import RetrievalService
 
-candidates = retrieval_service.search(
+result = retrieval_service.search(
     query="một người đang đi bộ",
     top_k=100,
     query_type=task_type,
 )
+candidates = result.candidates
+encoding_ms = result.trace.duration_for("query_encoding")
 ```
 
-`RetrievalService` exposes the online `search` boundary and the offline
+Every `search` call returns its own candidates, warnings, and named stage
+trace. Timing is never read from mutable service fields, so concurrent calls
+cannot overwrite each other's telemetry. `RetrievalService` exposes this
+online boundary and the offline
 `load_index`, `build_index`, and `build_text_artifacts` operations. Production
 code outside this component must not instantiate dense/text retrievers, FAISS
 indexes, or fusion implementations directly. The application composition root
@@ -78,7 +83,7 @@ flowchart LR
     O --> U
     A --> U
     U --> F["Task-weighted RRF"]
-    F --> R["RetrievalCandidate list"]
+    F --> R["RetrievalResult: candidates + trace + warnings"]
 ```
 
 The visual branch embeds the query in the visual frame space. Caption, OCR,

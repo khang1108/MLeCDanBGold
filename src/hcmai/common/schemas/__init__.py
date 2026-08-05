@@ -21,7 +21,7 @@ from .inference import (
     TextEmbeddingRequest,
     TextEmbeddingResponse,
 )
-from .retrieval import RetrievalCandidate, SearchScores
+from .retrieval import RetrievalCandidate, RetrievalResult, SearchScores
 from .query_suggestion import (
     QuerySuggestion,
     QuerySuggestionInferenceRequest,
@@ -36,6 +36,7 @@ from .search import (
     SearchResult,
 )
 from .task import TaskRequest, TaskResponse
+from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
 from .trake import TRAKERequest, TRAKEResponse, TRAKESubmission
 from .transcript import TranscriptSegment
 from .vqa import (
@@ -64,6 +65,11 @@ __all__ = [
     "QueryDifficulty",
     "SearchScores",
     "RetrievalCandidate",
+    "RetrievalResult",
+    "StageStatus",
+    "StageTrace",
+    "PipelineTrace",
+    "RetrievalTrace",
     "QuerySuggestion",
     "QuerySuggestionInferenceRequest",
     "QuerySuggestionRequest",

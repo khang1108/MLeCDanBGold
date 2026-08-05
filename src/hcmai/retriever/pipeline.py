@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from hcmai.common.config import FusionConfig
-from hcmai.common.schemas import RetrievalCandidate, RetrievalSource, TaskType
+from hcmai.common.schemas import RetrievalResult, RetrievalSource, TaskType
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retriever.dense.index import INDEX_FILENAME, DenseIndex
@@ -69,14 +69,6 @@ class RetrievalService:
         return cls(RRFFusionRetriever(retrievers, fusion))
 
     @property
-    def last_query_encoding_ms(self) -> float:
-        return float(getattr(self._retriever, "last_query_encoding_ms", 0.0))
-
-    @property
-    def last_index_search_ms(self) -> float:
-        return float(getattr(self._retriever, "last_index_search_ms", 0.0))
-
-    @property
     def index_metadata(self) -> IndexMetadata:
         """Expose provenance for single-index benchmark reporting."""
 
@@ -93,7 +85,7 @@ class RetrievalService:
         top_k: int = 100,
         filters: SearchFilters | None = None,
         query_type: TaskType = TaskType.KIS,
-    ) -> list[RetrievalCandidate]:
+    ) -> RetrievalResult:
         return self._retriever.search(query, top_k, filters, query_type)
 
     @staticmethod

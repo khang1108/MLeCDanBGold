@@ -62,7 +62,7 @@ class KISPipeline:
             request.top_k,
             candidate_count,
         )
-        candidates, retrieval_ms, reranking_ms = rank_candidates(
+        retrieval_result, reranking_ms = rank_candidates(
             request,
             self.retrieval,
             self.reranking,
@@ -70,6 +70,7 @@ class KISPipeline:
             rerank_count=self.config.rerank_count,
             request_id=request_id_value,
         )
+        candidates = retrieval_result.candidates
         materialization_started = perf_counter()
         logger.info(
             "[%s] materialization started selected=%d",
@@ -79,15 +80,33 @@ class KISPipeline:
         response = self.materializer.build_response(
             request, candidates[: request.top_k], request_id_value
         )
+        trace = retrieval_result.trace
+        has_index_search = any(
+            name == "index_search" or name.endswith(".index_search")
+            for name in trace.stages
+        )
+        candidate_retrieval_ms = trace.duration_for(
+            "index_search" if has_index_search else "retrieval"
+        )
         latency = response.latency_ms.model_copy(
             update={
-                "candidate_retrieval": retrieval_ms,
+                "query_encoding": int(trace.duration_for("query_encoding")),
+                "candidate_retrieval": int(candidate_retrieval_ms),
+                "fusion": int(trace.duration_for("fusion")),
                 "reranking": reranking_ms,
                 "materialization": elapsed_ms(materialization_started),
                 "total": elapsed_ms(started),
             }
         )
-        response = response.model_copy(update={"latency_ms": latency})
+        response = response.model_copy(
+            update={
+                "latency_ms": latency,
+                "warnings": [
+                    *response.warnings,
+                    *retrieval_result.warnings,
+                ],
+            }
+        )
         logger.info(
             "[%s] search completed results=%d",
             request_id_value,

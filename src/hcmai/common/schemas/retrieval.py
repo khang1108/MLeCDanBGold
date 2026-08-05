@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from hcmai.common.schemas import ContractModel, NonEmptyString, RetrievalSource
+from collections.abc import Iterator
+from typing import Any, overload
+
 from pydantic import Field, field_validator
-from typing import Any
+
+from .base import ContractModel, NonEmptyString
+from .enum import RetrievalSource
+from .telemetry import RetrievalTrace
+
 
 class RetrievalCandidate(ContractModel):
     """Internal frame candidate shared by retrieval pipeline stages."""
@@ -27,6 +33,33 @@ class RetrievalCandidate(ContractModel):
             raise ValueError("source ranks must be greater than or equal to 1")
 
         return source_ranks
+
+
+class RetrievalResult(ContractModel):
+    """Candidates and telemetry owned by one retrieval call."""
+
+    candidates: list[RetrievalCandidate] = Field(default_factory=list)
+    trace: RetrievalTrace = Field(default_factory=RetrievalTrace)
+    warnings: list[NonEmptyString] = Field(default_factory=list)
+
+    def __len__(self) -> int:
+        """Preserve sequence convenience while exposing trace explicitly."""
+
+        return len(self.candidates)
+
+    def __iter__(self) -> Iterator[RetrievalCandidate]:
+        return iter(self.candidates)
+
+    @overload
+    def __getitem__(self, index: int) -> RetrievalCandidate: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> list[RetrievalCandidate]: ...
+
+    def __getitem__(
+        self, index: int | slice
+    ) -> RetrievalCandidate | list[RetrievalCandidate]:
+        return self.candidates[index]
 
 
 class SearchScores(ContractModel):

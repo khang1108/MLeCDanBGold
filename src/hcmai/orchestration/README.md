@@ -38,6 +38,12 @@ Canonical identity is immutable: retrieval and reranking may score or reorder
 `frame_id` to its official `video_id` and integer `frame_idx` through
 `DataService`.
 
+Retrieval latency and warnings are returned in a request-scoped
+`RetrievalResult`. KIS derives query-encoding, index-search, and fusion latency
+from that trace; no timing is read from a mutable singleton service field.
+Completed stages also emit a JSON record containing `request_id`, `task_type`,
+`stage`, `duration_ms`, and `status`.
+
 ## Verification
 
 ```bash
