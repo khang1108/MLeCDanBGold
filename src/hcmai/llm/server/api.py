@@ -23,8 +23,8 @@ from hcmai.common.schemas import (
     RerankResponse,
     TextEmbeddingRequest,
     TextEmbeddingResponse,
-    TrakeParseInferenceRequest,
-    TrakeParseResponse,
+    TRAKEParseInferenceRequest,
+    TRAKEParseResponse,
     VQAInferenceEvidence,
     VQAInferenceResponse,
 )
@@ -69,7 +69,7 @@ def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
         "/v1/trake/parse",
         parse_trake,
         methods=["POST"],
-        response_model=TrakeParseResponse,
+        response_model=TRAKEParseResponse,
     )
     app.add_api_route(
         "/v1/vqa", vqa, methods=["POST"], response_model=VQAInferenceResponse
@@ -190,13 +190,13 @@ async def resolve(
 
 
 async def parse_trake(
-    payload: TrakeParseInferenceRequest, request: Request
-) -> TrakeParseResponse:
+    payload: TRAKEParseInferenceRequest, request: Request
+) -> TRAKEParseResponse:
     try:
         output = request.app.state.runtime.parse_trake(
             payload.model_dump(mode="json")
         )
-        return TrakeParseResponse.model_validate(output)
+        return TRAKEParseResponse.model_validate(output)
     except Exception as error:
         raise _unavailable("TRAKE parsing failed", error) from error
 

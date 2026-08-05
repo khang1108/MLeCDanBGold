@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from typing import Any
 
 from PIL import Image
+
+import json
 
 from hcmai.common.schemas import VQAInferenceEvidence
 from hcmai.llm.config import HostedConversationConfig
@@ -46,7 +47,7 @@ class StructuredConversationModel:
 
     def __call__(self, request: dict[str, Any]) -> dict[str, Any]:
         text = self.generate(self._messages(request))
-        return json_object(text, _STATE_FIELDS)
+        return _json_object(text, _STATE_FIELDS)
 
     def structured_json(self, instruction: str, message: str) -> dict[str, Any]:
         """Return one JSON object for a bounded non-conversation prompt.
@@ -55,7 +56,7 @@ class StructuredConversationModel:
         caller's text travels under ``current_message``.
         """
         request = {"instruction": instruction, "current_message": message}
-        return json_object(self.generate(self._messages(request)))
+        return _json_object(self.generate(self._messages(request)))
 
     def answer_vqa(
         self,
@@ -189,7 +190,7 @@ def _model_options(config: HostedConversationConfig, dtype: Any) -> dict[str, An
     return options
 
 
-def json_object(
+def _json_object(
     text: str, required: frozenset[str] = frozenset()
 ) -> dict[str, Any]:
     """Return the first JSON object in model output holding every required key."""
