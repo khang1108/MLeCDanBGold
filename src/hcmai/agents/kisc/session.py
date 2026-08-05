@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Literal
+from typing import Literal, cast
 
 from hcmai.common.schemas import (
     ConversationSession,
@@ -154,8 +154,10 @@ class KiscSessionManager:
         service: SearchService,
     ) -> SearchResponse:
         """Execute stateless search or one turn in an existing session."""
+        # KISC only ever sends a SearchRequest, so the union response is
+        # always the search branch.
         if request.session_id is None:
-            return service.search(request)
+            return cast(SearchResponse, service.search(request))
 
         session = self.get_session(request.session_id)
         if request.feedback is not None:
@@ -164,7 +166,7 @@ class KiscSessionManager:
                 request.feedback,
             )
         user_turn = self._append_turn(session, "user", request.query)
-        response = service.search(request)
+        response = cast(SearchResponse, service.search(request))
         results = self._apply_feedback(response.results, session.feedback)
         ai_message = f"Retrieved {len(results)} frame candidates."
         ai_turn = self._append_turn(

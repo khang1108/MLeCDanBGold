@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
-from hcmai.common.schemas import SearchRequest, SearchResponse, TaskType
+from hcmai.common.schemas import SearchRequest, TaskRequest, TaskResponse, TaskType
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipeline import (
     SearchPipelineUnavailableError,
@@ -22,21 +22,22 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
 
     router = APIRouter()
 
-    @router.post("/api/v1/search", response_model=SearchResponse)
-    async def search_frames(request: SearchRequest) -> SearchResponse:
-        if request.session_id is not None or request.feedback is not None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    "session_id and feedback are not supported by "
-                    "standalone search"
-                ),
-            )
-        if request.query_type is TaskType.KISC:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="query_type 'kisc' is not a standalone search task",
-            )
+    @router.post("/api/v1/search", response_model=TaskResponse)
+    async def search_frames(request: TaskRequest) -> TaskResponse:
+        if isinstance(request, SearchRequest):
+            if request.session_id is not None or request.feedback is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=(
+                        "session_id and feedback are not supported by "
+                        "standalone search"
+                    ),
+                )
+            if request.query_type is TaskType.KISC:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="query_type 'kisc' is not a standalone search task",
+                )
         service = service_container.get("service")
         if service is None:
             raise HTTPException(
@@ -53,6 +54,13 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
         except SearchPipelineUnavailableError as error:
             raise HTTPException(
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail=str(error),
+            ) from error
+        except ValueError as error:
+            # A pipeline rejecting its own request payload is a client error,
+            # for example a TRAKE query with no resolvable ordered events.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(error),
             ) from error
         except KeyError as error:

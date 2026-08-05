@@ -37,7 +37,13 @@ from .search import (
 )
 from .task import TaskRequest, TaskResponse
 from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
-from .trake import TRAKERequest, TRAKEResponse, TRAKESubmission
+from .trake import (
+    TRAKERequest,
+    TRAKEResponse,
+    TRAKESubmission,
+    TrakeParseInferenceRequest,
+    TrakeParseResponse,
+)
 from .transcript import TranscriptSegment
 from .vqa import (
     VQAInferenceEvidence,
@@ -109,6 +115,8 @@ __all__ = [
     "TRAKERequest",
     "TRAKEResponse",
     "TRAKESubmission",
+    "TrakeParseInferenceRequest",
+    "TrakeParseResponse",
     "TaskRequest",
     "TaskResponse",
     "TranscriptSegment",

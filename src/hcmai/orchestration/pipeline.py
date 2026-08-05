@@ -11,9 +11,9 @@ from hcmai.common.schemas import (
     QuerySuggestionRequest,
     QuerySuggestionResponse,
     RetrievalSource,
-    SearchRequest,
-    SearchResponse,
     SubmissionResult,
+    TaskRequest,
+    TaskResponse,
     TaskType,
 )
 from hcmai.common.utils.logging import get_logger
@@ -21,6 +21,7 @@ from hcmai.data.pipeline import DataService
 from hcmai.llm.pipeline import LLMService
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.orchestration.pipelines.kis import KISPipeline
+from hcmai.orchestration.pipelines.trake import TRAKEPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.query_suggestions.pipeline import SuggestionService
 from hcmai.reranking.pipeline import RerankingService
@@ -149,7 +150,7 @@ class SearchService:
         if self.llm is not None:
             self.llm.close()
 
-    def search(self, request: SearchRequest) -> SearchResponse:
+    def search(self, request: TaskRequest) -> TaskResponse:
         try:
             pipeline = self.pipeline_registry.get(request.query_type)
         except KeyError as error:
@@ -164,7 +165,7 @@ class SearchService:
 
     def _default_registry(self) -> PipelineRegistry:
         task_types = (TaskType.KIS, TaskType.VKIS, TaskType.KISC)
-        return PipelineRegistry(
+        registry = PipelineRegistry(
             KISPipeline(
                 task_type,
                 self.data,
@@ -174,3 +175,5 @@ class SearchService:
             )
             for task_type in task_types
         )
+        registry.register(TRAKEPipeline(self.retrieval, self.config))
+        return registry

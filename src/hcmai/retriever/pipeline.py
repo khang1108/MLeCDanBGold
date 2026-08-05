@@ -81,6 +81,16 @@ class RetrievalService:
             )
         return index.metadata
 
+    @property
+    def visual_index(self) -> DenseIndex:
+        """Expose the visual index for full-frame rescoring such as TRAKE."""
+
+        retrievers = getattr(self._retriever, "retrievers", (self._retriever,))
+        for retriever in retrievers:
+            if getattr(retriever, "source_family", None) == "visual":
+                return cast(DenseIndex, retriever.index)
+        raise RuntimeError("No visual index is configured for retrieval")
+
     def search(
         self,
         query: str,

@@ -5,7 +5,12 @@ from __future__ import annotations
 from time import perf_counter
 
 from hcmai.common.config import SearchConfig
-from hcmai.common.schemas import SearchRequest, SearchResponse, TaskType
+from hcmai.common.schemas import (
+    SearchRequest,
+    SearchResponse,
+    TaskRequest,
+    TaskType,
+)
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.materializer import SearchMaterializer
@@ -41,7 +46,11 @@ class KISPipeline:
     def task_type(self) -> TaskType:
         return self._task_type
 
-    def execute(self, request: SearchRequest) -> SearchResponse:
+    def execute(self, request: TaskRequest) -> SearchResponse:
+        if not isinstance(request, SearchRequest):
+            raise ValueError(
+                f"pipeline for {self.task_type.value!r} requires a search request"
+            )
         if request.query_type is not self.task_type:
             raise ValueError(
                 f"pipeline for {self.task_type.value!r} cannot execute "
