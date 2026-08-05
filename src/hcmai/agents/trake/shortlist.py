@@ -32,20 +32,16 @@ class VideoEventScores:
 
 
 def event_video_scores(
-    retriever: Any,
-    encoder: Any,
-    index: Any,
+    retrieval: Any,
     events: Sequence[str],
     top_k: int = 500,
 ) -> list[VideoEventScores]:
     """Shortlist videos per event, then rescore every frame of those videos.
 
     Args:
-        retriever: Any ``search(query, top_k)`` retriever (4-modal RRF or dense)
-            used only to choose candidate videos.
-        encoder: Text encoder producing L2-normalized event vectors.
-        index: Loaded :class:`DenseIndex` whose mapping position equals
-            ``embedding_index``.
+        retrieval: :class:`RetrievalService`-shaped object providing
+            ``search(query, top_k)`` for the shortlist, ``encode_text_batch``
+            for the event vectors, and ``visual_index`` for exact rescoring.
         events: Ordered TRAKE events, already split and translated.
         top_k: Frames kept per event when shortlisting videos.
 
@@ -55,12 +51,13 @@ def event_video_scores(
     if not events:
         raise ValueError("events must not be empty")
 
+    index = retrieval.visual_index
     mapping = index.mapping
     timer = Timer()
     frame_ids = {
         candidate.frame_id
         for event in events
-        for candidate in retriever.search(event, top_k)
+        for candidate in retrieval.search(event, top_k)
     }
     shortlisted = mapping["video_id"].isin(
         mapping.loc[mapping["frame_id"].isin(frame_ids), "video_id"].unique()
@@ -68,7 +65,8 @@ def event_video_scores(
     shortlist_ms = timer.stop()
     timer = Timer()
     scores, positions = index.search(
-        encoder.encode_text(list(events)), index.index.ntotal
+        retrieval.encode_text_batch(list(events), "visual").vectors,
+        index.index.ntotal,
     )
     full = np.empty_like(scores)
     np.put_along_axis(full, positions, scores, axis=1)

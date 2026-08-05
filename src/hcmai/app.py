@@ -1,6 +1,6 @@
 """FastAPI application for the HCMAI frame-retrieval pipeline.
 
-This module exposes the HTTP API boundary between the Python search engine
+This module exposes the HTTP API boundary between the Python search service
 and the Node.js frontend. It loads online models and frame indexes once at
 application startup during the lifespan context.
 """
@@ -16,18 +16,14 @@ from typing import Any, AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from hcmai.bootstrap import load_default_engine
-from hcmai.common.schemas import SearchRequest, SearchResponse
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.orchestration import SearchEngine
-from hcmai.routers import (
-    StandaloneSearchDispatcher,
+from hcmai.orchestration.pipeline import SearchService
+from hcmai.api.routers import (
     create_frames_router,
     create_query_suggestion_router,
     create_search_router,
     create_system_router,
 )
-from hcmai.routers.search import SearchEngineUnavailableError
 
 logger = get_logger(__name__)
 
@@ -46,66 +42,43 @@ def _configure_backend_logging() -> None:
 
 
 def create_app(
-    search_engine: SearchEngine | None = None,
-    query_suggestion_service: Any | None = None,
+    search_service: SearchService | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
-    engine_container: dict[str, Any] = {
-        "engine": search_engine,
+    service_container: dict[str, Any] = {
+        "service": search_service,
         "startup_messages": [],
     }
-    suggestion_container = {
-        "service": query_suggestion_service
-        or getattr(search_engine, "query_suggestion_service", None)
-    }
     dataset_root = Path(os.getenv("HCMAI_DATASET_ROOT", "data")).resolve()
-
-    def run_frame_search(request: SearchRequest) -> SearchResponse:
-        engine = engine_container["engine"]
-        if engine is None or getattr(engine, "retriever", None) is None:
-            raise SearchEngineUnavailableError(
-                "Search engine or DenseRetriever not initialized"
-            )
-        return engine.search(request)
-
-    search_dispatcher = StandaloneSearchDispatcher(run_frame_search)
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         _configure_backend_logging()
         logger.info("Backend startup started")
-        if engine_container["engine"] is None:
-            engine_container["engine"] = load_default_engine(
-                engine_container["startup_messages"]
+        if service_container["service"] is None:
+            service_container["service"] = SearchService.load(
+                service_container["startup_messages"]
             )
-        engine = engine_container["engine"]
-        if suggestion_container["service"] is None:
-            suggestion_container["service"] = getattr(
-                engine, "query_suggestion_service", None
-            )
+        service = service_container["service"]
+        health = service.health(service_container["startup_messages"])
         logger.info(
             "Backend startup completed search=%s reranker=%s "
             "remote_inference=%s messages=%d",
-            getattr(engine, "retriever", None) is not None,
-            getattr(engine, "reranker", None) is not None,
-            getattr(engine, "inference_client", None) is not None,
-            len(engine_container["startup_messages"]),
+            health["capabilities"]["search"],
+            getattr(service, "reranking", None) is not None,
+            service.llm is not None,
+            len(service_container["startup_messages"]),
         )
-        for message in engine_container["startup_messages"]:
+        for message in service_container["startup_messages"]:
             logger.warning("Backend startup note: %s", message)
 
         try:
             yield
         finally:
-            engine = engine_container["engine"]
-            client = getattr(engine, "inference_client", None)
-            service = suggestion_container["service"]
-            provider = getattr(service, "provider", None)
-            close = getattr(provider, "close", None)
+            service = service_container["service"]
+            close = getattr(service, "close", None)
             if close is not None:
                 close()
-            if client is not None:
-                client.client.close()
             logger.info("Backend shutdown completed")
 
     app = FastAPI(
@@ -128,15 +101,11 @@ def create_app(
     logger.info("Initializing FastAPI application for the backend service.")
 
     app.include_router(
-        create_system_router(
-            engine_container,
-            search_dispatcher,
-            suggestion_container,
-        )
+        create_system_router(service_container)
     )
-    app.include_router(create_search_router(search_dispatcher))
-    app.include_router(create_query_suggestion_router(suggestion_container))
-    app.include_router(create_frames_router(engine_container, dataset_root))
+    app.include_router(create_search_router(service_container))
+    app.include_router(create_query_suggestion_router(service_container))
+    app.include_router(create_frames_router(service_container, dataset_root))
 
     return app
 

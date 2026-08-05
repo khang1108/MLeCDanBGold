@@ -13,7 +13,7 @@ from typing import Any
 from hcmai.common.utils.io import read_json, write_json
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.dense.models import IndexMetadata
+from hcmai.retriever.models.metadata import IndexMetadata
 
 logger = get_logger(__name__)
 

@@ -12,7 +12,7 @@ from hcmai.common.schemas import FrameEnrichment, ProcessingStatus
 from hcmai.common.utils.io import atomic_write, write_json, write_parquet
 
 from .config import OCRConfig
-from .models import Evidence, FailureDetail, FrameRow, OCRResult
+from .models.entities import Evidence, FailureDetail, FrameRow, OCRResult
 
 
 def _null_scalar(value: object) -> bool:

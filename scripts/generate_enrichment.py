@@ -1,5 +1,5 @@
-from hcmai.enrichment.caption.pipeline import main
+from hcmai.enrichment.pipeline import EnrichmentService
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(EnrichmentService.run_caption_cli())

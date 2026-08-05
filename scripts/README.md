@@ -3,6 +3,13 @@
 These thin CLIs call reusable code from `src/hcmai`. Run them from the
 repository root with the `aic/` virtual environment.
 
+Scripts use the owning public service in each component's `pipeline.py`:
+`DataService`, `EmbeddingService`, `EnrichmentService`, `RetrievalService`, or
+`TranscriptService`. They must not compose another component's adapters,
+stores, or generators directly. `build_benchmark.py` is the sole deliberate
+exception: it uses the internal dense-baseline `RetrievalBenchmark`, which is
+not an end-to-end `EvaluationService`.
+
 ## Build embeddings and index
 
 `build_embeddings.py` resolves canonical relative image paths against
@@ -99,9 +106,15 @@ PYTHONPATH=src aic/bin/python scripts/build_index.py \
 
 ## Benchmark retrieval
 
+`build_benchmark.py` is a legacy dense-baseline harness, not the selected
+competition evaluator. It still expects `models.embedding` inside the YAML
+passed as `--config`; the current `configs/baseline.yaml` no longer owns that
+checkpoint. Do not treat the command below as runnable with the current
+baseline config until the script is migrated to `llm/config.yaml`.
+
 ```bash
 PYTHONPATH=src aic/bin/python scripts/build_benchmark.py \
-  --config configs/baseline.yaml \
+  --config path/to/legacy-benchmark-config.yaml \
   --index artifacts/indexes/visual \
   --queries data/eval/queries.jsonl \
   --output runs/dense_model_comparison

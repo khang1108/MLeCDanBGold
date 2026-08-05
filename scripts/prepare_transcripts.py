@@ -7,11 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from hcmai.common.config import ASRConfig, DiarizationConfig
-from hcmai.transcripts import (
-    ASREngine,
-    DiarizationEngine,
-    prepare_transcripts,
-)
+from hcmai.transcripts.pipeline import TranscriptService
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -29,11 +25,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run transcription and print its compact final report."""
 
     args = parse_args(argv)
-    report = prepare_transcripts(
+    service = TranscriptService.from_configs(ASRConfig(), DiarizationConfig())
+    report = service.prepare(
         args.videos_root,
         args.output,
-        ASREngine(ASRConfig()),
-        diarizer=DiarizationEngine(DiarizationConfig()),
         resume=not args.no_resume,
         limit=args.limit,
     )

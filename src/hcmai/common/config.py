@@ -38,6 +38,10 @@ def _text_embedding_filenames() -> dict[RetrievalSource, str]:
     }
 
 
+def _required_retrieval_sources() -> set[RetrievalSource]:
+    return {RetrievalSource.VISUAL}
+
+
 class EnrichmentArtifactsConfig(BaseModel):
     """Paths to source-specific frame-enrichment artifacts."""
 
@@ -158,6 +162,11 @@ class FusionConfig(BaseModel):
 
     method: Literal["rrf"] = "rrf"
     rrf_k: int = Field(default=60, gt=0)
+    modality_max_workers: int = Field(default=4, ge=1)
+    required_sources: set[RetrievalSource] = Field(
+        default_factory=_required_retrieval_sources
+    )
+    normalize_active_weights: bool = True
     task_weights: dict[TaskType, dict[RetrievalSource, float]] = Field(
         default_factory=_equal_fusion_weights
     )
@@ -169,6 +178,8 @@ class FusionConfig(BaseModel):
         if set(self.task_weights) != set(TaskType):
             raise ValueError("fusion task_weights must configure every TaskType")
         expected = set(FUSION_SOURCES)
+        if not self.required_sources.issubset(expected):
+            raise ValueError("required_sources contains an unknown modality")
         for task, weights in self.task_weights.items():
             if set(weights) != expected:
                 raise ValueError(

@@ -1,5 +1,3 @@
-from __future__ import annotations
+"""Embedding capability; public access is ``embedding.pipeline``."""
 
-from hcmai.embedding.embedding import *
-
-__all__ = ["EmbeddingPipeline"]
+__all__: list[str] = []

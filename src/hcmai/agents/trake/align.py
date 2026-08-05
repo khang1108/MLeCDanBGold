@@ -15,11 +15,13 @@ class TrakePath:
 
     ``frame_idx`` holds exactly one canonical frame index per event, in event
     order, ready for a ``<video_name>,<frame_1>,...,<frame_N>`` submission row.
+    ``frame_ids`` are the matching internal identities, in the same order.
     """
 
     video_id: str
     score: float
     frame_idx: tuple[int, ...]
+    frame_ids: tuple[str, ...] = ()
 
 
 def align_video(
@@ -75,13 +77,13 @@ def align_video(
         for event in range(n_events - 1, 0, -1):
             position = int(back[event, position])
             path.append(position)
+        ordered = tuple(reversed(path))
         results.append(
             TrakePath(
                 video_id=video.video_id,
                 score=float(current[endpoint]),
-                frame_idx=tuple(
-                    video.frame_idx[position] for position in reversed(path)
-                ),
+                frame_idx=tuple(video.frame_idx[position] for position in ordered),
+                frame_ids=tuple(video.frame_ids[position] for position in ordered),
             )
         )
     return results

@@ -1,100 +1,91 @@
 # `hcmai` Package Reference
 
-The `hcmai` package provides the core video-frame retrieval pipeline for the
-Ho Chi Minh City AI Challenge 2026. It includes canonical frame preparation,
-candidate retrieval, search orchestration, conversational state, and HTTP API
-endpoints behind shared Pydantic contracts.
+HCMAI is a modular monolith for multimodal video-frame retrieval. Each domain
+service package shown below exposes one public service from its top-level
+`pipeline.py`; model and provider implementations stay behind feature-owned
+adapters. `api`, `common`, research agents, and the internal baseline evaluator
+are explicit exceptions.
 
----
-
-## Package Layout
+## Package layout
 
 ```text
 src/hcmai/
-├── app.py          # FastAPI lifecycle and router assembly
-├── bootstrap/      # Configured model, index, and store initialization
-├── orchestration/  # High-level SearchEngine pipeline
-├── routers/        # FastAPI endpoint groups
-├── agents/         # Bounded AI components and KISC session handling
-├── common/         # Shared schemas, configuration, and generic utilities
-│   ├── config.py   # Global configuration settings & Pydantic settings
-│   ├── schemas/    # Pydantic 2 data contracts (SearchRequest, FrameRecord, etc.)
-│   └── utils/      # Generic I/O, image loading, timing, and logging helpers
-├── data/           # Canonical Parquet builder and FrameStore
-├── embedding/      # Image embedding generation pipeline
-├── enrichment/     # Feature-owned caption and OCR pipelines
-├── reranking/      # Bounded multimodal reranking and Qwen adapter
-└── retriever/      # FAISS visual index, DenseEncoder, DenseRetriever, benchmarking
+├── app.py                    # FastAPI lifecycle and router assembly
+├── api/routers/              # Thin HTTP adapters over SearchService
+├── orchestration/
+│   ├── pipeline.py           # SearchService: online task routing
+│   ├── setup.py              # Application composition root
+│   └── materializer.py       # Canonical candidate materialization
+├── data/                     # DataService and canonical frame stores
+├── embedding/                # EmbeddingService and model adapters
+├── retriever/                # RetrievalService, indexes, and fusion
+├── reranking/                # RerankingService and scoring adapters
+├── enrichment/               # Caption/OCR EnrichmentService
+├── transcripts/              # TranscriptService and ASR adapters
+├── llm/                      # LLMService and local/HTTP adapters
+├── query_suggestions/        # SuggestionService and provider adapters
+├── agents/kisc/              # Bounded conversational KIS research code
+└── common/                   # Shared config, schemas, and generic utilities
 ```
 
-Feature-specific configuration, models, protocols, and helpers stay in their
-own package. Move a contract to `common` only when multiple domain packages
-exchange it; `common` must never depend on a feature package.
+## Dependency rule
 
----
+Production code crossing a component boundary imports only its public
+`pipeline.py` or a shared schema from `common`:
 
-## Core Modules & Primary Contracts
+```python
+from hcmai.data.pipeline import DataService
+from hcmai.embedding.pipeline import EmbeddingService
+from hcmai.retriever.pipeline import RetrievalService
+from hcmai.reranking.pipeline import RerankingService
+from hcmai.orchestration.pipeline import SearchService
+```
 
-### 1. HTTP API Server (`hcmai.app`)
-- **FastAPI Application**: Exposes REST endpoints for the Node.js frontend.
-- **Key Endpoints**:
-  - `GET /health`: Health status, loaded frame count, and per-query-type
-    pipeline readiness.
-  - `POST /api/v1/search`: Routes standalone KIS, VKIS, VQA, and TRAKE
-    requests by `query_type`. KIS/VKIS currently share frame search; VQA/TRAKE
-    return `501` until their task-specific contracts and orchestrators exist.
-  - `POST /api/v1/query-suggestions`: Generate 5–10 optional operator query
-    suggestions through the single provider selected in `llm/config.yaml`.
-  - `GET /api/v1/frames/{frame_id}`: Fetch single frame metadata.
-  - `GET /api/v1/frames/{frame_id}/neighbors`: Temporal $\pm N$ neighbor frame expansion.
-  - `POST /api/v1/submit`: Format frame ID into official BTC submission code (`video_id,frame_idx`).
+`models/` contains contracts, entities, metadata, statistics, and value
+objects. Concrete SigLIP, BGE, Qwen, remote HTTP, ASR, and enrichment backends
+belong in `adapters/`. Unit tests may import internals for focused testing;
+scripts and integration code call the owning service.
 
-### 2. Retained KISC Research Code (`hcmai.agents.kisc`)
-- KISC code remains available for experiments but is not mounted by the
-  application or connected to standalone competition search.
+## Runtime paths
 
-### 3. Search Orchestrator (`hcmai.orchestration`)
-- **`SearchEngine`**: Orchestrates `candidate_retrieval`, optional `reranking`, and response `materialization` into `SearchResponse` objects with latency tracking.
-- Uses one benchmark-selected competition configuration.
+Online traffic uses one configured path:
 
-### 4. Data Pipeline & Store (`hcmai.data`)
-- **`FrameStore`**: In-memory metadata store backed by `frames.parquet`.
-  Supports lookup, deterministic iteration, submission-pair membership, and
-  temporal neighbors.
-- **Data Preparation**: `prepare_frames()` joins official mappings to
-  keyframe images and writes one validated canonical `frames.parquet`.
-- `frame_idx` always comes from the official mapping; consumers must not parse
-  `frame_id` or infer it from time/FPS.
+```text
+FastAPI → SearchService → RetrievalService → optional RerankingService
+        → canonical response materialization
+```
 
-### 5. Dense Retriever & Index (`hcmai.retriever`)
-- **`DenseRetriever`**: Pairs a text query encoder (`DenseEncoder`) with a FAISS index (`DenseIndex`) to execute vector similarity searches over keyframe embeddings.
+KIS and initial VKIS queries use frame retrieval directly. KISC research code
+resolves only context-dependent turns and then calls `SearchService`. VQA and
+TRAKE are recognized but return `501` until their real pipelines exist.
 
----
+Offline research jobs call their owning service directly, for example
+`DataService` for frame preparation, `EmbeddingService` for vector artifacts,
+and `RetrievalService` for index construction. This keeps experiments modular
+without adding a production-style dependency-injection framework.
 
-## Quick Usage Examples
+There is no public `EvaluationService` yet. The existing
+`retriever/evaluation/benchmark.py` is an internal dense-baseline tool; an
+end-to-end evaluator remains deferred until its contract and second use are
+demonstrated.
 
-### Running the API Server
+## Canonical identity invariant
+
+Every displayed or submitted result resolves through the authoritative
+`frame_id → video_id → frame_idx` mapping. Never derive `frame_idx` from a
+timestamp, FPS, filename, array position, or neighboring frame.
+
+## Running the API
+
 ```bash
 PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
-  --host 127.0.0.1 --port 8000 --reload
+  --host 127.0.0.1 --port 8000
 ```
 
-### Python Search Engine Orchestration
-```python
-from hcmai.data import FrameStore
-from hcmai.orchestration import SearchEngine
-from hcmai.common.schemas import SearchRequest
+The public endpoints remain:
 
-# Load metadata store and initialize engine
-store = FrameStore.load("data/metadata/frames.parquet")
-engine = SearchEngine(frame_store=store, retriever=dense_retriever)
-
-# Execute search
-request = SearchRequest(
-    query="một người đang đi bộ", query_type="kis", top_k=10
-)
-response = engine.search(request)
-
-for result in response.results:
-    print(f"Rank {result.rank}: {result.frame_id} (score: {result.scores.final:.4f})")
-```
+- `GET /health`
+- `POST /api/v1/search`
+- `POST /api/v1/query-suggestions`
+- `GET /api/v1/frames/{frame_id}` and frame asset/neighbor routes
+- `POST /api/v1/submit`

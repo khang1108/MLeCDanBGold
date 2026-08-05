@@ -1,16 +1,3 @@
-"""Public OCR enrichment API."""
+"""Internal OCR enrichment implementation."""
 
-from .backend import FlorenceOCREngine, OCREngine
-from .config import OCRConfig
-from .models import OCRResult
-from .pipeline import generate_ocr
-from .protocols import OCRBackend
-
-__all__ = [
-    "FlorenceOCREngine",
-    "OCRBackend",
-    "OCRConfig",
-    "OCREngine",
-    "OCRResult",
-    "generate_ocr",
-]
+__all__: list[str] = []

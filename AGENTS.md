@@ -142,12 +142,54 @@
 
 ## Folder and File Aware
 
+- `src/hcmai/api/routers/`: thin FastAPI adapters; no retrieval logic.
+- `src/hcmai/orchestration/pipeline.py`: `SearchService`, the only online task
+  router and search entry point used by API and conversational composition.
+- `src/hcmai/orchestration/setup.py`: the application composition root; create
+  and connect long-lived services here.
 - `src/hcmai/agents/`: KISC and future bounded task orchestration.
-- `src/hcmai/data/`: dataset loading, preparation, and canonical frame mapping.
-- `src/hcmai/common/schemas/`: authoritative API and task contracts.
-- `src/hcmai/embedding/`: embedding modules and services.
-- `src/hcmai/retriever/`: retrieval modules, indexes, and benchmarks.
+- `src/hcmai/data/`: `DataService`, dataset preparation, canonical mapping, and
+  frame/evidence stores.
+- `src/hcmai/common/schemas/`: authoritative cross-component API and task
+  contracts.
+- `src/hcmai/embedding/`: `EmbeddingService`, embedding contracts, artifacts,
+  and provider/model adapters.
+- `src/hcmai/enrichment/`: `EnrichmentService` and caption/OCR adapters.
+- `src/hcmai/retriever/`: `RetrievalService`, indexes, fusion, and the internal
+  dense-baseline benchmark.
+- `src/hcmai/reranking/`: `RerankingService` and scoring adapters.
+- `src/hcmai/transcripts/`: `TranscriptService`, transcript stores, and ASR /
+  diarization adapters.
+- `src/hcmai/llm/`: `LLMService`, the private inference server, and local/HTTP
+  adapters.
+- `src/hcmai/query_suggestions/`: `SuggestionService` and provider adapters.
 - `src/hcmai/common/utils/`: cross-cutting helpers, not domain logic.
+
+## Service Pipeline Architecture
+
+- Service-owning packages (`data`, `embedding`, `enrichment`, `llm`,
+  `orchestration`, `query_suggestions`, `reranking`, `retriever`, and
+  `transcripts`) expose one public `pipeline.py` containing their `*Service`
+  facade. Online and offline callers use that boundary. `api`, `common`,
+  `agents`, and the internal dense-baseline evaluator are explicit exceptions.
+- Cross-component production imports may target only another component's
+  `pipeline.py` or authoritative contracts in `common`. Do not import another
+  component's `adapters/`, `models/`, provider config, stores, generators, or
+  other implementation modules.
+- `models/` contains contracts, entities, metadata, statistics, and value
+  objects only. Concrete SigLIP, BGE, Qwen, HTTP, ASR, diarization, caption,
+  and OCR implementations belong in the owning component's `adapters/`.
+- `SearchService` routes Textual KIS, initial VKIS, KISC, VQA, and TRAKE.
+  Unsupported pipelines must fail explicitly; leave a focused block comment
+  for the intended stage sequence and do not add fake components.
+- FastAPI routers, CLIs, notebooks, agents, and other components do not compose
+  retrieval internals themselves. API and KISC call `SearchService`; offline
+  CLIs call the relevant owning service directly.
+- `orchestration/setup.py` is the single application composition root. Load
+  models and indexes once, then inject the resulting services.
+- `EvaluationService` is deliberately deferred. Until an end-to-end evaluator
+  has a second demonstrated use and confirmed 2026 semantics,
+  `retriever/evaluation/benchmark.py` remains an internal dense-baseline tool.
 
 ## Subagent Roles
 
@@ -159,7 +201,8 @@ multi-agent work is explicitly requested.
 
 - Owns contracts crossing frontend, FastAPI, and the AI search pipeline.
 - Primary paths: `frontend/`, `src/hcmai/app.py`,
-  `src/hcmai/common/schemas/`, and API integration tests.
+  `src/hcmai/api/routers/`, `src/hcmai/common/schemas/`, and API integration
+  tests.
 - Checks endpoint request/response compatibility, startup configuration,
   error handling, submission CSV/ZIP compatibility, and complete
   UI → API → search → UI flows.
@@ -170,9 +213,9 @@ multi-agent work is explicitly requested.
 - Owns KIS-conversation orchestration, turn state, query reformulation,
   feedback behavior, clarification logic, reranking, and TRAKE joint temporal
   alignment over retrieval candidates.
-- Primary paths: `src/hcmai/kisc.py`, `src/hcmai/search.py`, future
-  `src/hcmai/agents/`, temporal alignment, or reranker code, and their focused
-  tests.
+- Primary paths: `src/hcmai/agents/kisc/`,
+  `src/hcmai/orchestration/pipeline.py`, `src/hcmai/reranking/`, future temporal
+  alignment code, and their focused tests.
 - Consumes shared `RetrievalCandidate` objects and preserves their exact frame
   identifiers when reranking.
 - Keeps orchestration research-friendly; no database or generalized agent
@@ -226,8 +269,8 @@ multi-agent work is explicitly requested.
 - Join artifacts on `frame_id`; exchange retrieval data via shared schemas.
 - Keep all selected model checkpoints in `llm/config.yaml` and candidate
   counts in `configs/baseline.yaml`; do not expose runtime search profiles.
-- Load models/indexes once, never at import or per request. `DenseEncoder`
-  lazily loads on its first non-empty encode call.
+- Load models/indexes once, never at import or per request. Embedding adapters
+  lazily load on their first non-empty encode call.
 - Keep reusable logic in `src/hcmai`, CLIs thin, domain logic out of
   `common/utils`, and the Python/frontend boundary intact.
 

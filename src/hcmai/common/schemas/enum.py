@@ -41,6 +41,15 @@ class TaskType(str, Enum):
     TRAKE = "trake"
 
 
+class ExecutionProfile(str, Enum):
+    """Bounded accuracy-latency profile selected for a task request."""
+
+    FAST = "fast"
+    BALANCED = "balanced"
+    ACCURATE = "accurate"
+    COMPETITION_ANYTIME = "competition_anytime"
+
+
 class QueryDifficulty(str, Enum):
     """Human-assigned difficulty of an evaluation query."""
 

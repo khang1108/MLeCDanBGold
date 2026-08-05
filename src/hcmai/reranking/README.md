@@ -1,59 +1,49 @@
 # Multimodal reranking
 
-`hcmai.reranking` reorders only the retrieval candidates supplied to it. It
-does not search FAISS, enumerate the corpus, or change authoritative frame
-identifiers.
-
-## Structure
+`hcmai.reranking` reorders only the bounded `RetrievalCandidate` list supplied
+by retrieval. It does not search the corpus and cannot create or rewrite a
+candidate's `frame_id`, `video_id`, or `frame_idx`.
 
 ```text
 reranking/
-├── multimodal/
-│   ├── config.py       # Candidate-pipeline configuration
-│   ├── protocols.py    # Model-agnostic scoring boundary
-│   └── reranker.py     # Bounded fail-fast reranking
-└── qwen/
-    ├── config.py       # Qwen checkpoint/runtime configuration
-    └── scorer.py       # Lazy native Qwen3-VL relevance scorer
+├── pipeline.py                 # RerankingService public facade
+├── config.py                   # Batching and score policy
+├── models/
+│   └── contracts.py            # RerankingAdapter protocol
+└── adapters/
+    ├── qwen.py                 # Lazy local Qwen scorer
+    └── remote.py               # Remote inference scorer
 ```
 
-Configuration and scoring protocols are owned by this package because they
-are used only by reranking. Input and output candidates use the shared
-`hcmai.common.schemas.RetrievalCandidate` contract. The root
-`hcmai.reranking` package re-exports the public classes; a new model backend
-gets its own folder rather than another flat root-level module.
+## Public service
 
-## Components
+```python
+from hcmai.reranking.pipeline import RerankingService
 
-- `MultimodalReranker` resolves images for the supplied candidates, invokes a
-  `ScoreBatch`, maps scores back in input order, and returns validated copies.
-- `RerankerConfig` controls batching and final-score policy.
-- `QwenRerankerScorer` lazily loads one Qwen3-VL model/processor pair and
-  returns the official yes/no relevance probability.
-- `QwenRerankerConfig` records checkpoint, revision, device, dtype, token, and
-  image limits.
-
-Missing images, backend failures, count mismatches, and invalid scores abort
-the request. Candidate count and exact `frame_id`, `video_id`, and `frame_idx`
-mappings must never change.
-
-## Dependency direction
-
-```text
-retriever -> RetrievalCandidate -> reranking -> RetrievalCandidate
-                                      |
-                                      -> FrameStore image lookup
+ranked = reranking_service.rerank(query, candidates)
 ```
 
-Reranking-specific configuration, protocols, and model adapters stay here.
-Only contracts exchanged with other modules belong in `common`.
+`RerankingService` resolves canonical image paths through the injected frame
+authority, loads a bounded batch, delegates scoring to its adapter, validates
+the returned count and finite scores, and returns score-enriched candidate
+copies. Equal scores preserve input order.
+
+The adapter contract is intentionally small: it scores an ordered image batch
+without owning candidate identity. `QwenAdapter` and `RemoteAdapter` implement
+that contract. Production callers select them through composition or the
+service's `remote` constructor; they do not import adapter modules directly.
+
+Missing frames or images, adapter failures, score-count mismatches, and invalid
+scores fail the request. Tests inject fake adapters and never download model
+weights.
 
 ## Verification
 
 ```bash
 PYTHONPATH=src aic/bin/pytest tests/test_reranker.py tests/test_qwen_reranker.py
+pyright src/hcmai/reranking
 ```
 
-Tests inject fake scorers and must not download model weights. A real
-experiment must record checkpoint, configuration, predictions, failures,
-Recall@1/5, MRR, and P50/P95 latency under `runs/`.
+Real experiments must record the selected checkpoint, configuration,
+predictions, failures, official Mean Top-k R-Score, Recall, MRR, and P50/P95
+latency under `runs/`.

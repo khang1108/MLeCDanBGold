@@ -35,24 +35,28 @@ class _FakeIndex:
         return np.take_along_axis(_SCORES, order, axis=1), order
 
 
-class _FakeRetriever:
+class _FakeBatch:
+    def __init__(self, texts: list[str]) -> None:
+        self.vectors = np.zeros((len(texts), 4), dtype=np.float32)
+
+
+class _FakeRetrieval:
     """Shortlist only v1 and v3, so v2 must never reach the aligner."""
+
+    visual_index = _FakeIndex()
 
     def search(self, query: str, top_k: int) -> list[RetrievalCandidate]:
         frame_id = "v1_b" if query == "first event" else "v3_a"
         return [RetrievalCandidate(frame_id=frame_id)]
 
-
-class _FakeEncoder:
-    def encode_text(self, texts: list[str]) -> np.ndarray:
-        return np.zeros((len(texts), 4), dtype=np.float32)
+    def encode_text_batch(self, texts: list[str], source_family: str) -> _FakeBatch:
+        assert source_family == "visual"
+        return _FakeBatch(texts)
 
 
 def test_shortlisted_videos_are_rescored_in_canonical_frame_order() -> None:
     results = event_video_scores(
-        _FakeRetriever(),
-        _FakeEncoder(),
-        _FakeIndex(),
+        _FakeRetrieval(),
         ["first event", "second event"],
     )
     assert [item.video_id for item in results] == ["v1", "v3"]

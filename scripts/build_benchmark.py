@@ -9,8 +9,9 @@ from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas.evaluation import EvaluationQuery
 from hcmai.common.utils.io import read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.retriever.dense import DenseEncoder, DenseIndex, DenseRetriever
+from hcmai.embedding.pipeline import EmbeddingService
 from hcmai.retriever.evaluation import RetrievalBenchmark
+from hcmai.retriever.pipeline import RetrievalService
 from script_args import parse_arguments
 
 logger = get_logger(__name__)
@@ -29,9 +30,12 @@ def main() -> int:
             if line.strip()
         ]
         model = config.get("models", {}).get("embedding", {})
-        retriever = DenseRetriever(
-            DenseEncoder(EncoderConfig.from_dict(model)),
-            DenseIndex.load(Path(args.index)),
+        encoder = EmbeddingService.create_text_adapter(
+            EncoderConfig.from_dict(model)
+        )
+        retriever = RetrievalService.from_index(
+            RetrievalService.load_index(Path(args.index)),
+            encoder,
         )
         benchmark = RetrievalBenchmark(
             retriever,
