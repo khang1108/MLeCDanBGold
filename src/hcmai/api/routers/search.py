@@ -56,13 +56,6 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
                 detail=str(error),
             ) from error
-        except ValueError as error:
-            # A pipeline rejecting its own request payload is a client error,
-            # for example a TRAKE query with no resolvable ordered events.
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=str(error),
-            ) from error
         except KeyError as error:
             logger.warning("API search request failed error=%s", error)
             raise HTTPException(
