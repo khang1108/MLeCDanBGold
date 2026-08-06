@@ -90,7 +90,7 @@ def test_candidate_image_failure_aborts_reranking(tmp_path):
     store, inputs = make_store(tmp_path, 8), [candidate(i) for i in range(8)]
     store.records["f1"].image_path = tmp_path / "missing.png"
     backend = Backend(lambda images: [0.4] * len(images))
-    with pytest.raises(RerankerUnavailableError, match="image_load_failure"):
+    with pytest.raises(RerankerUnavailableError, match="frame_asset_missing"):
         RerankingService(
             cast(DataService, store), RerankerConfig(batch_size=10), backend
         ).rerank("q", inputs)

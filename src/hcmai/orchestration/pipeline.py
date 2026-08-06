@@ -99,6 +99,7 @@ class SearchService:
     def health(self, startup_messages: Sequence[str] = ()) -> dict[str, Any]:
         data_ready = self.data is not None
         retrieval_ready = self.retrieval is not None
+        asset_status = self._frame_asset_status()
         active_sources = (
             set(getattr(self.retrieval, "active_sources", (RetrievalSource.VISUAL,)))
             if self.retrieval is not None
@@ -164,11 +165,17 @@ class SearchService:
                 "vqa": task_capabilities.get(TaskType.VQA.value, False),
                 "shared_retrieval": retrieval_ready,
                 "remote_inference": remote_capabilities,
-                "frame_assets": data_ready,
+                "frame_assets": asset_status["ready"],
+                "frame_asset_status": asset_status,
                 "query_types": task_capabilities,
             },
             "startup_messages": list(startup_messages),
         }
+
+    def _frame_asset_status(self) -> dict[str, int | bool]:
+        if not isinstance(self.data, DataService):
+            return {"ready": False, "checked": 0, "available": 0, "missing": 0}
+        return self.data.frame_asset_status().as_dict()
 
     def close(self) -> None:
         if self.llm is not None:

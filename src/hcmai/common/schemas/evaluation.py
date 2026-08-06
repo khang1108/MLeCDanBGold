@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from hcmai.common.schemas import ContractModel, NonEmptyString, QueryLanguage, TaskType, QueryDifficulty
 from pydantic import Field, field_validator
+
+from .base import ContractModel, NonEmptyString
+from .enum import QueryDifficulty, QueryLanguage, TaskType
 
 class EvaluationQuery(ContractModel):
     """One labelled query used by the offline evaluation harness."""

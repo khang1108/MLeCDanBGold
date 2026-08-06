@@ -112,7 +112,9 @@ class RerankingService:
             return []
         try:
             copies, prepared = self._prepare(original)
-        except (OSError, KeyError) as error:
+        except FileNotFoundError as error:
+            raise RerankerUnavailableError("frame_asset_missing") from error
+        except (OSError, KeyError, RuntimeError) as error:
             raise RerankerUnavailableError("image_load_failure") from error
         logger.info("Reranker images prepared loaded=%d", len(prepared))
         try:
@@ -144,8 +146,11 @@ class RerankingService:
         try:
             for position, candidate in enumerate(copies):
                 frame = self.data.get_frame(candidate.frame_id)
-                path = Path(str(frame.image_path)).expanduser()
-                image_path = path if path.is_absolute() else self.dataset_root / path
+                if isinstance(self.data, DataService):
+                    image_path = self.data.resolve_frame_asset(frame)
+                else:
+                    path = Path(str(frame.image_path)).expanduser()
+                    image_path = path if path.is_absolute() else self.dataset_root / path
                 prepared.append((position, load_image(image_path, mode="RGB")))
         except Exception:
             for _, image in prepared:

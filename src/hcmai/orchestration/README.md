@@ -25,9 +25,9 @@ FastAPI or KISC
 ```
 
 `SearchService` resolves each request through `PipelineRegistry`. The current
-`KISPipeline` preserves Textual KIS, initial VKIS, and resolved legacy KISC
-behavior. Missing VQA and TRAKE registrations raise
-`SearchPipelineUnavailableError` until their real end-to-end pipelines exist.
+registry exposes KIS, the initial VKIS path, and the grounded VQA pipeline.
+TRAKE remains an externally owned integration seam and raises
+`SearchPipelineUnavailableError` until its pipeline is registered.
 
 `setup.py` loads configuration and artifacts once, constructs the selected
 services, and injects them into `SearchService`. Cross-component imports in

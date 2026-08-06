@@ -42,7 +42,9 @@ def answer_windows(
     for localized_window in localized:
         if calls >= max_calls:
             break
-        candidate, error = _answer_one(localized_window, parsed, llm, load)
+        candidate, error = _answer_one(
+            localized_window, parsed, llm, load, data
+        )
         calls += 1
         if error:
             warnings.append(error)
@@ -60,7 +62,9 @@ def answer_windows(
             if expanded is not None:
                 retry_bundle = build_evidence_bundle(expanded, data)
                 retry_localized = LocalizedWindow(retry_bundle, localized_window.score, ("temporal_neighbor_fallback",))
-                retry, retry_error = _answer_one(retry_localized, parsed, llm, load)
+                retry, retry_error = _answer_one(
+                    retry_localized, parsed, llm, load, data
+                )
                 calls += 1
                 warnings.append("temporal_neighbor_fallback")
                 if retry_error:
@@ -70,7 +74,13 @@ def answer_windows(
     return answers, list(dict.fromkeys(warnings))
 
 
-def _answer_one(localized: LocalizedWindow, parsed: ParsedVQAQuery, llm: VQAService, load: ImageLoader):
+def _answer_one(
+    localized: LocalizedWindow,
+    parsed: ParsedVQAQuery,
+    llm: VQAService,
+    load: ImageLoader,
+    data: AnswerData | None,
+):
     bundle = localized.bundle
     if not bundle.window.sampled_frames:
         return None, "empty_evidence_window"
@@ -85,7 +95,9 @@ def _answer_one(localized: LocalizedWindow, parsed: ParsedVQAQuery, llm: VQAServ
     evidence = _provider_evidence(bundle.items)
     image = None
     try:
-        image = load(frame.image_path)
+        resolve = getattr(data, "resolve_frame_asset", None)
+        image_path = resolve(frame) if callable(resolve) else frame.image_path
+        image = load(str(image_path))
         try:
             response = llm.answer_vqa(
                 request_id=f"vqa:{bundle.window.window_id}:{frame.frame_id}",
@@ -97,6 +109,8 @@ def _answer_one(localized: LocalizedWindow, parsed: ParsedVQAQuery, llm: VQAServ
         except TypeError:
             # Local and legacy fake adapters retain the three-argument method.
             response = llm.answer_vqa(parsed.question, image, evidence)
+    except FileNotFoundError:
+        return None, f"frame_asset_missing(frame_id={frame.frame_id})"
     except (TimeoutError, ConnectionError, OSError, RuntimeError) as exc:
         return None, f"vqa_provider_{type(exc).__name__.lower()}"
     finally:

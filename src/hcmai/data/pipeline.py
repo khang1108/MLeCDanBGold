@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
+from itertools import islice
 from pathlib import Path
 
 from hcmai.common.schemas import FrameRecord, RetrievalSource
 from hcmai.common.schemas.search import SearchFilters
+from hcmai.data.assets import FrameAssetResolver, FrameAssetStatus
 from hcmai.data.prepare import prepare_frames
 from hcmai.data.stores import ASRStore, CaptionStore, FrameStore, OCRStore
 
@@ -25,15 +27,19 @@ class DataService:
         self,
         frame_store: FrameStore | None = None,
         evidence_stores: Mapping[RetrievalSource, EvidenceStore] | None = None,
+        asset_resolver: FrameAssetResolver | None = None,
     ) -> None:
         self.frame_store = frame_store
         self.evidence_stores = dict(evidence_stores or {})
+        self.asset_resolver = asset_resolver
 
     @classmethod
     def load(
         cls,
         frames_path: str | Path,
         evidence_paths: Mapping[RetrievalSource, str | Path] | None = None,
+        *,
+        dataset_root: str | Path | None = None,
     ) -> "DataService":
         """Load canonical frames and any explicitly configured evidence."""
 
@@ -41,7 +47,8 @@ class DataService:
             source: _EVIDENCE_STORES[source](path)
             for source, path in (evidence_paths or {}).items()
         }
-        return cls(FrameStore(frames_path), evidence)
+        resolver = FrameAssetResolver(dataset_root) if dataset_root is not None else None
+        return cls(FrameStore(frames_path), evidence, resolver)
 
     def load_evidence(
         self, source: RetrievalSource, artifact_path: str | Path
@@ -87,6 +94,28 @@ class DataService:
 
     def contains_submission(self, video_id: str, frame_idx: int) -> bool:
         return self._frames().contains_submission(video_id, frame_idx)
+
+    def resolve_frame_asset(
+        self,
+        frame: FrameRecord | str,
+        *,
+        thumbnail: bool = False,
+        require_file: bool = True,
+    ) -> Path:
+        if self.asset_resolver is None:
+            raise RuntimeError("Frame asset resolver is not configured")
+        record = self.get_frame(frame) if isinstance(frame, str) else frame
+        return self.asset_resolver.resolve_frame(
+            record,
+            thumbnail=thumbnail,
+            require_file=require_file,
+        )
+
+    def frame_asset_status(self, *, sample_size: int = 100) -> FrameAssetStatus:
+        if self.asset_resolver is None:
+            return FrameAssetStatus(False, 0, 0, 0)
+        records = tuple(islice(self.iter_frames(), sample_size))
+        return self.asset_resolver.sample_status(records, sample_size=sample_size)
 
     @property
     def record_count(self) -> int:

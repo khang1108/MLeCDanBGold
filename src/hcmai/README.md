@@ -86,12 +86,17 @@ The public endpoints remain:
 
 - `GET /health`
 - `POST /api/v1/search`
-- `POST /api/v1/query-suggestions`
+- `POST /api/v1/vqa`
 - `GET /api/v1/frames/{frame_id}` and frame asset/neighbor routes
 - `POST /api/v1/submit`
 - `GET /api/v1/minichallenge/evaluations`
 - `GET /api/v1/minichallenge/evaluations/{id}/current-task`
 - `POST /api/v1/minichallenge/evaluations/{id}/submit`
+
+Run `PYTHONPATH=src aic/bin/python scripts/doctor.py` before starting a
+competition session. It validates that metadata, canonical frame assets, and
+the visual index agree without loading model weights. See
+`docs/ARCHITECTURE.md` for the dependency and debugging map.
 
 The mini-challenge routes require the DRES session token in the
 `X-DRES-Session` header. The browser keeps this token only in memory. Submission

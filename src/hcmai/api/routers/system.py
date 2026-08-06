@@ -30,6 +30,12 @@ def create_system_router(service_container: dict[str, Any]) -> APIRouter:
                 "capabilities": {
                     "search": False,
                     "frame_assets": False,
+                    "frame_asset_status": {
+                        "ready": False,
+                        "checked": 0,
+                        "available": 0,
+                        "missing": 0,
+                    },
                     "query_types": {
                         "kis": False,
                         "vkis": False,

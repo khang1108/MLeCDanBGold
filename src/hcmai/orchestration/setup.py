@@ -94,7 +94,10 @@ def _load_data(
         messages.append(f"Metadata not available at {metadata_path}")
         return None
     try:
-        data = DataService.load(metadata_path)
+        data = DataService.load(
+            metadata_path,
+            dataset_root=settings.dataset.root,
+        )
     except Exception as error:
         messages.append(
             f"Could not load metadata {metadata_path}: "

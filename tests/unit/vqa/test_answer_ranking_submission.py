@@ -77,6 +77,20 @@ def test_multi_candidate_partial_failure_wrong_identity_and_deterministic_fallba
     assert warnings == ["provider_returned_unknown_frame_id", "vqa_provider_timeouterror"]
 
 
+def test_missing_frame_asset_has_actionable_warning():
+    data, parsed, localized = setup_localized()
+
+    def missing(_):
+        raise FileNotFoundError("missing")
+
+    answers, warnings = answer_windows(
+        localized[:1], parsed, FakeLLM([]), max_calls=1, image_loader=missing
+    )
+
+    assert answers == []
+    assert warnings == ["frame_asset_missing(frame_id=f1)"]
+
+
 def test_answer_normalize_rank_and_materialize_canonical_identity():
     data, parsed, localized = setup_localized()
     frame_ids = [item.bundle.window.sampled_frames[0].frame_id for item in localized]
