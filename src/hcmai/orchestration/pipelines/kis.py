@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 from time import perf_counter
-from typing import cast
 
 from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
     RetrievalTrace,
     SearchRequest,
     SearchResponse,
-    StageStatus,
     TaskType,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.kis.ranking import KISRankingConfig, shape_kis_candidates
-from hcmai.kis.retrieval import retrieve_query_variants
-from hcmai.kis.variants import ControlledQueryExpander, SuggestionProvider
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.orchestration.ranking import elapsed_ms, rank_candidates, request_id
@@ -39,7 +35,6 @@ class KISPipeline:
         retrieval: RetrievalService | None,
         reranking: RerankingService | None,
         config: SearchConfig,
-        suggestion_service: SuggestionProvider | None = None,
     ) -> None:
         if task_type not in {TaskType.KIS, TaskType.VKIS, TaskType.KISC}:
             raise ValueError(f"KISPipeline cannot handle {task_type.value!r}")
@@ -48,7 +43,6 @@ class KISPipeline:
         self.retrieval = retrieval
         self.reranking = reranking
         self.config = config
-        self.expander = ControlledQueryExpander(suggestion_service)
         self.materializer = SearchMaterializer(data) if data is not None else None
 
     @property
@@ -72,29 +66,6 @@ class KISPipeline:
             output_count=1,
             backend="pydantic",
         )
-        expansion_timer = StageTimer(PipelineStage.EXPANSION.value)
-        variant_plan = (
-            self.expander.expand(request.query)
-            if self.task_type is TaskType.KIS
-            else ControlledQueryExpander().expand(request.query)
-        )
-        expansion_trace = expansion_timer.finish(
-            status=(
-                StageStatus.PARTIAL
-                if variant_plan.warnings
-                else StageStatus.SUCCESS
-                if len(variant_plan.variants) > 1
-                else StageStatus.SKIPPED
-            ),
-            attempt_count=1 if self.expander.provider is not None else 0,
-            input_count=1,
-            output_count=len(variant_plan.variants),
-            backend=(
-                type(self.expander.provider).__name__
-                if self.expander.provider is not None else None
-            ),
-            fallback_used=bool(variant_plan.warnings),
-        )
         request_id_value = request_id(request)
         candidate_count = max(request.top_k, self.config.candidate_count)
         logger.info(
@@ -104,20 +75,9 @@ class KISPipeline:
             request.top_k,
             candidate_count,
         )
-        ranked_retrieval = self.retrieval
-        if self.task_type is TaskType.KIS and len(variant_plan.variants) > 1:
-            variant_result = retrieve_query_variants(
-                self.retrieval,
-                variant_plan.variants,
-                top_k=candidate_count,
-                filters=request.filters,
-                query_type=request.query_type,
-                rrf_k=self.config.fusion.rrf_k,
-            )
-            ranked_retrieval = _PreparedRetrieval(variant_result)
         retrieval_result, reranking_ms = rank_candidates(
             request,
-            cast(RetrievalService, ranked_retrieval),
+            self.retrieval,
             self.reranking,
             candidate_count=candidate_count,
             rerank_count=self.config.rerank_count,
@@ -154,7 +114,7 @@ class KISPipeline:
             backend="canonical_frame_store",
         )
         trace = retrieval_result.trace
-        for stage in (parse_trace, expansion_trace, materialization_trace):
+        for stage in (parse_trace, materialization_trace):
             trace = trace.merged(RetrievalTrace(stages={stage.stage: stage}))
             log_stage(
                 logger,
@@ -192,7 +152,6 @@ class KISPipeline:
                 "latency_ms": latency,
                 "warnings": [
                     *response.warnings,
-                    *variant_plan.warnings,
                     *retrieval_result.warnings,
                 ],
                 "trace": trace,
@@ -204,14 +163,3 @@ class KISPipeline:
             response.total_results,
         )
         return response
-
-
-class _PreparedRetrieval:
-    """Present one already-batched result to the shared reranking stage."""
-
-    def __init__(self, result) -> None:
-        self.result = result
-
-    def search(self, query, top_k, filters, query_type):
-        del query, top_k, filters, query_type
-        return self.result

@@ -8,8 +8,6 @@ from typing import Any, cast
 from hcmai.common.config import SearchConfig, VQAConfig
 from hcmai.common.schemas import (
     FrameRecord,
-    QuerySuggestionRequest,
-    QuerySuggestionResponse,
     RetrievalSource,
     SearchRequest,
     SearchResponse,
@@ -25,7 +23,6 @@ from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.orchestration.pipelines.kis import KISPipeline
 from hcmai.orchestration.pipelines.vqa import VQAPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
-from hcmai.query_suggestions.pipeline import SuggestionService
 from hcmai.reranking.pipeline import RerankingService
 from hcmai.retriever.pipeline import RetrievalService
 from hcmai.observability import METRICS
@@ -54,7 +51,6 @@ class SearchService:
         retrieval: RetrievalService | None,
         reranking: RerankingService | None = None,
         config: SearchConfig | None = None,
-        suggestion_service: SuggestionService | None = None,
         llm: LLMService | None = None,
         vqa_config: VQAConfig | None = None,
         pipeline_registry: PipelineRegistry | None = None,
@@ -63,7 +59,6 @@ class SearchService:
         self.retrieval = retrieval
         self.reranking = reranking
         self.config = config or SearchConfig()
-        self.suggestion_service = suggestion_service
         self.llm = llm
         self.vqa_config = vqa_config or VQAConfig()
         self.pipeline_registry = (
@@ -101,13 +96,6 @@ class SearchService:
             submission_code=f"{frame.video_id},{frame.frame_idx}",
         )
 
-    def suggest(self, request: QuerySuggestionRequest) -> QuerySuggestionResponse:
-        if self.suggestion_service is None:
-            raise SearchServiceUnavailableError(
-                "Query-suggestion provider is not configured"
-            )
-        return self.suggestion_service.suggest(request)
-
     def health(self, startup_messages: Sequence[str] = ()) -> dict[str, Any]:
         data_ready = self.data is not None
         retrieval_ready = self.retrieval is not None
@@ -116,7 +104,6 @@ class SearchService:
             if self.retrieval is not None
             else set()
         )
-        suggestions_ready = self.suggestion_service is not None
         task_capabilities = self.pipeline_registry.capability_report(
             (TaskType.KIS, TaskType.VKIS, TaskType.VQA, TaskType.TRAKE)
         )
@@ -177,13 +164,6 @@ class SearchService:
                 "vqa": task_capabilities.get(TaskType.VQA.value, False),
                 "shared_retrieval": retrieval_ready,
                 "remote_inference": remote_capabilities,
-                "query_suggestions": {
-                    "enabled": suggestions_ready,
-                    "provider": (
-                        self.suggestion_service.provider_name
-                        if self.suggestion_service else None
-                    ),
-                },
                 "frame_assets": data_ready,
                 "query_types": task_capabilities,
             },
@@ -191,8 +171,6 @@ class SearchService:
         }
 
     def close(self) -> None:
-        if self.suggestion_service is not None:
-            self.suggestion_service.close()
         if self.llm is not None:
             self.llm.close()
 
@@ -218,9 +196,6 @@ class SearchService:
                 self.retrieval,
                 self.reranking,
                 self.config,
-                suggestion_service=(
-                    self.suggestion_service if task_type is TaskType.KIS else None
-                ),
             )
             for task_type in task_types
         ]

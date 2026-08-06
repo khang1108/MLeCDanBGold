@@ -2,7 +2,7 @@
 
 `hcmai.llm` is the boundary between the local HCMAI search application and the
 models hosted on a temporary GPU VM. It serves only model inference. The
-keyframes, metadata, embeddings, FAISS indexes, KISC orchestration, FastAPI
+keyframes, metadata, embeddings, FAISS indexes, FastAPI
 search backend, and React UI remain on the local machine.
 
 For VM provisioning, Supervisor, and Cloudflare Tunnel setup, see the
@@ -15,7 +15,7 @@ module and its contracts.
 React UI
    │ localhost:8000
    ▼
-Local FastAPI ── KISC / retrieval / frame materialization
+Local FastAPI ── retrieval / VQA / frame materialization
    │
    │ LLMService + HTTP adapter + optional Cloudflare Access headers
    ▼
@@ -26,8 +26,7 @@ api.iamphuckhang.dev ── Cloudflare Tunnel ── localhost:8100 on GPU VM
                                                 ├─ SigLIP2/BGE encoders
                                                 ├─ Florence captioner
                                                 ├─ Qwen VL reranker
-                                                └─ GLM conversation, VQA,
-                                                   and query suggestions
+                                                └─ grounded VQA model
 ```
 
 The browser never calls the GPU service directly. This keeps Cloudflare
@@ -42,14 +41,12 @@ corpus to a disposable VM.
 | `server/api.py` | Private FastAPI endpoints, request limits, error translation |
 | `adapters/local.py` | Single-process ownership and lifecycle of hosted models |
 | `adapters/http.py` | Bounded synchronous client for remote inference |
-| `adapters/conversation.py` | Structured conversation model and JSON extraction |
+| `adapters/vqa.py` | Grounded single/multi-frame VQA model |
 | `config.py` | Typed model and service configuration loaded from YAML |
 | `models/contracts.py` | Adapter-facing data contracts only |
 
 The authoritative request and response models are in
-[`common/schemas/inference.py`](../common/schemas/inference.py), while KISC
-conversation state is defined in
-[`common/schemas/conversation.py`](../common/schemas/conversation.py).
+[`common/schemas/inference.py`](../common/schemas/inference.py).
 
 ## Model lifecycle
 
@@ -66,8 +63,7 @@ in GPU memory.
 
 `GET /health` only proves that the HTTP process responds. `GET /ready` verifies
 that every enabled model is loaded and returns checkpoint provenance.
-Conversation inference is optional only when
-`HCMAI_ENABLE_CONVERSATION=false`.
+VQA inference is optional when `HCMAI_ENABLE_VQA=false`.
 
 ## Configuration
 
@@ -77,29 +73,25 @@ The checked-in [`llm/config.yaml`](../../../llm/config.yaml) configures:
 - `BAAI/bge-m3` for multilingual caption/query dense embeddings;
 - Florence for caption generation;
 - `Qwen/Qwen3-VL-Reranker-2B` for image-query reranking;
-- `zai-org/GLM-4.1V-9B-Thinking` for KISC state resolution, VQA, and the
-  configured GPU query-suggestion provider.
+- `zai-org/GLM-4.1V-9B-Thinking` only for grounded VQA.
 
 Relevant environment variables are:
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `HCMAI_LLM_CONFIG` | GPU service | YAML path; defaults to `llm/config.yaml` |
-| `HCMAI_CONVERSATION_MODEL` | GPU service | Non-empty checkpoint override |
+| `HCMAI_VQA_MODEL` | GPU service | Non-empty VQA checkpoint override |
 | `HCMAI_ENABLE_CAPTION` | GPU service | Load caption generation model |
 | `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load SigLIP2 visual/query encoder |
 | `HCMAI_ENABLE_CAPTION_EMBEDDING` | GPU service | Load BGE-M3 caption/query encoder |
 | `HCMAI_ENABLE_RERANKER` | GPU service | Load image-query reranker |
-| `HCMAI_ENABLE_CONVERSATION` | GPU service | Load conversation/VQA model |
-| `HCMAI_ENABLE_QUERY_SUGGESTIONS` | GPU service | Enable configured GPU suggestion model |
+| `HCMAI_ENABLE_VQA` | GPU service | Load grounded VQA model |
 | `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted API base URL |
 | `HCMAI_CF_ACCESS_CLIENT_ID` | Local backend | Cloudflare service credential |
 | `HCMAI_CF_ACCESS_CLIENT_SECRET` | Local backend | Cloudflare service credential |
 
-An empty `HCMAI_CONVERSATION_MODEL` does not disable conversation inference; it
-leaves the YAML checkpoint unchanged. Set `HCMAI_ENABLE_CONVERSATION=false` to
-disable it. A null checkpoint while conversation remains enabled is invalid and
-fails model-service startup.
+An empty `HCMAI_VQA_MODEL` leaves the YAML checkpoint unchanged. Set
+`HCMAI_ENABLE_VQA=false` to disable VQA model loading.
 
 Each remote embedding checkpoint, vector dimension, normalization, and dtype
 must remain compatible with its visual or caption FAISS artifact. A different text
@@ -114,9 +106,7 @@ encoder cannot safely query an index created in another embedding space.
 | `POST /v1/captions` | Multipart IDs and images | Caption for each input ID |
 | `POST /v1/embeddings/text` | JSON with 1–64 texts | Normalized text vectors |
 | `POST /v1/rerank` | Multipart query, IDs, and images | Score for each input ID |
-| `POST /v1/conversation/resolve` | Complete bounded KISC context | `ConversationState` |
 | `POST /v1/vqa` | Question, canonical frame, and evidence | Grounded answer bound to the frame |
-| `POST /v1/query-suggestions` | Query and requested count | Bounded alternative queries |
 
 Check a running service:
 
@@ -132,27 +122,6 @@ curl -sS http://127.0.0.1:8100/v1/embeddings/text \
   -H 'Content-Type: application/json' \
   -d '{"texts":["a 60-second timer","a red bus on a city street"]}'
 ```
-
-Resolve one KISC turn:
-
-```bash
-curl -sS http://127.0.0.1:8100/v1/conversation/resolve \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "instruction":"Convert the conversation into structured search state.",
-    "history":[],
-    "current_message":"Find a 60-second timer visual",
-    "feedback":null,
-    "previous_state":null,
-    "response_schema":{}
-  }'
-```
-
-The response must contain all six state fields: `standalone_query`,
-`positive_constraints`, `negative_constraints`, `uncertain_constraints`,
-`accepted_frame_ids`, and `rejected_frame_ids`. The conversation loader uses
-GLM's multimodal processor and text content blocks, then extracts the first
-complete JSON object even when a thinking model emits reasoning before it.
 
 Reranking accepts 1–100 unique item IDs and the same number of image parts.
 Each uploaded image is limited to 5 MB. The client thumbnails candidates to at

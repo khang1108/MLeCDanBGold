@@ -29,7 +29,6 @@ def create_system_router(service_container: dict[str, Any]) -> APIRouter:
                 },
                 "capabilities": {
                     "search": False,
-                    "query_suggestions": {"enabled": False, "provider": None},
                     "frame_assets": False,
                     "query_types": {
                         "kis": False,

@@ -6,18 +6,14 @@ from typing import Any
 
 from hcmai.common.config import InferenceConfig
 from hcmai.llm.config import (
-    HostedConversationConfig,
+    HostedVQAConfig,
     LLMServiceConfig,
-    QuerySuggestionConfig,
-    QuerySuggestionGenerationConfig,
 )
 
 __all__ = [
-    "HostedConversationConfig",
+    "HostedVQAConfig",
     "LLMService",
     "LLMServiceConfig",
-    "QuerySuggestionConfig",
-    "QuerySuggestionGenerationConfig",
 ]
 
 
@@ -56,10 +52,6 @@ class LLMService:
     @property
     def reranker(self) -> Any:
         return self.adapter.reranker
-
-    @property
-    def query_suggester(self) -> Any:
-        return self.adapter.query_suggester
 
     def load(self) -> None:
         method = getattr(self.adapter, "load", None)
@@ -108,15 +100,6 @@ class LLMService:
 
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
-
-    def resolve(self, request: dict[str, Any]) -> Any:
-        method = getattr(self.adapter, "resolve", None)
-        if method is None:
-            method = self.adapter.resolve_conversation
-        return method(request)
-
-    def suggest_queries(self, *args: Any, **kwargs: Any) -> Any:
-        return self.adapter.suggest_queries(*args, **kwargs)
 
     def answer_vqa(self, *args: Any, **kwargs: Any) -> Any:
         return self.adapter.answer_vqa(*args, **kwargs)

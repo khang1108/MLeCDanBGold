@@ -23,9 +23,7 @@ src/hcmai/
 ├── enrichment/               # Caption/OCR EnrichmentService
 ├── transcripts/              # TranscriptService and ASR adapters
 ├── llm/                      # LLMService and local/HTTP adapters
-├── query_suggestions/        # SuggestionService and provider adapters
 ├── submission/               # Optional DRES mini-challenge client
-├── agents/kisc/              # Bounded conversational KIS research code
 └── common/                   # Shared config, schemas, and generic utilities
 ```
 
@@ -52,13 +50,14 @@ scripts and integration code call the owning service.
 Online traffic uses one configured path:
 
 ```text
-FastAPI → SearchService → RetrievalService → optional RerankingService
+FastAPI → SearchService → query embedding → RetrievalService
+        → optional RerankingService
         → canonical response materialization
 ```
 
-KIS and initial VKIS queries use frame retrieval directly. KISC research code
-resolves only context-dependent turns and then calls `SearchService`. VQA and
-TRAKE are recognized but return `501` until their real pipelines exist.
+KIS and VKIS queries use the original operator text directly; online query
+suggestion and conversational resolution are not part of the search path.
+VQA retains its separate grounded multimodal answering path.
 
 Offline research jobs call their owning service directly, for example
 `DataService` for frame preparation, `EmbeddingService` for vector artifacts,

@@ -1,4 +1,4 @@
-"""Transformers adapter for structured conversation and grounded VQA."""
+"""Transformers adapter for grounded VQA over supplied evidence frames."""
 
 from __future__ import annotations
 
@@ -9,25 +9,17 @@ from typing import Any
 from PIL import Image
 
 from hcmai.common.schemas import VQAInferenceEvidence
-from hcmai.llm.config import HostedConversationConfig
+from hcmai.llm.config import HostedVQAConfig
 
-BackendLoader = Callable[[HostedConversationConfig], tuple[Any, Any]]
-_STATE_FIELDS = {
-    "standalone_query",
-    "positive_constraints",
-    "negative_constraints",
-    "uncertain_constraints",
-    "accepted_frame_ids",
-    "rejected_frame_ids",
-}
+BackendLoader = Callable[[HostedVQAConfig], tuple[Any, Any]]
 
 
-class StructuredConversationModel:
-    """Load one causal LLM and return one JSON object per bounded call."""
+class GroundedVQAModel:
+    """Load one multimodal model for bounded, frame-grounded VQA calls."""
 
     def __init__(
         self,
-        config: HostedConversationConfig,
+        config: HostedVQAConfig,
         backend_loader: BackendLoader | None = None,
     ) -> None:
         self.config = config
@@ -43,10 +35,6 @@ class StructuredConversationModel:
         self.revision = self.config.revision or getattr(
             self.model.config, "_commit_hash", None
         )
-
-    def __call__(self, request: dict[str, Any]) -> dict[str, Any]:
-        text = self.generate(self._messages(request))
-        return _conversation_state(text)
 
     def answer_vqa(
         self,
@@ -127,7 +115,7 @@ class StructuredConversationModel:
         """Generate bounded text for one trusted structured prompt."""
         self.load()
         if self.model is None or self.processor is None:
-            raise RuntimeError("conversation checkpoint is not configured")
+            raise RuntimeError("VQA checkpoint is not configured")
         inputs = self.processor.apply_chat_template(
             messages,
             tokenize=True,
@@ -148,35 +136,7 @@ class StructuredConversationModel:
         generated = output[0, inputs["input_ids"].shape[1] :]
         return self.processor.decode(generated, skip_special_tokens=True)
 
-    def _messages(self, request: dict[str, Any]) -> list[dict[str, Any]]:
-        context = {
-            key: request.get(key)
-            for key in (
-                "history",
-                "current_message",
-                "feedback",
-                "previous_state",
-                "response_schema",
-            )
-        }
-        user_text = (
-            json.dumps(context, ensure_ascii=False)
-            + "\nReturn only the complete JSON object. Do not use Markdown."
-        )
-        messages = [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": request["instruction"]}],
-            },
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": user_text}],
-            },
-        ]
-        return messages
-
-
-def _load_backend(config: HostedConversationConfig) -> tuple[Any, Any]:
+def _load_backend(config: HostedVQAConfig) -> tuple[Any, Any]:
     import torch
     from transformers import (
         AutoConfig,
@@ -188,7 +148,7 @@ def _load_backend(config: HostedConversationConfig) -> tuple[Any, Any]:
 
     checkpoint = config.checkpoint
     if checkpoint is None:
-        raise RuntimeError("conversation checkpoint is not configured")
+        raise RuntimeError("VQA checkpoint is not configured")
     dtype = {"bfloat16": torch.bfloat16, "float32": torch.float32}[config.dtype]
     metadata = AutoConfig.from_pretrained(
         checkpoint,
@@ -214,7 +174,7 @@ def _load_backend(config: HostedConversationConfig) -> tuple[Any, Any]:
     return processor, model.eval()
 
 
-def _model_options(config: HostedConversationConfig, dtype: Any) -> dict[str, Any]:
+def _model_options(config: HostedVQAConfig, dtype: Any) -> dict[str, Any]:
     options: dict[str, Any] = {
         "revision": config.revision,
         "torch_dtype": dtype,
@@ -224,20 +184,6 @@ def _model_options(config: HostedConversationConfig, dtype: Any) -> dict[str, An
     if config.device.startswith("cuda"):
         options["device_map"] = "auto"
     return options
-
-
-def _conversation_state(text: str) -> dict[str, Any]:
-    decoder = json.JSONDecoder()
-    for start, character in enumerate(text):
-        if character != "{":
-            continue
-        try:
-            value, _ = decoder.raw_decode(text[start:])
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict) and _STATE_FIELDS <= value.keys():
-            return value
-    raise ValueError("conversation model did not return a complete state object")
 
 
 def _short_answer(text: str) -> str:

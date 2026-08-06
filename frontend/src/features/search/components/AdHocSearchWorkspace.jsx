@@ -1,21 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { fetchQuerySuggestions } from "../../../api/querySuggestions";
 import { searchFrames } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "./GifLoaderOverlay";
 import MiniChallengePanel from "../../minichallenge/components/MiniChallengePanel";
 import { useMiniChallenge } from "../../minichallenge/hooks/useMiniChallenge";
-import QuerySuggestions from "./QuerySuggestions";
 
 const QUERY_PREFIX = /^\/(kis|vkis)\b\s*/i;
 
-// Standalone competition search workspace with query suggestions and frame results.
+// Standalone competition search workspace with frame results.
 const AdHocSearchWorkspace = ({
   topK,
   setTopK,
-  suggestionCount,
-  setSuggestionCount,
   onFrameClick,
   queryInputRef,
   onFocusQueryInput,
@@ -31,55 +27,6 @@ const AdHocSearchWorkspace = ({
   const challenge = useMiniChallenge();
 
   useEffect(() => () => requestRef.current?.abort(), []);
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionError, setSuggestionError] = useState(null);
-  const [isSuggesting, setIsSuggesting] = useState(false);
-  const [suggestionQueryType, setSuggestionQueryType] = useState("kis");
-  const suggestionSequence = useRef(0);
-  const suggestionAbortController = useRef(null);
-
-  useEffect(
-    () => () => suggestionAbortController.current?.abort(),
-    [],
-  );
-
-  const loadSuggestions = useCallback(
-    (searchQuery, requestSequence) => {
-      const controller = new AbortController();
-      suggestionAbortController.current = controller;
-      setIsSuggesting(true);
-
-      fetchQuerySuggestions({
-        query: searchQuery,
-        count: suggestionCount,
-        signal: controller.signal,
-      })
-        .then((response) => {
-          if (suggestionSequence.current !== requestSequence) return;
-          setSuggestions(response.suggestions);
-          setSuggestionError(null);
-        })
-        .catch((requestError) => {
-          if (
-            requestError?.name === "AbortError" ||
-            suggestionSequence.current !== requestSequence
-          ) {
-            return;
-          }
-          setSuggestions([]);
-          setSuggestionError(
-            requestError.message || "Failed to generate query suggestions",
-          );
-        })
-        .finally(() => {
-          if (suggestionSequence.current === requestSequence) {
-            setIsSuggesting(false);
-          }
-        });
-    },
-    [suggestionCount],
-  );
-
   const handleSubmit = useCallback(
     async (event) => {
       event?.preventDefault();
@@ -130,58 +77,9 @@ const AdHocSearchWorkspace = ({
     [isSearching, query, topK],
   );
 
-  const handleSuggest = useCallback(() => {
-    const trimmed = query.trim();
-    if (!trimmed || isSuggesting || isSearching) return;
-
-    const prefixMatch = trimmed.match(QUERY_PREFIX);
-    if (!prefixMatch) {
-      setSuggestions([]);
-      setSuggestionError(
-        "Start your frame query with /kis or /vkis.",
-      );
-      return;
-    }
-
-    const queryType = prefixMatch[1].toLowerCase();
-    const searchQuery = trimmed.slice(prefixMatch[0].length).trim();
-    if (!searchQuery) {
-      setSuggestions([]);
-      setSuggestionError(`Enter a query after /${queryType}.`);
-      return;
-    }
-
-    suggestionAbortController.current?.abort();
-    const requestSequence = suggestionSequence.current + 1;
-    suggestionSequence.current = requestSequence;
-    setSuggestionQueryType(queryType);
-    setSuggestions([]);
-    setSuggestionError(null);
-    loadSuggestions(searchQuery, requestSequence);
-  }, [isSearching, isSuggesting, loadSuggestions, query]);
-  const handleSuggestionSelect = useCallback(
-    (suggestedQuery) => {
-      const trimmed = suggestedQuery.trim();
-      setQuery(
-        QUERY_PREFIX.test(trimmed)
-          ? trimmed
-          : `/${suggestionQueryType} ${trimmed}`,
-      );
-      window.requestAnimationFrame(() => {
-        queryInputRef.current?.focus();
-        queryInputRef.current?.setSelectionRange(
-          queryInputRef.current.value.length,
-          queryInputRef.current.value.length,
-        );
-      });
-    },
-    [queryInputRef, suggestionQueryType],
-  );
-
   const handleResetOptions = useCallback(() => {
     setTopK(20);
-    setSuggestionCount(5);
-  }, [setSuggestionCount, setTopK]);
+  }, [setTopK]);
 
   const handleChallengeSubmit = useCallback((frame) => {
     const taskName = challenge.currentTask?.name;
@@ -223,14 +121,6 @@ const AdHocSearchWorkspace = ({
           />
         </div>
         <button
-          type="button"
-          className="btn-utility query-suggest-btn"
-          disabled={isSearching || isSuggesting || !query.trim()}
-          onClick={handleSuggest}
-        >
-          {isSuggesting ? "Suggesting..." : "Suggest"}
-        </button>
-        <button
           type="submit"
           className="btn-primary query-submit-btn"
           disabled={isSearching || !query.trim()}
@@ -239,21 +129,12 @@ const AdHocSearchWorkspace = ({
         </button>
       </form>
 
-      <QuerySuggestions
-        suggestions={suggestions}
-        isLoading={isSuggesting}
-        error={suggestionError}
-        onSelect={handleSuggestionSelect}
-      />
-
       <div className="adhoc-workspace-body">
         <aside className="adhoc-sidebar">
           <h3 className="adhoc-sidebar-title">Options</h3>
           <ToolBox
             topK={topK}
             setTopK={setTopK}
-            suggestionCount={suggestionCount}
-            setSuggestionCount={setSuggestionCount}
             onReset={handleResetOptions}
           />
           <MiniChallengePanel challenge={challenge} />

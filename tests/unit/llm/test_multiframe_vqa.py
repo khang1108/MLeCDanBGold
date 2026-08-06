@@ -8,8 +8,8 @@ from hcmai.common.schemas import (
     VQAInferenceEvidence,
     VQAMultiFrameInferenceResponse,
 )
-from hcmai.llm.adapters.conversation import StructuredConversationModel
-from hcmai.llm.config import HostedConversationConfig
+from hcmai.llm.adapters.vqa import GroundedVQAModel
+from hcmai.llm.config import HostedVQAConfig
 
 
 class Inputs(dict):
@@ -39,8 +39,8 @@ class Model:
 
 
 def test_multiframe_model_selects_only_from_ordered_supplied_frames():
-    model = StructuredConversationModel(
-        HostedConversationConfig(checkpoint="test/model"),
+    model = GroundedVQAModel(
+        HostedVQAConfig(checkpoint="test/model"),
         backend_loader=lambda _: (Processor(), Model()),
     )
 

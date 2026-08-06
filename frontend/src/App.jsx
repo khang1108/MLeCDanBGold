@@ -14,7 +14,6 @@ import "./styles/vim.css";
 function App() {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [topK, setTopK] = useState(20);
-  const [suggestionCount, setSuggestionCount] = useState(5);
   const queryInputRef = useRef(null);
   const { isHealthy, healthData, isChecking } = useHealthCheck();
   const vim = useVimMode({
@@ -47,8 +46,6 @@ function App() {
         <AdHocSearchWorkspace
           topK={topK}
           setTopK={setTopK}
-          suggestionCount={suggestionCount}
-          setSuggestionCount={setSuggestionCount}
           onFrameClick={setSelectedFrame}
           queryInputRef={queryInputRef}
           onFocusQueryInput={() => vim.setMode("INSERT")}

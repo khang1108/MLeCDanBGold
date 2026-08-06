@@ -84,7 +84,6 @@ def test_search_response_and_health_expose_canonical_observability() -> None:
 
     assert set(response.trace.stages) == {
         "parse",
-        "expansion",
         "visual.encode",
         "visual.search",
         "fusion",

@@ -14,7 +14,6 @@ from hcmai.data.pipeline import DataService
 from hcmai.embedding.pipeline import EmbeddingService
 from hcmai.llm.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.query_suggestions.pipeline import build_query_suggestion_service
 from hcmai.reranking.pipeline import RerankerConfig, RerankingService
 from hcmai.retriever.pipeline import RetrievalService
 
@@ -45,15 +44,11 @@ def load_search_service(messages: list[str]) -> SearchService:
             llm,
             dataset_root=settings.dataset.root,
         )
-    suggestions = build_query_suggestion_service(
-        models.query_suggestions, llm
-    )
     return SearchService(
         data=data,
         retrieval=retrieval,
         reranking=reranking,
         config=settings.search,
-        suggestion_service=suggestions,
         llm=llm,
         vqa_config=settings.vqa,
     )

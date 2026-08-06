@@ -14,8 +14,6 @@ from hcmai.common.config import InferenceConfig
 from hcmai.common.schemas import (
     CaptionResponse,
     InferenceReadiness,
-    QuerySuggestionInferenceRequest,
-    QuerySuggestionResponse,
     RerankResponse,
     TextEmbeddingResponse,
     VQAInferenceEvidence,
@@ -95,35 +93,6 @@ class InferenceClient:
         if [item.item_id for item in response.items] != item_ids:
             raise InferenceClientError("reranker changed item identity or order")
         return [item.score for item in response.items]
-
-    def resolve_conversation(self, request: dict[str, Any]) -> object:
-        return self._post("/v1/conversation/resolve", json=request)
-
-    def suggest_queries(
-        self,
-        request: QuerySuggestionInferenceRequest,
-        endpoint_path: str = "/v1/query-suggestions",
-        timeout_seconds: float | None = None,
-    ) -> QuerySuggestionResponse:
-        deadline_at = (
-            monotonic() + timeout_seconds
-            if timeout_seconds is not None
-            else None
-        )
-        payload = self._post(
-            endpoint_path,
-            json=request.model_dump(mode="json"),
-            deadline_at=deadline_at,
-        )
-        response = _validated(QuerySuggestionResponse, payload)
-        if (
-            response.request_id != request.request_id
-            or response.original_query != request.query
-        ):
-            raise InferenceClientError(
-                "query-suggestion provider changed request identity"
-            )
-        return response
 
     def answer_vqa(
         self,
