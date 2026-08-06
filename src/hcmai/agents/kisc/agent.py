@@ -8,7 +8,7 @@ from hcmai.common.schemas import SearchRequest
 from hcmai.common.schemas.enum import TaskType
 from hcmai.common.schemas.kisc import KISCSearchRequest, KISCSearchResponse
 from hcmai.common.utils.logging import get_logger
-from hcmai.orchestration import SearchEngine
+from hcmai.orchestration.pipeline import SearchService
 
 from .resolver import ConversationResolver
 
@@ -19,10 +19,10 @@ class KISCAgent:
     """Execute one stateless resolve-then-search turn."""
 
     def __init__(
-        self, resolver: ConversationResolver, search_engine: SearchEngine
+        self, resolver: ConversationResolver, search_service: SearchService
     ) -> None:
         self.resolver = resolver
-        self.search_engine = search_engine
+        self.search_service = search_service
 
     def search(self, request: KISCSearchRequest) -> KISCSearchResponse:
         """Resolve context once, search once, and apply explicit feedback."""
@@ -50,7 +50,7 @@ class KISCAgent:
             len(state.uncertain_constraints),
         )
         logger.info("KISC frame search started")
-        response = self.search_engine.search(
+        response = self.search_service.search(
             SearchRequest(
                 query=state.standalone_query,
                 query_type=TaskType.KISC,

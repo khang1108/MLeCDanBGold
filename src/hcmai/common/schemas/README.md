@@ -29,6 +29,8 @@ that feature package. In particular, caption/OCR types belong under
 - `QueryLanguage`: query language: Vietnamese (`vi`), English (`en`), or
   mixed (`mixed`).
 - `TaskType`: frontend query type: `kis`, `kisc`, `vkis`, `vqa`, or `trake`.
+- `ExecutionProfile`: bounded task profile: `fast`, `balanced`, `accurate`, or
+  `competition_anytime`.
 - `QueryDifficulty`: evaluation difficulty: `easy`, `medium`, or `hard`.
 
 ### `frame.py`
@@ -53,6 +55,17 @@ that feature package. In particular, caption/OCR types belong under
   optional metadata. Source ranks must be positive one-based integers.
 - `SearchScores`: scores exposed for a returned frame, including visual,
   caption, OCR, ASR, fusion, reranker, and final scores.
+- `RetrievalResult`: one request-owned candidate list, retrieval trace, and
+  warning list. Sequence access remains available for compatibility, while
+  production callers consume `.candidates` and `.trace` explicitly.
+
+### `telemetry.py`
+
+- `StageTrace`: one stage's monotonic start/end, duration, status, attempt
+  count, cache state, and optional error category.
+- `PipelineTrace`: uniquely named stages with deterministic merge and duration
+  aggregation helpers.
+- `RetrievalTrace`: request-scoped retrieval specialization of `PipelineTrace`.
 
 ### `search.py`
 
@@ -82,11 +95,24 @@ that feature package. In particular, caption/OCR types belong under
 
 ### `vqa.py`
 
-- `VQARequest`: canonical frame ID and one bounded natural-language question.
-- `VQAEvidence`: optional caption, OCR, ASR, and object evidence supplied to a
-  VQA provider.
-- `VQAResponse`: identity-preserving answer, grounding flag, provider name,
-  latency, evidence, and warnings.
+- `VQARequest`: competition event description, question, Top-k, optional
+  filters, language hint, and execution profile.
+- `VQASubmission`: ranked canonical video/frame/answer row with retrieval,
+  grounding, answer, and joint scores.
+- `VQAResponse`: bounded ranked competition submissions.
+- `VQAInferenceRequest`, `VQAInferenceEvidence`, and `VQAInferenceResponse`:
+  explicitly provider-scoped one-frame inference contracts.
+
+### `trake.py`
+
+- `TRAKERequest`: raw query and optional caller-supplied ordered events.
+- `TRAKESubmission`: one same-video canonical frame mapping per ordered event.
+- `TRAKEResponse`: bounded ranked temporal-alignment submissions.
+
+### `task.py`
+
+- `TaskRequest` and `TaskResponse`: discriminated KIS/VKIS, VQA, and TRAKE
+  unions for internal task routing and typed API adapters.
 
 ### `evaluation.py`
 

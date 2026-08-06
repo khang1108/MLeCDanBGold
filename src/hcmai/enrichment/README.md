@@ -1,91 +1,72 @@
 # Frame enrichment
 
-`hcmai.enrichment` contains offline, resumable features that add searchable
-evidence to canonical frame records. Each feature owns its configuration,
-models, backend boundary, artifact handling, and pipeline.
-
-## Structure
+`hcmai.enrichment` owns offline, resumable caption and OCR generation for
+canonical frames. External callers use `EnrichmentService`; each feature keeps
+its contracts/entities in `models/` and framework-specific model code in
+`adapters/`.
 
 ```text
 enrichment/
+├── pipeline.py                         # EnrichmentService public facade
 ├── caption/
-│   ├── config.py       # CaptionConfig and YAML-backed CaptionJobConfig
-│   ├── backend.py      # Lazy Florence caption model
-│   ├── artifacts.py    # Resume validation and atomic artifacts
-│   ├── resume.py       # Prior-row and manifest compatibility
-│   ├── runner.py       # Image loading and caption batches
-│   ├── report.py       # Reproducibility manifest
-│   ├── pipeline.py     # Caption orchestration and CLI
-│   └── __main__.py     # python -m entry point
+│   ├── generator.py                    # Caption job orchestration
+│   ├── models/contracts.py             # Caption adapter contract
+│   ├── adapters/{transformers,remote}.py
+│   └── artifacts/config/report/resume/runner.py
 └── ocr/
-    ├── config.py       # OCRConfig
-    ├── models.py       # OCRResult and OCR-local row types
-    ├── protocols.py    # OCRBackend boundary
-    ├── backend.py      # Lazy Florence OCR model
-    ├── artifacts.py    # Validation and artifact writes
-    ├── report.py       # OCR run report
-    └── pipeline.py     # Resume and batch orchestration
+    ├── generator.py                    # OCR job orchestration
+    ├── models/{contracts,entities}.py  # OCR contract and results
+    ├── adapters/florence.py
+    └── artifacts/config/report.py
 ```
 
-Caption and OCR types stay in their respective packages unless another
-feature consumes the same contract. Cross-feature output is validated with
-the shared `hcmai.common.schemas.FrameEnrichment` contract.
+## Public service
 
-## Caption job
+```python
+from hcmai.enrichment.pipeline import EnrichmentService
+
+caption_report = EnrichmentService.generate_captions(
+    frames_path,
+    output_dir,
+    caption_config,
+    dataset_root=dataset_root,
+)
+ocr_report = EnrichmentService.generate_ocr(
+    frames_path,
+    output_dir,
+    ocr_config,
+    dataset_root=dataset_root,
+)
+```
+
+Production scripts call this service boundary. Tests may inject fake caption or
+OCR adapters; production callers do not import feature adapters or generators
+directly.
 
 Caption settings are read from
-[`configs/enrichment.yaml`](../../../configs/enrichment.yaml). Relative dataset
-and output paths are resolved from the repository root.
+[`configs/enrichment.yaml`](../../../configs/enrichment.yaml). The existing
+entry points remain:
 
 ```bash
 PYTHONPATH=src aic/bin/python -m hcmai.enrichment.caption
-```
-
-The equivalent thin script is:
-
-```bash
 PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py
 ```
 
-Both accept `--config`, `--frames`, `--dataset-root`, and `--output`
-overrides. The job writes:
+Jobs write `frame_enrichment.parquet`, `manifest.json`, and `failures.json`.
+Compatible completed rows are skipped; failed, incomplete, or malformed rows
+are retried. Caption and OCR artifacts join on the exact canonical `frame_id`
+and never rewrite `video_id` or `frame_idx`.
 
-```text
-frame_enrichment.parquet
-manifest.json
-failures.json
-```
-
-Completed rows with a compatible manifest are skipped. Failed, incomplete,
-or malformed rows are retried without changing canonical `frame_id`,
-`video_id`, or `frame_idx` values.
-
-## OCR job
-
-`generate_ocr` accepts an `OCRConfig`, a frame Parquet path, an artifact
-directory, and an optional injected `OCRBackend`. Model loading is lazy and
-tests use fake backends; tests must not download a checkpoint.
-
-OCR writes the same shared enrichment table format plus its own manifest,
-failure list, and report. Join caption and OCR artifacts on `frame_id`.
-
-## Dependency direction
-
-```text
-caption ─┐
-         ├──> common.schemas.FrameEnrichment
-ocr ─────┘
-```
-
-`common` must not import from `enrichment`. Feature-specific configs, backend
-protocols, intermediate results, and report types remain inside the owning
-feature.
+Feature-local configuration, adapter contracts, intermediate entities, and
+reports stay inside the owning feature. Cross-feature output uses the shared
+`hcmai.common.schemas.FrameEnrichment` contract, and `common` never imports
+from enrichment.
 
 ## Verification
 
 ```bash
 PYTHONPATH=src aic/bin/pytest tests/test_caption.py tests/test_ocr.py tests/test_config.py
+pyright src/hcmai/enrichment
 ```
 
-Real corpus runs and generated artifacts are local evidence and must not be
-committed.
+Real-corpus artifacts are local experiment evidence and must not be committed.

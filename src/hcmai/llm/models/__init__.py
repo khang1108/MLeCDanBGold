@@ -1,5 +1,3 @@
-"""Model wrappers used by the private inference service."""
+"""Contracts and entities used by the private inference service."""
 
-from .conversation import StructuredConversationModel
-
-__all__ = ["StructuredConversationModel"]
+__all__: list[str] = []

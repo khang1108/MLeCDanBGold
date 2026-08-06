@@ -89,8 +89,20 @@ class ModelStatus(ContractModel):
     revision: str | None = None
 
 
+class InferenceCapabilities(ContractModel):
+    """Feature-level readiness advertised by one inference deployment."""
+
+    embedding: bool = False
+    reranking: bool = False
+    multi_image_vqa: bool = False
+    structured_parsing: bool = False
+
+
 class InferenceReadiness(ContractModel):
     """Readiness snapshot for all configured inference capabilities."""
 
     ready: bool
     models: dict[str, ModelStatus]
+    capabilities: InferenceCapabilities = Field(
+        default_factory=InferenceCapabilities
+    )

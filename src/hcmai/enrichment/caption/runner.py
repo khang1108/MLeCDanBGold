@@ -11,7 +11,7 @@ from tqdm.auto import tqdm
 from hcmai.common.schemas import FrameEnrichment, ProcessingStatus
 from hcmai.common.utils.image import load_image
 from hcmai.enrichment.caption.artifacts import write_caption_artifacts
-from hcmai.enrichment.caption.backend import CaptionBackend
+from hcmai.enrichment.caption.models.contracts import CaptionAdapter
 from hcmai.enrichment.caption.config import CaptionConfig, ENRICHMENT_VERSION
 
 
@@ -43,7 +43,7 @@ def run_batches(
     order: list[str],
     rows: dict[str, FrameEnrichment],
     failures: dict[str, dict[str, str]],
-    captioner: CaptionBackend,
+    captioner: CaptionAdapter,
     config: CaptionConfig,
     output: Path,
     root: Path,

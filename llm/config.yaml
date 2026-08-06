@@ -34,7 +34,7 @@ reranker:
   revision: null
   device: "cuda"
   dtype: "bfloat16"
-  batch_size: 1
+  batch_size: 16
   max_length: 1024
   max_pixels: 262144
 
@@ -66,7 +66,7 @@ query_suggestions:
     timeout_seconds: 10.0
 
   openai_compatible:
-    base_url: "https://api.example.com/v1"
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
     api_key_env: "HCMAI_QUERY_SUGGESTION_API_KEY"
-    model: "configure-when-active"
+    model: "gemini-2.5-flash"
     timeout_seconds: 10.0

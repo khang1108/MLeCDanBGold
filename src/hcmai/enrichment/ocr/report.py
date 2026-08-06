@@ -11,7 +11,7 @@ from typing import Any
 from hcmai.common.schemas import FrameEnrichment, ProcessingStatus
 
 from .config import OCRConfig
-from .models import Evidence, FailureDetail
+from .models.entities import Evidence, FailureDetail
 
 
 def build_ocr_report(

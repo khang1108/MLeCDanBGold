@@ -17,15 +17,17 @@ React UI
    ▼
 Local FastAPI ── KISC / retrieval / frame materialization
    │
-   │ InferenceClient + optional Cloudflare Access headers
+   │ LLMService + HTTP adapter + optional Cloudflare Access headers
    ▼
 api.iamphuckhang.dev ── Cloudflare Tunnel ── localhost:8100 on GPU VM
                                                    │
                                                    ▼
-                                  FastAPI API → LLMRuntime
-                                                ├─ SigLIP2 text encoder
+                                  FastAPI API → LLMService
+                                                ├─ SigLIP2/BGE encoders
+                                                ├─ Florence captioner
                                                 ├─ Qwen VL reranker
-                                                └─ GLM conversation resolver
+                                                └─ GLM conversation, VQA,
+                                                   and query suggestions
 ```
 
 The browser never calls the GPU service directly. This keeps Cloudflare
@@ -36,12 +38,13 @@ corpus to a disposable VM.
 
 | File | Responsibility |
 | --- | --- |
-| `service/api.py` | Private FastAPI endpoints, request limits, error translation |
-| `service/runtime.py` | Single-process ownership and lifecycle of hosted models |
-| `client/inference.py` | Local synchronous client and remote model adapters |
+| `pipeline.py` | Public `LLMService` lifecycle and inference facade |
+| `server/api.py` | Private FastAPI endpoints, request limits, error translation |
+| `adapters/local.py` | Single-process ownership and lifecycle of hosted models |
+| `adapters/http.py` | Bounded synchronous client for remote inference |
+| `adapters/conversation.py` | Structured conversation model and JSON extraction |
 | `config.py` | Typed model and service configuration loaded from YAML |
-| `models/conversation.py` | Structured conversation inference and JSON extraction |
-| `__init__.py` | Public client exports used by the local backend |
+| `models/contracts.py` | Adapter-facing data contracts only |
 
 The authoritative request and response models are in
 [`common/schemas/inference.py`](../common/schemas/inference.py), while KISC
@@ -52,8 +55,9 @@ conversation state is defined in
 
 Importing this package does not load model weights. In production:
 
-1. `LLMRuntime.from_environment()` reads `llm/config.yaml`.
-2. The FastAPI lifespan calls `runtime.load()` once.
+1. `LLMService.from_environment()` reads `llm/config.yaml` through its local
+   adapter.
+2. The FastAPI lifespan calls `service.load()` once.
 3. Only enabled model groups stay in memory.
 4. Every request reuses those instances.
 
@@ -61,8 +65,9 @@ Run exactly one Uvicorn worker. Additional workers duplicate all model weights
 in GPU memory.
 
 `GET /health` only proves that the HTTP process responds. `GET /ready` verifies
-that every required model is loaded and returns checkpoint provenance.
-Conversation inference is optional when `conversation.checkpoint` is `null`.
+that every enabled model is loaded and returns checkpoint provenance.
+Conversation inference is optional only when
+`HCMAI_ENABLE_CONVERSATION=false`.
 
 ## Configuration
 
@@ -70,8 +75,10 @@ The checked-in [`llm/config.yaml`](../../../llm/config.yaml) configures:
 
 - `google/siglip2-base-patch16-224` for visual-query embeddings;
 - `BAAI/bge-m3` for multilingual caption/query dense embeddings;
+- Florence for caption generation;
 - `Qwen/Qwen3-VL-Reranker-2B` for image-query reranking;
-- `zai-org/GLM-4.1V-9B-Thinking` for KISC state resolution.
+- `zai-org/GLM-4.1V-9B-Thinking` for KISC state resolution, VQA, and the
+  configured GPU query-suggestion provider.
 
 Relevant environment variables are:
 
@@ -79,15 +86,20 @@ Relevant environment variables are:
 | --- | --- | --- |
 | `HCMAI_LLM_CONFIG` | GPU service | YAML path; defaults to `llm/config.yaml` |
 | `HCMAI_CONVERSATION_MODEL` | GPU service | Non-empty checkpoint override |
+| `HCMAI_ENABLE_CAPTION` | GPU service | Load caption generation model |
 | `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load SigLIP2 visual/query encoder |
 | `HCMAI_ENABLE_CAPTION_EMBEDDING` | GPU service | Load BGE-M3 caption/query encoder |
+| `HCMAI_ENABLE_RERANKER` | GPU service | Load image-query reranker |
+| `HCMAI_ENABLE_CONVERSATION` | GPU service | Load conversation/VQA model |
+| `HCMAI_ENABLE_QUERY_SUGGESTIONS` | GPU service | Enable configured GPU suggestion model |
 | `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted API base URL |
 | `HCMAI_CF_ACCESS_CLIENT_ID` | Local backend | Cloudflare service credential |
 | `HCMAI_CF_ACCESS_CLIENT_SECRET` | Local backend | Cloudflare service credential |
 
 An empty `HCMAI_CONVERSATION_MODEL` does not disable conversation inference; it
-leaves the YAML checkpoint unchanged. Set `conversation.checkpoint: null` in
-the YAML to disable it explicitly.
+leaves the YAML checkpoint unchanged. Set `HCMAI_ENABLE_CONVERSATION=false` to
+disable it. A null checkpoint while conversation remains enabled is invalid and
+fails model-service startup.
 
 Each remote embedding checkpoint, vector dimension, normalization, and dtype
 must remain compatible with its visual or caption FAISS artifact. A different text
@@ -99,9 +111,12 @@ encoder cannot safely query an index created in another embedding space.
 | --- | --- | --- |
 | `GET /health` | None | Process liveness |
 | `GET /ready` | None | Per-model readiness and provenance |
+| `POST /v1/captions` | Multipart IDs and images | Caption for each input ID |
 | `POST /v1/embeddings/text` | JSON with 1–64 texts | Normalized text vectors |
 | `POST /v1/rerank` | Multipart query, IDs, and images | Score for each input ID |
 | `POST /v1/conversation/resolve` | Complete bounded KISC context | `ConversationState` |
+| `POST /v1/vqa` | Question, canonical frame, and evidence | Grounded answer bound to the frame |
+| `POST /v1/query-suggestions` | Query and requested count | Bounded alternative queries |
 
 Check a running service:
 
@@ -160,13 +175,18 @@ start the service from the repository root:
 aic/bin/python -m pip install -e ".[embedding,dev]"
 
 HCMAI_LLM_CONFIG=llm/config.yaml \
-PYTHONPATH=src aic/bin/python -m uvicorn hcmai.llm.service.api:app \
+PYTHONPATH=src aic/bin/python -m uvicorn hcmai.llm.server.api:app \
   --host 127.0.0.1 --port 8100 --workers 1
 ```
 
 The first production start downloads the configured checkpoints. Unit tests
 inject fake runtimes and model backends, so they never download checkpoints or
 load the real corpus.
+
+Code outside `hcmai.llm` imports only `LLMService` and configuration contracts
+from `hcmai.llm.pipeline`. It must not import `server/`, `adapters/`, or
+`models/` directly. The private server is the intentional exception because it
+is the transport entry point owned by this component.
 
 ## Pipeline behavior
 

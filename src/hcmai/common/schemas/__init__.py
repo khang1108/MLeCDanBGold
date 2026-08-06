@@ -14,6 +14,7 @@ from .inference import (
     CaptionItem,
     CaptionResponse,
     ConversationInferenceRequest,
+    InferenceCapabilities,
     InferenceReadiness,
     ModelStatus,
     RerankItem,
@@ -21,7 +22,7 @@ from .inference import (
     TextEmbeddingRequest,
     TextEmbeddingResponse,
 )
-from .retrieval import RetrievalCandidate, SearchScores
+from .retrieval import RetrievalCandidate, RetrievalResult, SearchScores
 from .query_suggestion import (
     QuerySuggestion,
     QuerySuggestionInferenceRequest,
@@ -35,8 +36,18 @@ from .search import (
     SearchResponse,
     SearchResult,
 )
+from .task import TaskRequest, TaskResponse
+from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
+from .trake import TRAKERequest, TRAKEResponse, TRAKESubmission
 from .transcript import TranscriptSegment
-from .vqa import VQAEvidence, VQARequest, VQAResponse
+from .vqa import (
+    VQAInferenceEvidence,
+    VQAInferenceRequest,
+    VQAInferenceResponse,
+    VQARequest,
+    VQAResponse,
+    VQASubmission,
+)
 
 # Backward-compatible names used by the earlier frontend/backend contract.
 # They intentionally point at the canonical search models instead of creating
@@ -51,9 +62,15 @@ __all__ = [
     "RetrievalSource",
     "QueryLanguage",
     "TaskType",
+    "ExecutionProfile",
     "QueryDifficulty",
     "SearchScores",
     "RetrievalCandidate",
+    "RetrievalResult",
+    "StageStatus",
+    "StageTrace",
+    "PipelineTrace",
+    "RetrievalTrace",
     "QuerySuggestion",
     "QuerySuggestionInferenceRequest",
     "QuerySuggestionRequest",
@@ -78,14 +95,23 @@ __all__ = [
     "ConversationInferenceRequest",
     "CaptionItem",
     "CaptionResponse",
+    "InferenceCapabilities",
     "InferenceReadiness",
     "ModelStatus",
     "RerankItem",
     "RerankResponse",
     "TextEmbeddingRequest",
     "TextEmbeddingResponse",
-    "VQAEvidence",
+    "VQAInferenceEvidence",
+    "VQAInferenceRequest",
+    "VQAInferenceResponse",
     "VQARequest",
     "VQAResponse",
+    "VQASubmission",
+    "TRAKERequest",
+    "TRAKEResponse",
+    "TRAKESubmission",
+    "TaskRequest",
+    "TaskResponse",
     "TranscriptSegment",
 ]

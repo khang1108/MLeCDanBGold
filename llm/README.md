@@ -11,6 +11,7 @@ FAISS index, mappings, embeddings, or frontend.
 - `POST /v1/embeddings/text`
 - `POST /v1/rerank` (multipart JPEG candidates)
 - `POST /v1/conversation/resolve`
+- `POST /v1/vqa` (one canonical frame plus optional evidence)
 - `POST /v1/query-suggestions`
 
 The public backend exposes `POST /api/v1/query-suggestions`. Its active
@@ -24,7 +25,7 @@ Run locally with one worker so model memory is not duplicated:
 
 ```bash
 HCMAI_LLM_CONFIG=llm/config.yaml \
-PYTHONPATH=src aic/bin/uvicorn hcmai.llm.service.api:app \
+PYTHONPATH=src aic/bin/uvicorn hcmai.llm.server.api:app \
   --host 127.0.0.1 --port 8100 --workers 1
 ```
 
@@ -65,6 +66,13 @@ Available flags are `--caption`, `--visual-embedding`,
 BGE-M3. Disabled models are not constructed, downloaded, or loaded into VRAM.
 Use `--help` to print the current options.
 
+Query suggestions are controlled at runtime by
+`HCMAI_ENABLE_QUERY_SUGGESTIONS`; the current private bootstrap has no separate
+CLI flag for it. When its configured checkpoint matches the enabled
+conversation model, the process reuses that model; otherwise it owns a
+separate model instance. Record this explicitly in the private bootstrap before
+estimating VRAM.
+
 The bootstrap clones the configured repository and branch into
 `/opt/hcmai/repo`, installs all required packages, downloads model checkpoints,
 starts the model API and tunnel, and verifies both processes. No manual clone,
@@ -98,8 +106,9 @@ Cloudflare Access Service Auth policy. The local HCMAI backend supplies
 The pinned conversation checkpoint in `llm/config.yaml` is used when
 `HCMAI_CONVERSATION_MODEL` is empty. Set that variable in the private bootstrap
 only to override the checkpoint. To disable hosted conversation inference, set
-`conversation.checkpoint` to `null`; KISC will then use its deterministic
-fallback.
+`HCMAI_ENABLE_CONVERSATION=false`; a null checkpoint with conversation enabled
+fails startup. The current online path does not silently replace a failed
+conversation request with another model.
 
 GLM-4.1V-9B-Thinking is loaded through its official multimodal processor and
 conditional-generation class. BF16 weights require substantial VRAM alongside
@@ -137,7 +146,8 @@ sudo supervisorctl restart hcmai-llm hcmai-cloudflared
 
 The React UI continues to call `http://127.0.0.1:8000`. On the data machine,
 export the values shown in the repository `.env.example` before starting
-`hcmai.app`; only that backend calls `https://api.iamphuckhang.dev`. If the
-remote encoder is unavailable, configuration permits the existing local encoder
-fallback. Reranker failures preserve dense order, and conversation failures use
-the existing deterministic KISC fallback.
+`hcmai.app`; only that backend calls `https://api.iamphuckhang.dev`. Missing or
+incompatible artifacts may leave the backend up in a degraded, not-ready state
+reported by `/health`. Once a remote-backed query starts, encoder, reranker,
+and conversation failures propagate; the service does not silently switch
+models or preserve an older ranking.

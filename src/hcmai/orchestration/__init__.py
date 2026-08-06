@@ -1,5 +1,1 @@
-"""Online retrieval orchestration."""
-
-from .search import SearchEngine
-
-__all__ = ["SearchEngine"]
+"""Search orchestration component; import its public API from ``pipeline``."""

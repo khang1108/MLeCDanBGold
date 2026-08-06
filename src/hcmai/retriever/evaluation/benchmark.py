@@ -11,7 +11,7 @@ from hcmai.common.schemas.evaluation import EvaluationQuery
 from hcmai.common.utils.io import write_json, write_yaml
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retriever.dense import DenseRetriever
+from hcmai.retriever.pipeline import RetrievalService
 from hcmai.common.config import RECALL_CUTOFFS, BenchmarkConfig
 
 logger = get_logger(__name__)
@@ -26,7 +26,7 @@ class RetrievalBenchmark:
 
     def __init__(
         self,
-        retriever: DenseRetriever,
+        retriever: RetrievalService,
         queries: list[EvaluationQuery],
         output_dir: Path | str,
         *,
@@ -47,7 +47,7 @@ class RetrievalBenchmark:
             ``metrics.json``.
         """
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        metadata = self.retriever.index.metadata
+        metadata = self.retriever.index_metadata
 
         # Reset GPU peak memory tracking so the reported figure reflects only
         # this benchmark run; ignored when CUDA is unavailable.
@@ -65,7 +65,8 @@ class RetrievalBenchmark:
 
         for query in self.queries:
             timer = Timer()
-            candidates = self.retriever.search(query.query, top_k=self.top_k)
+            result = self.retriever.search(query.query, top_k=self.top_k)
+            candidates = result.candidates
             total_ms = timer.stop()
             latencies_ms.append(total_ms)
 
@@ -108,8 +109,10 @@ class RetrievalBenchmark:
                     "task_type": query.task_type.value,
                     "difficulty": query.difficulty.value,
                     "first_gold_rank": first_gold_rank,
-                    "query_encoding_ms": self.retriever.last_query_encoding_ms,
-                    "index_search_ms": self.retriever.last_index_search_ms,
+                    "query_encoding_ms": result.trace.duration_for(
+                        "query_encoding"
+                    ),
+                    "index_search_ms": result.trace.duration_for("index_search"),
                     "total_ms": total_ms,
                     **{f"recall@{k}": recalls[k] for k in RECALL_CUTOFFS},
                 }
@@ -158,8 +161,12 @@ class RetrievalBenchmark:
         )
         write_yaml(config.__dict__, self.output_dir / "config.yaml")
         write_json(metrics, self.output_dir / "metrics.json")
-        pd.DataFrame(per_query_rows).to_csv(self.output_dir / "per_query.csv", index=False)
-        pd.DataFrame(failure_rows).to_csv(self.output_dir / "failures.csv", index=False)
+        pd.DataFrame(per_query_rows).to_csv(
+            self.output_dir / "per_query.csv", index=False
+        )
+        pd.DataFrame(failure_rows).to_csv(
+            self.output_dir / "failures.csv", index=False
+        )
 
         logger.info(
             f"Benchmark '{self.run_name}': "
