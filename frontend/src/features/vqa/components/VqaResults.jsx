@@ -5,7 +5,7 @@ const VqaResults = ({ submissions, warnings, latencyMs, error, hasSearched }) =>
     {error && (
       <div className="error-alert" role="alert">
         <div className="error-details">
-          <h4 className="error-title">VQA Request Error</h4>
+          <h4 className="error-title">Search Request Error</h4>
           <p className="error-message">{error}</p>
         </div>
       </div>
@@ -57,10 +57,10 @@ const VqaResults = ({ submissions, warnings, latencyMs, error, hasSearched }) =>
     {!error && submissions.length === 0 && (
       <div className="frames-empty-state">
         <p className="body-md frames-empty-text">
-          {hasSearched ? "No grounded answers found" : "Competition VQA"}
+          {hasSearched ? "No grounded answers found" : "Competition Search"}
         </p>
         <p className="caption frames-empty-subtext">
-          Describe the event and ask a question to retrieve grounded answers.
+          Use /kis or /trake for retrieval, or add a question for grounded QA.
         </p>
       </div>
     )}

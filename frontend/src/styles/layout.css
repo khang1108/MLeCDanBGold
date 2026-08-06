@@ -33,34 +33,6 @@
   margin: 0;
 }
 
-.task-navigation {
-  display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  background: var(--color-canvas-soft);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--rounded-md);
-}
-
-.task-navigation-link {
-  padding: 6px 14px;
-  color: var(--color-ink-muted);
-  border-radius: calc(var(--rounded-md) - 2px);
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.task-navigation-link:hover {
-  color: var(--color-ink);
-}
-
-.task-navigation-link.active {
-  color: var(--color-primary);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-level-1);
-}
-
 /* Health Check Badge Styles */
 .health-badge {
   display: inline-flex;
@@ -242,6 +214,12 @@
 
 .vqa-query-form .query-input-field {
   padding-left: 14px;
+}
+
+.vqa-query-hint {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: 12px;
 }
 
 .vqa-submission-list {
