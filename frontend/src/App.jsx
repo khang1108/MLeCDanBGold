@@ -7,7 +7,6 @@ import { useVimMode } from "./features/vim/hooks/useVimMode";
 import VimModeBadge from "./features/vim/components/VimModeBadge";
 import TopKPromptModal from "./features/vim/components/TopKPromptModal";
 import VimHelpModal from "./features/vim/components/VimHelpModal";
-import VqaSearchWorkspace from "./features/vqa/components/VqaSearchWorkspace";
 import "./styles/gif-loader.css";
 import "./styles/vim.css";
 

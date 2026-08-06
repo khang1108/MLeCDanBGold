@@ -37,13 +37,13 @@ test('clicking Search sends KIS request and renders retrieved frame', async () =
       onFrameClick={jest.fn()}
     />,
   );
-  fireEvent.change(screen.getByPlaceholderText(/Search frames/), {
-    target: { value: 'red boat' },
+  fireEvent.change(screen.getByPlaceholderText(/Start with/), {
+    target: { value: '/kis red boat' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
-    expect.objectContaining({ query: 'red boat', topK: 100 }),
+    expect.objectContaining({ query: 'red boat', topK: 100, queryType: 'kis' }),
   ));
   expect(await screen.findByText(/video-1 · frame 42/)).toBeTruthy();
   expect(screen.getAllByText('A red boat')).toHaveLength(2);

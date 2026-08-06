@@ -8,7 +8,7 @@ import MiniChallengePanel from "../../minichallenge/components/MiniChallengePane
 import { useMiniChallenge } from "../../minichallenge/hooks/useMiniChallenge";
 import QuerySuggestions from "./QuerySuggestions";
 
-const QUERY_PREFIX = /^\/(kis|kisc|vkis|vqa|trake)\b\s*/i;
+const QUERY_PREFIX = /^\/(kis|vkis)\b\s*/i;
 
 // Standalone competition search workspace with query suggestions and frame results.
 const AdHocSearchWorkspace = ({
@@ -89,7 +89,7 @@ const AdHocSearchWorkspace = ({
       const prefixMatch = trimmed.match(QUERY_PREFIX);
       if (!prefixMatch) {
         setError(
-          "Start your query with /kis, /kisc, /vkis, /vqa, or /trake.",
+          "Start your frame query with /kis or /vkis.",
         );
         return;
       }
@@ -101,6 +101,9 @@ const AdHocSearchWorkspace = ({
         return;
       }
 
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
       setIsSearching(true);
       setError(null);
 
@@ -109,11 +112,13 @@ const AdHocSearchWorkspace = ({
           query: searchQuery,
           topK,
           queryType,
+          signal: controller.signal,
         });
         setResults(response.results || []);
         setWarnings(response.warnings || []);
         setLatencyMs(response.latency_ms || null);
       } catch (requestError) {
+        if (requestError?.name === "AbortError") return;
         setError(requestError.message || "Failed to contact search API");
       } finally {
         if (requestRef.current === controller) {
@@ -133,7 +138,7 @@ const AdHocSearchWorkspace = ({
     if (!prefixMatch) {
       setSuggestions([]);
       setSuggestionError(
-        "Start your query with /kis, /kisc, /vkis, /vqa, or /trake.",
+        "Start your frame query with /kis or /vkis.",
       );
       return;
     }
@@ -209,7 +214,7 @@ const AdHocSearchWorkspace = ({
             ref={queryInputRef}
             type="text"
             className="input-text query-input-field"
-            placeholder="Start with /kis, /kisc, /vkis, /vqa, or /trake"
+            placeholder="Start with /kis or /vkis"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onFocus={onFocusQueryInput}
