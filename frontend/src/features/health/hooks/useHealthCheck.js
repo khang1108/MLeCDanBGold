@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getHealth } from '../../../api/health';
 
-const HEALTH_CHECK_INTERVAL_MS = 30000;
-
 export const useHealthCheck = () => {
   const [isHealthy, setIsHealthy] = useState(null);
   const [healthData, setHealthData] = useState(null);
@@ -37,13 +35,8 @@ export const useHealthCheck = () => {
     isMountedRef.current = true;
     checkHealth();
 
-    const timer = setInterval(() => {
-      checkHealth();
-    }, HEALTH_CHECK_INTERVAL_MS);
-
     return () => {
       isMountedRef.current = false;
-      clearInterval(timer);
     };
   }, [checkHealth]);
 
