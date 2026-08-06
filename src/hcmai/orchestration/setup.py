@@ -132,55 +132,111 @@ def _load_retrieval(
         visual_encoder = _query_encoder(
             models.visual_embedding, visual, llm, "visual"
         )
-        paths = {
-            RetrievalSource.CAPTION: Path(os.getenv(
-                "HCMAI_CAPTION_INDEX_PATH", str(settings.index.caption_path)
-            )),
-            RetrievalSource.OCR: Path(os.getenv(
-                "HCMAI_OCR_INDEX_PATH", str(settings.index.ocr_path)
-            )),
-            RetrievalSource.ASR: Path(os.getenv(
-                "HCMAI_ASR_INDEX_PATH", str(settings.index.asr_path)
-            )),
-        }
-        text_indexes = {}
-        for source, path in paths.items():
-            if not path.is_dir():
-                if source in settings.search.fusion.required_sources:
-                    raise FileNotFoundError(
-                        f"Required {source.value} index not available at {path}"
-                    )
-                messages.append(
-                    f"{source.value.upper()} index not available at {path}"
-                )
-                continue
-            text_indexes[source] = RetrievalService.load_index(
-                path,
-                subset_search_threshold=settings.index.subset_search_threshold,
-            )
-        if any(
-            index.metadata.dataset_version != visual.metadata.dataset_version
-            for index in text_indexes.values()
-        ):
-            raise ValueError("visual and text index dataset versions differ")
-        if not text_indexes:
-            return RetrievalService.from_index(
-                visual,
-                visual_encoder,
-                cache_config=settings.search.cache,
-            )
-        sample = next(iter(text_indexes.values()))
-        text_encoder = _query_encoder(models.caption_embedding, sample, llm, "text")
+    except Exception as error:
+        messages.append(
+            f"Could not load required visual index {index_dir}: "
+            f"{type(error).__name__}: {error}"
+        )
+        return None
+    text_indexes = _load_text_indexes(
+        settings,
+        visual,
+        models.caption_embedding.model_name,
+        messages,
+    )
+    if text_indexes is None:
+        return None
+    if not text_indexes:
+        return RetrievalService.from_index(
+            visual,
+            visual_encoder,
+            cache_config=settings.search.cache,
+        )
+    sample = next(iter(text_indexes.values()))
+    try:
+        text_encoder = _query_encoder(
+            models.caption_embedding,
+            sample,
+            llm,
+            "text",
+        )
         return RetrievalService.from_indexes(
-            visual, visual_encoder, text_indexes, text_encoder,
+            visual,
+            visual_encoder,
+            text_indexes,
+            text_encoder,
             settings.search.fusion,
             settings.search.cache,
         )
     except Exception as error:
+        if set(text_indexes).intersection(settings.search.fusion.required_sources):
+            messages.append(
+                "Could not configure required text retrieval: "
+                f"{type(error).__name__}: {error}"
+            )
+            return None
         messages.append(
-            f"Could not load index {index_dir}: {type(error).__name__}: {error}"
+            "Text retrieval unavailable; continuing visual-only: "
+            f"{type(error).__name__}: {error}"
         )
-        return None
+        return RetrievalService.from_index(
+            visual,
+            visual_encoder,
+            cache_config=settings.search.cache,
+        )
+
+
+def _load_text_indexes(
+    settings: AppConfig,
+    visual: Any,
+    expected_model_name: str,
+    messages: list[str],
+) -> dict[RetrievalSource, Any] | None:
+    loaded: dict[RetrievalSource, Any] = {}
+    expected_dimension: int | None = None
+    for source, path in _text_index_paths(settings).items():
+        required = source in settings.search.fusion.required_sources
+        if not path.is_dir():
+            messages.append(f"{source.value.upper()} index not available at {path}")
+            if required:
+                return None
+            continue
+        try:
+            index = RetrievalService.load_index(
+                path,
+                subset_search_threshold=settings.index.subset_search_threshold,
+            )
+            if index.metadata.dataset_version != visual.metadata.dataset_version:
+                raise ValueError("dataset version differs from visual index")
+            if index.metadata.model_name != expected_model_name:
+                raise ValueError("model differs from configured text encoder")
+            if expected_dimension is None:
+                expected_dimension = index.metadata.embedding_dim
+            elif index.metadata.embedding_dim != expected_dimension:
+                raise ValueError("embedding dimension differs from text indexes")
+            loaded[source] = index
+        except Exception as error:
+            messages.append(
+                f"Could not load {source.value} index {path}: "
+                f"{type(error).__name__}: {error}"
+            )
+            if required:
+                return None
+    return loaded
+
+
+def _text_index_paths(settings: AppConfig) -> dict[RetrievalSource, Path]:
+    return {
+        RetrievalSource.CAPTION: Path(os.getenv(
+            "HCMAI_CAPTION_INDEX_PATH", str(settings.index.caption_path)
+        )),
+        RetrievalSource.OCR: Path(os.getenv(
+            "HCMAI_OCR_INDEX_PATH", str(settings.index.ocr_path)
+        )),
+        RetrievalSource.ASR: Path(os.getenv(
+            "HCMAI_ASR_INDEX_PATH", str(settings.index.asr_path)
+        )),
+    }
 
 
 def _query_encoder(

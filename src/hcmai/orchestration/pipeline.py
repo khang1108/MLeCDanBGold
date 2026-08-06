@@ -105,6 +105,11 @@ class SearchService:
     def health(self, startup_messages: Sequence[str] = ()) -> dict[str, Any]:
         data_ready = self.data is not None
         retrieval_ready = self.retrieval is not None
+        active_sources = (
+            set(getattr(self.retrieval, "active_sources", (RetrievalSource.VISUAL,)))
+            if self.retrieval is not None
+            else set()
+        )
         suggestions_ready = self.suggestion_service is not None
         task_capabilities = self.pipeline_registry.capability_report(
             (TaskType.KIS, TaskType.VKIS, TaskType.VQA, TaskType.TRAKE)
@@ -136,6 +141,13 @@ class SearchService:
                     "circuit_state": "not_configured",
                 }
             ),
+            "retrieval_modalities": {
+                source.value: {
+                    "active": source in active_sources,
+                    "required": source in self.config.fusion.required_sources,
+                }
+                for source in RetrievalSource
+            },
             "capabilities": {
                 "search": search_ready,
                 "query_suggestions": {

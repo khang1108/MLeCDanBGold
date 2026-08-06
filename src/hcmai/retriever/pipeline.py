@@ -110,6 +110,14 @@ class RetrievalService:
             )
         return index.metadata
 
+    @property
+    def active_sources(self) -> tuple[RetrievalSource, ...]:
+        """Report configured modality indexes in deterministic order."""
+
+        retrievers = getattr(self._retriever, "retrievers", (self._retriever,))
+        active = {getattr(retriever, "source") for retriever in retrievers}
+        return tuple(source for source in RetrievalSource if source in active)
+
     def search(
         self,
         query: str,
