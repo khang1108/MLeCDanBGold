@@ -20,7 +20,7 @@ def _task_discriminator(value: Any) -> str | None:
     else:
         query_type = getattr(value, "query_type", TaskType.KIS)
     raw_value = getattr(query_type, "value", query_type)
-    if raw_value in {TaskType.KIS.value, TaskType.VKIS.value, TaskType.KISC.value}:
+    if raw_value in {TaskType.KIS.value, TaskType.VKIS.value}:
         return "search"
     if raw_value == TaskType.VQA.value:
         return "vqa"

@@ -25,19 +25,6 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
 
     @router.post("/api/v1/search", response_model=SearchResponse)
     async def search_frames(request: SearchRequest) -> SearchResponse:
-        if request.session_id is not None or request.feedback is not None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(
-                    "session_id and feedback are not supported by "
-                    "standalone search"
-                ),
-            )
-        if request.query_type is TaskType.KISC:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="query_type 'kisc' is not a standalone search task",
-            )
         if request.query_type is TaskType.VQA:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

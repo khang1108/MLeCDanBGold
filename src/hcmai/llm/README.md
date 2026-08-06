@@ -159,11 +159,7 @@ is the transport entry point owned by this component.
 
 ## Pipeline behavior
 
-- KISC sends the current message, bounded history, feedback, prior state, and
-  output schema to the conversation endpoint.
-- Its `standalone_query` is an English, self-contained visual description used
-  by retrieval; it is not a conversational answer to the user.
-- The remote SigLIP2 encoder converts that query into the same vector space as
+- The remote SigLIP2 encoder converts each search query into the same vector space as
   the local image index.
 - Dense retrieval selects candidates from local FAISS artifacts.
 - The remote Qwen model only reorders those candidates. It cannot recover a
@@ -174,9 +170,9 @@ is the transport entry point owned by this component.
   optional caption, OCR, ASR, and object evidence. It reuses the configured
   GLM vision model and preserves request/frame identity.
 
-The configured competition path is fail-fast: embedding, conversation, image
-loading, invalid reranker scores, and remote inference failures abort the
-request instead of silently switching models or preserving an older ranking.
+The configured competition path categorizes embedding, image loading, invalid
+reranker scores, and remote inference failures and applies the task's bounded
+fallback policy.
 
 ## Troubleshooting
 

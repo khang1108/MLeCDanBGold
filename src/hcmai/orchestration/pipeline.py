@@ -195,7 +195,7 @@ class SearchService:
             raise SearchServiceUnavailableError(str(error)) from error
 
     def _default_registry(self) -> PipelineRegistry:
-        task_types = (TaskType.KIS, TaskType.VKIS, TaskType.KISC)
+        task_types = (TaskType.KIS, TaskType.VKIS)
         pipelines = [
             KISPipeline(
                 task_type,

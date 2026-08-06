@@ -28,7 +28,7 @@ that feature package. In particular, caption/OCR types belong under
   `caption`, `ocr`, or `asr`.
 - `QueryLanguage`: query language: Vietnamese (`vi`), English (`en`), or
   mixed (`mixed`).
-- `TaskType`: frontend query type: `kis`, `kisc`, `vkis`, `vqa`, or `trake`.
+- `TaskType`: frontend query type: `kis`, `vkis`, `vqa`, or `trake`.
 - `ExecutionProfile`: bounded task profile: `fast`, `balanced`, `accurate`, or
   `competition_anytime`.
 - `QueryDifficulty`: evaluation difficulty: `easy`, `medium`, or `hard`.
@@ -72,26 +72,14 @@ that feature package. In particular, caption/OCR types belong under
 - `SearchFilters`: optional video and time-range restrictions. Video IDs are
   deduplicated, and `end_time_ms` cannot precede `start_time_ms`.
 - `SearchRequest`: public standalone-search request containing a typed
-  `query_type`, a non-empty query, bounded `top_k`, optional filters, optional
-  legacy session context, and human `feedback`. Feedback is valid only with a
-  session ID. The HTTP router accepts KIS, VKIS, VQA, and TRAKE here; KISC uses
-  `KISCSearchRequest`.
+  `query_type`, a non-empty query, bounded `top_k`, and optional filters.
 - `SearchLatency`: non-negative latency measurements for each search stage and
   the total request, in milliseconds.
 - `SearchResult`: one ranked result with the canonical frame identifiers,
   preview URLs, enrichment text, and scores.
 - `SearchResponse`: complete search response with request metadata, latency,
-  results, warnings, and optional KISC context. Conversational responses contain
-  a session ID, user `turn_id`, `assistant_turn_id`, and `ai_message` together.
-  `total_results` must match the result list and cannot exceed `top_k`.
-
-### `kisc.py`
-
-- `KISCSearchRequest`: typed `kisc` request with browser-owned ordered
-  history, current message, prior interpreted state, feedback, and filters for one stateless
-  KISC turn.
-- `KISCSearchResponse`: complete interpreted state, resolution latency, and a
-  canonical nested `SearchResponse`.
+  results, and warnings. `total_results` must match the result list and cannot
+  exceed `top_k`.
 
 ### `vqa.py`
 
@@ -130,22 +118,9 @@ that feature package. In particular, caption/OCR types belong under
 - `MiniChallengeSubmissionResult`: accepted verdict and description returned by
   DRES.
 
-### `conversation.py`
+### `submission.py`
 
-- `ConversationConstraint`: one resolver fact with a semantic slot, value,
-  positive/negative/uncertain polarity, and source turn ID.
-- `ConversationState`: complete interpreted KISC state containing the
-  standalone query, positive/negative/uncertain constraints, and accepted or
-  rejected frame IDs.
-- `ConversationTurn`: one user or AI message in a KIS conversation with
-  turn ID, typed sender (`user` or `ai`), timestamp, optional reply target, and
-  non-empty message.
-- `FrameFeedback`: ordered, deduplicated accepted/rejected frame IDs. One update
-  cannot contain the same frame in both decisions.
-- `ConversationSession`: active KISC conversation session state containing
-  session ID, optional problem ID, creation timestamp, turns, and cumulative
-  feedback.
-- `SubmissionResult`: official competition submission output format containing
+- `SubmissionResult`: official KIS submission output format containing
   `frame_id`, `video_id`, `frame_idx`, and a validated
   `video_id,frame_idx` submission code.
 

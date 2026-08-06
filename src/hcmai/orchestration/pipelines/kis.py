@@ -36,7 +36,7 @@ class KISPipeline:
         reranking: RerankingService | None,
         config: SearchConfig,
     ) -> None:
-        if task_type not in {TaskType.KIS, TaskType.VKIS, TaskType.KISC}:
+        if task_type not in {TaskType.KIS, TaskType.VKIS}:
             raise ValueError(f"KISPipeline cannot handle {task_type.value!r}")
         self._task_type = task_type
         self.data = data

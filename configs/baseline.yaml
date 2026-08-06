@@ -45,7 +45,6 @@ search:
     # Neutral starting point only. Tune per task on labeled validation queries.
     task_weights:
       kis: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      kisc: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
       vkis: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
       vqa: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
       trake: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}

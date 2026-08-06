@@ -60,30 +60,3 @@ export const searchVqa = async ({
   }
   return payload;
 };
-
-export const searchKisc = async ({
-  history = [],
-  currentMessage,
-  previousState = null,
-  feedback = {},
-  topK = 20,
-  filters = null,
-  signal,
-}) => {
-  const payload = await requestJson('/api/v1/kisc/search', {
-    method: 'POST',
-    body: {
-      history,
-      current_message: currentMessage.trim(),
-      previous_state: previousState,
-      feedback,
-      top_k: topK,
-      filters,
-    },
-    signal,
-  });
-  if (!payload?.interpreted_state || !Array.isArray(payload?.search?.results)) {
-    throw new Error('KISC server returned an invalid response contract');
-  }
-  return { ...payload, search: withAssetUrls(payload.search) };
-};

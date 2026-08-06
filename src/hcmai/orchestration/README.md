@@ -1,8 +1,8 @@
 # Search orchestration
 
-`hcmai.orchestration` owns the online application flow. FastAPI routers and
-KISC composition call `SearchService` from `pipeline.py`; they do not wire
-retrieval or reranking internals themselves.
+`hcmai.orchestration` owns the online application flow. FastAPI routers call
+`SearchService` from `pipeline.py`; they do not wire retrieval or reranking
+internals themselves.
 
 ```text
 orchestration/
@@ -17,7 +17,7 @@ orchestration/
 ## Runtime path
 
 ```text
-FastAPI or KISC
+FastAPI
     → SearchService
     → RetrievalService
     → optional RerankingService

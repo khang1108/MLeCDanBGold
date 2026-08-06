@@ -7,7 +7,6 @@ from typing import Literal
 from pydantic import Field, field_validator
 
 from .base import ContractModel, NonEmptyString
-from .conversation import ConversationState, ConversationTurn, FrameFeedback
 
 
 class TextEmbeddingRequest(ContractModel):
@@ -67,17 +66,6 @@ class RerankResponse(ContractModel):
     revision: str | None = None
     items: list[RerankItem]
     latency_ms: float = Field(ge=0)
-
-
-class ConversationInferenceRequest(ContractModel):
-    """Complete bounded context required for one resolver call."""
-
-    instruction: NonEmptyString
-    history: list[ConversationTurn] = Field(default_factory=list)
-    current_message: NonEmptyString
-    feedback: FrameFeedback | None = None
-    previous_state: ConversationState | None = None
-    response_schema: dict = Field(default_factory=dict)
 
 
 class ModelStatus(ContractModel):

@@ -1,4 +1,4 @@
-import { searchFrames, searchKisc, searchVqa } from './search';
+import { searchFrames, searchVqa } from './search';
 
 const response = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -74,42 +74,6 @@ test('rejects a malformed successful search response', async () => {
     query: 'boat',
     topK: 20,
   })).rejects.toThrow('invalid response contract');
-});
-
-test('posts the canonical KISC request', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
-    interpreted_state: { standalone_query: 'red car' },
-    search: { results: [], latency_ms: { total: 1 } },
-  }));
-
-  await searchKisc({
-    history: [{
-      turn_id: 'turn_0001',
-      sender: 'user',
-      message: 'find a vehicle',
-      created_at: 1,
-      reply_to_turn_id: null,
-    }],
-    currentMessage: ' red car ',
-    previousState: {
-      standalone_query: 'find a vehicle',
-      positive_constraints: ['vehicle'],
-      negative_constraints: [],
-      uncertain_constraints: [],
-      accepted_frame_ids: [],
-      rejected_frame_ids: [],
-    },
-    feedback: {
-      accepted_frame_ids: ['f1'],
-      rejected_frame_ids: [],
-    },
-  });
-  expect(global.fetch.mock.calls[0][0]).toContain('/api/v1/kisc/search');
-  const kiscBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-  expect(kiscBody.current_message).toBe('red car');
-  expect(kiscBody.history).toHaveLength(1);
-  expect(kiscBody.previous_state.standalone_query).toBe('find a vehicle');
-  expect(kiscBody.feedback.accepted_frame_ids).toEqual(['f1']);
 });
 
 test('posts the dedicated competition VQA request', async () => {
