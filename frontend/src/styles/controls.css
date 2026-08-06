@@ -1,13 +1,3 @@
-/* ─────────────────────────────────────────────────────────── */
-/* QUERY INPUT COMPONENT                                       */
-/* ─────────────────────────────────────────────────────────── */
-.query-form {
-  display: flex;
-  gap: var(--spacing-sm);
-  width: 100%;
-  margin: 0 auto;
-}
-
 .query-input-wrapper {
   position: relative;
   flex: 1;

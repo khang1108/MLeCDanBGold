@@ -1,15 +1,8 @@
 import React, { useState } from "react";
-import FrameFeedbackActions from "./FrameFeedbackActions";
 import ScoreBreakdown from "./ScoreBreakdown";
 
 // Compact result card; clicking opens the inspector while controls stop propagation.
-const FrameCard = ({
-  frame,
-  feedbackState,
-  onClick,
-  onPromising,
-  onReject,
-}) => {
+const FrameCard = ({ frame, onClick }) => {
   const [copied, setCopied] = useState(false);
   const previewUrl = frame.thumbnail_url || frame.frame_url;
   const copy = (event) => {
@@ -20,7 +13,7 @@ const FrameCard = ({
   };
   return (
     <div
-      className={`frame-card ${feedbackState ? `is-${feedbackState}` : ""}`}
+      className="frame-card"
       onClick={onClick}
     >
       <div className="frame-tooltip">
@@ -39,14 +32,6 @@ const FrameCard = ({
           {copied ? "✓" : "⧉"}
         </button>
       </div>
-      {onPromising && onReject && (
-        <FrameFeedbackActions
-          state={feedbackState}
-          onPromising={onPromising}
-          onReject={onReject}
-          frameId={frame.frame_id}
-        />
-      )}
       <div className="frame-image-container">
         {previewUrl ? (
           <img

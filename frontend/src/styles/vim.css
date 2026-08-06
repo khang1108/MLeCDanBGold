@@ -48,62 +48,6 @@
   box-shadow: 0 0 6px rgba(26, 174, 57, 0.6);
 }
 
-/* Query Type Badge */
-.query-type-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  line-height: 1;
-  transition: all 0.2s ease;
-  user-select: none;
-  cursor: pointer;
-}
-
-.query-type-label {
-  font-size: 10px;
-  opacity: 0.75;
-  font-weight: 600;
-}
-
-.query-type-value {
-  font-weight: 800;
-}
-
-.query-type-badge.type-kis {
-  background-color: rgba(147, 51, 234, 0.12);
-  color: #9333ea;
-  border: 1px solid rgba(147, 51, 234, 0.3);
-}
-
-.query-type-badge.type-kisc {
-  background-color: rgba(79, 70, 229, 0.12);
-  color: #4f46e5;
-  border: 1px solid rgba(79, 70, 229, 0.3);
-}
-
-.query-type-badge.type-vkis {
-  background-color: rgba(13, 148, 136, 0.12);
-  color: #0d9488;
-  border: 1px solid rgba(13, 148, 136, 0.3);
-}
-
-.query-type-badge.type-vqa {
-  background-color: rgba(217, 119, 6, 0.12);
-  color: #d97706;
-  border: 1px solid rgba(217, 119, 6, 0.3);
-}
-
-.query-type-badge.type-trake {
-  background-color: rgba(225, 29, 72, 0.12);
-  color: #e11d48;
-  border: 1px solid rgba(225, 29, 72, 0.3);
-}
-
 /* TopK Prompt Modal */
 .vim-prompt-card {
   background-color: var(--color-surface);

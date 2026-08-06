@@ -14,13 +14,11 @@ const withAssetUrls = (payload) => ({
   })),
 });
 
-// Executes one search turn; session context is optional for non-conversation search.
+// Executes one standalone competition-task search.
 export const searchFrames = async ({
   query,
   topK,
   queryType,
-  sessionId,
-  feedback,
   signal,
 }) => {
   const body = {
@@ -28,8 +26,6 @@ export const searchFrames = async ({
     top_k: topK,
   };
   if (queryType) body.query_type = queryType;
-  if (sessionId) body.session_id = sessionId;
-  if (feedback) body.feedback = feedback;
 
   const payload = await requestJson("/api/v1/search", {
     method: "POST",
@@ -40,35 +36,4 @@ export const searchFrames = async ({
     throw new Error("Search server returned an invalid response contract");
   }
   return withAssetUrls(payload);
-};
-
-export const searchKisc = async ({
-  history = [],
-  currentMessage,
-  previousState = null,
-  feedback = {},
-  topK = 20,
-  queryType,
-  filters = null,
-  signal,
-}) => {
-  const body = {
-    history,
-    current_message: currentMessage.trim(),
-    previous_state: previousState,
-    feedback,
-    top_k: topK,
-    filters,
-  };
-  if (queryType) body.query_type = queryType;
-
-  const payload = await requestJson("/api/v1/kisc/search", {
-    method: "POST",
-    body,
-    signal,
-  });
-  if (!payload?.interpreted_state || !Array.isArray(payload?.search?.results)) {
-    throw new Error("KISC server returned an invalid response contract");
-  }
-  return { ...payload, search: withAssetUrls(payload.search) };
 };

@@ -95,37 +95,6 @@
   100% { opacity: 1; transform: scale(1.2); }
 }
 
-.tab-navigation {
-  display: flex;
-  gap: 4px;
-  background-color: var(--color-canvas-soft);
-  padding: 4px;
-  border-radius: var(--rounded-md);
-  border: 1px solid var(--color-hairline);
-}
-
-.tab-button {
-  padding: 6px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-ink-muted);
-  background: transparent;
-  border: none;
-  border-radius: calc(var(--rounded-md) - 2px);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.tab-button:hover {
-  color: var(--color-ink);
-}
-
-.tab-button.active {
-  background-color: var(--color-surface);
-  color: var(--color-primary);
-  box-shadow: var(--shadow-level-1);
-}
-
 .search-section {
   width: 100%;
 }

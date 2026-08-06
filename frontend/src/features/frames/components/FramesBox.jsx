@@ -8,13 +8,9 @@ const FramesBox = ({
   error,
   latencyMs,
   warnings = [],
-  feedbackState,
-  onPromising,
-  onReject,
   onFrameClick,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
-  const hasFeedback = Boolean(feedbackState && onPromising && onReject);
   if (isLoading) return null;
   return (
     <section className="frames-container">
@@ -78,12 +74,6 @@ const FramesBox = ({
                 <FrameCard
                   key={frame.frame_id}
                   frame={frame}
-                  // Keep feedback optional so Ad-hoc search can render without it.
-                  feedbackState={
-                    hasFeedback ? feedbackState(frame.frame_id) : null
-                  }
-                  onPromising={hasFeedback ? onPromising : undefined}
-                  onReject={hasFeedback ? onReject : undefined}
                   onClick={() => onFrameClick(frame)}
                 />
               ))}
