@@ -8,6 +8,8 @@ import { useVimMode } from "./features/vim/hooks/useVimMode";
 import VimModeBadge from "./features/vim/components/VimModeBadge";
 import TopKPromptModal from "./features/vim/components/TopKPromptModal";
 import VimHelpModal from "./features/vim/components/VimHelpModal";
+import TabNavigation from "./features/navigation/components/TabNavigation";
+import VqaSearchWorkspace from "./features/vqa/components/VqaSearchWorkspace";
 import "./styles/gif-loader.css";
 import "./styles/vim.css";
 
@@ -16,6 +18,7 @@ function App() {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [topK, setTopK] = useState(20);
+  const [activeTask, setActiveTask] = useState("kis");
   const queryInputRef = useRef(null);
   const { isHealthy, healthData, isChecking } = useHealthCheck();
   const vim = useVimMode({
@@ -45,18 +48,23 @@ function App() {
                 : vim.enterNormalMode()
             }
           />
+          <TabNavigation activeTab={activeTask} onSelectTab={setActiveTask} />
         </div>
       </header>
 
       <main className="app-container adhoc-app">
-        <AdHocSearchWorkspace
-          topK={topK}
-          setTopK={setTopK}
-          onFrameClick={setSelectedFrame}
-          queryInputRef={queryInputRef}
-          onFocusQueryInput={() => vim.setMode("INSERT")}
-          onBlurQueryInput={() => vim.setMode("NORMAL")}
-        />
+        {activeTask === "kis" ? (
+          <AdHocSearchWorkspace
+            topK={topK}
+            setTopK={setTopK}
+            onFrameClick={setSelectedFrame}
+            queryInputRef={queryInputRef}
+            onFocusQueryInput={() => vim.setMode("INSERT")}
+            onBlurQueryInput={() => vim.setMode("NORMAL")}
+          />
+        ) : (
+          <VqaSearchWorkspace topK={topK} setTopK={setTopK} />
+        )}
       </main>
 
       <OptionsDrawer

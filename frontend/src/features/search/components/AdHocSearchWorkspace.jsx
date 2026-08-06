@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { searchFrames } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
@@ -21,7 +21,10 @@ const AdHocSearchWorkspace = ({
   const [latencyMs, setLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const requestRef = useRef(null);
   const challenge = useMiniChallenge();
+
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   const handleSubmit = useCallback(
     async (event) => {
@@ -29,20 +32,28 @@ const AdHocSearchWorkspace = ({
       const trimmed = query.trim();
       if (!trimmed || isSearching) return;
 
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
       setIsSearching(true);
       setError(null);
       try {
         const response = await searchFrames({
           query: trimmed,
           topK,
+          signal: controller.signal,
         });
         setResults(response.results || []);
         setWarnings(response.warnings || []);
         setLatencyMs(response.latency_ms || null);
       } catch (err) {
+        if (err.name === "AbortError") return;
         setError(err.message || "Failed to contact search API");
       } finally {
-        setIsSearching(false);
+        if (requestRef.current === controller) {
+          requestRef.current = null;
+          setIsSearching(false);
+        }
       }
     },
     [isSearching, query, topK],

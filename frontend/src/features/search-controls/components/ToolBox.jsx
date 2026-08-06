@@ -14,7 +14,7 @@ const ToolBox = ({ topK, setTopK, onReset }) => (
         id="top-k-slider"
         type="range"
         min="5"
-        max="50"
+        max="100"
         step="5"
         value={topK}
         onChange={(event) => setTopK(Number(event.target.value))}

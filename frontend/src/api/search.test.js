@@ -1,4 +1,4 @@
-import { searchFrames, searchKisc } from './search';
+import { searchFrames, searchKisc, searchVqa } from './search';
 
 const response = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -118,4 +118,30 @@ test('posts the canonical KISC request', async () => {
   expect(kiscBody.history).toHaveLength(1);
   expect(kiscBody.previous_state.standalone_query).toBe('find a vehicle');
   expect(kiscBody.feedback.accepted_frame_ids).toEqual(['f1']);
+});
+
+test('posts the dedicated competition VQA request', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+    submissions: [],
+    latency_ms: 0,
+  }));
+
+  await searchVqa({
+    eventDescription: ' a person reads a sign ',
+    question: ' what does it say? ',
+    topK: 100,
+  });
+
+  expect(global.fetch).toHaveBeenCalledWith(
+    'http://127.0.0.1:8000/api/v1/vqa',
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        query_type: 'vqa',
+        event_description: 'a person reads a sign',
+        question: 'what does it say?',
+        top_k: 100,
+      }),
+    }),
+  );
 });

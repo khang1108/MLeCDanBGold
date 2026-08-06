@@ -1,24 +1,24 @@
 import React from "react";
 
-// Switcher between Conversation (KIS) and Ad-hoc search views.
+// Switcher between the two competition workflows.
 const TabNavigation = ({ activeTab, onSelectTab }) => {
   return (
     <nav className="tab-navigation" aria-label="Main Navigation">
       <button
         type="button"
-        className={`tab-button ${activeTab === "conversation" ? "active" : ""}`}
-        onClick={() => onSelectTab("conversation")}
+        className={`tab-button ${activeTab === "kis" ? "active" : ""}`}
+        onClick={() => onSelectTab("kis")}
       >
-        Conversation
+        KIS
       </button>
       <button
         type="button"
         className={`tab-button ${
-          activeTab === "ad_hoc" || activeTab === "adhoc" ? "active" : ""
+          activeTab === "vqa" ? "active" : ""
         }`}
-        onClick={() => onSelectTab("ad_hoc")}
+        onClick={() => onSelectTab("vqa")}
       >
-        Ad-hoc Search
+        VQA
       </button>
     </nav>
   );

@@ -1,0 +1,70 @@
+import React from "react";
+
+const VqaResults = ({ submissions, warnings, latencyMs, error, hasSearched }) => (
+  <section className="frames-container vqa-results" aria-live="polite">
+    {error && (
+      <div className="error-alert" role="alert">
+        <div className="error-details">
+          <h4 className="error-title">VQA Request Error</h4>
+          <p className="error-message">{error}</p>
+        </div>
+      </div>
+    )}
+    {!error && hasSearched && (
+      <div className="latency-banner">
+        <div className="latency-summary">
+          Found <span className="latency-highlight">{submissions.length}</span>{" "}
+          grounded answers in{" "}
+          <span className="latency-highlight">{latencyMs}ms</span>
+        </div>
+      </div>
+    )}
+    {!error && warnings.length > 0 && (
+      <div className="search-warning" role="status">
+        <span>Server note:</span>
+        <ul>{warnings.map((warning, index) => (
+          <li key={`${warning}-${index}`}>{warning}</li>
+        ))}</ul>
+      </div>
+    )}
+    {!error && submissions.length > 0 && (
+      <ol className="vqa-submission-list">
+        {submissions.map((submission) => (
+          <li
+            className="vqa-submission-card"
+            key={`${submission.video_id}-${submission.frame_id}-${submission.answer}`}
+          >
+            <span className="vqa-rank">#{submission.rank}</span>
+            <div>
+              <strong>{submission.answer}</strong>
+              {submission.normalized_answer
+                && submission.normalized_answer !== submission.answer && (
+                  <span className="vqa-normalized">
+                    Normalized: {submission.normalized_answer}
+                  </span>
+                )}
+              <span className="vqa-grounding">
+                {submission.video_id}, frame {submission.frame_idx}
+              </span>
+            </div>
+            <span className="vqa-score">
+              {Math.round(submission.joint_score * 100)}%
+            </span>
+          </li>
+        ))}
+      </ol>
+    )}
+    {!error && submissions.length === 0 && (
+      <div className="frames-empty-state">
+        <p className="body-md frames-empty-text">
+          {hasSearched ? "No grounded answers found" : "Competition VQA"}
+        </p>
+        <p className="caption frames-empty-subtext">
+          Describe the event and ask a question to retrieve grounded answers.
+        </p>
+      </div>
+    )}
+  </section>
+);
+
+export default VqaResults;

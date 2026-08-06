@@ -78,10 +78,10 @@ const FramesBox = ({
               <FrameCard
                 key={frame.frame_id}
                 frame={frame}
-                feedbackState={feedbackState(frame.frame_id)}
+                feedbackState={feedbackState?.(frame.frame_id)}
                 onPromising={onPromising}
                 onReject={onReject}
-                onClick={() => onFrameClick(frame)}
+                onClick={() => onFrameClick?.(frame)}
                 onChallengeSubmit={onChallengeSubmit}
                 isChallengeSubmitting={submittingFrameId === frame.frame_id}
               />

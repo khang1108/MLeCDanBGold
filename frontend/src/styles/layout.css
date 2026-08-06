@@ -198,3 +198,58 @@
   padding-left: 0;
   width: 100%;
 }
+
+.vqa-query-form {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg);
+}
+
+.vqa-query-form label {
+  color: var(--color-ink-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.vqa-query-form textarea {
+  min-height: 72px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.vqa-query-form .query-input-field {
+  padding-left: 14px;
+}
+
+.vqa-submission-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+
+.vqa-submission-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+}
+
+.vqa-rank, .vqa-score {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.vqa-normalized, .vqa-grounding {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-ink-muted);
+  font-size: 12px;
+}
