@@ -50,9 +50,12 @@ from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
 from .trake import TRAKERequest, TRAKEResponse, TRAKESubmission
 from .transcript import TranscriptSegment
 from .vqa import (
+    VQABaselineProfile,
+    VQARetrievalEvidence,
     VQAInferenceEvidence,
     VQAInferenceRequest,
     VQAInferenceResponse,
+    VQAMultiFrameInferenceResponse,
     VQARequest,
     VQAResponse,
     VQASubmission,
@@ -119,8 +122,11 @@ __all__ = [
     "MiniChallengeSubmitRequest",
     "MiniChallengeTaskTemplate",
     "VQAInferenceEvidence",
+    "VQABaselineProfile",
+    "VQARetrievalEvidence",
     "VQAInferenceRequest",
     "VQAInferenceResponse",
+    "VQAMultiFrameInferenceResponse",
     "VQARequest",
     "VQAResponse",
     "VQASubmission",

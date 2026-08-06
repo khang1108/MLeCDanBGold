@@ -71,6 +71,52 @@ class StructuredConversationModel:
         }]
         return _short_answer(self.generate(messages))
 
+    def answer_vqa_multi(
+        self,
+        question: str,
+        images: list[Image.Image],
+        frame_ids: list[str],
+        evidence: VQAInferenceEvidence,
+    ) -> dict[str, Any]:
+        """Answer from ordered frames and bind the answer to a supplied ID."""
+        if not images or len(images) != len(frame_ids):
+            raise ValueError("images and frame_ids must be non-empty and aligned")
+        if len(set(frame_ids)) != len(frame_ids):
+            raise ValueError("frame_ids must be unique")
+        context = evidence.model_dump(exclude_none=True)
+        content: list[dict[str, Any]] = []
+        for frame_id, image in zip(frame_ids, images):
+            content.extend((
+                {"type": "text", "text": f"Frame ID: {frame_id}"},
+                {"type": "image", "image": image},
+            ))
+        content.append({
+            "type": "text",
+            "text": (
+                f"Question: {question}\n"
+                f"Retrieved evidence: {json.dumps(context, ensure_ascii=False)}\n"
+                "Return only JSON with keys answer, selected_frame_id, "
+                "answerable, confidence. selected_frame_id must be one of the "
+                "supplied Frame IDs; confidence must be between 0 and 1."
+            ),
+        })
+        payload = _grounded_answer(self.generate([{"role": "user", "content": content}]))
+        if payload["selected_frame_id"] not in frame_ids:
+            raise ValueError("VQA model selected a frame outside supplied evidence")
+        return payload
+
+    @property
+    def supports_multi_image(self) -> bool:
+        """Report capability from loaded multimodal model metadata."""
+        if self.model is None:
+            return False
+        config = getattr(self.model, "config", None)
+        model_type = str(getattr(config, "model_type", "")).lower()
+        return bool(
+            getattr(config, "vision_config", None) is not None
+            or model_type in {"glm4v", "qwen2_vl", "qwen2_5_vl", "qwen3_vl"}
+        )
+
     def generate(
         self,
         messages: list[dict[str, Any]],
@@ -202,3 +248,34 @@ def _short_answer(text: str) -> str:
     if not value:
         raise ValueError("VQA model returned an empty answer")
     return value[:100].rstrip()
+
+
+def _grounded_answer(text: str) -> dict[str, Any]:
+    decoder = json.JSONDecoder()
+    for start, character in enumerate(text):
+        if character != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text[start:])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(value, dict):
+            continue
+        answer = " ".join(str(value.get("answer", "")).split())[:100]
+        frame_id = str(value.get("selected_frame_id", "")).strip()
+        answerable = value.get("answerable", True)
+        confidence = value.get("confidence", 0.5)
+        if not answer or not frame_id or not isinstance(answerable, bool):
+            continue
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= confidence <= 1:
+            return {
+                "answer": answer,
+                "selected_frame_id": frame_id,
+                "answerable": answerable,
+                "confidence": confidence,
+            }
+    raise ValueError("VQA model did not return a grounded JSON answer")

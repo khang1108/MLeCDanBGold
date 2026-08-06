@@ -121,7 +121,7 @@ def test_kis_pipeline_preserves_search_response_behavior(
     assert retrieval.query_types == [query_type]
 
 
-@pytest.mark.parametrize("query_type", [TaskType.VQA, TaskType.TRAKE])
+@pytest.mark.parametrize("query_type", [TaskType.TRAKE])
 def test_missing_pipeline_maps_to_typed_service_error(
     query_type: TaskType,
 ) -> None:

@@ -20,6 +20,7 @@ from hcmai.common.schemas import (
     TextEmbeddingResponse,
     VQAInferenceEvidence,
     VQAInferenceResponse,
+    VQAMultiFrameInferenceResponse,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.llm.gateway import InferenceGateway, InferenceGatewayError
@@ -145,6 +146,37 @@ class InferenceClient:
         )
         response = _validated(VQAInferenceResponse, payload)
         if response.request_id != request_id or response.frame_id != frame_id:
+            raise InferenceClientError("VQA provider changed request/frame identity")
+        if response.question != question:
+            raise InferenceClientError("VQA provider changed the question")
+        return response
+
+    def answer_vqa_multi(
+        self,
+        request_id: str,
+        frame_ids: list[str],
+        question: str,
+        images: Sequence[Image.Image],
+        evidence: VQAInferenceEvidence | None = None,
+    ) -> VQAMultiFrameInferenceResponse:
+        if not frame_ids or len(frame_ids) != len(images):
+            raise ValueError("frame_ids and images must be non-empty and aligned")
+        context = evidence or VQAInferenceEvidence()
+        payload = self._post(
+            "/v1/vqa/multi",
+            data={
+                "request_id": request_id,
+                "frame_ids": json.dumps(frame_ids),
+                "question": question,
+                "evidence": context.model_dump_json(),
+            },
+            files=[
+                ("images", (f"{frame_id}.jpg", _jpeg(image), "image/jpeg"))
+                for frame_id, image in zip(frame_ids, images)
+            ],
+        )
+        response = _validated(VQAMultiFrameInferenceResponse, payload)
+        if response.request_id != request_id or response.frame_ids != frame_ids:
             raise InferenceClientError("VQA provider changed request/frame identity")
         if response.question != question:
             raise InferenceClientError("VQA provider changed the question")

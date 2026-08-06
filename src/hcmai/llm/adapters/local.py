@@ -184,6 +184,19 @@ class LocalAdapter:
             raise RuntimeError("vision-language model is disabled")
         return self.conversation.answer_vqa(question, image, evidence)
 
+    def answer_vqa_multi(
+        self,
+        question: str,
+        images: list[Image.Image],
+        frame_ids: list[str],
+        evidence: VQAInferenceEvidence,
+    ) -> dict[str, Any]:
+        if self.conversation is None:
+            raise RuntimeError("vision-language model is disabled")
+        return self.conversation.answer_vqa_multi(
+            question, images, frame_ids, evidence
+        )
+
     def readiness(self) -> InferenceReadiness:
         generator_loaded = (
             self.captioner is not None and self.captioner.model is not None
@@ -270,7 +283,10 @@ class LocalAdapter:
             capabilities=InferenceCapabilities(
                 embedding=visual_loaded or caption_loaded,
                 reranking=reranker_loaded,
-                multi_image_vqa=False,
+                multi_image_vqa=(
+                    conversation_loaded
+                    and bool(getattr(self.conversation, "supports_multi_image", False))
+                ),
                 structured_parsing=conversation_loaded,
             ),
         )

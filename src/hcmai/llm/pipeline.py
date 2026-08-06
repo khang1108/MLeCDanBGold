@@ -120,3 +120,9 @@ class LLMService:
 
     def answer_vqa(self, *args: Any, **kwargs: Any) -> Any:
         return self.adapter.answer_vqa(*args, **kwargs)
+
+    def answer_vqa_multi(self, *args: Any, **kwargs: Any) -> Any:
+        method = getattr(self.adapter, "answer_vqa_multi", None)
+        if method is None:
+            raise RuntimeError("multi-frame VQA is not supported by this provider")
+        return method(*args, **kwargs)

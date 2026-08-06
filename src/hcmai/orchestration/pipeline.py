@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
-from hcmai.common.config import SearchConfig
+from hcmai.common.config import SearchConfig, VQAConfig
 from hcmai.common.schemas import (
     FrameRecord,
     QuerySuggestionRequest,
@@ -14,6 +14,8 @@ from hcmai.common.schemas import (
     SearchRequest,
     SearchResponse,
     SubmissionResult,
+    TaskRequest,
+    TaskResponse,
     TaskType,
 )
 from hcmai.common.utils.logging import get_logger
@@ -21,6 +23,7 @@ from hcmai.data.pipeline import DataService
 from hcmai.llm.pipeline import LLMService
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.orchestration.pipelines.kis import KISPipeline
+from hcmai.orchestration.pipelines.vqa import VQAPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.query_suggestions.pipeline import SuggestionService
 from hcmai.reranking.pipeline import RerankingService
@@ -53,6 +56,7 @@ class SearchService:
         config: SearchConfig | None = None,
         suggestion_service: SuggestionService | None = None,
         llm: LLMService | None = None,
+        vqa_config: VQAConfig | None = None,
         pipeline_registry: PipelineRegistry | None = None,
     ) -> None:
         self.data = data
@@ -61,6 +65,7 @@ class SearchService:
         self.config = config or SearchConfig()
         self.suggestion_service = suggestion_service
         self.llm = llm
+        self.vqa_config = vqa_config or VQAConfig()
         self.pipeline_registry = (
             pipeline_registry
             if pipeline_registry is not None
@@ -191,7 +196,7 @@ class SearchService:
         if self.llm is not None:
             self.llm.close()
 
-    def search(self, request: SearchRequest) -> SearchResponse:
+    def search(self, request: TaskRequest) -> TaskResponse:
         try:
             pipeline = self.pipeline_registry.get(request.query_type)
         except KeyError as error:
@@ -200,19 +205,34 @@ class SearchService:
                 "is not available"
             ) from error
         try:
-            return pipeline.execute(request)
+            return cast(Any, pipeline).execute(request)
         except TaskPipelineDependencyError as error:
             raise SearchServiceUnavailableError(str(error)) from error
 
     def _default_registry(self) -> PipelineRegistry:
         task_types = (TaskType.KIS, TaskType.VKIS, TaskType.KISC)
-        return PipelineRegistry(
+        pipelines = [
             KISPipeline(
                 task_type,
                 self.data,
                 self.retrieval,
                 self.reranking,
                 self.config,
+                suggestion_service=(
+                    self.suggestion_service if task_type is TaskType.KIS else None
+                ),
             )
             for task_type in task_types
+        ]
+        pipelines.append(
+            cast(
+                Any,
+                VQAPipeline(
+                    self.data,
+                    self.retrieval,
+                    self.llm,
+                    self.vqa_config,
+                ),
+            )
         )
+        return PipelineRegistry(pipelines)

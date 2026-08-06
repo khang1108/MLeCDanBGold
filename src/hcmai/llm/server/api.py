@@ -25,6 +25,7 @@ from hcmai.common.schemas import (
     TextEmbeddingResponse,
     VQAInferenceEvidence,
     VQAInferenceResponse,
+    VQAMultiFrameInferenceResponse,
 )
 from hcmai.llm.pipeline import LLMService
 
@@ -65,6 +66,12 @@ def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
     )
     app.add_api_route(
         "/v1/vqa", vqa, methods=["POST"], response_model=VQAInferenceResponse
+    )
+    app.add_api_route(
+        "/v1/vqa/multi",
+        vqa_multi,
+        methods=["POST"],
+        response_model=VQAMultiFrameInferenceResponse,
     )
     app.add_api_route(
         "/v1/query-suggestions",
@@ -230,6 +237,45 @@ async def vqa(
         question=question,
         answer=answer,
         grounded=True,
+        model_name=runtime.config.conversation.checkpoint,
+        latency_ms=max(0, int((perf_counter() - started) * 1_000)),
+        evidence=context,
+    )
+
+
+async def vqa_multi(
+    request: Request,
+    request_id: str = Form(min_length=1),
+    frame_ids: str = Form(min_length=1),
+    question: str = Form(min_length=1, max_length=1_000),
+    evidence: str = Form(default="{}"),
+    images: list[UploadFile] = File(),
+) -> VQAMultiFrameInferenceResponse:
+    try:
+        context = VQAInferenceEvidence.model_validate_json(evidence)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail="invalid VQA evidence") from error
+    identifiers, decoded = _decode_images(frame_ids, images, maximum=32)
+    started = perf_counter()
+    runtime = request.app.state.runtime
+    try:
+        result = runtime.answer_vqa_multi(
+            question, decoded, identifiers, context
+        )
+    except Exception as error:
+        raise _unavailable("Multi-frame VQA inference failed", error) from error
+    finally:
+        for image in decoded:
+            image.close()
+    return VQAMultiFrameInferenceResponse(
+        request_id=request_id,
+        frame_ids=identifiers,
+        selected_frame_id=result["selected_frame_id"],
+        question=question,
+        answer=result["answer"],
+        answerable=result.get("answerable", True),
+        grounded=True,
+        confidence=result.get("confidence", 0.5),
         model_name=runtime.config.conversation.checkpoint,
         latency_ms=max(0, int((perf_counter() - started) * 1_000)),
         evidence=context,

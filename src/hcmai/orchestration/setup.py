@@ -55,6 +55,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         config=settings.search,
         suggestion_service=suggestions,
         llm=llm,
+        vqa_config=settings.vqa,
     )
 
 

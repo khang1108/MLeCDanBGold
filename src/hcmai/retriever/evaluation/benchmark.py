@@ -171,7 +171,7 @@ class RetrievalBenchmark:
         logger.info(
             f"Benchmark '{self.run_name}': "
             f"R@1={metrics['recall']['@1']:.3f}, "
-            f"R@10={metrics['recall']['@10']:.3f}, "
+            f"R@20={metrics['recall']['@20']:.3f}, "
             f"R@100={metrics['recall']['@100']:.3f}, "
             f"P95={metrics['latency_ms']['p95']:.1f}ms, "
             f"{metrics['throughput_qps']:.1f} qps, "

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from time import perf_counter
+from typing import cast
 
 from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
@@ -14,6 +15,9 @@ from hcmai.common.schemas import (
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
+from hcmai.kis.ranking import KISRankingConfig, shape_kis_candidates
+from hcmai.kis.retrieval import retrieve_query_variants
+from hcmai.kis.variants import ControlledQueryExpander, SuggestionProvider
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.orchestration.ranking import elapsed_ms, rank_candidates, request_id
@@ -35,6 +39,7 @@ class KISPipeline:
         retrieval: RetrievalService | None,
         reranking: RerankingService | None,
         config: SearchConfig,
+        suggestion_service: SuggestionProvider | None = None,
     ) -> None:
         if task_type not in {TaskType.KIS, TaskType.VKIS, TaskType.KISC}:
             raise ValueError(f"KISPipeline cannot handle {task_type.value!r}")
@@ -43,6 +48,7 @@ class KISPipeline:
         self.retrieval = retrieval
         self.reranking = reranking
         self.config = config
+        self.expander = ControlledQueryExpander(suggestion_service)
         self.materializer = SearchMaterializer(data) if data is not None else None
 
     @property
@@ -66,11 +72,28 @@ class KISPipeline:
             output_count=1,
             backend="pydantic",
         )
-        expansion_trace = StageTimer(PipelineStage.EXPANSION.value).finish(
-            status=StageStatus.SKIPPED,
-            attempt_count=0,
+        expansion_timer = StageTimer(PipelineStage.EXPANSION.value)
+        variant_plan = (
+            self.expander.expand(request.query)
+            if self.task_type is TaskType.KIS
+            else ControlledQueryExpander().expand(request.query)
+        )
+        expansion_trace = expansion_timer.finish(
+            status=(
+                StageStatus.PARTIAL
+                if variant_plan.warnings
+                else StageStatus.SUCCESS
+                if len(variant_plan.variants) > 1
+                else StageStatus.SKIPPED
+            ),
+            attempt_count=1 if self.expander.provider is not None else 0,
             input_count=1,
-            output_count=1,
+            output_count=len(variant_plan.variants),
+            backend=(
+                type(self.expander.provider).__name__
+                if self.expander.provider is not None else None
+            ),
+            fallback_used=bool(variant_plan.warnings),
         )
         request_id_value = request_id(request)
         candidate_count = max(request.top_k, self.config.candidate_count)
@@ -81,15 +104,40 @@ class KISPipeline:
             request.top_k,
             candidate_count,
         )
+        ranked_retrieval = self.retrieval
+        if self.task_type is TaskType.KIS and len(variant_plan.variants) > 1:
+            variant_result = retrieve_query_variants(
+                self.retrieval,
+                variant_plan.variants,
+                top_k=candidate_count,
+                filters=request.filters,
+                query_type=request.query_type,
+                rrf_k=self.config.fusion.rrf_k,
+            )
+            ranked_retrieval = _PreparedRetrieval(variant_result)
         retrieval_result, reranking_ms = rank_candidates(
             request,
-            self.retrieval,
+            cast(RetrievalService, ranked_retrieval),
             self.reranking,
             candidate_count=candidate_count,
             rerank_count=self.config.rerank_count,
             request_id=request_id_value,
         )
         candidates = retrieval_result.candidates
+        refinement_started = perf_counter()
+        if self.task_type is TaskType.KIS:
+            candidates = shape_kis_candidates(
+                candidates,
+                self.data,
+                KISRankingConfig(
+                    temporal_window_ms=self.config.temporal_window_ms,
+                ),
+                minimum_results=request.top_k,
+            )
+            retrieval_result = retrieval_result.model_copy(
+                update={"candidates": candidates}
+            )
+        refinement_ms = elapsed_ms(refinement_started)
         materialization_started = perf_counter()
         materialization_timer = StageTimer(PipelineStage.MATERIALIZATION.value)
         logger.info(
@@ -130,6 +178,7 @@ class KISPipeline:
                 "candidate_retrieval": int(candidate_retrieval_ms),
                 "fusion": int(trace.duration_for("fusion")),
                 "reranking": int(trace.duration_for("rerank")) or reranking_ms,
+                "temporal_refinement": refinement_ms,
                 "materialization": elapsed_ms(materialization_started),
                 "time_to_first_candidate": int(
                     retrieval_result.time_to_first_candidate_ms or 0
@@ -143,6 +192,7 @@ class KISPipeline:
                 "latency_ms": latency,
                 "warnings": [
                     *response.warnings,
+                    *variant_plan.warnings,
                     *retrieval_result.warnings,
                 ],
                 "trace": trace,
@@ -154,3 +204,14 @@ class KISPipeline:
             response.total_results,
         )
         return response
+
+
+class _PreparedRetrieval:
+    """Present one already-batched result to the shared reranking stage."""
+
+    def __init__(self, result) -> None:
+        self.result = result
+
+    def search(self, query, top_k, filters, query_type):
+        del query, top_k, filters, query_type
+        return self.result

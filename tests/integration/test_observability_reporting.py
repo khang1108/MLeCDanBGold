@@ -94,7 +94,7 @@ def test_search_response_and_health_expose_canonical_observability() -> None:
     assert response.latency_ms.time_to_first_candidate == 4
     assert response.latency_ms.time_to_first_submission >= 0
     assert health["capabilities"]["kis"] is True
-    assert health["capabilities"]["vqa"] is False
+    assert health["capabilities"]["vqa"] is True
     assert health["capabilities"]["shared_retrieval"] is True
     assert set(health["capabilities"]["remote_inference"]) == {
         "embedding",
