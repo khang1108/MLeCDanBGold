@@ -37,7 +37,10 @@ def load_search_service(messages: list[str]) -> SearchService:
     if llm is not None and data is not None and settings.search.rerank_count > 0:
         reranking = RerankingService.remote(
             data,
-            RerankerConfig(batch_size=models.reranker.batch_size),
+            RerankerConfig(
+                batch_size=models.reranker.batch_size,
+                required=settings.search.reranker.required,
+            ),
             llm,
             dataset_root=settings.dataset.root,
         )

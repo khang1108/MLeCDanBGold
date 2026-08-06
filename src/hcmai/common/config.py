@@ -191,6 +191,12 @@ class FusionConfig(BaseModel):
         return self
 
 
+class RerankerPolicyConfig(BaseModel):
+    """Online behavior when the optional reranker is unavailable."""
+
+    required: bool = False
+
+
 class SearchConfig(BaseModel):
     """Single search configuration selected for the competition pipeline."""
 
@@ -198,6 +204,7 @@ class SearchConfig(BaseModel):
     rerank_count: int = Field(default=100, ge=0)
     temporal_window_ms: int = Field(default=3000, ge=0)
     fusion: FusionConfig = Field(default_factory=FusionConfig)
+    reranker: RerankerPolicyConfig = Field(default_factory=RerankerPolicyConfig)
 
 
 class ApiConfig(BaseModel):

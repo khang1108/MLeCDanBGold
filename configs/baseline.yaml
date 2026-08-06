@@ -22,6 +22,8 @@ search:
   candidate_count: 500
   rerank_count: 100
   temporal_window_ms: 3000
+  reranker:
+    required: false
 
   fusion:
     method: "rrf"

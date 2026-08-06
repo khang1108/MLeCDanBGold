@@ -11,6 +11,7 @@ class RerankerConfig:
 
     batch_size: int = 8
     final_score_policy: str = "reranker"
+    required: bool = False
 
     def __post_init__(self) -> None:
         if self.batch_size < 1:

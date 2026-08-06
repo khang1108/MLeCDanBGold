@@ -10,10 +10,11 @@ from hcmai.common.schemas import (
     RetrievalTrace,
     SearchRequest,
     StageStatus,
+    StageTrace,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.observability.tracing import StageTimer, log_stage
-from hcmai.reranking.pipeline import RerankingService
+from hcmai.reranking.pipeline import RerankingError, RerankingService
 from hcmai.retriever.pipeline import RetrievalService
 
 logger = get_logger(__name__)
@@ -98,11 +99,43 @@ def rank_candidates(
             task_type=request.query_type,
             trace=skipped,
         )
-        return result, 0
+        return _with_reranking_trace(result, skipped), 0
     reranking_timer = StageTimer("reranking")
     depth = min(rerank_count, len(candidates))
     logger.info("[%s] reranking started candidates=%d", request_id, depth)
-    ranked = reranking.rerank(request.query, candidates[:depth])
+    try:
+        ranked = reranking.rerank(request.query, candidates[:depth])
+    except RerankingError as error:
+        reranking_trace = reranking_timer.finish(
+            status=StageStatus.PARTIAL,
+            error_category=error.category,
+        )
+        log_stage(
+            logger,
+            request_id=request_id,
+            task_type=request.query_type,
+            trace=reranking_trace,
+        )
+        logger.warning(
+            "[%s] reranking fallback category=%s candidates=%d",
+            request_id,
+            error.category,
+            depth,
+        )
+        if reranking.config.required:
+            raise
+        fallback = result.model_copy(
+            update={
+                "warnings": [
+                    *result.warnings,
+                    f"reranking fallback ({error.category})",
+                ]
+            }
+        )
+        return (
+            _with_reranking_trace(fallback, reranking_trace),
+            int(reranking_trace.duration_ms),
+        )
     ranked.extend(candidates[depth:])
     reranking_trace = reranking_timer.finish()
     reranking_ms = int(reranking_trace.duration_ms)
@@ -118,7 +151,8 @@ def rank_candidates(
         depth,
         reranking_ms,
     )
-    return result.model_copy(update={"candidates": ranked}), reranking_ms
+    updated = result.model_copy(update={"candidates": ranked})
+    return _with_reranking_trace(updated, reranking_trace), reranking_ms
 
 
 def request_id(request: SearchRequest) -> str:
@@ -130,3 +164,13 @@ def request_id(request: SearchRequest) -> str:
 
 def elapsed_ms(started: float) -> int:
     return max(0, int((perf_counter() - started) * 1_000))
+
+
+def _with_reranking_trace(
+    result: RetrievalResult,
+    stage: StageTrace,
+) -> RetrievalResult:
+    trace = result.trace.merged(
+        RetrievalTrace(stages={stage.stage: stage})
+    )
+    return result.model_copy(update={"trace": trace})
