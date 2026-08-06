@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-import pandas as pd
 
 from hcmai.common.schemas import (
     RetrievalCandidate,
@@ -85,17 +84,18 @@ class DenseRetriever:
 
         del query_type
         self._validate_query_batch(query_batch)
-        mapping = self.index.mapping
-        allowed_positions = _allowed_positions(mapping, filters)
-        search_k = self.index.index.ntotal if allowed_positions is not None else top_k
         logger.info(
             "FAISS batch search started queries=%d search_k=%d source=%s",
             len(query_batch.embeddings),
-            search_k,
+            top_k,
             self.source.value,
         )
         timer = StageTimer("index_search")
-        scores, positions = self.index.search(query_batch.vectors, search_k)
+        scores, positions = self.index.search_filtered(
+            query_batch.vectors,
+            top_k,
+            filters,
+        )
         search_trace = timer.finish()
         return [
             RetrievalResult(
@@ -104,7 +104,6 @@ class DenseRetriever:
                     positions[row_index],
                     top_k,
                     filters,
-                    allowed_positions,
                 ),
                 trace=RetrievalTrace(
                     stages={search_trace.stage: search_trace}
@@ -174,7 +173,6 @@ class DenseRetriever:
         positions,
         top_k: int,
         filters: SearchFilters | None,
-        allowed_positions: set[int] | None,
     ) -> list[RetrievalCandidate]:
         minimum = filters.min_score if filters is not None else None
         candidates: list[RetrievalCandidate] = []
@@ -182,8 +180,6 @@ class DenseRetriever:
         for raw_score, raw_position in zip(scores, positions):
             position = int(raw_position)
             if position < 0:
-                continue
-            if allowed_positions is not None and position not in allowed_positions:
                 continue
             score = float(raw_score)
             if minimum is not None and score < minimum:
@@ -197,26 +193,6 @@ class DenseRetriever:
             if len(candidates) >= top_k:
                 break
         return candidates
-
-
-def _allowed_positions(
-    mapping: pd.DataFrame,
-    filters: SearchFilters | None,
-) -> set[int] | None:
-    if filters is None or not (
-        filters.video_ids
-        or filters.start_time_ms is not None
-        or filters.end_time_ms is not None
-    ):
-        return None
-    mask = pd.Series(True, index=mapping.index)
-    if filters.video_ids:
-        mask &= mapping["video_id"].isin(filters.video_ids)
-    if filters.start_time_ms is not None:
-        mask &= mapping["timestamp_ms"] >= filters.start_time_ms
-    if filters.end_time_ms is not None:
-        mask &= mapping["timestamp_ms"] <= filters.end_time_ms
-    return set(mapping.loc[mask, "embedding_index"].tolist())
 
 
 def _candidate(frame_id, row, source, score, rank) -> RetrievalCandidate:

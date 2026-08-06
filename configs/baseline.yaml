@@ -13,6 +13,7 @@ index:
   caption_path: "artifacts/indexes/caption"
   ocr_path: "artifacts/indexes/ocr"
   asr_path: "artifacts/indexes/asr"
+  subset_search_threshold: 100000
   text_embedding_filenames:
     caption: "caption_embeddings.npy"
     ocr: "ocr_embeddings.npy"

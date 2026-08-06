@@ -156,8 +156,15 @@ class RetrievalService:
         return CacheMetricsSnapshot(0, 0, 0, 0, 0)
 
     @staticmethod
-    def load_index(index_dir: str | Path) -> DenseIndex:
-        return DenseIndex.load(index_dir)
+    def load_index(
+        index_dir: str | Path,
+        *,
+        subset_search_threshold: int = 100_000,
+    ) -> DenseIndex:
+        return DenseIndex.load(
+            index_dir,
+            subset_search_threshold=subset_search_threshold,
+        )
 
     @staticmethod
     def build_index(

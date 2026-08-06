@@ -134,6 +134,7 @@ class IndexConfig(BaseModel):
     caption_path: Path = Path("artifacts/indexes/caption")
     ocr_path: Path = Path("artifacts/indexes/ocr")
     asr_path: Path = Path("artifacts/indexes/asr")
+    subset_search_threshold: int = Field(default=100_000, ge=1)
     text_embedding_filenames: dict[RetrievalSource, str] = Field(
         default_factory=_text_embedding_filenames
     )

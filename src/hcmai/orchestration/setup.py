@@ -125,7 +125,10 @@ def _load_retrieval(
         messages.append(f"Index directory not available at {index_dir}")
         return None
     try:
-        visual = RetrievalService.load_index(index_dir)
+        visual = RetrievalService.load_index(
+            index_dir,
+            subset_search_threshold=settings.index.subset_search_threshold,
+        )
         visual_encoder = _query_encoder(
             models.visual_embedding, visual, llm, "visual"
         )
@@ -151,7 +154,10 @@ def _load_retrieval(
                     f"{source.value.upper()} index not available at {path}"
                 )
                 continue
-            text_indexes[source] = RetrievalService.load_index(path)
+            text_indexes[source] = RetrievalService.load_index(
+                path,
+                subset_search_threshold=settings.index.subset_search_threshold,
+            )
         if any(
             index.metadata.dataset_version != visual.metadata.dataset_version
             for index in text_indexes.values()
