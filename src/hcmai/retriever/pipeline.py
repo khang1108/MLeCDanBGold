@@ -9,11 +9,12 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
-from hcmai.common.config import FusionConfig
+from hcmai.common.config import FusionConfig, RetrievalCacheConfig
 from hcmai.common.schemas import RetrievalResult, RetrievalSource, TaskType
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retriever.dense.index import INDEX_FILENAME, DenseIndex
+from hcmai.retriever.cache import CacheMetricsSnapshot, EmbeddingCache
 from hcmai.retriever.dense.retriever import DenseRetriever
 from hcmai.retriever.fusion.rrf import RRFFusionRetriever
 from hcmai.retriever.models.contracts import Retriever
@@ -47,8 +48,21 @@ class RetrievalService:
         index: DenseIndex,
         encoder: TextEmbeddingAdapter,
         source: RetrievalSource = RetrievalSource.VISUAL,
+        cache_config: RetrievalCacheConfig | None = None,
     ) -> "RetrievalService":
-        return cls(DenseRetriever(encoder, index, source))
+        cache = _embedding_cache(cache_config)
+        prompt_version = (
+            cache_config.prompt_version if cache_config is not None else "query-v1"
+        )
+        return cls(
+            DenseRetriever(
+                encoder,
+                index,
+                source,
+                embedding_cache=cache,
+                prompt_version=prompt_version,
+            )
+        )
 
     @classmethod
     def from_indexes(
@@ -58,12 +72,27 @@ class RetrievalService:
         text_indexes: Mapping[RetrievalSource, DenseIndex],
         text_encoder: TextEmbeddingAdapter,
         fusion: FusionConfig,
+        cache_config: RetrievalCacheConfig | None = None,
     ) -> "RetrievalService":
+        cache = _embedding_cache(cache_config)
+        prompt_version = (
+            cache_config.prompt_version if cache_config is not None else "query-v1"
+        )
         retrievers: list[Retriever] = [
-            DenseRetriever(visual_encoder, visual_index)
+            DenseRetriever(
+                visual_encoder,
+                visual_index,
+                embedding_cache=cache,
+                prompt_version=prompt_version,
+            )
         ]
         retrievers.extend(
-            _TEXT_RETRIEVERS[source](text_encoder, index)
+            _TEXT_RETRIEVERS[source](
+                text_encoder,
+                index,
+                cache,
+                prompt_version,
+            )
             for source, index in text_indexes.items()
         )
         if len(retrievers) == 1:
@@ -116,6 +145,16 @@ class RetrievalService:
             f"No {source_family!r} query encoder is configured for retrieval"
         )
 
+    def cache_metrics(self) -> CacheMetricsSnapshot:
+        """Return metrics for the shared embedding cache, if configured."""
+
+        retrievers = getattr(self._retriever, "retrievers", (self._retriever,))
+        for retriever in retrievers:
+            cache = getattr(retriever, "embedding_cache", None)
+            if cache is not None:
+                return cache.metrics()
+        return CacheMetricsSnapshot(0, 0, 0, 0, 0)
+
     @staticmethod
     def load_index(index_dir: str | Path) -> DenseIndex:
         return DenseIndex.load(index_dir)
@@ -159,3 +198,15 @@ class RetrievalService:
             output_dir=output_dir,
             encoder=encoder,
         )
+
+
+def _embedding_cache(
+    config: RetrievalCacheConfig | None,
+) -> EmbeddingCache | None:
+    if config is None or not config.enabled:
+        return None
+    return EmbeddingCache(
+        max_entries=config.embedding_max_entries,
+        max_bytes=config.embedding_max_bytes,
+        ttl_seconds=config.embedding_ttl_seconds,
+    )

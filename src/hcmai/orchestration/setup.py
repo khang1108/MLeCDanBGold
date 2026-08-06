@@ -158,12 +158,17 @@ def _load_retrieval(
         ):
             raise ValueError("visual and text index dataset versions differ")
         if not text_indexes:
-            return RetrievalService.from_index(visual, visual_encoder)
+            return RetrievalService.from_index(
+                visual,
+                visual_encoder,
+                cache_config=settings.search.cache,
+            )
         sample = next(iter(text_indexes.values()))
         text_encoder = _query_encoder(models.caption_embedding, sample, llm, "text")
         return RetrievalService.from_indexes(
             visual, visual_encoder, text_indexes, text_encoder,
             settings.search.fusion,
+            settings.search.cache,
         )
     except Exception as error:
         messages.append(

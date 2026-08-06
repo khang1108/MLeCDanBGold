@@ -19,6 +19,7 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.observability.tracing import StageTimer
 from hcmai.retriever.dense.index import DenseIndex
+from hcmai.retriever.cache import EmbeddingCache
 from hcmai.retriever.query_batch import (
     QueryEmbeddingBatch,
     SourceFamily,
@@ -36,6 +37,8 @@ class DenseRetriever:
         encoder: TextEmbeddingAdapter,
         index: DenseIndex,
         source: RetrievalSource = RetrievalSource.VISUAL,
+        embedding_cache: EmbeddingCache | None = None,
+        prompt_version: str = "query-v1",
     ) -> None:
         if index.metadata.model_name != encoder.config.model_name:
             raise ValueError(
@@ -53,6 +56,8 @@ class DenseRetriever:
         self.encoder = encoder
         self.index = index
         self.source = source
+        self.embedding_cache = embedding_cache
+        self.prompt_version = prompt_version
 
     @property
     def source_family(self) -> SourceFamily:
@@ -61,7 +66,13 @@ class DenseRetriever:
     def encode(self, query_texts: list[str]) -> QueryEmbeddingBatch:
         """Encode a non-empty query batch once with full provenance."""
 
-        return encode_query_batch(query_texts, self.encoder, self.source_family)
+        return encode_query_batch(
+            query_texts,
+            self.encoder,
+            self.source_family,
+            self.embedding_cache,
+            self.prompt_version,
+        )
 
     def search_vectors(
         self,

@@ -197,6 +197,20 @@ class RerankerPolicyConfig(BaseModel):
     required: bool = False
 
 
+class RetrievalCacheConfig(BaseModel):
+    """Bounds for process-local immutable retrieval caches."""
+
+    enabled: bool = True
+    prompt_version: str = Field(default="query-v1", min_length=1)
+    embedding_ttl_seconds: float = Field(default=3600, gt=0)
+    embedding_max_entries: int = Field(default=4096, ge=1)
+    embedding_max_bytes: int = Field(default=67_108_864, ge=1)
+    thumbnail_ttl_seconds: float = Field(default=3600, gt=0)
+    thumbnail_max_entries: int = Field(default=1024, ge=1)
+    thumbnail_max_bytes: int = Field(default=134_217_728, ge=1)
+    disk_enabled: Literal[False] = False
+
+
 class SearchConfig(BaseModel):
     """Single search configuration selected for the competition pipeline."""
 
@@ -205,6 +219,7 @@ class SearchConfig(BaseModel):
     temporal_window_ms: int = Field(default=3000, ge=0)
     fusion: FusionConfig = Field(default_factory=FusionConfig)
     reranker: RerankerPolicyConfig = Field(default_factory=RerankerPolicyConfig)
+    cache: RetrievalCacheConfig = Field(default_factory=RetrievalCacheConfig)
 
 
 class ApiConfig(BaseModel):

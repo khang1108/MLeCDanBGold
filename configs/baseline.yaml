@@ -24,6 +24,16 @@ search:
   temporal_window_ms: 3000
   reranker:
     required: false
+  cache:
+    enabled: true
+    prompt_version: "query-v1"
+    embedding_ttl_seconds: 3600
+    embedding_max_entries: 4096
+    embedding_max_bytes: 67108864
+    thumbnail_ttl_seconds: 3600
+    thumbnail_max_entries: 1024
+    thumbnail_max_bytes: 134217728
+    disk_enabled: false
 
   fusion:
     method: "rrf"
