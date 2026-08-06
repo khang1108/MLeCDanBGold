@@ -7,6 +7,7 @@ from hcmai.common.schemas.base import ContractModel, NonEmptyString
 from hcmai.common.schemas.conversation import FrameFeedback
 from hcmai.common.schemas.enum import TaskType
 from hcmai.common.schemas.retrieval import SearchScores
+from hcmai.common.schemas.telemetry import PipelineTrace
 
 
 class SearchFilters(ContractModel):
@@ -68,6 +69,8 @@ class SearchLatency(ContractModel):
     reranking: int = Field(default=0, ge=0)
     temporal_refinement: int = Field(default=0, ge=0)
     materialization: int = Field(default=0, ge=0)
+    time_to_first_candidate: int = Field(default=0, ge=0)
+    time_to_first_submission: int = Field(default=0, ge=0)
     total: int = Field(ge=0)
 
 
@@ -98,6 +101,7 @@ class SearchResponse(ContractModel):
     latency_ms: SearchLatency
     results: list[SearchResult] = Field(default_factory=list)
     warnings: list[NonEmptyString] = Field(default_factory=list)
+    trace: PipelineTrace = Field(default_factory=PipelineTrace)
     session_id: NonEmptyString | None = None
     turn_id: NonEmptyString | None = None
     assistant_turn_id: NonEmptyString | None = None

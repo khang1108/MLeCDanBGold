@@ -26,6 +26,7 @@ class LLMService:
 
     def __init__(self, adapter: Any) -> None:
         self.adapter = adapter
+        self._last_readiness: Any | None = None
 
     @classmethod
     def from_environment(cls) -> LLMService:
@@ -75,8 +76,20 @@ class LLMService:
         if method is not None:
             method()
 
-    def readiness(self) -> Any:
-        return self.adapter.readiness()
+    def readiness(self, *args: Any, **kwargs: Any) -> Any:
+        self._last_readiness = self.adapter.readiness(*args, **kwargs)
+        return self._last_readiness
+
+    def capability_health(self) -> dict[str, bool]:
+        readiness = self._last_readiness
+        if readiness is None:
+            return {
+                "embedding": False,
+                "reranking": False,
+                "multi_image_vqa": False,
+                "structured_parsing": False,
+            }
+        return readiness.capabilities.model_dump()
 
     def gateway_health(self) -> dict[str, Any]:
         method = getattr(self.adapter, "health", None)

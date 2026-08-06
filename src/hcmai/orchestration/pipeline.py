@@ -25,6 +25,7 @@ from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.query_suggestions.pipeline import SuggestionService
 from hcmai.reranking.pipeline import RerankingService
 from hcmai.retriever.pipeline import RetrievalService
+from hcmai.observability import METRICS
 
 logger = get_logger(__name__)
 
@@ -119,6 +120,22 @@ class SearchService:
             for task_type, registered in task_capabilities.items()
         }
         search_ready = any(task_capabilities.values())
+        default_remote_capabilities = {
+            "embedding": False,
+            "reranking": False,
+            "multi_image_vqa": False,
+            "structured_parsing": False,
+        }
+        capability_health = (
+            getattr(self.llm, "capability_health", None)
+            if self.llm is not None
+            else None
+        )
+        remote_capabilities = (
+            capability_health()
+            if capability_health is not None
+            else default_remote_capabilities
+        )
         return {
             "status": "ok",
             "ready": data_ready and retrieval_ready,
@@ -148,8 +165,13 @@ class SearchService:
                 }
                 for source in RetrievalSource
             },
+            "observability": METRICS.snapshot(),
             "capabilities": {
                 "search": search_ready,
+                "kis": task_capabilities.get(TaskType.KIS.value, False),
+                "vqa": task_capabilities.get(TaskType.VQA.value, False),
+                "shared_retrieval": retrieval_ready,
+                "remote_inference": remote_capabilities,
                 "query_suggestions": {
                     "enabled": suggestions_ready,
                     "provider": (

@@ -7,6 +7,7 @@ import logging
 from time import perf_counter
 
 from hcmai.common.schemas import StageStatus, StageTrace, TaskType
+from hcmai.observability.metrics import METRICS
 
 
 class StageTimer:
@@ -23,6 +24,10 @@ class StageTimer:
         attempt_count: int = 1,
         cache_hit: bool = False,
         error_category: str | None = None,
+        input_count: int | None = None,
+        output_count: int | None = None,
+        backend: str | None = None,
+        fallback_used: bool = False,
     ) -> StageTrace:
         """Finish this timer and return a request-owned trace value."""
 
@@ -36,6 +41,10 @@ class StageTimer:
             attempt_count=attempt_count,
             cache_hit=cache_hit,
             error_category=error_category,
+            input_count=input_count,
+            output_count=output_count,
+            backend=backend,
+            fallback_used=fallback_used,
         )
 
 
@@ -49,6 +58,7 @@ def log_stage(
     """Emit the required stage fields as one deterministic JSON log record."""
 
     task_value = getattr(task_type, "value", task_type)
+    METRICS.observe_stage(trace)
     logger.info(
         json.dumps(
             {
@@ -57,6 +67,11 @@ def log_stage(
                 "stage": trace.stage,
                 "duration_ms": trace.duration_ms,
                 "status": trace.status.value,
+                "input_count": trace.input_count,
+                "output_count": trace.output_count,
+                "backend": trace.backend,
+                "fallback_used": trace.fallback_used,
+                "error_category": trace.error_category,
             },
             ensure_ascii=False,
             sort_keys=True,

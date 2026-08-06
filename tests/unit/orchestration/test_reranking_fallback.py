@@ -111,7 +111,7 @@ def test_fallback_trace_is_partial_and_does_not_expose_backend_detail() -> None:
         request_id="request-1",
     )
 
-    trace = result.trace.stages["reranking"]
+    trace = result.trace.stages["rerank"]
     assert trace.status is StageStatus.PARTIAL
     assert trace.error_category == "image_load_failure"
     assert result.warnings == ["reranking fallback (image_load_failure)"]

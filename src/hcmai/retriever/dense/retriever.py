@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Optional
+from time import perf_counter
 
 import numpy as np
 
@@ -17,6 +18,7 @@ from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.logging import get_logger
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.observability.tracing import StageTimer
+from hcmai.observability import PipelineStage
 from hcmai.retriever.dense.index import DenseIndex
 from hcmai.retriever.cache import EmbeddingCache
 from hcmai.retriever.query_batch import (
@@ -90,13 +92,17 @@ class DenseRetriever:
             top_k,
             self.source.value,
         )
-        timer = StageTimer("index_search")
+        timer = StageTimer(PipelineStage.SEARCH.value)
         scores, positions = self.index.search_filtered(
             query_batch.vectors,
             top_k,
             filters,
         )
-        search_trace = timer.finish()
+        search_trace = timer.finish(
+            input_count=len(query_batch.embeddings),
+            output_count=sum(position >= 0 for row in positions for position in row),
+            backend="faiss_or_exact_subset",
+        )
         return [
             RetrievalResult(
                 candidates=self._materialize(
@@ -123,8 +129,10 @@ class DenseRetriever:
 
         if not queries:
             return []
+        started = perf_counter()
         batch = self.encode(queries)
         results = self.search_vectors(batch, top_k, filters, query_type)
+        first_candidate_ms = (perf_counter() - started) * 1_000
         return [
             result.model_copy(
                 update={
@@ -133,7 +141,8 @@ class DenseRetriever:
                             batch.encoding_trace.stage: batch.encoding_trace,
                             **result.trace.stages,
                         }
-                    )
+                    ),
+                    "time_to_first_candidate_ms": first_candidate_ms,
                 }
             )
             for result in results

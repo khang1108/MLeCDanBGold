@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from hcmai.common.config import AppConfig
@@ -29,7 +30,7 @@ def load_search_service(messages: list[str]) -> SearchService:
     ))
     index_dir = Path(os.getenv("HCMAI_INDEX_PATH", str(settings.index.path)))
     data = _load_data(settings, metadata_path, messages)
-    llm = _load_remote_llm(settings)
+    llm = _load_remote_llm(settings, messages)
     retrieval = _load_retrieval(
         settings, models, index_dir, llm, messages
     )
@@ -71,11 +72,23 @@ def _load_model_config() -> LLMServiceConfig:
     return LLMServiceConfig.from_yaml(path)
 
 
-def _load_remote_llm(settings: AppConfig) -> LLMService | None:
+def _load_remote_llm(
+    settings: AppConfig,
+    messages: list[str],
+) -> LLMService | None:
     if not settings.inference.enabled:
         return None
     base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
-    return LLMService.remote(base_url, settings.inference)
+    service = LLMService.remote(base_url, settings.inference)
+    try:
+        service.readiness(deadline_at=monotonic() + 5.0)
+    except Exception as error:
+        category = getattr(getattr(error, "category", None), "value", None)
+        messages.append(
+            "Remote inference readiness unavailable: "
+            f"{category or type(error).__name__}"
+        )
+    return service
 
 
 def _load_data(

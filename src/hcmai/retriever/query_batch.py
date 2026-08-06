@@ -9,6 +9,7 @@ import numpy as np
 
 from hcmai.common.schemas import StageTrace
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
+from hcmai.observability import PipelineStage
 from hcmai.observability.tracing import StageTimer
 from hcmai.retriever.cache import EmbeddingCache, EmbeddingCacheKey
 
@@ -106,7 +107,7 @@ def encode_query_batch(
     if not queries:
         raise ValueError("texts must not be empty")
     unique_texts = list(dict.fromkeys(query.normalized_text for query in queries))
-    timer = StageTimer("query_encoding")
+    timer = StageTimer(PipelineStage.ENCODE.value)
     model_name = encoder.config.model_name
     initial_revision = _encoder_revision(encoder)
     by_text: dict[str, np.ndarray] = {}
@@ -151,7 +152,12 @@ def encode_query_batch(
                 )
     else:
         revision = initial_revision
-    trace = timer.finish(cache_hit=not misses)
+    trace = timer.finish(
+        cache_hit=not misses,
+        input_count=len(unique_texts),
+        output_count=len(unique_texts),
+        backend=model_name,
+    )
     embeddings = tuple(
         QueryEmbedding(
             query=query,
