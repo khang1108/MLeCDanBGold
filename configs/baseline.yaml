@@ -45,3 +45,15 @@ inference:
   enabled: true
   base_url: "https://api.iamphuckhang.dev"
   timeout_seconds: 120
+  connect_timeout_seconds: 5
+  read_timeout_seconds: 120
+  write_timeout_seconds: 30
+  pool_timeout_seconds: 5
+  max_attempts: 3
+  backoff_initial_seconds: 0.1
+  backoff_max_seconds: 2
+  backoff_jitter_ratio: 0.2
+  circuit_failure_threshold: 3
+  circuit_cooldown_seconds: 30
+  max_concurrency: 4
+  minimum_retry_budget_seconds: 0.05

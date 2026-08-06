@@ -213,6 +213,24 @@ class InferenceConfig(BaseModel):
     enabled: bool = False
     base_url: str = "https://api.iamphuckhang.dev"
     timeout_seconds: float = Field(default=10, gt=0, le=120)
+    connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
+    read_timeout_seconds: float = Field(default=120, gt=0, le=600)
+    write_timeout_seconds: float = Field(default=30, gt=0, le=600)
+    pool_timeout_seconds: float = Field(default=5, gt=0, le=120)
+    max_attempts: int = Field(default=3, ge=1, le=10)
+    backoff_initial_seconds: float = Field(default=0.1, ge=0, le=10)
+    backoff_max_seconds: float = Field(default=2, ge=0, le=60)
+    backoff_jitter_ratio: float = Field(default=0.2, ge=0, le=1)
+    circuit_failure_threshold: int = Field(default=3, ge=1, le=100)
+    circuit_cooldown_seconds: float = Field(default=30, gt=0, le=3600)
+    max_concurrency: int = Field(default=4, ge=1, le=128)
+    minimum_retry_budget_seconds: float = Field(default=0.05, ge=0, le=10)
+
+    @model_validator(mode="after")
+    def validate_resilience_ranges(self) -> InferenceConfig:
+        if self.backoff_max_seconds < self.backoff_initial_seconds:
+            raise ValueError("backoff_max_seconds must not be below initial backoff")
+        return self
 
 
 class BenchmarkConfig(BaseModel):

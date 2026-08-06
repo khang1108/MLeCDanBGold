@@ -72,7 +72,7 @@ def _load_remote_llm(settings: AppConfig) -> LLMService | None:
     if not settings.inference.enabled:
         return None
     base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
-    return LLMService.remote(base_url, settings.inference.timeout_seconds)
+    return LLMService.remote(base_url, settings.inference)
 
 
 def _load_data(

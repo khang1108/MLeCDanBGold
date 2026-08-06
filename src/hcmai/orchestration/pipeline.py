@@ -128,6 +128,14 @@ class SearchService:
                     RetrievalSource.ASR,
                 )
             },
+            "remote_inference": (
+                self.llm.gateway_health()
+                if self.llm is not None
+                else {
+                    "configured": False,
+                    "circuit_state": "not_configured",
+                }
+            ),
             "capabilities": {
                 "search": search_ready,
                 "query_suggestions": {

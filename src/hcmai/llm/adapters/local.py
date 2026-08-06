@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 
 from hcmai.common.schemas import (
+    InferenceCapabilities,
     InferenceReadiness,
     ModelStatus,
     QuerySuggestion,
@@ -266,6 +267,12 @@ class LocalAdapter:
                     ),
                 ),
             },
+            capabilities=InferenceCapabilities(
+                embedding=visual_loaded or caption_loaded,
+                reranking=reranker_loaded,
+                multi_image_vqa=False,
+                structured_parsing=conversation_loaded,
+            ),
         )
 
     def _query_suggestion_model(self) -> Any | None:

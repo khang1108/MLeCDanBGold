@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from hcmai.common.config import InferenceConfig
 from hcmai.llm.config import (
     HostedConversationConfig,
     LLMServiceConfig,
@@ -34,7 +35,10 @@ class LLMService:
 
     @classmethod
     def remote(
-        cls, base_url: str, timeout_seconds: float = 10, client: Any | None = None
+        cls,
+        base_url: str,
+        timeout_seconds: float | InferenceConfig = 10,
+        client: Any | None = None,
     ) -> LLMService:
         from hcmai.llm.adapters.http import InferenceClient
 
@@ -73,6 +77,15 @@ class LLMService:
 
     def readiness(self) -> Any:
         return self.adapter.readiness()
+
+    def gateway_health(self) -> dict[str, Any]:
+        method = getattr(self.adapter, "health", None)
+        if method is None:
+            return {
+                "configured": False,
+                "circuit_state": "not_applicable",
+            }
+        return method()
 
     def embed_text(self, texts: list[str], source: str = "visual") -> Any:
         return self.adapter.embed_text(texts, source)
