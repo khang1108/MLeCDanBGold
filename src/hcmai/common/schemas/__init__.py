@@ -22,12 +22,6 @@ from .minichallenge import (
     MiniChallengeTaskTemplate,
 )
 from .retrieval import RetrievalCandidate, RetrievalResult, SearchScores
-from .query_suggestion import (
-    QuerySuggestion,
-    QuerySuggestionInferenceRequest,
-    QuerySuggestionRequest,
-    QuerySuggestionResponse,
-)
 from .search import (
     SearchFilters,
     SearchLatency,
@@ -74,10 +68,6 @@ __all__ = [
     "StageTrace",
     "PipelineTrace",
     "RetrievalTrace",
-    "QuerySuggestion",
-    "QuerySuggestionInferenceRequest",
-    "QuerySuggestionRequest",
-    "QuerySuggestionResponse",
     "SearchFilters",
     "SearchRequest",
     "MessageRequest",
