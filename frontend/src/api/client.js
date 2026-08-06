@@ -15,8 +15,13 @@ const errorMessage = (payload, status) => {
 };
 
 // Parses JSON once and makes backend, malformed-response, and network errors distinct.
-export const requestJson = async (path, { method = 'GET', body, signal } = {}) => {
-  const options = { method, headers: { 'Content-Type': 'application/json' } };
+export const requestJson = async (path, {
+  method = 'GET', body, signal, headers = {},
+} = {}) => {
+  const options = {
+    method,
+    headers: { 'Content-Type': 'application/json', ...headers },
+  };
   if (body !== undefined) options.body = JSON.stringify(body);
   if (signal) options.signal = signal;
 

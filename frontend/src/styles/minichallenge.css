@@ -1,0 +1,104 @@
+.minichallenge-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.minichallenge-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.minichallenge-heading .adhoc-sidebar-title {
+  margin: 0;
+}
+
+.minichallenge-heading > span {
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.minichallenge-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--color-ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.minichallenge-connect {
+  width: 100%;
+  font-size: 12px;
+}
+
+.minichallenge-connect:disabled,
+.card-submit-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.minichallenge-task {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas-soft);
+  font-size: 11px;
+}
+
+.minichallenge-task span {
+  color: var(--color-ink-muted);
+}
+
+.minichallenge-answer {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.minichallenge-message {
+  padding: 8px;
+  border-radius: var(--rounded-sm);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.minichallenge-message.error {
+  color: #9f2929;
+  background: #fff1f1;
+}
+
+.minichallenge-message.success {
+  color: #176b35;
+  background: #effaf3;
+}
+
+.frame-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.card-submit-btn {
+  border: 1px solid rgba(0, 117, 222, 0.3);
+  border-radius: var(--rounded-sm);
+  padding: 3px 6px;
+  color: var(--color-primary);
+  background: rgba(0, 117, 222, 0.06);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.card-submit-btn:hover {
+  background: rgba(0, 117, 222, 0.12);
+}

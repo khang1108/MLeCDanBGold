@@ -12,6 +12,8 @@ const FramesBox = ({
   onPromising,
   onReject,
   onFrameClick,
+  onChallengeSubmit,
+  submittingFrameId,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
   if (isLoading) return null;
@@ -80,6 +82,8 @@ const FramesBox = ({
                 onPromising={onPromising}
                 onReject={onReject}
                 onClick={() => onFrameClick(frame)}
+                onChallengeSubmit={onChallengeSubmit}
+                isChallengeSubmitting={submittingFrameId === frame.frame_id}
               />
             ))}
           </div>

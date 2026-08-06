@@ -22,6 +22,15 @@ from .inference import (
     TextEmbeddingRequest,
     TextEmbeddingResponse,
 )
+from .minichallenge import (
+    MiniChallengeAnswer,
+    MiniChallengeAnswerSet,
+    MiniChallengeEvaluation,
+    MiniChallengeSubmission,
+    MiniChallengeSubmissionResult,
+    MiniChallengeSubmitRequest,
+    MiniChallengeTaskTemplate,
+)
 from .retrieval import RetrievalCandidate, RetrievalResult, SearchScores
 from .query_suggestion import (
     QuerySuggestion,
@@ -102,6 +111,13 @@ __all__ = [
     "RerankResponse",
     "TextEmbeddingRequest",
     "TextEmbeddingResponse",
+    "MiniChallengeAnswer",
+    "MiniChallengeAnswerSet",
+    "MiniChallengeEvaluation",
+    "MiniChallengeSubmission",
+    "MiniChallengeSubmissionResult",
+    "MiniChallengeSubmitRequest",
+    "MiniChallengeTaskTemplate",
     "VQAInferenceEvidence",
     "VQAInferenceRequest",
     "VQAInferenceResponse",

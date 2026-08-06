@@ -24,6 +24,7 @@ src/hcmai/
 ├── transcripts/              # TranscriptService and ASR adapters
 ├── llm/                      # LLMService and local/HTTP adapters
 ├── query_suggestions/        # SuggestionService and provider adapters
+├── submission/               # Optional DRES mini-challenge client
 ├── agents/kisc/              # Bounded conversational KIS research code
 └── common/                   # Shared config, schemas, and generic utilities
 ```
@@ -89,3 +90,13 @@ The public endpoints remain:
 - `POST /api/v1/query-suggestions`
 - `GET /api/v1/frames/{frame_id}` and frame asset/neighbor routes
 - `POST /api/v1/submit`
+- `GET /api/v1/minichallenge/evaluations`
+- `GET /api/v1/minichallenge/evaluations/{id}/current-task`
+- `POST /api/v1/minichallenge/evaluations/{id}/submit`
+
+The mini-challenge routes require the DRES session token in the
+`X-DRES-Session` header. The browser keeps this token only in memory. Submission
+requests contain a canonical `frame_id`; the backend resolves its authoritative
+`video_id` and sends the DRES `answerSets` payload with `start=end=0`. Configure
+the upstream with `HCMAI_MINICHALLENGE_BASE_URL` and bound network calls with
+`HCMAI_MINICHALLENGE_TIMEOUT_SECONDS`.

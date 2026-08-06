@@ -13,6 +13,15 @@
     flex-direction: column;
   }
 
+  .adhoc-workspace-body {
+    flex-direction: column;
+  }
+
+  .adhoc-sidebar {
+    width: 100%;
+    flex-basis: auto;
+  }
+
   .conversation-panel {
     flex-basis: auto;
     width: 100%;

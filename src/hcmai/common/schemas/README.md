@@ -120,6 +120,16 @@ that feature package. In particular, caption/OCR types belong under
   query metadata, gold frame/video IDs, temporal tolerance, tags, and optional
   notes. ID and tag lists are deduplicated while preserving order.
 
+### `minichallenge.py`
+
+- `MiniChallengeEvaluation` and `MiniChallengeTaskTemplate`: validated DRES
+  evaluation-list and current-task responses with camelCase wire aliases.
+- `MiniChallengeSubmitRequest`: local submission input containing canonical
+  `frame_id`, task name, and optional text answer.
+- `MiniChallengeSubmission`: exact DRES `answerSets` wire payload.
+- `MiniChallengeSubmissionResult`: accepted verdict and description returned by
+  DRES.
+
 ### `conversation.py`
 
 - `ConversationConstraint`: one resolver fact with a semantic slot, value,

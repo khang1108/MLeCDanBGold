@@ -20,10 +20,12 @@ from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.api.routers import (
     create_frames_router,
+    create_minichallenge_router,
     create_query_suggestion_router,
     create_search_router,
     create_system_router,
 )
+from hcmai.submission.pipeline import MiniChallengeService
 
 logger = get_logger(__name__)
 
@@ -43,11 +45,21 @@ def _configure_backend_logging() -> None:
 
 def create_app(
     search_service: SearchService | None = None,
+    minichallenge_service: MiniChallengeService | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     service_container: dict[str, Any] = {
         "service": search_service,
         "startup_messages": [],
+        "minichallenge_service": minichallenge_service or MiniChallengeService.remote(
+            os.getenv(
+                "HCMAI_MINICHALLENGE_BASE_URL",
+                "http://if-wan4.selab.edu.vn:20740",
+            ),
+            timeout_seconds=float(
+                os.getenv("HCMAI_MINICHALLENGE_TIMEOUT_SECONDS", "10")
+            ),
+        ),
     }
     dataset_root = Path(os.getenv("HCMAI_DATASET_ROOT", "data")).resolve()
 
@@ -79,6 +91,7 @@ def create_app(
             close = getattr(service, "close", None)
             if close is not None:
                 close()
+            await service_container["minichallenge_service"].close()
             logger.info("Backend shutdown completed")
 
     app = FastAPI(
@@ -105,6 +118,7 @@ def create_app(
     )
     app.include_router(create_search_router(service_container))
     app.include_router(create_query_suggestion_router(service_container))
+    app.include_router(create_minichallenge_router(service_container))
     app.include_router(create_frames_router(service_container, dataset_root))
 
     return app

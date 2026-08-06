@@ -3,6 +3,8 @@ import { searchFrames } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "./GifLoaderOverlay";
+import MiniChallengePanel from "../../minichallenge/components/MiniChallengePanel";
+import { useMiniChallenge } from "../../minichallenge/hooks/useMiniChallenge";
 
 // Tab 2: Simple ad-hoc query workspace with top query bar and split options/results layout.
 const AdHocSearchWorkspace = ({
@@ -19,6 +21,7 @@ const AdHocSearchWorkspace = ({
   const [latencyMs, setLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const challenge = useMiniChallenge();
 
   const handleSubmit = useCallback(
     async (event) => {
@@ -48,6 +51,15 @@ const AdHocSearchWorkspace = ({
   const handleResetOptions = useCallback(() => {
     setTopK(20);
   }, [setTopK]);
+
+  const handleChallengeSubmit = useCallback((frame) => {
+    const taskName = challenge.currentTask?.name;
+    if (!taskName) return;
+    const confirmed = window.confirm(
+      `Submit ${frame.video_id} to “${taskName}”?`,
+    );
+    if (confirmed) challenge.submitFrame(frame);
+  }, [challenge]);
 
   return (
     <div className="adhoc-workspace">
@@ -96,6 +108,7 @@ const AdHocSearchWorkspace = ({
             setTopK={setTopK}
             onReset={handleResetOptions}
           />
+          <MiniChallengePanel challenge={challenge} />
         </aside>
 
         <section className="adhoc-results">
@@ -107,6 +120,8 @@ const AdHocSearchWorkspace = ({
             latencyMs={latencyMs}
             warnings={warnings}
             onFrameClick={onFrameClick}
+            onChallengeSubmit={challenge.currentTask ? handleChallengeSubmit : null}
+            submittingFrameId={challenge.submittingFrameId}
           />
         </section>
       </div>
