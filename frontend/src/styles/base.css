@@ -38,11 +38,7 @@ path,
 .toolbox-slider,
 .btn-primary,
 .btn-utility,
-.tab-button,
-.frame-card,
-.conversation-action-btn,
-.history-item,
-.frame-feedback-btn {
+.frame-card {
   cursor: url("../../public/nino_cursor_24.png") 12 12, url("../../public/nino_cursor_24.png") 12 12, auto !important;
 }
 

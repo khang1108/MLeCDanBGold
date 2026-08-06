@@ -8,18 +8,14 @@ const response = (payload, status = 200) => ({
 
 afterEach(() => jest.restoreAllMocks());
 
-test('posts the canonical stateful search request', async () => {
+test('posts the canonical standalone search request', async () => {
   const payload = { results: [], latency_ms: { total: 1 } };
   jest.spyOn(global, 'fetch').mockResolvedValue(response(payload));
 
   await expect(searchFrames({
     query: ' red boat ',
     topK: 20,
-    sessionId: 'kisc_sess_1234',
-    feedback: {
-      accepted_frame_ids: ['frame_A'],
-      rejected_frame_ids: [],
-    },
+    queryType: 'vkis',
   })).resolves.toEqual(payload);
 
   expect(global.fetch).toHaveBeenCalledWith(
@@ -29,11 +25,7 @@ test('posts the canonical stateful search request', async () => {
       body: JSON.stringify({
         query: 'red boat',
         top_k: 20,
-        session_id: 'kisc_sess_1234',
-        feedback: {
-          accepted_frame_ids: ['frame_A'],
-          rejected_frame_ids: [],
-        },
+        query_type: 'vkis',
       }),
     }),
   );

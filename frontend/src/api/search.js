@@ -1,8 +1,8 @@
-import { API_BASE_URL, requestJson } from './client';
+import { API_BASE_URL, requestJson } from "./client";
 
 export const resolveApiUrl = (value) => {
   if (!value || /^(?:https?:|data:)/i.test(value)) return value;
-  return `${API_BASE_URL}/${value.replace(/^\/+/, '')}`;
+  return `${API_BASE_URL}/${value.replace(/^\/+/, "")}`;
 };
 
 const withAssetUrls = (payload) => ({
@@ -14,28 +14,26 @@ const withAssetUrls = (payload) => ({
   })),
 });
 
-// Executes one search turn; session context is optional for non-conversation search.
+// Executes one standalone competition-task search.
 export const searchFrames = async ({
   query,
   topK,
-  sessionId,
-  feedback,
+  queryType,
   signal,
 }) => {
   const body = {
     query: query.trim(),
     top_k: topK,
   };
-  if (sessionId) body.session_id = sessionId;
-  if (feedback) body.feedback = feedback;
+  if (queryType) body.query_type = queryType;
 
-  const payload = await requestJson('/api/v1/search', {
-    method: 'POST',
+  const payload = await requestJson("/api/v1/search", {
+    method: "POST",
     body,
     signal,
   });
   if (!Array.isArray(payload?.results) || !payload.latency_ms) {
-    throw new Error('Search server returned an invalid response contract');
+    throw new Error("Search server returned an invalid response contract");
   }
   return withAssetUrls(payload);
 };

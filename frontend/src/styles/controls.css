@@ -1,13 +1,3 @@
-/* ─────────────────────────────────────────────────────────── */
-/* QUERY INPUT COMPONENT                                       */
-/* ─────────────────────────────────────────────────────────── */
-.query-form {
-  display: flex;
-  gap: var(--spacing-sm);
-  width: 100%;
-  margin: 0 auto;
-}
-
 .query-input-wrapper {
   position: relative;
   flex: 1;
@@ -35,6 +25,30 @@
   border-radius: var(--rounded-md);
 }
 
+.query-suggest-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 18px;
+  border-color: color-mix(in srgb, var(--color-primary) 32%, var(--color-hairline));
+  border-radius: var(--rounded-md);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.query-suggest-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
+}
+
+.query-suggest-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
 .query-submit-btn {
   height: 42px;
   padding: 0 22px;
@@ -91,9 +105,56 @@
 }
 
 .toolbox-slider {
+  --slider-progress: 19.2%;
   width: 100%;
-  accent-color: var(--color-primary);
+  height: 6px;
+  margin: 4px 0 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
   cursor: pointer;
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0 var(--slider-progress),
+    var(--color-canvas-soft, #eef1f4) var(--slider-progress) 100%
+  );
+  outline: none;
+}
+
+.toolbox-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 3px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--color-primary) 42%, transparent);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.toolbox-slider::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 3px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--color-primary) 42%, transparent);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.toolbox-slider:hover::-webkit-slider-thumb,
+.toolbox-slider:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+.toolbox-slider:hover::-moz-range-thumb,
+.toolbox-slider:focus-visible::-moz-range-thumb {
+  transform: scale(1.12);
+}
+
+.toolbox-slider:focus-visible {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 
 .toolbox-input {
