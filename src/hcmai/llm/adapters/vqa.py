@@ -153,7 +153,7 @@ def _load_backend(config: HostedVQAConfig) -> tuple[Any, Any]:
     metadata = AutoConfig.from_pretrained(
         checkpoint,
         revision=config.revision,
-        trust_remote_code=False,
+        trust_remote_code=True,
     )
     options = _model_options(config, dtype)
     model: Any
@@ -164,6 +164,33 @@ def _load_backend(config: HostedVQAConfig) -> tuple[Any, Any]:
         model = Glm4vForConditionalGeneration.from_pretrained(
             checkpoint, **options
         )
+    elif metadata.model_type in {"qwen2_5_vl", "qwen2_vl", "qwen3_vl"}:
+        processor = AutoProcessor.from_pretrained(
+            checkpoint, revision=config.revision, use_fast=True
+        )
+        try:
+            from transformers import (
+                Qwen2_5_VLForConditionalGeneration,
+                Qwen2VLForConditionalGeneration,
+            )
+            model_cls = (
+                Qwen2_5_VLForConditionalGeneration
+                if metadata.model_type == "qwen2_5_vl"
+                else Qwen2VLForConditionalGeneration
+            )
+            model = model_cls.from_pretrained(checkpoint, **options)
+        except (ImportError, AttributeError):
+            from transformers import AutoModelForImageTextToText
+            model = AutoModelForImageTextToText.from_pretrained(checkpoint, **options)
+    elif getattr(metadata, "vision_config", None) is not None:
+        processor = AutoProcessor.from_pretrained(
+            checkpoint, revision=config.revision, use_fast=True
+        )
+        try:
+            from transformers import AutoModelForImageTextToText
+            model = AutoModelForImageTextToText.from_pretrained(checkpoint, **options)
+        except Exception:
+            model = AutoModelForCausalLM.from_pretrained(checkpoint, **options)
     else:
         processor = AutoTokenizer.from_pretrained(
             checkpoint, revision=config.revision
@@ -178,7 +205,7 @@ def _model_options(config: HostedVQAConfig, dtype: Any) -> dict[str, Any]:
     options: dict[str, Any] = {
         "revision": config.revision,
         "torch_dtype": dtype,
-        "trust_remote_code": False,
+        "trust_remote_code": True,
         "low_cpu_mem_usage": True,
     }
     if config.device.startswith("cuda"):
