@@ -51,8 +51,8 @@ from hcmai.common.config import EncoderConfig
 from hcmai.embedding.pipeline import EmbeddingService
 
 run = EmbeddingService.build_visual_artifacts(
-    frames_path=Path("data/metadata/frames.parquet"),
-    dataset_root=Path("data"),
+    frames_path=Path("artifacts/frame_store/frames.parquet"),
+    dataset_root=Path("artifacts/frame_store"),
     output_dir=Path("artifacts"),
     encoder_config=EncoderConfig(device="cuda"),
     dataset_version="hcmai2026",

@@ -27,8 +27,11 @@ def load_search_service(messages: list[str]) -> SearchService:
     metadata_path = Path(os.getenv(
         "HCMAI_METADATA_PATH", str(settings.dataset.frames_path)
     ))
+    dataset_root = Path(os.getenv(
+        "HCMAI_DATASET_ROOT", str(settings.dataset.root)
+    ))
     index_dir = Path(os.getenv("HCMAI_INDEX_PATH", str(settings.index.path)))
-    data = _load_data(settings, metadata_path, messages)
+    data = _load_data(settings, metadata_path, dataset_root, messages)
     llm = _load_remote_llm(settings, messages)
     retrieval = _load_retrieval(
         settings, models, index_dir, llm, messages
@@ -42,7 +45,7 @@ def load_search_service(messages: list[str]) -> SearchService:
                 required=settings.search.reranker.required,
             ),
             llm,
-            dataset_root=settings.dataset.root,
+            dataset_root=dataset_root,
         )
     return SearchService(
         data=data,
@@ -88,7 +91,10 @@ def _load_remote_llm(
 
 
 def _load_data(
-    settings: AppConfig, metadata_path: Path, messages: list[str]
+    settings: AppConfig,
+    metadata_path: Path,
+    dataset_root: Path,
+    messages: list[str],
 ) -> DataService | None:
     if not metadata_path.is_file() or metadata_path.stat().st_size == 0:
         messages.append(f"Metadata not available at {metadata_path}")
@@ -96,7 +102,7 @@ def _load_data(
     try:
         data = DataService.load(
             metadata_path,
-            dataset_root=settings.dataset.root,
+            dataset_root=dataset_root,
         )
     except Exception as error:
         messages.append(

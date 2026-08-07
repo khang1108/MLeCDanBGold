@@ -31,6 +31,7 @@ frontend/.cache/
 /data/
 /dataset/
 artifacts/
+artifacts/.preprocessing_work/
 runs/
 *.ckpt
 *.pt
@@ -57,6 +58,8 @@ runs/
 /scripts/evaluate_transcripts.py
 /tests/test_asr_evaluation.py
 /src/hcmai/transcripts/PIPELINE_OPTIONS.md
+/PR_TRANSCRIPT_PIPELINE.md
+/2026-08-07-aic2026-end-to-end-retrieval-plan.md
 
 # IDE and operating-system files
 .vscode/

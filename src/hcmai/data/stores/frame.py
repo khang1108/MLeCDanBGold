@@ -9,7 +9,7 @@ Typical usage::
 
     from hcmai.data.stores.frame import FrameStore
 
-    store = FrameStore("data/aic2025/metadata/frames.parquet")
+    store = FrameStore("artifacts/frame_store/frames.parquet")
 
     # Single lookup
     frame = store.get("L21_V001_keyframe_000001")
@@ -67,7 +67,8 @@ class FrameStore:
 
         Args:
             metadata_path: Path to the canonical ``frames.parquet`` file
-                produced by ``prepare_frames``. Accepts a string or any
+            produced by ``prepare_frames`` or ``prepare_frame_store``.
+            Accepts a string or any
                 path-like object.
 
         Raises:
