@@ -9,7 +9,6 @@ import csv
 import math
 
 from hcmai.common.utils.logging import get_logger
-
 from hcmai.retriever.video_scores import VideoEventScores
 
 from .align import TrakePath, align_video
