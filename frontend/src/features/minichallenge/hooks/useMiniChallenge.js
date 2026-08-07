@@ -15,6 +15,15 @@ export const useMiniChallenge = () => {
   const [notice, setNotice] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [submittingFrameId, setSubmittingFrameId] = useState(null);
+  const selectedEvaluation = evaluations.find((item) => item.id === evaluationId);
+  const matchingTemplate = selectedEvaluation?.taskTemplates?.find(
+    (template) => template.taskGroup === currentTask?.taskGroup
+      && template.taskType === currentTask?.taskType,
+  );
+  const submissionTaskName = matchingTemplate?.name
+    || selectedEvaluation?.taskTemplates?.[0]?.name
+    || currentTask?.name
+    || '';
 
   const loadTask = useCallback(async (token, id) => {
     setCurrentTask(null);
@@ -63,7 +72,8 @@ export const useMiniChallenge = () => {
   }, [loadTask, session]);
 
   const submitFrame = useCallback(async (frame) => {
-    if (!currentTask || !evaluationId || !session.trim() || submittingFrameId) {
+    if (!currentTask || !submissionTaskName || !evaluationId
+      || !session.trim() || submittingFrameId) {
       return null;
     }
     setSubmittingFrameId(frame.frame_id);
@@ -74,7 +84,7 @@ export const useMiniChallenge = () => {
         session,
         evaluationId,
         frameId: frame.frame_id,
-        taskName: currentTask.name,
+        taskName: submissionTaskName,
         text: answer,
       });
       setNotice(`${result.submission}: ${result.description}`);
@@ -85,7 +95,7 @@ export const useMiniChallenge = () => {
     } finally {
       setSubmittingFrameId(null);
     }
-  }, [answer, currentTask, evaluationId, session, submittingFrameId]);
+  }, [answer, currentTask, evaluationId, session, submissionTaskName, submittingFrameId]);
 
   return {
     session,
@@ -93,6 +103,7 @@ export const useMiniChallenge = () => {
     evaluations,
     evaluationId,
     currentTask,
+    submissionTaskName,
     answer,
     setAnswer,
     error,

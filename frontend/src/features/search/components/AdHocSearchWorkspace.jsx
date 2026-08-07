@@ -82,7 +82,7 @@ const AdHocSearchWorkspace = ({
   }, [setTopK]);
 
   const handleChallengeSubmit = useCallback((frame) => {
-    const taskName = challenge.currentTask?.name;
+    const taskName = challenge.submissionTaskName;
     if (!taskName) return;
     const confirmed = window.confirm(
       `Submit ${frame.video_id} to “${taskName}”?`,

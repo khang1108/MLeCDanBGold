@@ -116,8 +116,8 @@ def test_dres_flow_preserves_session_and_exact_submission_payload() -> None:
             "taskName": "QA task",
             "answers": [{
                 "mediaItemName": "L21_V001",
-                "start": 0,
-                "end": 0,
+                "start": 3_600,
+                "end": 3_600,
                 "text": "Bơ",
             }],
         }]

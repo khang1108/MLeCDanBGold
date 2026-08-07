@@ -77,6 +77,8 @@ const FramesBox = ({
                   key={frame.frame_id}
                   frame={frame}
                   onClick={() => onFrameClick(frame)}
+                  onChallengeSubmit={onChallengeSubmit}
+                  isChallengeSubmitting={submittingFrameId === frame.frame_id}
                 />
               ))}
             </div>

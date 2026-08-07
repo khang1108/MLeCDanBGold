@@ -49,8 +49,8 @@ class MiniChallengeService:
                 taskName=request.task_name,
                 answers=[MiniChallengeAnswer(
                     mediaItemName=frame.video_id,
-                    start=0,
-                    end=0,
+                    start=frame.timestamp_ms,
+                    end=frame.timestamp_ms,
                     text=request.text,
                 )],
             )
