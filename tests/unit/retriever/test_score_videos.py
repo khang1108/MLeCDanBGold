@@ -30,18 +30,17 @@ class _FakeIndex:
         self.video_ids = mapping["video_id"].to_numpy()
         self.frame_ids = mapping["frame_id"].to_numpy()
         self.frame_idx = mapping["frame_idx"].to_numpy()
-        self.timestamps_ms = mapping["timestamp_ms"].to_numpy(dtype=np.float64)
-        ordered = mapping.sort_values(["video_id", "frame_idx"])
-        self.video_positions = {
-            str(video_id): group["embedding_index"].to_numpy()
-            for video_id, group in ordered.groupby("video_id", sort=False)
-        }
+        self.timestamps = mapping["timestamp_ms"].to_numpy(dtype=np.int64)
         self.scored_positions: np.ndarray | None = None
 
     def search(self, query_vectors: np.ndarray, top_k: int):
         del query_vectors
         order = np.argsort(-self._scores, axis=1)[:, :top_k]
         return np.take_along_axis(self._scores, order, axis=1), order
+
+    def video_positions(self, video_id: str) -> np.ndarray:
+        positions = np.flatnonzero(self.video_ids == video_id)
+        return positions[np.argsort(self.frame_idx[positions], kind="stable")]
 
     def score_subset(
         self, query_vectors: np.ndarray, positions: np.ndarray, chunk_size: int
@@ -62,7 +61,7 @@ def test_only_shortlisted_videos_are_rescored_in_canonical_frame_order() -> None
 
     assert list(results[0].frame_ids) == ["v1_a", "v1_b", "v1_c"]
     assert list(results[0].frame_idx) == [5, 10, 20]
-    assert np.array_equal(results[0].timestamps_ms, [200.0, 400.0, 800.0])
+    assert np.array_equal(results[0].timestamps_ms, [200, 400, 800])
     assert np.array_equal(results[0].scores, _SCORES[:, [2, 0, 4]])
     assert np.array_equal(results[1].scores, _SCORES[:, [3]])
 

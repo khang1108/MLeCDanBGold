@@ -43,12 +43,12 @@ def score_videos(
     Args:
         index: :class:`DenseIndex`-shaped object providing ``search``,
             ``score_subset``, ``video_positions`` and the position-indexed
-            ``video_ids``/``frame_ids``/``frame_idx``/``timestamps_ms`` arrays.
+            ``video_ids``/``frame_ids``/``frame_idx``/``timestamps`` arrays.
         query_vectors: One L2-normalized row per ordered event.
         top_k: Frames kept per event when shortlisting videos.
         max_videos: Videos kept for rescoring, filled from full coverage down.
         rrf_k: RRF constant damping the head of each event's ranking.
-        chunk_size: Vectors reconstructed at a time, bounding peak memory.
+        chunk_size: Vectors materialized at a time, bounding peak memory.
 
     Returns:
         One entry per shortlisted video, ordered by ``video_id``.
@@ -76,13 +76,12 @@ def score_videos(
     # Coverage first: TRAKE needs every event inside one video, so evidence for
     # all of them beats one very strong match however high it ranks. RRF breaks
     # ties within a coverage tier, video_id keeps the order deterministic.
-    postings = index.video_positions
     ranked = sorted(
         votes,
         key=lambda video_id: (-coverage[video_id], -votes[video_id], video_id),
     )
     shortlist = sorted(ranked[:max_videos])
-    windows = [postings[video_id] for video_id in shortlist]
+    windows = [index.video_positions(video_id) for video_id in shortlist]
     scored_positions = np.concatenate(windows)
     shortlist_ms = timer.stop()
 
@@ -99,7 +98,7 @@ def score_videos(
                 video_id=video_id,
                 frame_ids=index.frame_ids[window],
                 frame_idx=index.frame_idx[window],
-                timestamps_ms=index.timestamps_ms[window],
+                timestamps_ms=index.timestamps[window],
                 scores=scores[:, start:stop],
             )
         )

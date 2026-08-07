@@ -289,7 +289,7 @@ class DenseIndex:
         Args:
             query_vectors: Array of shape (Q, dim) with L2-normalized rows.
             positions: Index positions to score, as held in ``mapping``.
-            chunk_size: Vectors reconstructed at a time, bounding peak memory.
+            chunk_size: Vectors materialized at a time, bounding peak memory.
 
         Returns:
             Array of shape (Q, len(positions)), column ``j`` for ``positions[j]``.
@@ -299,21 +299,22 @@ class DenseIndex:
         scores = np.empty((len(queries), len(positions)), dtype=np.float32)
         for start in range(0, len(positions), chunk_size):
             chunk = positions[start : start + chunk_size]
-            scores[:, start : start + len(chunk)] = queries @ self.index.reconstruct_batch(chunk).T
+            vectors = np.asarray(self.vectors[chunk], dtype=np.float32)
+            scores[:, start : start + len(chunk)] = queries @ vectors.T
         return scores
 
-    @cached_property
-    def video_positions(self) -> dict[str, np.ndarray]:
-        """Index positions of every video's frames, in canonical frame order.
+    def video_positions(self, video_id: str) -> np.ndarray:
+        """Index positions of one video's frames, in canonical frame order.
 
-        Built once so per-query lookups cost ``O(videos)`` instead of scanning
-        the whole mapping.
+        Args:
+            video_id: Video to look up; an unknown id raises ``KeyError``.
+
+        Returns:
+            The video's positions sorted by ``frame_idx``, which the posting
+            table does not guarantee since it is ordered by embedding index.
         """
-        ordered = self.mapping.sort_values(["video_id", "frame_idx"])
-        return {
-            str(video_id): group["embedding_index"].to_numpy()
-            for video_id, group in ordered.groupby("video_id", sort=False)
-        }
+        positions = self.posting_positions[self._video_slices[video_id]]
+        return positions[np.argsort(self.frame_idx[positions], kind="stable")]
 
     @cached_property
     def video_ids(self) -> np.ndarray:
@@ -329,11 +330,6 @@ class DenseIndex:
     def frame_idx(self) -> np.ndarray:
         """In-video frame index of each index position."""
         return self.mapping["frame_idx"].to_numpy()
-
-    @cached_property
-    def timestamps_ms(self) -> np.ndarray:
-        """Timestamp of each index position, never inferred from FPS."""
-        return self.mapping["timestamp_ms"].to_numpy(dtype=np.float64)
 
     def search_filtered(
         self,
