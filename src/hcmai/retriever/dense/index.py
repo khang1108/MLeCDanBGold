@@ -7,6 +7,7 @@ import faiss
 import pandas as pd
 from tqdm.auto import tqdm
 
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
@@ -207,6 +208,8 @@ class DenseIndex:
         mapping = pd.read_parquet(index_dir / MAPPING_FILENAME)
         metadata = IndexMetadata.from_dict(read_json(index_dir / METADATA_FILENAME))
         vectors_path = index_dir / VECTORS_FILENAME
+        if not vectors_path.is_file():
+            _materialize_vectors(index, vectors_path)
         vectors = (
             np.load(vectors_path, mmap_mode="r")
             if vectors_path.is_file()
@@ -276,6 +279,59 @@ class DenseIndex:
             queries = queries.reshape(1, -1)
         scores, positions = self.index.search(queries, min(top_k, self.index.ntotal))
         return scores, positions
+
+    def score_subset(
+        self,
+        query_vectors: np.ndarray,
+        positions: np.ndarray,
+        chunk_size: int = 65_536,
+    ) -> np.ndarray:
+        """Score every query against a subset of indexed vectors, exactly.
+
+        Args:
+            query_vectors: Array of shape (Q, dim) with L2-normalized rows.
+            positions: Index positions to score, as held in ``mapping``.
+            chunk_size: Vectors materialized at a time, bounding peak memory.
+
+        Returns:
+            Array of shape (Q, len(positions)), column ``j`` for ``positions[j]``.
+        """
+        queries = np.ascontiguousarray(query_vectors, dtype=np.float32).reshape(-1, self.index.d)
+        positions = np.ascontiguousarray(positions, dtype=np.int64)
+        scores = np.empty((len(queries), len(positions)), dtype=np.float32)
+        for start in range(0, len(positions), chunk_size):
+            chunk = positions[start : start + chunk_size]
+            vectors = np.asarray(self.vectors[chunk], dtype=np.float32)
+            scores[:, start : start + len(chunk)] = queries @ vectors.T
+        return scores
+
+    def video_positions(self, video_id: str) -> np.ndarray:
+        """Index positions of one video's frames, in canonical frame order.
+
+        Args:
+            video_id: Video to look up; an unknown id raises ``KeyError``.
+
+        Returns:
+            The video's positions sorted by ``frame_idx``, which the posting
+            table does not guarantee since it is ordered by embedding index.
+        """
+        positions = self.posting_positions[self._video_slices[video_id]]
+        return positions[np.argsort(self.frame_idx[positions], kind="stable")]
+
+    @cached_property
+    def video_ids(self) -> np.ndarray:
+        """Video of each index position, sharing the mapping's string objects."""
+        return self.mapping["video_id"].to_numpy()
+
+    @cached_property
+    def frame_ids(self) -> np.ndarray:
+        """Frame id of each index position."""
+        return self.mapping["frame_id"].to_numpy()
+
+    @cached_property
+    def frame_idx(self) -> np.ndarray:
+        """In-video frame index of each index position."""
+        return self.mapping["frame_idx"].to_numpy()
 
     def search_filtered(
         self,
@@ -353,6 +409,28 @@ def _postings(
         else np.empty(0, dtype=np.int64)
     )
     return video_ids, offsets, positions
+
+
+def _materialize_vectors(index: Any, path: Path) -> None:
+    """Back-fill an index directory built before ``vectors.npy`` existed.
+
+    Loading without the file reconstructs into RAM instead, holding a second
+    full copy of the corpus for the life of the process, on every startup, with
+    nothing in the logs. Staged through a temporary file so a kill mid-write
+    cannot leave a truncated array behind.
+    """
+    staged = path.with_name(path.name + ".tmp")
+    try:
+        with staged.open("wb") as handle:
+            np.save(handle, _reconstruct(index))
+        staged.replace(path)
+        logger.info(f"Back-filled {path} so later loads memory-map the vectors")
+    except OSError as error:
+        staged.unlink(missing_ok=True)
+        logger.warning(
+            f"Could not write {path} ({error}); holding a second in-RAM copy "
+            "of the vectors, which doubles resident memory"
+        )
 
 
 def _reconstruct(index: Any) -> np.ndarray:

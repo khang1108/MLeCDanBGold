@@ -32,7 +32,11 @@ from .search import (
 from .submission import SubmissionResult
 from .task import TaskRequest, TaskResponse
 from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
-from .trake import TRAKERequest, TRAKEResponse, TRAKESubmission
+from .trake import (
+    TRAKERequest,
+    TRAKEResponse,
+    TRAKESubmission,
+)
 from .transcript import TranscriptSegment
 from .vqa import (
     VQABaselineProfile,

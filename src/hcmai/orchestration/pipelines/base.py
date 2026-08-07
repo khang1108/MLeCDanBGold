@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from hcmai.common.schemas import SearchRequest, SearchResponse, TaskType
+from hcmai.common.schemas import TaskRequest, TaskResponse, TaskType
 
 
 class TaskPipelineDependencyError(RuntimeError):
@@ -20,7 +20,7 @@ class TaskPipeline(Protocol):
 
         ...
 
-    def execute(self, request: SearchRequest) -> SearchResponse:
-        """Execute the pipeline for a validated public request."""
+    def execute(self, request: TaskRequest) -> TaskResponse:
+        """Execute the pipeline for a validated public task request."""
 
         ...

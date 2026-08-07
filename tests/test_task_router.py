@@ -121,14 +121,11 @@ def test_kis_pipeline_preserves_search_response_behavior(
     assert retrieval.query_types == [query_type]
 
 
-@pytest.mark.parametrize("query_type", [TaskType.TRAKE])
-def test_missing_pipeline_maps_to_typed_service_error(
-    query_type: TaskType,
-) -> None:
+def test_missing_pipeline_maps_to_typed_service_error() -> None:
     service = SearchService(None, None)
 
-    with pytest.raises(SearchPipelineUnavailableError, match=query_type.value):
-        service.search(SearchRequest(query="question", query_type=query_type))
+    with pytest.raises(SearchPipelineUnavailableError, match="vqa"):
+        service.search(SearchRequest(query="question", query_type=TaskType.VQA))
 
 
 def test_health_task_availability_is_derived_from_registry() -> None:
@@ -145,3 +142,12 @@ def test_health_task_availability_is_derived_from_registry() -> None:
         "vqa": True,
         "trake": False,
     }
+
+
+def test_trake_is_registered_by_default() -> None:
+    service = SearchService(
+        cast(DataService, Data()), cast(RetrievalService, Retrieval())
+    )
+
+    assert service.pipeline_registry.get(TaskType.TRAKE).task_type is TaskType.TRAKE
+    assert service.health()["capabilities"]["query_types"]["trake"] is True
