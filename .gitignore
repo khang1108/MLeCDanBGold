@@ -14,6 +14,8 @@ htmlcov/
 venv/
 env/
 ENV/
+/aic/
+aic/
 .env
 .env.*
 !.env.example
@@ -24,14 +26,31 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+frontend/node_modules/
 frontend/build/
+frontend/dist/
 frontend/.cache/
 
-# Local datasets and generated AI artifacts
+# Local datasets and data directories
 /data/
+data/
 /dataset/
+dataset/
+/datasets/
+datasets/
+
+# Generated AI artifacts, runs, and outputs
+/artifacts/
 artifacts/
+artifacts/.preprocessing_work/
+/runs/
 runs/
+/output/
+output/
+/outputs/
+outputs/
+
+# Large binary files, models, datasets, and archives
 *.ckpt
 *.pt
 *.pth
@@ -41,6 +60,14 @@ runs/
 *.npy
 *.npz
 *.parquet
+*.bin
+*.faiss
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
 
 # Local Kaggle subset tooling and generated packages
 /scripts/create_kaggle_subset.py
@@ -51,12 +78,15 @@ runs/
 
 # Local deployment secrets; the checked-in LLM script reads these from env.
 /llm/.env
+llm/deploy_cloudflared_private.sh
 
 # Local ASR evaluation and benchmark code
 /src/hcmai/transcripts/evaluate.py
 /scripts/evaluate_transcripts.py
 /tests/test_asr_evaluation.py
 /src/hcmai/transcripts/PIPELINE_OPTIONS.md
+/PR_TRANSCRIPT_PIPELINE.md
+/2026-08-07-aic2026-end-to-end-retrieval-plan.md
 
 # IDE and operating-system files
 .vscode/
@@ -66,13 +96,14 @@ runs/
 .DS_Store
 Thumbs.db
 
-# Local logs and temporary files
+# Local logs, caches, and temporary files
 *.log
 *.tmp
 tmp/
 temp/
+.cache/
 
-# LaTeX auxiliary output
+# LaTeX auxiliary output and document slide/template outputs
 *.aux
 *.bbl
 *.blg
@@ -83,17 +114,11 @@ temp/
 *.snm
 *.toc
 *.synctex.gz
+docs/papers/
+docs/slides/
+docs/slide/
+docs/template/
 
 .codex/
 .claude/
 .agents/
-/aic
-# Frontend
-frontend/build
-frontend/node_modules
-
-docs/papers/
-docs/slides/
-llm/deploy_cloudflared_private.sh
-tests/
-docs/
