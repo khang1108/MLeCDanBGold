@@ -62,6 +62,14 @@ const ImageModal = ({ frame, onClose }) => {
                 {frame.caption || "No caption available"}
               </p>
             </div>
+            {frame.answer && (
+              <div className="inspector-section">
+                <span className="inspector-section-label">VQA Answer</span>
+                <p className="inspector-caption-text vqa-answer-highlight" style={{ fontWeight: '600', color: 'var(--color-primary-light)' }}>
+                  {frame.answer}
+                </p>
+              </div>
+            )}
             <div className="inspector-section">
               <span className="inspector-section-label">Metadata</span>
               <FrameMetadata frame={frame} />
