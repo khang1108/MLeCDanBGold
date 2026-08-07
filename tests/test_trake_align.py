@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from hcmai.agents.trake import align_video
+from hcmai.trake import align_video
 from hcmai.retriever.video_scores import VideoEventScores
 
 

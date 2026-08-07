@@ -14,7 +14,7 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.retriever.pipeline import RetrievalService
-from hcmai.agents.trake import TRAKESettings, rank_paths
+from hcmai.trake import TRAKESettings, rank_paths
 
 logger = get_logger(__name__)
 

@@ -1,8 +1,8 @@
-"""API integration test for the unified task contract and TRAKE pipeline.
+"""API integration test for the TRAKE route and pipeline.
 
-Proves the handover boundary end to end: HTTP body -> ``TaskRequest``
-discriminator -> ``PipelineRegistry`` -> ``TRAKEPipeline.execute`` ->
-``TRAKEResponse`` -> HTTP 200 JSON, with fake models and a tiny fixture.
+Proves the handover boundary end to end: HTTP body -> ``TRAKERequest`` ->
+``PipelineRegistry`` -> ``TRAKEPipeline.execute`` -> ``TRAKEResponse`` ->
+HTTP 200 JSON, with fake models and a tiny fixture.
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ def test_trake_request_reaches_the_pipeline_and_returns_a_submission(
     client: TestClient,
 ) -> None:
     with client:
-        response = client.post("/api/v1/search", json=_BODY)
+        response = client.post("/api/v1/trake", json=_BODY)
 
     assert response.status_code == 200
     payload = response.json()
@@ -143,7 +143,7 @@ def test_trake_request_reaches_the_pipeline_and_returns_a_submission(
 
 def test_every_submission_has_one_frame_per_event(client: TestClient) -> None:
     with client:
-        payload = client.post("/api/v1/search", json=_BODY).json()
+        payload = client.post("/api/v1/trake", json=_BODY).json()
 
     event_count = len(payload["events"])
     assert all(
@@ -152,7 +152,7 @@ def test_every_submission_has_one_frame_per_event(client: TestClient) -> None:
     )
 
 
-def test_kis_still_works_through_the_union_contract(client: TestClient) -> None:
+def test_kis_still_works_on_its_own_route(client: TestClient) -> None:
     with client:
         response = client.post(
             "/api/v1/search",
@@ -189,18 +189,18 @@ def test_invalid_trake_input_is_rejected(
     client: TestClient, body: dict[str, Any]
 ) -> None:
     with client:
-        assert client.post("/api/v1/search", json=body).status_code == 422
+        assert client.post("/api/v1/trake", json=body).status_code == 422
 
 
 def test_unregistered_pipeline_is_not_implemented() -> None:
     with _client(_FakeData(), _FakeRetrieval(), PipelineRegistry()) as client:
-        response = client.post("/api/v1/search", json=_BODY)
+        response = client.post("/api/v1/trake", json=_BODY)
 
     assert response.status_code == 501
 
 
 def test_unavailable_dependency_is_service_unavailable() -> None:
     with _client(_FakeData(), None) as client:
-        response = client.post("/api/v1/search", json=_BODY)
+        response = client.post("/api/v1/trake", json=_BODY)
 
     assert response.status_code == 503
