@@ -208,6 +208,8 @@ class DenseIndex:
         mapping = pd.read_parquet(index_dir / MAPPING_FILENAME)
         metadata = IndexMetadata.from_dict(read_json(index_dir / METADATA_FILENAME))
         vectors_path = index_dir / VECTORS_FILENAME
+        if not vectors_path.is_file():
+            _materialize_vectors(index, vectors_path)
         vectors = (
             np.load(vectors_path, mmap_mode="r")
             if vectors_path.is_file()
@@ -407,6 +409,28 @@ def _postings(
         else np.empty(0, dtype=np.int64)
     )
     return video_ids, offsets, positions
+
+
+def _materialize_vectors(index: Any, path: Path) -> None:
+    """Back-fill an index directory built before ``vectors.npy`` existed.
+
+    Loading without the file reconstructs into RAM instead, holding a second
+    full copy of the corpus for the life of the process, on every startup, with
+    nothing in the logs. Staged through a temporary file so a kill mid-write
+    cannot leave a truncated array behind.
+    """
+    staged = path.with_name(path.name + ".tmp")
+    try:
+        with staged.open("wb") as handle:
+            np.save(handle, _reconstruct(index))
+        staged.replace(path)
+        logger.info(f"Back-filled {path} so later loads memory-map the vectors")
+    except OSError as error:
+        staged.unlink(missing_ok=True)
+        logger.warning(
+            f"Could not write {path} ({error}); holding a second in-RAM copy "
+            "of the vectors, which doubles resident memory"
+        )
 
 
 def _reconstruct(index: Any) -> np.ndarray:
