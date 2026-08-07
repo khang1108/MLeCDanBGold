@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -18,13 +18,14 @@ from hcmai.retriever.dense.retriever import DenseRetriever
 from hcmai.retriever.fusion.rrf import RRFFusionRetriever
 from hcmai.retriever.models.contracts import Retriever
 from hcmai.retriever.models.metadata import IndexMetadata
-from hcmai.retriever.query_batch import QueryEmbeddingBatch, SourceFamily
+from hcmai.retriever.query_batch import SourceFamily
 from hcmai.retriever.text.artifacts import build_text_artifacts
 from hcmai.retriever.text.retriever import (
     ASRRetriever,
     CaptionRetriever,
     OCRRetriever,
 )
+from hcmai.retriever.video_scores import VideoEventScores, score_videos
 
 _TEXT_RETRIEVERS = {
     RetrievalSource.CAPTION: CaptionRetriever,
@@ -81,11 +82,36 @@ class RetrievalService:
             )
         return index.metadata
 
-    @property
-    def visual_index(self) -> DenseIndex:
-        """Expose the visual index for full-frame rescoring such as TRAKE."""
+    def score_visual_videos(
+        self,
+        events: Sequence[str],
+        top_k: int = 500,
+        max_videos: int = 200,
+        rrf_k: int = 60,
+        chunk_size: int = 65_536,
+    ) -> list[VideoEventScores]:
+        """Shortlist videos for ordered events and rescore only their frames.
 
-        return cast(DenseIndex, self._retriever_for("visual").index)
+        Encodes once and reuses the same vectors for shortlisting and
+        rescoring, so callers never touch the visual index directly.
+
+        Args:
+            events: Ordered events, already split and translated.
+            top_k: Frames kept per event when shortlisting videos.
+            max_videos: Videos kept for rescoring.
+            rrf_k: RRF constant damping the head of each event's ranking.
+            chunk_size: Vectors reconstructed at a time, bounding peak memory.
+
+        Returns:
+            One entry per shortlisted video, ordered by ``video_id``.
+        """
+        if not events:
+            raise ValueError("events must not be empty")
+        visual = self._retriever_for("visual")
+        batch = visual.encode(list(events))
+        return score_videos(
+            visual.index, batch.vectors, top_k, max_videos, rrf_k, chunk_size
+        )
 
     def search(
         self,
@@ -106,15 +132,6 @@ class RetrievalService:
         """Retrieve multiple ordered queries with batched encoder calls."""
 
         return self._retriever.search_batch(queries, top_k, filters, query_type)
-
-    def encode_text_batch(
-        self,
-        texts: list[str],
-        source_family: SourceFamily = "text",
-    ) -> QueryEmbeddingBatch:
-        """Expose a reusable query batch for task pipelines such as TRAKE."""
-
-        return cast(Any, self._retriever_for(source_family)).encode(texts)
 
     def _retriever_for(self, source_family: SourceFamily) -> Any:
         """Return the one configured retriever owning an embedding family."""

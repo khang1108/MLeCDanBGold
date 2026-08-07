@@ -10,8 +10,9 @@ import math
 
 from hcmai.common.utils.logging import get_logger
 
+from hcmai.retriever.video_scores import VideoEventScores
+
 from .align import TrakePath, align_video
-from .shortlist import VideoEventScores
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,7 @@ def rank_paths(
     videos: Sequence[VideoEventScores],
     lambda_gap: float = 1e-5,
     max_rows: int = 100,
+    event_power: float = 1.0,
 ) -> list[TrakePath]:
     """Rank aligned paths, one video per row before any video repeats.
 
@@ -32,6 +34,7 @@ def rank_paths(
         videos: Shortlisted videos with their event/frame score matrices.
         lambda_gap: Time-gap penalty per millisecond, passed to the aligner.
         max_rows: Official per-query row limit.
+        event_power: Similarity exponent, passed to the aligner.
 
     Returns:
         At most ``max_rows`` paths, best first.
@@ -39,7 +42,9 @@ def rank_paths(
     if not videos:
         return []
     depth = math.ceil(max_rows / len(videos))
-    per_video = [align_video(video, lambda_gap, depth) for video in videos]
+    per_video = [
+        align_video(video, lambda_gap, depth, event_power) for video in videos
+    ]
     rows: list[TrakePath] = []
     for level in range(depth):
         rows.extend(

@@ -7,6 +7,7 @@ import faiss
 import pandas as pd
 from tqdm.auto import tqdm
 
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
@@ -217,3 +218,36 @@ class DenseIndex:
             chunk = positions[start : start + chunk_size]
             scores[:, start : start + len(chunk)] = queries @ self.index.reconstruct_batch(chunk).T
         return scores
+
+    @cached_property
+    def video_positions(self) -> dict[str, np.ndarray]:
+        """Index positions of every video's frames, in canonical frame order.
+
+        Built once so per-query lookups cost ``O(videos)`` instead of scanning
+        the whole mapping.
+        """
+        ordered = self.mapping.sort_values(["video_id", "frame_idx"])
+        return {
+            str(video_id): group["embedding_index"].to_numpy()
+            for video_id, group in ordered.groupby("video_id", sort=False)
+        }
+
+    @cached_property
+    def video_ids(self) -> np.ndarray:
+        """Video of each index position, sharing the mapping's string objects."""
+        return self.mapping["video_id"].to_numpy()
+
+    @cached_property
+    def frame_ids(self) -> np.ndarray:
+        """Frame id of each index position."""
+        return self.mapping["frame_id"].to_numpy()
+
+    @cached_property
+    def frame_idx(self) -> np.ndarray:
+        """In-video frame index of each index position."""
+        return self.mapping["frame_idx"].to_numpy()
+
+    @cached_property
+    def timestamps_ms(self) -> np.ndarray:
+        """Timestamp of each index position, never inferred from FPS."""
+        return self.mapping["timestamp_ms"].to_numpy(dtype=np.float64)

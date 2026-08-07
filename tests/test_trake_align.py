@@ -5,7 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from hcmai.agents.trake import VideoEventScores, align_video
+from hcmai.agents.trake import align_video
+from hcmai.retriever.video_scores import VideoEventScores
 
 
 def _video(scores: list[list[float]]) -> VideoEventScores:

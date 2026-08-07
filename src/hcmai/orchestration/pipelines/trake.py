@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from hashlib import sha1
 
-from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
     TaskRequest,
     TaskType,
@@ -15,7 +14,7 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.retriever.pipeline import RetrievalService
-from hcmai.agents.trake import event_video_scores, rank_paths
+from hcmai.agents.trake import TRAKESettings, rank_paths
 
 logger = get_logger(__name__)
 
@@ -26,10 +25,12 @@ class TRAKEPipeline:
     task_type = TaskType.TRAKE
 
     def __init__(
-        self, retrieval: RetrievalService | None, config: SearchConfig
+        self,
+        retrieval: RetrievalService | None,
+        settings: TRAKESettings | None = None,
     ) -> None:
         self.retrieval = retrieval
-        self.config = config
+        self.settings = settings or TRAKESettings()
 
     def execute(self, request: TaskRequest) -> TRAKEResponse:
         if not isinstance(request, TRAKERequest):
@@ -42,10 +43,19 @@ class TRAKEPipeline:
             raise ValueError("TRAKE needs 'events' with at least two ordered events")
         digest = sha1(f"trake\0{request.query}\0{request.top_k}".encode())
         request_id = f"trake-{digest.hexdigest()[:12]}"
-        videos = event_video_scores(
-            self.retrieval, events, self.config.candidate_count
+        videos = self.retrieval.score_visual_videos(
+            events,
+            self.settings.top_k,
+            self.settings.max_videos,
+            self.settings.rrf_k,
+            self.settings.chunk_size,
         )
-        rows = rank_paths(videos, max_rows=request.top_k)
+        rows = rank_paths(
+            videos,
+            self.settings.lambda_gap,
+            request.top_k,
+            self.settings.event_power,
+        )
         logger.info(
             "[%s] trake completed events=%d videos=%d rows=%d",
             request_id,

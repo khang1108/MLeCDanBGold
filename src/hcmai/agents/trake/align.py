@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .shortlist import VideoEventScores
+from hcmai.retriever.video_scores import VideoEventScores
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,19 +24,27 @@ class TrakePath:
 
 
 def align_video(
-    video: VideoEventScores, lambda_gap: float = 1e-5, paths: int = 1
+    video: VideoEventScores,
+    lambda_gap: float = 1e-5,
+    paths: int = 1,
+    event_power: float = 1.0,
 ) -> list[TrakePath]:
     """Return the best monotonic event-to-frame paths of one shortlisted video.
 
-    Maximizes ``sum_j S[j, t_j] - lambda_gap * (tau_t_N - tau_t_1)`` over
+    Maximizes ``sum_j S[j, t_j] ** p - lambda_gap * (tau_t_N - tau_t_1)`` over
     ``t_1 < ... < t_N`` in ``O(N * M)``: the gap penalties telescope, so a
-    running prefix max over ``D[j-1][t'] + lambda * tau_t'`` is enough.
+    running prefix max over ``D[j-1][t'] + lambda * tau_t'`` is enough. The
+    exponent is per frame, so it never touches the recurrence.
 
     Args:
         video: One video's ``N x M`` similarities in canonical frame order.
         lambda_gap: Time-gap penalty per millisecond. A calibration knob:
             tune it on a labeled TRAKE validation set.
         paths: How many paths to return, best first, for submission padding.
+        event_power: Exponent applied to every similarity. Below 1.0 one weak
+            event costs more than a strong one gains, so a video covering the
+            whole chain beats a one-event spike. Another calibration knob, and
+            it rescales ``score``, so retune ``lambda_gap`` alongside it.
 
     Returns:
         Up to ``paths`` paths, best first, empty when ``M < N``. Path ``i``
@@ -46,6 +54,10 @@ def align_video(
     n_events, n_frames = scores.shape
     if n_frames < n_events:
         return []
+    if event_power != 1.0:
+        # Clipped because a negative similarity is no evidence, not evidence
+        # against, and fractional powers of it are not real.
+        scores = np.clip(scores, 0.0, None) ** event_power
 
     weighted_time = lambda_gap * np.asarray(video.timestamps_ms, dtype=np.float64)
     frames = np.arange(n_frames)
@@ -74,8 +86,8 @@ def align_video(
             TrakePath(
                 video_id=video.video_id,
                 score=float(current[endpoint]),
-                frame_idx=tuple(video.frame_idx[position] for position in ordered),
-                frame_ids=tuple(video.frame_ids[position] for position in ordered),
+                frame_idx=tuple(int(video.frame_idx[position]) for position in ordered),
+                frame_ids=tuple(str(video.frame_ids[position]) for position in ordered),
             )
         )
     return results

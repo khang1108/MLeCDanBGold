@@ -7,6 +7,7 @@ discriminator -> ``PipelineRegistry`` -> ``TRAKEPipeline.execute`` ->
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -16,11 +17,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from hcmai.app import create_app
-from hcmai.common.schemas import RetrievalCandidate, RetrievalSource, TaskType
+from hcmai.common.schemas import RetrievalSource
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retriever.video_scores import VideoEventScores
 
 _MAPPING = pd.DataFrame(
     {
@@ -46,41 +48,28 @@ _FRAMES = {
 }
 
 
-class _FakeIndex:
-    mapping = _MAPPING
-    index = SimpleNamespace(ntotal=3)
-
-    def search(self, query_vectors: np.ndarray, top_k: int):
-        order = np.argsort(-_SCORES, axis=1)[:, :top_k]
-        return np.take_along_axis(_SCORES, order, axis=1), order
-
-
 class _FakeRetrieval:
     """Shortlist video_001 only, so video_002 never reaches the aligner."""
 
-    visual_index = _FakeIndex()
-
-    def search(
+    def score_visual_videos(
         self,
-        query: str,
-        top_k: int = 100,
-        filters: Any = None,
-        query_type: TaskType = TaskType.KIS,
-    ) -> list[RetrievalCandidate]:
-        del query, top_k, filters, query_type
+        events: Sequence[str],
+        top_k: int = 500,
+        max_videos: int = 200,
+        rrf_k: int = 60,
+        chunk_size: int = 65_536,
+    ) -> list[VideoEventScores]:
+        del top_k, max_videos, rrf_k, chunk_size
+        assert len(events) == len(_SCORES)
         return [
-            RetrievalCandidate(
-                frame_id="frame_10",
-                source_scores={RetrievalSource.VISUAL: 0.9},
-                final_score=0.9,
+            VideoEventScores(
+                video_id="video_001",
+                frame_ids=np.array(["frame_10", "frame_20"], dtype=object),
+                frame_idx=np.array([10, 20]),
+                timestamps_ms=np.array([1_000.0, 2_000.0]),
+                scores=_SCORES[:, [0, 1]],
             )
         ]
-
-    def encode_text_batch(self, texts: list[str], source_family: str = "text"):
-        assert source_family == "visual"
-        return SimpleNamespace(
-            vectors=np.zeros((len(texts), 4), dtype=np.float32)
-        )
 
 
 class _FakeData:
@@ -192,7 +181,8 @@ def test_health_reports_trake_once_the_pipeline_is_registered(
     [
         {"query_type": "trake", "query": "only one event", "events": ["one"]},
         {"query_type": "trake", "top_k": 20},
-        {"query_type": "trake", "query": "no delimiter, no events field"},
+        {"query_type": "trake", "query": "prose query with no events field"},
+        {"query_type": "trake", "query": "enter kitchen | add butter"},
     ],
 )
 def test_invalid_trake_input_is_rejected(

@@ -177,5 +177,5 @@ class SearchService:
             )
             for task_type in task_types
         )
-        registry.register(TRAKEPipeline(self.retrieval, self.config))
+        registry.register(TRAKEPipeline(self.retrieval))
         return registry
