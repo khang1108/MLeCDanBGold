@@ -9,6 +9,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
 from hcmai.common.schemas import FrameRecord, SubmissionResult
+from hcmai.data.assets import FrameAssetError, FrameAssetResolver
+from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 
 
@@ -29,6 +31,7 @@ def create_frames_router(
     """Create routes that materialize only canonical frame identities."""
 
     router = APIRouter()
+    fallback_resolver = FrameAssetResolver(dataset_root)
 
     @router.get("/api/v1/frames/{frame_id}", response_model=FrameRecord)
     async def get_frame(frame_id: str) -> FrameRecord:
@@ -58,16 +61,18 @@ def create_frames_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(error),
             ) from error
-        value = frame.thumbnail_path if thumbnail else frame.image_path
-        if thumbnail and value is None:
-            value = frame.image_path
-        path = Path(value).expanduser()
-        resolved = path.resolve() if path.is_absolute() else (dataset_root / path).resolve()
-        if not resolved.is_relative_to(dataset_root) or not resolved.is_file():
+        data = getattr(_search_service(service_container), "data", None)
+        try:
+            resolved = (
+                data.resolve_frame_asset(frame, thumbnail=thumbnail)
+                if isinstance(data, DataService)
+                else fallback_resolver.resolve_frame(frame, thumbnail=thumbnail)
+            )
+        except (FrameAssetError, RuntimeError):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Frame asset not available",
-            )
+            ) from None
         return FileResponse(resolved)
 
     @router.get("/api/v1/frames/{frame_id}/thumbnail")

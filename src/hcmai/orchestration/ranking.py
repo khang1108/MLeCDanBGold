@@ -10,10 +10,12 @@ from hcmai.common.schemas import (
     RetrievalTrace,
     SearchRequest,
     StageStatus,
+    StageTrace,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.observability.tracing import StageTimer, log_stage
-from hcmai.reranking.pipeline import RerankingService
+from hcmai.observability import PipelineStage
+from hcmai.reranking.pipeline import RerankingError, RerankingService
 from hcmai.retriever.pipeline import RetrievalService
 
 logger = get_logger(__name__)
@@ -30,7 +32,7 @@ def rank_candidates(
 ) -> tuple[RetrievalResult, int]:
     """Retrieve and optionally rerank one bounded candidate list."""
 
-    retrieval_timer = StageTimer("retrieval")
+    retrieval_timer = StageTimer(PipelineStage.SEARCH.value)
     logger.info("[%s] retrieval started", request_id)
     raw_result = retrieval.search(
         query=request.query,
@@ -38,11 +40,15 @@ def rank_candidates(
         filters=request.filters,
         query_type=request.query_type,
     )
-    retrieval_stage = retrieval_timer.finish()
     result = (
         raw_result
         if isinstance(raw_result, RetrievalResult)
         else RetrievalResult(candidates=raw_result)
+    )
+    retrieval_stage = retrieval_timer.finish(
+        input_count=1,
+        output_count=len(result.candidates),
+        backend=type(retrieval).__name__,
     )
     if not result.trace.stages:
         result = result.model_copy(
@@ -88,9 +94,11 @@ def rank_candidates(
     if reranking is None or rerank_count <= 0:
         reason = "not_configured" if reranking is None else "disabled"
         logger.info("[%s] reranking skipped reason=%s", request_id, reason)
-        skipped = StageTimer("reranking").finish(
+        skipped = StageTimer(PipelineStage.RERANK.value).finish(
             status=StageStatus.SKIPPED,
             attempt_count=0,
+            input_count=len(candidates),
+            output_count=len(candidates),
         )
         log_stage(
             logger,
@@ -98,13 +106,53 @@ def rank_candidates(
             task_type=request.query_type,
             trace=skipped,
         )
-        return result, 0
-    reranking_timer = StageTimer("reranking")
+        return _with_reranking_trace(result, skipped), 0
+    reranking_timer = StageTimer(PipelineStage.RERANK.value)
     depth = min(rerank_count, len(candidates))
     logger.info("[%s] reranking started candidates=%d", request_id, depth)
-    ranked = reranking.rerank(request.query, candidates[:depth])
+    try:
+        ranked = reranking.rerank(request.query, candidates[:depth])
+    except RerankingError as error:
+        reranking_trace = reranking_timer.finish(
+            status=StageStatus.PARTIAL,
+            error_category=error.category,
+            input_count=depth,
+            output_count=len(candidates),
+            backend=_reranker_backend(reranking),
+            fallback_used=True,
+        )
+        log_stage(
+            logger,
+            request_id=request_id,
+            task_type=request.query_type,
+            trace=reranking_trace,
+        )
+        logger.warning(
+            "[%s] reranking fallback category=%s candidates=%d",
+            request_id,
+            error.category,
+            depth,
+        )
+        if reranking.config.required:
+            raise
+        fallback = result.model_copy(
+            update={
+                "warnings": [
+                    *result.warnings,
+                    f"reranking fallback ({error.category})",
+                ]
+            }
+        )
+        return (
+            _with_reranking_trace(fallback, reranking_trace),
+            int(reranking_trace.duration_ms),
+        )
     ranked.extend(candidates[depth:])
-    reranking_trace = reranking_timer.finish()
+    reranking_trace = reranking_timer.finish(
+        input_count=depth,
+        output_count=len(ranked),
+        backend=_reranker_backend(reranking),
+    )
     reranking_ms = int(reranking_trace.duration_ms)
     log_stage(
         logger,
@@ -118,7 +166,8 @@ def rank_candidates(
         depth,
         reranking_ms,
     )
-    return result.model_copy(update={"candidates": ranked}), reranking_ms
+    updated = result.model_copy(update={"candidates": ranked})
+    return _with_reranking_trace(updated, reranking_trace), reranking_ms
 
 
 def request_id(request: SearchRequest) -> str:
@@ -130,3 +179,18 @@ def request_id(request: SearchRequest) -> str:
 
 def elapsed_ms(started: float) -> int:
     return max(0, int((perf_counter() - started) * 1_000))
+
+
+def _with_reranking_trace(
+    result: RetrievalResult,
+    stage: StageTrace,
+) -> RetrievalResult:
+    trace = result.trace.merged(
+        RetrievalTrace(stages={stage.stage: stage})
+    )
+    return result.model_copy(update={"trace": trace})
+
+
+def _reranker_backend(reranking: RerankingService) -> str:
+    adapter = getattr(reranking, "adapter", reranking)
+    return type(adapter).__name__

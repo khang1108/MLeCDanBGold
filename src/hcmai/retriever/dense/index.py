@@ -14,6 +14,8 @@ from typing import Any
 from hcmai.common.utils.io import read_json, write_json
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
+from hcmai.common.schemas.search import SearchFilters
+from hcmai.retriever.filtered import exact_subset_search
 from hcmai.retriever.models.metadata import IndexMetadata
 
 logger = get_logger(__name__)
@@ -23,6 +25,11 @@ logger = get_logger(__name__)
 INDEX_FILENAME = "dense.index"
 MAPPING_FILENAME = "frame_mapping.parquet"
 METADATA_FILENAME = "metadata.json"
+VECTORS_FILENAME = "vectors.npy"
+POSTING_VIDEO_IDS_FILENAME = "posting_video_ids.json"
+POSTING_OFFSETS_FILENAME = "posting_offsets.npy"
+POSTING_POSITIONS_FILENAME = "posting_positions.npy"
+TIMESTAMPS_FILENAME = "timestamps.npy"
 
 
 class DenseIndex:
@@ -33,7 +40,18 @@ class DenseIndex:
     baseline must be measured before any IVF/PQ approximation is introduced.
     """
 
-    def __init__(self, index: Any, mapping: pd.DataFrame, metadata: IndexMetadata) -> None:
+    def __init__(
+        self,
+        index: Any,
+        mapping: pd.DataFrame,
+        metadata: IndexMetadata,
+        vectors: np.ndarray | None = None,
+        posting_video_ids: list[str] | None = None,
+        posting_offsets: np.ndarray | None = None,
+        posting_positions: np.ndarray | None = None,
+        timestamps: np.ndarray | None = None,
+        subset_search_threshold: int = 100_000,
+    ) -> None:
         """Wrap a live FAISS index with its frame mapping and metadata.
 
         The mapping is sorted by ``embedding_index`` so that FAISS position
@@ -42,6 +60,27 @@ class DenseIndex:
         self.index = index
         self.mapping = mapping.sort_values("embedding_index").reset_index(drop=True)
         self.metadata = metadata
+        self.vectors = vectors if vectors is not None else _reconstruct(index)
+        if posting_video_ids is None:
+            posting_video_ids, posting_offsets, posting_positions = _postings(
+                self.mapping
+            )
+        self.posting_video_ids = posting_video_ids
+        self.posting_offsets = _int64_array(posting_offsets)
+        self.posting_positions = _int64_array(posting_positions)
+        self.timestamps = (
+            _int64_array(timestamps)
+            if timestamps is not None
+            else self.mapping["timestamp_ms"].to_numpy(dtype=np.int64)
+        )
+        self.subset_search_threshold = subset_search_threshold
+        self._video_slices = {
+            video_id: slice(
+                int(self.posting_offsets[index]),
+                int(self.posting_offsets[index + 1]),
+            )
+            for index, video_id in enumerate(self.posting_video_ids)
+        }
 
     @classmethod
     def build(
@@ -118,7 +157,7 @@ class DenseIndex:
             generated_at=pd.Timestamp.now().isoformat(),
         )
         logger.info(f"Index built in {build_time_sec:.3f}s")
-        return cls(index, ordered, metadata)
+        return cls(index, ordered, metadata, vectors=vectors)
 
     def save(self, output_dir: Path | str) -> Path:
         """Serialize the index, mapping, and metadata to ``output_dir``.
@@ -132,6 +171,11 @@ class DenseIndex:
         index_path = output_dir / INDEX_FILENAME
         faiss.write_index(self.index, str(index_path))
         self.mapping.to_parquet(output_dir / MAPPING_FILENAME)
+        np.save(output_dir / VECTORS_FILENAME, np.asarray(self.vectors, dtype=np.float32))
+        write_json(self.posting_video_ids, output_dir / POSTING_VIDEO_IDS_FILENAME)
+        np.save(output_dir / POSTING_OFFSETS_FILENAME, self.posting_offsets)
+        np.save(output_dir / POSTING_POSITIONS_FILENAME, self.posting_positions)
+        np.save(output_dir / TIMESTAMPS_FILENAME, self.timestamps)
 
         # Record the on-disk index size now that the file exists so the
         # metadata reports the real artifact size.
@@ -142,7 +186,12 @@ class DenseIndex:
         return output_dir
 
     @classmethod
-    def load(cls, index_dir: Path | str) -> DenseIndex:
+    def load(
+        cls,
+        index_dir: Path | str,
+        *,
+        subset_search_threshold: int = 100_000,
+    ) -> DenseIndex:
         """Load an index directory and reject mismatched artifacts.
 
         Args:
@@ -158,6 +207,28 @@ class DenseIndex:
         index = faiss.read_index(str(index_dir / INDEX_FILENAME))
         mapping = pd.read_parquet(index_dir / MAPPING_FILENAME)
         metadata = IndexMetadata.from_dict(read_json(index_dir / METADATA_FILENAME))
+        vectors_path = index_dir / VECTORS_FILENAME
+        vectors = (
+            np.load(vectors_path, mmap_mode="r")
+            if vectors_path.is_file()
+            else _reconstruct(index)
+        )
+        posting_paths = (
+            index_dir / POSTING_VIDEO_IDS_FILENAME,
+            index_dir / POSTING_OFFSETS_FILENAME,
+            index_dir / POSTING_POSITIONS_FILENAME,
+            index_dir / TIMESTAMPS_FILENAME,
+        )
+        if all(path.is_file() for path in posting_paths):
+            posting_video_ids = list(read_json(posting_paths[0]))
+            posting_offsets = np.load(posting_paths[1], mmap_mode="r")
+            posting_positions = np.load(posting_paths[2], mmap_mode="r")
+            timestamps = np.load(posting_paths[3], mmap_mode="r")
+        else:
+            posting_video_ids, posting_offsets, posting_positions = _postings(mapping)
+            timestamps = mapping.sort_values("embedding_index")[
+                "timestamp_ms"
+            ].to_numpy(dtype=np.int64)
 
         # Cross-check the three artifacts so a stale or mispaired index is
         # rejected with a clear error instead of returning wrong frames.
@@ -175,7 +246,19 @@ class DenseIndex:
             f"Loaded index from {index_dir}: {index.ntotal} vectors, "
             f"model={metadata.model_name}, version={metadata.dataset_version}"
         )
-        return cls(index, mapping, metadata)
+        if vectors.shape != (metadata.vector_count, metadata.embedding_dim):
+            raise ValueError("Persisted vectors do not match index metadata")
+        return cls(
+            index,
+            mapping,
+            metadata,
+            vectors=vectors,
+            posting_video_ids=posting_video_ids,
+            posting_offsets=posting_offsets,
+            posting_positions=posting_positions,
+            timestamps=timestamps,
+            subset_search_threshold=subset_search_threshold,
+        )
 
     def search(self, query_vectors: np.ndarray, top_k: int) -> tuple[np.ndarray, np.ndarray]:
         """Search the index for the nearest frames to each query vector.
@@ -251,3 +334,92 @@ class DenseIndex:
     def timestamps_ms(self) -> np.ndarray:
         """Timestamp of each index position, never inferred from FPS."""
         return self.mapping["timestamp_ms"].to_numpy(dtype=np.float64)
+
+    def search_filtered(
+        self,
+        query_vectors: np.ndarray,
+        top_k: int,
+        filters: SearchFilters | None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Use FAISS when unrestricted and exact narrowed vectors otherwise."""
+
+        allowed = self.filtered_positions(filters)
+        if allowed is None:
+            return self.search(query_vectors, top_k)
+        return exact_subset_search(
+            query_vectors,
+            self.vectors,
+            allowed,
+            top_k,
+            chunk_size=self.subset_search_threshold,
+        )
+
+    def filtered_positions(
+        self,
+        filters: SearchFilters | None,
+    ) -> np.ndarray | None:
+        if filters is None or not (
+            filters.video_ids
+            or filters.start_time_ms is not None
+            or filters.end_time_ms is not None
+        ):
+            return None
+        if filters.video_ids:
+            groups = []
+            for video_id in filters.video_ids:
+                bounds = self._video_slices.get(video_id)
+                if bounds is not None:
+                    groups.append(self.posting_positions[bounds])
+            positions = (
+                np.unique(np.concatenate(groups))
+                if groups
+                else np.empty(0, dtype=np.int64)
+            )
+        else:
+            positions = np.arange(self.metadata.vector_count, dtype=np.int64)
+        if filters.start_time_ms is not None:
+            positions = positions[
+                self.timestamps[positions] >= filters.start_time_ms
+            ]
+        if filters.end_time_ms is not None:
+            positions = positions[
+                self.timestamps[positions] <= filters.end_time_ms
+            ]
+        return positions
+
+
+def _postings(
+    mapping: pd.DataFrame,
+) -> tuple[list[str], np.ndarray, np.ndarray]:
+    ordered = mapping.sort_values("embedding_index")
+    video_ids = sorted(str(value) for value in ordered["video_id"].unique())
+    groups = [
+        np.sort(
+            ordered.loc[
+                ordered["video_id"].astype(str) == video_id,
+                "embedding_index",
+            ].to_numpy(dtype=np.int64)
+        )
+        for video_id in video_ids
+    ]
+    offsets = np.zeros(len(groups) + 1, dtype=np.int64)
+    if groups:
+        offsets[1:] = np.cumsum([len(group) for group in groups])
+    positions = (
+        np.concatenate(groups)
+        if groups
+        else np.empty(0, dtype=np.int64)
+    )
+    return video_ids, offsets, positions
+
+
+def _reconstruct(index: Any) -> np.ndarray:
+    vectors = np.empty((index.ntotal, index.d), dtype=np.float32)
+    index.reconstruct_n(0, index.ntotal, vectors)
+    return vectors
+
+
+def _int64_array(values: Any) -> np.ndarray:
+    if isinstance(values, np.ndarray) and values.dtype == np.int64:
+        return values
+    return np.asarray(values, dtype=np.int64)

@@ -20,10 +20,43 @@ __all__ = [
     "RerankerConfig",
     "HostedRerankingAdapter",
     "RerankingAdapter",
+    "RerankingError",
+    "RerankerContractError",
+    "RerankerInvalidScoreError",
+    "RerankerTimeoutError",
+    "RerankerUnavailableError",
     "RerankingService",
 ]
 
 logger = get_logger(__name__)
+
+
+class RerankingError(RuntimeError):
+    """Safe categorized reranking failure exposed to orchestration."""
+
+    def __init__(self, category: str) -> None:
+        super().__init__(f"reranking failed ({category})")
+        self.category = category
+
+
+class RerankerUnavailableError(RerankingError):
+    def __init__(self, category: str = "unavailable") -> None:
+        super().__init__(category)
+
+
+class RerankerTimeoutError(RerankingError):
+    def __init__(self) -> None:
+        super().__init__("timeout")
+
+
+class RerankerContractError(RerankingError):
+    def __init__(self) -> None:
+        super().__init__("contract_error")
+
+
+class RerankerInvalidScoreError(RerankingError):
+    def __init__(self) -> None:
+        super().__init__("invalid_score")
 
 
 class RerankingService:
@@ -77,16 +110,28 @@ class RerankingService:
         original = list(candidates)
         if not original:
             return []
-        copies, prepared = self._prepare(original)
+        try:
+            copies, prepared = self._prepare(original)
+        except FileNotFoundError as error:
+            raise RerankerUnavailableError("frame_asset_missing") from error
+        except (OSError, KeyError, RuntimeError) as error:
+            raise RerankerUnavailableError("image_load_failure") from error
         logger.info("Reranker images prepared loaded=%d", len(prepared))
         try:
-            scored = self._score(query, prepared)
+            try:
+                scored = self._score(query, prepared)
+            except RerankingError:
+                raise
+            except TimeoutError as error:
+                raise RerankerTimeoutError() from error
+            except Exception as error:
+                raise _classified_backend_error(error) from error
         finally:
             for _, image in prepared:
                 image.close()
         for position, value in scored:
             if not _finite(value):
-                raise ValueError(f"reranker returned invalid score: {value!r}")
+                raise RerankerInvalidScoreError()
             score = float(value)
             copies[position] = _replace(
                 copies[position], reranker_score=score, final_score=score
@@ -101,8 +146,11 @@ class RerankingService:
         try:
             for position, candidate in enumerate(copies):
                 frame = self.data.get_frame(candidate.frame_id)
-                path = Path(str(frame.image_path)).expanduser()
-                image_path = path if path.is_absolute() else self.dataset_root / path
+                if isinstance(self.data, DataService):
+                    image_path = self.data.resolve_frame_asset(frame)
+                else:
+                    path = Path(str(frame.image_path)).expanduser()
+                    image_path = path if path.is_absolute() else self.dataset_root / path
                 prepared.append((position, load_image(image_path, mode="RGB")))
         except Exception:
             for _, image in prepared:
@@ -118,7 +166,7 @@ class RerankingService:
             batch = prepared[start : start + self.config.batch_size]
             values = list(self.adapter.score(query, [image for _, image in batch]))
             if len(values) != len(batch):
-                raise ValueError("score backend returned the wrong result count")
+                raise RerankerContractError()
             scored.extend((position, value) for (position, _), value in zip(batch, values))
         return scored
 
@@ -145,3 +193,13 @@ def _replace(candidate: RetrievalCandidate, **updates: Any) -> RetrievalCandidat
     values = candidate.model_dump(mode="python")
     values.update(updates)
     return RetrievalCandidate.model_validate(values)
+
+
+def _classified_backend_error(error: Exception) -> RerankingError:
+    raw_category = getattr(error, "category", None)
+    category = str(getattr(raw_category, "value", raw_category) or "")
+    if category in {"timeout", "deadline_exceeded"}:
+        return RerankerTimeoutError()
+    if category in {"client_error", "invalid_response"}:
+        return RerankerContractError()
+    return RerankerUnavailableError()

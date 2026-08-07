@@ -1,7 +1,6 @@
 import React, { useRef, useState } from "react";
 import ImageModal from "./features/frames/components/ImageModal";
-import AdHocSearchWorkspace from "./features/search/components/AdHocSearchWorkspace";
-import OptionsDrawer from "./features/search-controls/components/OptionsDrawer";
+import VqaSearchWorkspace from "./features/vqa/components/VqaSearchWorkspace";
 import { useHealthCheck } from "./features/health/hooks/useHealthCheck";
 import HealthBadge from "./features/health/components/HealthBadge";
 import { useVimMode } from "./features/vim/hooks/useVimMode";
@@ -11,19 +10,13 @@ import VimHelpModal from "./features/vim/components/VimHelpModal";
 import "./styles/gif-loader.css";
 import "./styles/vim.css";
 
-// App exposes only the standalone ad-hoc competition search workspace.
 function App() {
   const [selectedFrame, setSelectedFrame] = useState(null);
-  const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [topK, setTopK] = useState(20);
   const queryInputRef = useRef(null);
   const { isHealthy, healthData, isChecking } = useHealthCheck();
   const vim = useVimMode({
-    onToggleOptions: () => setIsOptionsOpen((previous) => !previous),
-    onCloseAllModals: () => {
-      setIsOptionsOpen(false);
-      setSelectedFrame(null);
-    },
+    onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
   });
 
@@ -49,7 +42,7 @@ function App() {
       </header>
 
       <main className="app-container adhoc-app">
-        <AdHocSearchWorkspace
+        <VqaSearchWorkspace
           topK={topK}
           setTopK={setTopK}
           onFrameClick={setSelectedFrame}
@@ -59,13 +52,6 @@ function App() {
         />
       </main>
 
-      <OptionsDrawer
-        isOpen={isOptionsOpen}
-        onClose={() => setIsOptionsOpen(false)}
-        topK={topK}
-        setTopK={setTopK}
-        onReset={() => setTopK(20)}
-      />
       {selectedFrame && (
         <ImageModal
           frame={selectedFrame}

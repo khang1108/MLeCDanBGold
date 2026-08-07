@@ -1,10 +1,14 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { searchFrames } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "./GifLoaderOverlay";
+import MiniChallengePanel from "../../minichallenge/components/MiniChallengePanel";
+import { useMiniChallenge } from "../../minichallenge/hooks/useMiniChallenge";
 
-// Tab 2: Simple ad-hoc query workspace with top query bar and split options/results layout.
+const QUERY_PREFIX = /^\/(kis|vkis)\b\s*/i;
+
+// Standalone competition search workspace with frame results.
 const AdHocSearchWorkspace = ({
   topK,
   setTopK,
@@ -19,27 +23,55 @@ const AdHocSearchWorkspace = ({
   const [latencyMs, setLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const requestRef = useRef(null);
+  const challenge = useMiniChallenge();
 
+  useEffect(() => () => requestRef.current?.abort(), []);
   const handleSubmit = useCallback(
     async (event) => {
       event?.preventDefault();
       const trimmed = query.trim();
       if (!trimmed || isSearching) return;
 
+      const prefixMatch = trimmed.match(QUERY_PREFIX);
+      if (!prefixMatch) {
+        setError(
+          "Start your frame query with /kis or /vkis.",
+        );
+        return;
+      }
+
+      const queryType = prefixMatch[1].toLowerCase();
+      const searchQuery = trimmed.slice(prefixMatch[0].length).trim();
+      if (!searchQuery) {
+        setError(`Enter a query after /${queryType}.`);
+        return;
+      }
+
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
       setIsSearching(true);
       setError(null);
+
       try {
         const response = await searchFrames({
-          query: trimmed,
+          query: searchQuery,
           topK,
+          queryType,
+          signal: controller.signal,
         });
         setResults(response.results || []);
         setWarnings(response.warnings || []);
         setLatencyMs(response.latency_ms || null);
-      } catch (err) {
-        setError(err.message || "Failed to contact search API");
+      } catch (requestError) {
+        if (requestError?.name === "AbortError") return;
+        setError(requestError.message || "Failed to contact search API");
       } finally {
-        setIsSearching(false);
+        if (requestRef.current === controller) {
+          requestRef.current = null;
+          setIsSearching(false);
+        }
       }
     },
     [isSearching, query, topK],
@@ -48,6 +80,15 @@ const AdHocSearchWorkspace = ({
   const handleResetOptions = useCallback(() => {
     setTopK(20);
   }, [setTopK]);
+
+  const handleChallengeSubmit = useCallback((frame) => {
+    const taskName = challenge.currentTask?.name;
+    if (!taskName) return;
+    const confirmed = window.confirm(
+      `Submit ${frame.video_id} to “${taskName}”?`,
+    );
+    if (confirmed) challenge.submitFrame(frame);
+  }, [challenge]);
 
   return (
     <div className="adhoc-workspace">
@@ -71,7 +112,7 @@ const AdHocSearchWorkspace = ({
             ref={queryInputRef}
             type="text"
             className="input-text query-input-field"
-            placeholder="Search frames by keyword or press '/' to search..."
+            placeholder="Start with /kis or /vkis"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onFocus={onFocusQueryInput}
@@ -96,6 +137,7 @@ const AdHocSearchWorkspace = ({
             setTopK={setTopK}
             onReset={handleResetOptions}
           />
+          <MiniChallengePanel challenge={challenge} />
         </aside>
 
         <section className="adhoc-results">
@@ -107,6 +149,8 @@ const AdHocSearchWorkspace = ({
             latencyMs={latencyMs}
             warnings={warnings}
             onFrameClick={onFrameClick}
+            onChallengeSubmit={challenge.currentTask ? handleChallengeSubmit : null}
+            submittingFrameId={challenge.submittingFrameId}
           />
         </section>
       </div>

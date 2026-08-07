@@ -14,6 +14,7 @@ from hcmai.data.pipeline import DataService
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retriever.dense.index import DenseIndex
 from hcmai.retriever.dense.retriever import DenseRetriever
+from hcmai.retriever.cache import EmbeddingCache
 
 _TEXT_SOURCES = {
     RetrievalSource.CAPTION,
@@ -30,25 +31,45 @@ class TextEvidenceRetriever(DenseRetriever):
         encoder: TextEmbeddingAdapter,
         index: DenseIndex,
         source: RetrievalSource,
+        embedding_cache: EmbeddingCache | None = None,
+        prompt_version: str = "query-v1",
     ) -> None:
         if source not in _TEXT_SOURCES:
             raise ValueError(f"{source.value!r} is not a text evidence source")
-        super().__init__(encoder, index, source=source)
+        super().__init__(
+            encoder,
+            index,
+            source=source,
+            embedding_cache=embedding_cache,
+            prompt_version=prompt_version,
+        )
 
 
 class CaptionRetriever(TextEvidenceRetriever):
-    def __init__(self, encoder: TextEmbeddingAdapter, index: DenseIndex) -> None:
-        super().__init__(encoder, index, RetrievalSource.CAPTION)
+    def __init__(
+        self, encoder: TextEmbeddingAdapter, index: DenseIndex,
+        embedding_cache: EmbeddingCache | None = None,
+        prompt_version: str = "query-v1",
+    ) -> None:
+        super().__init__(encoder, index, RetrievalSource.CAPTION, embedding_cache, prompt_version)
 
 
 class OCRRetriever(TextEvidenceRetriever):
-    def __init__(self, encoder: TextEmbeddingAdapter, index: DenseIndex) -> None:
-        super().__init__(encoder, index, RetrievalSource.OCR)
+    def __init__(
+        self, encoder: TextEmbeddingAdapter, index: DenseIndex,
+        embedding_cache: EmbeddingCache | None = None,
+        prompt_version: str = "query-v1",
+    ) -> None:
+        super().__init__(encoder, index, RetrievalSource.OCR, embedding_cache, prompt_version)
 
 
 class ASRRetriever(TextEvidenceRetriever):
-    def __init__(self, encoder: TextEmbeddingAdapter, index: DenseIndex) -> None:
-        super().__init__(encoder, index, RetrievalSource.ASR)
+    def __init__(
+        self, encoder: TextEmbeddingAdapter, index: DenseIndex,
+        embedding_cache: EmbeddingCache | None = None,
+        prompt_version: str = "query-v1",
+    ) -> None:
+        super().__init__(encoder, index, RetrievalSource.ASR, embedding_cache, prompt_version)
 
 
 def _text_corpus(

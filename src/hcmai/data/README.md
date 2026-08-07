@@ -121,6 +121,12 @@ submission = (frame.video_id, frame.frame_idx)
 assert data.contains_submission(*submission)
 ```
 
+Online composition also injects the configured dataset root into
+`DataService`. Call `data.resolve_frame_asset(frame)` rather than joining
+`image_path` independently; this enforces one path-containment policy for the
+frame API, reranking, and VQA. `data.frame_asset_status()` provides a bounded,
+deterministic availability sample for readiness checks.
+
 Production code outside this package must not import `stores/` or
 `prepare.py` directly. Focused unit tests may use those internals with tiny
 fixtures.

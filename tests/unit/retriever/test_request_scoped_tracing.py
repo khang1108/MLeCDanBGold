@@ -90,8 +90,8 @@ def test_parallel_calls_on_one_retriever_own_independent_traces() -> None:
     assert not hasattr(retriever, "last_query_encoding_ms")
     assert not hasattr(retriever, "last_index_search_ms")
     assert slow.trace is not fast.trace
-    assert slow.trace.stages["query_encoding"] is not fast.trace.stages[
-        "query_encoding"
+    assert slow.trace.stages["encode"] is not fast.trace.stages[
+        "encode"
     ]
     assert slow.trace.duration_for("query_encoding") > (
         fast.trace.duration_for("query_encoding") + 30
@@ -149,5 +149,5 @@ def test_orchestration_emits_required_json_stage_fields(caplog) -> None:
     assert {record["stage"] for record in records} == {
         "visual.query_encoding",
         "visual.index_search",
-        "reranking",
+        "rerank",
     }

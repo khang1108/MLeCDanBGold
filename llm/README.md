@@ -10,16 +10,7 @@ FAISS index, mappings, embeddings, or frontend.
 - `POST /v1/captions` (multipart JPEG frames)
 - `POST /v1/embeddings/text`
 - `POST /v1/rerank` (multipart JPEG candidates)
-- `POST /v1/conversation/resolve`
 - `POST /v1/vqa` (one canonical frame plus optional evidence)
-- `POST /v1/query-suggestions`
-
-The public backend exposes `POST /api/v1/query-suggestions`. Its active
-provider, model, timeout, and generation settings live under
-`query_suggestions` in `llm/config.yaml`. Select `gpu_inference` to call this
-private service or `openai_compatible` to call a configured third-party API.
-Third-party credentials are read only from the environment variable named by
-`api_key_env`; never store the key in YAML or the frontend.
 
 Run locally with one worker so model memory is not duplicated:
 
@@ -60,18 +51,10 @@ sudo bash /home/ubuntu/deploy_cloudflared_private.sh \
   --caption-embedding true
 ```
 
-Available flags are `--caption`, `--visual-embedding`,
-`--caption-embedding`, `--reranker`, and `--conversation`; each accepts exactly
-`true` or `false`. Visual embedding hosts SigLIP2. Caption embedding hosts
-BGE-M3. Disabled models are not constructed, downloaded, or loaded into VRAM.
-Use `--help` to print the current options.
-
-Query suggestions are controlled at runtime by
-`HCMAI_ENABLE_QUERY_SUGGESTIONS`; the current private bootstrap has no separate
-CLI flag for it. When its configured checkpoint matches the enabled
-conversation model, the process reuses that model; otherwise it owns a
-separate model instance. Record this explicitly in the private bootstrap before
-estimating VRAM.
+Enable grounded VQA with `HCMAI_ENABLE_VQA=true` in the Supervisor environment.
+Visual embedding hosts SigLIP2 and caption embedding hosts BGE-M3. Disabled
+models are not constructed, downloaded, or loaded into VRAM. Any private
+bootstrap wrapper must migrate its old conversation flag to this VQA variable.
 
 The bootstrap clones the configured repository and branch into
 `/opt/hcmai/repo`, installs all required packages, downloads model checkpoints,
@@ -103,12 +86,9 @@ Cloudflare Access Service Auth policy. The local HCMAI backend supplies
 `HCMAI_CF_ACCESS_CLIENT_ID` and
 `HCMAI_CF_ACCESS_CLIENT_SECRET`; never put them in the React frontend.
 
-The pinned conversation checkpoint in `llm/config.yaml` is used when
-`HCMAI_CONVERSATION_MODEL` is empty. Set that variable in the private bootstrap
-only to override the checkpoint. To disable hosted conversation inference, set
-`HCMAI_ENABLE_CONVERSATION=false`; a null checkpoint with conversation enabled
-fails startup. The current online path does not silently replace a failed
-conversation request with another model.
+The pinned VQA checkpoint in `llm/config.yaml` is used when `HCMAI_VQA_MODEL`
+is empty. Set that variable only to override the checkpoint. Conversation and
+query-suggestion inference are not deployed.
 
 GLM-4.1V-9B-Thinking is loaded through its official multimodal processor and
 conditional-generation class. BF16 weights require substantial VRAM alongside

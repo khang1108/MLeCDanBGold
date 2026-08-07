@@ -146,7 +146,7 @@ def test_optional_caption_failure_warns_and_normalizes_active_weights() -> None:
     assert [candidate.frame_id for candidate in result] == ["visual-0"]
     assert result[0].fusion_score == pytest.approx(2 / 61)
     assert result.warnings == ["caption retrieval unavailable (TimeoutError)"]
-    assert result.trace.stages["caption.index_search"].error_category == "TimeoutError"
+    assert result.trace.stages["caption.search"].error_category == "TimeoutError"
     assert "private backend detail" not in result.warnings[0]
 
 

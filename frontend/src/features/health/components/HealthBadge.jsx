@@ -11,22 +11,21 @@ const HealthBadge = ({ isHealthy, healthData, isChecking }) => {
   }
 
   if (isHealthy) {
-    const readyText = healthData?.ready ? 'Ready' : 'Online';
     const totalFrames = healthData?.total_frames ?? 0;
-    const tooltip = `Status: OK | System: ${readyText} | Frames: ${totalFrames.toLocaleString()}`;
+    const tooltip = `Status: OK | System: Ready | Frames: ${totalFrames.toLocaleString()}`;
 
     return (
       <div className="health-badge online" title={tooltip}>
         <span className="health-dot online-dot" />
-        <span className="health-text">System Online</span>
+        <span className="health-text">System Ready</span>
       </div>
     );
   }
 
   return (
-    <div className="health-badge offline" title="Backend service is offline or unreachable">
+    <div className="health-badge offline" title="Backend is unavailable or not ready for search">
       <span className="health-dot offline-dot" />
-      <span className="health-text">System Offline</span>
+      <span className="health-text">System Not Ready</span>
     </div>
   );
 };

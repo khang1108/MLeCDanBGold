@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 export const useVimMode = ({
-  onToggleOptions,
   onCloseAllModals,
   queryInputRef,
 }) => {
@@ -50,28 +49,21 @@ export const useVimMode = ({
 
       // --- NORMAL MODE KEYBINDINGS ---
 
-      // 1. / -> Focus search query input and enter INSERT mode
+      // / -> Focus search query input and enter INSERT mode
       if (event.key === "/") {
         event.preventDefault();
         enterInsertMode();
         return;
       }
 
-      // 2. t -> Open Top-K quick edit dialog
+      // 4. t -> Open Top-K quick edit dialog
       if (event.key.toLowerCase() === "t") {
         event.preventDefault();
         setIsTopKOpen(true);
         return;
       }
 
-      // 3. o -> Toggle Options drawer
-      if (event.key.toLowerCase() === "o") {
-        event.preventDefault();
-        onToggleOptions?.();
-        return;
-      }
-
-      // 4. ? -> Open Vim Shortcuts Help Cheat Sheet
+      // ? -> Open Vim Shortcuts Help Cheat Sheet
       if (event.key === "?") {
         event.preventDefault();
         setIsHelpOpen((prev) => !prev);
@@ -88,7 +80,6 @@ export const useVimMode = ({
     isTopKOpen,
     mode,
     onCloseAllModals,
-    onToggleOptions,
   ]);
 
   return {

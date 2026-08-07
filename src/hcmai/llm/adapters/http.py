@@ -4,24 +4,25 @@ from __future__ import annotations
 
 import io
 import json
-import os
-from time import perf_counter
+from time import monotonic, perf_counter
 from typing import Any, Sequence
 
 import httpx
 from PIL import Image
 
+from hcmai.common.config import InferenceConfig
 from hcmai.common.schemas import (
     CaptionResponse,
     InferenceReadiness,
-    QuerySuggestionInferenceRequest,
-    QuerySuggestionResponse,
     RerankResponse,
     TextEmbeddingResponse,
     VQAInferenceEvidence,
     VQAInferenceResponse,
+    VQAMultiFrameInferenceResponse,
 )
 from hcmai.common.utils.logging import get_logger
+from hcmai.llm.gateway import InferenceGateway, InferenceGatewayError
+from hcmai.llm.resilience import FailureCategory
 
 logger = get_logger(__name__)
 
@@ -32,15 +33,21 @@ class InferenceClient:
     def __init__(
         self,
         base_url: str,
-        timeout_seconds: float = 10,
+        timeout_seconds: float | InferenceConfig = 10,
         client: httpx.Client | None = None,
+        gateway: InferenceGateway | None = None,
     ) -> None:
-        headers = _access_headers()
-        self.client = client or httpx.Client(
-            base_url=base_url.rstrip("/"),
-            timeout=timeout_seconds,
-            headers=headers,
+        config = (
+            timeout_seconds
+            if isinstance(timeout_seconds, InferenceConfig)
+            else _legacy_config(timeout_seconds)
         )
+        self.gateway = gateway or InferenceGateway(
+            base_url,
+            config,
+            client,
+        )
+        self.client = self.gateway.client
 
     def embed_text(
         self, texts: list[str], source: str = "visual"
@@ -49,10 +56,11 @@ class InferenceClient:
             "/v1/embeddings/text",
             json={"source": source, "texts": texts},
         )
-        return TextEmbeddingResponse.model_validate(payload)
+        return _validated(TextEmbeddingResponse, payload)
 
-    def readiness(self) -> InferenceReadiness:
-        return InferenceReadiness.model_validate(self._request("GET", "/ready"))
+    def readiness(self, deadline_at: float | None = None) -> InferenceReadiness:
+        payload = self._request("GET", "/ready", deadline_at=deadline_at)
+        return _validated(InferenceReadiness, payload)
 
     def caption(self, images: Sequence[Image.Image]) -> CaptionResponse:
         item_ids = [str(index) for index in range(len(images))]
@@ -65,7 +73,7 @@ class InferenceClient:
             data={"item_ids": json.dumps(item_ids)},
             files=files,
         )
-        response = CaptionResponse.model_validate(payload)
+        response = _validated(CaptionResponse, payload)
         if [item.item_id for item in response.items] != item_ids:
             raise InferenceClientError("captioner changed item identity or order")
         return response
@@ -81,34 +89,10 @@ class InferenceClient:
             data={"query": query, "item_ids": json.dumps(item_ids)},
             files=files,
         )
-        response = RerankResponse.model_validate(payload)
+        response = _validated(RerankResponse, payload)
         if [item.item_id for item in response.items] != item_ids:
             raise InferenceClientError("reranker changed item identity or order")
         return [item.score for item in response.items]
-
-    def resolve_conversation(self, request: dict[str, Any]) -> object:
-        return self._post("/v1/conversation/resolve", json=request)
-
-    def suggest_queries(
-        self,
-        request: QuerySuggestionInferenceRequest,
-        endpoint_path: str = "/v1/query-suggestions",
-        timeout_seconds: float | None = None,
-    ) -> QuerySuggestionResponse:
-        payload = self._post(
-            endpoint_path,
-            json=request.model_dump(mode="json"),
-            timeout=timeout_seconds,
-        )
-        response = QuerySuggestionResponse.model_validate(payload)
-        if (
-            response.request_id != request.request_id
-            or response.original_query != request.query
-        ):
-            raise InferenceClientError(
-                "query-suggestion provider changed request identity"
-            )
-        return response
 
     def answer_vqa(
         self,
@@ -129,8 +113,39 @@ class InferenceClient:
             },
             files=[("image", (f"{frame_id}.jpg", _jpeg(image), "image/jpeg"))],
         )
-        response = VQAInferenceResponse.model_validate(payload)
+        response = _validated(VQAInferenceResponse, payload)
         if response.request_id != request_id or response.frame_id != frame_id:
+            raise InferenceClientError("VQA provider changed request/frame identity")
+        if response.question != question:
+            raise InferenceClientError("VQA provider changed the question")
+        return response
+
+    def answer_vqa_multi(
+        self,
+        request_id: str,
+        frame_ids: list[str],
+        question: str,
+        images: Sequence[Image.Image],
+        evidence: VQAInferenceEvidence | None = None,
+    ) -> VQAMultiFrameInferenceResponse:
+        if not frame_ids or len(frame_ids) != len(images):
+            raise ValueError("frame_ids and images must be non-empty and aligned")
+        context = evidence or VQAInferenceEvidence()
+        payload = self._post(
+            "/v1/vqa/multi",
+            data={
+                "request_id": request_id,
+                "frame_ids": json.dumps(frame_ids),
+                "question": question,
+                "evidence": context.model_dump_json(),
+            },
+            files=[
+                ("images", (f"{frame_id}.jpg", _jpeg(image), "image/jpeg"))
+                for frame_id, image in zip(frame_ids, images)
+            ],
+        )
+        response = _validated(VQAMultiFrameInferenceResponse, payload)
+        if response.request_id != request_id or response.frame_ids != frame_ids:
             raise InferenceClientError("VQA provider changed request/frame identity")
         if response.question != question:
             raise InferenceClientError("VQA provider changed the question")
@@ -139,22 +154,47 @@ class InferenceClient:
     def _post(self, path: str, **kwargs: Any) -> Any:
         return self._request("POST", path, **kwargs)
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        deadline_at: float | None = None,
+        **kwargs: Any,
+    ) -> Any:
         started = perf_counter()
         logger.info("Remote inference request started path=%s", path)
         try:
-            response = self.client.request(method, path, **kwargs)
-            response.raise_for_status()
+            response = self.gateway.request(
+                method,
+                path,
+                idempotent=True,
+                deadline_at=deadline_at,
+                **kwargs,
+            )
             payload = response.json()
-        except Exception as error:
-            detail = _response_detail(error)
+        except InferenceGatewayError as error:
             logger.warning(
                 "Remote inference request failed path=%s elapsed_ms=%d "
-                "error=%s detail=%s",
+                "category=%s attempts=%d circuit=%s",
                 path, int((perf_counter() - started) * 1_000),
-                type(error).__name__, detail,
+                error.category.value,
+                error.attempt_count,
+                self.gateway.circuit.state.value,
             )
-            raise InferenceClientError(f"{path} failed: {detail}") from error
+            raise InferenceClientError(
+                f"{path} failed ({error.category.value})",
+                category=error.category,
+                attempt_count=error.attempt_count,
+                circuit_state=self.gateway.circuit.state.value,
+            ) from error
+        except ValueError as error:
+            raise InferenceClientError(
+                f"{path} returned invalid JSON",
+                category=FailureCategory.INVALID_RESPONSE,
+                attempt_count=1,
+                circuit_state=self.gateway.circuit.state.value,
+            ) from error
         logger.info(
             "Remote inference request completed path=%s status=%d elapsed_ms=%d",
             path,
@@ -163,9 +203,28 @@ class InferenceClient:
         )
         return payload
 
+    def health(self) -> dict[str, Any]:
+        return self.gateway.health()
+
+    def close(self) -> None:
+        self.gateway.close()
+
 
 class InferenceClientError(RuntimeError):
     """Bounded remote inference or contract failure."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: FailureCategory = FailureCategory.INVALID_RESPONSE,
+        attempt_count: int = 1,
+        circuit_state: str = "closed",
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.attempt_count = attempt_count
+        self.circuit_state = circuit_state
 
 
 def _jpeg(image: Image.Image) -> bytes:
@@ -177,23 +236,21 @@ def _jpeg(image: Image.Image) -> bytes:
     return output.getvalue()
 
 
-def _access_headers() -> dict[str, str]:
-    client_id = os.getenv("HCMAI_CF_ACCESS_CLIENT_ID")
-    secret = os.getenv("HCMAI_CF_ACCESS_CLIENT_SECRET")
-    if not client_id or not secret:
-        return {}
-    return {
-        "CF-Access-Client-Id": client_id,
-        "CF-Access-Client-Secret": secret,
-    }
+def _legacy_config(timeout_seconds: float) -> InferenceConfig:
+    return InferenceConfig(
+        timeout_seconds=timeout_seconds,
+        connect_timeout_seconds=timeout_seconds,
+        read_timeout_seconds=timeout_seconds,
+        write_timeout_seconds=timeout_seconds,
+        pool_timeout_seconds=timeout_seconds,
+    )
 
 
-def _response_detail(error: Exception) -> str:
-    if isinstance(error, httpx.HTTPStatusError):
-        try:
-            detail = error.response.json().get("detail")
-        except Exception:
-            detail = None
-        if detail:
-            return str(detail)[:160]
-    return (str(error).strip() or type(error).__name__)[:160]
+def _validated(model: Any, payload: Any) -> Any:
+    try:
+        return model.model_validate(payload)
+    except Exception as error:
+        raise InferenceClientError(
+            "remote inference response contract is invalid",
+            category=FailureCategory.INVALID_RESPONSE,
+        ) from error

@@ -10,6 +10,20 @@ stores, or generators directly. `build_benchmark.py` is the sole deliberate
 exception: it uses the internal dense-baseline `RetrievalBenchmark`, which is
 not an end-to-end `EvaluationService`.
 
+## Diagnose local runtime artifacts
+
+Run the read-only doctor before starting the API or a competition session:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/doctor.py
+```
+
+It checks canonical metadata, a deterministic sample of frame assets, visual
+index-to-frame alignment, embedding dimension metadata, and configured text
+evidence artifacts without loading model weights. Add `--check-remote` to also
+query the configured inference server's bounded readiness endpoint. A non-zero
+exit status means at least one required local capability is unavailable.
+
 ## Build embeddings and index
 
 `build_embeddings.py` resolves canonical relative image paths against

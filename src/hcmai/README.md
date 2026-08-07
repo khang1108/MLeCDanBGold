@@ -23,8 +23,7 @@ src/hcmai/
 ├── enrichment/               # Caption/OCR EnrichmentService
 ├── transcripts/              # TranscriptService and ASR adapters
 ├── llm/                      # LLMService and local/HTTP adapters
-├── query_suggestions/        # SuggestionService and provider adapters
-├── agents/kisc/              # Bounded conversational KIS research code
+├── submission/               # Optional DRES mini-challenge client
 └── common/                   # Shared config, schemas, and generic utilities
 ```
 
@@ -51,13 +50,14 @@ scripts and integration code call the owning service.
 Online traffic uses one configured path:
 
 ```text
-FastAPI → SearchService → RetrievalService → optional RerankingService
+FastAPI → SearchService → query embedding → RetrievalService
+        → optional RerankingService
         → canonical response materialization
 ```
 
-KIS and initial VKIS queries use frame retrieval directly. KISC research code
-resolves only context-dependent turns and then calls `SearchService`. VQA and
-TRAKE are recognized but return `501` until their real pipelines exist.
+KIS and VKIS queries use the original operator text directly; online query
+suggestion and conversational resolution are not part of the search path.
+VQA retains its separate grounded multimodal answering path.
 
 Offline research jobs call their owning service directly, for example
 `DataService` for frame preparation, `EmbeddingService` for vector artifacts,
@@ -86,6 +86,21 @@ The public endpoints remain:
 
 - `GET /health`
 - `POST /api/v1/search`
-- `POST /api/v1/query-suggestions`
+- `POST /api/v1/vqa`
 - `GET /api/v1/frames/{frame_id}` and frame asset/neighbor routes
 - `POST /api/v1/submit`
+- `GET /api/v1/minichallenge/evaluations`
+- `GET /api/v1/minichallenge/evaluations/{id}/current-task`
+- `POST /api/v1/minichallenge/evaluations/{id}/submit`
+
+Run `PYTHONPATH=src aic/bin/python scripts/doctor.py` before starting a
+competition session. It validates that metadata, canonical frame assets, and
+the visual index agree without loading model weights. See
+`docs/ARCHITECTURE.md` for the dependency and debugging map.
+
+The mini-challenge routes require the DRES session token in the
+`X-DRES-Session` header. The browser keeps this token only in memory. Submission
+requests contain a canonical `frame_id`; the backend resolves its authoritative
+`video_id` and sends the DRES `answerSets` payload with `start=end=0`. Configure
+the upstream with `HCMAI_MINICHALLENGE_BASE_URL` and bound network calls with
+`HCMAI_MINICHALLENGE_TIMEOUT_SECONDS`.

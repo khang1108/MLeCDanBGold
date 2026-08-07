@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
-from hcmai.common.config import SearchConfig
+from hcmai.common.config import SearchConfig, VQAConfig
 from hcmai.common.schemas import (
     FrameRecord,
-    QuerySuggestionRequest,
-    QuerySuggestionResponse,
     RetrievalSource,
     SubmissionResult,
     TaskRequest,
@@ -22,10 +20,11 @@ from hcmai.llm.pipeline import LLMService
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.orchestration.pipelines.kis import KISPipeline
 from hcmai.orchestration.pipelines.trake import TRAKEPipeline
+from hcmai.orchestration.pipelines.vqa import VQAPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
-from hcmai.query_suggestions.pipeline import SuggestionService
 from hcmai.reranking.pipeline import RerankingService
 from hcmai.retriever.pipeline import RetrievalService
+from hcmai.observability import METRICS
 
 logger = get_logger(__name__)
 
@@ -51,16 +50,16 @@ class SearchService:
         retrieval: RetrievalService | None,
         reranking: RerankingService | None = None,
         config: SearchConfig | None = None,
-        suggestion_service: SuggestionService | None = None,
         llm: LLMService | None = None,
+        vqa_config: VQAConfig | None = None,
         pipeline_registry: PipelineRegistry | None = None,
     ) -> None:
         self.data = data
         self.retrieval = retrieval
         self.reranking = reranking
         self.config = config or SearchConfig()
-        self.suggestion_service = suggestion_service
         self.llm = llm
+        self.vqa_config = vqa_config or VQAConfig()
         self.pipeline_registry = (
             pipeline_registry
             if pipeline_registry is not None
@@ -96,17 +95,15 @@ class SearchService:
             submission_code=f"{frame.video_id},{frame.frame_idx}",
         )
 
-    def suggest(self, request: QuerySuggestionRequest) -> QuerySuggestionResponse:
-        if self.suggestion_service is None:
-            raise SearchServiceUnavailableError(
-                "Query-suggestion provider is not configured"
-            )
-        return self.suggestion_service.suggest(request)
-
     def health(self, startup_messages: Sequence[str] = ()) -> dict[str, Any]:
         data_ready = self.data is not None
         retrieval_ready = self.retrieval is not None
-        suggestions_ready = self.suggestion_service is not None
+        asset_status = self._frame_asset_status()
+        active_sources = (
+            set(getattr(self.retrieval, "active_sources", (RetrievalSource.VISUAL,)))
+            if self.retrieval is not None
+            else set()
+        )
         task_capabilities = self.pipeline_registry.capability_report(
             (TaskType.KIS, TaskType.VKIS, TaskType.VQA, TaskType.TRAKE)
         )
@@ -115,6 +112,22 @@ class SearchService:
             for task_type, registered in task_capabilities.items()
         }
         search_ready = any(task_capabilities.values())
+        default_remote_capabilities = {
+            "embedding": False,
+            "reranking": False,
+            "multi_image_vqa": False,
+            "structured_parsing": False,
+        }
+        capability_health = (
+            getattr(self.llm, "capability_health", None)
+            if self.llm is not None
+            else None
+        )
+        remote_capabilities = (
+            capability_health()
+            if capability_health is not None
+            else default_remote_capabilities
+        )
         return {
             "status": "ok",
             "ready": data_ready and retrieval_ready,
@@ -129,24 +142,41 @@ class SearchService:
                     RetrievalSource.ASR,
                 )
             },
+            "remote_inference": (
+                self.llm.gateway_health()
+                if self.llm is not None
+                else {
+                    "configured": False,
+                    "circuit_state": "not_configured",
+                }
+            ),
+            "retrieval_modalities": {
+                source.value: {
+                    "active": source in active_sources,
+                    "required": source in self.config.fusion.required_sources,
+                }
+                for source in RetrievalSource
+            },
+            "observability": METRICS.snapshot(),
             "capabilities": {
                 "search": search_ready,
-                "query_suggestions": {
-                    "enabled": suggestions_ready,
-                    "provider": (
-                        self.suggestion_service.provider_name
-                        if self.suggestion_service else None
-                    ),
-                },
-                "frame_assets": data_ready,
+                "kis": task_capabilities.get(TaskType.KIS.value, False),
+                "vqa": task_capabilities.get(TaskType.VQA.value, False),
+                "shared_retrieval": retrieval_ready,
+                "remote_inference": remote_capabilities,
+                "frame_assets": asset_status["ready"],
+                "frame_asset_status": asset_status,
                 "query_types": task_capabilities,
             },
             "startup_messages": list(startup_messages),
         }
 
+    def _frame_asset_status(self) -> dict[str, int | bool]:
+        if not isinstance(self.data, DataService):
+            return {"ready": False, "checked": 0, "available": 0, "missing": 0}
+        return self.data.frame_asset_status().as_dict()
+
     def close(self) -> None:
-        if self.suggestion_service is not None:
-            self.suggestion_service.close()
         if self.llm is not None:
             self.llm.close()
 
@@ -159,15 +189,15 @@ class SearchService:
                 "is not available"
             ) from error
         try:
-            return pipeline.execute(request)
+            return cast(Any, pipeline).execute(request)
         except TaskPipelineDependencyError as error:
             raise SearchServiceUnavailableError(str(error)) from error
         except ValueError as error:
             raise UnsupportedSearchTaskError(str(error)) from error
 
     def _default_registry(self) -> PipelineRegistry:
-        task_types = (TaskType.KIS, TaskType.VKIS, TaskType.KISC)
-        registry = PipelineRegistry(
+        task_types = (TaskType.KIS, TaskType.VKIS)
+        pipelines = [
             KISPipeline(
                 task_type,
                 self.data,
@@ -176,6 +206,17 @@ class SearchService:
                 self.config,
             )
             for task_type in task_types
+        ]
+        pipelines.append(
+            cast(
+                Any,
+                VQAPipeline(
+                    self.data,
+                    self.retrieval,
+                    self.llm,
+                    self.vqa_config,
+                ),
+            )
         )
-        registry.register(TRAKEPipeline(self.retrieval))
-        return registry
+        pipelines.append(cast(Any, TRAKEPipeline(self.retrieval)))
+        return PipelineRegistry(pipelines)

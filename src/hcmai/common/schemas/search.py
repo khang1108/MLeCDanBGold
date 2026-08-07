@@ -4,9 +4,9 @@ from typing import Self
 from pydantic import Field, field_validator, model_validator
 
 from hcmai.common.schemas.base import ContractModel, NonEmptyString
-from hcmai.common.schemas.conversation import FrameFeedback
 from hcmai.common.schemas.enum import TaskType
 from hcmai.common.schemas.retrieval import SearchScores
+from hcmai.common.schemas.telemetry import PipelineTrace
 
 
 class SearchFilters(ContractModel):
@@ -47,15 +47,6 @@ class SearchRequest(ContractModel):
     query_type: TaskType = TaskType.KIS
     top_k: int = Field(default=20, ge=1, le=100)
     filters: SearchFilters | None = None
-    session_id: NonEmptyString | None = None
-    feedback: FrameFeedback | None = None
-
-    @model_validator(mode="after")
-    def validate_kisc_context(self) -> Self:
-        """Require a session for stateful frame feedback."""
-        if self.feedback is not None and self.session_id is None:
-            raise ValueError("feedback requires session_id")
-        return self
 
 
 class SearchLatency(ContractModel):
@@ -68,6 +59,8 @@ class SearchLatency(ContractModel):
     reranking: int = Field(default=0, ge=0)
     temporal_refinement: int = Field(default=0, ge=0)
     materialization: int = Field(default=0, ge=0)
+    time_to_first_candidate: int = Field(default=0, ge=0)
+    time_to_first_submission: int = Field(default=0, ge=0)
     total: int = Field(ge=0)
 
 
@@ -98,10 +91,7 @@ class SearchResponse(ContractModel):
     latency_ms: SearchLatency
     results: list[SearchResult] = Field(default_factory=list)
     warnings: list[NonEmptyString] = Field(default_factory=list)
-    session_id: NonEmptyString | None = None
-    turn_id: NonEmptyString | None = None
-    assistant_turn_id: NonEmptyString | None = None
-    ai_message: NonEmptyString | None = None
+    trace: PipelineTrace = Field(default_factory=PipelineTrace)
 
     @model_validator(mode="after")
     def validate_result_count(self) -> Self:
@@ -112,13 +102,5 @@ class SearchResponse(ContractModel):
 
         if self.total_results > self.top_k:
             raise ValueError("total_results must not be greater than top_k")
-
-        context = (self.turn_id, self.assistant_turn_id, self.ai_message)
-        has_context = any(value is not None for value in context)
-        missing_context = any(value is None for value in context)
-        if self.session_id is None and has_context:
-            raise ValueError("KISC turn metadata requires session_id")
-        if self.session_id is not None and missing_context:
-            raise ValueError("KISC responses require complete turn metadata")
 
         return self

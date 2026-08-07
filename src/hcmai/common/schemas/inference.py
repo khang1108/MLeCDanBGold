@@ -7,7 +7,6 @@ from typing import Literal
 from pydantic import Field, field_validator
 
 from .base import ContractModel, NonEmptyString
-from .conversation import ConversationState, ConversationTurn, FrameFeedback
 
 
 class TextEmbeddingRequest(ContractModel):
@@ -69,17 +68,6 @@ class RerankResponse(ContractModel):
     latency_ms: float = Field(ge=0)
 
 
-class ConversationInferenceRequest(ContractModel):
-    """Complete bounded context required for one resolver call."""
-
-    instruction: NonEmptyString
-    history: list[ConversationTurn] = Field(default_factory=list)
-    current_message: NonEmptyString
-    feedback: FrameFeedback | None = None
-    previous_state: ConversationState | None = None
-    response_schema: dict = Field(default_factory=dict)
-
-
 class ModelStatus(ContractModel):
     """Readiness and provenance for one hosted model."""
 
@@ -89,8 +77,20 @@ class ModelStatus(ContractModel):
     revision: str | None = None
 
 
+class InferenceCapabilities(ContractModel):
+    """Feature-level readiness advertised by one inference deployment."""
+
+    embedding: bool = False
+    reranking: bool = False
+    multi_image_vqa: bool = False
+    structured_parsing: bool = False
+
+
 class InferenceReadiness(ContractModel):
     """Readiness snapshot for all configured inference capabilities."""
 
     ready: bool
     models: dict[str, ModelStatus]
+    capabilities: InferenceCapabilities = Field(
+        default_factory=InferenceCapabilities
+    )

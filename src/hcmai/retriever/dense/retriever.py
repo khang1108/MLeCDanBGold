@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from typing import Optional
+from time import perf_counter
 
 import numpy as np
-import pandas as pd
 
 from hcmai.common.schemas import (
     RetrievalCandidate,
@@ -18,7 +18,9 @@ from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.logging import get_logger
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.observability.tracing import StageTimer
+from hcmai.observability import PipelineStage
 from hcmai.retriever.dense.index import DenseIndex
+from hcmai.retriever.cache import EmbeddingCache
 from hcmai.retriever.query_batch import (
     QueryEmbeddingBatch,
     SourceFamily,
@@ -36,6 +38,8 @@ class DenseRetriever:
         encoder: TextEmbeddingAdapter,
         index: DenseIndex,
         source: RetrievalSource = RetrievalSource.VISUAL,
+        embedding_cache: EmbeddingCache | None = None,
+        prompt_version: str = "query-v1",
     ) -> None:
         if index.metadata.model_name != encoder.config.model_name:
             raise ValueError(
@@ -53,6 +57,8 @@ class DenseRetriever:
         self.encoder = encoder
         self.index = index
         self.source = source
+        self.embedding_cache = embedding_cache
+        self.prompt_version = prompt_version
 
     @property
     def source_family(self) -> SourceFamily:
@@ -61,7 +67,13 @@ class DenseRetriever:
     def encode(self, query_texts: list[str]) -> QueryEmbeddingBatch:
         """Encode a non-empty query batch once with full provenance."""
 
-        return encode_query_batch(query_texts, self.encoder, self.source_family)
+        return encode_query_batch(
+            query_texts,
+            self.encoder,
+            self.source_family,
+            self.embedding_cache,
+            self.prompt_version,
+        )
 
     def search_vectors(
         self,
@@ -74,18 +86,23 @@ class DenseRetriever:
 
         del query_type
         self._validate_query_batch(query_batch)
-        mapping = self.index.mapping
-        allowed_positions = _allowed_positions(mapping, filters)
-        search_k = self.index.index.ntotal if allowed_positions is not None else top_k
         logger.info(
             "FAISS batch search started queries=%d search_k=%d source=%s",
             len(query_batch.embeddings),
-            search_k,
+            top_k,
             self.source.value,
         )
-        timer = StageTimer("index_search")
-        scores, positions = self.index.search(query_batch.vectors, search_k)
-        search_trace = timer.finish()
+        timer = StageTimer(PipelineStage.SEARCH.value)
+        scores, positions = self.index.search_filtered(
+            query_batch.vectors,
+            top_k,
+            filters,
+        )
+        search_trace = timer.finish(
+            input_count=len(query_batch.embeddings),
+            output_count=sum(position >= 0 for row in positions for position in row),
+            backend="faiss_or_exact_subset",
+        )
         return [
             RetrievalResult(
                 candidates=self._materialize(
@@ -93,7 +110,6 @@ class DenseRetriever:
                     positions[row_index],
                     top_k,
                     filters,
-                    allowed_positions,
                 ),
                 trace=RetrievalTrace(
                     stages={search_trace.stage: search_trace}
@@ -113,8 +129,10 @@ class DenseRetriever:
 
         if not queries:
             return []
+        started = perf_counter()
         batch = self.encode(queries)
         results = self.search_vectors(batch, top_k, filters, query_type)
+        first_candidate_ms = (perf_counter() - started) * 1_000
         return [
             result.model_copy(
                 update={
@@ -123,7 +141,8 @@ class DenseRetriever:
                             batch.encoding_trace.stage: batch.encoding_trace,
                             **result.trace.stages,
                         }
-                    )
+                    ),
+                    "time_to_first_candidate_ms": first_candidate_ms,
                 }
             )
             for result in results
@@ -163,7 +182,6 @@ class DenseRetriever:
         positions,
         top_k: int,
         filters: SearchFilters | None,
-        allowed_positions: set[int] | None,
     ) -> list[RetrievalCandidate]:
         minimum = filters.min_score if filters is not None else None
         candidates: list[RetrievalCandidate] = []
@@ -171,8 +189,6 @@ class DenseRetriever:
         for raw_score, raw_position in zip(scores, positions):
             position = int(raw_position)
             if position < 0:
-                continue
-            if allowed_positions is not None and position not in allowed_positions:
                 continue
             score = float(raw_score)
             if minimum is not None and score < minimum:
@@ -186,26 +202,6 @@ class DenseRetriever:
             if len(candidates) >= top_k:
                 break
         return candidates
-
-
-def _allowed_positions(
-    mapping: pd.DataFrame,
-    filters: SearchFilters | None,
-) -> set[int] | None:
-    if filters is None or not (
-        filters.video_ids
-        or filters.start_time_ms is not None
-        or filters.end_time_ms is not None
-    ):
-        return None
-    mask = pd.Series(True, index=mapping.index)
-    if filters.video_ids:
-        mask &= mapping["video_id"].isin(filters.video_ids)
-    if filters.start_time_ms is not None:
-        mask &= mapping["timestamp_ms"] >= filters.start_time_ms
-    if filters.end_time_ms is not None:
-        mask &= mapping["timestamp_ms"] <= filters.end_time_ms
-    return set(mapping.loc[mask, "embedding_index"].tolist())
 
 
 def _candidate(frame_id, row, source, score, rank) -> RetrievalCandidate:

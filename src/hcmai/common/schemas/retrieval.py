@@ -41,6 +41,7 @@ class RetrievalResult(ContractModel):
     candidates: list[RetrievalCandidate] = Field(default_factory=list)
     trace: RetrievalTrace = Field(default_factory=RetrievalTrace)
     warnings: list[NonEmptyString] = Field(default_factory=list)
+    time_to_first_candidate_ms: float | None = Field(default=None, ge=0)
 
     def __len__(self) -> int:
         """Preserve sequence convenience while exposing trace explicitly."""

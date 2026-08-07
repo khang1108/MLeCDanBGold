@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from time import perf_counter
 from typing import Any
 
 from hcmai.common.config import FusionConfig
@@ -15,6 +16,7 @@ from hcmai.common.schemas import (
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.observability.tracing import StageTimer
+from hcmai.observability import PipelineStage
 from hcmai.retriever.concurrent import (
     ModalitySearchExecutor,
     ModalitySearchJob,
@@ -73,15 +75,23 @@ class RRFFusionRetriever:
 
         if not queries:
             return []
+        started = perf_counter()
         if not all(
             hasattr(retriever, "encode")
             and hasattr(retriever, "search_vectors")
             and hasattr(retriever, "source_family")
             for retriever in self.retrievers
         ):
-            return [
+            results = [
                 self._search_legacy(query, top_k, filters, query_type)
                 for query in queries
+            ]
+            first_candidate_ms = (perf_counter() - started) * 1_000
+            return [
+                result.model_copy(
+                    update={"time_to_first_candidate_ms": first_candidate_ms}
+                )
+                for result in results
             ]
 
         batches: dict[str, Any] = {}
@@ -151,7 +161,13 @@ class RRFFusionRetriever:
                     active_sources=active_sources,
                 )
             )
-        return results
+        first_candidate_ms = (perf_counter() - started) * 1_000
+        return [
+            result.model_copy(
+                update={"time_to_first_candidate_ms": first_candidate_ms}
+            )
+            for result in results
+        ]
 
     def _search_legacy(
         self,
@@ -198,7 +214,7 @@ class RRFFusionRetriever:
             for warning in result.warnings
         ]
         result_warnings.extend(warnings or [])
-        fusion_timer = StageTimer("fusion")
+        fusion_timer = StageTimer(PipelineStage.FUSION.value)
         pool: dict[str, RetrievalCandidate] = {}
         for _, result in child_results:
             for candidate in result.candidates:
@@ -225,7 +241,11 @@ class RRFFusionRetriever:
             for candidate in pool.values()
         ]
         fused.sort(key=_sort_key)
-        fusion_trace = fusion_timer.finish()
+        fusion_trace = fusion_timer.finish(
+            input_count=sum(len(result.candidates) for _, result in child_results),
+            output_count=min(top_k, len(fused)),
+            backend="rrf",
+        )
         trace = trace.merged(
             RetrievalTrace(stages={fusion_trace.stage: fusion_trace})
         )

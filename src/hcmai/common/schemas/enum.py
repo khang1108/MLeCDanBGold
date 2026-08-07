@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from enum import Enum
 
-from hcmai.common.schemas import NonEmptyString, ContractModel
-
-
 class ProcessingStatus(str, Enum):
     """Status of an offline processing operation."""
 
@@ -35,7 +32,6 @@ class TaskType(str, Enum):
     """Task type of each query."""
 
     KIS = "kis"
-    KISC = "kisc"
     VKIS = "vkis"
     VQA = "vqa"
     TRAKE = "trake"

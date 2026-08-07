@@ -173,17 +173,17 @@ the service returns `501` instead of constructing placeholder components.
 
 ### Service boundaries
 
-| Component | Public boundary | Responsibility |
-|---|---|---|
-| Data | `hcmai.data.pipeline.DataService` | Canonical frame preparation, lookup, and evidence access |
-| Embedding | `hcmai.embedding.pipeline.EmbeddingService` | Visual/text encoding and visual embedding artifacts |
-| Enrichment | `hcmai.enrichment.pipeline.EnrichmentService` | Offline caption and OCR jobs |
-| Transcripts | `hcmai.transcripts.pipeline.TranscriptService` | ASR/diarization jobs and transcript access |
-| Retrieval | `hcmai.retriever.pipeline.RetrievalService` | Index construction/loading, multimodal retrieval, and fusion |
-| Reranking | `hcmai.reranking.pipeline.RerankingService` | Bounded candidate rescoring without identity changes |
-| LLM | `hcmai.llm.pipeline.LLMService` | Local or remote model-inference lifecycle |
-| Suggestions | `hcmai.query_suggestions.pipeline.SuggestionService` | Explicit operator query suggestions |
-| Orchestration | `hcmai.orchestration.pipeline.SearchService` | Online task routing and canonical response materialization |
+| Component     | Public boundary                                        | Responsibility                                               |
+| ------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
+| Data          | `hcmai.data.pipeline.DataService`                    | Canonical frame preparation, lookup, and evidence access     |
+| Embedding     | `hcmai.embedding.pipeline.EmbeddingService`          | Visual/text encoding and visual embedding artifacts          |
+| Enrichment    | `hcmai.enrichment.pipeline.EnrichmentService`        | Offline caption and OCR jobs                                 |
+| Transcripts   | `hcmai.transcripts.pipeline.TranscriptService`       | ASR/diarization jobs and transcript access                   |
+| Retrieval     | `hcmai.retriever.pipeline.RetrievalService`          | Index construction/loading, multimodal retrieval, and fusion |
+| Reranking     | `hcmai.reranking.pipeline.RerankingService`          | Bounded candidate rescoring without identity changes         |
+| LLM           | `hcmai.llm.pipeline.LLMService`                      | Local or remote model-inference lifecycle                    |
+| Suggestions   | `hcmai.query_suggestions.pipeline.SuggestionService` | Explicit operator query suggestions                          |
+| Orchestration | `hcmai.orchestration.pipeline.SearchService`         | Online task routing and canonical response materialization   |
 
 `common/` remains the shared contract/helper layer, `api/routers/` remains a
 thin transport layer, and `agents/` is intentionally exempt from the
@@ -420,6 +420,7 @@ artifacts/indexes/visual/
 ├── frame_mapping.parquet
 └── metadata.json
 ```
+
 ### 3. Start FastAPI
 
 Keep the GPU VM and Cloudflare Tunnel running, then launch the local backend:

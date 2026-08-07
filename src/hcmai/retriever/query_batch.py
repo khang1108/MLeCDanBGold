@@ -9,7 +9,9 @@ import numpy as np
 
 from hcmai.common.schemas import StageTrace
 from hcmai.embedding.pipeline import TextEmbeddingAdapter
+from hcmai.observability import PipelineStage
 from hcmai.observability.tracing import StageTimer
+from hcmai.retriever.cache import EmbeddingCache, EmbeddingCacheKey
 
 SourceFamily = Literal["visual", "text"]
 
@@ -88,6 +90,8 @@ def encode_query_batch(
     texts: list[str],
     encoder: TextEmbeddingAdapter,
     source_family: SourceFamily,
+    cache: EmbeddingCache | None = None,
+    prompt_version: str = "query-v1",
 ) -> QueryEmbeddingBatch:
     """Normalize/deduplicate text, encode once, and restore caller order."""
 
@@ -103,20 +107,62 @@ def encode_query_batch(
     if not queries:
         raise ValueError("texts must not be empty")
     unique_texts = list(dict.fromkeys(query.normalized_text for query in queries))
-    timer = StageTimer("query_encoding")
-    vectors = np.asarray(encoder.encode_text(unique_texts), dtype=np.float32)
-    trace = timer.finish()
-    if vectors.ndim != 2 or vectors.shape[0] != len(unique_texts):
-        raise ValueError("encoder returned an invalid query embedding batch shape")
-    if not np.isfinite(vectors).all():
-        raise ValueError("encoder returned non-finite query embeddings")
-    by_text = dict(zip(unique_texts, vectors))
-    revision = _encoder_revision(encoder)
+    timer = StageTimer(PipelineStage.ENCODE.value)
+    model_name = encoder.config.model_name
+    initial_revision = _encoder_revision(encoder)
+    by_text: dict[str, np.ndarray] = {}
+    misses: list[str] = []
+    for normalized_text in unique_texts:
+        key = EmbeddingCacheKey(
+            model_name=model_name,
+            revision=initial_revision,
+            source_family=source_family,
+            normalized_query=normalized_text,
+            prompt_version=prompt_version,
+        )
+        cached = cache.get(key) if cache is not None else None
+        if cached is None:
+            misses.append(normalized_text)
+        else:
+            by_text[normalized_text] = cached
+    if misses:
+        encoded = _validated_vectors(encoder.encode_text(misses), len(misses))
+        revision = _encoder_revision(encoder)
+        if by_text and revision != initial_revision:
+            by_text.clear()
+            misses = unique_texts
+            encoded = _validated_vectors(
+                encoder.encode_text(misses),
+                len(misses),
+            )
+            revision = _encoder_revision(encoder)
+        for normalized_text, vector in zip(misses, encoded):
+            readonly = _readonly(vector)
+            by_text[normalized_text] = readonly
+            if cache is not None:
+                cache.set(
+                    EmbeddingCacheKey(
+                        model_name=model_name,
+                        revision=revision,
+                        source_family=source_family,
+                        normalized_query=normalized_text,
+                        prompt_version=prompt_version,
+                    ),
+                    readonly,
+                )
+    else:
+        revision = initial_revision
+    trace = timer.finish(
+        cache_hit=not misses,
+        input_count=len(unique_texts),
+        output_count=len(unique_texts),
+        backend=model_name,
+    )
     embeddings = tuple(
         QueryEmbedding(
             query=query,
             vector=by_text[query.normalized_text],
-            model_name=encoder.config.model_name,
+            model_name=model_name,
             revision=revision,
             normalized=_is_normalized(by_text[query.normalized_text]),
         )
@@ -141,3 +187,18 @@ def _encoder_revision(encoder: TextEmbeddingAdapter) -> str | None:
 
 def _is_normalized(vector: np.ndarray) -> bool:
     return bool(np.isclose(np.linalg.norm(vector), 1.0, rtol=1e-3, atol=1e-4))
+
+
+def _validated_vectors(values, expected_count: int) -> np.ndarray:
+    vectors = np.asarray(values, dtype=np.float32)
+    if vectors.ndim != 2 or vectors.shape[0] != expected_count:
+        raise ValueError("encoder returned an invalid query embedding batch shape")
+    if not np.isfinite(vectors).all():
+        raise ValueError("encoder returned non-finite query embeddings")
+    return vectors
+
+
+def _readonly(vector: np.ndarray) -> np.ndarray:
+    value = np.array(vector, dtype=np.float32, copy=True)
+    value.setflags(write=False)
+    return value

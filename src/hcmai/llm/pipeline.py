@@ -4,19 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from hcmai.common.config import InferenceConfig
 from hcmai.llm.config import (
-    HostedConversationConfig,
+    HostedVQAConfig,
     LLMServiceConfig,
-    QuerySuggestionConfig,
-    QuerySuggestionGenerationConfig,
 )
 
 __all__ = [
-    "HostedConversationConfig",
+    "HostedVQAConfig",
     "LLMService",
     "LLMServiceConfig",
-    "QuerySuggestionConfig",
-    "QuerySuggestionGenerationConfig",
 ]
 
 
@@ -25,6 +22,7 @@ class LLMService:
 
     def __init__(self, adapter: Any) -> None:
         self.adapter = adapter
+        self._last_readiness: Any | None = None
 
     @classmethod
     def from_environment(cls) -> LLMService:
@@ -34,7 +32,10 @@ class LLMService:
 
     @classmethod
     def remote(
-        cls, base_url: str, timeout_seconds: float = 10, client: Any | None = None
+        cls,
+        base_url: str,
+        timeout_seconds: float | InferenceConfig = 10,
+        client: Any | None = None,
     ) -> LLMService:
         from hcmai.llm.adapters.http import InferenceClient
 
@@ -52,10 +53,6 @@ class LLMService:
     def reranker(self) -> Any:
         return self.adapter.reranker
 
-    @property
-    def query_suggester(self) -> Any:
-        return self.adapter.query_suggester
-
     def load(self) -> None:
         method = getattr(self.adapter, "load", None)
         if method is not None:
@@ -71,8 +68,29 @@ class LLMService:
         if method is not None:
             method()
 
-    def readiness(self) -> Any:
-        return self.adapter.readiness()
+    def readiness(self, *args: Any, **kwargs: Any) -> Any:
+        self._last_readiness = self.adapter.readiness(*args, **kwargs)
+        return self._last_readiness
+
+    def capability_health(self) -> dict[str, bool]:
+        readiness = self._last_readiness
+        if readiness is None:
+            return {
+                "embedding": False,
+                "reranking": False,
+                "multi_image_vqa": False,
+                "structured_parsing": False,
+            }
+        return readiness.capabilities.model_dump()
+
+    def gateway_health(self) -> dict[str, Any]:
+        method = getattr(self.adapter, "health", None)
+        if method is None:
+            return {
+                "configured": False,
+                "circuit_state": "not_applicable",
+            }
+        return method()
 
     def embed_text(self, texts: list[str], source: str = "visual") -> Any:
         return self.adapter.embed_text(texts, source)
@@ -83,14 +101,11 @@ class LLMService:
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
 
-    def resolve(self, request: dict[str, Any]) -> Any:
-        method = getattr(self.adapter, "resolve", None)
-        if method is None:
-            method = self.adapter.resolve_conversation
-        return method(request)
-
-    def suggest_queries(self, *args: Any, **kwargs: Any) -> Any:
-        return self.adapter.suggest_queries(*args, **kwargs)
-
     def answer_vqa(self, *args: Any, **kwargs: Any) -> Any:
         return self.adapter.answer_vqa(*args, **kwargs)
+
+    def answer_vqa_multi(self, *args: Any, **kwargs: Any) -> Any:
+        method = getattr(self.adapter, "answer_vqa_multi", None)
+        if method is None:
+            raise RuntimeError("multi-frame VQA is not supported by this provider")
+        return method(*args, **kwargs)

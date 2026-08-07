@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from hcmai.common.schemas import ContractModel, NonEmptyString, ProcessingStatus
 from pydantic import Field, field_validator
+
+from .base import ContractModel, NonEmptyString
+from .enum import ProcessingStatus
 
 class FrameRecord(ContractModel):
     """Canonical metadata for one searchable frame."""

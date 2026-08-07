@@ -15,6 +15,7 @@ from hcmai.common.schemas import (
 )
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.observability.tracing import StageTimer
+from hcmai.observability import PipelineStage
 from hcmai.retriever.query_batch import QueryEmbeddingBatch
 
 
@@ -93,7 +94,7 @@ class ModalitySearchExecutor:
             ]
         ] = []
         for job in jobs:
-            timer = StageTimer("index_search")
+            timer = StageTimer(PipelineStage.SEARCH.value)
             future = self._pool.submit(
                 job.index.search_vectors,
                 job.query_batch,
@@ -119,6 +120,9 @@ class ModalitySearchExecutor:
                 failure = timer.finish(
                     status=StageStatus.FAILED,
                     error_category=category,
+                    input_count=len(job.query_batch.embeddings),
+                    output_count=0,
+                    backend="faiss_or_exact_subset",
                 )
                 warning = (
                     f"{job.source.value} retrieval unavailable ({category})"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from hcmai.common.config import AppConfig
@@ -13,7 +14,6 @@ from hcmai.data.pipeline import DataService
 from hcmai.embedding.pipeline import EmbeddingService
 from hcmai.llm.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.query_suggestions.pipeline import build_query_suggestion_service
 from hcmai.reranking.pipeline import RerankerConfig, RerankingService
 from hcmai.retriever.pipeline import RetrievalService
 
@@ -29,7 +29,7 @@ def load_search_service(messages: list[str]) -> SearchService:
     ))
     index_dir = Path(os.getenv("HCMAI_INDEX_PATH", str(settings.index.path)))
     data = _load_data(settings, metadata_path, messages)
-    llm = _load_remote_llm(settings)
+    llm = _load_remote_llm(settings, messages)
     retrieval = _load_retrieval(
         settings, models, index_dir, llm, messages
     )
@@ -37,20 +37,20 @@ def load_search_service(messages: list[str]) -> SearchService:
     if llm is not None and data is not None and settings.search.rerank_count > 0:
         reranking = RerankingService.remote(
             data,
-            RerankerConfig(batch_size=models.reranker.batch_size),
+            RerankerConfig(
+                batch_size=models.reranker.batch_size,
+                required=settings.search.reranker.required,
+            ),
             llm,
             dataset_root=settings.dataset.root,
         )
-    suggestions = build_query_suggestion_service(
-        models.query_suggestions, llm
-    )
     return SearchService(
         data=data,
         retrieval=retrieval,
         reranking=reranking,
         config=settings.search,
-        suggestion_service=suggestions,
         llm=llm,
+        vqa_config=settings.vqa,
     )
 
 
@@ -68,11 +68,23 @@ def _load_model_config() -> LLMServiceConfig:
     return LLMServiceConfig.from_yaml(path)
 
 
-def _load_remote_llm(settings: AppConfig) -> LLMService | None:
+def _load_remote_llm(
+    settings: AppConfig,
+    messages: list[str],
+) -> LLMService | None:
     if not settings.inference.enabled:
         return None
     base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
-    return LLMService.remote(base_url, settings.inference.timeout_seconds)
+    service = LLMService.remote(base_url, settings.inference)
+    try:
+        service.readiness(deadline_at=monotonic() + 5.0)
+    except Exception as error:
+        category = getattr(getattr(error, "category", None), "value", None)
+        messages.append(
+            "Remote inference readiness unavailable: "
+            f"{category or type(error).__name__}"
+        )
+    return service
 
 
 def _load_data(
@@ -82,7 +94,10 @@ def _load_data(
         messages.append(f"Metadata not available at {metadata_path}")
         return None
     try:
-        data = DataService.load(metadata_path)
+        data = DataService.load(
+            metadata_path,
+            dataset_root=settings.dataset.root,
+        )
     except Exception as error:
         messages.append(
             f"Could not load metadata {metadata_path}: "
@@ -122,51 +137,118 @@ def _load_retrieval(
         messages.append(f"Index directory not available at {index_dir}")
         return None
     try:
-        visual = RetrievalService.load_index(index_dir)
+        visual = RetrievalService.load_index(
+            index_dir,
+            subset_search_threshold=settings.index.subset_search_threshold,
+        )
         visual_encoder = _query_encoder(
             models.visual_embedding, visual, llm, "visual"
         )
-        paths = {
-            RetrievalSource.CAPTION: Path(os.getenv(
-                "HCMAI_CAPTION_INDEX_PATH", str(settings.index.caption_path)
-            )),
-            RetrievalSource.OCR: Path(os.getenv(
-                "HCMAI_OCR_INDEX_PATH", str(settings.index.ocr_path)
-            )),
-            RetrievalSource.ASR: Path(os.getenv(
-                "HCMAI_ASR_INDEX_PATH", str(settings.index.asr_path)
-            )),
-        }
-        text_indexes = {}
-        for source, path in paths.items():
-            if not path.is_dir():
-                if source in settings.search.fusion.required_sources:
-                    raise FileNotFoundError(
-                        f"Required {source.value} index not available at {path}"
-                    )
-                messages.append(
-                    f"{source.value.upper()} index not available at {path}"
-                )
-                continue
-            text_indexes[source] = RetrievalService.load_index(path)
-        if any(
-            index.metadata.dataset_version != visual.metadata.dataset_version
-            for index in text_indexes.values()
-        ):
-            raise ValueError("visual and text index dataset versions differ")
-        if not text_indexes:
-            return RetrievalService.from_index(visual, visual_encoder)
-        sample = next(iter(text_indexes.values()))
-        text_encoder = _query_encoder(models.caption_embedding, sample, llm, "text")
-        return RetrievalService.from_indexes(
-            visual, visual_encoder, text_indexes, text_encoder,
-            settings.search.fusion,
-        )
     except Exception as error:
         messages.append(
-            f"Could not load index {index_dir}: {type(error).__name__}: {error}"
+            f"Could not load required visual index {index_dir}: "
+            f"{type(error).__name__}: {error}"
         )
         return None
+    text_indexes = _load_text_indexes(
+        settings,
+        visual,
+        models.caption_embedding.model_name,
+        messages,
+    )
+    if text_indexes is None:
+        return None
+    if not text_indexes:
+        return RetrievalService.from_index(
+            visual,
+            visual_encoder,
+            cache_config=settings.search.cache,
+        )
+    sample = next(iter(text_indexes.values()))
+    try:
+        text_encoder = _query_encoder(
+            models.caption_embedding,
+            sample,
+            llm,
+            "text",
+        )
+        return RetrievalService.from_indexes(
+            visual,
+            visual_encoder,
+            text_indexes,
+            text_encoder,
+            settings.search.fusion,
+            settings.search.cache,
+        )
+    except Exception as error:
+        if set(text_indexes).intersection(settings.search.fusion.required_sources):
+            messages.append(
+                "Could not configure required text retrieval: "
+                f"{type(error).__name__}: {error}"
+            )
+            return None
+        messages.append(
+            "Text retrieval unavailable; continuing visual-only: "
+            f"{type(error).__name__}: {error}"
+        )
+        return RetrievalService.from_index(
+            visual,
+            visual_encoder,
+            cache_config=settings.search.cache,
+        )
+
+
+def _load_text_indexes(
+    settings: AppConfig,
+    visual: Any,
+    expected_model_name: str,
+    messages: list[str],
+) -> dict[RetrievalSource, Any] | None:
+    loaded: dict[RetrievalSource, Any] = {}
+    expected_dimension: int | None = None
+    for source, path in _text_index_paths(settings).items():
+        required = source in settings.search.fusion.required_sources
+        if not path.is_dir():
+            messages.append(f"{source.value.upper()} index not available at {path}")
+            if required:
+                return None
+            continue
+        try:
+            index = RetrievalService.load_index(
+                path,
+                subset_search_threshold=settings.index.subset_search_threshold,
+            )
+            if index.metadata.dataset_version != visual.metadata.dataset_version:
+                raise ValueError("dataset version differs from visual index")
+            if index.metadata.model_name != expected_model_name:
+                raise ValueError("model differs from configured text encoder")
+            if expected_dimension is None:
+                expected_dimension = index.metadata.embedding_dim
+            elif index.metadata.embedding_dim != expected_dimension:
+                raise ValueError("embedding dimension differs from text indexes")
+            loaded[source] = index
+        except Exception as error:
+            messages.append(
+                f"Could not load {source.value} index {path}: "
+                f"{type(error).__name__}: {error}"
+            )
+            if required:
+                return None
+    return loaded
+
+
+def _text_index_paths(settings: AppConfig) -> dict[RetrievalSource, Path]:
+    return {
+        RetrievalSource.CAPTION: Path(os.getenv(
+            "HCMAI_CAPTION_INDEX_PATH", str(settings.index.caption_path)
+        )),
+        RetrievalSource.OCR: Path(os.getenv(
+            "HCMAI_OCR_INDEX_PATH", str(settings.index.ocr_path)
+        )),
+        RetrievalSource.ASR: Path(os.getenv(
+            "HCMAI_ASR_INDEX_PATH", str(settings.index.asr_path)
+        )),
+    }
 
 
 def _query_encoder(

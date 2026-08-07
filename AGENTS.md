@@ -1,314 +1,1258 @@
 # Agent Instructions
 
-## Mission
+## 1. Current Scope and Ownership
 
-- Build HCMAI 2026 retrieval for Textual KIS, TRAKE, Q&A/VQA, and the
-  working 2026 extensions conversational KIS and VKIS, using Vietnamese and
-  English queries.
-- Return official video names and `frame_idx` values through the canonical
-  frame mapping; optimize the official competition score, ranking,
-  reproducibility, warm-query latency, and operator throughput.
-- Build a competition system and identify at most two defensible research gaps
-  for potential SoICT papers.
+You are working on the **HCMAI / AIC HCMC 2026 Multimodal Video Retrieval**
+repository.
 
-## Competition Contract and Evidence
+This workstream owns:
 
-- Primary public baseline:
-  [https://www.codabench.org/competitions/10187/](https://www.codabench.org/competitions/10187/), "HCMC AI Challenge 2025
-  (Group A)", reviewed 2026-07-28.
-- Treat this 2025 contract as evidence about the prior competition, not proof
-  of unchanged 2026 rules. New official 2026 rules override this section.
-- The official 2025 preliminary round contains exactly three query types:
-  Textual KIS, Q&A/VQA, and TRAKE. The page does not list VKIS or
-  conversational KIS as preliminary submission types.
-- Do not invent missing rules. Record conflicts or unknown 2026 behavior and
-  ask the user before encoding it in schemas, scoring, or submission logic.
+1. the shared retrieval infrastructure;
+2. Textual Known Item Search — KIS;
+3. Competition Question Answering / Video Question Answering — Q&A/VQA;
+4. API, resilience, caching, observability, evaluation, and integration needed
+   by KIS and VQA.
 
-### Official 2025 Task Semantics
+The system must support Vietnamese and English queries.
 
-- **Textual KIS**: rank candidate rows `<video_name>,<frame_idx>`. A row is
-  correct when the video name matches the ground-truth video and `frame_idx`
-  falls inside the accepted ground-truth interval `[s, e]`.
-- **Q&A/VQA**: rank `<video_name>,<frame_idx>,<answer>` rows. Credit requires
-  the correct video, a frame inside `[s, e]`, and the correct answer. The answer
-  is at most 100 characters and may be Vietnamese or English. The public page
-  mentions both semantic comparison and exact string comparison; until the
-  2026 scorer resolves this, preserve the submitted string and evaluate both
-  normalized semantic accuracy and exact match in local experiments.
-- **TRAKE**: retrieve and temporally align an ordered sequence of `N` key
-  events. Each row is `<video_name>,<frame_1>,...,<frame_N>`; it must contain
-  exactly `N` integer frame indices in chronological event order. A wrong
-  video gives zero row credit. For the correct video, row credit is the
-  fraction of events whose predicted frame falls in that event's accepted
-  interval `[s_j, e_j]`.
+### Current progress
 
-### Official 2025 Ranking and Submission
+The repository has completed implementation through:
 
-- A query accepts at most 100 ranked answer rows.
-- For `k in {1, 5, 20, 50, 100}`, `R@k` is the maximum task-specific row
-  R-Score among the first `k` rows. Query score is the mean of those five
-  `R@k` values. Ranking at all five cutoffs matters; do not optimize only
-  Recall@1/5.
-- The preliminary round used three query packages. Public leaderboard results
-  used 50% of the answers and private ranking used 100%.
-- Each package allowed at most three submissions, with the last submission
-  used for ranking; a malformed upload still consumed a submission.
-- Submission CSV files are UTF-8, comma-delimited, have no header, and use
-  integer frame indices. Video names omit `.mp4`.
-- Package all per-query CSV files under `submission/` inside one `.zip`.
+- S2-T01 — task-pipeline registry;
+- S2-T02 — task-specific API contracts;
+- S2-T03 — request-scoped traces;
+- S2-T04 — batched query encoding;
+- S2-T05 — concurrent modality retrieval.
 
-### Working 2026 Extensions — User-Provided, Not Yet Official
+The next active task is:
 
-- **VKIS**: the participant watches a target video clip, describes it to the
-  system, and retrieves the corresponding video/frame. The initial description
-  is a standalone retrieval query and must not require conversation resolution.
-- **Conversational KIS**: follow-up turns refine a previous retrieval state.
-  Resolve only genuinely context-dependent turns; first-turn, feedback-only,
-  and already standalone queries should bypass a generative resolver.
-- VKIS and conversational KIS remain product/research requirements until an
-  official 2026 competition source confirms their scoring and submission rules.
+> **S2-T06 — resilient remote inference gateway**
 
-## DOs and DON'Ts
+Do not redo S2-T01 through S2-T05 unless a regression is demonstrated or the
+user explicitly asks for rework.
 
-### DOs
+### TRAKE ownership boundary
 
-- Inspect the relevant code, tests, artifacts, and official competition source
-  before proposing or implementing a change.
-- Distinguish confirmed 2025 rules, user-provided 2026 working definitions, and
-  unresolved 2026 assumptions in code, reports, and experiments.
-- Ask the user when a missing rule, corpus detail, or product decision would
-  materially change the implementation or evaluation.
-- Preserve the canonical `frame_id` → `video_id` → `frame_idx` mapping through
-  retrieval, reranking, temporal alignment, UI display, and submission export.
-- Optimize and report the official Mean Top-k R-Score at
-  `{1,5,20,50,100}` alongside task metrics, Recall, MRR, and P50/P95 latency.
-- Use one benchmark-selected competition pipeline and measure
-  query-to-first-useful-results plus end-to-end operator throughput.
-- Route standalone Textual KIS and initial VKIS descriptions directly to
-  retrieval; invoke conversation resolution only for context-dependent turns.
-- Handle feedback-only KISC turns deterministically and keep accepted/rejected
-  frame state outside generative model control.
-- Retrieve temporal windows for TRAKE, preserve same-video and event-order
-  constraints, and jointly align the complete event sequence.
-- Reuse authoritative schemas and shared `RetrievalCandidate` objects across
-  data preparation, retrieval, reranking, orchestration, API, and frontend.
-- Keep experiments reproducible with pinned checkpoints, configs, predictions,
-  failures, official metrics, and latency measurements under `runs/`.
-- Use fake models and tiny fixtures in tests; update focused tests and docs when
-  public behavior or competition contracts change.
-- Preserve unrelated worktree changes and keep changes within the requested
-  files and task scope.
-- Treat GLM-class thinking models as offline teachers or optional measured
-  components unless they satisfy the competition latency and reliability budget.
+TRAKE is implemented by a separate teammate.
 
-### DON'Ts
+This agent must not implement, refactor, optimize, benchmark, or review:
 
-- Do not guess competition rules, scorer normalization, dataset structure,
-  frame sampling policy, or user intent.
-- Do not infer `frame_idx` from timestamps, FPS, filenames, array positions, or
-  neighboring frames.
-- Do not route every query through KISC, an LLM, a VLM, or `/resolve`.
-- Do not place unbounded reasoning, model loading, network calls, or synchronous
-  generation on the default critical path without a timeout and deterministic
-  fallback.
-- Do not treat TRAKE events as unrelated static-image queries or combine event
-  frames from different predicted videos in one row.
-- Do not allow a reranker, resolver, or VQA provider to rewrite candidate/frame
-  identity.
-- Do not duplicate authoritative schemas, invent frontend-only fields, or add
-  parallel contracts for the same task.
-- Do not rewrite stable mapping, embedding, or FAISS artifact foundations
-  without an evidence-backed compatibility or performance reason.
-- Do not call a component competition-ready solely because its schema, mock
-  test, or endpoint exists; require an end-to-end path and recorded metrics.
-- Do not optimize only Recall@1/5 or report a retrieval improvement without the
-  official score and latency trade-off.
-- Do not commit datasets, videos, frames, model weights, embeddings, indexes,
-  run outputs, credentials, Cloudflare tokens, or private deployment scripts.
-- Do not add auth, databases, microservices, containers, retries, circuit
-  breakers, generalized plugin systems, premature factories/DI, or base classes
-  without explicit approval and demonstrated need.
-- Do not download checkpoints, load the real corpus, or depend on live remote
-  services in unit tests.
-- Do not expand a research prototype into production code before it has a
-  notebook result and a second demonstrated use.
+- TRAKE query/event parsing;
+- per-event posting generation;
+- TRAKE candidate-video ranking;
+- monotonic, exhaustive, sparse, or other temporal alignment;
+- gap or shot-transition penalties;
+- original-frame refinement for TRAKE;
+- TRAKE k-best path generation;
+- TRAKE-specific metrics, datasets, experiments, or ablations.
 
-## Package Managers
+Do not delete existing TRAKE contracts, routers, pipeline registrations, or
+integration seams that have already been merged.
 
-- Python: use the repository virtual environment at `aic/`; install with
-  `aic/bin/python -m pip install -e ".[embedding,dev]"`.
-- Frontend: use `npm` in `frontend/`; preserve the existing React application.
-- Add supported runtime dependencies to `pyproject.toml`.
+Treat the TRAKE pipeline as an externally owned black box:
 
-## Folder and File Aware
+```text
+TaskRequest
+  -> PipelineRegistry
+  -> externally owned TRAKEPipeline
+  -> TaskResponse / TRAKEResponse
+```
 
-- `src/hcmai/api/routers/`: thin FastAPI adapters; no retrieval logic.
-- `src/hcmai/orchestration/pipeline.py`: `SearchService`, the only online task
-  router and search entry point used by API and conversational composition.
-- `src/hcmai/orchestration/setup.py`: the application composition root; create
-  and connect long-lived services here.
-- `src/hcmai/agents/`: KISC and future bounded task orchestration.
-- `src/hcmai/data/`: `DataService`, dataset preparation, canonical mapping, and
-  frame/evidence stores.
-- `src/hcmai/common/schemas/`: authoritative cross-component API and task
-  contracts.
-- `src/hcmai/embedding/`: `EmbeddingService`, embedding contracts, artifacts,
-  and provider/model adapters.
-- `src/hcmai/enrichment/`: `EnrichmentService` and caption/OCR adapters.
-- `src/hcmai/retriever/`: `RetrievalService`, indexes, fusion, and the internal
-  dense-baseline benchmark.
-- `src/hcmai/reranking/`: `RerankingService` and scoring adapters.
-- `src/hcmai/transcripts/`: `TranscriptService`, transcript stores, and ASR /
-  diarization adapters.
-- `src/hcmai/llm/`: `LLMService`, the private inference server, and local/HTTP
-  adapters.
-- `src/hcmai/query_suggestions/`: `SuggestionService` and provider adapters.
-- `src/hcmai/common/utils/`: cross-cutting helpers, not domain logic.
+Shared-kernel changes must remain backward compatible with public interfaces
+used by the TRAKE teammate.
 
-## Service Pipeline Architecture
+Before changing any shared schema or retrieval contract that may affect their
+branch:
 
-- Service-owning packages (`data`, `embedding`, `enrichment`, `llm`,
-  `orchestration`, `query_suggestions`, `reranking`, `retriever`, and
-  `transcripts`) expose one public `pipeline.py` containing their `*Service`
-  facade. Online and offline callers use that boundary. `api`, `common`,
-  `agents`, and the internal dense-baseline evaluator are explicit exceptions.
-- Cross-component production imports may target only another component's
-  `pipeline.py` or authoritative contracts in `common`. Do not import another
-  component's `adapters/`, `models/`, provider config, stores, generators, or
-  other implementation modules.
-- `models/` contains contracts, entities, metadata, statistics, and value
-  objects only. Concrete SigLIP, BGE, Qwen, HTTP, ASR, diarization, caption,
-  and OCR implementations belong in the owning component's `adapters/`.
-- `SearchService` routes Textual KIS, initial VKIS, KISC, VQA, and TRAKE.
-  Unsupported pipelines must fail explicitly; leave a focused block comment
-  for the intended stage sequence and do not add fake components.
-- FastAPI routers, CLIs, notebooks, agents, and other components do not compose
-  retrieval internals themselves. API and KISC call `SearchService`; offline
-  CLIs call the relevant owning service directly.
-- `orchestration/setup.py` is the single application composition root. Load
-  models and indexes once, then inject the resulting services.
-- `EvaluationService` is deliberately deferred. Until an end-to-end evaluator
-  has a second demonstrated use and confirmed 2026 semantics,
-  `retriever/evaluation/benchmark.py` remains an internal dense-baseline tool.
+1. describe the interface diff;
+2. identify the compatibility impact;
+3. coordinate the migration with the TRAKE owner;
+4. do not edit their algorithm to make the shared change compile.
 
-## Subagent Roles
+KISC, conversational KIS, and VKIS are also out of scope unless the user
+explicitly restores them.
+
+---
+
+## 2. Mission
+
+### Product mission
+
+Build a reliable competition system that:
+
+- accepts stable KIS and VQA requests;
+- reuses one shared multimodal retrieval kernel;
+- returns the earliest accurate result possible;
+- continues producing ranked alternatives up to Top-100;
+- degrades gracefully when optional modalities or remote services fail;
+- preserves canonical frame identity through every stage;
+- records enough telemetry to diagnose failures and latency;
+- remains compatible with the separately owned TRAKE integration boundary.
+
+### Research mission
+
+Establish reproducible baselines for:
+
+- KIS retrieval quality and latency;
+- VQA retrieval and correct-video ranking;
+- VQA evidence localization;
+- VQA answer generation;
+- grounded joint video-frame-answer ranking;
+- VQA accuracy-latency-cost trade-offs;
+- anytime Top-100 generation.
+
+Identify at most two defensible research gaps for potential SoICT work.
+
+Do not promote a research idea into a paper claim without a frozen benchmark,
+ablations, and recorded evidence.
+
+### Operational objective
+
+There is no fixed latency threshold.
+
+Optimize:
+
+- official Mean Top-k R-Score at `{1, 5, 20, 50, 100}`;
+- task-specific accuracy;
+- query-to-first-useful-result;
+- time to first correct-video result;
+- time to first grounded correct answer when labels exist;
+- warm P50/P95 latency;
+- operator throughput;
+- remote API calls and GPU time per query.
+
+Do not optimize only Recall@1 or Recall@5.
+
+---
+
+## 3. Deployment Assumptions
+
+- Videos, keyframes, metadata, evidence stores, and FAISS indexes run locally.
+- Expensive model inference may run:
+  - on ThunderCompute;
+  - on an L40 or A6000 GPU;
+  - through an external API;
+  - or through a configurable local backend.
+- Models and indexes are loaded once and reused.
+- Do not load models at import time or once per request.
+- Embedding adapters may lazily load on the first non-empty encode call.
+- Unit tests use fake models and tiny fixtures.
+- Unit tests must not download checkpoints, load the real corpus, or call live
+  remote services.
+
+---
+
+## 4. Source-of-Truth Order
+
+Use this precedence:
+
+1. the user's latest explicit instruction;
+2. the latest official AIC HCMC 2026 specification, scorer, or organizer notice;
+3. the current repository, tests, artifacts, and active branch;
+4. the current approved implementation plan;
+5. official AIC 2025 material as historical evidence only;
+6. peer-reviewed papers and official implementations;
+7. engineering hypotheses requiring validation.
+
+When sources conflict:
+
+1. identify the conflict;
+2. state the practical consequences;
+3. do not silently choose;
+4. ask the user when the decision changes API contracts, scoring semantics,
+   corpus assumptions, or research claims.
+
+Do not guess:
+
+- competition rules;
+- scorer normalization;
+- dataset structure;
+- frame sampling policy;
+- model capabilities;
+- private provider behavior;
+- user intent.
+
+---
+
+## 5. Competition Semantics
+
+### 5.1 Textual KIS
+
+Input:
+
+- a natural-language event description.
+
+Output row:
+
+```text
+<video_name>,<frame_idx>
+```
+
+A row is correct when:
+
+- the video name is correct; and
+- `frame_idx` lies inside the accepted interval `[s, e]`.
+
+### 5.2 Competition Q&A / VQA
+
+Input:
+
+- an event description;
+- a question about information in that event.
+
+Output row:
+
+```text
+<video_name>,<frame_idx>,<answer>
+```
+
+Credit requires:
+
+- the correct video;
+- a frame inside the accepted interval `[s, e]`;
+- the correct answer under the official scorer.
+
+Preserve both:
+
+- raw submitted answer;
+- normalized answer used for local evaluation.
+
+For local experiments record:
+
+- exact match;
+- normalized exact match;
+- configured semantic or alias-based metric;
+- correct-video accuracy;
+- frame-interval accuracy;
+- joint video-frame-answer accuracy.
+
+A plausible answer without supporting evidence is not a valid grounded VQA
+result.
+
+### 5.3 Ranking and submission
+
+- A query may contain at most 100 ranked answer rows.
+- For `k in {1, 5, 20, 50, 100}`, `R@k` is the maximum row R-Score among the
+  first `k` rows.
+- Query score is the mean of those five `R@k` values.
+- Ranking at all five cutoffs matters.
+- Submission video names omit `.mp4` when required by the official exporter.
+- Submission rows use canonical integer `frame_idx`.
+
+Never infer `frame_idx` from:
+
+- timestamps;
+- FPS;
+- filenames;
+- array positions;
+- keyframe order;
+- neighboring frames.
+
+---
+
+## 6. Target Architecture
+
+Build a shared retrieval kernel with thin KIS and VQA pipelines.
+
+```text
+HTTP API
+    |
+    v
+SearchService
+    |
+    v
+PipelineRegistry
+    |-------------------------|
+    v                         v
+KISPipeline               VQAPipeline
+    |                         |
+    +-------------------------+
+                |
+                v
+       Shared Retrieval Kernel
+       - normalization
+       - controlled expansion
+       - batched encoding
+       - concurrent modality search
+       - fusion and filtering
+       - caching
+       - video aggregation
+       - telemetry
+                |
+       +--------+---------+
+       |                  |
+       v                  v
+Local data + FAISS    Remote inference gateway
+evidence stores       rerank / VLM / parser
+```
+
+The same registry may contain an externally owned `TRAKEPipeline`. Treat it as
+opaque and do not import its private implementation.
+
+### Architecture rules
+
+- `SearchService` is the online application facade.
+- Task-specific logic must not accumulate in one large `if/elif` chain.
+- Use explicit pipeline dispatch.
+- KIS and VQA reuse the shared retrieval kernel.
+- FastAPI routers remain thin.
+- Routers must not compose retrieval internals.
+- VQA-specific logic stays outside the shared retrieval kernel.
+- Shared contracts belong in `src/hcmai/common/schemas/`.
+- Do not create parallel contracts for the same concept.
+- Cross-component production imports may target:
+  - another component's public `pipeline.py`; or
+  - authoritative contracts under `common`.
+- Do not import another component's private adapters, stores, provider config,
+  or implementation modules.
+
+---
+
+## 7. KIS Workflow
+
+```text
+text query
+  -> validate and normalize
+  -> preserve original query
+  -> optional controlled query variants
+  -> batch encode each unique variant once
+  -> search visual/caption/OCR/ASR concurrently
+  -> fuse modality and variant evidence
+  -> bounded reranking
+  -> deterministic fallback to fused ranking
+  -> temporal deduplication
+  -> video diversity
+  -> canonical frame materialization
+  -> ranked Top-100
+```
+
+Rules:
+
+- Query expansion is controlled, auditable, and configurable.
+- Generated variants must not overwhelm the original query.
+- Reuse compatible text embeddings across caption, OCR, and ASR.
+- Avoid many adjacent duplicate frames.
+- Avoid one video occupying the whole Top-100 without strong evidence.
+- Preserve per-modality scores, ranks, and provenance.
+- Maintain a deterministic golden path for regression testing.
+- A failed optional expansion or reranker must not block KIS.
+
+---
+
+## 8. Competition VQA Workflow
+
+```text
+event description + question
+  -> validate request
+  -> decompose retrieval and answer intent
+  -> event-aware retrieval branch
+  -> question-aware retrieval branch
+  -> multimodal fusion
+  -> video aggregation
+  -> temporal deduplication
+  -> bounded evidence-window construction
+  -> caption/OCR/ASR/object/visual evidence bundle
+  -> question-aware localization
+  -> answer multiple shortlisted candidates
+  -> deterministic answer normalization
+  -> grounded joint ranking
+  -> bounded neighbor-window fallback
+  -> canonical frame materialization
+  -> ranked Top-100
+```
+
+A VQA candidate is a grounded object, not only an answer string.
+
+It should contain at least:
+
+```text
+video_id
+frame_id
+frame_idx
+timestamp_ms
+temporal_window
+answer
+normalized_answer
+retrieval_score
+localization_score
+answer_confidence
+evidence_consistency_score
+joint_score
+provenance
+warnings
+```
+
+Rules:
+
+- Retrieve and localize before calling an expensive VLM.
+- Never call a VLM over the full corpus.
+- Never rank only by answer confidence.
+- Every answer remains attached to supporting evidence.
+- Answer multiple shortlisted candidates, not only the first frame.
+- Keep Localizer and Answerer as separate interfaces.
+- Verify that the configured checkpoint supports image or multi-image input.
+- Do not treat a generic causal language model as multimodal.
+- Use configurable temporal windows.
+- Start with a training-free localizer.
+- Do not train a selector without a validated internal benchmark.
+- Add a text-only blind baseline to detect language-prior leakage.
+- Evaluate video, frame, answer, and joint correctness separately.
+- A provider may select only frame IDs supplied in its evidence set.
+- Reject or degrade a response that invents a frame identity.
+
+---
+
+## 9. Shared Retrieval Requirements
+
+### 9.1 Batched query encoding
+
+The kernel must:
+
+- accept multiple queries and variants;
+- deduplicate identical text;
+- encode each unique text once per encoder;
+- reuse compatible embeddings across indexes;
+- preserve query order;
+- return explicit text-to-vector mappings;
+- record model version, cache status, and latency;
+- reject dimension mismatches.
+
+Do not independently encode the same BGE text for caption, OCR, and ASR when
+one embedding is compatible with all three indexes.
+
+### 9.2 Concurrent modality search
+
+Visual, caption, OCR, and ASR searches should execute concurrently where safe.
+
+Requirements:
+
+- bounded concurrency;
+- request deadline propagation;
+- per-modality timeout;
+- partial success support;
+- successful sources are not discarded because one optional source failed;
+- deterministic merge order;
+- per-modality status, warning, latency, and result count.
+
+### 9.3 Fusion
+
+Fusion must:
+
+- preserve modality scores and ranks;
+- support task-specific weights;
+- use configuration rather than hidden constants;
+- validate score direction and normalization;
+- be deterministic;
+- be unit-testable;
+- expose provenance.
+
+### 9.4 Filtering and local search
+
+Do not use an unbounded full-index search merely to filter by video or time.
+
+Do not default to:
+
+```python
+search_k = index.ntotal
+```
+
+for candidate-local refinement.
+
+Use a measured solution such as:
+
+- per-video postings;
+- per-video indexes;
+- FAISS ID selectors;
+- subset vector search;
+- sorted mapping ranges;
+- exact narrowed fallback.
+
+Preserve exact-search behavior for correctness tests.
+
+### 9.5 Caching
+
+Approved caches include:
+
+- normalized query embeddings;
+- repeated query variants;
+- thumbnails;
+- immutable evidence bundles;
+- local frame-window materialization.
+
+Cache keys include relevant:
+
+- encoder/model version;
+- index version;
+- corpus version;
+- normalization version;
+- modality;
+- normalized query;
+- prompt version;
+- configuration affecting output.
+
+Define TTL, size limits, and eviction.
+
+Never return an entry from an incompatible model, index, or corpus version.
+
+### 9.6 Reranking fallback
+
+- Use reranked output when successful.
+- Fall back to fused ranking on timeout or failure.
+- Record warning and error category.
+- Do not lose valid retrieval results because an optional reranker failed.
+- A reranker may reorder but must not rewrite candidate identity.
+
+---
+
+## 10. Remote Inference Reliability
+
+The following are explicitly approved for remote model and API calls:
+
+- connect timeout;
+- read timeout;
+- write timeout;
+- pool timeout;
+- total request deadline;
+- bounded retry for transient idempotent failures;
+- exponential backoff with jitter;
+- circuit breaker;
+- bounded concurrency / bulkhead semaphore;
+- capability discovery;
+- deterministic fallback.
+
+Rules:
+
+- Do not retry deterministic client errors.
+- Do not retry a non-idempotent operation without an idempotency strategy.
+- Do not begin a retry when too little request deadline remains.
+- Do not place unbounded generation or network calls on the critical path.
+- Do not turn resilience into a generalized infrastructure framework.
+- Scope it to remote inference.
+- Record backend, attempts, timeout, fallback, and circuit state.
+- A remote provider must not rewrite candidate identity.
+- Unit tests use mocked HTTP responses and fake time.
+
+---
+
+## 11. Request-Scoped State and Observability
+
+Do not store request-specific timing, warnings, or intermediate results in
+mutable singleton fields.
+
+Use a request-scoped context conceptually similar to:
+
+```python
+class RequestContext:
+    request_id: str
+    task_type: TaskType
+    deadline_ms: int | None
+    started_at: float
+    warnings: list[str]
+    trace: PipelineTrace
+    cache_policy: CachePolicy
+    cancellation_token: CancellationToken | None
+```
+
+Each stage records:
+
+- stage name;
+- start and end time;
+- duration;
+- input count;
+- output count;
+- cache status;
+- backend;
+- fallback;
+- warnings;
+- error category.
+
+Trace stages when applicable:
+
+- validation;
+- normalization;
+- parsing;
+- expansion;
+- encoding;
+- each modality search;
+- fusion;
+- filtering;
+- video aggregation;
+- temporal deduplication;
+- reranking;
+- evidence construction;
+- VQA localization;
+- VQA answering;
+- VQA joint ranking;
+- materialization;
+- submission export.
+
+Health/readiness may report an externally registered TRAKE capability, but this
+agent must not inspect or assert its internal stages.
+
+Logs must be structured.
+
+Do not log:
+
+- API keys;
+- credentials;
+- private tokens;
+- full sensitive prompts;
+- private deployment details;
+- raw provider secrets.
+
+---
+
+## 12. Canonical Identity and Artifacts
+
+`src/hcmai/common/schemas/` is authoritative.
+
+Preserve:
+
+```text
+frame_id -> video_id -> frame_idx
+```
+
+through:
+
+- data preparation;
+- indexing;
+- retrieval;
+- fusion;
+- reranking;
+- VQA localization;
+- VQA answering;
+- API responses;
+- UI display;
+- evaluation;
+- submission export.
+
+Never infer `frame_idx`.
+
+Expected artifact flow:
+
+```text
+frames.parquet
+  -> normalized .npy + mapping Parquet
+  -> FAISS index
+```
+
+YAML and JSON store configuration and provenance, not vector arrays.
+
+Join artifacts on `frame_id`.
+
+Do not commit:
+
+- datasets;
+- videos;
+- extracted frames;
+- weights;
+- embeddings;
+- indexes;
+- run outputs;
+- credentials;
+- Cloudflare tokens;
+- private deployment scripts.
+
+---
+
+## 13. Repository and Folder Awareness
+
+- `src/hcmai/api/routers/`
+  - thin FastAPI adapters;
+  - no retrieval, answering, or ranking logic.
+
+- `src/hcmai/orchestration/pipeline.py`
+  - public `SearchService` facade;
+  - explicit task dispatch;
+  - delegate to pipelines.
+
+- `src/hcmai/orchestration/setup.py`
+  - single composition root;
+  - create and connect long-lived services.
+
+- `src/hcmai/data/`
+  - dataset preparation;
+  - canonical mapping;
+  - frame and evidence stores.
+
+- `src/hcmai/common/schemas/`
+  - authoritative cross-component contracts.
+
+- `src/hcmai/embedding/`
+  - embedding contracts, artifacts, and adapters.
+
+- `src/hcmai/enrichment/`
+  - caption, OCR, object, and enrichment adapters.
+
+- `src/hcmai/retriever/`
+  - retrieval service, indexes, fusion, filtering, cache, and benchmarks.
+
+- `src/hcmai/reranking/`
+  - local and remote scoring adapters.
+
+- `src/hcmai/transcripts/`
+  - ASR and diarization stores and adapters.
+
+- `src/hcmai/llm/`
+  - private inference service and local/HTTP adapters.
+
+- `src/hcmai/vqa/`
+  - VQA parser, candidates, windows, evidence, localization, answering,
+    normalization, and joint ranking.
+
+- `src/hcmai/query_suggestions/`
+  - controlled expansion providers.
+
+- `src/hcmai/common/utils/`
+  - cross-cutting helpers only;
+  - no task domain logic.
+
+Existing TRAKE-owned folders may remain. Do not modify them unless the user and
+TRAKE owner explicitly assign a shared-interface migration.
+
+### Service boundary convention
+
+Service-owning packages expose one public `pipeline.py` containing a
+`*Service` facade.
+
+Concrete providers belong in the owning component's `adapters/`.
+
+`models/` contains contracts, entities, metadata, statistics, and value
+objects, not provider implementations.
+
+Do not duplicate service composition in routers, CLIs, notebooks, or task
+pipelines.
+
+---
+
+## 14. Subagent Roles
 
 These are responsibility profiles for parallel work, not a requirement to
-spawn agents for every task. The lead agent dispatches them only when
-multi-agent work is explicitly requested.
+spawn agents for every task.
 
 ### nhuy — Senior SWE, API and Integration
 
-- Owns contracts crossing frontend, FastAPI, and the AI search pipeline.
-- Primary paths: `frontend/`, `src/hcmai/app.py`,
-  `src/hcmai/api/routers/`, `src/hcmai/common/schemas/`, and API integration
-  tests.
-- Checks endpoint request/response compatibility, startup configuration,
-  error handling, submission CSV/ZIP compatibility, and complete
-  UI → API → search → UI flows.
-- Must not invent frontend-only fields or duplicate authoritative schemas.
+Owns:
 
-### khầy — Senior AI Engineer, Conversation and Reranking
+- frontend and FastAPI contracts;
+- KIS/VQA request and response schemas;
+- startup wiring;
+- endpoint compatibility;
+- API integration tests;
+- submission export;
+- health and readiness;
+- UI -> API -> pipeline -> UI flows.
 
-- Owns KIS-conversation orchestration, turn state, query reformulation,
-  feedback behavior, clarification logic, reranking, and TRAKE joint temporal
-  alignment over retrieval candidates.
-- Primary paths: `src/hcmai/agents/kisc/`,
-  `src/hcmai/orchestration/pipeline.py`, `src/hcmai/reranking/`, future temporal
-  alignment code, and their focused tests.
-- Consumes shared `RetrievalCandidate` objects and preserves their exact frame
-  identifiers when reranking.
-- Keeps orchestration research-friendly; no database or generalized agent
-  framework unless explicitly approved.
+Primary paths:
 
-### [fuvo — Senior AI Engineer, Retrieval and Enrichment]()
+- `frontend/`
+- `src/hcmai/app.py`
+- `src/hcmai/api/routers/`
+- `src/hcmai/common/schemas/`
+- API integration tests
 
-- Owns metadata preparation, embeddings, FAISS indexing, dense retrieval,
-  OCR/ASR/caption/object/action enrichment, temporal windows, per-event TRAKE
-  candidates, fusion inputs, and retrieval benchmarks.
-- Primary paths: `src/hcmai/data/`, `src/hcmai/embedding/`,
-  `src/hcmai/retriever/`, `scripts/`, `notebooks/`, and related tests.
-- Produces shared `RetrievalCandidate` outputs for khầy and stable API
-  materialization for nhuy.
-- Every retrieval experiment must record the configured checkpoint and metrics
-  under `runs/`; no real corpus or checkpoint loading in tests.
+Must not:
+
+- invent frontend-only fields;
+- duplicate schemas;
+- put retrieval logic in routers;
+- modify TRAKE internals.
+
+### khầy — Senior AI Engineer, VQA and Reranking
+
+Owns:
+
+- VQA query decomposition;
+- VQA evidence localization;
+- VQA multi-candidate answering;
+- VQA grounded joint ranking;
+- reranking;
+- temporal-window fallback;
+- related tests.
+
+Primary paths:
+
+- `src/hcmai/orchestration/`
+- `src/hcmai/reranking/`
+- `src/hcmai/vqa/`
+- related tests
+
+Must:
+
+- consume shared candidate objects;
+- preserve exact frame identity;
+- avoid generalized agent frameworks;
+- not implement or review TRAKE algorithms.
+
+### fuvo — Senior AI Engineer, Retrieval and Enrichment
+
+Owns:
+
+- metadata preparation;
+- embeddings;
+- FAISS indexing;
+- dense retrieval;
+- caption/OCR/ASR/object/action enrichment;
+- KIS/VQA temporal windows;
+- video aggregation;
+- fusion inputs;
+- filtered retrieval;
+- caches;
+- retrieval benchmarks.
+
+Primary paths:
+
+- `src/hcmai/data/`
+- `src/hcmai/embedding/`
+- `src/hcmai/enrichment/`
+- `src/hcmai/retriever/`
+- `src/hcmai/transcripts/`
+- `scripts/`
+- `notebooks/`
+- related tests
+
+Must:
+
+- produce stable shared candidate outputs;
+- record experiments under `runs/`;
+- not load the real corpus in unit tests;
+- coordinate shared-contract changes with the TRAKE owner.
 
 ### Coordination
 
-- Fuvo produces frame/event candidates, khầy may reorder, refine, or jointly
-  align them, and nhuy exposes and exports the final shared response.
-- Each subagent reports files inspected or changed, tests run, and unresolved
-  gaps. For audits, use evidence-backed status tables and do not guess.
-- Agents share the worktree: preserve unrelated edits and never revert another
-  agent's changes.
+- Fuvo produces frame, window, and video candidates.
+- Khầy may rerank, localize, answer, and refine VQA evidence.
+- Nhuy exposes and exports final responses.
+- The TRAKE teammate consumes only stable shared contracts and owns TRAKE
+  internals.
+- Each agent reports files inspected, files changed, tests run, unresolved
+  assumptions, and limitations.
+- Preserve unrelated edits.
+- Never revert another agent's work without explicit approval.
 
-## Key Conventions
+---
 
-- `src/hcmai/common/schemas/` is authoritative. Extend existing contracts with
-  optional fields before adding models; keep unknown fields rejected.
-- Preserve exact `frame_id` → `video_id` → `frame_idx` mappings everywhere.
-  Never infer `frame_idx` from timestamps or FPS.
-- Competition output uses official video names and integer `frame_idx` values;
-  internal `frame_id` values must always materialize through the canonical
-  mapping before display or submission.
-- TRAKE rows must keep all `N` event frames on one predicted video, preserve
-  event order, and contain exactly one mapped frame index per event. Retrieve
-  temporal windows and score state transitions; do not treat boundary events
-  as independent static-image queries.
-- Route standalone Textual KIS and initial VKIS descriptions directly to
-  retrieval. Route only context-dependent conversational refinements through a
-  resolver. Do not route TRAKE through the KISC agent.
-- Treat query-to-first-useful-results and operator throughput as competition
-  KPIs. The selected competition path is configured once. Any generative or
-  remote stage on that path needs measured warm P50/P95 latency, a bounded
-  timeout, and a deterministic fallback before it can be enabled by default.
-- Resolve canonical relative `image_path` values against the dataset root
-  without rewriting `frames.parquet`.
-- Artifact flow is `frames.parquet` → normalized `.npy` + mapping Parquet →
-  exact FAISS `dense.index`; YAML/JSON stores provenance, not vectors.
-- Join artifacts on `frame_id`; exchange retrieval data via shared schemas.
-- Keep all selected model checkpoints in `llm/config.yaml` and candidate
-  counts in `configs/baseline.yaml`; do not expose runtime search profiles.
-- Load models/indexes once, never at import or per request. Embedding adapters
-  lazily load on their first non-empty encode call.
-- Keep reusable logic in `src/hcmai`, CLIs thin, domain logic out of
-  `common/utils`, and the Python/frontend boundary intact.
+## 15. Evidence and Research Discipline
 
-## Research Rules
+Classify technical claims as:
 
-- Prove retrieval ideas in a notebook; extract code only for a second use.
-- Limits: new module ≤200 lines, smoke test ≤100, function ≤40, change ≤300.
-- A new research component uses exactly implementation + smoke-test files
-  unless explicitly approved.
-- Do not add auth, databases, microservices, containers, retries, circuit
-  breakers, runtime checksums, generalized plugins, premature factories/DI,
-  or a base class without two implementations.
-- Atomic temp-file writes are allowed only in the completed ingestion pipeline.
-- Tests use fake models and tiny fixtures; never download checkpoints or load
-  the corpus.
-- Runs record the official mean Top-k R-Score at `{1,5,20,50,100}`, task row
-  R-Scores, Recall@1/5, MRR, P50/P95 latency, predictions, failures, config,
-  and checkpoint under `runs/`. TRAKE runs also record video accuracy,
-  per-event interval accuracy, and full-sequence accuracy; Q&A runs record
-  exact match and the explicitly configured normalization metric. No
-  `metrics.json` means no experiment.
-- Never commit datasets, weights, embeddings, indexes, or run outputs.
-- MUST NOT GUESS the information or intent. If you don't know anything, MUST QA with me to clarify
+- **SOURCE**
+  - verified from code, tests, artifacts, or official rules.
 
-## File-Scoped Commands
+- **PAPER**
+  - explicitly supported by a cited paper or official implementation.
 
-| Task      | Command                                                     |
-| --------- | ----------------------------------------------------------- |
-| Compile   | `aic/bin/python -m py_compile src/hcmai/<file>.py`        |
-| Test      | `PYTHONPATH=src aic/bin/pytest tests/test_<component>.py` |
-| Typecheck | `pyright src/hcmai/<file>.py`                             |
+- **PROPOSED**
+  - an engineering or research hypothesis requiring experiments.
 
-## Change and Commit Discipline
+Do not:
 
-- Inspect first and preserve unrelated work. Update tests/docs with public
-  behavior or contract changes; record unknown corpus-format assumptions.
-- AI commits include `Co-Authored-By: <model name> <noreply@openai.com>`.
+- present a proposal as proven;
+- invent benchmark or latency values;
+- invent paper claims;
+- infer unseen implementation details from an abstract;
+- call a component competition-ready because a schema or endpoint exists.
 
-## Infrastructure
+Competition-ready requires:
 
-- We use ThunderCompute with **L40 GPU** or **A6000** **GPU**
+- an end-to-end path;
+- deterministic fallback;
+- unit tests;
+- integration tests;
+- recorded metrics;
+- recorded latency;
+- failure analysis;
+- reproducible configuration.
+
+### Baseline-first VQA rule
+
+1. retrieve candidate frames/videos;
+2. build bounded temporal windows;
+3. answer one baseline candidate;
+4. add question-aware localization;
+5. answer multiple candidates;
+6. add grounded joint ranking;
+7. add bounded temporal fallback;
+8. generate Top-100;
+9. measure before training a selector.
+
+---
+
+## 16. Evaluation and Reproducibility
+
+Every experiment records:
+
+- task;
+- dataset/corpus version;
+- query-set version;
+- configuration;
+- checkpoints;
+- index version;
+- predictions;
+- failures;
+- warnings;
+- official metrics;
+- task metrics;
+- P50/P95 latency;
+- per-stage latency;
+- hardware;
+- remote provider;
+- remote call count;
+- timestamp;
+- git commit.
+
+Store experiment records under `runs/`.
+
+No `metrics.json` means no completed experiment.
+
+### KIS metrics
+
+- official Mean Top-k R-Score;
+- Recall@1/5/20/50/100;
+- MRR;
+- accepted-frame accuracy;
+- video diversity;
+- duplicate-frame rate;
+- P50/P95 latency;
+- time to first useful result;
+- degraded-mode behavior.
+
+### VQA metrics
+
+- official Mean Top-k R-Score;
+- correct-video recall;
+- frame-interval accuracy;
+- raw answer exact match;
+- normalized answer match;
+- configured semantic/alias metric;
+- joint video-frame-answer accuracy;
+- grounded accuracy;
+- text-only blind baseline;
+- P50/P95 latency;
+- VLM calls and GPU/API seconds per query.
+
+TRAKE metrics belong to the separate TRAKE workstream.
+
+Use frozen development and test partitions when an internal benchmark exists.
+
+Manual inspection is useful for debugging, but not enough for a publishable
+accuracy claim.
+
+---
+
+## 17. DOs and DON'Ts
+
+### DO
+
+- Inspect code, tests, artifacts, and official rules before changes.
+- Preserve canonical frame mapping.
+- Reuse the shared retrieval kernel.
+- Use KIS/VQA-specific contracts and pipelines.
+- Batch query encoding.
+- Run independent modality retrieval concurrently when safe.
+- Use expensive inference only after corpus pruning.
+- Keep deterministic fallbacks.
+- Preserve candidate identity.
+- Add focused tests for public behavior.
+- Record benchmark config and failures.
+- Preserve unrelated worktree changes.
+- Coordinate shared-interface changes with the TRAKE owner.
+- Ask the user when a missing decision affects correctness.
+
+### DON'T
+
+- Do not guess.
+- Do not implement KISC, conversational KIS, or VKIS.
+- Do not implement or modify TRAKE internals.
+- Do not route every query through an LLM or VLM.
+- Do not call a VLM on the full corpus.
+- Do not infer frame indices.
+- Do not let rerankers or providers rewrite identity.
+- Do not duplicate schemas.
+- Do not hide failure with broad silent exceptions.
+- Do not add auth, databases, microservices, containers, generalized plugins,
+  or premature dependency-injection frameworks without approval.
+- Do not download checkpoints or use live services in unit tests.
+- Do not commit datasets, weights, indexes, embeddings, credentials, or run
+  outputs.
+- Do not claim improvement without accuracy and latency evidence.
+- Do not rewrite another teammate's files to avoid a shared-contract migration.
+
+---
+
+## 18. Required Execution Protocol
+
+### Step 1 — Inspect repository state
+
+Run:
+
+```bash
+git status
+git branch --show-current
+```
+
+Then:
+
+- identify uncommitted changes;
+- identify work by other agents;
+- inspect configuration;
+- preserve unrelated edits.
+
+### Step 2 — Read before editing
+
+Inspect:
+
+- relevant modules;
+- service boundaries;
+- call sites;
+- authoritative schemas;
+- tests;
+- configuration;
+- documentation;
+- duplicate or legacy implementations.
+
+Verify actual behavior.
+
+### Step 3 — Restate the task
+
+Before coding report:
+
+- objective;
+- current task ID;
+- affected components;
+- assumptions;
+- ambiguities;
+- expected public behavior;
+- acceptance criteria;
+- likely files.
+
+Ask the user when required behavior cannot be inferred safely.
+
+### Step 4 — Check ownership
+
+Before modifying a file determine whether it is:
+
+- owned by this KIS/VQA workstream;
+- shared infrastructure;
+- owned by the TRAKE teammate;
+- unrelated.
+
+For shared contracts that may affect TRAKE:
+
+1. document the proposed interface change;
+2. preserve compatibility where practical;
+3. coordinate before merge.
+
+Do not modify TRAKE-owned implementation files.
+
+### Step 5 — Design the smallest coherent change
+
+Specify:
+
+- files to create;
+- files to modify;
+- interfaces;
+- compatibility;
+- fallback;
+- tests;
+- risks.
+
+Prefer a small coherent change over a rewrite.
+
+### Step 6 — Implement
+
+- follow existing style where sound;
+- use typed contracts;
+- reject invalid input explicitly;
+- avoid hidden global state;
+- keep VQA logic outside retrieval;
+- keep routers thin;
+- avoid dead code and fake components;
+- do not use silent broad exceptions;
+- categorize and trace failures;
+- preserve deterministic ordering;
+- preserve public compatibility.
+
+### Step 7 — Add tests
+
+At minimum cover:
+
+- success;
+- invalid input;
+- empty results;
+- duplicate candidates;
+- optional modality unavailable;
+- remote timeout;
+- partial failure;
+- fallback;
+- deterministic ordering;
+- boundary conditions;
+- existing behavior.
+
+For algorithms also cover:
+
+- hand-computed cases;
+- randomized small cases;
+- oracle comparison where available;
+- regression fixtures.
+
+### Step 8 — Run validation
+
+Compile changed files:
+
+```bash
+aic/bin/python -m py_compile src/hcmai/<file>.py
+```
+
+Run focused tests:
+
+```bash
+PYTHONPATH=src aic/bin/pytest tests/test_<component>.py
+```
+
+Run type checking:
+
+```bash
+pyright src/hcmai/<file>.py
+```
+
+Run broader tests when public behavior changes.
+
+Unit tests must not load real models or corpus data.
+
+### Step 9 — Review diff
+
+Run:
+
+```bash
+git diff --check
+git diff --stat
+git diff
+```
+
+Confirm:
+
+- no unrelated changes;
+- no secrets;
+- no generated artifacts;
+- no dataset/model files;
+- no accidental contract break;
+- no modification to TRAKE-owned algorithm files;
+- tests and docs match behavior.
+
+### Step 10 — Report
+
+Report:
+
+- files inspected;
+- files created;
+- files modified;
+- behavior implemented;
+- tests and results;
+- benchmark results when applicable;
+- limitations;
+- unresolved assumptions;
+- shared-contract impact;
+- follow-up work.
+
+Do not hide failed tests.
+
+### Step 11 — Commit and push
+
+Commit only after validation passes.
+
+```bash
+git add <explicit-files>
+git commit -m "<conventional commit message>"
+git push -u origin <approved-feature-branch>
+```
+
+Do not use `git add .` when unrelated changes exist.
+
+Do not push directly to a protected branch.
+
+AI-authored commits include:
+
+```text
+Co-Authored-By: <model name> <noreply@openai.com>
+```
+
+If credentials or permissions are unavailable, stop after the local commit and
+report the blocker.
+
+---
+
+## 19. Package Managers
+
+### Python
+
+Use:
+
+```bash
+aic/bin/python -m pip install -e ".[embedding,dev]"
+```
+
+Add runtime dependencies to `pyproject.toml`.
+
+Before adding a dependency explain:
+
+- why it is required;
+- runtime scope;
+- test impact;
+- whether an existing dependency already covers it.
+
+### Frontend
+
+Use `npm` in:
+
+```text
+frontend/
+```
+
+Preserve the React application and API boundary.
+
+---
+
+## 20. Code-Quality Guidelines
+
+Prefer:
+
+- module under 200 lines;
+- function under 40 lines;
+- focused change under 300 lines;
+- explicit interfaces;
+- small fixtures;
+- one responsibility per module.
+
+These are guidelines, not reasons to fragment cohesive code.
+
+Exceeding a guideline is allowed when splitting damages cohesion. Explain the
+exception in the task report.
+
+Do not create:
+
+- a base class without two implementations;
+- a factory without a concrete need;
+- a plugin system for one provider;
+- a generic framework for one task;
+- a new service boundary without ownership and tests.
+
+---
+
+## 21. Final Working Principle
+
+For every active KIS/VQA task:
+
+1. make the baseline executable;
+2. make it correct;
+3. make it observable;
+4. make it reproducible;
+5. measure it;
+6. optimize the measured bottleneck;
+7. preserve compatibility;
+8. document source-derived, paper-derived, and proposed decisions.
+
+When information is missing and materially affects correctness:
+
+> Stop and ask the user. Do not guess.

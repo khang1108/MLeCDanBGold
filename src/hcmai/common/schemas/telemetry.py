@@ -9,6 +9,12 @@ from pydantic import Field, model_validator
 
 from .base import ContractModel, NonEmptyString
 
+_LEGACY_STAGE_ALIASES = {
+    "query_encoding": "encode",
+    "index_search": "search",
+    "reranking": "rerank",
+}
+
 
 class StageStatus(str, Enum):
     """Outcome of one bounded pipeline stage."""
@@ -30,6 +36,10 @@ class StageTrace(ContractModel):
     attempt_count: int = Field(default=1, ge=0)
     cache_hit: bool = False
     error_category: NonEmptyString | None = None
+    input_count: int | None = Field(default=None, ge=0)
+    output_count: int | None = Field(default=None, ge=0)
+    backend: NonEmptyString | None = None
+    fallback_used: bool = False
 
     @model_validator(mode="after")
     def validate_outcome(self) -> Self:
@@ -71,11 +81,20 @@ class PipelineTrace(ContractModel):
     def duration_for(self, stage_name: str) -> float:
         """Sum exact and modality-prefixed occurrences of ``stage_name``."""
 
-        suffix = f".{stage_name}"
+        canonical_name = _LEGACY_STAGE_ALIASES.get(stage_name, stage_name)
+        names = {
+            stage_name,
+            canonical_name,
+            *(
+                legacy_name
+                for legacy_name, canonical in _LEGACY_STAGE_ALIASES.items()
+                if canonical == canonical_name
+            ),
+        }
         return sum(
             trace.duration_ms
             for name, trace in self.stages.items()
-            if name == stage_name or name.endswith(suffix)
+            if any(name == value or name.endswith(f".{value}") for value in names)
         )
 
     def merged(
