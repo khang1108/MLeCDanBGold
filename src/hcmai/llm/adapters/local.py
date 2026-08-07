@@ -164,13 +164,6 @@ class LocalAdapter:
             raise RuntimeError("conversation model is disabled")
         return self.conversation(request)
 
-    def parse_trake(self, request: dict[str, Any]) -> dict[str, Any]:
-        if self.conversation is None:
-            raise RuntimeError("conversation model is disabled")
-        return self.conversation.structured_json(
-            request["instruction"], request["raw_query"]
-        )
-
     def suggest_queries(self, query: str, count: int) -> list[QuerySuggestion]:
         if self.query_suggester is None:
             raise RuntimeError("query-suggestion model is disabled")

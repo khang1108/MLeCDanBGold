@@ -193,3 +193,27 @@ class DenseIndex:
             queries = queries.reshape(1, -1)
         scores, positions = self.index.search(queries, min(top_k, self.index.ntotal))
         return scores, positions
+
+    def score_subset(
+        self,
+        query_vectors: np.ndarray,
+        positions: np.ndarray,
+        chunk_size: int = 65_536,
+    ) -> np.ndarray:
+        """Score every query against a subset of indexed vectors, exactly.
+
+        Args:
+            query_vectors: Array of shape (Q, dim) with L2-normalized rows.
+            positions: Index positions to score, as held in ``mapping``.
+            chunk_size: Vectors reconstructed at a time, bounding peak memory.
+
+        Returns:
+            Array of shape (Q, len(positions)), column ``j`` for ``positions[j]``.
+        """
+        queries = np.ascontiguousarray(query_vectors, dtype=np.float32).reshape(-1, self.index.d)
+        positions = np.ascontiguousarray(positions, dtype=np.int64)
+        scores = np.empty((len(queries), len(positions)), dtype=np.float32)
+        for start in range(0, len(positions), chunk_size):
+            chunk = positions[start : start + chunk_size]
+            scores[:, start : start + len(chunk)] = queries @ self.index.reconstruct_batch(chunk).T
+        return scores

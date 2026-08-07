@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -34,14 +35,17 @@ def event_video_scores(
     retrieval: Any,
     events: Sequence[str],
     top_k: int = 500,
+    max_videos: int = 200,
 ) -> list[VideoEventScores]:
     """Shortlist videos per event, then rescore every frame of those videos.
 
     Args:
         retrieval: :class:`RetrievalService`-shaped object providing
-            ``search``, ``encode_text_batch`` and ``visual_index``.
+            ``search_batch``, ``encode_text_batch`` and ``visual_index``.
         events: Ordered TRAKE events, already split and translated.
         top_k: Frames kept per event when shortlisting videos.
+        max_videos: Videos kept for rescoring. A calibration knob: every later
+            stage costs ``O(events * frames of these videos)``.
 
     Returns:
         One entry per shortlisted video, ordered by ``video_id``.
@@ -51,41 +55,56 @@ def event_video_scores(
 
     index = retrieval.visual_index
     mapping = index.mapping
+
     timer = Timer()
-    frame_ids = {
-        candidate.frame_id
-        for event in events
-        for candidate in retrieval.search(event, top_k)
-    }
+    ranked = [
+        [candidate.frame_id for candidate in result]
+        for result in retrieval.search_batch(list(events), top_k)
+    ]
+    video_of = mapping.loc[
+        mapping["frame_id"].isin({frame_id for hits in ranked for frame_id in hits}),
+        ["frame_id", "video_id"],
+    ].set_index("frame_id")["video_id"].to_dict()
+
+    votes: defaultdict[str, float] = defaultdict(float)
+    for hits in ranked:
+        seen: set[str] = set()
+        for rank, frame_id in enumerate(hits):
+            video_id = video_of.get(frame_id)
+            if video_id is None or video_id in seen:
+                continue
+            seen.add(video_id)
+            votes[video_id] += 1.0 / (60 + rank)
     shortlisted = mapping["video_id"].isin(
-        mapping.loc[mapping["frame_id"].isin(frame_ids), "video_id"].unique()
+        sorted(votes, key=votes.__getitem__, reverse=True)[:max_videos]
     )
     shortlist_ms = timer.stop()
+
+    rows = mapping.loc[shortlisted].sort_values(["video_id", "frame_idx"]).reset_index(drop=True)
+
     timer.start()
-    scores, positions = index.search(
+    scores = index.score_subset(
         retrieval.encode_text_batch(list(events), "visual").vectors,
-        len(mapping),
+        rows["embedding_index"].to_numpy(),
     )
-    full = np.empty_like(scores)
-    np.put_along_axis(full, positions, scores, axis=1)
     rescore_ms = timer.stop()
 
-    rows = mapping.loc[shortlisted].sort_values(["video_id", "frame_idx"])
     results = [
         VideoEventScores(
             video_id=str(video_id),
             frame_ids=tuple(group["frame_id"]),
             frame_idx=tuple(int(value) for value in group["frame_idx"]),
             timestamps_ms=group["timestamp_ms"].to_numpy(dtype=np.float64),
-            scores=full[:, group["embedding_index"].to_numpy()],
+            scores=scores[:, group.index.to_numpy()],
         )
         for video_id, group in rows.groupby("video_id", sort=True)
     ]
     logger.info(
-        "TRAKE rescoring events=%d videos=%d frames=%d "
+        "TRAKE rescoring events=%d videos=%d/%d frames=%d "
         "shortlist_ms=%.1f rescore_ms=%.1f",
         len(events),
         len(results),
+        len(votes),
         len(rows),
         shortlist_ms,
         rescore_ms,

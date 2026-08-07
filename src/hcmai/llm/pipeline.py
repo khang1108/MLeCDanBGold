@@ -89,12 +89,6 @@ class LLMService:
             method = self.adapter.resolve_conversation
         return method(request)
 
-    def parse_trake(self, request: dict[str, Any]) -> Any:
-        method = getattr(self.adapter, "parse_trake", None)
-        if method is None:
-            method = self.adapter.parse_trake_query
-        return method(request)
-
     def suggest_queries(self, *args: Any, **kwargs: Any) -> Any:
         return self.adapter.suggest_queries(*args, **kwargs)
 

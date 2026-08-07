@@ -38,8 +38,6 @@ from .search import (
 from .task import TaskRequest, TaskResponse
 from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
 from .trake import (
-    TRAKEParseInferenceRequest,
-    TRAKEParseResponse,
     TRAKERequest,
     TRAKEResponse,
     TRAKESubmission,
@@ -112,8 +110,6 @@ __all__ = [
     "VQARequest",
     "VQAResponse",
     "VQASubmission",
-    "TRAKEParseInferenceRequest",
-    "TRAKEParseResponse",
     "TRAKERequest",
     "TRAKEResponse",
     "TRAKESubmission",

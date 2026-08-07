@@ -20,7 +20,7 @@ class TrakePath:
     video_id: str
     score: float
     frame_idx: tuple[int, ...]
-    frame_ids: tuple[str, ...] = ()
+    frame_ids: tuple[str, ...]
 
 
 def align_video(

@@ -15,13 +15,7 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.retriever.pipeline import RetrievalService
-from hcmai.agents.trake import (
-    event_video_scores,
-    rank_paths,
-    split_delimited,
-    TrakeParserError,
-    TrakeQueryParser,
-)
+from hcmai.agents.trake import event_video_scores, rank_paths
 
 logger = get_logger(__name__)
 
@@ -32,14 +26,10 @@ class TRAKEPipeline:
     task_type = TaskType.TRAKE
 
     def __init__(
-        self,
-        retrieval: RetrievalService | None,
-        config: SearchConfig,
-        parser: TrakeQueryParser | None = None,
+        self, retrieval: RetrievalService | None, config: SearchConfig
     ) -> None:
         self.retrieval = retrieval
         self.config = config
-        self.parser = parser
 
     def execute(self, request: TaskRequest) -> TRAKEResponse:
         if not isinstance(request, TRAKERequest):
@@ -47,22 +37,9 @@ class TRAKEPipeline:
         if self.retrieval is None:
             raise TaskPipelineDependencyError("Retriever not loaded")
 
-        if request.events is not None:
-            events = request.events
-        elif self.parser is None:
-            events = split_delimited(request.query)
-        else:
-            try:
-                events = self.parser.parse(request.query).events
-            except TrakeParserError as error:
-                # A provider outage and an unparsable query leave the caller the
-                # same remedy: send 'events' or a '|'-delimited query.
-                raise ValueError(f"TRAKE query parsing failed: {error}") from error
-        if events is None or len(events) < 2:
-            raise ValueError(
-                "TRAKE needs at least two ordered events; send 'events' or a "
-                "'|'-delimited query"
-            )
+        events = request.events
+        if events is None:
+            raise ValueError("TRAKE needs 'events' with at least two ordered events")
         digest = sha1(f"trake\0{request.query}\0{request.top_k}".encode())
         request_id = f"trake-{digest.hexdigest()[:12]}"
         videos = event_video_scores(

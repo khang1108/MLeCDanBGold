@@ -49,15 +49,6 @@ class StructuredConversationModel:
         text = self.generate(self._messages(request))
         return _json_object(text, _STATE_FIELDS)
 
-    def structured_json(self, instruction: str, message: str) -> dict[str, Any]:
-        """Return one JSON object for a bounded non-conversation prompt.
-
-        The prompt reuses the conversation message layout unchanged, so the
-        caller's text travels under ``current_message``.
-        """
-        request = {"instruction": instruction, "current_message": message}
-        return _json_object(self.generate(self._messages(request)))
-
     def answer_vqa(
         self,
         question: str,
