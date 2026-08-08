@@ -10,6 +10,8 @@ from pydantic import TypeAdapter, ValidationError
 
 from hcmai.common.schemas import (
     MiniChallengeEvaluation,
+    MiniChallengeLoginRequest,
+    MiniChallengeLoginResponse,
     MiniChallengeSubmission,
     MiniChallengeSubmissionResult,
     MiniChallengeTaskTemplate,
@@ -48,6 +50,17 @@ class DRESClient:
             timeout=httpx.Timeout(timeout_seconds),
         )
 
+    async def login(
+        self, request: MiniChallengeLoginRequest
+    ) -> MiniChallengeLoginResponse:
+        return await self._request(
+            "POST",
+            "api/v2/login",
+            None,
+            TypeAdapter(MiniChallengeLoginResponse),
+            json=request.model_dump(mode="json", by_alias=True),
+        )
+
     async def list_evaluations(
         self, session: str
     ) -> list[MiniChallengeEvaluation]:
@@ -79,21 +92,26 @@ class DRESClient:
             f"api/v2/submit/{evaluation_id}",
             session,
             TypeAdapter(MiniChallengeSubmissionResult),
-            json=submission.model_dump(mode="json", by_alias=True),
+            json=submission.model_dump(
+                mode="json", by_alias=True, exclude_none=True
+            ),
         )
 
     async def _request(
         self,
         method: str,
         path: str,
-        session: str,
+        session: str | None,
         adapter: TypeAdapter[ResponseType],
         **kwargs: Any,
     ) -> ResponseType:
         logger.info("DRES request started method=%s path=%s", method, path)
+        params = kwargs.pop("params", {}) or {}
+        if session is not None:
+            params["session"] = session
         try:
             response = await self.client.request(
-                method, path, params={"session": session}, **kwargs
+                method, path, params=params if params else None, **kwargs
             )
         except httpx.TimeoutException as error:
             logger.warning("DRES request timed out method=%s path=%s", method, path)
@@ -102,23 +120,41 @@ class DRESClient:
             logger.warning("DRES request failed method=%s path=%s", method, path)
             raise DRESClientError("Could not reach DRES") from error
 
-        payload = self._json(response, path)
         if not response.is_success:
-            description = (
-                payload.get("description")
-                if isinstance(payload, dict)
-                else None
-            )
+            description = None
+            try:
+                payload = response.json()
+                if isinstance(payload, dict):
+                    description = payload.get("description") or payload.get("message")
+            except ValueError:
+                raw_text = response.text.strip()
+                if raw_text:
+                    description = f"DRES error ({response.status_code}): {raw_text[:200]}"
             safe_status = response.status_code if response.status_code in {
-                400, 401, 404, 412
+                400, 401, 403, 404, 412
             } else 502
+            logger.warning(
+                "DRES request rejected method=%s path=%s status=%d body=%s",
+                method,
+                path,
+                response.status_code,
+                response.text[:200],
+            )
             raise DRESClientError(
                 description or f"DRES rejected the request ({response.status_code})",
                 status_code=safe_status,
             )
+
+        payload = self._json(response, path)
         try:
             result = adapter.validate_python(payload)
         except ValidationError as error:
+            logger.warning(
+                "DRES payload validation error method=%s path=%s error=%s",
+                method,
+                path,
+                error,
+            )
             raise DRESClientError("DRES returned an invalid response contract") from error
         logger.info(
             "DRES request completed method=%s path=%s status=%d",
@@ -133,10 +169,17 @@ class DRESClient:
         try:
             return response.json()
         except ValueError as error:
+            logger.warning(
+                "DRES returned non-JSON response status=%d path=%s text=%s",
+                response.status_code,
+                path,
+                response.text[:200],
+            )
             raise DRESClientError(
-                f"DRES returned invalid JSON for {path}"
+                f"DRES returned invalid JSON for {path} (status {response.status_code})"
             ) from error
 
     async def close(self) -> None:
         if self._owns_client:
             await self.client.aclose()
+

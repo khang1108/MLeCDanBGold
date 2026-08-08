@@ -4,6 +4,8 @@ import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 import VqaResults from "./VqaResults";
+import MiniChallengePanel from "../../minichallenge/components/MiniChallengePanel";
+import { useMiniChallenge } from "../../minichallenge/hooks/useMiniChallenge";
 
 const RETRIEVAL_PREFIX = /^\/(kis|trake)\b\s*/i;
 
@@ -33,8 +35,18 @@ const VqaSearchWorkspace = ({
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const requestRef = useRef(null);
+  const challenge = useMiniChallenge();
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  const handleChallengeSubmit = useCallback((frame, overrideAnswer = null) => {
+    const taskName = challenge.submissionTaskName;
+    if (!taskName) return;
+    const confirmed = window.confirm(
+      `Submit ${frame.video_id} (frame ${frame.frame_idx}) to “${taskName}”?`,
+    );
+    if (confirmed) challenge.submitFrame(frame, overrideAnswer);
+  }, [challenge]);
 
   const submit = useCallback(async (event) => {
     event.preventDefault();
@@ -139,6 +151,7 @@ const VqaSearchWorkspace = ({
         <aside className="adhoc-sidebar">
           <h3 className="adhoc-sidebar-title">Options</h3>
           <ToolBox topK={topK} setTopK={setTopK} onReset={() => setTopK(20)} />
+          <MiniChallengePanel challenge={challenge} />
         </aside>
         <div className="adhoc-results">
           <GifLoaderOverlay isVisible={isSearching} />
@@ -151,6 +164,8 @@ const VqaSearchWorkspace = ({
                 latencyMs={searchLatencyMs}
                 warnings={warnings}
                 onFrameClick={onFrameClick}
+                onChallengeSubmit={challenge.currentTask ? handleChallengeSubmit : null}
+                submittingFrameId={challenge.submittingFrameId}
               />
             ) : (
               <VqaResults
@@ -159,6 +174,8 @@ const VqaSearchWorkspace = ({
                 latencyMs={vqaLatencyMs}
                 error={error}
                 hasSearched={vqaLatencyMs !== null || error !== null}
+                onChallengeSubmit={challenge.currentTask ? handleChallengeSubmit : null}
+                submittingFrameId={challenge.submittingFrameId}
               />
             )
           )}

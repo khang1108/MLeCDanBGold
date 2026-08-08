@@ -126,12 +126,28 @@ def test_dres_flow_preserves_session_and_exact_submission_payload() -> None:
 
 def test_minichallenge_api_requires_header_and_resolves_frame_identity() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/login"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "user-1",
+                    "username": "participant-1",
+                    "role": "PARTICIPANT",
+                    "sessionId": "session-1",
+                },
+            )
         if request.method == "POST":
             return httpx.Response(200, json={**RESULT, "submission": "CORRECT"})
         return httpx.Response(200, json=[EVALUATION])
 
     search, mini, client = _services(handler)
     app = create_app(search, mini)
+    login_resp = _request(
+        app,
+        "POST",
+        "/api/v1/minichallenge/login",
+        json={"username": "participant-1", "password": "secret-password"},
+    )
     missing = _request(app, "GET", "/api/v1/minichallenge/evaluations")
     listed = _request(
         app,
@@ -155,6 +171,8 @@ def test_minichallenge_api_requires_header_and_resolves_frame_identity() -> None
     )
     asyncio.run(client.aclose())
 
+    assert login_resp.status_code == 200
+    assert login_resp.json()["sessionId"] == "session-1"
     assert missing.status_code == 422
     assert listed.json()[0]["taskTemplates"][0]["taskType"] == "QA"
     assert submitted.json()["submission"] == "CORRECT"

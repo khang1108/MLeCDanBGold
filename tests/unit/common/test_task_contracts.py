@@ -7,6 +7,7 @@ from hcmai.common.schemas import (
     ExecutionProfile,
     QueryLanguage,
     SearchRequest,
+    TextEmbeddingRequest,
     TRAKERequest,
     TRAKEResponse,
     TRAKESubmission,
@@ -85,6 +86,14 @@ def test_one_frame_vqa_contract_is_explicitly_provider_scoped() -> None:
     )
 
     assert response.evidence.caption == "Một ô vuông đỏ."
+
+
+def test_text_embedding_contract_uses_shared_text_source_name() -> None:
+    request = TextEmbeddingRequest(source="text", texts=["red bus"])
+
+    assert request.source == "text"
+    with pytest.raises(ValidationError):
+        TextEmbeddingRequest(source="caption", texts=["red bus"])
 
 
 @pytest.mark.parametrize(

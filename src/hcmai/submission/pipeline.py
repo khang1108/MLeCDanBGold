@@ -7,6 +7,8 @@ from hcmai.common.schemas import (
     MiniChallengeAnswer,
     MiniChallengeAnswerSet,
     MiniChallengeEvaluation,
+    MiniChallengeLoginRequest,
+    MiniChallengeLoginResponse,
     MiniChallengeSubmission,
     MiniChallengeSubmissionResult,
     MiniChallengeSubmitRequest,
@@ -24,6 +26,11 @@ class MiniChallengeService:
         cls, base_url: str, *, timeout_seconds: float = 10.0
     ) -> "MiniChallengeService":
         return cls(DRESClient(base_url, timeout_seconds=timeout_seconds))
+
+    async def login(
+        self, request: MiniChallengeLoginRequest
+    ) -> MiniChallengeLoginResponse:
+        return await self.client.login(request)
 
     async def list_evaluations(
         self, session: str

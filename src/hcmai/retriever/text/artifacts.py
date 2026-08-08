@@ -34,13 +34,24 @@ def _text_encoder(
     settings: AppConfig,
     models: LLMServiceConfig,
     encoder: TextEmbeddingAdapter | None,
+    source: RetrievalSource = RetrievalSource.CAPTION,
 ) -> TextEmbeddingAdapter:
-    """Resolve the configured local encoder unless one was injected."""
+    """Resolve the configured local or remote encoder unless one was injected."""
 
     selected = encoder
     if selected is None and settings.inference.enabled:
-        raise ValueError(
-            "Remote embedding requires an injected RemoteEmbeddingAdapter"
+        import os
+        from hcmai.llm.pipeline import LLMService
+
+        base_url = os.getenv(
+            "HCMAI_INFERENCE_BASE_URL", settings.inference.base_url
+        )
+        service = LLMService.remote(base_url, settings.inference)
+        selected = EmbeddingService.create_remote_adapter(
+            service,
+            models.caption_embedding,
+            embedding_dim=1024,
+            source=source.value,
         )
     if selected is None:
         selected = EmbeddingService.create_text_adapter(models.caption_embedding)
@@ -90,7 +101,9 @@ def build_text_artifacts(
     enrichment, frames, output = _artifact_paths(
         settings, source, enrichment_path, frames_path, output_dir
     )
-    selected_encoder = _text_encoder(settings, models, encoder)
+    selected_encoder = _text_encoder(
+        settings, models, encoder, source=source
+    )
     data = DataService.load(frames, {source: enrichment})
     index = build_text_index(
         data,
