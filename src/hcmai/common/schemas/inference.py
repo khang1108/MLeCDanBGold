@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
@@ -12,7 +12,7 @@ from .base import ContractModel, NonEmptyString
 class TextEmbeddingRequest(ContractModel):
     """Ordered text batch routed to one configured retrieval encoder."""
 
-    source: Literal["visual", "caption"] = "visual"
+    source: Literal["visual", "text"] = "visual"
     texts: list[NonEmptyString] = Field(min_length=1, max_length=64)
 
 
@@ -49,6 +49,23 @@ class CaptionResponse(ContractModel):
     model: NonEmptyString
     revision: NonEmptyString
     items: list[CaptionItem]
+    latency_ms: float = Field(ge=0)
+
+
+class OCRItem(ContractModel):
+    """One caller-owned image and its extracted OCR text."""
+
+    item_id: NonEmptyString
+    text: str
+    raw_output: Any = None
+
+
+class OCRResponse(ContractModel):
+    """Ordered OCR results returned by the hosted vision model."""
+
+    model: NonEmptyString
+    revision: str | None = None
+    items: list[OCRItem]
     latency_ms: float = Field(ge=0)
 
 

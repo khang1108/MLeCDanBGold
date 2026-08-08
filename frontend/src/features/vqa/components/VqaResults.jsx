@@ -1,6 +1,14 @@
 import React from "react";
 
-const VqaResults = ({ submissions, warnings, latencyMs, error, hasSearched }) => (
+const VqaResults = ({
+  submissions,
+  warnings,
+  latencyMs,
+  error,
+  hasSearched,
+  onChallengeSubmit,
+  submittingFrameId,
+}) => (
   <section className="frames-container vqa-results" aria-live="polite">
     {error && (
       <div className="error-alert" role="alert">
@@ -46,6 +54,21 @@ const VqaResults = ({ submissions, warnings, latencyMs, error, hasSearched }) =>
               <span className="vqa-grounding">
                 {submission.video_id}, frame {submission.frame_idx}
               </span>
+            </div>
+            <div className="frame-card-actions" style={{ marginLeft: "auto", marginRight: "8px" }}>
+              {onChallengeSubmit && (
+                <button
+                  className="card-submit-btn"
+                  onClick={() => onChallengeSubmit(
+                    { frame_id: submission.frame_id, video_id: submission.video_id, frame_idx: submission.frame_idx },
+                    submission.answer,
+                  )}
+                  disabled={submittingFrameId === submission.frame_id}
+                  title="Submit this answer to the current mini-challenge task"
+                >
+                  {submittingFrameId === submission.frame_id ? "Sending…" : "Submit"}
+                </button>
+              )}
             </div>
             <span className="vqa-score">
               {Math.round(submission.joint_score * 100)}%

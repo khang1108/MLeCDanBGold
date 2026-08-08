@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Self
+from typing import Self
 
 from pydantic import ConfigDict, Field, model_validator
 
@@ -10,7 +10,19 @@ from hcmai.common.schemas.base import ContractModel, NonEmptyString
 
 
 class _CamelCaseContract(ContractModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+class MiniChallengeLoginRequest(ContractModel):
+    username: NonEmptyString
+    password: str
+
+
+class MiniChallengeLoginResponse(_CamelCaseContract):
+    id: str | None = None
+    username: str
+    role: str | None = None
+    session_id: str = Field(alias="sessionId")
 
 
 class MiniChallengeTaskTemplate(_CamelCaseContract):
@@ -23,14 +35,16 @@ class MiniChallengeTaskTemplate(_CamelCaseContract):
 class MiniChallengeEvaluation(_CamelCaseContract):
     id: NonEmptyString
     name: NonEmptyString
-    type: Literal["SYNCHRONOUS", "ASYNCHRONOUS", "NON_INTERACTIVE"]
-    status: Literal["CREATED", "ACTIVE", "TERMINATED"]
-    template_id: NonEmptyString = Field(alias="templateId")
+    status: str
+    type: str | None = None
+    template_id: str | None = Field(default=None, alias="templateId")
     template_description: str | None = Field(
         default=None, alias="templateDescription"
     )
-    teams: list[NonEmptyString]
-    task_templates: list[MiniChallengeTaskTemplate] = Field(alias="taskTemplates")
+    teams: list[str] = Field(default_factory=list)
+    task_templates: list[MiniChallengeTaskTemplate] = Field(
+        default_factory=list, alias="taskTemplates"
+    )
 
 
 class MiniChallengeSubmitRequest(ContractModel):
@@ -66,6 +80,9 @@ class MiniChallengeSubmission(_CamelCaseContract):
 
 
 class MiniChallengeSubmissionResult(ContractModel):
+    model_config = ConfigDict(extra="ignore")
+
     status: bool
-    submission: Literal["CORRECT", "WRONG", "INDETERMINATE", "UNDECIDABLE"]
+    submission: str
     description: str
+

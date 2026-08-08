@@ -40,8 +40,8 @@ reranker:
 
 # HCMAI_VQA_MODEL may override this pinned default on the VM.
 vqa_model:
-  checkpoint: "zai-org/GLM-4.1V-9B-Thinking"
-  revision: "3c1471e51dc811b589d4d12b1c1c7c1c941267c2"
+  checkpoint: "Qwen/Qwen2.5-VL-3B-Instruct"
+  revision: null
   device: "cuda"
   dtype: "bfloat16"
   max_new_tokens: 256

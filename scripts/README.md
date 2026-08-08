@@ -10,6 +10,20 @@ stores, or generators directly. `build_benchmark.py` is the sole deliberate
 exception: it uses the internal dense-baseline `RetrievalBenchmark`, which is
 not an end-to-end `EvaluationService`.
 
+## Organize raw keyframes
+
+If downloaded keyframes are nested as `data/raw/Keyframes_Lxx/keyframes/<video>`,
+consolidate them into the layout consumed by the data pipeline:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/organize_keyframes.py --dry-run
+PYTHONPATH=src aic/bin/python scripts/organize_keyframes.py
+```
+
+The default destination is `data/keyframes`. The script validates duplicate or
+already-existing video folders before moving anything. Use custom locations
+with `--source` and `--destination`.
+
 ## Diagnose local runtime artifacts
 
 Run the read-only doctor before starting the API or a competition session:

@@ -1,9 +1,31 @@
 import { requestJson } from './client';
 
-const sessionOptions = (session, options = {}) => ({
-  ...options,
-  headers: { ...options.headers, 'X-DRES-Session': session.trim() },
-});
+const sessionOptions = (session, options = {}) => {
+  const headers = { ...options.headers };
+  if (session && session.trim()) {
+    headers['X-DRES-Session'] = session.trim();
+  }
+  return { ...options, headers };
+};
+
+export const getMiniChallengeConfig = async (signal) => {
+  return await requestJson('/api/v1/minichallenge/config', { signal });
+};
+
+export const loginMiniChallenge = async (username, password, signal) => {
+  const payload = await requestJson('/api/v1/minichallenge/login', {
+    method: 'POST',
+    body: {
+      username: username.trim(),
+      password,
+    },
+    signal,
+  });
+  if (!payload?.sessionId) {
+    throw new Error('Mini-challenge login failed: missing sessionId');
+  }
+  return payload;
+};
 
 export const listMiniChallengeEvaluations = async (session, signal) => {
   const payload = await requestJson(

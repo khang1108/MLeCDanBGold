@@ -16,6 +16,8 @@ from hcmai.common.schemas import (
     VQAInferenceEvidence,
 )
 from hcmai.embedding.pipeline import EmbeddingService
+from hcmai.enrichment.ocr.adapters.florence import FlorenceAdapter
+from hcmai.enrichment.ocr.config import OCRConfig
 from hcmai.enrichment.pipeline import EnrichmentService
 from hcmai.llm.adapters.vqa import GroundedVQAModel
 from hcmai.llm.pipeline import LLMServiceConfig
@@ -33,12 +35,14 @@ class LocalAdapter:
         captioner: Any | None = None,
         reranker: Any | None = None,
         vqa_model: Any | None = None,
+        ocr_adapter: Any | None = None,
         *,
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
         enable_caption_embedding: bool = True,
         enable_reranker: bool = True,
         enable_vqa: bool = True,
+        enable_ocr: bool = False,
     ) -> None:
         self.config = config
         self.enable_caption = enable_caption
@@ -46,6 +50,7 @@ class LocalAdapter:
         self.enable_caption_embedding = enable_caption_embedding
         self.enable_reranker = enable_reranker
         self.enable_vqa = enable_vqa
+        self.enable_ocr = enable_ocr
         self.visual_encoder = visual_encoder or (
             cast(Any, EmbeddingService.create_text_adapter(config.visual_embedding))
             if enable_visual_embedding
@@ -73,6 +78,16 @@ class LocalAdapter:
             if enable_vqa
             else None
         )
+        self.ocr_adapter: Any = ocr_adapter or (
+            FlorenceAdapter(OCRConfig(
+                checkpoint=config.caption_generation.model_checkpoint,
+                revision=config.caption_generation.revision,
+                device=config.caption_generation.device,
+                dtype=config.caption_generation.dtype,
+            ))
+            if enable_ocr
+            else None
+        )
 
     @classmethod
     def from_environment(cls) -> LocalAdapter:
@@ -95,6 +110,7 @@ class LocalAdapter:
             ),
             enable_reranker=_env_bool("HCMAI_ENABLE_RERANKER"),
             enable_vqa=_env_bool("HCMAI_ENABLE_VQA"),
+            enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
         )
 
     def load(self) -> None:
@@ -112,14 +128,23 @@ class LocalAdapter:
             self.reranker._ensure_loaded()
         if self.vqa_model is not None:
             self.vqa_model.load()
+        if self.ocr_adapter is not None:
+            self.ocr_adapter._load()
+
 
     def embed_text(self, texts: list[str], source: str = "visual") -> np.ndarray:
         encoder = (
-            self.caption_encoder if source == "caption" else self.visual_encoder
+            self.caption_encoder if source == "text" else self.visual_encoder
         )
         if encoder is None:
             raise RuntimeError("embedding model is disabled")
         return encoder.encode_text(texts)
+
+    def ocr(self, images: Sequence[Image.Image]) -> list[str]:
+        if self.ocr_adapter is None:
+            raise RuntimeError("ocr model is disabled")
+        results = self.ocr_adapter.recognize_batch(images)
+        return [str(r.text).strip() for r in results]
 
     def caption(self, images: Sequence[Image.Image]) -> list[str]:
         if self.captioner is None:
@@ -170,12 +195,16 @@ class LocalAdapter:
         vqa_loaded = (
             self.vqa_model is not None and self.vqa_model.model is not None
         )
+        ocr_loaded = (
+            self.ocr_adapter is not None and self.ocr_adapter.model is not None
+        )
         return InferenceReadiness(
             ready=(not self.enable_caption or generator_loaded)
             and (not self.enable_visual_embedding or visual_loaded)
             and (not self.enable_caption_embedding or caption_loaded)
             and (not self.enable_reranker or reranker_loaded)
-            and (not self.enable_vqa or vqa_loaded),
+            and (not self.enable_vqa or vqa_loaded)
+            and (not self.enable_ocr or ocr_loaded),
             models={
                 "caption_generation": ModelStatus(
                     enabled=self.enable_caption,
@@ -214,6 +243,15 @@ class LocalAdapter:
                     revision=(
                         self.vqa_model.revision
                         if self.vqa_model is not None
+                        else None
+                    ),
+                ),
+                "ocr": ModelStatus(
+                    enabled=self.enable_ocr,
+                    loaded=ocr_loaded,
+                    checkpoint=(
+                        self.ocr_adapter.config.checkpoint
+                        if self.ocr_adapter is not None
                         else None
                     ),
                 ),

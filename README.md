@@ -1,195 +1,278 @@
-# HCMAI 2026 Frame Retrieval
+# HCMAI 2026 Multimodal Video Retrieval
 
-HCMAI is a research-oriented video-frame retrieval project for the Ho Chi
-Minh City AI Challenge 2026. The target interaction is a Vietnamese or
-English natural-language query that returns the exact matching frame's
-official `video_id` and `frame_idx`.
+HCMAI is a competition-oriented multimodal video retrieval system for the Ho Chi Minh City AI Challenge 2026. The system accepts Vietnamese or English natural-language input and returns canonical video/frame identities for Textual Known Item Search (KIS) and grounded video question answering (Q&A/VQA).
 
-The project is a small, measurable hackathon baseline. The current code
-includes canonical frame preparation, shared contracts, visual retrieval,
-search orchestration, and an API boundary.
+The current engineering priority is **not to replace the model stack**. It is to make the existing KIS and VQA pipelines more correct, query-aware, evidence-preserving, temporally grounded, measurable, and fast.
 
-## Current status
+> The approved implementation roadmap is [`KIS_VQA_V2_PLAN.md`](KIS_VQA_V2_PLAN.md). Coding agents must treat that plan, the current repository/tests/configuration, and the latest user instruction as the active source of truth.
 
-Implemented foundations:
+## Scope
 
-- Pydantic 2 schemas for frames, enrichment, retrieval, search, evaluation,
-  enums, and conversational feedback.
-- A deterministic `official mapping + keyframes → frames.parquet` builder and
-  an in-memory `FrameStore`.
-- `SearchService` orchestration with one selected competition configuration,
-  optional reranking, response materialization, and latency fields.
-- Visual embedding, FAISS index, and dense-retrieval foundations.
-- Caption and OCR enrichment pipelines, Caption/OCR/ASR evidence stores, plus
-  generic text indexing and four-source visual/caption/OCR/ASR RRF retrieval.
-- Resumable multilingual transcription with speaker-labelled, per-video
-  Parquet artifacts.
-- A FastAPI application and the existing Node.js frontend.
-- Utility helpers for YAML/JSON/Parquet I/O, image loading, timing, and
-  logging.
-- Lightweight schema tests and smoke-testable modules.
+This workstream owns:
 
-Still to implement:
+- shared multimodal retrieval used by KIS and VQA;
+- Textual KIS;
+- Competition Q&A / VQA;
+- reranking, evidence localization, temporal windows, grounded answering;
+- resilience, caching, observability, evaluation, and submission integration needed by KIS/VQA.
 
-- Build and validate full-corpus OCR/ASR indexes, then benchmark multimodal
-  fusion weights.
-- Benchmark and select the highest-scoring caption text encoder that satisfies
-  the competition latency budget.
-- Reproducible offline evaluation runners and measured retrieval experiments.
-- Real VQA answer grounding and TRAKE same-video temporal alignment pipelines.
+### Explicit non-goals
 
-## Data and retrieval flow
+- **TRAKE is owned by another teammate.** Do not implement, refactor, benchmark, optimize, or review TRAKE internals from this workstream.
+- Do not remove or break existing TRAKE contracts, registrations, routers, or shared integration seams.
+- KISC / conversational KIS / VKIS are outside the active optimization scope unless explicitly restored.
 
-The diagram separates offline artifacts from the service-level online path.
-Every artifact is joined through the canonical `frame_id`; final submission
-identifiers always come from `frames.parquet`.
+## Competition outputs
+
+### KIS
+
+```text
+<video_name>,<frame_idx>
+```
+
+### VQA
+
+```text
+<video_name>,<frame_idx>,<answer>
+```
+
+`frame_idx` must always come from the canonical frame mapping. It must never be inferred from timestamp, FPS, filename, array position, or neighboring keyframes.
+
+## Current baseline
+
+The repository already contains an executable shared retrieval stack and task-specific KIS/VQA logic.
+
+Implemented foundations include:
+
+- canonical `frame_id -> video_id -> frame_idx` mapping and `FrameStore`;
+- visual/caption/OCR/ASR evidence stores and dense indexes;
+- SigLIP2 visual retrieval;
+- BGE-M3 text retrieval for caption/OCR/ASR;
+- concurrent multimodal search and Reciprocal Rank Fusion (RRF);
+- KIS candidate reranking and result shaping;
+- VQA parsing, multi-branch retrieval, video aggregation, temporal-window construction, evidence collection, localization, answering, and joint ranking;
+- Qwen-based image reranking and VQA inference, including a multi-image VQA API capability;
+- request-scoped tracing, FastAPI integration, and the React UI;
+- remote GPU inference deployment support.
+
+The current baseline works end-to-end, but code audit identified structural quality and latency issues that should be fixed before changing backbone models.
+
+## Current model stack
+
+The active model configuration is expected to come from project configuration rather than hard-coded module constants. The current stack is centered on:
+
+| Capability | Model family / role |
+| --- | --- |
+| Frame captioning | Florence-2 |
+| Visual text-image retrieval | SigLIP2 |
+| Caption/OCR/ASR text embeddings | BGE-M3 |
+| KIS visual reranking | Qwen3-VL reranker |
+| VQA | Qwen2.5-VL |
+
+Model replacement is a **P2 research experiment**, not a P0 correctness fix.
+
+## Baseline online flows
+
+### KIS baseline
+
+```mermaid
+flowchart LR
+    Q["Natural-language query"] --> RET["RetrievalService"]
+    RET --> V["SigLIP visual"]
+    RET --> C["Caption / BGE"]
+    RET --> O["OCR / BGE"]
+    RET --> A["ASR / BGE"]
+    V --> RRF["RRF fusion"]
+    C --> RRF
+    O --> RRF
+    A --> RRF
+    RRF --> RR["bounded Qwen visual reranking"]
+    RR --> NMS["temporal dedup + diversity"]
+    NMS --> OUT["canonical Top-K / Top-100"]
+```
+
+Known baseline risks:
+
+- task-wide/static modality weighting does not express whether a query is visual, OCR-heavy, speech-heavy, or mixed;
+- the image-only reranker can overwrite evidence that originally came from OCR/ASR;
+- a fixed rerank depth spends GPU time even when retrieval is already confident;
+- fixed time-only deduplication can suppress visually distinct neighboring shots.
+
+### VQA baseline
+
+```mermaid
+flowchart LR
+    IN["event description + question"] --> PARSE["VQA parser"]
+    PARSE --> ER["event retrieval"]
+    PARSE --> QR["question retrieval"]
+    ER --> MERGE["candidate merge"]
+    QR --> MERGE
+    MERGE --> VA["video aggregation"]
+    VA --> WIN["temporal windows"]
+    WIN --> EVID["caption/OCR/ASR evidence"]
+    EVID --> LOC["localizer"]
+    LOC --> ANS["VLM answerer"]
+    ANS --> JR["grounded joint ranking"]
+    JR --> OUT["canonical VQA candidates"]
+```
+
+Important code-audit findings:
+
+- the required OCR/ASR modality boost is computed but does not currently become a first-class candidate-ranking feature;
+- video aggregation mixes heuristic coverage terms with retrieval scores on incompatible scales;
+- overlapping windows can merge transitively into oversized windows;
+- merged windows may keep the earliest frames rather than the most relevant/diverse evidence;
+- lexical localization is fragile for cross-lingual Vietnamese-query / English-caption cases;
+- frame/evidence temporal identity is partially flattened before answering;
+- a multi-frame VQA capability exists, while the current orchestration can still reduce a multi-frame window to one image;
+- event context, answerability, and confidence need stronger contracts for grounded VQA.
+
+## Target KIS/VQA V2 architecture
+
+The V2 design is **query-conditioned, evidence-preserving, coarse-to-fine, and measured**.
 
 ```mermaid
 flowchart TB
-    subgraph OFFLINE["Offline ingestion and indexing"]
-        direction LR
-        MAP["Official frame mappings"] --> META["data/metadata/<br/>frames.parquet"]
-        KEY["Keyframe images"] --> META
+    Q["Natural-language input"] --> PLAN["QueryPlanner\nintent + modality + temporal need + subqueries"]
 
-        META --> VDATA["Frame images"]
-        VDATA --> VENC["SigLIP2<br/>image encoder"]
-        VENC --> VEMB["artifacts/embeddings/<br/>visual_embeddings.npy"]
-        VEMB --> VIDX["artifacts/indexes/visual/<br/>dense.index + mapping + metadata"]
+    PLAN --> RET["Query-conditioned Retrieval Kernel"]
+    RET --> V["visual"]
+    RET --> C["caption"]
+    RET --> O["OCR"]
+    RET --> A["ASR"]
+    V --> FUSE["query-aware RRF + provenance"]
+    C --> FUSE
+    O --> FUSE
+    A --> FUSE
 
-        VDATA --> CAPGEN["Caption generation<br/>florence-community/Florence-2-base-ft"]
-        CAPGEN --> CAPSTORE["artifacts/enrichment/caption/<br/>frame_enrichment.parquet"]
-        CAPSTORE --> CAPENC["Caption TextEncoder<br/>benchmark: SigLIP2 / E5 / BGE-M3"]
-        CAPENC --> CAPEMB["artifacts/indexes/caption/<br/>caption_embeddings.npy"]
-        CAPEMB --> CAPIDX["artifacts/indexes/caption/<br/>dense.index + mapping + metadata"]
+    FUSE --> KIS["KISPipeline"]
+    FUSE --> VQA["VQAPipeline"]
 
-        VDATA --> OCRGEN["OCR generation<br/>florence-community/Florence-2-base-ft"]
-        OCRGEN --> OCRSTORE["artifacts/enrichment/ocr/<br/>frame_enrichment.parquet"]
-        OCRSTORE --> OCRENC["BGE text encoder"]
-        OCRENC --> OCREMB["artifacts/indexes/ocr/<br/>text embeddings"]
-        OCREMB --> OCRIDX["dense.index + mapping + metadata"]
+    KIS --> KR["evidence-preserving / gated reranking"]
+    KR --> KF["second-stage rank fusion"]
+    KF --> KN["shot-aware NMS + diversity"]
+    KN --> KO["ranked KIS results"]
 
-        VIDEO["Video audio"] --> ASRGEN["ASR pipeline"]
-        ASRGEN --> ASRSTORE["artifacts/enrichment/asr/<br/>frame_enrichment.parquet"]
-        ASRSTORE --> ASRENC["BGE text encoder"]
-        ASRENC --> ASREMB["artifacts/indexes/asr/<br/>text embeddings"]
-        ASREMB --> ASRIDX["dense.index + mapping + metadata"]
-    end
-
-    subgraph ONLINE["Online query path"]
-        direction LR
-        UI["React UI"] --> API["FastAPI"]
-        API --> SEARCH["SearchService<br/>task router"]
-        KISC["KISC resolver<br/>context-dependent turns only"] --> SEARCH
-
-        SEARCH --> RETRIEVAL["RetrievalService<br/>visual + text indexes + RRF"]
-        VIDX --> RETRIEVAL
-        CAPIDX --> RETRIEVAL
-        OCRIDX --> RETRIEVAL
-        ASRIDX --> RETRIEVAL
-
-        RETRIEVAL --> RERANK["Optional RerankingService"]
-        RERANK --> MATERIALIZE["SearchService materialization<br/>exact video_id + frame_idx"]
-        META --> DATA["DataService"]
-        DATA --> MATERIALIZE
-
-        CAPSTORE --> DATA
-        OCRSTORE --> DATA
-        ASRSTORE --> DATA
-
-        MATERIALIZE --> RESPONSE["Search response"]
-        RESPONSE --> UI
-    end
-
-    classDef active fill:#dcfce7,stroke:#15803d,color:#14532d;
-    classDef component fill:#fef3c7,stroke:#d97706,color:#78350f;
-    classDef planned fill:#f3f4f6,stroke:#6b7280,color:#374151,stroke-dasharray:5 5;
-
-    style OFFLINE fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a;
-    style ONLINE fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a;
-    linkStyle default stroke:#64748b,stroke-width:1.5px;
-
-    class MAP,KEY,META,VDATA,VENC,VEMB,VIDX,CAPGEN,CAPSTORE,OCRGEN,OCRSTORE,ASRSTORE,UI,API,SEARCH,RETRIEVAL,DATA,RERANK,MATERIALIZE,RESPONSE active;
-    class KISC,CAPENC,CAPEMB,CAPIDX,OCRENC,OCREMB,OCRIDX,ASRENC,ASREMB,ASRIDX component;
-    class VIDEO,ASRGEN planned;
+    VQA --> VV["video aggregation"]
+    VV --> VP["local temporal peaks"]
+    VP --> VW["bounded windows"]
+    VW --> VS["question-aware frame selection"]
+    VS --> VE["frame-bound evidence"]
+    VE --> VL["semantic localization"]
+    VL --> VM["adaptive single/multi-frame VLM"]
+    VM --> VJ["confidence-aware grounded joint ranking"]
+    VJ --> VO["ranked VQA results"]
 ```
 
-Green nodes are implemented and become ready when their compatible artifacts
-are available. Amber nodes have artifact contracts or reusable code but still
-require a benchmark or integration decision. Dashed gray nodes are planned. The caption
-encoder is deliberately marked as a benchmark choice: `SigLIP2`,
-`multilingual-e5-small`, and `BGE-M3` must be measured before selecting the
-competition checkpoint. Every enabled index must match its configured query
-encoder and dataset provenance.
+### V2 design rules
 
-The design keeps expensive offline work separate from online search. Model
-checkpoints and candidate counts belong in
-configuration, while frame identifiers and API shapes belong in the shared
-schemas.
+1. **Query-conditioned retrieval:** do not give every modality equal importance for every query.
+2. **Evidence preservation:** reranking must not erase why a frame was retrieved.
+3. **Coarse-to-fine inference:** prune the corpus with cheap retrieval before expensive VLM calls.
+4. **Bounded temporal context:** a configured 15-second window must not silently become an unbounded merged segment.
+5. **Question-guided frame selection:** selected images should maximize relevance and temporal coverage, not simply be the earliest frames.
+6. **Explicit temporal identity:** frame IDs/timestamps remain attached to evidence shown to the VLM.
+7. **Adaptive compute:** simple color/OCR questions should not pay the same multi-frame VLM cost as temporal/causal questions.
+8. **Measure before replacing models:** architecture and orchestration bugs are P0/P1; new encoders/VLMs are P2.
+
+## Active implementation program
+
+The roadmap is executed in this order:
+
+1. **Measurement foundation** — frozen KIS/VQA dev sets, stage metrics, reproducible run records.
+2. **Shared query planning** — intent/modality plan and runtime retrieval policy.
+3. **KIS P0 correctness** — query-aware retrieval and evidence-preserving reranking.
+4. **VQA P0 correctness** — modality scoring, video aggregation, bounded windows, semantic localization, frame-bound evidence, multi-frame answering.
+5. **P1 quality/latency** — shot-aware NMS, adaptive rerank depth, contextual clue retrieval, confidence-driven fallback, caches.
+6. **P2 research** — shot/window captions, learned frame selectors, ANN/GPU FAISS, alternative temporal/video encoders, model replacement.
+
+See [`KIS_VQA_V2_PLAN.md`](KIS_VQA_V2_PLAN.md) for task IDs, dependencies, acceptance criteria, ablations, and paper-to-architecture mapping.
+
+## Evaluation gates
+
+A change is not an improvement until it is measured on a frozen query set.
+
+### KIS
+
+Record at least:
+
+- official Mean Top-k R-Score where the official scorer is available;
+- Hit/Recall at `{1, 5, 20, 50, 100}`;
+- MRR;
+- accepted-frame accuracy;
+- per-query-category metrics: visual, OCR, speech, mixed, temporal, hard-negative;
+- warm P50/P95 latency;
+- reranker calls / images per query.
+
+### VQA
+
+Evaluate the pipeline by stage:
+
+```text
+correct-video recall
+    -> correct-window recall
+    -> selected-frame/evidence recall
+    -> answer accuracy conditioned on correct evidence
+    -> end-to-end joint video-frame-answer accuracy
+```
+
+Also record:
+
+- raw and normalized answer match;
+- answerability / grounded accuracy;
+- VLM calls and images per call;
+- warm P50/P95 and per-stage latency.
+
+If video recall is high but window recall is low, fix localization rather than replacing SigLIP/BGE. If oracle-window VQA accuracy is low, focus on evidence construction, prompt/input design, and the VLM.
 
 ## Repository structure
 
 ```text
-frontend/                         Existing Node.js UI
-scripts/                          Root-level data and experiment CLIs
+frontend/                         React UI
+scripts/                          data/index/evaluation CLIs
 src/hcmai/
 ├── app.py                        FastAPI lifecycle and router assembly
-├── api/routers/                  Thin HTTP adapters
-├── orchestration/
-│   ├── pipeline.py               SearchService task router
-│   └── setup.py                  Application composition root
-├── data/                         DataService and canonical stores
-├── embedding/                    EmbeddingService and model adapters
-├── enrichment/                   EnrichmentService for caption/OCR jobs
-├── retriever/                    RetrievalService, indexes, fusion, baseline evaluation
-├── reranking/                    RerankingService and scoring adapters
-├── transcripts/                  TranscriptService and ASR adapters
-├── llm/                          LLMService and local/HTTP adapters
-├── query_suggestions/            SuggestionService and provider adapters
-├── agents/kisc/                  Bounded conversational KIS research code
+├── api/routers/                  thin HTTP adapters
+├── orchestration/                SearchService, registry, task pipelines
+├── data/                         canonical frames and evidence stores
+├── embedding/                    embedding service and adapters
+├── enrichment/                   caption/OCR enrichment
+├── retriever/                    multimodal retrieval, indexes, fusion, benchmarks
+├── reranking/                    bounded reranking service/adapters
+├── transcripts/                  ASR/diarization artifacts and access
+├── llm/                          local/remote inference service/adapters
+├── vqa/                          VQA candidates/windows/evidence/localization/answering
+├── query_suggestions/            optional controlled query suggestions
+├── agents/kisc/                  out-of-scope conversational KIS research code
 └── common/
-    ├── config.py                 Shared settings scaffolding
-    ├── schemas/                  Pydantic contracts
-    │   └── README.md              Schema documentation
-    └── utils/                    Generic helpers
-        └── README.md              Utility documentation
-configs/                          Experiment and search configuration
-data/                             Local corpus and metadata
-artifacts/                        Generated embeddings and indexes
-runs/                             Evaluation outputs
-tests/                            Contract tests and smoke tests
+    ├── config.py
+    ├── schemas/                  authoritative cross-component contracts
+    └── utils/                    cross-cutting helpers only
+configs/                          search/experiment configuration
+data/                             local corpus + canonical metadata
+artifacts/                        generated enrichment/embeddings/indexes
+runs/                             reproducible experiment records
+tests/                            unit/integration/regression tests
+AGENTS.md                         coding-agent guardrails
+KIS_VQA_V2_PLAN.md               approved optimization roadmap
 ```
 
-The service-owning packages listed below expose one public `pipeline.py` and a
-`*Service` facade. Code outside a service component calls that facade or a
-shared schema; concrete SigLIP, BGE, Qwen, HTTP, ASR, caption, and OCR
-implementations live in the component's `adapters/`. The `models/` directories
-contain only contracts, entities, metadata, statistics, and other data objects.
+## Service boundaries
 
-Online API traffic enters through `SearchService`, which routes the task and
-coordinates `RetrievalService`, optional `RerankingService`, and canonical
-materialization. Offline jobs call their owning service directly. VQA and
-TRAKE are declared task types but are not yet executable end-to-end pipelines;
-the service returns `501` instead of constructing placeholder components.
+| Component | Public boundary | Responsibility |
+| --- | --- | --- |
+| Data | `hcmai.data.pipeline.DataService` | canonical frame/evidence access |
+| Embedding | `hcmai.embedding.pipeline.EmbeddingService` | text/visual encoding and embedding artifacts |
+| Enrichment | `hcmai.enrichment.pipeline.EnrichmentService` | offline caption/OCR jobs |
+| Transcripts | `hcmai.transcripts.pipeline.TranscriptService` | ASR/diarization jobs and transcript access |
+| Retrieval | `hcmai.retriever.pipeline.RetrievalService` | index loading/search, multimodal retrieval, fusion |
+| Reranking | `hcmai.reranking.pipeline.RerankingService` | bounded rescoring without identity mutation |
+| LLM | `hcmai.llm.pipeline.LLMService` | local/remote model-inference lifecycle |
+| Orchestration | `hcmai.orchestration.pipeline.SearchService` | task dispatch and canonical response materialization |
 
-### Service boundaries
+Production code outside a service component should call its public service facade or authoritative schemas under `common`. FastAPI routers stay thin.
 
-| Component     | Public boundary                                        | Responsibility                                               |
-| ------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
-| Data          | `hcmai.data.pipeline.DataService`                    | Canonical frame preparation, lookup, and evidence access     |
-| Embedding     | `hcmai.embedding.pipeline.EmbeddingService`          | Visual/text encoding and visual embedding artifacts          |
-| Enrichment    | `hcmai.enrichment.pipeline.EnrichmentService`        | Offline caption and OCR jobs                                 |
-| Transcripts   | `hcmai.transcripts.pipeline.TranscriptService`       | ASR/diarization jobs and transcript access                   |
-| Retrieval     | `hcmai.retriever.pipeline.RetrievalService`          | Index construction/loading, multimodal retrieval, and fusion |
-| Reranking     | `hcmai.reranking.pipeline.RerankingService`          | Bounded candidate rescoring without identity changes         |
-| LLM           | `hcmai.llm.pipeline.LLMService`                      | Local or remote model-inference lifecycle                    |
-| Suggestions   | `hcmai.query_suggestions.pipeline.SuggestionService` | Explicit operator query suggestions                          |
-| Orchestration | `hcmai.orchestration.pipeline.SearchService`         | Online task routing and canonical response materialization   |
-
-`common/` remains the shared contract/helper layer, `api/routers/` remains a
-thin transport layer, and `agents/` is intentionally exempt from the
-one-`pipeline.py` rule.
-
-Install the project and its declared dependencies:
+## Install
 
 ```bash
 aic/bin/python -m pip install -e ".[embedding,reranking,dev]"
