@@ -21,28 +21,15 @@ def rank_paths(
     lambda_gap: float = 1e-5,
     max_rows: int = 100,
     event_power: float = 1.0,
+    cluster_delta: float = 0.0,
 ) -> list[TrakePath]:
-    """Rank aligned paths, one video per row before any video repeats.
-
-    Every video contributes its best path first, sorted by ``score``, because a
-    wrong video scores zero for the whole row and ``R@k`` keeps only the best
-    row inside each cutoff. Leading videos contribute a second-best path only
-    once the best paths run out.
-
-    Args:
-        videos: Shortlisted videos with their event/frame score matrices.
-        lambda_gap: Time-gap penalty per millisecond, passed to the aligner.
-        max_rows: Official per-query row limit.
-        event_power: Similarity exponent, passed to the aligner.
-
-    Returns:
-        At most ``max_rows`` paths, best first.
-    """
+    """Rank at most ``max_rows`` aligned paths, one video per row before repeats."""
     if not videos:
         return []
     depth = math.ceil(max_rows / len(videos))
     per_video = [
-        align_video(video, lambda_gap, depth, event_power) for video in videos
+        align_video(video, lambda_gap, depth, event_power, cluster_delta)
+        for video in videos
     ]
     rows: list[TrakePath] = []
     for level in range(depth):
@@ -59,17 +46,7 @@ def rank_paths(
 
 
 def write_submission(rows: Sequence[TrakePath], output_path: str | Path) -> Path:
-    """Write ranked TRAKE paths as one official per-query CSV.
-
-    Emits headerless UTF-8 rows of ``<video_name>,<frame_1>,...,<frame_N>``.
-    ``frame_idx`` already comes from the canonical mapping, so this only drops
-    the ``.mp4`` extension to get the official video name. Parent directories
-    of ``output_path`` are created.
-
-    Raises:
-        ValueError: If the rows disagree on event count, since a row with the
-            wrong column count is scored as invalid.
-    """
+    """Write headerless ``<video_name>,<frame_1>,...,<frame_N>`` rows as one CSV."""
     counts = {len(row.frame_idx) for row in rows}
     if len(counts) > 1:
         raise ValueError(f"rows mix event counts: {sorted(counts)}")

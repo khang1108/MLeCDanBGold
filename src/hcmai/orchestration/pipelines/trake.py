@@ -55,6 +55,7 @@ class TRAKEPipeline:
             self.settings.lambda_gap,
             request.top_k,
             self.settings.event_power,
+            self.settings.cluster_delta,
         )
         logger.info(
             "[%s] trake completed events=%d videos=%d rows=%d",
