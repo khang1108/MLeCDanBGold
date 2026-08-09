@@ -412,13 +412,6 @@ def _postings(
 
 
 def _materialize_vectors(index: Any, path: Path) -> None:
-    """Back-fill an index directory built before ``vectors.npy`` existed.
-
-    Loading without the file reconstructs into RAM instead, holding a second
-    full copy of the corpus for the life of the process, on every startup, with
-    nothing in the logs. Staged through a temporary file so a kill mid-write
-    cannot leave a truncated array behind.
-    """
     staged = path.with_name(path.name + ".tmp")
     try:
         with staged.open("wb") as handle:

@@ -119,21 +119,7 @@ class RetrievalService:
         rrf_k: int = 60,
         chunk_size: int = 65_536,
     ) -> list[VideoEventScores]:
-        """Shortlist videos for ordered events and rescore only their frames.
-
-        Encodes once and reuses the same vectors for shortlisting and
-        rescoring, so callers never touch the visual index directly.
-
-        Args:
-            events: Ordered events, already split and translated.
-            top_k: Frames kept per event when shortlisting videos.
-            max_videos: Videos kept for rescoring.
-            rrf_k: RRF constant damping the head of each event's ranking.
-            chunk_size: Vectors reconstructed at a time, bounding peak memory.
-
-        Returns:
-            One entry per shortlisted video, ordered by ``video_id``.
-        """
+        """Shortlist videos for ordered events and rescore only their frames."""
         if not events:
             raise ValueError("events must not be empty")
         visual = self._retriever_for("visual")

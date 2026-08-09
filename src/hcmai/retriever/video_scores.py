@@ -16,12 +16,7 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class VideoEventScores:
-    """One shortlisted video's event-to-frame similarities.
-
-    Column ``t`` of :attr:`scores` belongs to ``frame_ids[t]``,
-    ``frame_idx[t]`` and ``timestamps_ms[t]``, all read from the index mapping
-    in canonical order and never inferred from FPS.
-    """
+    """One video's event-to-frame similarities; column ``t`` is frame ``t`` of every array."""
 
     video_id: str
     frame_ids: np.ndarray
@@ -38,21 +33,7 @@ def score_videos(
     rrf_k: int = 60,
     chunk_size: int = 65_536,
 ) -> list[VideoEventScores]:
-    """Shortlist videos by event coverage then RRF vote, and rescore their frames.
-
-    Args:
-        index: :class:`DenseIndex`-shaped object providing ``search``,
-            ``score_subset``, ``video_positions`` and the position-indexed
-            ``video_ids``/``frame_ids``/``frame_idx``/``timestamps`` arrays.
-        query_vectors: One L2-normalized row per ordered event.
-        top_k: Frames kept per event when shortlisting videos.
-        max_videos: Videos kept for rescoring, filled from full coverage down.
-        rrf_k: RRF constant damping the head of each event's ranking.
-        chunk_size: Vectors materialized at a time, bounding peak memory.
-
-    Returns:
-        One entry per shortlisted video, ordered by ``video_id``.
-    """
+    """Shortlist videos by event coverage then RRF vote, and rescore their frames."""
     timer = Timer()
     _, positions = index.search(query_vectors, top_k)
 
@@ -62,7 +43,7 @@ def score_videos(
     for row in positions:
         seen: set[str] = set()
         for rank, position in enumerate(row):
-            if position < 0:  # FAISS pads short result rows with -1.
+            if position < 0:
                 continue
             video_id = str(video_ids[position])
             if video_id in seen:
@@ -73,9 +54,6 @@ def score_videos(
     if not votes:
         return []
 
-    # Coverage first: TRAKE needs every event inside one video, so evidence for
-    # all of them beats one very strong match however high it ranks. RRF breaks
-    # ties within a coverage tier, video_id keeps the order deterministic.
     ranked = sorted(
         votes,
         key=lambda video_id: (-coverage[video_id], -votes[video_id], video_id),
