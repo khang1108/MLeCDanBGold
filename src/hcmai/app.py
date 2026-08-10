@@ -25,6 +25,7 @@ from hcmai.api.routers import (
     create_system_router,
     create_vqa_router,
 )
+from hcmai.common.schemas import MiniChallengeLoginRequest
 from hcmai.submission.pipeline import MiniChallengeService
 
 logger = get_logger(__name__)
@@ -84,6 +85,35 @@ def create_app(
         for message in service_container["startup_messages"]:
             logger.warning("Backend startup note: %s", message)
 
+        mini_service = service_container["minichallenge_service"]
+        refresh_username = (
+            os.getenv("DES_USERNAME") or os.getenv("DRES_USERNAME") or ""
+        ).strip().strip('"').strip("'")
+        refresh_password = (
+            os.getenv("DES_PASSWORD") or os.getenv("DRES_PASSWORD") or ""
+        ).strip().strip('"').strip("'")
+        if refresh_username and refresh_password:
+            refresh_interval = float(
+                os.getenv(
+                    "HCMAI_MINICHALLENGE_SESSION_REFRESH_SECONDS", "300"
+                )
+            )
+            await mini_service.start_session_refresh(
+                MiniChallengeLoginRequest(
+                    username=refresh_username,
+                    password=refresh_password,
+                ),
+                interval_seconds=refresh_interval,
+            )
+            logger.info(
+                "DRES automatic session refresh enabled interval_seconds=%s",
+                refresh_interval,
+            )
+        elif refresh_username or refresh_password:
+            logger.warning(
+                "DRES automatic session refresh disabled because credentials are incomplete"
+            )
+
         try:
             yield
         finally:
@@ -91,7 +121,7 @@ def create_app(
             close = getattr(service, "close", None)
             if close is not None:
                 close()
-            await service_container["minichallenge_service"].close()
+            await mini_service.close()
             logger.info("Backend shutdown completed")
 
     app = FastAPI(

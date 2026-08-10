@@ -33,24 +33,29 @@ def _raise_upstream(error: DRESClientError) -> Never:
     raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
-def _resolve_session(session: str | None) -> str:
+def _environment_session() -> str:
+    return (
+        os.getenv("DES_SESSION_ID")
+        or os.getenv("DRES_SESSION_ID")
+        or os.getenv("HCMAI_MINICHALLENGE_SESSION")
+        or ""
+    ).strip().strip('"').strip("'")
+
+
+def _resolve_session(service: MiniChallengeService, session: str | None) -> str:
+    explicit_session = session.strip() if session and session.strip() else ""
     resolved = (
-        session.strip()
-        if session and session.strip()
-        else (
-            os.getenv("DES_SESSION_ID")
-            or os.getenv("DRES_SESSION_ID")
-            or os.getenv("HCMAI_MINICHALLENGE_SESSION")
-            or ""
-        )
-        .strip()
-        .strip('"')
-        .strip("'")
+        service.session_id
+        or explicit_session
+        or _environment_session()
     )
     if not resolved:
         raise HTTPException(
             status_code=422,
-            detail="Missing session token. Provide X-DRES-Session header or set DES_SESSION_ID in .env",
+            detail=(
+                "Missing session token. Provide X-DRES-Session, set "
+                "DES_SESSION_ID, or configure DES_USERNAME and DES_PASSWORD"
+            ),
         )
     return resolved
 
@@ -60,12 +65,7 @@ def create_minichallenge_router(container: dict[str, Any]) -> APIRouter:
 
     @router.get("/config")
     async def get_config() -> dict[str, Any]:
-        default_session = (
-            os.getenv("DES_SESSION_ID")
-            or os.getenv("DRES_SESSION_ID")
-            or os.getenv("HCMAI_MINICHALLENGE_SESSION")
-            or ""
-        ).strip().strip('"').strip("'")
+        default_session = _service(container).session_id or _environment_session()
         username = (
             os.getenv("DES_USERNAME")
             or os.getenv("DRES_USERNAME")
@@ -96,7 +96,7 @@ def create_minichallenge_router(container: dict[str, Any]) -> APIRouter:
     async def list_evaluations(
         session: SessionHeader = None,
     ) -> list[MiniChallengeEvaluation]:
-        resolved_session = _resolve_session(session)
+        resolved_session = _resolve_session(_service(container), session)
         try:
             return await _service(container).list_evaluations(resolved_session)
         except DRESClientError as error:
@@ -110,7 +110,7 @@ def create_minichallenge_router(container: dict[str, Any]) -> APIRouter:
         evaluation_id: str,
         session: SessionHeader = None,
     ) -> MiniChallengeTaskTemplate:
-        resolved_session = _resolve_session(session)
+        resolved_session = _resolve_session(_service(container), session)
         try:
             return await _service(container).current_task(
                 evaluation_id, resolved_session
@@ -127,7 +127,7 @@ def create_minichallenge_router(container: dict[str, Any]) -> APIRouter:
         request: MiniChallengeSubmitRequest,
         session: SessionHeader = None,
     ) -> MiniChallengeSubmissionResult:
-        resolved_session = _resolve_session(session)
+        resolved_session = _resolve_session(_service(container), session)
         search = container["service"]
         if search is None:
             raise HTTPException(
@@ -147,4 +147,3 @@ def create_minichallenge_router(container: dict[str, Any]) -> APIRouter:
             _raise_upstream(error)
 
     return router
-

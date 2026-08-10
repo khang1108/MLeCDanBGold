@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { searchFrames, searchVqa } from '../../../api/search';
+import { searchFrames, searchVqa, suggestQueries } from '../../../api/search';
 import VqaSearchWorkspace from './VqaSearchWorkspace';
 
 jest.mock('../../../api/search');
@@ -8,9 +8,13 @@ jest.mock('../../../api/search');
 beforeEach(() => {
   searchFrames.mockReset();
   searchVqa.mockReset();
+  suggestQueries.mockReset();
 });
 
-test('clicking Search VQA sends both intents and renders grounded answer', async () => {
+const EVENT_PLACEHOLDER = 'Event query (/tkis, /vkis, /trake)...';
+const QUESTION_PLACEHOLDER = 'Question (optional for VQA)...';
+
+test('clicking Search sends both intents and renders grounded answer', async () => {
   searchVqa.mockResolvedValueOnce({
     submissions: [{
       rank: 1,
@@ -26,13 +30,13 @@ test('clicking Search VQA sends both intents and renders grounded answer', async
   });
 
   render(<VqaSearchWorkspace topK={100} setTopK={jest.fn()} />);
-  fireEvent.change(screen.getByLabelText('Event description'), {
+  fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
     target: { value: 'A person reads a city sign' },
   });
-  fireEvent.change(screen.getByLabelText('Question (optional)'), {
+  fireEvent.change(screen.getByPlaceholderText(QUESTION_PLACEHOLDER), {
     target: { value: 'Which city is shown?' },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Search QA' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
   await waitFor(() => expect(searchVqa).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -45,23 +49,23 @@ test('clicking Search VQA sends both intents and renders grounded answer', async
   expect(screen.getByText(/video-2, frame 81/)).toBeTruthy();
 });
 
-test('a question always routes through VQA', async () => {
+test('a question always routes through VQA and strips prefixes', async () => {
   searchVqa.mockResolvedValueOnce({
     submissions: [], warnings: [], latency_ms: 12,
   });
 
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  fireEvent.change(screen.getByLabelText('Event description'), {
-    target: { value: '/kis a red vehicle passes' },
+  fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
+    target: { value: '/vkis a red vehicle passes' },
   });
-  fireEvent.change(screen.getByLabelText('Question (optional)'), {
+  fireEvent.change(screen.getByPlaceholderText(QUESTION_PLACEHOLDER), {
     target: { value: 'What color is it?' },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Search QA' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
   await waitFor(() => expect(searchVqa).toHaveBeenCalledWith(
     expect.objectContaining({
-      eventDescription: '/kis a red vehicle passes',
+      eventDescription: 'a red vehicle passes',
       question: 'What color is it?',
     }),
   ));
@@ -70,6 +74,8 @@ test('a question always routes through VQA', async () => {
 
 test.each([
   ['/kis a red vehicle passes', 'kis', 'a red vehicle passes'],
+  ['/tkis blue car', 'kis', 'blue car'],
+  ['/vkis green tree', 'vkis', 'green tree'],
   ['/trake person enters then leaves', 'trake', 'person enters then leaves'],
 ])('without a question routes %s through frame search', async (
   description,
@@ -80,21 +86,15 @@ test.each([
     results: [],
     warnings: [],
     latency_ms: {
-      query_processing: 0,
-      query_encoding: 1,
-      candidate_retrieval: 2,
-      fusion: 0,
-      reranking: 0,
-      materialization: 1,
       total: 4,
     },
   });
 
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  fireEvent.change(screen.getByLabelText('Event description'), {
+  fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
     target: { value: description },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Search KIS / TRAKE' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
     expect.objectContaining({ query, queryType, topK: 20 }),
@@ -104,14 +104,38 @@ test.each([
 
 test('requires a task prefix when the question is empty', () => {
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  fireEvent.change(screen.getByLabelText('Event description'), {
+  fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
     target: { value: 'a red vehicle passes' },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Search KIS / TRAKE' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
   expect(screen.getByRole('alert').textContent).toContain(
-    'must start with /kis or /trake',
+    'must start with /tkis, /vkis, or /trake',
   );
   expect(searchFrames).not.toHaveBeenCalled();
   expect(searchVqa).not.toHaveBeenCalled();
+});
+
+test('suggests queries preserving original prefix', async () => {
+  suggestQueries.mockResolvedValueOnce({
+    suggestions: [
+      { suggestion_id: '1', query: 'a red vehicle driving fast', focus: 'action' }
+    ]
+  });
+
+  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
+  fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
+    target: { value: '/vkis a red vehicle' },
+  });
+  
+  fireEvent.click(screen.getByRole('button', { name: 'Suggest' }));
+  
+  await waitFor(() => expect(suggestQueries).toHaveBeenCalledWith(
+    expect.objectContaining({ query: 'a red vehicle' }),
+  ));
+  
+  const suggestionBtn = await screen.findByText('a red vehicle driving fast');
+  fireEvent.click(suggestionBtn);
+  
+  expect(screen.getByPlaceholderText(EVENT_PLACEHOLDER).value).toBe('/vkis a red vehicle driving fast');
 });

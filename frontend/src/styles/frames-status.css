@@ -67,6 +67,8 @@
   border-top: none;
   font-size: 12px;
   margin-top: -2px; /* align overlap nicely */
+  border-bottom-left-radius: calc(var(--rounded-lg) - 1px);
+  border-bottom-right-radius: calc(var(--rounded-lg) - 1px);
 }
 
 .frame-score-badge-wrapper {

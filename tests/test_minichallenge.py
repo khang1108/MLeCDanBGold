@@ -11,7 +11,11 @@ import httpx
 import pytest
 
 from hcmai.app import create_app
-from hcmai.common.schemas import FrameRecord, MiniChallengeSubmitRequest
+from hcmai.common.schemas import (
+    FrameRecord,
+    MiniChallengeLoginRequest,
+    MiniChallengeSubmitRequest,
+)
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retriever.pipeline import RetrievalService
@@ -125,6 +129,8 @@ def test_dres_flow_preserves_session_and_exact_submission_payload() -> None:
 
 
 def test_minichallenge_api_requires_header_and_resolves_frame_identity() -> None:
+    sessions: list[str | None] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/login"):
             return httpx.Response(
@@ -136,6 +142,7 @@ def test_minichallenge_api_requires_header_and_resolves_frame_identity() -> None
                     "sessionId": "session-1",
                 },
             )
+        sessions.append(request.url.params.get("session"))
         if request.method == "POST":
             return httpx.Response(200, json={**RESULT, "submission": "CORRECT"})
         return httpx.Response(200, json=[EVALUATION])
@@ -153,7 +160,7 @@ def test_minichallenge_api_requires_header_and_resolves_frame_identity() -> None
         app,
         "GET",
         "/api/v1/minichallenge/evaluations",
-        headers={"X-DRES-Session": "session-1"},
+        headers={"X-DRES-Session": "stale-session"},
     )
     submitted = _request(
         app,
@@ -173,10 +180,51 @@ def test_minichallenge_api_requires_header_and_resolves_frame_identity() -> None
 
     assert login_resp.status_code == 200
     assert login_resp.json()["sessionId"] == "session-1"
-    assert missing.status_code == 422
+    assert missing.status_code == 200
     assert listed.json()[0]["taskTemplates"][0]["taskType"] == "QA"
     assert submitted.json()["submission"] == "CORRECT"
     assert unknown.status_code == 404
+    assert sessions == ["session-1"] * 3
+
+
+def test_session_refresh_updates_token_and_preserves_it_after_failure() -> None:
+    calls = 0
+    failed_refresh = asyncio.Event()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        assert request.url.path.endswith("/api/v2/login")
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "id": "user-1",
+                    "username": "participant-1",
+                    "role": "PARTICIPANT",
+                    "sessionId": "refreshed-session-1",
+                },
+            )
+        failed_refresh.set()
+        return httpx.Response(503, json={"message": "temporarily unavailable"})
+
+    _, mini, client = _services(handler)
+
+    async def run() -> None:
+        await mini.start_session_refresh(
+            request=MiniChallengeLoginRequest(
+                username="participant-1",
+                password="never-log-this-password",
+            ),
+            interval_seconds=0.01,
+        )
+        await asyncio.wait_for(failed_refresh.wait(), timeout=1)
+        assert mini.session_id == "refreshed-session-1"
+        await mini.close()
+        await client.aclose()
+
+    asyncio.run(run())
+    assert calls == 2
 
 
 @pytest.mark.parametrize(

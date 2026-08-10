@@ -98,9 +98,13 @@ competition session. It validates that metadata, canonical frame assets, and
 the visual index agree without loading model weights. See
 `docs/ARCHITECTURE.md` for the dependency and debugging map.
 
-The mini-challenge routes require the DRES session token in the
-`X-DRES-Session` header. The browser keeps this token only in memory. Submission
-requests contain a canonical `frame_id`; the backend resolves its authoritative
-`video_id` and sends the DRES `answerSets` payload with `start=end=0`. Configure
-the upstream with `HCMAI_MINICHALLENGE_BASE_URL` and bound network calls with
-`HCMAI_MINICHALLENGE_TIMEOUT_SECONDS`.
+The mini-challenge routes use the latest in-memory backend session when one is
+available, with `X-DRES-Session` and the static environment session retained as
+fallbacks. This prevents a browser-held token from overriding a newer automatic
+refresh. Submission requests contain a canonical `frame_id`; the backend resolves
+its authoritative `video_id` and sends the DRES `answerSets` payload with
+`start=end=0`. Configure the upstream with
+`HCMAI_MINICHALLENGE_BASE_URL` and bound network calls with
+`HCMAI_MINICHALLENGE_TIMEOUT_SECONDS`. Set `DES_USERNAME` and `DES_PASSWORD` to
+log in once at startup and refresh the in-memory session automatically every
+`HCMAI_MINICHALLENGE_SESSION_REFRESH_SECONDS` (300 seconds by default).
