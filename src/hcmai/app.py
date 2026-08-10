@@ -23,6 +23,7 @@ from hcmai.api.routers import (
     create_minichallenge_router,
     create_search_router,
     create_system_router,
+    create_trake_router,
     create_vqa_router,
 )
 from hcmai.common.schemas import MiniChallengeLoginRequest
@@ -148,6 +149,7 @@ def create_app(
     )
     app.include_router(create_search_router(service_container))
     app.include_router(create_vqa_router(service_container))
+    app.include_router(create_trake_router(service_container))
     app.include_router(create_minichallenge_router(service_container))
     app.include_router(create_frames_router(service_container, dataset_root))
 

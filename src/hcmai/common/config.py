@@ -20,29 +20,6 @@ TEXT_RETRIEVAL_SOURCES: tuple[RetrievalSource, ...] = (
 )
 
 
-def _equal_fusion_weights() -> dict[TaskType, dict[RetrievalSource, float]]:
-    """Return neutral weights until each task has labeled validation queries."""
-
-    return {
-        task: {source: 1.0 for source in FUSION_SOURCES}
-        for task in TaskType
-    }
-
-
-def _text_embedding_filenames() -> dict[RetrievalSource, str]:
-    """Return default artifact names for frame-aligned text embeddings."""
-
-    return {
-        RetrievalSource.CAPTION: "caption_embeddings.npy",
-        RetrievalSource.OCR: "ocr_embeddings.npy",
-        RetrievalSource.ASR: "asr_embeddings.npy",
-    }
-
-
-def _required_retrieval_sources() -> set[RetrievalSource]:
-    return {RetrievalSource.VISUAL}
-
-
 class EnrichmentArtifactsConfig(BaseModel):
     """Paths to source-specific frame-enrichment artifacts."""
 
@@ -137,7 +114,11 @@ class IndexConfig(BaseModel):
     asr_path: Path = Path("artifacts/indexes/asr")
     subset_search_threshold: int = Field(default=100_000, ge=1)
     text_embedding_filenames: dict[RetrievalSource, str] = Field(
-        default_factory=_text_embedding_filenames
+        default_factory=lambda: {
+            RetrievalSource.CAPTION: "caption_embeddings.npy",
+            RetrievalSource.OCR: "ocr_embeddings.npy",
+            RetrievalSource.ASR: "asr_embeddings.npy",
+        }
     )
 
     @field_validator("text_embedding_filenames")
@@ -166,11 +147,14 @@ class FusionConfig(BaseModel):
     rrf_k: int = Field(default=60, gt=0)
     modality_max_workers: int = Field(default=4, ge=1)
     required_sources: set[RetrievalSource] = Field(
-        default_factory=_required_retrieval_sources
+        default_factory=lambda: {RetrievalSource.VISUAL}
     )
     normalize_active_weights: bool = True
     task_weights: dict[TaskType, dict[RetrievalSource, float]] = Field(
-        default_factory=_equal_fusion_weights
+        default_factory=lambda: {
+            task: {source: 1.0 for source in FUSION_SOURCES}
+            for task in TaskType
+        }
     )
 
     @model_validator(mode="after")

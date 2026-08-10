@@ -9,8 +9,6 @@ from hcmai.common.config import SearchConfig, VQAConfig
 from hcmai.common.schemas import (
     FrameRecord,
     RetrievalSource,
-    SearchRequest,
-    SearchResponse,
     SubmissionResult,
     TaskRequest,
     TaskResponse,
@@ -21,6 +19,7 @@ from hcmai.data.pipeline import DataService
 from hcmai.llm.pipeline import LLMService
 from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
 from hcmai.orchestration.pipelines.kis import KISPipeline
+from hcmai.orchestration.pipelines.trake import TRAKEPipeline
 from hcmai.orchestration.pipelines.vqa import VQAPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.reranking.pipeline import RerankingService
@@ -193,6 +192,8 @@ class SearchService:
             return cast(Any, pipeline).execute(request)
         except TaskPipelineDependencyError as error:
             raise SearchServiceUnavailableError(str(error)) from error
+        except ValueError as error:
+            raise UnsupportedSearchTaskError(str(error)) from error
 
     def _default_registry(self) -> PipelineRegistry:
         task_types = (TaskType.KIS, TaskType.VKIS)
@@ -217,4 +218,5 @@ class SearchService:
                 ),
             )
         )
+        pipelines.append(cast(Any, TRAKEPipeline(self.retrieval)))
         return PipelineRegistry(pipelines)
