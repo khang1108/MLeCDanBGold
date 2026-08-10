@@ -100,7 +100,7 @@ def add_dynamic_coverage(
 def iter_source_frames(path: Path) -> Iterator[tuple[FrameMeta, Any]]:
     """Yield canonical metadata and source frames in presentation order."""
 
-    import av
+    import av  # type: ignore[import-not-found]
 
     with av.open(str(path)) as container:
         stream = container.streams.video[0]
@@ -178,7 +178,7 @@ def analyze_video(
     """Decode once for motion, TransNet, and streamed event detection."""
 
     try:
-        import cv2
+        import cv2  # type: ignore[import-not-found]
 
         tools: tuple[Any, Any] | None = (
             cv2,
@@ -203,9 +203,6 @@ def analyze_video(
         previous = rgb
     if not records:
         raise ValueError(f"Video has no decodable frames: {path}")
-    frame_ids = [record.frame_idx for record in records]
-    if len(frame_ids) != len(set(frame_ids)):
-        raise ValueError(f"Canonical frame index collision in {path.name}")
     return VideoAnalysis(
         records,
         np.asarray(shot_frames, dtype=np.uint8),

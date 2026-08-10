@@ -22,6 +22,7 @@ class PreprocessingConfig(BaseModel):
     efficientgebd_checkpoint: Path
     device: str = "cuda"
     dino_model: str = "facebook/dinov2-small"
+    dino_revision: str | None = None
     dino_dtype: str = "float16"
     dino_batch_size: int = Field(default=16, gt=0)
     efficientgebd_sample_fps: float = Field(default=10.0, gt=0)
@@ -45,7 +46,7 @@ class PreprocessingConfig(BaseModel):
     def work_root(self) -> Path:
         """Return the private checkpoint directory beside FrameStore."""
 
-        return self.output_root.parent / ".preprocessing_work"
+        return self.output_root.parent / f".{self.output_root.name}_preprocessing_work"
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> PreprocessingConfig:

@@ -69,6 +69,23 @@ class DataService:
     def prepare(dataset_root: str | Path, output_path: str | Path) -> Path:
         return prepare_frames(Path(dataset_root), Path(output_path))
 
+    @staticmethod
+    def prepare_adaptive(
+        config_path: str | Path,
+        *,
+        resume: bool = True,
+        limit: int | None = None,
+    ) -> Path:
+        """Run adaptive offline video preparation behind the data facade."""
+
+        from hcmai.data.preprocessing import (
+            PreprocessingConfig,
+            prepare_frame_store,
+        )
+
+        config = PreprocessingConfig.from_yaml(config_path)
+        return prepare_frame_store(config, resume=resume, limit=limit)
+
     def get_frame(self, frame_id: str) -> FrameRecord:
         return self._frames().get(frame_id)
 

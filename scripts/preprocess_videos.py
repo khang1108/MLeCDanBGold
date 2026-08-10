@@ -7,8 +7,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from hcmai.data import FrameStore
-from hcmai.data.preprocessing import PreprocessingConfig, prepare_frame_store
+from hcmai.data.pipeline import DataService
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -26,17 +25,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
     try:
-        config = PreprocessingConfig.from_yaml(args.config)
-        output = prepare_frame_store(
-            config,
+        output = DataService.prepare_adaptive(
+            args.config,
             resume=not args.no_resume,
             limit=args.limit,
         )
-        store = FrameStore.load(output)
+        data = DataService.load(output)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
-    frames = tuple(store.iter_frames())
+    frames = tuple(data.iter_frames())
     print(f"Videos: {len({frame.video_id for frame in frames})}")
     print(f"Frames: {len(frames)}")
     print(f"Output: {output}")

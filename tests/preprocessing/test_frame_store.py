@@ -2,14 +2,30 @@
 
 from pathlib import Path
 
-import av
 import numpy as np
+import pandas as pd
+import pytest
+
+try:
+    import av
+except ModuleNotFoundError:
+    av = None
 
 from hcmai.common.config import AppConfig
-from hcmai.data import FrameStore
+from hcmai.common.schemas.frame import FrameRecord
 from hcmai.data.pipeline import DataService
 from hcmai.data.preprocessing import PreprocessingConfig, prepare_frame_store
-from hcmai.data.preprocessing.selection import deduplicate, select_candidates
+from hcmai.data.preprocessing.prepare import (
+    _config_hash,
+    _publish_directory,
+    _record,
+)
+from hcmai.data.preprocessing.selection import (
+    CandidateFrame,
+    deduplicate,
+    restore_maximum_gap,
+    select_candidates,
+)
 from hcmai.data.preprocessing.video import FrameMeta, iter_source_frames
 
 
@@ -53,6 +69,7 @@ def _config(root: Path, **updates: object) -> PreprocessingConfig:
         "efficientgebd_repo": root / "EfficientGEBD",
         "efficientgebd_config": root / "efficientgebd.yaml",
         "efficientgebd_checkpoint": root / "efficientgebd.pth",
+        "dino_revision": "test-revision",
     }
     values.update(updates)
     return PreprocessingConfig.model_validate(values)
@@ -61,6 +78,8 @@ def _config(root: Path, **updates: object) -> PreprocessingConfig:
 def _video(path: Path) -> None:
     """Write a tiny ten-FPS video fixture."""
 
+    if av is None:
+        pytest.skip("PyAV is installed by the preprocessing extra")
     with av.open(str(path), "w") as output:
         stream = output.add_stream("mpeg4", rate=10)
         stream.width, stream.height, stream.pix_fmt = 64, 48, "yuv420p"
@@ -93,6 +112,80 @@ def test_candidate_union_gap_and_safe_dedup(tmp_path: Path) -> None:
     retained = deduplicate(candidates, embeddings, config)
     assert len(retained) < len(candidates)
     assert any(item.frame.frame_idx == 2 for item in retained)
+
+
+def test_dedup_repairs_the_hard_maximum_gap(tmp_path: Path) -> None:
+    """Reinsert coverage candidates removed by semantic deduplication."""
+
+    config = _config(
+        tmp_path,
+        maximum_gap_ms=1_000,
+        minimum_gap_ms=1_000,
+    )
+    frames = [
+        FrameMeta("V", index, index, index, "1/10", index * 100, 8, 8)
+        for index in range(31)
+    ]
+    shots = np.zeros(31, dtype=np.float32)
+    shots[10] = 1.0
+    candidates = select_candidates(frames, shots, np.zeros(31), config)
+    embeddings = np.ones((len(candidates), 2), dtype=np.float32) / np.sqrt(2)
+
+    retained = restore_maximum_gap(
+        candidates,
+        deduplicate(candidates, embeddings, config),
+        config,
+    )
+
+    assert all(
+        right.frame.timestamp_ms - left.frame.timestamp_ms <= 1_000
+        for left, right in zip(retained, retained[1:])
+    )
+
+
+def test_internal_identity_does_not_depend_on_submission_frame_idx() -> None:
+    """Allow decoded frames to share a submission mapping without collision."""
+
+    first = CandidateFrame(
+        FrameMeta("V", 7, 3, 7, "1/10", 300, 8, 8),
+        0, 0.0, 0.0, ("coverage_anchor",), True,
+    )
+    second = CandidateFrame(
+        FrameMeta("V", 8, 3, 8, "1/10", 350, 8, 8),
+        0, 0.0, 0.0, ("coverage_anchor",), True,
+    )
+
+    rows = [_record(first, Path("7.jpg")), _record(second, Path("8.jpg"))]
+
+    assert rows[0]["frame_idx"] == rows[1]["frame_idx"] == 3
+    assert rows[0]["frame_id"] != rows[1]["frame_id"]
+
+
+def test_directory_publication_restores_previous_images_on_failure(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Keep the previous complete image set if final publication fails."""
+
+    final_dir = tmp_path / "video"
+    partial_dir = tmp_path / ".video.partial"
+    final_dir.mkdir()
+    partial_dir.mkdir()
+    (final_dir / "old.jpg").touch()
+    (partial_dir / "new.jpg").touch()
+    original_replace = Path.replace
+
+    def failing_replace(path: Path, target: Path) -> Path:
+        if path == partial_dir:
+            raise OSError("simulated publication failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", failing_replace)
+
+    with pytest.raises(OSError, match="simulated publication failure"):
+        _publish_directory(partial_dir, final_dir)
+
+    assert (final_dir / "old.jpg").is_file()
+    assert not (final_dir / "new.jpg").exists()
 
 
 def test_frame_index_uses_zero_based_milliseconds_and_fps(tmp_path: Path) -> None:
@@ -178,14 +271,13 @@ def test_prepare_publishes_one_resumable_frame_store(
     output = prepare_frame_store(
         config, shot_detector=detector, event_detector=detector, encoder=encoder
     )
-    store = FrameStore.load(output)
     data = DataService.load(output, dataset_root=config.output_root)
-    assert tuple(path.name for path in config.output_root.iterdir()) == (
-        "images", "frames.parquet",
+    assert tuple(sorted(path.name for path in config.output_root.iterdir())) == (
+        "frames.parquet", "images", "manifest.json",
     )
     assert not partial.exists()
     assert all((config.output_root / frame.image_path).is_file()
-               for frame in store.iter_frames())
+               for frame in data.iter_frames())
     assert all(data.resolve_frame_asset(frame).is_file()
                for frame in data.iter_frames())
     assert decode_count == 2
@@ -201,3 +293,55 @@ def test_prepare_publishes_one_resumable_frame_store(
         resume=False,
     )
     assert decode_count == 4
+
+
+def test_limit_uses_an_isolated_frame_store(tmp_path: Path, monkeypatch) -> None:
+    """Never truncate the configured full-corpus artifact during a smoke run."""
+
+    videos = tmp_path / "videos"
+    videos.mkdir()
+    for name in ("L21_V001.mp4", "L21_V002.mp4"):
+        (videos / name).touch()
+    config = _config(tmp_path, videos_root=videos)
+
+    def fake_prepare(path: Path, *_args, **_kwargs) -> pd.DataFrame:
+        candidate = CandidateFrame(
+            FrameMeta(path.stem, 0, 0, 0, "1/10", 0, 8, 8),
+            0, 0.0, 0.0, ("coverage_anchor",), True,
+        )
+        return pd.DataFrame(
+            [_record(candidate, Path("images") / f"{path.stem}.jpg")],
+            columns=list(FrameRecord.model_fields),
+        )
+
+    monkeypatch.setattr(
+        "hcmai.data.preprocessing.prepare._prepare_video", fake_prepare
+    )
+    full = prepare_frame_store(
+        config, shot_detector=object(), event_detector=object(), encoder=object()
+    )
+    limited = prepare_frame_store(
+        config,
+        shot_detector=object(),
+        event_detector=object(),
+        encoder=object(),
+        limit=1,
+    )
+
+    assert full == config.output_root / "frames.parquet"
+    assert limited == tmp_path / "frame_store.limit-1/frames.parquet"
+    assert len(pd.read_parquet(full)) == 2
+    assert len(pd.read_parquet(limited)) == 1
+
+
+def test_config_hash_tracks_checkpoint_contents(tmp_path: Path) -> None:
+    """Invalidate resume when a model file changes at the same path."""
+
+    checkpoint = tmp_path / "efficientgebd.pth"
+    checkpoint.write_bytes(b"first-version")
+    config = _config(tmp_path, efficientgebd_checkpoint=checkpoint)
+
+    first = _config_hash(config)
+    checkpoint.write_bytes(b"other-version")
+
+    assert _config_hash(config) != first

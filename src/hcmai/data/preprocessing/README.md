@@ -12,8 +12,12 @@ lần sau chỉ ghi candidate JPEG. Frame đầu tiên bắt đầu từ `0`:
 
 ```text
 frame_idx = round(timestamp_ms * FPS / 1000)
-frame_id  = <video_id>_frame_<frame_idx đủ 9 chữ số>
+frame_id  = <video_id>_frame_<decode_index đủ 9 chữ số>
 ```
+
+`frame_idx` chỉ là mapping dùng khi submit. Pipeline dùng `decode_index` cho
+identity, tên JPEG và join giữa hai decode pass, nên hai decoded frame có cùng
+`frame_idx` vẫn không va chạm.
 
 ## Cài đặt
 
@@ -42,6 +46,8 @@ preprocessing:
 
   device: cuda
   dino_model: facebook/dinov2-small
+  # Nên pin immutable Hugging Face commit cho run chính thức.
+  dino_revision: null
   dino_dtype: float16
   dino_batch_size: 16
 
@@ -78,12 +84,16 @@ PYTHONPATH=src python scripts/preprocess_videos.py \
   --no-resume
 ```
 
+`--limit N` luôn ghi vào FrameStore riêng
+`<output_root>.limit-N`; nó không sửa hoặc truncate full-corpus FrameStore.
+
 ## Output
 
 ```text
 artifacts/frame_store/
 ├── frames.parquet
-└── images/<group>/<video_id>/<frame_idx>.jpg
+├── manifest.json
+└── images/<group>/<video_id>/<decode_index>.jpg
 ```
 
 Các bên chỉ cần:
@@ -93,8 +103,13 @@ FrameStore root: artifacts/frame_store
 Metadata:        artifacts/frame_store/frames.parquet
 ```
 
-Checkpoint nằm tại `artifacts/.preprocessing_work/`, không phải output query.
+Checkpoint nằm tại `artifacts/.frame_store_preprocessing_work/`, không phải
+output query. Limited run có checkpoint root riêng tương ứng.
 `image_path` trong Parquet là đường dẫn tương đối từ FrameStore root.
+`manifest.json` lưu pipeline version, config hash, model/source fingerprints
+và số video/frame để audit và invalidation khi resume.
+Resume chỉ được bật khi `dino_revision` đã pin; nếu để `null`, pipeline luôn
+xử lý lại để tránh tái dùng artifact sau khi remote model `main` thay đổi.
 
 ## Khởi tạo
 

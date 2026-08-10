@@ -47,15 +47,19 @@ class DinoEncoder:
 
         if self.model is None:
             self.processor = AutoImageProcessor.from_pretrained(
-                self.config.dino_model
+                self.config.dino_model,
+                revision=self.config.dino_revision,
             )
             self.model = AutoModel.from_pretrained(
                 self.config.dino_model,
+                revision=self.config.dino_revision,
                 dtype=getattr(torch, self.config.dino_dtype),
             ).to(self.config.device).eval()
+        assert self.processor is not None
         inputs = self.processor(images=images, return_tensors="pt").to(
             self.config.device
         )
+        assert self.model is not None
         with torch.inference_mode():
             output = self.model(**inputs)
         vectors = torch.nn.functional.normalize(output.pooler_output.float(), dim=1)
@@ -155,3 +159,44 @@ def deduplicate(
         if not duplicate:
             kept.append(index)
     return [candidates[index] for index in kept]
+
+
+def restore_maximum_gap(
+    candidates: list[CandidateFrame],
+    retained: list[CandidateFrame],
+    config: PreprocessingConfig,
+) -> list[CandidateFrame]:
+    """Reinsert the fewest available candidates needed for hard coverage.
+
+    Semantic deduplication may remove an unprotected coverage frame.  This
+    repair operates on decode identities and restores the configured temporal
+    bound without changing submission frame indices.
+    """
+
+    if not retained:
+        return []
+    ordered = sorted(candidates, key=lambda item: item.frame.decode_index)
+    retained_ids = {item.frame.decode_index for item in retained}
+    repaired = [ordered[0]]
+    for target in ordered[1:]:
+        if target.frame.decode_index not in retained_ids:
+            continue
+        while (
+            target.frame.timestamp_ms - repaired[-1].frame.timestamp_ms
+            > config.maximum_gap_ms
+        ):
+            deadline = repaired[-1].frame.timestamp_ms + config.maximum_gap_ms
+            available = [
+                item
+                for item in ordered
+                if repaired[-1].frame.decode_index < item.frame.decode_index
+                < target.frame.decode_index
+                and item.frame.timestamp_ms <= deadline
+            ]
+            if not available:
+                raise ValueError(
+                    "Cannot restore maximum frame gap from selected candidates"
+                )
+            repaired.append(available[-1])
+        repaired.append(target)
+    return repaired
