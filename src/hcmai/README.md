@@ -17,7 +17,8 @@ src/hcmai/
 │   ├── setup.py              # Application composition root
 │   └── materializer.py       # Canonical candidate materialization
 ├── data/                     # DataService, canonical stores, enrichment
-│   └── enrichment/           # Caption/OCR EnrichmentService
+│   └── enrichment/           # Caption/OCR/ASR enrichment services
+│       └── transcripts/      # TranscriptService and ASR adapters
 ├── retrieval/                # Shared retrieval-layer capabilities
 │   ├── embedding/            # EmbeddingService and model adapters
 │   ├── retriever/            # RetrievalService, indexes, and fusion
@@ -26,7 +27,6 @@ src/hcmai/
 │   ├── kis/
 │   ├── vqa/
 │   └── trake/                # Externally owned; moved without logic changes
-├── transcripts/              # TranscriptService and ASR adapters
 ├── llm/                      # LLMService and local/HTTP adapters
 ├── submission/               # Optional DRES mini-challenge client
 └── common/                   # Shared config, schemas, and generic utilities

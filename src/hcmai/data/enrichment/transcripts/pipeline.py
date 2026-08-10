@@ -5,10 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from hcmai.common.config import ASRConfig, DiarizationConfig
-from hcmai.transcripts.adapters.asr import ASRAdapter
-from hcmai.transcripts.adapters.diarization import DiarizationAdapter
-from hcmai.transcripts.prepare import TranscriptReport, prepare_transcripts
-from hcmai.transcripts.store import TranscriptStore
+from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
+from hcmai.data.enrichment.transcripts.adapters.diarization import (
+    DiarizationAdapter,
+)
+from hcmai.data.enrichment.transcripts.prepare import (
+    TranscriptReport,
+    prepare_transcripts,
+)
+from hcmai.data.enrichment.transcripts.store import TranscriptStore
 
 
 class TranscriptService:

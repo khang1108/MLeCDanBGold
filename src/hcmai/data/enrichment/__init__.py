@@ -1,1 +1,1 @@
-"""Offline enrichment capability exposed by ``hcmai.data.enrichment.pipeline``."""
+"""Offline caption, OCR, and transcript enrichment capabilities."""

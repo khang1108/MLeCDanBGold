@@ -235,9 +235,9 @@ src/hcmai/
 ├── api/routers/                  thin HTTP adapters
 ├── orchestration/                SearchService, registry, task pipelines
 ├── data/                         canonical frames, evidence stores, enrichment
+│   └── enrichment/               caption, OCR, ASR, and diarization
 ├── retrieval/                    embedding, retrieval, and reranking capabilities
 ├── pipelines/                    KIS, VQA, and externally owned TRAKE domains
-├── transcripts/                  ASR/diarization artifacts and access
 ├── llm/                          local/remote inference service/adapters
 └── common/
     ├── config.py
@@ -259,7 +259,7 @@ KIS_VQA_V2_PLAN.md               approved optimization roadmap
 | Data | `hcmai.data.pipeline.DataService` | canonical frame/evidence access |
 | Embedding | `hcmai.retrieval.embedding.pipeline.EmbeddingService` | text/visual encoding and embedding artifacts |
 | Enrichment | `hcmai.data.enrichment.pipeline.EnrichmentService` | offline caption/OCR jobs |
-| Transcripts | `hcmai.transcripts.pipeline.TranscriptService` | ASR/diarization jobs and transcript access |
+| Transcripts | `hcmai.data.enrichment.transcripts.pipeline.TranscriptService` | ASR/diarization jobs and transcript access |
 | Retrieval | `hcmai.retrieval.retriever.pipeline.RetrievalService` | index loading/search, multimodal retrieval, fusion |
 | Reranking | `hcmai.retrieval.reranking.pipeline.RerankingService` | bounded rescoring without identity mutation |
 | LLM | `hcmai.llm.pipeline.LLMService` | local/remote model-inference lifecycle |
@@ -445,7 +445,7 @@ PYTHONPATH=src python scripts/prepare_transcripts.py \
 
 The command writes one speaker-labelled transcript Parquet per video. Pass
 `--no-resume` to reprocess existing outputs. See the
-[transcript pipeline guide](src/hcmai/transcripts/README.md) for artifact
+[transcript pipeline guide](src/hcmai/data/enrichment/transcripts/README.md) for artifact
 schemas, diarization behavior, and configuration.
 
 ## Initialize the local FastAPI backend

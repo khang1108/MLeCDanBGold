@@ -1,9 +1,9 @@
-# Frame enrichment
+# Media enrichment
 
-`hcmai.data.enrichment` owns offline, resumable caption and OCR generation for
-canonical frames. External callers use `EnrichmentService`; each feature keeps
-its contracts/entities in `models/` and framework-specific model code in
-`adapters/`.
+`hcmai.data.enrichment` owns offline, resumable caption, OCR, and transcript
+generation. Caption and OCR callers use `EnrichmentService`; ASR/diarization
+callers use `TranscriptService` from `transcripts/pipeline.py`. Each feature
+keeps framework-specific model code behind internal adapters.
 
 ```text
 enrichment/
@@ -13,11 +13,16 @@ enrichment/
 │   ├── models/contracts.py             # Caption adapter contract
 │   ├── adapters/{transformers,remote}.py
 │   └── artifacts/config/report/resume/runner.py
-└── ocr/
+├── ocr/
     ├── generator.py                    # OCR job orchestration
     ├── models/{contracts,entities}.py  # OCR contract and results
     ├── adapters/florence.py
-    └── artifacts/config/report.py
+│   └── artifacts/config/report.py
+└── transcripts/
+    ├── pipeline.py                     # TranscriptService public facade
+    ├── prepare.py                      # ASR/diarization job orchestration
+    ├── store.py                        # Canonical transcript access
+    └── adapters/{asr,diarization}.py
 ```
 
 ## Public service
@@ -37,6 +42,10 @@ ocr_report = EnrichmentService.generate_ocr(
     ocr_config,
     dataset_root=dataset_root,
 )
+
+from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
+
+transcript_service = TranscriptService.from_configs(asr_config, diarization_config)
 ```
 
 Production scripts call this service boundary. Tests may inject fake caption or

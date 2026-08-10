@@ -8,7 +8,7 @@ from typing import Any
 
 from hcmai.common.config import DiarizationConfig
 from hcmai.common.schemas import TranscriptSegment
-from hcmai.transcripts.adapters.asr import read_audio
+from hcmai.data.enrichment.transcripts.adapters.asr import read_audio
 
 
 def _speaker_id(

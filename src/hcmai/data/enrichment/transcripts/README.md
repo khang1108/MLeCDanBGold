@@ -1,7 +1,7 @@
 # Canonical transcript data
 
-`hcmai.transcripts` đọc audio từ video, chia các vùng có lời nói và ghi riêng
-một file Parquet cho mỗi video. Caller dùng `TranscriptService` trong
+`hcmai.data.enrichment.transcripts` đọc audio từ video, chia các vùng có lời
+nói và ghi riêng một file Parquet cho mỗi video. Caller dùng `TranscriptService` trong
 `pipeline.py`; ASR và diarization cụ thể nằm sau các adapter nội bộ.
 
 ```text
@@ -102,7 +102,7 @@ chỉ giữ speaker chiếm nhiều thời gian nhất.
 ## Đọc transcript
 
 ```python
-from hcmai.transcripts.pipeline import TranscriptService
+from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
 
 store = TranscriptService.load_store("artifacts/transcripts")
 

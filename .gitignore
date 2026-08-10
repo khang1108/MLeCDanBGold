@@ -131,3 +131,8 @@ docs/template/
 .claude/
 .agents/
 tests/
+!tests/
+tests/*
+!tests/unit/
+tests/unit/*
+!tests/unit/test_s3_streaming_latency_app.py

@@ -15,6 +15,7 @@ import pytest
         "hcmai.pipelines.vqa",
         "hcmai.pipelines.trake",
         "hcmai.data.enrichment.pipeline",
+        "hcmai.data.enrichment.transcripts.pipeline",
         "hcmai.orchestration.workflows.kis",
         "hcmai.orchestration.workflows.vqa",
         "hcmai.orchestration.workflows.trake",

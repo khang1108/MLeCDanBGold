@@ -902,7 +902,7 @@ Typical ownership:
 - `src/hcmai/enrichment/`: caption/OCR/object enrichment;
 - `src/hcmai/retriever/`: search/index/fusion/cache/evaluation;
 - `src/hcmai/reranking/`: reranking service/adapters;
-- `src/hcmai/transcripts/`: ASR/diarization;
+- `src/hcmai/data/enrichment/transcripts/`: ASR/diarization;
 - `src/hcmai/llm/`: inference service/adapters;
 - `src/hcmai/vqa/`: VQA candidates/windows/evidence/localization/answering;
 - `src/hcmai/common/utils/`: cross-cutting helpers only.

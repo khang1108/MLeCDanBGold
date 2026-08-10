@@ -10,7 +10,8 @@ và cách KIS, Q&A, TRAKE truy cập FrameStore.
 data/
 ├── pipeline.py              # DataService public facade
 ├── prepare.py               # Canonical frames.parquet builder
-├── enrichment/              # Offline caption/OCR EnrichmentService
+├── enrichment/              # Offline caption/OCR/ASR enrichment
+│   └── transcripts/         # TranscriptService and transcript store
 └── stores/
     ├── frame.py             # FrameStore
     └── evidence.py          # Caption/OCR/ASR evidence stores

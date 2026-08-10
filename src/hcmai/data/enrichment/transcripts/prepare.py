@@ -8,8 +8,10 @@ from pathlib import Path
 import pandas as pd
 
 from hcmai.common.schemas import TranscriptSegment
-from hcmai.transcripts.adapters.asr import ASRAdapter
-from hcmai.transcripts.adapters.diarization import DiarizationAdapter
+from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
+from hcmai.data.enrichment.transcripts.adapters.diarization import (
+    DiarizationAdapter,
+)
 
 TRANSCRIPT_DTYPES = {
     "segment_id": "string",

@@ -140,7 +140,7 @@ The current source already contains useful boundaries. The new design should ext
 - `src/hcmai/embedding/`
   - Reuse SigLIP adapters/artifact builders.
 
-- `src/hcmai/transcripts/`
+- `src/hcmai/data/enrichment/transcripts/`
   - Reuse `TranscriptService`, ASR adapter, diarization, and store.
 
 - `src/hcmai/enrichment/ocr/` and `src/hcmai/enrichment/caption/`
@@ -1092,8 +1092,8 @@ The rest of runtime code no longer cares whether frames came from BTC keyframes 
 
 **Files**
 
-- Modify: `src/hcmai/transcripts/pipeline.py`
-- Modify: `src/hcmai/transcripts/store.py`
+- Modify: `src/hcmai/data/enrichment/transcripts/pipeline.py`
+- Modify: `src/hcmai/data/enrichment/transcripts/store.py`
 - Modify/create text artifact builder under `src/hcmai/retriever/text/`
 - Create: `tests/transcripts/test_frame_alignment.py`
 
@@ -2226,4 +2226,3 @@ The target solution is considered implemented when all conditions below hold.
 - `Thong tin vong So tuyen AIC2026.pdf` — official preliminary-round task definitions, scoring, and dataset notes.
 - `Shared Video Frame Extraction Baseline.md` — teammate survey/proposed preprocessing architecture.
 - Current `src.zip` — existing HCMAI source structure, especially `FrameStore`, `DataService`, SigLIP embedding, ASR, OCR/caption enrichment, RRF retrieval, KIS orchestration, and TRAKE public schemas.
-

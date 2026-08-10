@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from hcmai.common.config import ASRConfig, DiarizationConfig
-from hcmai.transcripts.pipeline import TranscriptService
+from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
