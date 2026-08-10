@@ -1,7 +1,7 @@
 dataset:
   version: "hcmai2026_v1"
-  root: "data"
-  frames_path: "data/metadata/frames.parquet"
+  root: "artifacts/frame_store"
+  frames_path: "artifacts/frame_store/frames.parquet"
 
 caption:
   output_dir: "artifacts/enrichment/caption"

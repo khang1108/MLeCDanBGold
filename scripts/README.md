@@ -48,8 +48,8 @@ frame mapping, and builds the FAISS index.
 PYTHONPATH=src aic/bin/python scripts/build_embeddings.py \
   --config configs/baseline.yaml \
   --model-config llm/config.yaml \
-  --dataset-root data \
-  --frames data/metadata/frames.parquet \
+  --dataset-root artifacts/frame_store \
+  --frames artifacts/frame_store/frames.parquet \
   --output artifacts
 ```
 
@@ -108,7 +108,7 @@ PYTHONPATH=src aic/bin/python scripts/build_caption_index.py \
   --config configs/baseline.yaml \
   --model-config llm/config.yaml \
   --enrichment artifacts/enrichment/asr/frame_enrichment.parquet \
-  --frames data/metadata/frames.parquet \
+  --frames artifacts/frame_store/frames.parquet \
   --output artifacts/indexes/asr
 ```
 

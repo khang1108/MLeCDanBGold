@@ -5,6 +5,7 @@ from pydantic import Field, field_validator
 from .base import ContractModel, NonEmptyString
 from .enum import ProcessingStatus
 
+
 class FrameRecord(ContractModel):
     """Canonical metadata for one searchable frame."""
 
@@ -19,6 +20,12 @@ class FrameRecord(ContractModel):
     height: int = Field(gt=0)
     shot_id: NonEmptyString | None = None
     is_anchor: bool = True
+    pts: int | None = None
+    time_base: NonEmptyString | None = None
+    motion_score: float = Field(default=0.0, ge=0)
+    shot_score: float = Field(default=0.0, ge=0, le=1)
+    event_score: float = Field(default=0.0, ge=0, le=1)
+    selection_reasons: tuple[NonEmptyString, ...] = ()
 
 
 class FrameEnrichment(ContractModel):

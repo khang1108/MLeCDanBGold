@@ -3,6 +3,9 @@
 `hcmai.data` owns canonical frame preparation and lookup. Other components use
 `DataService` from `pipeline.py`; store implementations remain internal.
 
+Xem [preprocessing/README.md](preprocessing/README.md) để biết cây output chuẩn
+và cách KIS, Q&A, TRAKE truy cập FrameStore.
+
 ```text
 data/
 ├── pipeline.py              # DataService public facade
@@ -21,6 +24,17 @@ uses `FrameStore` to resolve a retrieved `frame_id` to the official
 `video_id,frame_idx` submission pair. Keeping that mapping in one canonical
 Parquet file prevents downstream components from inferring official
 identifiers from filenames, timestamps, FPS, or internal IDs.
+
+The runtime baseline reads the raw-video preprocessing output:
+
+```text
+artifacts/frame_store/frames.parquet
+artifacts/frame_store/images/...
+```
+
+`preprocessing/` owns the confirmed zero-based
+`round(timestamp_ms * FPS / 1000)` mapping. `prepare.py` is a separate builder
+for downloaded keyframes that already provide authoritative mapping CSVs.
 
 ## Input layout
 
@@ -47,7 +61,7 @@ Every mapping CSV must have a matching `keyframes/<video_id>/` directory, and
 every mapping row must resolve to its numbered image. The build fails instead
 of silently dropping mappings when the downloaded dataset is incomplete.
 
-## Build
+## Alternative mapping-based build
 
 Run from the repository root:
 
@@ -95,8 +109,8 @@ frames_path = DataService.prepare(
 | `image_path`        | POSIX relative path from`dataset_root`                    |
 | `width`, `height` | Source dimensions required by`FrameRecord`                |
 
-Never derive `frame_idx` from `frame_id`, image names, timestamps, or FPS.
-Every submission must resolve through the canonical `FrameRecord`.
+Code downstream of preprocessing must never rederive `frame_idx`. Every
+submission must resolve through the canonical `FrameRecord`.
 Distinct keyframes that share one `(video_id, frame_idx)` pair remain distinct
 rows with separate `frame_id` values.
 
@@ -107,9 +121,12 @@ AI indexing can iterate records in deterministic Parquet order:
 ```python
 from hcmai.data.pipeline import DataService
 
-data = DataService.load("data/metadata/frames.parquet")
+data = DataService.load(
+    "artifacts/frame_store/frames.parquet",
+    dataset_root="artifacts/frame_store",
+)
 for frame in data.iter_frames():
-    image_path = dataset_root / frame.image_path
+    image_path = data.resolve_frame_asset(frame)
     build_embedding(frame.frame_id, image_path)
 ```
 

@@ -38,8 +38,8 @@ class DatasetConfig(BaseModel):
     """Configuration for corpus metadata and enrichment paths."""
 
     version: str = "hcmai2026_v1"
-    root: Path = Path("data")
-    frames_path: Path = Path("data/metadata/frames.parquet")
+    root: Path = Path("artifacts/frame_store")
+    frames_path: Path = Path("artifacts/frame_store/frames.parquet")
     enrichment: EnrichmentArtifactsConfig = Field(
         default_factory=EnrichmentArtifactsConfig
     )

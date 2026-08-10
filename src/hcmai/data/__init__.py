@@ -3,4 +3,6 @@
 Cross-component code imports :class:`DataService` from ``data.pipeline``.
 """
 
-__all__: list[str] = []
+from hcmai.data.stores.frame import FrameStore
+
+__all__ = ["FrameStore"]

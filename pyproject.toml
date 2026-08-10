@@ -49,6 +49,17 @@ transcripts = [
     "torchaudio>=2.6, <2.10",
     "transformers>=5.13, <6.0",
 ]
+preprocessing = [
+    "av>=14, <19",
+    "einops>=0.8, <1.0",
+    "opencv-python-headless>=4.10, <5.0",
+    "tensorflow>=2.20, <3.0",
+    "timm>=1.0, <2.0",
+    "torch>=2.6, <3.0",
+    "torchvision>=0.21, <1.0",
+    "transformers>=4.56, <6.0",
+    "yacs>=0.1.8, <1.0",
+]
 dev = [
     "httpx>=0.28.1",
     "pytest>=7.0",

@@ -63,7 +63,9 @@ def create_app(
             ),
         ),
     }
-    dataset_root = Path(os.getenv("HCMAI_DATASET_ROOT", "data")).resolve()
+    dataset_root = Path(os.getenv(
+        "HCMAI_DATASET_ROOT", "artifacts/frame_store"
+    )).resolve()
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
