@@ -508,6 +508,16 @@ PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000 --reload
 ```
 
+Alternatively, create and bootstrap the Thunder VM, follow its `llm.log`, and
+run the local backend together in one terminal:
+
+```bash
+./run.sh --gpu l40 --token "$TNR_TOKEN" -- \
+  --caption true --caption-embedding true
+```
+
+Run `./run.sh --help` for all Thunder, model, local API, and logging options.
+
 ### 4. Verify backend readiness
 
 From another local terminal:

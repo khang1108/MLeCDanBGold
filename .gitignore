@@ -130,3 +130,4 @@ docs/template/
 .codex/
 .claude/
 .agents/
+tests/

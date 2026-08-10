@@ -34,6 +34,44 @@ Access policy remain in Cloudflare after a Thunder instance is deleted.
 
 ## Every throwaway VM
 
+Create, upload, and start the private bootstrap in a detached tmux session with
+the repository launcher:
+
+```bash
+llm/launch_thunder_instance.sh --gpu l40 --token "$TNR_TOKEN" -- \
+  --caption true \
+  --caption-embedding true
+```
+
+`--gpu` accepts only `l40` or `a6000`. The token is used only if the existing
+Thunder CLI login is unavailable; for automation it can instead be supplied as
+`TNR_API_TOKEN`. The launcher creates one GPU with 8 vCPUs and a 100 GB disk by
+default, waits for `RUNNING`, copies `deploy_cloudflared_private.sh` with
+`tnr scp`, and starts it in the `hcmai-deploy` tmux session. Run `--help` for
+resource, timeout, and tmux-session overrides. Arguments after `--` belong to
+the private bootstrap; at least one model option is required because every
+model is disabled by default.
+
+The launcher leaves a successfully created instance intact if a later step
+fails, and prints its ID because it may continue to incur charges.
+
+To launch Thunder, run the local FastAPI backend, and follow the remote model
+service log in one terminal, use the repository-level wrapper with the same
+arguments:
+
+```bash
+./run.sh --gpu l40 --token "$TNR_TOKEN" -- \
+  --caption true \
+  --caption-embedding true
+```
+
+Remote lines from `/opt/hcmai/logs/llm.log` are prefixed with
+`[thunder:llm]`. Uvicorn and `src/hcmai` logger output remain on the same local
+terminal. Pressing `Ctrl-C` stops those local processes but deliberately leaves
+the Thunder instance running.
+
+### Manual alternative
+
 From the local machine, copy the private bootstrap to the new instance and
 connect:
 
