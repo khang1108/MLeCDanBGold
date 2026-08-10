@@ -3,8 +3,6 @@ import { searchFrames } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "./GifLoaderOverlay";
-import MiniChallengePanel from "../../minichallenge/components/MiniChallengePanel";
-import { useMiniChallenge } from "../../minichallenge/hooks/useMiniChallenge";
 
 const QUERY_PREFIX = /^\/(kis|vkis)\b\s*/i;
 
@@ -24,7 +22,6 @@ const AdHocSearchWorkspace = ({
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const requestRef = useRef(null);
-  const challenge = useMiniChallenge();
 
   useEffect(() => () => requestRef.current?.abort(), []);
   const handleSubmit = useCallback(
@@ -81,15 +78,6 @@ const AdHocSearchWorkspace = ({
     setTopK(20);
   }, [setTopK]);
 
-  const handleChallengeSubmit = useCallback((frame) => {
-    const taskName = challenge.submissionTaskName;
-    if (!taskName) return;
-    const confirmed = window.confirm(
-      `Submit ${frame.video_id} to “${taskName}”?`,
-    );
-    if (confirmed) challenge.submitFrame(frame);
-  }, [challenge]);
-
   return (
     <div className="adhoc-workspace">
       <form className="adhoc-query-bar" onSubmit={handleSubmit}>
@@ -137,7 +125,6 @@ const AdHocSearchWorkspace = ({
             setTopK={setTopK}
             onReset={handleResetOptions}
           />
-          <MiniChallengePanel challenge={challenge} />
         </aside>
 
         <section className="adhoc-results">
@@ -149,8 +136,6 @@ const AdHocSearchWorkspace = ({
             latencyMs={latencyMs}
             warnings={warnings}
             onFrameClick={onFrameClick}
-            onChallengeSubmit={challenge.currentTask ? handleChallengeSubmit : null}
-            submittingFrameId={challenge.submittingFrameId}
           />
         </section>
       </div>

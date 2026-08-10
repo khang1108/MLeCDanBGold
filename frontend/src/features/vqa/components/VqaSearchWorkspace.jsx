@@ -4,9 +4,6 @@ import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import QuerySuggestionsBox from "../../search-controls/components/QuerySuggestionsBox";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
-import VqaResults from "./VqaResults";
-import MiniChallengePanel from "../../minichallenge/components/MiniChallengePanel";
-import { useMiniChallenge } from "../../minichallenge/hooks/useMiniChallenge";
 
 const RETRIEVAL_PREFIX = /^\/(kis|tkis|vkis|trake)\b\s*/i;
 const ANY_PREFIX = /^\/(vqa|kis|tkis|vkis|trake)\b\s*/i;
@@ -46,7 +43,6 @@ const VqaSearchWorkspace = ({
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const requestRef = useRef(null);
-  const challenge = useMiniChallenge();
 
   useEffect(() => () => {
     requestRef.current?.abort();
@@ -95,15 +91,6 @@ const VqaSearchWorkspace = ({
       setEventDescription(suggestionQuery);
     }
   }, [eventDescription]);
-
-  const handleChallengeSubmit = useCallback((frame, overrideAnswer = null) => {
-    const taskName = challenge.submissionTaskName;
-    if (!taskName) return;
-    const confirmed = window.confirm(
-      `Submit ${frame.video_id} (frame ${frame.frame_idx}) to “${taskName}”?`,
-    );
-    if (confirmed) challenge.submitFrame(frame, overrideAnswer);
-  }, [challenge]);
 
   const submit = useCallback(async (event) => {
     event.preventDefault();
@@ -260,8 +247,6 @@ const VqaSearchWorkspace = ({
                 latencyMs={searchLatencyMs}
                 warnings={warnings}
                 onFrameClick={onFrameClick}
-                onChallengeSubmit={challenge.currentTask ? handleChallengeSubmit : null}
-                submittingFrameId={challenge.submittingFrameId}
               />
             ) : (
               <FramesBox
@@ -273,8 +258,6 @@ const VqaSearchWorkspace = ({
                 isLoading={false}
                 error={error}
                 hasSearched={vqaLatencyMs !== null || error !== null}
-                onChallengeSubmit={challenge.currentTask ? handleChallengeSubmit : null}
-                submittingFrameId={challenge.submittingFrameId}
                 latencyMs={vqaLatencyMs}
                 warnings={warnings}
                 onFrameClick={onFrameClick}

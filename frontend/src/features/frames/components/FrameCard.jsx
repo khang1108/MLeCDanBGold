@@ -6,8 +6,6 @@ const FrameCard = ({
   frame,
   feedbackState,
   onClick,
-  onChallengeSubmit,
-  isChallengeSubmitting,
 }) => {
   const [copied, setCopied] = useState(false);
   const previewUrl = frame.thumbnail_url || frame.frame_url;
@@ -27,19 +25,6 @@ const FrameCard = ({
           {frame.video_id} &middot; frame {frame.frame_idx}
         </span>
         <div className="frame-card-actions">
-          {onChallengeSubmit && (
-            <button
-              className="card-submit-btn"
-              onClick={(event) => {
-                event.stopPropagation();
-                onChallengeSubmit(frame);
-              }}
-              disabled={isChallengeSubmitting}
-              title="Submit this video to the current mini-challenge task"
-            >
-              {isChallengeSubmitting ? "Sending&hellip;" : "Submit"}
-            </button>
-          )}
           <button
             className={`card-copy-btn ${copied ? "copied" : ""}`}
             onClick={copy}

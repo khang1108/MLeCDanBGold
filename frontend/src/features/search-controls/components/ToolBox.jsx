@@ -1,5 +1,4 @@
 import React, { useId } from "react";
-import ManualSubmissionBox from "./ManualSubmissionBox";
 
 const TOP_K_MIN = 1;
 const TOP_K_MAX = 100;
@@ -79,8 +78,6 @@ const ToolBox = ({
       <button className="btn-utility toolbox-reset-btn" onClick={onReset} style={{ marginBottom: '12px' }}>
         Reset Parameters
       </button>
-
-      <ManualSubmissionBox />
     </aside>
   );
 };
