@@ -10,10 +10,10 @@ from hcmai.common.schemas import (
     RetrievalSource,
     VQARequest,
 )
-from hcmai.vqa.candidates import retrieve_candidates
-from hcmai.vqa.models import QuestionType
-from hcmai.vqa.parser import parse_vqa_query
-from hcmai.vqa.video_aggregation import aggregate_videos
+from hcmai.pipelines.vqa.candidates import retrieve_candidates
+from hcmai.pipelines.vqa.models import QuestionType
+from hcmai.pipelines.vqa.parser import parse_vqa_query
+from hcmai.pipelines.vqa.video_aggregation import aggregate_videos
 
 
 def frame(frame_id: str, video: str, index: int, timestamp: int) -> FrameRecord:

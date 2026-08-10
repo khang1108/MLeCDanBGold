@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import replace
 
 from hcmai.common.schemas import FrameRecord, RetrievalSource, VQARequest
-from hcmai.vqa.answerer import answer_windows
-from hcmai.vqa.evidence import build_evidence_bundle
-from hcmai.vqa.localizer import SimilarityLocalizer
-from hcmai.vqa.models import BranchCandidate, GroundedAnswerCandidate, VideoEvidenceCandidate
-from hcmai.vqa.normalization import normalize_answer
-from hcmai.vqa.parser import parse_vqa_query
-from hcmai.vqa.ranking import rank_grounded_answers
-from hcmai.vqa.submission import materialize_submissions
-from hcmai.vqa.windows import build_windows
+from hcmai.pipelines.vqa.answerer import answer_windows
+from hcmai.pipelines.vqa.evidence import build_evidence_bundle
+from hcmai.pipelines.vqa.localizer import SimilarityLocalizer
+from hcmai.pipelines.vqa.models import BranchCandidate, GroundedAnswerCandidate, VideoEvidenceCandidate
+from hcmai.pipelines.vqa.normalization import normalize_answer
+from hcmai.pipelines.vqa.parser import parse_vqa_query
+from hcmai.pipelines.vqa.ranking import rank_grounded_answers
+from hcmai.pipelines.vqa.submission import materialize_submissions
+from hcmai.pipelines.vqa.windows import build_windows
 
 
 def frame(frame_id, video, index, timestamp):

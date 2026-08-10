@@ -16,11 +16,16 @@ src/hcmai/
 │   ├── pipeline.py           # SearchService: online task routing
 │   ├── setup.py              # Application composition root
 │   └── materializer.py       # Canonical candidate materialization
-├── data/                     # DataService and canonical frame stores
-├── embedding/                # EmbeddingService and model adapters
-├── retriever/                # RetrievalService, indexes, and fusion
-├── reranking/                # RerankingService and scoring adapters
-├── enrichment/               # Caption/OCR EnrichmentService
+├── data/                     # DataService, canonical stores, enrichment
+│   └── enrichment/           # Caption/OCR EnrichmentService
+├── retrieval/                # Shared retrieval-layer capabilities
+│   ├── embedding/            # EmbeddingService and model adapters
+│   ├── retriever/            # RetrievalService, indexes, and fusion
+│   └── reranking/            # RerankingService and scoring adapters
+├── pipelines/                # Task-specific domain logic
+│   ├── kis/
+│   ├── vqa/
+│   └── trake/                # Externally owned; moved without logic changes
 ├── transcripts/              # TranscriptService and ASR adapters
 ├── llm/                      # LLMService and local/HTTP adapters
 ├── submission/               # Optional DRES mini-challenge client
@@ -34,9 +39,9 @@ Production code crossing a component boundary imports only its public
 
 ```python
 from hcmai.data.pipeline import DataService
-from hcmai.embedding.pipeline import EmbeddingService
-from hcmai.retriever.pipeline import RetrievalService
-from hcmai.reranking.pipeline import RerankingService
+from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.reranking.pipeline import RerankingService
 from hcmai.orchestration.pipeline import SearchService
 ```
 
@@ -65,7 +70,7 @@ and `RetrievalService` for index construction. This keeps experiments modular
 without adding a production-style dependency-injection framework.
 
 There is no public `EvaluationService` yet. The existing
-`retriever/evaluation/benchmark.py` is an internal dense-baseline tool; an
+`retrieval/retriever/evaluation/benchmark.py` is an internal dense-baseline tool; an
 end-to-end evaluator remains deferred until its contract and second use are
 demonstrated.
 
@@ -93,10 +98,7 @@ The public endpoints remain:
 - `GET /api/v1/minichallenge/evaluations/{id}/current-task`
 - `POST /api/v1/minichallenge/evaluations/{id}/submit`
 
-Run `PYTHONPATH=src aic/bin/python scripts/doctor.py` before starting a
-competition session. It validates that metadata, canonical frame assets, and
-the visual index agree without loading model weights. See
-`docs/ARCHITECTURE.md` for the dependency and debugging map.
+See `docs/ARCHITECTURE.md` for the dependency and debugging map.
 
 The mini-challenge routes use the latest in-memory backend session when one is
 available, with `X-DRES-Session` and the static environment session retained as

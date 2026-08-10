@@ -12,7 +12,7 @@ from hcmai.common.schemas import RetrievalSource
 from hcmai.llm.config import LLMServiceConfig
 from hcmai.orchestration import setup
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
 class LoadedService:

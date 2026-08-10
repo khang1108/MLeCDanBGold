@@ -15,13 +15,13 @@ from hcmai.common.schemas import (
     ModelStatus,
     VQAInferenceEvidence,
 )
-from hcmai.embedding.pipeline import EmbeddingService
-from hcmai.enrichment.ocr.adapters.florence import FlorenceAdapter
-from hcmai.enrichment.ocr.config import OCRConfig
-from hcmai.enrichment.pipeline import EnrichmentService
+from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
+from hcmai.data.enrichment.ocr.config import OCRConfig
+from hcmai.data.enrichment.pipeline import EnrichmentService
 from hcmai.llm.adapters.vqa import GroundedVQAModel
 from hcmai.llm.pipeline import LLMServiceConfig
-from hcmai.reranking.pipeline import QwenRerankerConfig, RerankingService
+from hcmai.retrieval.reranking.pipeline import QwenRerankerConfig, RerankingService
 
 
 class LocalAdapter:

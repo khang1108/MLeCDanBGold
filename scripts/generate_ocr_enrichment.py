@@ -8,8 +8,8 @@ from pathlib import Path
 
 from hcmai.common.config import AppConfig
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.enrichment.ocr.config import OCRConfig
-from hcmai.enrichment.ocr.generator import generate_ocr
+from hcmai.data.enrichment.ocr.config import OCRConfig
+from hcmai.data.enrichment.ocr.generator import generate_ocr
 
 logger = get_logger(__name__)
 
@@ -45,7 +45,7 @@ def main() -> int:
         settings = AppConfig.from_yaml(app_path)
         base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
         if settings.inference.enabled or base_url:
-            from hcmai.enrichment.ocr.adapters.remote import RemoteOCRAdapter
+            from hcmai.data.enrichment.ocr.adapters.remote import RemoteOCRAdapter
             from hcmai.llm.pipeline import LLMService
 
             client = LLMService.remote(base_url, settings.inference.timeout_seconds)

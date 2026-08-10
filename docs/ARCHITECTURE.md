@@ -48,9 +48,7 @@ VQA: /api/v1/vqa -> routers/vqa.py -> pipelines/vqa.py
 ```
 
 Every request stage records request ID, task type, duration, status, backend,
-fallback, warning, and error category. Run `scripts/doctor.py` before a session
-to validate metadata, frame assets, visual-index alignment, evidence artifacts,
-and optional remote inference readiness.
+fallback, warning, and error category.
 
 ## Research boundary
 

@@ -11,11 +11,11 @@ from hcmai.common.config import AppConfig
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
-from hcmai.embedding.pipeline import EmbeddingService
+from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from hcmai.llm.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.reranking.pipeline import RerankerConfig, RerankingService
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.reranking.pipeline import RerankerConfig, RerankingService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 logger = get_logger(__name__)
 

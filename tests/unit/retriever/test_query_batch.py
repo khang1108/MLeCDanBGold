@@ -13,10 +13,10 @@ pytest.importorskip("faiss")
 
 from hcmai.common.config import EncoderConfig, FusionConfig
 from hcmai.common.schemas import RetrievalSource
-from hcmai.retriever.dense.index import DenseIndex
-from hcmai.retriever.dense.retriever import DenseRetriever
-from hcmai.retriever.pipeline import RetrievalService
-from hcmai.retriever.query_batch import encode_query_batch
+from hcmai.retrieval.retriever.dense.index import DenseIndex
+from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
+from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.query_batch import encode_query_batch
 
 
 class CountingEncoder:

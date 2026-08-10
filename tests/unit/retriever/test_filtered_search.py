@@ -9,7 +9,7 @@ import pytest
 pytest.importorskip("faiss")
 
 from hcmai.common.schemas.search import SearchFilters
-from hcmai.retriever.dense.index import DenseIndex
+from hcmai.retrieval.retriever.dense.index import DenseIndex
 
 
 def _normalize(values: np.ndarray) -> np.ndarray:

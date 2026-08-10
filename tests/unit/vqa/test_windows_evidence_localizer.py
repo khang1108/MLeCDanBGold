@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from hcmai.common.schemas import FrameRecord, RetrievalSource, VQARequest
-from hcmai.vqa.evidence import build_evidence_bundle
-from hcmai.vqa.localizer import SimilarityLocalizer
-from hcmai.vqa.models import BranchCandidate, VideoEvidenceCandidate
-from hcmai.vqa.parser import parse_vqa_query
-from hcmai.vqa.windows import build_windows, expand_neighbor_window
+from hcmai.pipelines.vqa.evidence import build_evidence_bundle
+from hcmai.pipelines.vqa.localizer import SimilarityLocalizer
+from hcmai.pipelines.vqa.models import BranchCandidate, VideoEvidenceCandidate
+from hcmai.pipelines.vqa.parser import parse_vqa_query
+from hcmai.pipelines.vqa.windows import build_windows, expand_neighbor_window
 
 
 def frame(frame_id, index, timestamp):

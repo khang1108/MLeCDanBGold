@@ -9,8 +9,8 @@ from hcmai.common.schemas import (
     TaskType,
 )
 from hcmai.data.pipeline import DataService
-from hcmai.orchestration.pipelines.kis import KISPipeline
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.orchestration.workflows.kis import KISPipeline
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
 class CanonicalData:

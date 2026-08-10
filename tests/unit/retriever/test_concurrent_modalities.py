@@ -15,12 +15,12 @@ from hcmai.common.schemas import (
     RetrievalTrace,
     TaskType,
 )
-from hcmai.retriever.concurrent import (
+from hcmai.retrieval.retriever.concurrent import (
     ModalitySearchExecutor,
     RequiredModalitySearchError,
 )
-from hcmai.retriever.fusion import RRFFusionRetriever
-from hcmai.retriever.query_batch import SourceFamily, encode_query_batch
+from hcmai.retrieval.retriever.fusion import RRFFusionRetriever
+from hcmai.retrieval.retriever.query_batch import SourceFamily, encode_query_batch
 
 
 class FixtureEncoder:

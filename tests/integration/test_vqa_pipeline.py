@@ -12,7 +12,7 @@ from hcmai.common.schemas import (
     VQAInferenceResponse,
     VQARequest,
 )
-from hcmai.orchestration.pipelines.vqa import VQAPipeline
+from hcmai.orchestration.workflows.vqa import VQAPipeline
 
 
 class Data:

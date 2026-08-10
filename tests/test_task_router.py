@@ -19,9 +19,9 @@ from hcmai.orchestration.pipeline import (
     SearchService,
     UnsupportedSearchTaskError,
 )
-from hcmai.orchestration.pipelines.base import TaskPipelineRequestError
+from hcmai.orchestration.workflows.base import TaskPipelineRequestError
 from hcmai.orchestration.task_router import PipelineRegistry
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
 @dataclass(frozen=True)

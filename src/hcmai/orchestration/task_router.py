@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from hcmai.common.schemas import TaskType
-from hcmai.orchestration.pipelines.base import TaskPipeline
+from hcmai.orchestration.workflows.base import TaskPipeline
 
 
 class PipelineRegistry:

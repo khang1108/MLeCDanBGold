@@ -12,7 +12,7 @@ from hcmai.data.assets import (
 )
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
 def frame(frame_id: str, image_path: str) -> FrameRecord:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from hcmai.retriever.video_scores import score_videos
+from hcmai.retrieval.retriever.video_scores import score_videos
 
 _MAPPING = pd.DataFrame(
     {

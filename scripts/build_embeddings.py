@@ -10,9 +10,9 @@ import numpy as np
 
 from hcmai.common.utils.io import read_parquet, read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.embedding.pipeline import EmbeddingService
+from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from hcmai.llm.pipeline import LLMServiceConfig
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 from script_args import parse_arguments
 
 logger = get_logger(__name__)

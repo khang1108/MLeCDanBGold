@@ -15,8 +15,8 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.observability.tracing import StageTimer, log_stage
 from hcmai.observability import PipelineStage
-from hcmai.reranking.pipeline import RerankingError, RerankingService
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.reranking.pipeline import RerankingError, RerankingService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 logger = get_logger(__name__)
 

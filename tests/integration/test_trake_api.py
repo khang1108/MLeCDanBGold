@@ -21,8 +21,8 @@ from hcmai.common.schemas import RetrievalSource
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.task_router import PipelineRegistry
-from hcmai.retriever.pipeline import RetrievalService
-from hcmai.retriever.video_scores import VideoEventScores
+from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 _MAPPING = pd.DataFrame(
     {

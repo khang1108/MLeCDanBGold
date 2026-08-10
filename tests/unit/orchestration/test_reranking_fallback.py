@@ -17,8 +17,8 @@ from hcmai.common.schemas import (
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.ranking import rank_candidates
-from hcmai.reranking.config import RerankerConfig
-from hcmai.reranking.pipeline import (
+from hcmai.retrieval.reranking.config import RerankerConfig
+from hcmai.retrieval.reranking.pipeline import (
     RerankerContractError,
     RerankerInvalidScoreError,
     RerankerTimeoutError,
@@ -26,7 +26,7 @@ from hcmai.reranking.pipeline import (
     RerankingError,
     RerankingService,
 )
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
 def _candidates() -> list[RetrievalCandidate]:

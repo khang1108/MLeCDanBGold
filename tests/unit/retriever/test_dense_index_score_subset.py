@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from hcmai.retriever.dense.index import (  # noqa: E402
+from hcmai.retrieval.retriever.dense.index import (  # noqa: E402
     VECTORS_FILENAME,
     DenseIndex,
     IndexArtifactError,

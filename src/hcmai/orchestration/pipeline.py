@@ -17,16 +17,16 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.llm.pipeline import LLMService
-from hcmai.orchestration.pipelines.base import (
+from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,
 )
-from hcmai.orchestration.pipelines.kis import KISPipeline
-from hcmai.orchestration.pipelines.trake import TRAKEPipeline
-from hcmai.orchestration.pipelines.vqa import VQAPipeline
+from hcmai.orchestration.workflows.kis import KISPipeline
+from hcmai.orchestration.workflows.trake import TRAKEPipeline
+from hcmai.orchestration.workflows.vqa import VQAPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
-from hcmai.reranking.pipeline import RerankingService
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.reranking.pipeline import RerankingService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.observability import METRICS
 
 logger = get_logger(__name__)

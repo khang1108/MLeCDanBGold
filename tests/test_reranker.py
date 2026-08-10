@@ -6,8 +6,8 @@ import pytest
 from PIL import Image
 from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
 from hcmai.data.pipeline import DataService
-from hcmai.reranking.config import RerankerConfig
-from hcmai.reranking.pipeline import (
+from hcmai.retrieval.reranking.config import RerankerConfig
+from hcmai.retrieval.reranking.pipeline import (
     RerankerContractError,
     RerankerInvalidScoreError,
     RerankerTimeoutError,

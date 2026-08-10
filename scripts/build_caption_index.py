@@ -6,7 +6,7 @@ import argparse
 
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.common.schemas import RetrievalSource
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 logger = get_logger(__name__)
 

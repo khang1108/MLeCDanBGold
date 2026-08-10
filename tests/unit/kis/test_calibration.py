@@ -1,5 +1,5 @@
 from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
-from hcmai.kis.calibration import CalibrationCase, calibrate_fusion
+from hcmai.pipelines.kis.calibration import CalibrationCase, calibrate_fusion
 
 
 def test_calibration_selects_measured_modality_without_rewriting_identity():

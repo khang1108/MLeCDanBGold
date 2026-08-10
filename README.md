@@ -234,16 +234,11 @@ src/hcmai/
 ├── app.py                        FastAPI lifecycle and router assembly
 ├── api/routers/                  thin HTTP adapters
 ├── orchestration/                SearchService, registry, task pipelines
-├── data/                         canonical frames and evidence stores
-├── embedding/                    embedding service and adapters
-├── enrichment/                   caption/OCR enrichment
-├── retriever/                    multimodal retrieval, indexes, fusion, benchmarks
-├── reranking/                    bounded reranking service/adapters
+├── data/                         canonical frames, evidence stores, enrichment
+├── retrieval/                    embedding, retrieval, and reranking capabilities
+├── pipelines/                    KIS, VQA, and externally owned TRAKE domains
 ├── transcripts/                  ASR/diarization artifacts and access
 ├── llm/                          local/remote inference service/adapters
-├── vqa/                          VQA candidates/windows/evidence/localization/answering
-├── query_suggestions/            optional controlled query suggestions
-├── agents/kisc/                  out-of-scope conversational KIS research code
 └── common/
     ├── config.py
     ├── schemas/                  authoritative cross-component contracts
@@ -262,11 +257,11 @@ KIS_VQA_V2_PLAN.md               approved optimization roadmap
 | Component | Public boundary | Responsibility |
 | --- | --- | --- |
 | Data | `hcmai.data.pipeline.DataService` | canonical frame/evidence access |
-| Embedding | `hcmai.embedding.pipeline.EmbeddingService` | text/visual encoding and embedding artifacts |
-| Enrichment | `hcmai.enrichment.pipeline.EnrichmentService` | offline caption/OCR jobs |
+| Embedding | `hcmai.retrieval.embedding.pipeline.EmbeddingService` | text/visual encoding and embedding artifacts |
+| Enrichment | `hcmai.data.enrichment.pipeline.EnrichmentService` | offline caption/OCR jobs |
 | Transcripts | `hcmai.transcripts.pipeline.TranscriptService` | ASR/diarization jobs and transcript access |
-| Retrieval | `hcmai.retriever.pipeline.RetrievalService` | index loading/search, multimodal retrieval, fusion |
-| Reranking | `hcmai.reranking.pipeline.RerankingService` | bounded rescoring without identity mutation |
+| Retrieval | `hcmai.retrieval.retriever.pipeline.RetrievalService` | index loading/search, multimodal retrieval, fusion |
+| Reranking | `hcmai.retrieval.reranking.pipeline.RerankingService` | bounded rescoring without identity mutation |
 | LLM | `hcmai.llm.pipeline.LLMService` | local/remote model-inference lifecycle |
 | Orchestration | `hcmai.orchestration.pipeline.SearchService` | task dispatch and canonical response materialization |
 

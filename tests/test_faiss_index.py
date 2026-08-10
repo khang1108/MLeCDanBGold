@@ -10,12 +10,12 @@ from tempfile import TemporaryDirectory
 
 faiss = pytest.importorskip("faiss")
 
-from hcmai.retriever.dense.index import (
+from hcmai.retrieval.retriever.dense.index import (
     POSTING_OFFSETS_FILENAME,
     DenseIndex,
     IndexArtifactError,
 )
-from hcmai.retriever.models.metadata import IndexMetadata
+from hcmai.retrieval.retriever.models.metadata import IndexMetadata
 
 
 def _normalize(vectors: np.ndarray) -> np.ndarray:
