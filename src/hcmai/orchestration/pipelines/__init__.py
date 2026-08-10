@@ -3,6 +3,7 @@
 from hcmai.orchestration.pipelines.base import (
     TaskPipeline,
     TaskPipelineDependencyError,
+    TaskPipelineRequestError,
 )
 from hcmai.orchestration.pipelines.kis import KISPipeline
 from hcmai.orchestration.pipelines.trake import TRAKEPipeline
@@ -14,4 +15,5 @@ __all__ = [
     "VQAPipeline",
     "TaskPipeline",
     "TaskPipelineDependencyError",
+    "TaskPipelineRequestError",
 ]

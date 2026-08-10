@@ -18,7 +18,10 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.llm.pipeline import LLMService
 from hcmai.observability.tracing import StageTimer, log_stage
-from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
+from hcmai.orchestration.pipelines.base import (
+    TaskPipelineDependencyError,
+    TaskPipelineRequestError,
+)
 from hcmai.retriever.pipeline import RetrievalService
 from hcmai.vqa.answerer import answer_windows
 from hcmai.vqa.candidates import retrieve_candidates
@@ -53,7 +56,9 @@ class VQAPipeline:
 
     def execute(self, request: VQARequest) -> VQAResponse:
         if not isinstance(request, VQARequest) or request.query_type is not TaskType.VQA:
-            raise ValueError("VQAPipeline requires a competition VQARequest")
+            raise TaskPipelineRequestError(
+                "VQAPipeline requires a competition VQARequest"
+            )
         if self.data is None:
             raise TaskPipelineDependencyError("Frame store not loaded")
         if self.retrieval is None:

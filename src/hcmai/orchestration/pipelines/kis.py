@@ -16,7 +16,10 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.kis.ranking import KISRankingConfig, shape_kis_candidates
 from hcmai.orchestration.materializer import SearchMaterializer
-from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
+from hcmai.orchestration.pipelines.base import (
+    TaskPipelineDependencyError,
+    TaskPipelineRequestError,
+)
 from hcmai.orchestration.ranking import elapsed_ms, rank_candidates, request_id
 from hcmai.observability import PipelineStage
 from hcmai.observability.tracing import StageTimer, log_stage
@@ -52,11 +55,11 @@ class KISPipeline:
 
     def execute(self, request: TaskRequest) -> SearchResponse:
         if not isinstance(request, SearchRequest):
-            raise ValueError(
+            raise TaskPipelineRequestError(
                 f"pipeline for {self.task_type.value!r} requires a search request"
             )
         if request.query_type is not self.task_type:
-            raise ValueError(
+            raise TaskPipelineRequestError(
                 f"pipeline for {self.task_type.value!r} cannot execute "
                 f"request for {request.query_type.value!r}"
             )

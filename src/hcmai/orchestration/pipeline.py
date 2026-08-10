@@ -17,7 +17,10 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.llm.pipeline import LLMService
-from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
+from hcmai.orchestration.pipelines.base import (
+    TaskPipelineDependencyError,
+    TaskPipelineRequestError,
+)
 from hcmai.orchestration.pipelines.kis import KISPipeline
 from hcmai.orchestration.pipelines.trake import TRAKEPipeline
 from hcmai.orchestration.pipelines.vqa import VQAPipeline
@@ -192,7 +195,7 @@ class SearchService:
             return cast(Any, pipeline).execute(request)
         except TaskPipelineDependencyError as error:
             raise SearchServiceUnavailableError(str(error)) from error
-        except ValueError as error:
+        except TaskPipelineRequestError as error:
             raise UnsupportedSearchTaskError(str(error)) from error
 
     def _default_registry(self) -> PipelineRegistry:

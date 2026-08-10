@@ -871,6 +871,14 @@ answering, API, evaluation, and export.
 
 Artifact flow should remain explicit and versioned.
 
+Embedding generation and index persistence are offline batch operations run on
+a remote GPU VM. The local KIS, TRAKE, and VQA serving process treats deployed
+retrieval artifacts as immutable and read-only: it may validate and memory-map
+them, but it must never generate, reconstruct, migrate, or save embeddings at
+startup or during a request. Missing or inconsistent files make the affected
+retrieval capability unavailable until the complete versioned bundle is rebuilt
+or resynchronized from the offline pipeline.
+
 Do not commit:
 
 - datasets/videos/extracted frames;

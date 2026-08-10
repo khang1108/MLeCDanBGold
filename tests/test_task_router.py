@@ -17,7 +17,9 @@ from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import (
     SearchPipelineUnavailableError,
     SearchService,
+    UnsupportedSearchTaskError,
 )
+from hcmai.orchestration.pipelines.base import TaskPipelineRequestError
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.retriever.pipeline import RetrievalService
 
@@ -28,6 +30,16 @@ class StubPipeline:
 
     def execute(self, request: SearchRequest) -> SearchResponse:
         raise AssertionError(f"unexpected execution for {request.query_type.value}")
+
+
+@dataclass(frozen=True)
+class RaisingPipeline:
+    task_type: TaskType
+    error: Exception
+
+    def execute(self, request: SearchRequest) -> SearchResponse:
+        del request
+        raise self.error
 
 
 class Data:
@@ -122,10 +134,35 @@ def test_kis_pipeline_preserves_search_response_behavior(
 
 
 def test_missing_pipeline_maps_to_typed_service_error() -> None:
-    service = SearchService(None, None)
+    service = SearchService(None, None, pipeline_registry=PipelineRegistry())
 
     with pytest.raises(SearchPipelineUnavailableError, match="vqa"):
         service.search(SearchRequest(query="question", query_type=TaskType.VQA))
+
+
+def test_pipeline_request_error_maps_to_unsupported_task() -> None:
+    registry = PipelineRegistry(
+        [
+            RaisingPipeline(
+                TaskType.KIS,
+                TaskPipelineRequestError("request does not match pipeline"),
+            )
+        ]
+    )
+    service = SearchService(None, None, pipeline_registry=registry)
+
+    with pytest.raises(UnsupportedSearchTaskError, match="does not match"):
+        service.search(SearchRequest(query="question", query_type=TaskType.KIS))
+
+
+def test_unexpected_pipeline_value_error_is_not_misclassified() -> None:
+    registry = PipelineRegistry(
+        [RaisingPipeline(TaskType.KIS, ValueError("invalid embedding shape"))]
+    )
+    service = SearchService(None, None, pipeline_registry=registry)
+
+    with pytest.raises(ValueError, match="invalid embedding shape"):
+        service.search(SearchRequest(query="question", query_type=TaskType.KIS))
 
 
 def test_health_task_availability_is_derived_from_registry() -> None:

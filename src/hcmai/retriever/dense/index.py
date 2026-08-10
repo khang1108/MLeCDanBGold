@@ -31,6 +31,21 @@ POSTING_OFFSETS_FILENAME = "posting_offsets.npy"
 POSTING_POSITIONS_FILENAME = "posting_positions.npy"
 TIMESTAMPS_FILENAME = "timestamps.npy"
 
+REQUIRED_INDEX_FILENAMES = (
+    INDEX_FILENAME,
+    MAPPING_FILENAME,
+    METADATA_FILENAME,
+    VECTORS_FILENAME,
+    POSTING_VIDEO_IDS_FILENAME,
+    POSTING_OFFSETS_FILENAME,
+    POSTING_POSITIONS_FILENAME,
+    TIMESTAMPS_FILENAME,
+)
+
+
+class IndexArtifactError(RuntimeError):
+    """A persisted retrieval index bundle is incomplete or inconsistent."""
+
 
 class DenseIndex:
     """Build, persist, load, and search an exact inner-product frame index.
@@ -195,61 +210,95 @@ class DenseIndex:
         """Load an index directory and reject mismatched artifacts.
 
         Args:
-            index_dir: Directory containing ``dense.index``,
-                ``frame_mapping.parquet``, and ``metadata.json``.
+            index_dir: Directory containing the complete immutable index
+                bundle written by :meth:`save` in the offline GPU pipeline.
 
         Raises:
-            ValueError: If the index vector count, mapping length, and metadata
-                ``vector_count`` disagree, or positions are not ``0..N-1``.
+            IndexArtifactError: If required files are missing or persisted
+                index, mapping, vectors, postings, and metadata disagree.
         """
 
         index_dir = Path(index_dir)
+        missing = [
+            filename
+            for filename in REQUIRED_INDEX_FILENAMES
+            if not (index_dir / filename).is_file()
+        ]
+        if missing:
+            names = ", ".join(missing)
+            raise IndexArtifactError(
+                f"Incomplete index bundle at {index_dir}: missing {names}. "
+                "Rebuild and synchronize the complete artifact from the "
+                "offline GPU pipeline."
+            )
+
         index = faiss.read_index(str(index_dir / INDEX_FILENAME))
         mapping = pd.read_parquet(index_dir / MAPPING_FILENAME)
         metadata = IndexMetadata.from_dict(read_json(index_dir / METADATA_FILENAME))
-        vectors_path = index_dir / VECTORS_FILENAME
-        if not vectors_path.is_file():
-            _materialize_vectors(index, vectors_path)
-        vectors = (
-            np.load(vectors_path, mmap_mode="r")
-            if vectors_path.is_file()
-            else _reconstruct(index)
-        )
-        posting_paths = (
-            index_dir / POSTING_VIDEO_IDS_FILENAME,
-            index_dir / POSTING_OFFSETS_FILENAME,
-            index_dir / POSTING_POSITIONS_FILENAME,
-            index_dir / TIMESTAMPS_FILENAME,
-        )
-        if all(path.is_file() for path in posting_paths):
-            posting_video_ids = list(read_json(posting_paths[0]))
-            posting_offsets = np.load(posting_paths[1], mmap_mode="r")
-            posting_positions = np.load(posting_paths[2], mmap_mode="r")
-            timestamps = np.load(posting_paths[3], mmap_mode="r")
-        else:
-            posting_video_ids, posting_offsets, posting_positions = _postings(mapping)
-            timestamps = mapping.sort_values("embedding_index")[
-                "timestamp_ms"
-            ].to_numpy(dtype=np.int64)
 
         # Cross-check the three artifacts so a stale or mispaired index is
         # rejected with a clear error instead of returning wrong frames.
         if not (index.ntotal == len(mapping) == metadata.vector_count):
-            raise ValueError(
+            raise IndexArtifactError(
                 "Mismatched index artifacts: "
                 f"index.ntotal={index.ntotal}, mapping_rows={len(mapping)}, "
                 f"metadata.vector_count={metadata.vector_count}"
             )
+        if index.d != metadata.embedding_dim:
+            raise IndexArtifactError(
+                "Mismatched index dimensions: "
+                f"index.d={index.d}, metadata.embedding_dim="
+                f"{metadata.embedding_dim}"
+            )
         positions = mapping["embedding_index"].to_numpy()
         if sorted(positions.tolist()) != list(range(len(mapping))):
-            raise ValueError("Loaded mapping embedding_index must be a permutation of 0..N-1")
+            raise IndexArtifactError(
+                "Loaded mapping embedding_index must be a permutation of 0..N-1"
+            )
+
+        vectors = np.load(index_dir / VECTORS_FILENAME, mmap_mode="r")
+        posting_video_ids = list(
+            read_json(index_dir / POSTING_VIDEO_IDS_FILENAME)
+        )
+        posting_offsets = np.load(
+            index_dir / POSTING_OFFSETS_FILENAME, mmap_mode="r"
+        )
+        posting_positions = np.load(
+            index_dir / POSTING_POSITIONS_FILENAME, mmap_mode="r"
+        )
+        timestamps = np.load(index_dir / TIMESTAMPS_FILENAME, mmap_mode="r")
+
+        if vectors.shape != (metadata.vector_count, metadata.embedding_dim):
+            raise IndexArtifactError("Persisted vectors do not match index metadata")
+        if vectors.dtype != np.float32:
+            raise IndexArtifactError("Persisted vectors must use float32 dtype")
+        if timestamps.shape != (metadata.vector_count,):
+            raise IndexArtifactError("Persisted timestamps do not match index metadata")
+        if posting_positions.shape != (metadata.vector_count,):
+            raise IndexArtifactError(
+                "Persisted posting positions do not match index metadata"
+            )
+        if posting_offsets.shape != (len(posting_video_ids) + 1,):
+            raise IndexArtifactError(
+                "Persisted posting offsets do not match posting video IDs"
+            )
+        if (
+            not len(posting_offsets)
+            or int(posting_offsets[0]) != 0
+            or int(posting_offsets[-1]) != len(posting_positions)
+            or np.any(np.diff(posting_offsets) < 0)
+        ):
+            raise IndexArtifactError("Persisted posting offsets are invalid")
+        if len(posting_positions) and (
+            int(posting_positions.min()) < 0
+            or int(posting_positions.max()) >= metadata.vector_count
+        ):
+            raise IndexArtifactError("Persisted posting positions are out of bounds")
 
         logger.info(
             f"Loaded index from {index_dir}: {index.ntotal} vectors, "
             f"model={metadata.model_name}, version={metadata.dataset_version}"
         )
-        if vectors.shape != (metadata.vector_count, metadata.embedding_dim):
-            raise ValueError("Persisted vectors do not match index metadata")
         return cls(
             index,
             mapping,
@@ -409,21 +458,6 @@ def _postings(
         else np.empty(0, dtype=np.int64)
     )
     return video_ids, offsets, positions
-
-
-def _materialize_vectors(index: Any, path: Path) -> None:
-    staged = path.with_name(path.name + ".tmp")
-    try:
-        with staged.open("wb") as handle:
-            np.save(handle, _reconstruct(index))
-        staged.replace(path)
-        logger.info(f"Back-filled {path} so later loads memory-map the vectors")
-    except OSError as error:
-        staged.unlink(missing_ok=True)
-        logger.warning(
-            f"Could not write {path} ({error}); holding a second in-RAM copy "
-            "of the vectors, which doubles resident memory"
-        )
 
 
 def _reconstruct(index: Any) -> np.ndarray:

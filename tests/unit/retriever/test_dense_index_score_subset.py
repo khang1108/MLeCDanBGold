@@ -8,7 +8,11 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from hcmai.retriever.dense.index import VECTORS_FILENAME, DenseIndex  # noqa: E402
+from hcmai.retriever.dense.index import (  # noqa: E402
+    VECTORS_FILENAME,
+    DenseIndex,
+    IndexArtifactError,
+)
 
 
 def _index() -> tuple[DenseIndex, np.ndarray]:
@@ -39,17 +43,35 @@ def test_score_subset_matches_matmul_across_chunks() -> None:
     assert np.allclose(scores, queries @ embeddings[positions].T, atol=1e-6)
 
 
-def test_a_legacy_index_directory_is_back_filled_instead_of_held_in_ram(
+def test_an_incomplete_index_bundle_is_rejected_without_runtime_backfill(
     tmp_path,
 ) -> None:
-    index, embeddings = _index()
+    index, _ = _index()
     index_dir = index.save(tmp_path / "visual")
     (index_dir / VECTORS_FILENAME).unlink()
+    files_before = sorted(path.name for path in index_dir.iterdir())
+
+    with pytest.raises(IndexArtifactError, match=r"missing vectors\.npy"):
+        DenseIndex.load(index_dir)
+
+    assert sorted(path.name for path in index_dir.iterdir()) == files_before
+
+
+def test_a_complete_index_bundle_loads_vectors_read_only(tmp_path) -> None:
+    index, embeddings = _index()
+    index_dir = index.save(tmp_path / "visual")
 
     loaded = DenseIndex.load(index_dir)
 
-    assert (index_dir / VECTORS_FILENAME).is_file()
-    # A memmap, not a second in-RAM copy of everything FAISS already holds.
     assert isinstance(loaded.vectors, np.memmap)
+    assert loaded.vectors.mode == "r"
     assert np.allclose(loaded.vectors, embeddings, atol=1e-6)
-    assert not list(index_dir.glob("*.tmp"))
+
+
+def test_vector_shape_mismatch_is_rejected(tmp_path) -> None:
+    index, _ = _index()
+    index_dir = index.save(tmp_path / "visual")
+    np.save(index_dir / VECTORS_FILENAME, np.zeros((19, 8), dtype=np.float32))
+
+    with pytest.raises(IndexArtifactError, match="vectors do not match"):
+        DenseIndex.load(index_dir)

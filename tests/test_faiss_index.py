@@ -10,7 +10,11 @@ from tempfile import TemporaryDirectory
 
 faiss = pytest.importorskip("faiss")
 
-from hcmai.retriever.dense.index import DenseIndex
+from hcmai.retriever.dense.index import (
+    POSTING_OFFSETS_FILENAME,
+    DenseIndex,
+    IndexArtifactError,
+)
 from hcmai.retriever.models.metadata import IndexMetadata
 
 
@@ -125,5 +129,20 @@ class TestDenseIndexPersistence:
             mapping_path = Path(tmp) / "frame_mapping.parquet"
             truncated = pd.read_parquet(mapping_path).iloc[:5]
             truncated.to_parquet(mapping_path)
-            with pytest.raises(ValueError, match="Mismatched index artifacts"):
+            with pytest.raises(
+                IndexArtifactError, match="Mismatched index artifacts"
+            ):
+                DenseIndex.load(tmp)
+
+    def test_load_rejects_invalid_posting_offsets(self, built_index):
+        with TemporaryDirectory() as tmp:
+            built_index.save(tmp)
+            np.save(
+                Path(tmp) / POSTING_OFFSETS_FILENAME,
+                np.array([0, 4, 3], dtype=np.int64),
+            )
+
+            with pytest.raises(
+                IndexArtifactError, match="posting offsets are invalid"
+            ):
                 DenseIndex.load(tmp)

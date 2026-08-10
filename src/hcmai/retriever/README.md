@@ -40,12 +40,12 @@ encoding_ms = result.trace.duration_for("query_encoding")
 
 Every `search` call returns its own candidates, warnings, and named stage
 trace. Timing is never read from mutable service fields, so concurrent calls
-cannot overwrite each other's telemetry. `RetrievalService` exposes this
-online boundary and the offline
-`load_index`, `build_index`, and `build_text_artifacts` operations. Production
-code outside this component must not instantiate dense/text retrievers, FAISS
-indexes, or fusion implementations directly. The application composition root
-constructs the service once and reuses its encoders and indexes.
+cannot overwrite each other's telemetry. `RetrievalService` exposes online
+search and read-only index loading, while its build helpers are used only by
+offline artifact jobs. Production code outside this component must not
+instantiate dense/text retrievers, FAISS indexes, or fusion implementations
+directly. The application composition root constructs the service once and
+reuses its encoders and indexes.
 
 `from_index` creates a single-index service for the frozen dense baseline.
 `from_indexes` wires the selected competition path: one visual index plus
@@ -64,10 +64,21 @@ building validates that embeddings and mappings describe the same corpus:
 - `frame_id` values are unique;
 - serialized index and mapping metadata remain compatible when loaded.
 
-The offline visual index contains `dense.index`, `frame_mapping.parquet`, and
-`metadata.json`. Caption, OCR, and ASR artifacts use filenames selected by
-`index.text_embedding_filenames` in `configs/baseline.yaml`; the component does
-not hard-code alternate names.
+Every deployable dense-index directory is a complete bundle containing
+`dense.index`, `frame_mapping.parquet`, `metadata.json`, `vectors.npy`, and the
+persisted video-posting/timestamp arrays. Caption, OCR, and ASR artifacts use
+filenames selected by `index.text_embedding_filenames` in
+`configs/baseline.yaml`; the component does not hard-code alternate names.
+
+### Offline generation and local serving
+
+Embedding generation and index persistence are offline batch operations run
+on a remote GPU VM. That job must validate, version, and synchronize a complete
+immutable bundle to the local serving machine. The local KIS, TRAKE, and VQA
+runtime only validates and memory-maps those artifacts. It must never generate,
+reconstruct, migrate, or save embeddings during application startup or a
+request. An incomplete bundle leaves retrieval unavailable with an actionable
+startup diagnostic and must be rebuilt or resynchronized from the offline job.
 
 ## Four-modal retrieval and fusion
 

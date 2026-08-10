@@ -12,7 +12,10 @@ from hcmai.common.schemas import (
     TRAKESubmission,
 )
 from hcmai.common.utils.logging import get_logger
-from hcmai.orchestration.pipelines.base import TaskPipelineDependencyError
+from hcmai.orchestration.pipelines.base import (
+    TaskPipelineDependencyError,
+    TaskPipelineRequestError,
+)
 from hcmai.retriever.pipeline import RetrievalService
 from hcmai.trake import TRAKESettings, rank_paths
 
@@ -34,13 +37,17 @@ class TRAKEPipeline:
 
     def execute(self, request: TaskRequest) -> TRAKEResponse:
         if not isinstance(request, TRAKERequest):
-            raise ValueError("TRAKEPipeline requires a TRAKE request")
+            raise TaskPipelineRequestError(
+                "TRAKEPipeline requires a TRAKE request"
+            )
         if self.retrieval is None:
             raise TaskPipelineDependencyError("Retriever not loaded")
 
         events = request.events
         if events is None:
-            raise ValueError("TRAKE needs 'events' with at least two ordered events")
+            raise TaskPipelineRequestError(
+                "TRAKE needs 'events' with at least two ordered events"
+            )
         digest = sha1(f"trake\0{request.query}\0{request.top_k}".encode())
         request_id = f"trake-{digest.hexdigest()[:12]}"
         videos = self.retrieval.score_visual_videos(

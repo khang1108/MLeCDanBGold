@@ -11,6 +11,10 @@ class TaskPipelineDependencyError(RuntimeError):
     """A required dependency of an executable task pipeline is unavailable."""
 
 
+class TaskPipelineRequestError(ValueError):
+    """A validated task request is incompatible with the selected pipeline."""
+
+
 class TaskPipeline(Protocol):
     """One executable pipeline registered for one task type."""
 
