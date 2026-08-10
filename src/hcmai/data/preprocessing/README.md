@@ -1,10 +1,14 @@
 # Tiền xử lý video thành FrameStore
 
-Pipeline đọc video theo thời gian, dùng **TransNetV2**, **EfficientGEBD** và
-optical flow để chọn candidate frame. Maximum gap bảo đảm video không có
-khoảng thời gian dài bị bỏ trống. DINOv3 đang tắt trong baseline hiện tại.
+Pipeline luôn chạy đầy đủ:
 
-Frame đầu tiên có `timestamp_ms = 0` và `frame_idx = 0`:
+```text
+Video → Optical Flow + TransNetV2 + EfficientGEBD
+      → Dynamic Gap → DINOv2 Dedup → FrameStore
+```
+
+Video được decode hai lần: lần đầu dùng chung cho các tín hiệu chọn frame,
+lần sau chỉ ghi candidate JPEG. Frame đầu tiên bắt đầu từ `0`:
 
 ```text
 frame_idx = round(timestamp_ms * FPS / 1000)
@@ -17,10 +21,12 @@ frame_id  = <video_id>_frame_<frame_idx đủ 9 chữ số>
 python -m pip install -e ".[preprocessing]"
 ```
 
-TransNetV2 và EfficientGEBD dùng checkout/checkpoint chính thức đặt bên ngoài
-repo. Model được lazy-load một lần và dùng lại cho toàn bộ video.
+TransNetV2 và EfficientGEBD dùng checkout/checkpoint chính thức đặt ngoài
+repository. DINOv2 Small được tải từ Hugging Face public.
 
 ## Cấu hình
+
+Tạo `preprocessing.yaml`:
 
 ```yaml
 preprocessing:
@@ -31,48 +37,45 @@ preprocessing:
   transnet_weights: /models/TransNetV2/inference/transnetv2-weights
 
   efficientgebd_repo: /models/EfficientGEBD
-  efficientgebd_enabled: true
   efficientgebd_config: /models/EfficientGEBD/model_config.yaml
   efficientgebd_checkpoint: /models/EfficientGEBD/model_best.pth
-  efficientgebd_device: cuda
+
+  device: cuda
+  dino_model: facebook/dinov2-small
+  dino_dtype: float16
+  dino_batch_size: 16
+
   efficientgebd_sample_fps: 10
-  efficientgebd_overlap_frames: 20
-
-  dino_enabled: false
+  motion_threshold: 0.012
+  shot_threshold: 0.5
+  event_threshold: 0.5
+  minimum_gap_ms: 500
+  maximum_gap_ms: 2000
+  dedup_similarity: 0.985
+  image_quality: 92
 ```
 
-`model_config.yaml` phải đúng với checkpoint. Checkpoint ResNet50-L2L3L4 chính
-thức dùng `BaseModel`, `HEAD_CHOICE: [3]`, `FPN_START_IDX: 1`,
-`CAT_PREV: true`, `IS_BASIC: false` và `NUM_BLOCKS: 1`.
-
-Nếu muốn chạy nhẹ chỉ với optical flow và maximum gap, đặt:
-
-```yaml
-transnet_enabled: false
-efficientgebd_enabled: false
-dino_enabled: false
-```
-
-Mọi trường có thể đặt bằng biến môi trường với prefix
-`HCMAI_PREPROCESSING_`, ví dụ:
+Chỉ device và DINO dtype có thể override khi deploy:
 
 ```bash
-export HCMAI_PREPROCESSING_VIDEOS_ROOT=/mounted/aic2026/videos
-export HCMAI_PREPROCESSING_OUTPUT_ROOT=artifacts/frame_store
+export HCMAI_PREPROCESSING_DEVICE=cuda
+export HCMAI_PREPROCESSING_DINO_DTYPE=float16
 ```
 
 ## Chạy
 
 ```bash
-PYTHONPATH=src python scripts/preprocess_videos.py --config /path/to/preprocessing.yaml
+PYTHONPATH=src python scripts/preprocess_videos.py \
+  --config preprocessing.yaml
 ```
 
-Chạy nhanh một video:
+Test ít video hoặc chạy lại từ đầu:
 
 ```bash
 PYTHONPATH=src python scripts/preprocess_videos.py \
-  --config /path/to/preprocessing.yaml \
-  --limit 1
+  --config preprocessing.yaml \
+  --limit 1 \
+  --no-resume
 ```
 
 ## Output
@@ -83,27 +86,67 @@ artifacts/frame_store/
 └── images/<group>/<video_id>/<frame_idx>.jpg
 ```
 
-Checkpoint resume nằm ở `artifacts/.preprocessing_work/`, không phải output
-public. File `.partial` không bao giờ được tính là hoàn thành.
+Các bên chỉ cần:
 
-## Cách dùng
-
-```python
-from hcmai.data import FrameStore
-
-store = FrameStore.load("artifacts/frame_store/frames.parquet")
-frame = store.get("L21_V001_frame_000000090")
-frames = store.get_many([frame.frame_id])
-neighbors = store.get_neighbors(frame.frame_id, window_ms=3000)
-frame_ids = store.filter_frame_ids(None)
+```text
+FrameStore root: artifacts/frame_store
+Metadata:        artifacts/frame_store/frames.parquet
 ```
 
-- `get`: lấy một frame theo ID.
-- `get_many`: lấy nhiều frame, giữ nguyên thứ tự đầu vào.
-- `get_neighbors`: lấy các frame cùng video trong một khoảng thời gian.
-- `filter_frame_ids`: lọc ID theo video và thời gian.
+Checkpoint nằm tại `artifacts/.preprocessing_work/`, không phải output query.
+`image_path` trong Parquet là đường dẫn tương đối từ FrameStore root.
 
-`image_path` là đường dẫn tương đối so với `artifacts/frame_store/`.
-`frames.parquet` là metadata canonical được các pipeline đọc. Các file
-`frame_mapping.parquet` trong embedding/index và `frame_enrichment.parquet`
-là artifact downstream, không thay thế file này.
+## Khởi tạo
+
+```python
+from hcmai.data.pipeline import DataService
+
+data = DataService.load(
+    "artifacts/frame_store/frames.parquet",
+    dataset_root="artifacts/frame_store",
+)
+```
+
+Service được tạo một lần. Retrieval trả về `frame_id`; không tự tách hoặc tính
+lại `video_id`, `frame_idx` từ chuỗi ID.
+
+### KIS
+
+```python
+frames = data.get_frames(retrieved_frame_ids)
+rows = [(frame.video_id, frame.frame_idx) for frame in frames]
+```
+
+### Q&A / VQA
+
+```python
+frame = data.get_frame(retrieved_frame_id)
+neighbors = data.neighbors(frame.frame_id, window_ms=3_000)
+image_path = data.resolve_frame_asset(frame)
+```
+
+Caption, OCR và ASR được join bằng đúng `frame_id`.
+
+### TRAKE
+
+```python
+from hcmai.common.schemas.search import SearchFilters
+
+ids = data.filter_frame_ids(SearchFilters(
+    video_ids=["L21_V001"],
+    start_time_ms=10_000,
+    end_time_ms=20_000,
+))
+frames = data.get_frames(ids)
+```
+
+FrameStore chỉ cung cấp canonical frames và temporal filtering; thuật toán
+temporal ranking thuộc pipeline TRAKE riêng.
+
+## API
+
+- `get_frame(frame_id)`: lấy một `FrameRecord`.
+- `get_frames(frame_ids)`: giữ thứ tự và duplicate đầu vào.
+- `neighbors(frame_id, window_ms=...)`: lấy frame lân cận cùng video.
+- `filter_frame_ids(filters)`: lọc theo video và thời gian.
+- `resolve_frame_asset(frame)`: lấy đường dẫn ảnh đầy đủ.

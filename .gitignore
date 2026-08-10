@@ -33,16 +33,15 @@ frontend/.cache/
 
 # Local datasets and data directories
 /data/
-data/
 /dataset/
-dataset/
 /datasets/
-datasets/
 
 # Generated AI artifacts, runs, and outputs
 /artifacts/
 artifacts/
 artifacts/.preprocessing_work/
+.preprocessing_work/
+*.partial
 /runs/
 runs/
 /output/
@@ -68,6 +67,15 @@ outputs/
 *.tgz
 *.7z
 *.rar
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+*.m4v
+*.wav
+*.mp3
+*.flac
 
 # Local Kaggle subset tooling and generated packages
 /scripts/create_kaggle_subset.py

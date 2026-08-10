@@ -12,6 +12,10 @@ from PIL import Image
 
 from hcmai.data.preprocessing.config import PreprocessingConfig
 
+ANALYSIS_SIZE = (320, 180)
+TRANSNET_SIZE = (48, 27)
+VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
+
 
 @dataclass(slots=True)
 class FrameMeta:
@@ -30,22 +34,27 @@ class FrameMeta:
 
 @dataclass(slots=True)
 class VideoAnalysis:
-    """Metadata and TransNet-sized frames for one decoded video."""
+    """Metadata and boundary scores produced by one analysis decode."""
 
     frames: list[FrameMeta]
     shot_frames: np.ndarray
+    event_scores: np.ndarray
 
 
-def discover_videos(config: PreprocessingConfig) -> list[Path]:
+def discover_videos(
+    config: PreprocessingConfig, limit: int | None = None,
+) -> list[Path]:
     """Find supported videos recursively in deterministic order."""
 
     root = config.videos_root.expanduser().resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"Video root does not exist: {root}")
-    suffixes = {suffix.lower() for suffix in config.video_extensions}
-    paths = sorted(path for path in root.rglob("*") if path.suffix.lower() in suffixes)
-    if config.limit is not None:
-        paths = paths[: config.limit]
+    paths = sorted(
+        path for path in root.rglob("*")
+        if path.suffix.lower() in VIDEO_EXTENSIONS
+    )
+    if limit is not None:
+        paths = paths[:limit]
     stems = [path.stem for path in paths]
     if len(stems) != len(set(stems)):
         raise ValueError("Video IDs must be unique across the corpus")
@@ -163,8 +172,10 @@ def _motion_score(
     return _camera_compensated_motion(previous, current, *tools)
 
 
-def analyze_video(path: Path, config: PreprocessingConfig) -> VideoAnalysis:
-    """Decode one low-resolution pass and release each analysis frame promptly."""
+def analyze_video(
+    path: Path, config: PreprocessingConfig, event_detector: Any,
+) -> VideoAnalysis:
+    """Decode once for motion, TransNet, and streamed event detection."""
 
     try:
         import cv2
@@ -178,18 +189,25 @@ def analyze_video(path: Path, config: PreprocessingConfig) -> VideoAnalysis:
     records: list[FrameMeta] = []
     shot_frames: list[np.ndarray] = []
     previous: np.ndarray | None = None
-    size = (config.analysis_width, config.analysis_height)
+    event_detector.start()
     for record, frame in iter_source_frames(path):
-        rgb = frame.reformat(width=size[0], height=size[1], format="rgb24").to_ndarray()
+        rgb = frame.reformat(
+            width=ANALYSIS_SIZE[0], height=ANALYSIS_SIZE[1], format="rgb24"
+        ).to_ndarray()
         record.motion_score = _motion_score(previous, rgb, tools)
         records.append(record)
         shot_frames.append(
-            np.asarray(Image.fromarray(rgb).resize((48, 27)), dtype=np.uint8)
+            np.asarray(Image.fromarray(rgb).resize(TRANSNET_SIZE), dtype=np.uint8)
         )
+        event_detector.update(record, frame)
         previous = rgb
     if not records:
         raise ValueError(f"Video has no decodable frames: {path}")
     frame_ids = [record.frame_idx for record in records]
     if len(frame_ids) != len(set(frame_ids)):
         raise ValueError(f"Canonical frame index collision in {path.name}")
-    return VideoAnalysis(records, np.asarray(shot_frames, dtype=np.uint8))
+    return VideoAnalysis(
+        records,
+        np.asarray(shot_frames, dtype=np.uint8),
+        event_detector.scores(len(records)),
+    )

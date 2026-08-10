@@ -3,6 +3,9 @@
 `hcmai.data` owns canonical frame preparation and lookup. Other components use
 `DataService` from `pipeline.py`; store implementations remain internal.
 
+Xem [preprocessing/README.md](preprocessing/README.md) để biết cây output chuẩn
+và cách KIS, Q&A, TRAKE truy cập FrameStore.
+
 ```text
 data/
 ├── pipeline.py              # DataService public facade

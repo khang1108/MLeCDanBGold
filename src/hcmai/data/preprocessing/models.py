@@ -7,12 +7,16 @@ import pickle
 import sys
 import types
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import numpy as np
 
 from hcmai.data.preprocessing.config import PreprocessingConfig
-from hcmai.data.preprocessing.video import iter_source_frames
+from hcmai.data.preprocessing.video import FrameMeta
+
+EFFICIENTGEBD_OVERLAP = 20
+IMAGE_MEAN = (0.485, 0.456, 0.406)
+IMAGE_STD = (0.229, 0.224, 0.225)
 
 
 def _module(name: str, path: Path) -> Any:
@@ -22,7 +26,11 @@ def _module(name: str, path: Path) -> Any:
         raise ImportError(f"Cannot import model source: {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(name, None)
+        raise
     return module
 
 
@@ -38,20 +46,17 @@ class TransNetDetector:
         """Load the official TensorFlow model once."""
         if self.model is not None:
             return self.model
-        repo = self.config.transnet_repo
-        source = repo / "inference" / "transnetv2.py" if repo else Path()
-        if not repo or not source.is_file():
-            raise FileNotFoundError("TransNetV2 checkout is not configured")
+        source = self.config.transnet_repo / "inference" / "transnetv2.py"
         weights = self.config.transnet_weights
+        if not source.is_file() or not weights.exists():
+            raise FileNotFoundError("TransNetV2 source or weights are unavailable")
         self.model = _module("hcmai_transnetv2", source).TransNetV2(
-            str(weights) if weights else None
+            str(weights)
         )
         return self.model
 
     def score(self, _path: Path, frames: np.ndarray) -> np.ndarray:
         """Return one score for each decoded frame."""
-        if not self.config.transnet_enabled:
-            return np.zeros(len(frames), dtype=np.float32)
         scores, _ = self._load().predict_frames(frames)
         return np.asarray(scores, dtype=np.float32).reshape(-1)
 
@@ -60,10 +65,18 @@ class EfficientGEBDDetector:
     """Run the official EfficientGEBD checkpoint over temporal windows."""
 
     def __init__(self, config: PreprocessingConfig) -> None:
-        """Keep the PyTorch model unloaded until it is enabled."""
+        """Keep the PyTorch model unloaded until the first video."""
         self.config = config
         self.model: Any = None
         self.model_config: Any = None
+        self.positions: list[int] = []
+        self.totals: list[float] = []
+        self.counts: list[int] = []
+        self.window: list[tuple[int, Any]] = []
+        self.pending = 0
+        self.next_ms = 0.0
+        self.mean: Any = None
+        self.std: Any = None
 
     def _load(self) -> tuple[Any, Any]:
         """Load the configured official model and checkpoint once."""
@@ -72,8 +85,12 @@ class EfficientGEBDDetector:
         repo = self.config.efficientgebd_repo
         cfg_path = self.config.efficientgebd_config
         checkpoint = self.config.efficientgebd_checkpoint
-        if not repo or not cfg_path or not checkpoint:
-            raise FileNotFoundError("EfficientGEBD paths are not configured")
+        if (
+            not repo.is_dir()
+            or not cfg_path.is_file()
+            or not checkpoint.is_file()
+        ):
+            raise FileNotFoundError("EfficientGEBD source or checkpoint is unavailable")
         base = _module("hcmai_gebd_config", repo / "modeling" / "config.py")
         cfg = base._C.clone()
         cfg.merge_from_file(str(cfg_path))
@@ -85,7 +102,7 @@ class EfficientGEBDDetector:
 
         state = torch.load(checkpoint, map_location="cpu", weights_only=False)
         model.load_state_dict(state.get("model", state), strict=True)
-        self.model = model.to(self.config.efficientgebd_device).eval()
+        self.model = model.to(self.config.device).eval()
         self.model_config = cfg
         return self.model, cfg
 
@@ -136,41 +153,62 @@ class EfficientGEBDDetector:
         import torch
         model, cfg = self._load()
         length = int(cfg.INPUT.SEQUENCE_LENGTH)
-        images += [images[-1]] * (length - len(images))
-        batch = torch.stack(images).unsqueeze(0).to(self.config.efficientgebd_device)
+        padded = images + [images[-1]] * (length - len(images))
+        batch = torch.stack(padded).unsqueeze(0).to(self.config.device)
         with torch.inference_mode():
             scores = model({"imgs": batch})[0, -1, :valid]
         return scores.float().cpu().numpy()
 
-    def score(self, path: Path, frames: np.ndarray) -> np.ndarray:
-        """Return interpolated event-boundary scores for every decoded frame."""
-        if not self.config.efficientgebd_enabled:
-            return np.zeros(len(frames), dtype=np.float32)
+    def start(self) -> None:
+        """Reset streamed event detection for one video."""
+        self.positions, self.totals, self.counts, self.window = [], [], [], []
+        self.pending, self.next_ms = 0, 0.0
+        import torch
+
         _, cfg = self._load()
-        length = int(cfg.INPUT.SEQUENCE_LENGTH)
-        overlap = self.config.efficientgebd_overlap_frames
-        if overlap >= length:
+        self.mean = torch.tensor(IMAGE_MEAN)[:, None, None]
+        self.std = torch.tensor(IMAGE_STD)[:, None, None]
+        if EFFICIENTGEBD_OVERLAP >= int(cfg.INPUT.SEQUENCE_LENGTH):
             raise ValueError("EfficientGEBD overlap must be shorter than its window")
-        step = length - overlap
-        positions: list[int] = []
-        totals: list[float] = []
-        counts: list[int] = []
-        window: list[tuple[int, Any]] = []
-        pending = 0
-        for position, tensor in self._samples(path, int(cfg.INPUT.RESOLUTION)):
-            positions.append(position)
-            totals.append(0.0)
-            counts.append(0)
-            window.append((len(positions) - 1, tensor))
-            pending += 1
-            if len(window) == length:
-                self._add_scores(window, totals, counts)
-                window = window[step:]
-                pending = 0
-        if window and (pending or not any(counts)):
-            self._add_scores(window, totals, counts)
-        sampled = np.asarray(totals) / np.maximum(counts, 1)
-        return np.interp(np.arange(len(frames)), positions, sampled).astype(np.float32)
+
+    def update(self, frame: FrameMeta, source: Any) -> None:
+        """Consume one decoded frame at the configured model rate."""
+        if frame.timestamp_ms < self.next_ms:
+            return
+        import torch
+
+        _, cfg = self._load()
+        resolution = int(cfg.INPUT.RESOLUTION)
+        image = source.to_image().convert("RGB").resize((resolution, resolution))
+        tensor = torch.from_numpy(np.asarray(image).copy()).permute(2, 0, 1)
+        tensor = tensor.float() / 255
+        self.positions.append(frame.decode_index)
+        self.totals.append(0.0)
+        self.counts.append(0)
+        self.window.append((
+            len(self.positions) - 1,
+            (tensor - self.mean) / self.std,
+        ))
+        self.pending += 1
+        length = int(cfg.INPUT.SEQUENCE_LENGTH)
+        if len(self.window) == length:
+            self._add_scores(self.window, self.totals, self.counts)
+            self.window = self.window[
+                length - EFFICIENTGEBD_OVERLAP:
+            ]
+            self.pending = 0
+        interval = 1_000 / self.config.efficientgebd_sample_fps
+        while self.next_ms <= frame.timestamp_ms:
+            self.next_ms += interval
+
+    def scores(self, frame_count: int) -> np.ndarray:
+        """Finish the stream and interpolate scores to native frame positions."""
+        if self.window and (self.pending or not any(self.counts)):
+            self._add_scores(self.window, self.totals, self.counts)
+        sampled = np.asarray(self.totals) / np.maximum(self.counts, 1)
+        return np.interp(
+            np.arange(frame_count), self.positions, sampled
+        ).astype(np.float32)
 
     def _add_scores(
         self, window: list[tuple[int, Any]], totals: list[float], counts: list[int]
@@ -180,21 +218,3 @@ class EfficientGEBDDetector:
         for (index, _), score in zip(window, scores):
             totals[index] += float(score)
             counts[index] += 1
-
-    def _samples(self, path: Path, resolution: int) -> Iterator[tuple[int, Any]]:
-        """Yield normalized RGB samples at the configured model rate."""
-        import torch
-
-        interval = 1_000 / self.config.efficientgebd_sample_fps
-        next_ms = 0.0
-        mean = torch.tensor([0.485, 0.456, 0.406])[:, None, None]
-        std = torch.tensor([0.229, 0.224, 0.225])[:, None, None]
-        for record, frame in iter_source_frames(path):
-            if record.timestamp_ms < next_ms:
-                continue
-            image = frame.to_image().convert("RGB").resize((resolution, resolution))
-            tensor = torch.from_numpy(np.asarray(image).copy()).permute(2, 0, 1)
-            tensor = tensor.float() / 255
-            yield record.decode_index, (tensor - mean) / std
-            while next_ms <= record.timestamp_ms:
-                next_ms += interval
