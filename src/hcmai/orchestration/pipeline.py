@@ -29,6 +29,7 @@ from hcmai.retrieval.reranking.pipeline import RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.common.observability import METRICS
 from hcmai.temporal import TemporalEvidenceCore
+from hcmai.pipelines.trake import TRAKESettings
 
 logger = get_logger(__name__)
 
@@ -218,13 +219,23 @@ class SearchService:
             raise UnsupportedSearchTaskError(str(error)) from error
 
     def _default_registry(self) -> PipelineRegistry:
-        """Build task heads and share one temporal core between KIS and VQA."""
+        """Build task heads and inject one temporal facade into every task."""
 
         temporal_core = (
-            TemporalEvidenceCore(self.data, self.retrieval, self.config)
-            if isinstance(self.data, DataService)
+            TemporalEvidenceCore(
+                self.data,
+                self.retrieval,
+                self.config,
+                trake_settings=TRAKESettings(),
+            )
+            if self.data is not None and self.retrieval is not None
+            else None
+        )
+        progressive_core = (
+            temporal_core
+            if self.config.progressive.architecture == "temporal"
+            and isinstance(self.data, DataService)
             and isinstance(self.retrieval, RetrievalService)
-            and self.config.progressive.architecture == "temporal"
             else None
         )
         task_types = (TaskType.KIS, TaskType.VKIS)
@@ -235,7 +246,7 @@ class SearchService:
                 self.retrieval,
                 self.reranking,
                 self.config,
-                temporal_core,
+                progressive_core,
             )
             for task_type in task_types
         ]
@@ -247,9 +258,9 @@ class SearchService:
                     self.retrieval,
                     self.llm,
                     self.vqa_config,
-                    temporal_core,
+                    progressive_core,
                 ),
             )
         )
-        pipelines.append(cast(Any, TRAKEPipeline(self.retrieval)))
+        pipelines.append(cast(Any, TRAKEPipeline(temporal_core)))
         return PipelineRegistry(pipelines)

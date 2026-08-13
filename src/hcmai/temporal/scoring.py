@@ -113,6 +113,32 @@ def rank_scenes(scenes: list[SceneCandidate]) -> list[SceneCandidate]:
     )
 
 
+def unit_score_bounds(
+    state: ProgressiveEvidenceState,
+    allowed_video_ids: set[str],
+) -> dict[str, tuple[float, float]]:
+    """Return per-query-unit ranges without assuming calibrated raw scores."""
+
+    values: dict[str, list[float]] = {}
+    for (unit_id, video_id), items in state.evidence.items():
+        if video_id not in allowed_video_ids or not items:
+            continue
+        values.setdefault(unit_id, []).append(max(item.score for item in items))
+    return {
+        unit_id: (min(0.0, min(unit_values)), max(unit_values))
+        for unit_id, unit_values in values.items()
+    }
+
+
+def normalize_score(value: float, bounds: tuple[float, float]) -> float:
+    """Normalize one score inside its query-unit evidence range."""
+
+    low, high = bounds
+    if high <= low:
+        return 1.0
+    return min(1.0, max(0.0, (value - low) / (high - low)))
+
+
 def _clamp(value: float) -> float:
     """Normalize a public scene-score component to the frozen [0, 1] range."""
 

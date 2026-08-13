@@ -16,6 +16,10 @@ fi
     tests/unit/temporal \
     tests/unit/vqa \
     tests/unit/llm/test_multiframe_vqa.py \
+    tests/preprocessing/test_s3_frame_store.py \
+    tests/test_transcripts.py \
+    tests/test_transcript_reliability.py \
+    tests/test_diarization.py \
     tests/integration/test_progressive_temporal_core.py \
     tests/integration/test_vqa_api.py \
     tests/integration/test_vqa_pipeline.py \

@@ -10,6 +10,7 @@ from hcmai.common.schemas import TranscriptSegment
 from hcmai.data.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,
 )
+from hcmai.data.enrichment.transcripts.adapters.asr import DecodedAudio
 
 
 def test_diarization_lazy_load_and_overlap(
@@ -38,7 +39,10 @@ def test_diarization_lazy_load_and_overlap(
     monkeypatch.setitem(
         sys.modules, "pyannote.audio", SimpleNamespace(Pipeline=Pipeline))
     monkeypatch.setattr(
-        diarization_module, "read_audio", lambda *_: np.zeros(16_000))
+        diarization_module,
+        "read_audio",
+        lambda *_: DecodedAudio(np.zeros(16_000), 16_000, 0),
+    )
     config = DiarizationConfig(device="cpu")
     engine = DiarizationAdapter(config, hf_token="secret")
     segments = [
@@ -51,8 +55,12 @@ def test_diarization_lazy_load_and_overlap(
     records = engine.assign_speakers("video.mp4", segments)
     engine.assign_speakers("video.mp4", segments)
     assert Pipeline.loads == 1 and Pipeline.load[1]["token"] == "secret"
+    assert Pipeline.load[1]["revision"] == config.revision
     assert [record.speaker_id for record in records] == [
         "SPEAKER_00", "SPEAKER_01"]
     monkeypatch.setattr(
-        diarization_module, "read_audio", lambda *_: np.empty(0))
+        diarization_module,
+        "read_audio",
+        lambda *_: DecodedAudio(np.empty(0), 16_000, 0),
+    )
     assert engine.assign_speakers("silent.mp4", segments) == segments

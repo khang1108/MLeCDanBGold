@@ -80,6 +80,10 @@ class ASRConfig(BaseModel):
     """Configuration for offline video transcription."""
 
     model_name: str = "Qwen/Qwen3-ASR-1.7B-hf"
+    revision: str = Field(
+        default="bcd2b5b7f32b480ab5790554cfa8347f246a14f3",
+        pattern=r"^[0-9a-f]{40}$",
+    )
     device: str = "cuda"
     dtype: str = "bfloat16"
     language: str | None = None
@@ -88,7 +92,7 @@ class ASRConfig(BaseModel):
     batch_size: int = Field(default=8, gt=0)
     attn_implementation: str | None = None
     compile_model: bool = False
-    audio_sample_rate: int = 16_000
+    audio_sample_rate: int = Field(default=16_000, gt=0)
     vad_threshold: float = Field(default=0.5, ge=0, le=1)
     min_speech_duration_ms: int = 250
     min_silence_duration_ms: int = 500
@@ -99,9 +103,58 @@ class ASRConfig(BaseModel):
 class DiarizationConfig(BaseModel):
     """Configuration for offline speaker diarization."""
 
+    enabled: bool = True
     model_name: str = "pyannote/speaker-diarization-community-1"
+    revision: str = Field(
+        default="3533c8cf8e369892e6b79ff1bf80f7b0286a54ee",
+        pattern=r"^[0-9a-f]{40}$",
+    )
     device: str = "cuda"
-    audio_sample_rate: int = 16_000
+    audio_sample_rate: int = Field(default=16_000, gt=0)
+
+
+class TranscriptJobConfig(BaseModel):
+    """Reproducible transcript preparation and frame-materialization settings."""
+
+    asr: ASRConfig = Field(default_factory=ASRConfig)
+    diarization: DiarizationConfig = Field(default_factory=DiarizationConfig)
+    pipeline_version: str = Field(default="transcript-pipeline-v1", min_length=1)
+    schema_version: str = Field(default="transcript-segment-v1", min_length=1)
+    enrichment_version: str = Field(default="asr-frame-v1", min_length=1)
+    frame_evidence_window_ms: int = Field(default=2_000, ge=0)
+    output_dir: Path = Path("artifacts/enrichment/transcripts")
+    frames_path: Path = Path("artifacts/frame_store/frames.parquet")
+    frame_enrichment_path: Path = Path(
+        "artifacts/enrichment/asr/frame_enrichment.parquet"
+    )
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> TranscriptJobConfig:
+        """Load the transcript section from the shared enrichment YAML."""
+
+        from hcmai.common.utils.io import read_yaml
+
+        config_path = Path(path).expanduser().resolve()
+        raw = read_yaml(config_path)
+        transcript = raw.get("transcript") if isinstance(raw, dict) else None
+        if not isinstance(transcript, dict):
+            raise ValueError("Enrichment YAML requires a transcript mapping")
+        config = cls.model_validate(transcript)
+        project_root = Path(__file__).resolve().parents[3]
+        return config.model_copy(update={
+            "output_dir": _project_path(config.output_dir, project_root),
+            "frames_path": _project_path(config.frames_path, project_root),
+            "frame_enrichment_path": _project_path(
+                config.frame_enrichment_path, project_root
+            ),
+        })
+
+
+def _project_path(path: Path, project_root: Path) -> Path:
+    """Resolve repository-owned configuration paths independently of cwd."""
+
+    expanded = path.expanduser()
+    return expanded if expanded.is_absolute() else project_root / expanded
 
 
 class IndexConfig(BaseModel):

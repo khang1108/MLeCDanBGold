@@ -2,12 +2,16 @@
 
 `hcmai.data.enrichment.transcripts` đọc audio từ video, chia các vùng có lời
 nói và ghi riêng một file Parquet cho mỗi video. Caller dùng `TranscriptService` trong
-`pipeline.py`; ASR và diarization cụ thể nằm sau các adapter nội bộ.
+`pipeline.py`; ASR và diarization cụ thể nằm sau các adapter nội bộ. Audio giữ
+media-time offset từ PTS, vì vậy VAD/ASR timestamps không bị đặt lại về `0`.
 
 ```text
 transcripts/
 ├── pipeline.py              # TranscriptService public facade
 ├── prepare.py               # Job implementation
+├── manifest.py              # Source/config/model resume identity
+├── materialize.py           # Transcript -> canonical FrameEnrichment
+├── publication.py           # Recoverable staged promotion
 ├── store.py                 # TranscriptStore
 └── adapters/
     ├── asr.py
@@ -50,13 +54,15 @@ export HF_TOKEN="hf_..."
 
 PYTHONPATH=src python scripts/prepare_transcripts.py \
   --videos-root /path/to/dataset \
-  --output artifacts/transcripts
+  --config configs/enrichment.yaml
 ```
 
 Trước khi chạy, chấp nhận điều kiện của
 [`community-1`](https://huggingface.co/pyannote/speaker-diarization-community-1).
-Token chỉ đọc từ `HF_TOKEN`, không lưu trong code hoặc output. Có thể thêm
-`--limit 2` để chạy thử hoặc `--no-resume` để tạo lại output.
+Token chỉ đọc từ `HF_TOKEN`, không lưu trong code hoặc output. Model revisions
+được pin trong `configs/enrichment.yaml`. Có thể thêm `--limit 2`,
+`--no-resume`, hoặc `--no-diarization`. Khi diarization tắt,
+`speaker_id=None` vẫn là transcript hợp lệ.
 
 Kết quả:
 
@@ -74,14 +80,25 @@ Status: PASSED
 
 ```text
 artifacts/
-└── transcripts/
-    └── L25/
-        └── L25_V001.parquet
+├── enrichment/transcripts/L25/
+│   ├── L25_V001.parquet
+│   └── L25_V001.manifest.json
+└── enrichment/asr/frame_enrichment.parquet
 ```
 
-Transcript chỉ được ghi sau khi ASR và diarization chạy xong. File `.partial`
-không được xem là hoàn chỉnh. Khi đổi model hoặc cấu hình, dùng
-`--no-resume` để tạo lại output.
+Mỗi manifest ghi source SHA-256, configuration hash, resolved ASR/diarization
+revisions, schema/pipeline versions, segment count và completion status. Resume
+chỉ reuse khi tất cả trường identity khớp và Parquet validate lại thành công.
+Source, config, revision hoặc version đổi sẽ tự động chạy lại.
+
+Parquet và manifest được ghi vào sibling staging paths, validate đầy đủ rồi mới
+promote. Promotion lỗi sẽ restore artifact hợp lệ trước đó. Failure record chỉ
+chứa exception category, không chứa raw provider error hoặc token.
+
+Sau transcript preparation, script materialize ASR text lên canonical frames.
+Chỉ video có completed manifest được emit; video no-speech có completed row với
+`asr_text=None`, còn video chưa evaluate không bị biến thành negative evidence.
+Online `DataService` đọc file này qua existing `ASRStore`.
 
 ## Parquet schema
 
@@ -90,8 +107,8 @@ không được xem là hoàn chỉnh. Khi đổi model hoặc cấu hình, dùn
 | `segment_id` | ID duy nhất của segment |
 | `video_id` | ID lấy từ tên video |
 | `segment_index` | Thứ tự segment trong video, bắt đầu từ `0` |
-| `start_ms` | Thời điểm bắt đầu |
-| `end_ms` | Thời điểm kết thúc |
+| `start_ms` | Media-time bắt đầu (đã cộng audio PTS offset) |
+| `end_ms` | Media-time kết thúc (half-open interval) |
 | `text` | Nội dung transcript |
 | `language` | Nhãn Qwen như `vietnamese`, `english` hoặc `und` |
 | `speaker_id` | Speaker có overlap lớn nhất, ví dụ `SPEAKER_00`; có thể rỗng |
@@ -127,5 +144,6 @@ Parquet một lần và cung cấp các hàm:
 Video không tồn tại hoặc không có segment phù hợp trả về danh sách rỗng.
 
 Code production bên ngoài component không import `adapters/`, `prepare.py`,
-hay `store.py` trực tiếp. Script chuẩn gọi `TranscriptService.from_configs()`
-rồi `prepare()` để model chỉ được tạo một lần cho cả job.
+hay `store.py` trực tiếp. Script chuẩn gọi
+`TranscriptService.from_job_config()` rồi `prepare()` để model chỉ được tạo một
+lần cho cả job.

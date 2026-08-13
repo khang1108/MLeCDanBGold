@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,20 +25,61 @@ def _language_label(language: str | None) -> str:
     return _clean_text(language).lower() if language else "und"
 
 
-def read_audio(path: Path, sample_rate: int) -> np.ndarray:
-    """Decode one video to a mono float waveform."""
+@dataclass(frozen=True)
+class DecodedAudio:
+    """Immutable mono waveform anchored to its canonical media timeline."""
+
+    samples: np.ndarray
+    sample_rate: int
+    start_ms: int
+
+    def __post_init__(self) -> None:
+        samples = np.asarray(self.samples, dtype=np.float32).reshape(-1).copy()
+        if self.sample_rate <= 0:
+            raise ValueError("sample_rate must be positive")
+        if self.start_ms < 0:
+            raise ValueError("audio start_ms must be non-negative")
+        samples.setflags(write=False)
+        object.__setattr__(self, "samples", samples)
+
+
+def _time_ms(pts: object, time_base: object) -> int | None:
+    """Convert one valid PTS/time-base pair to non-negative media time."""
+
+    if pts is None or time_base is None:
+        return None
+    try:
+        value = round(float(pts * time_base) * 1_000)  # type: ignore[operator]
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return value if value >= 0 else None
+
+
+def read_audio(path: Path, sample_rate: int) -> DecodedAudio:
+    """Decode mono audio and retain the first valid media-time coordinate."""
 
     import av  # pyright: ignore[reportMissingImports]
 
     chunks = []
     with av.open(str(path)) as container:
         if not container.streams.audio:
-            return np.empty(0, dtype=np.float32)
+            return DecodedAudio(np.empty(0, dtype=np.float32), sample_rate, 0)
         stream = container.streams.audio[0]
+        fallback_ms = _time_ms(
+            getattr(stream, "start_time", None),
+            getattr(stream, "time_base", None),
+        )
+        start_ms: int | None = None
         resampler = av.AudioResampler(
             format="fltp", layout="mono", rate=sample_rate
         )
         for frame in container.decode(stream):
+            if start_ms is None:
+                start_ms = _time_ms(
+                    getattr(frame, "pts", None),
+                    getattr(frame, "time_base", None)
+                    or getattr(stream, "time_base", None),
+                )
             chunks.extend(
                 item.to_ndarray().reshape(-1)
                 for item in resampler.resample(frame)
@@ -47,8 +89,14 @@ def read_audio(path: Path, sample_rate: int) -> np.ndarray:
             for item in resampler.resample(None)
         )
     if not chunks:
-        return np.empty(0, dtype=np.float32)
-    return np.concatenate(chunks).astype(np.float32, copy=False)
+        return DecodedAudio(
+            np.empty(0, dtype=np.float32), sample_rate, fallback_ms or 0
+        )
+    if start_ms is None:
+        if fallback_ms is None:
+            raise ValueError("audio has no valid frame PTS or stream start time")
+        start_ms = fallback_ms
+    return DecodedAudio(np.concatenate(chunks), sample_rate, start_ms)
 
 
 class ASRAdapter:
@@ -76,7 +124,8 @@ class ASRAdapter:
             from transformers import AutoModelForMultimodalLM, AutoProcessor
 
             self._processor = AutoProcessor.from_pretrained(
-                self.config.model_name
+                self.config.model_name,
+                revision=self.config.revision,
             )
             model_options = {"dtype": getattr(torch, self.config.dtype)}
             if self.config.attn_implementation:
@@ -84,11 +133,20 @@ class ASRAdapter:
                     self.config.attn_implementation
                 )
             self._model = AutoModelForMultimodalLM.from_pretrained(
-                self.config.model_name, **model_options
+                self.config.model_name,
+                revision=self.config.revision,
+                **model_options,
             ).to(self.config.device).eval()
             if self.config.compile_model:
                 self._model.forward = torch.compile(self._model.forward)
         return self._model, self._processor
+
+    @property
+    def resolved_revision(self) -> str:
+        """Return the immutable configured or backend-confirmed ASR revision."""
+
+        config = getattr(self._model, "config", None)
+        return str(getattr(config, "_commit_hash", None) or self.config.revision)
 
     def _load_vad(self) -> Any:
         """Load the Silero VAD model once."""
@@ -160,9 +218,10 @@ class ASRAdapter:
     ) -> list[TranscriptSegment]:
         """Return normalized transcript segments for one video."""
 
-        audio = read_audio(
+        decoded = read_audio(
             Path(video_path), self.config.audio_sample_rate
         )
+        audio = decoded.samples
         regions = self._speech_regions(audio) if audio.size else []
         records = []
         for offset in range(0, len(regions), self.config.batch_size):
@@ -182,13 +241,27 @@ class ASRAdapter:
                     segment_id=f"{video_id}_segment_{index:06d}",
                     video_id=video_id,
                     segment_index=index,
-                    start_ms=round(
+                    start_ms=decoded.start_ms + round(
                         start * 1000 / self.config.audio_sample_rate
                     ),
-                    end_ms=round(
+                    end_ms=decoded.start_ms + round(
                         end * 1000 / self.config.audio_sample_rate
                     ),
                     text=text,
                     language=_language_label(language),
                 ))
+        _validate_segments(records)
         return records
+
+
+def _validate_segments(records: list[TranscriptSegment]) -> None:
+    """Reject negative, duplicate, or non-monotonic final media intervals."""
+
+    previous_start = -1
+    previous_end = -1
+    for record in records:
+        if record.start_ms < 0 or record.end_ms <= record.start_ms:
+            raise ValueError("transcript intervals must be positive media time")
+        if record.start_ms < previous_start or record.end_ms < previous_end:
+            raise ValueError("transcript intervals must be monotonic")
+        previous_start, previous_end = record.start_ms, record.end_ms

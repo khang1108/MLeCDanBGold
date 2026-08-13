@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from hcmai.data.pipeline import DataService
+from hcmai.data.preprocessing import PreprocessingConfig
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -25,19 +26,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
     try:
+        config = PreprocessingConfig.from_yaml(args.config)
         output = DataService.prepare_adaptive(
             args.config,
             resume=not args.no_resume,
             limit=args.limit,
         )
         data = DataService.load(output)
-    except (OSError, ValueError) as error:
+    except (OSError, RuntimeError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
     frames = tuple(data.iter_frames())
     print(f"Videos: {len({frame.video_id for frame in frames})}")
     print(f"Frames: {len(frames)}")
     print(f"Output: {output}")
+    if config.s3 is not None:
+        artifacts_prefix = config.s3.artifacts_prefix_for_run(args.limit)
+        print(
+            "Published: "
+            f"s3://{config.s3.bucket}/{artifacts_prefix}/latest.json"
+        )
     print("Status: PASSED")
     return 0
 

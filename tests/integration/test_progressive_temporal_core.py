@@ -163,14 +163,14 @@ def test_identical_kis_vqa_hint_history_produces_identical_pre_answer_scenes():
     ]
 
 
-def test_task_heads_share_one_core_and_trake_remains_separate():
+def test_all_task_heads_receive_one_shared_temporal_facade():
     service = SearchService(DataService(), RetrievalService(Retrieval()), config=_config())
     kis = service.pipeline_registry.get(TaskType.KIS)
     vqa = service.pipeline_registry.get(TaskType.VQA)
     trake = service.pipeline_registry.get(TaskType.TRAKE)
     assert kis.temporal_core is vqa.temporal_core
     assert kis.temporal_core is not None
-    assert not hasattr(trake, "temporal_core")
+    assert kis.temporal_core is trake.temporal_core
 
 
 def test_multi_video_top_k_absence_remains_unknown():

@@ -16,8 +16,7 @@ from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,
 )
-from hcmai.retrieval.retriever.pipeline import RetrievalService
-from hcmai.pipelines.trake import TRAKESettings, rank_paths
+from hcmai.temporal import TemporalEvidenceCore
 
 logger = get_logger(__name__)
 
@@ -29,18 +28,16 @@ class TRAKEPipeline:
 
     def __init__(
         self,
-        retrieval: RetrievalService | None,
-        settings: TRAKESettings | None = None,
+        temporal_core: TemporalEvidenceCore | None,
     ) -> None:
-        self.retrieval = retrieval
-        self.settings = settings or TRAKESettings()
+        self.temporal_core = temporal_core
 
     def execute(self, request: TaskRequest) -> TRAKEResponse:
         if not isinstance(request, TRAKERequest):
             raise TaskPipelineRequestError(
                 "TRAKEPipeline requires a TRAKE request"
             )
-        if self.retrieval is None:
+        if self.temporal_core is None:
             raise TaskPipelineDependencyError("Retriever not loaded")
 
         events = request.events
@@ -50,25 +47,17 @@ class TRAKEPipeline:
             )
         digest = sha1(f"trake\0{request.query}\0{request.top_k}".encode())
         request_id = f"trake-{digest.hexdigest()[:12]}"
-        videos = self.retrieval.score_visual_videos(
-            events,
-            self.settings.top_k,
-            self.settings.max_videos,
-            self.settings.rrf_k,
-            self.settings.chunk_size,
+        plan = self.temporal_core.ordered_plan(events)
+        aligned = self.temporal_core.align_ordered(
+            plan,
+            max_paths=request.top_k,
         )
-        rows = rank_paths(
-            videos,
-            self.settings.lambda_gap,
-            request.top_k,
-            self.settings.event_power,
-            self.settings.cluster_delta,
-        )
+        rows = aligned.paths
         logger.info(
             "[%s] trake completed events=%d videos=%d rows=%d",
             request_id,
             len(events),
-            len(videos),
+            len({row.video_id for row in rows}),
             len(rows),
         )
         return TRAKEResponse(
@@ -81,8 +70,8 @@ class TRAKEPipeline:
                 TRAKESubmission(
                     rank=rank,
                     video_id=row.video_id,
-                    frame_ids=list(row.frame_ids),
-                    frame_idxs=list(row.frame_idx),
+                    frame_ids=[frame.frame_id for frame in row.frames],
+                    frame_idxs=[frame.frame_idx for frame in row.frames],
                 )
                 for rank, row in enumerate(rows, start=1)
             ],

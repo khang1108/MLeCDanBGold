@@ -19,3 +19,24 @@ caption:
   batch_size: 32
   enrichment_version: "caption_v1"
   write_interval: 2000
+
+transcript:
+  output_dir: "artifacts/enrichment/transcripts"
+  frames_path: "artifacts/frame_store/frames.parquet"
+  frame_enrichment_path: "artifacts/enrichment/asr/frame_enrichment.parquet"
+  pipeline_version: "transcript-pipeline-v1"
+  schema_version: "transcript-segment-v1"
+  enrichment_version: "asr-frame-v1"
+  frame_evidence_window_ms: 2000
+  asr:
+    model_name: "Qwen/Qwen3-ASR-1.7B-hf"
+    revision: "bcd2b5b7f32b480ab5790554cfa8347f246a14f3"
+    device: "cuda"
+    dtype: "bfloat16"
+    audio_sample_rate: 16000
+  diarization:
+    enabled: true
+    model_name: "pyannote/speaker-diarization-community-1"
+    revision: "3533c8cf8e369892e6b79ff1bf80f7b0286a54ee"
+    device: "cuda"
+    audio_sample_rate: 16000

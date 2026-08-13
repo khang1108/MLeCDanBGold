@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from hcmai.common.config import AppConfig
+from hcmai.common.config import AppConfig, TranscriptJobConfig
 from hcmai.common.schemas import RetrievalSource, TaskType, VQABaselineProfile
 from hcmai.data.enrichment.caption.config import CaptionJobConfig
 from hcmai.llm.config import LLMServiceConfig
@@ -74,6 +74,14 @@ def test_enrichment_config_is_loaded_from_root_yaml() -> None:
     assert config.dataset_root == project_root / "artifacts/frame_store"
     assert config.frames_path == project_root / "artifacts/frame_store/frames.parquet"
     assert config.output_dir == project_root / "artifacts/enrichment/caption"
+
+    transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
+    assert transcript.asr.revision == "bcd2b5b7f32b480ab5790554cfa8347f246a14f3"
+    assert transcript.diarization.revision == "3533c8cf8e369892e6b79ff1bf80f7b0286a54ee"
+    assert transcript.frames_path == project_root / "artifacts/frame_store/frames.parquet"
+    assert transcript.frame_enrichment_path == (
+        project_root / "artifacts/enrichment/asr/frame_enrichment.parquet"
+    )
 
 
 @pytest.mark.parametrize("working_directory", ["repository", "external"])

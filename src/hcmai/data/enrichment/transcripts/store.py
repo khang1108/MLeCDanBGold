@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from collections.abc import Iterator
 from pathlib import Path
 
 import pandas as pd
@@ -11,7 +12,7 @@ import pandas as pd
 from hcmai.common.schemas import TranscriptSegment
 
 
-def _records(
+def load_transcript_records(
     metadata_path: Path,
 ) -> tuple[TranscriptSegment, ...]:
     """Load transcript records from one Parquet or a directory."""
@@ -26,6 +27,10 @@ def _records(
         table = pd.read_parquet(path).astype(object)
         rows = table.where(table.notna(), None).to_dict(orient="records")
         records.extend(TranscriptSegment.model_validate(row) for row in rows)
+
+    identifiers = [record.segment_id for record in records]
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError(f"Duplicate segment_id values in {metadata_path}")
     return tuple(records)
 
 
@@ -36,7 +41,7 @@ class TranscriptStore:
         """Load and index one transcript file or directory."""
 
         self.metadata_path = Path(metadata_path)
-        records = _records(self.metadata_path)
+        records = load_transcript_records(self.metadata_path)
         self._records_by_id = {
             record.segment_id: record for record in records
         }
@@ -67,6 +72,11 @@ class TranscriptStore:
         """Return all segments for one video in segment order."""
 
         return list(self._records_by_video.get(video_id, ()))
+
+    def iter_records(self) -> Iterator[TranscriptSegment]:
+        """Iterate every validated segment in deterministic artifact order."""
+
+        return iter(self._records_by_id.values())
 
     def get_at_time(
         self,

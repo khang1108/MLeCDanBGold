@@ -25,6 +25,12 @@ identity, tên JPEG và join giữa hai decode pass, nên hai decoded frame có 
 python -m pip install -e ".[preprocessing]"
 ```
 
+Khi dùng S3, cài cả hai extra:
+
+```bash
+python -m pip install -e ".[preprocessing,s3]"
+```
+
 TransNetV2 và EfficientGEBD dùng checkout/checkpoint chính thức đặt ngoài
 repository. DINOv2 Small được tải từ Hugging Face public.
 
@@ -61,6 +67,34 @@ preprocessing:
   image_quality: 92
 ```
 
+### S3 input và artifact publication
+
+Thay `videos_root` bằng block `s3` (không cấu hình cả hai):
+
+```yaml
+preprocessing:
+  s3:
+    bucket: hcmai-dataset
+    videos_prefix: videos
+    artifacts_prefix: artifacts
+    region: ap-southeast-1
+    # endpoint_url: http://localhost:9000  # chỉ dùng cho S3-compatible storage
+    # staging_root: /local-nvme/hcmai
+
+  output_root: artifacts/frame_store
+  # Các model path và selection settings giống cấu hình local ở trên.
+```
+
+Ví dụ đầy đủ nằm tại `configs/preprocessing.s3.example.yaml`. Credential không
+được ghi trong YAML; boto3 dùng IAM role hoặc standard AWS credential chain.
+Worker cần quyền list `videos_prefix`, get video objects, và put/head dưới
+`artifacts_prefix`.
+
+Pipeline list object đệ quy dưới `videos_prefix`, chỉ stage **một video tại một
+thời điểm**, chạy đủ hai decode pass trên file local, rồi xóa file stage. Vì
+vậy decoder/model hiện tại không cần seek trực tiếp qua S3 và local disk usage
+không tăng theo toàn corpus.
+
 Chỉ device và DINO dtype có thể override khi deploy:
 
 ```bash
@@ -86,6 +120,9 @@ PYTHONPATH=src python scripts/preprocess_videos.py \
 
 `--limit N` luôn ghi vào FrameStore riêng
 `<output_root>.limit-N`; nó không sửa hoặc truncate full-corpus FrameStore.
+Với S3, limited run publish vào
+`<artifacts_prefix>/limited/limit-N/`; nó không cập nhật production
+`<artifacts_prefix>/latest.json`.
 
 ## Output
 
@@ -110,6 +147,25 @@ output query. Limited run có checkpoint root riêng tương ứng.
 và số video/frame để audit và invalidation khi resume.
 Resume chỉ được bật khi `dino_revision` đã pin; nếu để `null`, pipeline luôn
 xử lý lại để tránh tái dùng artifact sau khi remote model `main` thay đổi.
+Với S3, checkpoint còn bind vào object key, ETag, size và LastModified; object
+source thay đổi sẽ invalidate checkpoint tương ứng.
+
+Sau khi local bundle và toàn bộ canonical image được validate, pipeline upload
+vào prefix immutable:
+
+```text
+s3://<bucket>/<artifacts_prefix>/versions/<bundle_id>/
+├── frames.parquet
+├── manifest.json
+├── source-manifest.json
+├── images/...
+└── _SUCCESS.json
+```
+
+Mỗi object được kiểm tra lại `ContentLength`. `_SUCCESS.json` chỉ được ghi sau
+khi đủ artifact, và `<artifacts_prefix>/latest.json` được cập nhật cuối cùng.
+Upload lỗi trước completion không thể chuyển consumer sang bundle chưa hoàn
+chỉnh. Local FrameStore được giữ lại để audit/retry.
 
 ## Khởi tạo
 

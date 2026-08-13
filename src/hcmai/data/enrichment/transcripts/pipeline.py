@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hcmai.common.config import ASRConfig, DiarizationConfig
+from hcmai.common.config import ASRConfig, DiarizationConfig, TranscriptJobConfig
 from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
 from hcmai.data.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,
@@ -33,7 +33,16 @@ class TranscriptService:
         asr: ASRConfig,
         diarization: DiarizationConfig,
     ) -> "TranscriptService":
-        return cls(ASRAdapter(asr), DiarizationAdapter(diarization))
+        return cls(
+            ASRAdapter(asr),
+            DiarizationAdapter(diarization) if diarization.enabled else None,
+        )
+
+    @classmethod
+    def from_job_config(cls, config: TranscriptJobConfig) -> "TranscriptService":
+        """Build adapters from one reproducible transcript job contract."""
+
+        return cls.from_configs(config.asr, config.diarization)
 
     def prepare(
         self,
@@ -42,9 +51,11 @@ class TranscriptService:
         *,
         resume: bool = True,
         limit: int | None = None,
+        schema_version: str = "transcript-segment-v1",
+        pipeline_version: str = "transcript-pipeline-v1",
     ) -> TranscriptReport:
-        if self.asr is None or self.diarization is None:
-            raise RuntimeError("ASR and diarization adapters are not configured")
+        if self.asr is None:
+            raise RuntimeError("ASR adapter is not configured")
         return prepare_transcripts(
             videos_root,
             output_path,
@@ -52,6 +63,8 @@ class TranscriptService:
             diarizer=self.diarization,
             resume=resume,
             limit=limit,
+            schema_version=schema_version,
+            pipeline_version=pipeline_version,
         )
 
     @staticmethod

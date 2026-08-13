@@ -40,17 +40,47 @@ flowchart TB
     REGISTRY -->|VQA| VQA["VQAPipeline"]
     REGISTRY -->|TRAKE| TRAKE["TRAKEPipeline"]
 
-    DATA["DataService<br/>FrameRecord + evidence stores"] --> KIS
+    KIS -->|progressive_scene plan| TEMP["TemporalEvidenceCore<br/>shared temporal facade"]
+    VQA -->|progressive_scene plan| TEMP
+    TRAKE -->|ordered_path plan| TEMP
+
+    DATA["DataService<br/>FrameRecord + evidence stores"] --> TEMP
+    DATA --> KIS
     DATA --> VQA
-    RET["RetrievalService<br/>multimodal indexes"] --> KIS
-    RET --> VQA
-    RET --> TRAKE
+    RET["RetrievalService<br/>multimodal indexes"] --> TEMP
     LLM["LLMService<br/>single / multi-frame VQA"] --> VQA
 
-    KIS --> KOUT["SearchResponse<br/>canonical video/frame"]
-    VQA --> VOUT["VQAResponse<br/>video/frame/answer"]
-    TRAKE --> TOUT["TRAKEResponse<br/>ordered frame path"]
+    TEMP -->|SceneCandidate[]| KIS
+    TEMP -->|SceneCandidate[]| VQA
+    TEMP -->|OrderedPathCandidate[]| TRAKE
+
+    KIS --> KMAT["SearchMaterializer<br/>canonical FrameRecord → SearchResult[]"]
+    VQA --> VMAT["VQA materialization<br/>grounded answers → VQASubmission[]<br/>+ retrieval fallback evidence"]
+    TRAKE --> TMAT["TRAKE materialization<br/>ranked paths → TRAKESubmission[]"]
+
+    KMAT --> KOUT["SearchResponse<br/>canonical video/frame"]
+    VMAT --> VOUT["VQAResponse<br/>video/frame/answer"]
+    TMAT --> TOUT["TRAKEResponse<br/>ordered frame path"]
+
+    KOUT --> KHTTP["POST /api/v1/search<br/>response_model=SearchResponse<br/>Pydantic validation → JSON"]
+    VOUT --> VHTTP["POST /api/v1/vqa<br/>response_model=VQAResponse<br/>Pydantic validation → JSON"]
+    TOUT --> THTTP["POST /api/v1/trake<br/>response_model=TRAKEResponse<br/>Pydantic validation → JSON"]
+
+    KHTTP --> FSEARCH["frontend searchFrames()<br/>validate results + resolve asset URLs"]
+    VHTTP --> FVQA["frontend searchVqa()<br/>validate submissions + resolve asset URLs"]
+    THTTP --> FTRAKE["frontend searchTrake()<br/>validate events + ordered submissions"]
+
+    FSEARCH --> KUI["AdHocSearchWorkspace<br/>ranked frame results"]
+    FVQA --> VUI["VqaSearchWorkspace<br/>answers + grounded evidence"]
+    FTRAKE --> TUI["VqaSearchWorkspace / TRAKE mode<br/>ordered event path"]
 ```
+
+Các pipeline tạo trực tiếp public response schema trước khi trả về
+`SearchService`. Router không tự ghép lại competition result: nó chỉ chọn đúng
+endpoint, áp dụng `response_model`, chuyển schema đã validate thành JSON và map
+lỗi application sang HTTP status. Ở frontend, `searchFrames()`, `searchVqa()`
+và `searchTrake()` kiểm tra shape tối thiểu của JSON; chúng không được tự tạo
+video/frame/answer thay cho backend.
 
 ### Public object boundaries
 
@@ -63,7 +93,11 @@ flowchart TB
 | KIS head | ranked scenes | `SearchResponse` | Một representative frame cho mỗi scene |
 | VQA reasoning | scene + question | `GroundedAnswerCandidate[]` | Answer được ground vào một frame đã cung cấp |
 | VQA output | ranked answers | `VQASubmission[]` | Canonical video/frame/answer rows |
-| TRAKE alignment | `VideoEventScores[]` | `TrakePath[]` | Một frame theo thứ tự cho mỗi event |
+| Temporal planning | task hints/events | `TemporalQueryPlan` | Chọn explicit `progressive_scene` hoặc `ordered_path` |
+| TRAKE alignment | `VideoEventScores[]` | `OrderedPathCandidate[]` | Canonical path: một frame theo thứ tự cho mỗi event |
+| Response composition | task rows + request metadata | `SearchResponse` / `VQAResponse` / `TRAKEResponse` | Ghép public schema trong task pipeline/materializer |
+| HTTP response | validated response schema | endpoint JSON | FastAPI áp dụng đúng `response_model` và serialize |
+| Frontend adapter | endpoint JSON | task workspace data | Kiểm tra shape, resolve asset URL, không tạo competition result |
 
 ## 2. Canonical identity
 
@@ -171,9 +205,23 @@ query-conditioned modality routing: OCR-heavy query, speech-heavy query và
 visual query sẽ có retrieval policy khác nhau. Thay đổi này phải được benchmark
 trước khi thay runtime mặc định.
 
-## 4. Progressive temporal evidence core
+## 4. Shared temporal alignment facade
 
-KIS và VQA dùng chung `TemporalEvidenceCore` khi:
+`TemporalEvidenceCore` là composition facade dùng chung cho cả ba task nhưng
+không ép chúng vào cùng một thuật toán:
+
+```mermaid
+flowchart LR
+    PLAN["TemporalQueryPlan"] --> MODE{"alignment_mode"}
+    MODE -->|progressive_scene| SPARSE["SparseProgressiveEvidenceProvider"]
+    SPARSE --> SCENE["ProgressiveSceneAligner"]
+    SCENE --> SCENES["SceneCandidate[]<br/>KIS + VQA"]
+    MODE -->|ordered_path| DENSE["DenseOrderedEvidenceProvider"]
+    DENSE --> MONO["MonotonicOrderedPathAligner"]
+    MONO --> PATHS["OrderedPathCandidate[]<br/>TRAKE"]
+```
+
+KIS và VQA bật progressive scene route khi:
 
 ```yaml
 search:
@@ -181,8 +229,9 @@ search:
     architecture: temporal
 ```
 
-`legacy` là lựa chọn explicit để chạy baseline cũ; không có fallback ngầm giữa
-hai architecture.
+`legacy` là lựa chọn explicit để chạy baseline KIS/VQA cũ; không có fallback
+ngầm giữa hai architecture. TRAKE dùng stateless `ordered_path` plan từ danh
+sách event explicit và không dùng progressive `search_id`.
 
 ### 4.1 Progressive snapshots
 
@@ -616,23 +665,28 @@ pipelines/vqa/
 
 ## 7. TRAKE workflow
 
-TRAKE không sử dụng progressive temporal core. Input là một danh sách event đã
-có thứ tự; output cần một frame trên cùng video cho mỗi event và giữ monotonic
-order.
+TRAKE sử dụng ordered-path operation của shared temporal facade, nhưng không
+dùng progressive state. Input là danh sách event đã có thứ tự; task adapter tạo
+`TemporalQueryPlan(alignment_mode=ordered_path)`. Dense provider và monotonic
+aligner giữ nguyên thuật toán TRAKE ổn định; facade chỉ chuẩn hóa composition,
+canonical identity và result contract.
 
 ```mermaid
 flowchart TB
     REQ["TRAKERequest<br/>ordered events E1..En"]
-    REQ --> ENC["event query vectors"]
+    REQ --> PLAN["TemporalQueryPlan<br/>ordered_path + QueryUnit[] + BEFORE constraints"]
+    PLAN --> CORE["TemporalEvidenceCore.align_ordered()"]
+    CORE --> ENC["DenseOrderedEvidenceProvider<br/>event query vectors"]
     ENC --> ANN["Top-K frame retrieval per event"]
     ANN --> VOTE["video coverage + RRF vote"]
     VOTE --> SHORT["shortlisted videos"]
     SHORT --> RESCORE["dense event x frame rescoring"]
     RESCORE --> MATRIX["VideoEventScores<br/>events x ordered frames"]
-    MATRIX --> DP["monotonic dynamic programming"]
-    DP --> PATHS["TrakePath[]"]
+    MATRIX --> DP["MonotonicOrderedPathAligner<br/>existing monotonic DP"]
+    DP --> PATHS["OrderedPathCandidate[]<br/>canonical FrameRecord[]"]
     PATHS --> DIVERSE["level-wise cross-video ranking"]
-    DIVERSE --> OUT["TRAKEResponse<br/>one frame per event"]
+    DIVERSE --> HEAD["thin TRAKE head"]
+    HEAD --> OUT["TRAKEResponse<br/>one frame per event"]
 ```
 
 ### 7.1 Video shortlisting
@@ -680,7 +734,9 @@ DP_e(j) = S[e,j] - \lambda t_j
         + \max_{i<j}(DP_{e-1}(i)+\lambda t_i)
 ```
 
-Backpointer khôi phục canonical `frame_ids` và `frame_idx`.
+Backpointer khôi phục `frame_ids`; shared adapter resolve từng ID qua
+`DataService` và reject mọi video/frame/timestamp conflict trước khi tạo
+`OrderedPathCandidate`.
 
 `event_power < 1` có thể transform non-negative similarity trước alignment:
 
@@ -803,11 +859,13 @@ src/hcmai/
 │   ├── embedding/                 query/frame encoders
 │   ├── retriever/                 indexes, concurrency and RRF
 │   └── reranking/                 optional bounded reranking
-├── temporal/                      shared KIS/VQA scene localization core
+├── temporal/                      shared query plans, providers and aligners
+│   ├── providers/                 sparse progressive + dense ordered evidence
+│   └── aligners/                  scene coverage + monotonic ordered path
 ├── pipelines/
 │   ├── kis/                       KIS-specific ranking/calibration helpers
 │   ├── vqa/                       VQA query/reasoning/output modules
-│   └── trake/                     monotonic event alignment
+│   └── trake/                     stable TRAKE DP compatibility algorithm
 ├── orchestration/                 composition, registry and KIS/TRAKE workflows
 └── llm/                           local/remote inference gateways
 ```

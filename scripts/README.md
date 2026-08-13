@@ -10,6 +10,17 @@ stores, or generators directly. `build_benchmark.py` is the sole deliberate
 exception: it uses the internal dense-baseline `RetrievalBenchmark`, which is
 not an end-to-end `EvaluationService`.
 
+`prepare_transcripts.py` additionally validates source/config/model manifests,
+supports explicitly disabled diarization, and materializes frame-aligned ASR
+through the canonical `FrameEnrichment`/`ASRStore` contract.
+
+`preprocess_videos.py` accepts either a local `videos_root` or an S3 source in
+its YAML. For S3 it stages one object at a time, validates the complete local
+FrameStore, publishes an immutable artifact version, writes `_SUCCESS.json`,
+and advances `latest.json` last. See
+`src/hcmai/data/preprocessing/README.md` and
+`configs/preprocessing.s3.example.yaml`.
+
 ## Validate the repository
 
 Run the complete deterministic release gate from the repository root:
@@ -39,6 +50,11 @@ The Plan 01 baseline recorded on 2026-08-13 is 324 passing backend tests with
 two deterministic skips, plus 21 passing frontend tests and a successful
 production build. Both backend skips generate tiny video fixtures and run when
 the optional preprocessing extra supplies PyAV.
+
+The current deterministic baseline after Plans 03–04 and the S3 preprocessing
+transport is 367 passing backend tests with the same two optional PyAV skips,
+plus 27 passing frontend tests and a successful production build. The focused
+temporal/VQA/TRAKE/data-reliability gate contains 120 passing tests.
 
 ## Organize raw keyframes
 

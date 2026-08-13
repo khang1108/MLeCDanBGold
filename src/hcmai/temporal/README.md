@@ -1,6 +1,25 @@
-# Shared temporal evidence core
+# Shared temporal evidence and alignment facade
 
-The core processes cumulative KIS/VQA hint snapshots transactionally:
+All task adapters create a validated `TemporalQueryPlan` and select one
+explicit alignment mode:
+
+```text
+progressive_scene
+  -> SparseProgressiveEvidenceProvider
+  -> ProgressiveSceneAligner
+  -> SceneCandidate[] for KIS/VQA
+
+ordered_path
+  -> DenseOrderedEvidenceProvider
+  -> MonotonicOrderedPathAligner
+  -> OrderedPathCandidate[] for TRAKE
+```
+
+The ports keep sparse progressive evidence separate from dense event/frame
+matrices. TRAKE remains stateless and keeps the existing monotonic DP; the
+shared adapter resolves its output through canonical `FrameRecord` values.
+
+For KIS/VQA, the facade processes cumulative hint snapshots transactionally:
 
 ```text
 snapshot delta
@@ -24,4 +43,5 @@ Important invariants:
   progressive session.
 
 `progressive.architecture` explicitly selects `temporal` or `legacy` at
-application composition time. The temporal path is the configured default.
+application composition time for KIS/VQA. The temporal path is the configured
+default. Dense provider failure never falls back to unordered scene alignment.

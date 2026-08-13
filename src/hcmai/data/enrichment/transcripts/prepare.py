@@ -1,4 +1,4 @@
-"""Build one transcript Parquet per video."""
+"""Build validated, resumable transcript artifacts per canonical video."""
 
 from __future__ import annotations
 
@@ -8,10 +8,18 @@ from pathlib import Path
 import pandas as pd
 
 from hcmai.common.schemas import TranscriptSegment
+from hcmai.common.utils.io import atomic_write, write_json
 from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
-from hcmai.data.enrichment.transcripts.adapters.diarization import (
-    DiarizationAdapter,
+from hcmai.data.enrichment.transcripts.adapters.diarization import DiarizationAdapter
+from hcmai.data.enrichment.transcripts.manifest import (
+    TranscriptManifest,
+    expected_manifest,
+    failure_manifest,
+    fingerprint_source,
+    reusable_transcript,
 )
+from hcmai.data.enrichment.transcripts.publication import publish_staged, staging_path
+from hcmai.data.enrichment.transcripts.store import load_transcript_records
 
 TRANSCRIPT_DTYPES = {
     "segment_id": "string",
@@ -38,10 +46,8 @@ class TranscriptReport:
     output_path: Path
 
 
-def _table(
-    records: list[TranscriptSegment],
-) -> pd.DataFrame:
-    """Convert transcript records to a table with stable types."""
+def _table(records: list[TranscriptSegment]) -> pd.DataFrame:
+    """Convert transcript records to a table with stable nullable types."""
 
     table = (
         pd.DataFrame(
@@ -50,35 +56,135 @@ def _table(
         )
         if records
         else pd.DataFrame({
-            name: pd.Series(dtype=dtype)
-            for name, dtype in TRANSCRIPT_DTYPES.items()
+            name: pd.Series(dtype=dtype) for name, dtype in TRANSCRIPT_DTYPES.items()
         })
     )
     return table.astype(TRANSCRIPT_DTYPES)
 
 
-def _write_parquet(table: pd.DataFrame, path: Path) -> None:
-    """Publish Parquet only after its temporary file is complete."""
+def _validate_records(
+    records: list[TranscriptSegment], video_id: str
+) -> list[TranscriptSegment]:
+    """Validate canonical identity, order, and monotonic media intervals."""
 
-    partial = path.with_suffix(f"{path.suffix}.partial")
-    table.to_parquet(partial, index=False)
-    partial.replace(path)
+    expected_indexes = list(range(len(records)))
+    if [record.segment_index for record in records] != expected_indexes:
+        raise ValueError("transcript segment indexes must be consecutive")
+    if any(record.video_id != video_id for record in records):
+        raise ValueError("transcript provider changed canonical video identity")
+    if len({record.segment_id for record in records}) != len(records):
+        raise ValueError("transcript segment IDs must be unique")
+    if any(
+        record.start_ms < 0 or record.end_ms <= record.start_ms
+        for record in records
+    ):
+        raise ValueError("transcript intervals must have positive media duration")
+    for previous, current in zip(records, records[1:]):
+        if current.start_ms < previous.start_ms or current.end_ms < previous.end_ms:
+            raise ValueError("transcript intervals must be monotonic")
+    return records
+
+
+def _manifest_path(output: Path) -> Path:
+    return output.with_suffix(".manifest.json")
+
+
+def _failure_path(output: Path) -> Path:
+    return output.with_suffix(".failure.json")
+
+
+def _load_one(output: Path) -> list[TranscriptSegment]:
+    return list(load_transcript_records(output))
+
+
+def _write_validated_pair(
+    records: list[TranscriptSegment],
+    manifest: TranscriptManifest,
+    output: Path,
+) -> None:
+    """Stage, reread, validate, and recoverably promote Parquet plus manifest."""
+
+    manifest_path = _manifest_path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staged_output = staging_path(output)
+    staged_manifest = staging_path(manifest_path)
+    try:
+        _table(records).to_parquet(staged_output, index=False)
+        write_json(manifest.model_dump(mode="json"), staged_manifest)
+        staged_records = _validate_records(_load_one(staged_output), manifest.video_id)
+        staged_manifest_value = TranscriptManifest.model_validate_json(
+            staged_manifest.read_text(encoding="utf-8")
+        )
+        if staged_manifest_value != manifest:
+            raise ValueError("staged transcript manifest changed during serialization")
+        if len(staged_records) != manifest.segment_count:
+            raise ValueError("staged transcript count does not match manifest")
+        publish_staged({
+            output: staged_output,
+            manifest_path: staged_manifest,
+        })
+    finally:
+        staged_output.unlink(missing_ok=True)
+        staged_manifest.unlink(missing_ok=True)
 
 
 def _prepare_video(
-    engine: ASRAdapter, diarizer: DiarizationAdapter,
-    video: Path, output: Path,
-) -> None:
-    """Write one speaker-labelled transcript output."""
+    engine: ASRAdapter,
+    diarizer: DiarizationAdapter | None,
+    video: Path,
+    output: Path,
+    *,
+    resume: bool,
+    schema_version: str,
+    pipeline_version: str,
+) -> tuple[Path, int]:
+    """Prepare or safely reuse one transcript/manifest pair."""
 
-    records = engine.transcribe(video, video.stem)
-    records = diarizer.assign_speakers(video, records)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    _write_parquet(_table(records), output)
+    expected = expected_manifest(
+        video,
+        video.stem,
+        engine.config,
+        diarizer.config if diarizer is not None else None,
+        asr_revision=engine.resolved_revision,
+        diarization_revision=(
+            diarizer.resolved_revision if diarizer is not None else None
+        ),
+        schema_version=schema_version,
+        pipeline_version=pipeline_version,
+    )
+    output.with_suffix(f"{output.suffix}.partial").unlink(missing_ok=True)
+    if resume and output.exists():
+        try:
+            records = _validate_records(_load_one(output), video.stem)
+        except Exception:
+            records = None
+        if records is not None and reusable_transcript(
+            output, _manifest_path(output), expected, records
+        ):
+            return output, len(records)
+
+    try:
+        records = engine.transcribe(video, video.stem)
+        if engine.resolved_revision != engine.config.revision:
+            raise ValueError("ASR backend resolved a revision different from its pin")
+        if diarizer is not None:
+            records = diarizer.assign_speakers(video, records)
+        records = _validate_records(records, video.stem)
+        completed = expected.model_copy(update={"segment_count": len(records)})
+        _write_validated_pair(records, completed, output)
+        _failure_path(output).unlink(missing_ok=True)
+        return output, len(records)
+    except Exception as error:
+        failed = failure_manifest(expected, error)
+        atomic_write(
+            _failure_path(output),
+            lambda path: write_json(failed.model_dump(mode="json"), path),
+        )
+        raise
 
 
 def _video_files(root: Path, limit: int | None) -> list[Path]:
-    """Find supported videos in deterministic order."""
+    """Find supported videos in deterministic canonical-ID order."""
 
     if not root.is_dir():
         raise FileNotFoundError(f"Videos root does not exist: {root}")
@@ -92,70 +198,59 @@ def _video_files(root: Path, limit: int | None) -> list[Path]:
     videos: dict[str, Path] = {}
     for path in candidates:
         current = videos.get(path.stem)
-        if current and current.stat().st_size != path.stat().st_size:
-            raise ValueError(f"Conflicting video_id: {path.stem}")
+        if current and fingerprint_source(current) != fingerprint_source(path):
+            raise ValueError(
+                f"Conflicting video_id with different source content: {path.stem}"
+            )
         videos.setdefault(path.stem, path)
     return [videos[video_id] for video_id in sorted(videos)][:limit]
 
 
 def _video_output(root: Path, video_id: str) -> Path:
-    """Return the grouped output path for one video."""
+    """Return the grouped transcript path without deriving canonical frame IDs."""
 
     group = video_id.split("_", maxsplit=1)[0]
     return root / group / f"{video_id}.parquet"
 
 
-def _count_outputs(paths: list[Path]) -> tuple[int, int, int]:
-    """Count completed videos and transcript segments."""
-
-    transcribed = 0
-    segments = 0
-    for path in paths:
-        count = len(pd.read_parquet(path, columns=["segment_id"]))
-        transcribed += int(count > 0)
-        segments += count
-    return transcribed, len(paths) - transcribed, segments
-
-
-def _process_video(
-    video: Path,
-    output_root: Path,
-    engine: ASRAdapter,
-    diarizer: DiarizationAdapter,
-    resume: bool,
-) -> Path:
-    """Prepare one transcript artifact for a video."""
-
-    output = _video_output(output_root, video.stem)
-    if not resume:
-        output.unlink(missing_ok=True)
-    if not output.exists():
-        _prepare_video(engine, diarizer, video, output)
-    return output
-
-
 def prepare_transcripts(
-    videos_root: str | Path, output_path: str | Path, engine: ASRAdapter,
-    *, diarizer: DiarizationAdapter, resume: bool = True,
+    videos_root: str | Path,
+    output_path: str | Path,
+    engine: ASRAdapter,
+    *,
+    diarizer: DiarizationAdapter | None = None,
+    resume: bool = True,
     limit: int | None = None,
+    schema_version: str = "transcript-segment-v1",
+    pipeline_version: str = "transcript-pipeline-v1",
 ) -> TranscriptReport:
-    """Write resumable speaker-labelled transcripts for each video."""
+    """Write independently resumable transcript artifacts without cross-video loss."""
 
     root = Path(videos_root).expanduser().resolve()
     output_root = Path(output_path).expanduser().resolve()
     videos = _video_files(root, limit)
     output_root.mkdir(parents=True, exist_ok=True)
     failures: dict[str, str] = {}
-    completed: list[Path] = []
+    segment_counts: list[int] = []
     for video in videos:
         try:
-            completed.append(_process_video(
-                video, output_root, engine, diarizer, resume,
-            ))
+            _, count = _prepare_video(
+                video=video,
+                output=_video_output(output_root, video.stem),
+                engine=engine,
+                diarizer=diarizer,
+                resume=resume,
+                schema_version=schema_version,
+                pipeline_version=pipeline_version,
+            )
+            segment_counts.append(count)
         except Exception as error:
-            failures[video.stem] = str(error)
-    transcribed, no_speech, segments = _count_outputs(completed)
+            failures[video.stem] = type(error).__name__
     return TranscriptReport(
-        len(videos), transcribed, no_speech, failures, segments,
-        output_root,
+        expected=len(videos),
+        transcribed=sum(count > 0 for count in segment_counts),
+        no_speech=sum(count == 0 for count in segment_counts),
+        failed=failures,
+        segments=sum(segment_counts),
+        output_path=output_root,
     )

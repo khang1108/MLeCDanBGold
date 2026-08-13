@@ -46,6 +46,8 @@ def discover_videos(
 ) -> list[Path]:
     """Find supported videos recursively in deterministic order."""
 
+    if config.videos_root is None:
+        raise ValueError("local video discovery requires videos_root")
     root = config.videos_root.expanduser().resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"Video root does not exist: {root}")

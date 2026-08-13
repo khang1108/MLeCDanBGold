@@ -25,9 +25,12 @@ from .task import TaskRequest, TaskResponse
 from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
 from .temporal import (
     FrameEvidence,
+    OrderedPathCandidate,
     QueryUnit,
     SceneCandidate,
+    TemporalAlignmentMode,
     TemporalConstraint,
+    TemporalQueryPlan,
     TemporalRelation,
 )
 from .trake import (
@@ -82,8 +85,11 @@ __all__ = [
     "FrameEnrichment",
     "QueryUnit",
     "FrameEvidence",
+    "OrderedPathCandidate",
     "SceneCandidate",
+    "TemporalAlignmentMode",
     "TemporalConstraint",
+    "TemporalQueryPlan",
     "TemporalRelation",
     "CaptionItem",
     "CaptionResponse",

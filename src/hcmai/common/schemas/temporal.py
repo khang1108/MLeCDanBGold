@@ -8,8 +8,9 @@ from typing import Self
 from pydantic import Field, model_validator
 
 from .base import ContractModel, NonEmptyString
-from .enum import RetrievalSource
+from .enum import RetrievalSource, TaskType
 from .frame import FrameRecord
+from .search import SearchFilters
 
 
 class QueryUnit(ContractModel):
@@ -28,6 +29,13 @@ class TemporalRelation(str, Enum):
     OVERLAP = "overlap"
     NEAR = "near"
     AT_END = "at_end"
+
+
+class TemporalAlignmentMode(str, Enum):
+    """Explicit alignment semantics selected by a task adapter."""
+
+    PROGRESSIVE_SCENE = "progressive_scene"
+    ORDERED_PATH = "ordered_path"
 
 
 class TemporalConstraint(ContractModel):
@@ -78,4 +86,73 @@ class SceneCandidate(ContractModel):
                 raise ValueError("scene evidence must belong to scene.video_id")
             if not self.start_ms <= item.frame.timestamp_ms <= self.end_ms:
                 raise ValueError("scene evidence timestamp must be inside scene range")
+        return self
+
+
+class TemporalQueryPlan(ContractModel):
+    """Validated task query units and constraints supplied to an aligner."""
+
+    task_type: TaskType
+    units: tuple[QueryUnit, ...] = Field(min_length=1)
+    constraints: tuple[TemporalConstraint, ...] = ()
+    filters: SearchFilters | None = None
+    alignment_mode: TemporalAlignmentMode
+
+    @model_validator(mode="after")
+    def validate_plan(self) -> Self:
+        unit_ids = [unit.unit_id for unit in self.units]
+        if len(unit_ids) != len(set(unit_ids)):
+            raise ValueError("temporal query-unit IDs must be unique")
+        if [unit.order for unit in self.units] != list(range(len(self.units))):
+            raise ValueError("temporal query-unit order must be consecutive")
+        expected_mode = (
+            TemporalAlignmentMode.ORDERED_PATH
+            if self.task_type is TaskType.TRAKE
+            else TemporalAlignmentMode.PROGRESSIVE_SCENE
+        )
+        if self.alignment_mode is not expected_mode:
+            raise ValueError(
+                f"task {self.task_type.value!r} requires "
+                f"{expected_mode.value!r} alignment"
+            )
+        known = set(unit_ids)
+        for constraint in self.constraints:
+            if constraint.subject_unit_id not in known:
+                raise ValueError("temporal constraint references an unknown subject")
+            if (
+                constraint.object_unit_id is not None
+                and constraint.object_unit_id not in known
+            ):
+                raise ValueError("temporal constraint references an unknown object")
+            if (
+                self.alignment_mode is TemporalAlignmentMode.ORDERED_PATH
+                and constraint.relation is not TemporalRelation.BEFORE
+            ):
+                raise ValueError("ordered-path plans accept only BEFORE constraints")
+        return self
+
+
+class OrderedPathCandidate(ContractModel):
+    """One canonical same-video frame path aligned to ordered query units."""
+
+    path_id: NonEmptyString
+    video_id: NonEmptyString
+    frames: tuple[FrameRecord, ...] = Field(min_length=1)
+    query_unit_ids: tuple[NonEmptyString, ...] = Field(min_length=1)
+    score: float
+    reason_labels: tuple[NonEmptyString, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_path(self) -> Self:
+        if len(self.frames) != len(self.query_unit_ids):
+            raise ValueError("ordered path must contain one frame per query unit")
+        if len(self.query_unit_ids) != len(set(self.query_unit_ids)):
+            raise ValueError("ordered path query-unit IDs must be unique")
+        if any(frame.video_id != self.video_id for frame in self.frames):
+            raise ValueError("ordered path frames must belong to path.video_id")
+        if any(
+            current.timestamp_ms < previous.timestamp_ms
+            for previous, current in zip(self.frames, self.frames[1:])
+        ):
+            raise ValueError("ordered path frames must be chronological")
         return self

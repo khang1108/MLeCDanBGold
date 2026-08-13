@@ -67,13 +67,17 @@ that feature package. In particular, caption/OCR types belong under
 - `SceneCandidate`: bounded video interval containing frame evidence and
   explicit semantic, coverage, temporal, relation, and final scene scores.
   VQA image sampling remains outside this shared contract.
+- `TemporalAlignmentMode`: explicit `progressive_scene` or `ordered_path`
+  behavior selected by the task adapter.
+- `TemporalQueryPlan`: task, ordered query units, constraints, filters, and
+  alignment mode, with task/mode and constraint-reference validation.
+- `TemporalConstraint`: explainable soft relation between query units.
+- `OrderedPathCandidate`: one canonical same-video chronological `FrameRecord`
+  per unique ordered query-unit ID. It is distinct from `SceneCandidate`.
 
-Temporal evidence state is intentionally not modeled yet. Future stateful
-storage must preserve the invariant that unknown/not-yet-evaluated evidence is
-different from evidence that was evaluated and produced no match. An enum or
-state contract should only be added with its first runtime consumer.
-Temporal-relation parsing and constraint contracts are likewise deferred until
-a parser/aligner consumer is implemented in the temporal-relation phase.
+Progressive evidence evaluation state is an internal runtime contract under
+`hcmai.temporal`; it preserves UNKNOWN separately from evaluated-no-match and
+matched evidence without exposing mutable search state as a public API schema.
 
 ### `telemetry.py`
 

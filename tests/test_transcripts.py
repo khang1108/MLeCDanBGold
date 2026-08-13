@@ -8,9 +8,9 @@ import pandas as pd
 import pytest
 
 import hcmai.data.enrichment.transcripts.adapters.asr as asr_module
-from hcmai.common.config import ASRConfig
+from hcmai.common.config import ASRConfig, DiarizationConfig
 from hcmai.common.schemas import TranscriptSegment
-from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
+from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
 from hcmai.data.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,
 )
@@ -44,7 +44,11 @@ def test_qwen_segments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     processor, model = Processor(), Model()
     config = ASRConfig(device="cpu", batch_size=2, prompt="HCMAI")
     engine = ASRAdapter(config, model, processor, object())
-    monkeypatch.setattr(asr_module, "read_audio", lambda *_: np.zeros(32_000))
+    monkeypatch.setattr(
+        asr_module,
+        "read_audio",
+        lambda *_: DecodedAudio(np.zeros(32_000), 16_000, 5_000),
+    )
     monkeypatch.setattr(engine, "_speech_regions", lambda _audio: [
         {"start": 0, "end": 800}, {"start": 1_600, "end": 9_600},
         {"start": 16_000, "end": 24_000},
@@ -54,13 +58,15 @@ def test_qwen_segments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     records = engine.transcribe(tmp_path / "video.mp4", "L21_V001")
     assert [row.language for row in records] == ["vietnamese", "english"]
     assert records[0].text == "Café Việt" and model.options["do_sample"] is False
-    assert (records[0].start_ms, records[0].end_ms) == (100, 600)
+    assert (records[0].start_ms, records[0].end_ms) == (5_100, 5_600)
     assert processor.batches == [2, 1]
 
 
 class FakeASR:
     def __init__(self):
         self.calls = []
+        self.config = ASRConfig(device="cpu")
+        self.resolved_revision = self.config.revision
     def transcribe(self, _path, video_id):
         self.calls.append(video_id)
         return [] if video_id == "L21_V002" else [TranscriptSegment(
@@ -72,6 +78,8 @@ class FakeASR:
 class FakeDiarizer:
     def __init__(self):
         self.calls = []
+        self.config = DiarizationConfig(device="cpu")
+        self.resolved_revision = self.config.revision
     def assign_speakers(self, path, records):
         video_id = path.stem
         self.calls.append(video_id)
@@ -108,6 +116,7 @@ def test_prepare_resume_and_stores(tmp_path: Path) -> None:
     )
     assert not second.failed and second.segments == 2
     assert asr.calls.count("L21_V003") == 2 and not partial.exists()
+    assert asr.calls.count("L21_V001") == 1
     output = transcripts / "L21/L21_V001.parquet"
     assert list(pd.read_parquet(output)) == list(TranscriptSegment.model_fields)
     assert TranscriptStore(transcripts).get_by_video("L21_V001")[0].speaker_id == "SPEAKER_00"

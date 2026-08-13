@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from types import SimpleNamespace
 from typing import Any, cast
 
 import httpx
@@ -19,7 +18,7 @@ import pytest
 from fastapi import FastAPI
 
 from hcmai.app import create_app
-from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
+from hcmai.common.schemas import FrameRecord, RetrievalCandidate, RetrievalSource
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.task_router import PipelineRegistry
@@ -42,11 +41,14 @@ _MAPPING = pd.DataFrame(
 _SCORES = np.array([[0.9, 0.1, 0.4], [0.2, 0.8, 0.5]], dtype=np.float32)
 
 _FRAMES = {
-    row.frame_id: SimpleNamespace(
+    row.frame_id: FrameRecord(
         frame_id=row.frame_id,
         video_id=row.video_id,
         frame_idx=row.frame_idx,
         timestamp_ms=row.timestamp_ms,
+        image_path=f"{row.frame_id}.jpg",
+        width=10,
+        height=10,
     )
     for row in _MAPPING.itertuples()
 }

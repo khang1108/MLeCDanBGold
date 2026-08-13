@@ -81,9 +81,14 @@ class DataService:
         from hcmai.data.preprocessing import (
             PreprocessingConfig,
             prepare_frame_store,
+            prepare_frame_store_from_s3,
         )
 
         config = PreprocessingConfig.from_yaml(config_path)
+        if config.s3 is not None:
+            return prepare_frame_store_from_s3(
+                config, resume=resume, limit=limit
+            )
         return prepare_frame_store(config, resume=resume, limit=limit)
 
     def get_frame(self, frame_id: str) -> FrameRecord:

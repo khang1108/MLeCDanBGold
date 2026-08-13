@@ -81,7 +81,7 @@ def _config_hash(
     """Hash settings that affect selected frames."""
     values = config.model_dump(
         mode="json",
-        exclude={"videos_root", "output_root"},
+        exclude={"videos_root", "output_root", "s3"},
     )
     values["pipeline_version"] = _PIPELINE_VERSION
     values["model_fingerprints"] = (
@@ -121,6 +121,7 @@ def _load_checkpoint(
     video_path: Path,
     resume: bool,
     config_hash: str,
+    source_version: str | None = None,
 ) -> pd.DataFrame | None:
     """Reuse a checkpoint when its source, config, and images still match."""
     path = _checkpoint_path(config, video_path.stem)
@@ -128,17 +129,26 @@ def _load_checkpoint(
         return None
     table = pd.read_parquet(path)
     stat = video_path.stat()
+    version_matches = source_version is None or (
+        "_source_version" in table
+        and str(table["_source_version"].iloc[0]) == source_version
+    )
     valid = (
         not table.empty
         and table["_config_hash"].iloc[0] == config_hash
         and int(table["_source_size"].iloc[0]) == stat.st_size
         and int(table["_source_mtime_ns"].iloc[0]) == stat.st_mtime_ns
+        and version_matches
         and all(
             (config.output_root / value).is_file()
             for value in table["image_path"]
         )
     )
-    return table.drop(columns=_CHECKPOINT_COLUMNS) if valid else None
+    checkpoint_columns = [
+        column for column in (*_CHECKPOINT_COLUMNS, "_source_version")
+        if column in table
+    ]
+    return table.drop(columns=checkpoint_columns) if valid else None
 
 
 def _encode_images(paths: list[Path], encoder: Any, batch_size: int) -> np.ndarray:
@@ -252,9 +262,12 @@ def _materialize(
 def _prepare_video(
     path: Path, config: PreprocessingConfig, shot_detector: Any,
     event_detector: Any, encoder: Any, resume: bool, config_hash: str,
+    source_version: str | None = None,
 ) -> pd.DataFrame:
     """Prepare one video or reuse its checkpoint."""
-    cached = _load_checkpoint(config, path, resume, config_hash)
+    cached = _load_checkpoint(
+        config, path, resume, config_hash, source_version
+    )
     if cached is not None:
         return cached
     analysis = analyze_video(path, config, event_detector)
@@ -271,8 +284,58 @@ def _prepare_video(
         _source_size=stat.st_size,
         _source_mtime_ns=stat.st_mtime_ns,
     )
+    if source_version is not None:
+        checkpoint["_source_version"] = source_version
     _write_parquet(checkpoint, _checkpoint_path(config, path.stem))
     return table
+
+
+def _limit_config(
+    config: PreprocessingConfig, limit: int | None,
+) -> PreprocessingConfig:
+    """Isolate smoke-test artifacts from the configured full-corpus output."""
+
+    if limit is None:
+        return config
+    if limit <= 0:
+        raise ValueError("limit must be greater than zero")
+    return config.model_copy(update={
+        "output_root": config.output_root.with_name(
+            f"{config.output_root.name}.limit-{limit}"
+        ),
+    })
+
+
+def _finalize_frame_store(
+    config: PreprocessingConfig,
+    tables: list[pd.DataFrame],
+    *,
+    config_hash: str,
+    model_fingerprints: dict[str, str],
+    limited_run: bool,
+    resume_enabled: bool,
+    source: dict[str, object] | None = None,
+) -> Path:
+    """Atomically publish canonical metadata after every video succeeds."""
+
+    frames = pd.concat(tables, ignore_index=True).sort_values(
+        ["video_id", "timestamp_ms", "frame_idx"], kind="stable"
+    )
+    output = config.output_root / "frames.parquet"
+    _write_parquet(frames.reset_index(drop=True), output)
+    manifest: dict[str, object] = {
+        "pipeline_version": _PIPELINE_VERSION,
+        "config_hash": config_hash,
+        "model_fingerprints": model_fingerprints,
+        "video_count": len(set(frames["video_id"].astype(str))),
+        "frame_count": len(frames),
+        "limited_run": limited_run,
+        "resume_enabled": resume_enabled,
+    }
+    if source is not None:
+        manifest["source"] = source
+    _write_json(manifest, config.output_root / "manifest.json")
+    return output
 
 
 def prepare_frame_store(
@@ -285,14 +348,9 @@ def prepare_frame_store(
     limit: int | None = None,
 ) -> Path:
     """Build and return the canonical ``frames.parquet`` path."""
-    if limit is not None:
-        if limit <= 0:
-            raise ValueError("limit must be greater than zero")
-        config = config.model_copy(update={
-            "output_root": config.output_root.with_name(
-                f"{config.output_root.name}.limit-{limit}"
-            ),
-        })
+    if config.videos_root is None:
+        raise ValueError("local preprocessing requires videos_root")
+    config = _limit_config(config, limit)
     config.output_root.mkdir(parents=True, exist_ok=True)
     model_fingerprints = _model_fingerprints(config)
     config_hash = _config_hash(config, model_fingerprints)
@@ -312,21 +370,11 @@ def prepare_frame_store(
         )
         for path in discover_videos(config, limit)
     ]
-    frames = pd.concat(tables, ignore_index=True).sort_values(
-        ["video_id", "timestamp_ms", "frame_idx"], kind="stable"
+    return _finalize_frame_store(
+        config,
+        tables,
+        config_hash=config_hash,
+        model_fingerprints=model_fingerprints,
+        limited_run=limit is not None,
+        resume_enabled=checkpoint_resume,
     )
-    output = config.output_root / "frames.parquet"
-    _write_parquet(frames.reset_index(drop=True), output)
-    _write_json(
-        {
-            "pipeline_version": _PIPELINE_VERSION,
-            "config_hash": config_hash,
-            "model_fingerprints": model_fingerprints,
-            "video_count": len(set(frames["video_id"].astype(str))),
-            "frame_count": len(frames),
-            "limited_run": limit is not None,
-            "resume_enabled": checkpoint_resume,
-        },
-        config.output_root / "manifest.json",
-    )
-    return output
