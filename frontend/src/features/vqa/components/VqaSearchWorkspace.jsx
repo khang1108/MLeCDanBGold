@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { searchFrames, searchVqa, suggestQueries } from "../../../api/search";
+import { searchFrames, searchTrake, searchVqa } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
-import QuerySuggestionsBox from "../../search-controls/components/QuerySuggestionsBox";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 
-const RETRIEVAL_PREFIX = /^\/(kis|tkis|vkis|trake)\b\s*/i;
+const RETRIEVAL_PREFIX = /^\/(kis|tkis|vkis)\b\s*/i;
 const ANY_PREFIX = /^\/(vqa|kis|tkis|vkis|trake)\b\s*/i;
+const TRAKE_PREFIX = /^\/trake\b\s*/i;
+const SESSION_FINGERPRINT_KEY = "hcmai.session.fingerprint";
+const SEARCH_ID_PREFIX = "hcmai.progressive.search_id";
+const PROGRESSIVE_TASKS = ["kis", "vkis", "vqa"];
 
 export const parseRetrievalDescription = (description) => {
   const match = description.match(RETRIEVAL_PREFIX);
@@ -16,6 +19,70 @@ export const parseRetrievalDescription = (description) => {
   const query = description.slice(match[0].length).trim();
   return query ? { queryType, query } : null;
 };
+
+export const parseTrakeEvents = (description) => {
+  if (!TRAKE_PREFIX.test(description)) return null;
+  return description
+    .replace(TRAKE_PREFIX, "")
+    .split(/\s*(?:->|\r?\n)\s*/)
+    .map((event) => event.trim())
+    .filter(Boolean);
+};
+
+const sessionFingerprint = () => {
+  let fingerprint = window.sessionStorage.getItem(SESSION_FINGERPRINT_KEY);
+  if (!fingerprint) {
+    fingerprint = window.crypto?.randomUUID?.()
+      || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    window.sessionStorage.setItem(SESSION_FINGERPRINT_KEY, fingerprint);
+  }
+  return fingerprint;
+};
+
+export const progressiveSearchIdKey = (task) => (
+  `${SEARCH_ID_PREFIX}.${task}.${sessionFingerprint()}`
+);
+
+const TrakeResults = ({ events, submissions, warnings, error, hasSearched }) => (
+  <section className="frames-container" aria-label="TRAKE ordered paths">
+    {error && (
+      <div className="error-alert" role="alert">
+        <div className="error-details">
+          <h4 className="error-title">TRAKE Search Error</h4>
+          <p className="error-message">{error}</p>
+        </div>
+      </div>
+    )}
+    {!error && warnings.length > 0 && (
+      <div className="search-warning" role="status">
+        <span>Server note:</span>
+        <ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+      </div>
+    )}
+    {!error && submissions.length > 0 && (
+      <div className="frames-scroll-region">
+        <h3>Ordered TRAKE paths</h3>
+        {submissions.map((submission) => (
+          <article key={`${submission.rank}-${submission.video_id}`}>
+            <h4>Rank {submission.rank}: {submission.video_id}</h4>
+            <ol>
+              {events.map((event, index) => (
+                <li key={`${submission.frame_ids[index]}-${index}`}>
+                  {event}: frame {submission.frame_idxs[index]} ({submission.frame_ids[index]})
+                </li>
+              ))}
+            </ol>
+          </article>
+        ))}
+      </div>
+    )}
+    {!error && hasSearched && submissions.length === 0 && (
+      <div className="frames-empty-state">
+        <p className="body-md frames-empty-text">No ordered TRAKE paths found</p>
+      </div>
+    )}
+  </section>
+);
 
 const VqaSearchWorkspace = ({
   topK,
@@ -27,16 +94,10 @@ const VqaSearchWorkspace = ({
 }) => {
   const [eventDescription, setEventDescription] = useState("");
   const [question, setQuestion] = useState("");
-  
-  const [suggestCount, setSuggestCount] = useState(5);
-  const [suggestions, setSuggestions] = useState([]);
-  const [isSuggesting, setIsSuggesting] = useState(false);
-  const [suggestError, setSuggestError] = useState(null);
-  const suggestControllerRef = useRef(null);
-
   const [resultType, setResultType] = useState(null);
   const [frames, setFrames] = useState([]);
   const [submissions, setSubmissions] = useState([]);
+  const [trakeEvents, setTrakeEvents] = useState([]);
   const [warnings, setWarnings] = useState([]);
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
   const [vqaLatencyMs, setVqaLatencyMs] = useState(null);
@@ -44,53 +105,7 @@ const VqaSearchWorkspace = ({
   const [isSearching, setIsSearching] = useState(false);
   const requestRef = useRef(null);
 
-  useEffect(() => () => {
-    requestRef.current?.abort();
-    suggestControllerRef.current?.abort();
-  }, []);
-
-  const handleSuggest = useCallback(async () => {
-    const rawText = eventDescription.trim();
-    if (!rawText) return;
-    
-    // Extract query text by stripping prefix if present
-    const cleanQuery = rawText.replace(ANY_PREFIX, "").trim();
-    if (!cleanQuery) return;
-
-    suggestControllerRef.current?.abort();
-    const controller = new AbortController();
-    suggestControllerRef.current = controller;
-    setIsSuggesting(true);
-    setSuggestError(null);
-    setSuggestions([]);
-
-    try {
-      const response = await suggestQueries({
-        query: cleanQuery,
-        count: suggestCount,
-        signal: controller.signal,
-      });
-      setSuggestions(response.suggestions || []);
-    } catch (err) {
-      if (err.name === "AbortError") return;
-      setSuggestError(err.message || "Failed to load suggestions.");
-    } finally {
-      if (suggestControllerRef.current === controller) {
-        suggestControllerRef.current = null;
-        setIsSuggesting(false);
-      }
-    }
-  }, [eventDescription, suggestCount]);
-
-  const handleSelectSuggestion = useCallback((suggestionQuery) => {
-    const rawText = eventDescription.trimStart();
-    const match = rawText.match(ANY_PREFIX);
-    if (match) {
-      setEventDescription(`${match[0]}${suggestionQuery}`);
-    } else {
-      setEventDescription(suggestionQuery);
-    }
-  }, [eventDescription]);
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   const submit = useCallback(async (event) => {
     event.preventDefault();
@@ -99,12 +114,19 @@ const VqaSearchWorkspace = ({
     if (!rawEventText || isSearching) return;
 
     const isVqaMode = Boolean(questionText);
+    const events = isVqaMode ? null : parseTrakeEvents(rawEventText);
+    const isTrakeMode = events !== null;
     let eventTextForSubmit = rawEventText;
     let retrieval = null;
 
     if (isVqaMode) {
-      // Auto VQA: strip prefix if user left it there
       eventTextForSubmit = rawEventText.replace(ANY_PREFIX, "").trim();
+    } else if (isTrakeMode) {
+      if (events.length < 2) {
+        setResultType("trake");
+        setError("TRAKE requires at least two non-empty ordered events separated by -> or new lines.");
+        return;
+      }
     } else {
       retrieval = parseRetrievalDescription(rawEventText);
       if (!retrieval) {
@@ -114,6 +136,9 @@ const VqaSearchWorkspace = ({
       }
     }
 
+    const task = isVqaMode ? "vqa" : (isTrakeMode ? "trake" : retrieval.queryType);
+    const searchKey = task === "trake" ? null : progressiveSearchIdKey(task);
+    const searchId = searchKey ? window.sessionStorage.getItem(searchKey) : null;
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
@@ -122,28 +147,43 @@ const VqaSearchWorkspace = ({
     setWarnings([]);
     setFrames([]);
     setSubmissions([]);
+    setTrakeEvents([]);
     setSearchLatencyMs(null);
     setVqaLatencyMs(null);
 
     try {
-      const response = isVqaMode
-        ? await searchVqa({
+      let response;
+      if (isVqaMode) {
+        response = await searchVqa({
           eventDescription: eventTextForSubmit,
           question: questionText,
           topK,
+          searchId,
           signal: controller.signal,
-        })
-        : await searchFrames({
+        });
+      } else if (isTrakeMode) {
+        response = await searchTrake({ events, topK, signal: controller.signal });
+      } else {
+        response = await searchFrames({
           query: retrieval.query,
           queryType: retrieval.queryType,
           topK,
+          searchId,
           signal: controller.signal,
         });
+      }
 
+      if (searchKey && response.search_id) {
+        window.sessionStorage.setItem(searchKey, response.search_id);
+      }
       if (isVqaMode) {
         setResultType("vqa");
         setSubmissions(response.submissions || []);
         setVqaLatencyMs(response.latency_ms);
+      } else if (isTrakeMode) {
+        setResultType("trake");
+        setSubmissions(response.submissions || []);
+        setTrakeEvents(response.events || events);
       } else {
         setResultType("retrieval");
         setFrames(response.results || []);
@@ -152,8 +192,14 @@ const VqaSearchWorkspace = ({
       setWarnings(response.warnings || []);
     } catch (requestError) {
       if (requestError.name === "AbortError") return;
-      setResultType(isVqaMode ? "vqa" : "retrieval");
-      setError(requestError.message || "Failed to contact search API");
+      if (requestError?.status === 410 && searchKey) {
+        window.sessionStorage.removeItem(searchKey);
+      }
+      const resetInstruction = requestError?.status === 409
+        ? " Reset this task with New Question before continuing."
+        : "";
+      setResultType(isVqaMode ? "vqa" : (isTrakeMode ? "trake" : "retrieval"));
+      setError(`${requestError.message || "Failed to contact search API"}${resetInstruction}`);
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null;
@@ -161,6 +207,30 @@ const VqaSearchWorkspace = ({
       }
     }
   }, [eventDescription, isSearching, question, topK]);
+
+  const handleNewQuestion = useCallback(() => {
+    PROGRESSIVE_TASKS.forEach((task) => {
+      window.sessionStorage.removeItem(progressiveSearchIdKey(task));
+    });
+    setEventDescription("");
+    setQuestion("");
+    setFrames([]);
+    setSubmissions([]);
+    setTrakeEvents([]);
+    setWarnings([]);
+    setResultType(null);
+    setError(null);
+    setSearchLatencyMs(null);
+    setVqaLatencyMs(null);
+  }, []);
+
+  const vqaFrames = submissions.map((submission) => ({
+    ...submission,
+    scores: { final: submission.joint_score },
+    caption: submission.caption
+      || submission.evidence_summary
+      || `Answer: ${submission.answer}`,
+  }));
 
   return (
     <div className="adhoc-workspace vqa-workspace">
@@ -178,30 +248,15 @@ const VqaSearchWorkspace = ({
               onFocus={onFocusQueryInput}
               onBlur={onBlurQueryInput}
               disabled={isSearching}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submit(e);
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  submit(event);
                 }
               }}
             />
           </div>
-          <button
-            type="button"
-            className="query-suggest-btn"
-            onClick={handleSuggest}
-            disabled={isSuggesting || !eventDescription.trim()}
-          >
-            {isSuggesting ? "..." : "Suggest"}
-          </button>
         </div>
-
-        <QuerySuggestionsBox
-          suggestions={suggestions}
-          isLoading={isSuggesting}
-          error={suggestError}
-          onSelectSuggestion={handleSelectSuggestion}
-        />
 
         <div className="adhoc-query-bar">
           <input
@@ -219,50 +274,47 @@ const VqaSearchWorkspace = ({
           >
             {isSearching ? "Searching..." : "Search"}
           </button>
+          <button type="button" className="btn-secondary" onClick={handleNewQuestion}>
+            New Question
+          </button>
         </div>
       </form>
 
       <div className="adhoc-workspace-body">
         <aside className="adhoc-sidebar">
           <h3 className="adhoc-sidebar-title">Options</h3>
-          <ToolBox 
-            topK={topK} 
-            setTopK={setTopK} 
-            suggestCount={suggestCount}
-            setSuggestCount={setSuggestCount}
-            onReset={() => {
-              setTopK(20);
-              setSuggestCount(5);
-            }} 
-          />
+          <ToolBox topK={topK} setTopK={setTopK} onReset={() => setTopK(20)} />
         </aside>
         <div className="adhoc-results">
           <GifLoaderOverlay isVisible={isSearching} />
-          {!isSearching && (
-            resultType === "retrieval" ? (
-              <FramesBox
-                results={frames}
-                isLoading={false}
-                error={error}
-                latencyMs={searchLatencyMs}
-                warnings={warnings}
-                onFrameClick={onFrameClick}
-              />
-            ) : (
-              <FramesBox
-                results={submissions.map(sub => ({
-                  ...sub,
-                  scores: { final: sub.joint_score },
-                  caption: sub.evidence_summary || `Answer: ${sub.answer}`
-                }))}
-                isLoading={false}
-                error={error}
-                hasSearched={vqaLatencyMs !== null || error !== null}
-                latencyMs={vqaLatencyMs}
-                warnings={warnings}
-                onFrameClick={onFrameClick}
-              />
-            )
+          {!isSearching && resultType === "trake" && (
+            <TrakeResults
+              events={trakeEvents}
+              submissions={submissions}
+              warnings={warnings}
+              error={error}
+              hasSearched
+            />
+          )}
+          {!isSearching && resultType === "retrieval" && (
+            <FramesBox
+              results={frames}
+              isLoading={false}
+              error={error}
+              latencyMs={searchLatencyMs}
+              warnings={warnings}
+              onFrameClick={onFrameClick}
+            />
+          )}
+          {!isSearching && resultType !== "trake" && resultType !== "retrieval" && (
+            <FramesBox
+              results={vqaFrames}
+              isLoading={false}
+              error={error}
+              latencyMs={vqaLatencyMs}
+              warnings={warnings}
+              onFrameClick={onFrameClick}
+            />
           )}
         </div>
       </div>

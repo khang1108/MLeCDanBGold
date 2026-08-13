@@ -21,7 +21,6 @@ from hcmai.common.schemas import (
     TextEmbeddingResponse,
     VQAInferenceEvidence,
     VQAInferenceResponse,
-    VQAMultiFrameInferenceResponse,
 )
 from hcmai.llm.pipeline import LLMService
 
@@ -61,7 +60,7 @@ def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
         "/v1/vqa/multi",
         vqa_multi,
         methods=["POST"],
-        response_model=VQAMultiFrameInferenceResponse,
+        response_model=VQAInferenceResponse,
     )
     return app
 
@@ -171,6 +170,8 @@ async def vqa(
     request: Request,
     request_id: str = Form(min_length=1),
     frame_id: str = Form(min_length=1),
+    video_id: str = Form(min_length=1),
+    scene_context: str = Form(default="", max_length=1_000),
     question: str = Form(min_length=1, max_length=1_000),
     evidence: str = Form(default="{}"),
     image: UploadFile = File(),
@@ -183,17 +184,23 @@ async def vqa(
     started = perf_counter()
     runtime = request.app.state.runtime
     try:
-        answer = runtime.answer_vqa(question, decoded[0], context)
+        answer = runtime.answer_vqa(
+            question, decoded[0], context, scene_context=scene_context
+        )
     except Exception as error:
         raise _unavailable("VQA inference failed", error) from error
     finally:
         decoded[0].close()
     return VQAInferenceResponse(
         request_id=request_id,
-        frame_id=frame_id,
+        video_id=video_id,
+        frame_ids=[frame_id],
+        selected_frame_id=frame_id,
         question=question,
         answer=answer,
+        answerable=True,
         grounded=True,
+        confidence=0.5,
         model_name=runtime.config.vqa_model.checkpoint,
         latency_ms=max(0, int((perf_counter() - started) * 1_000)),
         evidence=context,
@@ -203,11 +210,13 @@ async def vqa(
 async def vqa_multi(
     request: Request,
     request_id: str = Form(min_length=1),
+    video_id: str = Form(min_length=1),
     frame_ids: str = Form(min_length=1),
+    scene_context: str = Form(default="", max_length=1_000),
     question: str = Form(min_length=1, max_length=1_000),
     evidence: str = Form(default="{}"),
     images: list[UploadFile] = File(),
-) -> VQAMultiFrameInferenceResponse:
+) -> VQAInferenceResponse:
     try:
         context = VQAInferenceEvidence.model_validate_json(evidence)
     except Exception as error:
@@ -217,15 +226,20 @@ async def vqa_multi(
     runtime = request.app.state.runtime
     try:
         result = runtime.answer_vqa_multi(
-            question, decoded, identifiers, context
+            question,
+            decoded,
+            identifiers,
+            context,
+            scene_context=scene_context,
         )
     except Exception as error:
         raise _unavailable("Multi-frame VQA inference failed", error) from error
     finally:
         for image in decoded:
             image.close()
-    return VQAMultiFrameInferenceResponse(
+    return VQAInferenceResponse(
         request_id=request_id,
+        video_id=video_id,
         frame_ids=identifiers,
         selected_frame_id=result["selected_frame_id"],
         question=question,

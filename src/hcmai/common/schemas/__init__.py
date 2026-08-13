@@ -12,17 +12,6 @@ from .inference import (
     TextEmbeddingRequest,
     TextEmbeddingResponse,
 )
-from .minichallenge import (
-    MiniChallengeAnswer,
-    MiniChallengeAnswerSet,
-    MiniChallengeEvaluation,
-    MiniChallengeLoginRequest,
-    MiniChallengeLoginResponse,
-    MiniChallengeSubmission,
-    MiniChallengeSubmissionResult,
-    MiniChallengeSubmitRequest,
-    MiniChallengeTaskTemplate,
-)
 from .retrieval import RetrievalCandidate, RetrievalResult, SearchScores
 from .search import (
     SearchFilters,
@@ -34,6 +23,13 @@ from .search import (
 from .submission import SubmissionResult
 from .task import TaskRequest, TaskResponse
 from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
+from .temporal import (
+    FrameEvidence,
+    QueryUnit,
+    SceneCandidate,
+    TemporalConstraint,
+    TemporalRelation,
+)
 from .trake import (
     TRAKERequest,
     TRAKEResponse,
@@ -44,9 +40,9 @@ from .vqa import (
     VQABaselineProfile,
     VQARetrievalEvidence,
     VQAInferenceEvidence,
+    VQAInferenceEvidenceItem,
     VQAInferenceRequest,
     VQAInferenceResponse,
-    VQAMultiFrameInferenceResponse,
     VQARequest,
     VQAResponse,
     VQASubmission,
@@ -84,6 +80,11 @@ __all__ = [
     "SubmissionResult",
     "FrameRecord",
     "FrameEnrichment",
+    "QueryUnit",
+    "FrameEvidence",
+    "SceneCandidate",
+    "TemporalConstraint",
+    "TemporalRelation",
     "CaptionItem",
     "CaptionResponse",
     "InferenceCapabilities",
@@ -93,21 +94,12 @@ __all__ = [
     "RerankResponse",
     "TextEmbeddingRequest",
     "TextEmbeddingResponse",
-    "MiniChallengeAnswer",
-    "MiniChallengeAnswerSet",
-    "MiniChallengeEvaluation",
-    "MiniChallengeLoginRequest",
-    "MiniChallengeLoginResponse",
-    "MiniChallengeSubmission",
-    "MiniChallengeSubmissionResult",
-    "MiniChallengeSubmitRequest",
-    "MiniChallengeTaskTemplate",
     "VQAInferenceEvidence",
+    "VQAInferenceEvidenceItem",
     "VQABaselineProfile",
     "VQARetrievalEvidence",
     "VQAInferenceRequest",
     "VQAInferenceResponse",
-    "VQAMultiFrameInferenceResponse",
     "VQARequest",
     "VQAResponse",
     "VQASubmission",

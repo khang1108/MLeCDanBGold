@@ -41,12 +41,15 @@ class GroundedVQAModel:
         question: str,
         image: Image.Image,
         evidence: VQAInferenceEvidence,
+        *,
+        scene_context: str = "",
     ) -> str:
         """Answer one frame-grounded question with the shared vision model."""
         context = evidence.model_dump(exclude_none=True)
         prompt = (
+            f"Scene context: {scene_context or 'Not supplied'}\n"
             f"Question: {question}\n"
-            f"Retrieved evidence: {json.dumps(context, ensure_ascii=False)}\n"
+            f"Evidence: {json.dumps(context, ensure_ascii=False)}\n"
             "Answer from the image and evidence. Return only the final answer "
             "in the question's language, with no reasoning, at most 100 characters."
         )
@@ -65,6 +68,8 @@ class GroundedVQAModel:
         images: list[Image.Image],
         frame_ids: list[str],
         evidence: VQAInferenceEvidence,
+        *,
+        scene_context: str = "",
     ) -> dict[str, Any]:
         """Answer from ordered frames and bind the answer to a supplied ID."""
         if not images or len(images) != len(frame_ids):
@@ -73,16 +78,25 @@ class GroundedVQAModel:
             raise ValueError("frame_ids must be unique")
         context = evidence.model_dump(exclude_none=True)
         content: list[dict[str, Any]] = []
+        timestamps = {
+            item.frame_id: item.start_ms
+            for item in evidence.items
+        }
         for frame_id, image in zip(frame_ids, images):
+            timestamp = timestamps.get(frame_id)
+            label = f"Frame ID: {frame_id}"
+            if timestamp is not None:
+                label += f" | timestamp_ms: {timestamp}"
             content.extend((
-                {"type": "text", "text": f"Frame ID: {frame_id}"},
+                {"type": "text", "text": label},
                 {"type": "image", "image": image},
             ))
         content.append({
             "type": "text",
             "text": (
+                f"Scene context: {scene_context or 'Not supplied'}\n"
                 f"Question: {question}\n"
-                f"Retrieved evidence: {json.dumps(context, ensure_ascii=False)}\n"
+                f"Evidence: {json.dumps(context, ensure_ascii=False)}\n"
                 "Return only JSON with keys answer, selected_frame_id, "
                 "answerable, confidence. selected_frame_id must be one of the "
                 "supplied Frame IDs; confidence must be between 0 and 1."

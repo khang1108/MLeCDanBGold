@@ -17,8 +17,8 @@ from hcmai.common.schemas import (
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.logging import get_logger
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
-from hcmai.observability.tracing import StageTimer
-from hcmai.observability import PipelineStage
+from hcmai.common.observability import PipelineStage
+from hcmai.common.observability.tracing import StageTimer
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.cache import EmbeddingCache
 from hcmai.retrieval.retriever.query_batch import (

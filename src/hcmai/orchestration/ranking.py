@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from hashlib import sha1
 from time import perf_counter
+from uuid import uuid4
 
 from hcmai.common.schemas import (
     RetrievalResult,
@@ -13,8 +13,8 @@ from hcmai.common.schemas import (
     StageTrace,
 )
 from hcmai.common.utils.logging import get_logger
-from hcmai.observability.tracing import StageTimer, log_stage
-from hcmai.observability import PipelineStage
+from hcmai.common.observability import PipelineStage
+from hcmai.common.observability.tracing import StageTimer, log_stage
 from hcmai.retrieval.reranking.pipeline import RerankingError, RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 
@@ -171,10 +171,9 @@ def rank_candidates(
 
 
 def request_id(request: SearchRequest) -> str:
-    """Build the stable request identifier used by pipeline telemetry."""
+    """Build a unique identifier for one pipeline invocation."""
 
-    payload = f"{request.query_type.value}\0{request.query}\0{request.top_k}".encode()
-    return f"search-{sha1(payload).hexdigest()[:12]}"
+    return f"request-{uuid4().hex}"
 
 
 def elapsed_ms(started: float) -> int:

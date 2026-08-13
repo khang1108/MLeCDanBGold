@@ -7,22 +7,26 @@ HTTP 200 JSON, with fake models and a tiny fixture.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import FastAPI
 
 from hcmai.app import create_app
-from hcmai.common.schemas import RetrievalSource
+from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+
+pytestmark = pytest.mark.usefixtures("inline_router_threadpool")
 
 _MAPPING = pd.DataFrame(
     {
@@ -50,6 +54,16 @@ _FRAMES = {
 
 class _FakeRetrieval:
     """Shortlist video_001 only, so video_002 never reaches the aligner."""
+
+    def search(self, query: str, top_k: int, filters: Any, query_type: Any):
+        del query, top_k, filters, query_type
+        return [
+            RetrievalCandidate(
+                frame_id="frame_10",
+                source_scores={RetrievalSource.VISUAL: 0.9},
+                final_score=0.9,
+            )
+        ]
 
     def score_visual_videos(
         self,
@@ -97,29 +111,40 @@ _BODY = {
 }
 
 
-def _client(
+def _app(
     data: Any = None,
     retrieval: Any = None,
     registry: PipelineRegistry | None = None,
-) -> TestClient:
+) -> FastAPI:
     service = SearchService(
         cast(DataService, data),
         cast(RetrievalService, retrieval),
         pipeline_registry=registry,
     )
-    return TestClient(create_app(service))
+    return create_app(service)
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return _client(_FakeData(), _FakeRetrieval())
+def app() -> FastAPI:
+    return _app(_FakeData(), _FakeRetrieval())
+
+
+def request(app: FastAPI, method: str, path: str, **kwargs: Any) -> httpx.Response:
+    async def send() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            return await client.request(method, path, **kwargs)
+
+    return asyncio.run(send())
 
 
 def test_trake_request_reaches_the_pipeline_and_returns_a_submission(
-    client: TestClient,
+    app: FastAPI,
 ) -> None:
-    with client:
-        response = client.post("/api/v1/trake", json=_BODY)
+    response = request(app, "POST", "/api/v1/trake", json=_BODY)
 
     assert response.status_code == 200
     payload = response.json()
@@ -141,9 +166,8 @@ def test_trake_request_reaches_the_pipeline_and_returns_a_submission(
     assert payload["warnings"] == []
 
 
-def test_every_submission_has_one_frame_per_event(client: TestClient) -> None:
-    with client:
-        payload = client.post("/api/v1/trake", json=_BODY).json()
+def test_every_submission_has_one_frame_per_event(app: FastAPI) -> None:
+    payload = request(app, "POST", "/api/v1/trake", json=_BODY).json()
 
     event_count = len(payload["events"])
     assert all(
@@ -152,12 +176,13 @@ def test_every_submission_has_one_frame_per_event(client: TestClient) -> None:
     )
 
 
-def test_kis_still_works_on_its_own_route(client: TestClient) -> None:
-    with client:
-        response = client.post(
-            "/api/v1/search",
-            json={"query_type": "kis", "query": "a red bus", "top_k": 5},
-        )
+def test_kis_still_works_on_its_own_route(app: FastAPI) -> None:
+    response = request(
+        app,
+        "POST",
+        "/api/v1/search",
+        json={"query_type": "kis", "query": "a red bus", "top_k": 5},
+    )
 
     assert response.status_code == 200
     payload = response.json()
@@ -168,10 +193,9 @@ def test_kis_still_works_on_its_own_route(client: TestClient) -> None:
 
 
 def test_health_reports_trake_once_the_pipeline_is_registered(
-    client: TestClient,
+    app: FastAPI,
 ) -> None:
-    with client:
-        capabilities = client.get("/health").json()["capabilities"]
+    capabilities = request(app, "GET", "/health").json()["capabilities"]
 
     assert capabilities["query_types"]["trake"] is True
 
@@ -186,21 +210,20 @@ def test_health_reports_trake_once_the_pipeline_is_registered(
     ],
 )
 def test_invalid_trake_input_is_rejected(
-    client: TestClient, body: dict[str, Any]
+    app: FastAPI, body: dict[str, Any]
 ) -> None:
-    with client:
-        assert client.post("/api/v1/trake", json=body).status_code == 422
+    assert request(app, "POST", "/api/v1/trake", json=body).status_code == 422
 
 
 def test_unregistered_pipeline_is_not_implemented() -> None:
-    with _client(_FakeData(), _FakeRetrieval(), PipelineRegistry()) as client:
-        response = client.post("/api/v1/trake", json=_BODY)
+    app = _app(_FakeData(), _FakeRetrieval(), PipelineRegistry())
+    response = request(app, "POST", "/api/v1/trake", json=_BODY)
 
     assert response.status_code == 501
 
 
 def test_unavailable_dependency_is_service_unavailable() -> None:
-    with _client(_FakeData(), None) as client:
-        response = client.post("/api/v1/trake", json=_BODY)
+    app = _app(_FakeData(), None)
+    response = request(app, "POST", "/api/v1/trake", json=_BODY)
 
     assert response.status_code == 503

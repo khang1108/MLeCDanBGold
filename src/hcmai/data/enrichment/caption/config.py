@@ -9,7 +9,7 @@ from typing import Any
 from hcmai.common.utils.io import read_yaml
 
 ENRICHMENT_VERSION = "enrichment_version"
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
 DEFAULT_ENRICHMENT_CONFIG = PROJECT_ROOT / "configs" / "enrichment.yaml"
 
 

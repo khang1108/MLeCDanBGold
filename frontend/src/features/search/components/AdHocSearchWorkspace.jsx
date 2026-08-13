@@ -5,6 +5,7 @@ import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "./GifLoaderOverlay";
 
 const QUERY_PREFIX = /^\/(kis|vkis)\b\s*/i;
+const SEARCH_ID_KEY = "hcmai.progressive.kis.search_id";
 
 // Standalone competition search workspace with frame results.
 const AdHocSearchWorkspace = ({
@@ -21,6 +22,9 @@ const AdHocSearchWorkspace = ({
   const [latencyMs, setLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchId, setSearchId] = useState(
+    () => window.sessionStorage.getItem(SEARCH_ID_KEY),
+  );
   const requestRef = useRef(null);
 
   useEffect(() => () => requestRef.current?.abort(), []);
@@ -56,13 +60,22 @@ const AdHocSearchWorkspace = ({
           query: searchQuery,
           topK,
           queryType,
+          searchId,
           signal: controller.signal,
         });
+        if (response.search_id) {
+          setSearchId(response.search_id);
+          window.sessionStorage.setItem(SEARCH_ID_KEY, response.search_id);
+        }
         setResults(response.results || []);
         setWarnings(response.warnings || []);
         setLatencyMs(response.latency_ms || null);
       } catch (requestError) {
         if (requestError?.name === "AbortError") return;
+        if (requestError?.status === 410) {
+          setSearchId(null);
+          window.sessionStorage.removeItem(SEARCH_ID_KEY);
+        }
         setError(requestError.message || "Failed to contact search API");
       } finally {
         if (requestRef.current === controller) {
@@ -71,8 +84,18 @@ const AdHocSearchWorkspace = ({
         }
       }
     },
-    [isSearching, query, topK],
+    [isSearching, query, searchId, topK],
   );
+
+  const handleNewQuestion = useCallback(() => {
+    setSearchId(null);
+    window.sessionStorage.removeItem(SEARCH_ID_KEY);
+    setQuery("");
+    setResults([]);
+    setWarnings([]);
+    setLatencyMs(null);
+    setError(null);
+  }, []);
 
   const handleResetOptions = useCallback(() => {
     setTopK(20);
@@ -114,6 +137,9 @@ const AdHocSearchWorkspace = ({
           disabled={isSearching || !query.trim()}
         >
           {isSearching ? "Searching..." : "Search"}
+        </button>
+        <button type="button" className="btn-secondary" onClick={handleNewQuestion}>
+          New Question
         </button>
       </form>
 

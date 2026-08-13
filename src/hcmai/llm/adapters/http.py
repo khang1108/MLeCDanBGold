@@ -18,7 +18,6 @@ from hcmai.common.schemas import (
     TextEmbeddingResponse,
     VQAInferenceEvidence,
     VQAInferenceResponse,
-    VQAMultiFrameInferenceResponse,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.llm.gateway import InferenceGateway, InferenceGatewayError
@@ -98,9 +97,12 @@ class InferenceClient:
         self,
         request_id: str,
         frame_id: str,
+        video_id: str,
         question: str,
         image: Image.Image,
         evidence: VQAInferenceEvidence | None = None,
+        *,
+        scene_context: str = "",
     ) -> VQAInferenceResponse:
         context = evidence or VQAInferenceEvidence()
         payload = self._post(
@@ -108,13 +110,17 @@ class InferenceClient:
             data={
                 "request_id": request_id,
                 "frame_id": frame_id,
+                "video_id": video_id,
+                "scene_context": scene_context,
                 "question": question,
                 "evidence": context.model_dump_json(),
             },
             files=[("image", (f"{frame_id}.jpg", _jpeg(image), "image/jpeg"))],
         )
         response = _validated(VQAInferenceResponse, payload)
-        if response.request_id != request_id or response.frame_id != frame_id:
+        if response.request_id != request_id or response.video_id != video_id:
+            raise InferenceClientError("VQA provider changed request/video identity")
+        if response.frame_ids != [frame_id] or response.selected_frame_id != frame_id:
             raise InferenceClientError("VQA provider changed request/frame identity")
         if response.question != question:
             raise InferenceClientError("VQA provider changed the question")
@@ -123,11 +129,14 @@ class InferenceClient:
     def answer_vqa_multi(
         self,
         request_id: str,
+        video_id: str,
         frame_ids: list[str],
         question: str,
         images: Sequence[Image.Image],
         evidence: VQAInferenceEvidence | None = None,
-    ) -> VQAMultiFrameInferenceResponse:
+        *,
+        scene_context: str = "",
+    ) -> VQAInferenceResponse:
         if not frame_ids or len(frame_ids) != len(images):
             raise ValueError("frame_ids and images must be non-empty and aligned")
         context = evidence or VQAInferenceEvidence()
@@ -135,7 +144,9 @@ class InferenceClient:
             "/v1/vqa/multi",
             data={
                 "request_id": request_id,
+                "video_id": video_id,
                 "frame_ids": json.dumps(frame_ids),
+                "scene_context": scene_context,
                 "question": question,
                 "evidence": context.model_dump_json(),
             },
@@ -144,8 +155,10 @@ class InferenceClient:
                 for frame_id, image in zip(frame_ids, images)
             ],
         )
-        response = _validated(VQAMultiFrameInferenceResponse, payload)
-        if response.request_id != request_id or response.frame_ids != frame_ids:
+        response = _validated(VQAInferenceResponse, payload)
+        if response.request_id != request_id or response.video_id != video_id:
+            raise InferenceClientError("VQA provider changed request/video identity")
+        if response.frame_ids != frame_ids:
             raise InferenceClientError("VQA provider changed request/frame identity")
         if response.question != question:
             raise InferenceClientError("VQA provider changed the question")

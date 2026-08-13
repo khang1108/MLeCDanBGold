@@ -127,6 +127,8 @@ class IndexConfig(BaseModel):
         cls,
         filenames: dict[RetrievalSource, str],
     ) -> dict[RetrievalSource, str]:
+        """Require one safe NumPy artifact filename per text modality."""
+
         if set(filenames) != set(TEXT_RETRIEVAL_SOURCES):
             raise ValueError(
                 "text_embedding_filenames must configure caption, ocr, and asr"
@@ -197,6 +199,72 @@ class RetrievalCacheConfig(BaseModel):
     disk_enabled: Literal[False] = False
 
 
+class ProgressiveSearchConfig(BaseModel):
+    """Transactional state, retrieval, and scene budgets for KIS/VQA."""
+
+    architecture: Literal["temporal", "legacy"] = "temporal"
+
+    progressive_state_ttl_seconds: float = Field(default=1800, gt=0)
+    progressive_state_max_entries: int = Field(default=256, gt=0)
+    progressive_max_hints: int = Field(default=10, gt=0)
+
+    candidate_pool_size: int = Field(default=50, gt=0)
+
+    global_quota: int = Field(default=100, gt=0)
+    local_quota: int = Field(default=50, gt=0)
+
+    top_m_evidence: int = Field(default=5, gt=0)
+
+    backfill_max_videos: int = Field(default=10, gt=0)
+    backfill_max_units_per_video: int = Field(default=5, gt=0)
+
+    candidate_semantic_weight: float = Field(default=0.45, ge=0)
+    candidate_match_weight: float = Field(default=0.25, ge=0)
+    candidate_evaluation_weight: float = Field(default=0.30, ge=0)
+
+    scene_max_gap_ms: int = Field(default=5_000, gt=0)
+    scene_max_span_ms: int = Field(default=30_000, gt=0)
+    scene_coherence_ms: int = Field(default=15_000, gt=0)
+    scene_top_b_per_video: int = Field(default=3, gt=0)
+    scene_top_p_global: int = Field(default=30, gt=0)
+    scene_semantic_weight: float = Field(default=0.45, ge=0)
+    scene_coverage_weight: float = Field(default=0.30, ge=0)
+    scene_temporal_weight: float = Field(default=0.15, ge=0)
+    scene_relation_weight: float = Field(default=0.10, ge=0)
+
+    @model_validator(mode="after")
+    def validate_scene_weights(self) -> ProgressiveSearchConfig:
+        """Require nonnegative weights with at least one active component."""
+
+        weights = (
+            self.scene_semantic_weight,
+            self.scene_coverage_weight,
+            self.scene_temporal_weight,
+            self.scene_relation_weight,
+        )
+        if sum(weights) <= 0:
+            raise ValueError(
+                "at least one progressive scene weight must be positive"
+            )
+        if self.scene_max_gap_ms > self.scene_max_span_ms:
+            raise ValueError("scene_max_gap_ms must not exceed scene_max_span_ms")
+        candidate_weights = (
+            self.candidate_semantic_weight,
+            self.candidate_match_weight,
+            self.candidate_evaluation_weight,
+        )
+        if sum(candidate_weights) <= 0:
+            raise ValueError(
+                "at least one progressive candidate weight must be positive"
+            )
+        return self
+
+    def diagnostics(self) -> dict[str, int | float]:
+        """Return reproducible active budgets without state implementation details."""
+
+        return self.model_dump()
+
+
 class SearchConfig(BaseModel):
     """Single search configuration selected for the competition pipeline."""
 
@@ -206,6 +274,9 @@ class SearchConfig(BaseModel):
     fusion: FusionConfig = Field(default_factory=FusionConfig)
     reranker: RerankerPolicyConfig = Field(default_factory=RerankerPolicyConfig)
     cache: RetrievalCacheConfig = Field(default_factory=RetrievalCacheConfig)
+    progressive: ProgressiveSearchConfig = Field(
+        default_factory=lambda: ProgressiveSearchConfig()
+    )
 
 
 class VQAProfileConfig(BaseModel):
@@ -219,11 +290,11 @@ class VQAProfileConfig(BaseModel):
     max_evidence_items: int = Field(default=24, ge=1, le=256)
     max_vlm_calls: int = Field(default=8, ge=0, le=100)
     localizer_enabled: bool = True
-    hierarchical_refinement: bool = False
-    temporal_fallback_ms: int = Field(default=15_000, ge=0, le=120_000)
 
 
 def _default_vqa_profiles() -> dict[VQABaselineProfile, VQAProfileConfig]:
+    """Return reproducible defaults for every supported VQA baseline."""
+
     return {
         VQABaselineProfile.SINGLE_FRAME: VQAProfileConfig(
             candidate_videos=1,
@@ -232,7 +303,6 @@ def _default_vqa_profiles() -> dict[VQABaselineProfile, VQAProfileConfig]:
             max_frames_per_window=1,
             max_vlm_calls=1,
             localizer_enabled=False,
-            temporal_fallback_ms=0,
         ),
         VQABaselineProfile.VRAG: VQAProfileConfig(
             candidate_videos=10,
@@ -250,7 +320,6 @@ def _default_vqa_profiles() -> dict[VQABaselineProfile, VQAProfileConfig]:
             max_windows=16,
             max_frames_per_window=8,
             max_vlm_calls=12,
-            hierarchical_refinement=True,
         ),
     }
 
@@ -265,6 +334,8 @@ class VQAConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_profiles(self) -> VQAConfig:
+        """Require complete baseline coverage and a configured default."""
+
         if set(self.profiles) != set(VQABaselineProfile):
             raise ValueError("vqa profiles must configure every baseline profile")
         if self.default_profile not in self.profiles:
@@ -300,6 +371,8 @@ class InferenceConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_resilience_ranges(self) -> InferenceConfig:
+        """Ensure retry backoff bounds form a valid increasing range."""
+
         if self.backoff_max_seconds < self.backoff_initial_seconds:
             raise ValueError("backoff_max_seconds must not be below initial backoff")
         return self

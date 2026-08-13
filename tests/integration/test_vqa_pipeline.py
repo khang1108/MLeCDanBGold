@@ -68,10 +68,19 @@ class Retrieval:
 class LLM:
     adapter = SimpleNamespace()
 
-    def answer_vqa(self, *, request_id, frame_id, question, image, evidence):
+    def answer_vqa(
+        self, *, request_id, frame_id, video_id, scene_context, question, image, evidence
+    ):
+        assert scene_context == "A bus passes on the road"
         assert question == "What color is the bus?"
+        assert video_id == "video-1"
+        assert {(item.frame_id, item.start_ms) for item in evidence.items} == {
+            ("f1", 1_000),
+        }
         return VQAInferenceResponse(
-            request_id=request_id, frame_id=frame_id, question=question,
+            request_id=request_id, video_id=video_id, frame_ids=[frame_id],
+            selected_frame_id=frame_id,
+            question=question,
             answer="red", grounded=True, latency_ms=1, evidence=evidence,
         )
 
@@ -89,12 +98,15 @@ def test_vqa_pipeline_runs_retrieval_to_grounded_submission(tmp_path: Path):
         event_description="A bus passes on the road",
         question="What color is the bus?",
         top_k=5,
+        search_id="search-session-1",
     ))
 
     assert response.total_results == 1
+    assert response.search_id == "search-session-1"
     assert response.submissions[0].video_id == "video-1"
     assert response.submissions[0].frame_idx in {12, 13}
     assert response.submissions[0].normalized_answer == "red"
+    assert response.submissions[0].caption == "A red bus is passing."
     assert response.evidence_candidates[0].frame_id == "f1"
     assert set(response.trace.stages) >= {
         "parse", "search", "video_aggregation", "window_construction",

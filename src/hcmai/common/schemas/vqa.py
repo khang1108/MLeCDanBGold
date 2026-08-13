@@ -26,12 +26,35 @@ class VQAInferenceRequest(ContractModel):
     """Ask an inference provider one question about one canonical frame."""
 
     frame_id: NonEmptyString
+    video_id: NonEmptyString
     question: NonEmptyString = Field(max_length=1_000)
 
 
-class VQAInferenceEvidence(ContractModel):
-    """Optional evidence supplied to a one-frame VQA inference provider."""
+class VQAInferenceEvidenceItem(ContractModel):
+    """One bounded, canonical text-evidence item supplied to a provider."""
 
+    source: NonEmptyString
+    value: NonEmptyString = Field(max_length=4_000)
+    frame_id: NonEmptyString
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(ge=0)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    provenance: NonEmptyString
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> Self:
+        if self.end_ms < self.start_ms:
+            raise ValueError("evidence end_ms must not precede start_ms")
+        return self
+
+
+class VQAInferenceEvidence(ContractModel):
+    """Optional evidence supplied to a VQA inference provider."""
+
+    items: list[VQAInferenceEvidenceItem] = Field(
+        default_factory=list,
+        max_length=64,
+    )
     caption: NonEmptyString | None = None
     ocr_text: NonEmptyString | None = None
     asr_text: NonEmptyString | None = None
@@ -39,23 +62,10 @@ class VQAInferenceEvidence(ContractModel):
 
 
 class VQAInferenceResponse(ContractModel):
-    """One bounded provider answer grounded in the requested frame."""
+    """One bounded provider answer grounded in supplied canonical frames."""
 
     request_id: NonEmptyString
-    frame_id: NonEmptyString
-    question: NonEmptyString
-    answer: NonEmptyString = Field(max_length=100)
-    grounded: bool
-    model_name: NonEmptyString | None = None
-    latency_ms: int = Field(ge=0)
-    evidence: VQAInferenceEvidence = Field(default_factory=VQAInferenceEvidence)
-    warnings: list[NonEmptyString] = Field(default_factory=list)
-
-
-class VQAMultiFrameInferenceResponse(ContractModel):
-    """Bounded answer whose selected identity must come from supplied frames."""
-
-    request_id: NonEmptyString
+    video_id: NonEmptyString
     frame_ids: list[NonEmptyString] = Field(min_length=1, max_length=32)
     selected_frame_id: NonEmptyString
     question: NonEmptyString
@@ -88,6 +98,7 @@ class VQARequest(ContractModel):
     language_hint: QueryLanguage | None = None
     execution_profile: ExecutionProfile | None = None
     baseline_profile: VQABaselineProfile = VQABaselineProfile.LOCALIZER
+    search_id: NonEmptyString | None = None
 
 
 class VQASubmission(ContractModel):
@@ -108,6 +119,7 @@ class VQASubmission(ContractModel):
     evidence_consistency_score: float | None = None
     provenance: dict[str, Any] = Field(default_factory=dict)
     warnings: list[NonEmptyString] = Field(default_factory=list)
+    caption: NonEmptyString | None = None
     evidence_summary: NonEmptyString | None = None
 
     @model_validator(mode="after")
@@ -135,6 +147,7 @@ class VQAResponse(ContractModel):
     """Ranked competition VQA submissions for one request."""
 
     request_id: NonEmptyString
+    search_id: NonEmptyString | None = None
     query_type: Literal[TaskType.VQA] = TaskType.VQA
     event_description: NonEmptyString
     question: NonEmptyString

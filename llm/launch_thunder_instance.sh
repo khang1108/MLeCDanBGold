@@ -16,6 +16,9 @@ POLL_INTERVAL_SECONDS=10
 TMUX_SESSION="hcmai-deploy"
 INSTANCE_ID=""
 DEPLOY_ARGS=()
+SSH_HOST=""
+SSH_PORT=""
+SSH_KEY_FILE=""
 
 log() {
     printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
@@ -24,7 +27,7 @@ log() {
 die() {
     printf 'ERROR: %s\n' "$*" >&2
     if [[ -n "${INSTANCE_ID}" ]]; then
-        printf 'ERROR: Thunder instance %s was created and may still be billable.\n' \
+        printf 'ERROR: Thunder instance %s may still be billable.\n' \
             "${INSTANCE_ID}" >&2
     fi
     exit 1
@@ -36,7 +39,7 @@ on_error() {
     printf 'ERROR: command failed at line %s (exit %s).\n' \
         "${BASH_LINENO[0]}" "${exit_code}" >&2
     if [[ -n "${INSTANCE_ID}" ]]; then
-        printf 'ERROR: Thunder instance %s was created and may still be billable.\n' \
+        printf 'ERROR: Thunder instance %s may still be billable.\n' \
             "${INSTANCE_ID}" >&2
     fi
     exit "${exit_code}"
@@ -46,11 +49,12 @@ trap on_error ERR
 usage() {
     cat <<'EOF'
 Usage:
-  llm/launch_thunder_instance.sh --gpu a6000|l40 [options] \
+  llm/launch_thunder_instance.sh (--gpu a6000|l40 | --instance ID) [options] \
       -- [deploy_cloudflared_private.sh options]
 
-Required:
+Instance selection (choose one):
   --gpu GPU               GPU type: a6000 or l40.
+  --instance ID           Reuse an existing Thunder instance by positional ID.
 
 Authentication:
   --token TOKEN           Thunder API token used only when the current tnr
@@ -105,6 +109,11 @@ parse_args() {
                 GPU="${2,,}"
                 shift 2
                 ;;
+            --instance)
+                require_value "$1" "$#"
+                INSTANCE_ID=$2
+                shift 2
+                ;;
             --token)
                 require_value "$1" "$#"
                 TOKEN=$2
@@ -152,8 +161,14 @@ parse_args() {
 }
 
 validate() {
-    [[ "${GPU}" == "a6000" || "${GPU}" == "l40" ]] \
-        || die "--gpu must be either a6000 or l40."
+    if [[ -n "${INSTANCE_ID}" ]]; then
+        [[ "${INSTANCE_ID}" =~ ^[0-9]+$ ]] \
+            || die "--instance must be a non-negative integer."
+        [[ -z "${GPU}" ]] || die "Use either --gpu or --instance, not both."
+    else
+        [[ "${GPU}" == "a6000" || "${GPU}" == "l40" ]] \
+            || die "--gpu must be either a6000 or l40 when --instance is omitted."
+    fi
     (( ${#DEPLOY_ARGS[@]} > 0 )) \
         || die "Provide at least one bootstrap model option after --."
     is_positive_integer "${VCPUS}" || die "--vcpus must be a positive integer."
@@ -168,7 +183,7 @@ validate() {
         || die "Private bootstrap not found or unreadable: ${DEPLOY_SCRIPT}"
 
     local command_name
-    for command_name in tnr ssh python3; do
+    for command_name in tnr python3 ssh; do
         command -v "${command_name}" >/dev/null 2>&1 \
             || die "Required command not found: ${command_name}"
     done
@@ -184,7 +199,7 @@ check_authentication() {
         TOKEN="${TNR_API_TOKEN:-}"
     fi
     [[ -n "${TOKEN}" ]] \
-        || die "Thunder CLI is not authenticated; provide --token or TNR_API_TOKEN."
+        || die "Thunder CLI is not logged in; provide --token TOKEN or set TNR_API_TOKEN."
 
     log "Current Thunder login is unavailable; validating the supplied API token."
     export TNR_API_TOKEN="${TOKEN}"
@@ -256,6 +271,54 @@ raise SystemExit(1)
 ' "${expected_id}"
 }
 
+json_instance_connection() {
+    local expected_id=$1
+    python3 -c '
+import json
+import sys
+
+expected = sys.argv[1]
+payload = json.load(sys.stdin)
+
+def walk(value):
+    yield value
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from walk(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from walk(child)
+
+def first_value(value, keys):
+    for candidate in walk(value):
+        if not isinstance(candidate, dict):
+            continue
+        for key in keys:
+            result = candidate.get(key)
+            if result not in (None, ""):
+                return result
+    return None
+
+for candidate in walk(payload):
+    if not isinstance(candidate, dict):
+        continue
+    identifier = candidate.get("identifier", candidate.get("instance_id", candidate.get("id")))
+    if identifier is None or str(identifier) != expected:
+        continue
+    uuid = first_value(candidate, ("uuid", "instance_uuid"))
+    host = first_value(candidate, ("ip", "ip_address", "public_ip", "publicIp"))
+    port = first_value(candidate, ("port", "ssh_port", "sshPort"))
+    if uuid is None or host is None:
+        continue
+    print(uuid)
+    print(host)
+    print(22 if port is None else port)
+    raise SystemExit(0)
+
+raise SystemExit("status response did not contain SSH connection metadata for the instance")
+' "${expected_id}"
+}
+
 create_instance() {
     local create_response
     log "Creating Thunder instance: gpu=${GPU}, vcpus=${VCPUS}, disk=${DISK_GB}GB."
@@ -269,6 +332,10 @@ create_instance() {
     INSTANCE_ID="$(json_instance_id <<<"${create_response}")"
     [[ "${INSTANCE_ID}" =~ ^[0-9]+$ ]] \
         || die "Thunder returned an invalid instance ID: ${INSTANCE_ID}"
+    log "Created Thunder instance ${INSTANCE_ID}."
+}
+
+publish_instance_id() {
     if [[ -n "${HCMAI_THUNDER_INSTANCE_ID_FILE:-}" ]]; then
         [[ -f "${HCMAI_THUNDER_INSTANCE_ID_FILE}" \
             && ! -L "${HCMAI_THUNDER_INSTANCE_ID_FILE}" ]] \
@@ -276,7 +343,6 @@ create_instance() {
         printf '%s\n' "${INSTANCE_ID}" \
             > "${HCMAI_THUNDER_INSTANCE_ID_FILE}"
     fi
-    log "Created Thunder instance ${INSTANCE_ID}."
 }
 
 wait_until_running() {
@@ -307,18 +373,82 @@ wait_until_running() {
     die "Timed out waiting for instance ${INSTANCE_ID} to reach RUNNING."
 }
 
-configure_ssh() {
-    log "Configuring SSH access for instance ${INSTANCE_ID}."
-    tnr connect "${INSTANCE_ID}" --json >/dev/null
-}
-
 upload_bootstrap() {
     log "Uploading the private bootstrap with tnr scp."
     tnr scp "${DEPLOY_SCRIPT}" "${INSTANCE_ID}:${REMOTE_SCRIPT}"
 }
 
+resolve_ssh_connection() {
+    local status_response connection_info instance_uuid
+    local -a connection_fields=() key_candidates=()
+
+    status_response="$(tnr status --no-wait --json)"
+    connection_info="$(json_instance_connection "${INSTANCE_ID}" <<<"${status_response}")"
+    mapfile -t connection_fields <<<"${connection_info}"
+    (( ${#connection_fields[@]} == 3 )) \
+        || die "Thunder returned incomplete SSH connection metadata."
+
+    instance_uuid="${connection_fields[0]}"
+    SSH_HOST="${connection_fields[1]}"
+    SSH_PORT="${connection_fields[2]}"
+    [[ "${instance_uuid}" =~ ^[A-Za-z0-9_-]+$ ]] \
+        || die "Thunder returned an invalid instance UUID."
+    [[ "${SSH_HOST}" =~ ^[A-Za-z0-9._:-]+$ ]] \
+        || die "Thunder returned an invalid SSH host."
+    is_positive_integer "${SSH_PORT}" \
+        || die "Thunder returned an invalid SSH port."
+    (( SSH_PORT <= 65535 )) || die "Thunder returned an invalid SSH port."
+
+    if [[ -n "${TNR_HOME:-}" ]]; then
+        key_candidates+=("${TNR_HOME}/keys/${instance_uuid}")
+    else
+        [[ -n "${HOME:-}" ]] \
+            && key_candidates+=("${HOME}/.thunder/keys/${instance_uuid}")
+        if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
+            key_candidates+=("${XDG_CACHE_HOME}/thunder/keys/${instance_uuid}")
+        elif [[ -n "${HOME:-}" ]]; then
+            key_candidates+=("${HOME}/.cache/thunder/keys/${instance_uuid}")
+        fi
+        key_candidates+=("/tmp/thunder-$(id -u)/keys/${instance_uuid}")
+    fi
+
+    local candidate
+    for candidate in "${key_candidates[@]}"; do
+        if [[ -f "${candidate}" && -r "${candidate}" ]]; then
+            SSH_KEY_FILE="${candidate}"
+            break
+        fi
+    done
+    [[ -n "${SSH_KEY_FILE}" ]] \
+        || die "Thunder SSH key was not cached by tnr scp for instance ${INSTANCE_ID}."
+
+    if [[ -n "${HCMAI_THUNDER_CONNECTION_FILE:-}" ]]; then
+        [[ -f "${HCMAI_THUNDER_CONNECTION_FILE}" \
+            && ! -L "${HCMAI_THUNDER_CONNECTION_FILE}" ]] \
+            || die "Connection-info destination must be an existing regular file."
+        printf '%s\n%s\n%s\n' "${SSH_HOST}" "${SSH_PORT}" "${SSH_KEY_FILE}" \
+            > "${HCMAI_THUNDER_CONNECTION_FILE}"
+    fi
+}
+
+ssh_command() {
+    ssh \
+        -T \
+        -i "${SSH_KEY_FILE}" \
+        -p "${SSH_PORT}" \
+        -o BatchMode=yes \
+        -o IdentitiesOnly=yes \
+        -o PasswordAuthentication=no \
+        -o KbdInteractiveAuthentication=no \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        -o LogLevel=ERROR \
+        -o ConnectTimeout=30 \
+        "ubuntu@${SSH_HOST}" "$@"
+}
+
 start_remote_tmux() {
-    local deploy_command remote_command ssh_alias
+    local deploy_command remote_command
     local deploy_parts=(sudo bash "${REMOTE_SCRIPT}" "${DEPLOY_ARGS[@]}")
 
     printf -v deploy_command '%q ' "${deploy_parts[@]}"
@@ -329,22 +459,28 @@ start_remote_tmux() {
         "${REMOTE_SCRIPT}" "${TMUX_SESSION}" "${TMUX_SESSION}" \
         "${TMUX_SESSION}" "${deploy_command}"
 
-    ssh_alias="tnr-${INSTANCE_ID}"
     log "Starting deployment in tmux session ${TMUX_SESSION}."
-    ssh "${ssh_alias}" "${remote_command}"
-    log "Deployment started. Attach with: ssh -t ${ssh_alias} tmux attach -t ${TMUX_SESSION}"
-    log "Bootstrap output: ssh ${ssh_alias} tail -f ${REMOTE_LOG}"
+    ssh_command "${remote_command}"
+    log "Deployment started for instance ${INSTANCE_ID}."
+    log "Use run.sh log streaming and tnr status to inspect the deployment."
 }
 
 main() {
     parse_args "$@"
     validate
     check_authentication
-    create_instance
+    if [[ -z "${INSTANCE_ID}" ]]; then
+        create_instance
+    else
+        log "Reusing Thunder instance ${INSTANCE_ID}."
+    fi
+    publish_instance_id
     wait_until_running
-    configure_ssh
     upload_bootstrap
+    resolve_ssh_connection
     start_remote_tmux
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

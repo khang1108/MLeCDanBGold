@@ -23,11 +23,12 @@ from hcmai.orchestration.workflows.base import (
 )
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
-from hcmai.orchestration.workflows.vqa import VQAPipeline
+from hcmai.pipelines.vqa.pipeline import VQAPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.retrieval.reranking.pipeline import RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
-from hcmai.observability import METRICS
+from hcmai.common.observability import METRICS
+from hcmai.temporal import TemporalEvidenceCore
 
 logger = get_logger(__name__)
 
@@ -57,6 +58,8 @@ class SearchService:
         vqa_config: VQAConfig | None = None,
         pipeline_registry: PipelineRegistry | None = None,
     ) -> None:
+        """Initialize task pipelines from configured capability services."""
+
         self.data = data
         self.retrieval = retrieval
         self.reranking = reranking
@@ -71,11 +74,15 @@ class SearchService:
 
     @classmethod
     def load(cls, messages: list[str]) -> SearchService:
+        """Load the configured search service and append startup diagnostics."""
+
         from hcmai.orchestration.setup import load_search_service
 
         return load_search_service(messages)
 
     def get_frame(self, frame_id: str) -> FrameRecord:
+        """Resolve one frame through the canonical data authority."""
+
         if self.data is None:
             raise SearchServiceUnavailableError("Frame store not loaded")
         return self.data.get_frame(frame_id)
@@ -83,6 +90,8 @@ class SearchService:
     def neighbors(
         self, frame_id: str, window_ms: int, include_self: bool = True
     ) -> list[FrameRecord]:
+        """Return canonical temporal neighbors around one frame."""
+
         if self.data is None:
             raise SearchServiceUnavailableError("Frame store not loaded")
         return self.data.neighbors(
@@ -90,6 +99,8 @@ class SearchService:
         )
 
     def submission(self, frame_id: str) -> SubmissionResult:
+        """Build the official submission identity for one canonical frame."""
+
         frame = self.get_frame(frame_id)
         return SubmissionResult(
             frame_id=frame.frame_id,
@@ -99,6 +110,8 @@ class SearchService:
         )
 
     def health(self, startup_messages: Sequence[str] = ()) -> dict[str, Any]:
+        """Report readiness and capability status without mutating services."""
+
         data_ready = self.data is not None
         retrieval_ready = self.retrieval is not None
         asset_status = self._frame_asset_status()
@@ -175,15 +188,21 @@ class SearchService:
         }
 
     def _frame_asset_status(self) -> dict[str, int | bool]:
+        """Return bounded frame-asset readiness diagnostics."""
+
         if not isinstance(self.data, DataService):
             return {"ready": False, "checked": 0, "available": 0, "missing": 0}
         return self.data.frame_asset_status().as_dict()
 
     def close(self) -> None:
+        """Close optional inference resources owned by the service."""
+
         if self.llm is not None:
             self.llm.close()
 
     def search(self, request: TaskRequest) -> TaskResponse:
+        """Dispatch a validated task request through its registered pipeline."""
+
         try:
             pipeline = self.pipeline_registry.get(request.query_type)
         except KeyError as error:
@@ -199,6 +218,15 @@ class SearchService:
             raise UnsupportedSearchTaskError(str(error)) from error
 
     def _default_registry(self) -> PipelineRegistry:
+        """Build task heads and share one temporal core between KIS and VQA."""
+
+        temporal_core = (
+            TemporalEvidenceCore(self.data, self.retrieval, self.config)
+            if isinstance(self.data, DataService)
+            and isinstance(self.retrieval, RetrievalService)
+            and self.config.progressive.architecture == "temporal"
+            else None
+        )
         task_types = (TaskType.KIS, TaskType.VKIS)
         pipelines = [
             KISPipeline(
@@ -207,6 +235,7 @@ class SearchService:
                 self.retrieval,
                 self.reranking,
                 self.config,
+                temporal_core,
             )
             for task_type in task_types
         ]
@@ -218,6 +247,7 @@ class SearchService:
                     self.retrieval,
                     self.llm,
                     self.vqa_config,
+                    temporal_core,
                 ),
             )
         )

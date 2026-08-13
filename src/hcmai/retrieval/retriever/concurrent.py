@@ -14,8 +14,8 @@ from hcmai.common.schemas import (
     TaskType,
 )
 from hcmai.common.schemas.search import SearchFilters
-from hcmai.observability.tracing import StageTimer
-from hcmai.observability import PipelineStage
+from hcmai.common.observability import PipelineStage
+from hcmai.common.observability.tracing import StageTimer
 from hcmai.retrieval.retriever.query_batch import QueryEmbeddingBatch
 
 

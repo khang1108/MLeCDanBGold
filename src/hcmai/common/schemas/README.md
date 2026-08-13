@@ -59,6 +59,22 @@ that feature package. In particular, caption/OCR types belong under
   warning list. Sequence access remains available for compatibility, while
   production callers consume `.candidates` and `.trace` explicitly.
 
+### `temporal.py`
+
+- `QueryUnit`: stable identity, text, and order for one semantic query unit.
+- `FrameEvidence`: canonical `FrameRecord` plus per-unit scores, retrieval
+  source scores/ranks, overall score, and provenance.
+- `SceneCandidate`: bounded video interval containing frame evidence and
+  explicit semantic, coverage, temporal, relation, and final scene scores.
+  VQA image sampling remains outside this shared contract.
+
+Temporal evidence state is intentionally not modeled yet. Future stateful
+storage must preserve the invariant that unknown/not-yet-evaluated evidence is
+different from evidence that was evaluated and produced no match. An enum or
+state contract should only be added with its first runtime consumer.
+Temporal-relation parsing and constraint contracts are likewise deferred until
+a parser/aligner consumer is implemented in the temporal-relation phase.
+
 ### `telemetry.py`
 
 - `StageTrace`: one stage's monotonic start/end, duration, status, attempt
@@ -72,24 +88,31 @@ that feature package. In particular, caption/OCR types belong under
 - `SearchFilters`: optional video and time-range restrictions. Video IDs are
   deduplicated, and `end_time_ms` cannot precede `start_time_ms`.
 - `SearchRequest`: public standalone-search request containing a typed
-  `query_type`, a non-empty query, bounded `top_k`, and optional filters.
+  `query_type`, a non-empty query, bounded `top_k`, optional filters, and an
+  optional progressive `search_id`.
 - `SearchLatency`: non-negative latency measurements for each search stage and
   the total request, in milliseconds.
 - `SearchResult`: one ranked result with the canonical frame identifiers,
   preview URLs, enrichment text, and scores.
 - `SearchResponse`: complete search response with request metadata, latency,
-  results, and warnings. `total_results` must match the result list and cannot
-  exceed `top_k`.
+  results, warnings, and the optional echoed `search_id`. `total_results` must
+  match the result list and cannot exceed `top_k`.
 
 ### `vqa.py`
 
 - `VQARequest`: competition event description, question, Top-k, optional
-  filters, language hint, and execution profile.
+  filters, language hint, execution profile, and progressive `search_id`.
 - `VQASubmission`: ranked canonical video/frame/answer row with retrieval,
   grounding, answer, and joint scores.
-- `VQAResponse`: bounded ranked competition submissions.
-- `VQAInferenceRequest`, `VQAInferenceEvidence`, and `VQAInferenceResponse`:
-  explicitly provider-scoped one-frame inference contracts.
+- `VQAResponse`: bounded ranked competition submissions with an optional
+  echoed `search_id`.
+- `VQAInferenceRequest` and `VQAInferenceEvidence`: provider-scoped request and
+  evidence contracts. Evidence retains bounded structured source text with its
+  canonical frame ID, time interval, confidence, and provenance; aggregated
+  caption/OCR/ASR fields remain for one-frame provider compatibility.
+- `VQAInferenceResponse`: the single provider response for one-frame and
+  multi-frame inference; it preserves ordered supplied frame IDs, the selected
+  canonical frame, and canonical video identity.
 
 ### `trake.py`
 
@@ -107,16 +130,6 @@ that feature package. In particular, caption/OCR types belong under
 - `EvaluationQuery`: labelled query for offline evaluation. It contains the
   query metadata, gold frame/video IDs, temporal tolerance, tags, and optional
   notes. ID and tag lists are deduplicated while preserving order.
-
-### `minichallenge.py`
-
-- `MiniChallengeEvaluation` and `MiniChallengeTaskTemplate`: validated DRES
-  evaluation-list and current-task responses with camelCase wire aliases.
-- `MiniChallengeSubmitRequest`: local submission input containing canonical
-  `frame_id`, task name, and optional text answer.
-- `MiniChallengeSubmission`: exact DRES `answerSets` wire payload.
-- `MiniChallengeSubmissionResult`: accepted verdict and description returned by
-  DRES.
 
 ### `submission.py`
 

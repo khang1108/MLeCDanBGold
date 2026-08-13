@@ -160,11 +160,17 @@ class LocalAdapter:
         return list(self.reranker.score_batch(query, images))
 
     def answer_vqa(
-        self, question: str, image: Image.Image, evidence: VQAInferenceEvidence
+        self,
+        question: str,
+        image: Image.Image,
+        evidence: VQAInferenceEvidence,
+        scene_context: str = "",
     ) -> str:
         if self.vqa_model is None:
             raise RuntimeError("vision-language model is disabled")
-        return self.vqa_model.answer_vqa(question, image, evidence)
+        return self.vqa_model.answer_vqa(
+            question, image, evidence, scene_context=scene_context
+        )
 
     def answer_vqa_multi(
         self,
@@ -172,11 +178,12 @@ class LocalAdapter:
         images: list[Image.Image],
         frame_ids: list[str],
         evidence: VQAInferenceEvidence,
+        scene_context: str = "",
     ) -> dict[str, Any]:
         if self.vqa_model is None:
             raise RuntimeError("vision-language model is disabled")
         return self.vqa_model.answer_vqa_multi(
-            question, images, frame_ids, evidence
+            question, images, frame_ids, evidence, scene_context=scene_context
         )
 
     def readiness(self) -> InferenceReadiness:

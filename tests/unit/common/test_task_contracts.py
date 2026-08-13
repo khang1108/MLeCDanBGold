@@ -5,7 +5,12 @@ from pydantic import TypeAdapter, ValidationError
 
 from hcmai.common.schemas import (
     ExecutionProfile,
+    FrameEvidence,
+    FrameRecord,
     QueryLanguage,
+    QueryUnit,
+    RetrievalSource,
+    SceneCandidate,
     SearchRequest,
     TextEmbeddingRequest,
     TRAKERequest,
@@ -21,6 +26,79 @@ from hcmai.common.schemas import (
     VQAResponse,
     VQASubmission,
 )
+
+
+def _frame() -> FrameRecord:
+    return FrameRecord(
+        frame_id="frame-42",
+        video_id="video-1",
+        frame_idx=42,
+        timestamp_ms=4_200,
+        image_path="/frames/frame-42.jpg",
+        width=1920,
+        height=1080,
+    )
+
+
+def test_query_unit_validates_identity_text_order_and_round_trips() -> None:
+    unit = QueryUnit(unit_id="H1", text="A red bus arrives.", order=0)
+
+    assert QueryUnit.model_validate_json(unit.model_dump_json()) == unit
+    for values in (
+        {"unit_id": " ", "text": "event", "order": 0},
+        {"unit_id": "H1", "text": " ", "order": 0},
+        {"unit_id": "H1", "text": "event", "order": -1},
+    ):
+        with pytest.raises(ValidationError):
+            QueryUnit.model_validate(values)
+
+
+def test_frame_evidence_preserves_canonical_identity_and_provenance() -> None:
+    evidence = FrameEvidence(
+        frame=_frame(),
+        unit_scores={"H1": 0.9},
+        source_scores={RetrievalSource.VISUAL: 0.8},
+        source_ranks={RetrievalSource.VISUAL: 2},
+        score=0.9,
+        provenance=("event", "visual"),
+    )
+
+    restored = FrameEvidence.model_validate_json(evidence.model_dump_json())
+    assert restored == evidence
+    assert restored.frame == _frame()
+    assert restored.unit_scores == {"H1": 0.9}
+    assert restored.source_scores == {RetrievalSource.VISUAL: 0.8}
+    assert restored.source_ranks == {RetrievalSource.VISUAL: 2}
+    assert restored.provenance == ("event", "visual")
+
+
+def test_scene_candidate_validates_range_and_round_trips_evidence_scores() -> None:
+    evidence = FrameEvidence(frame=_frame(), score=0.9)
+    scene = SceneCandidate(
+        scene_id="video-1:1000-5000",
+        video_id="video-1",
+        start_ms=1_000,
+        end_ms=5_000,
+        evidence=(evidence,),
+        unit_scores={"H1": 0.9},
+        semantic_score=0.8,
+        coverage_score=0.7,
+        temporal_score=0.6,
+        relation_score=0.5,
+        final_score=0.75,
+        reason_labels=("retrieval_similarity",),
+    )
+
+    assert SceneCandidate.model_validate_json(scene.model_dump_json()) == scene
+    assert scene.evidence == (evidence,)
+    assert scene.reason_labels == ("retrieval_similarity",)
+    with pytest.raises(ValidationError, match="end_ms"):
+        SceneCandidate(
+            scene_id="invalid",
+            video_id="video-1",
+            start_ms=5_000,
+            end_ms=1_000,
+        )
 
 
 def _vqa_submission(**updates) -> VQASubmission:
@@ -57,9 +135,11 @@ def test_vqa_contracts_round_trip_without_losing_submission_text() -> None:
         top_k=100,
         language_hint=QueryLanguage.ENGLISH,
         execution_profile=ExecutionProfile.BALANCED,
+        search_id="search-session-1",
     )
     response = VQAResponse(
         request_id="vqa-1",
+        search_id=request.search_id,
         event_description=request.event_description,
         question=request.question,
         top_k=request.top_k,
@@ -71,13 +151,26 @@ def test_vqa_contracts_round_trip_without_losing_submission_text() -> None:
     restored = VQAResponse.model_validate_json(response.model_dump_json())
     assert restored == response
     assert restored.submissions[0].answer == "Bơ"
+    assert restored.search_id == "search-session-1"
+
+
+def test_search_and_vqa_requests_remain_compatible_without_search_id() -> None:
+    assert SearchRequest.model_validate({"query": "red bus", "top_k": 10}).search_id is None
+    assert VQARequest.model_validate({
+        "event_description": "a bus stops",
+        "question": "What color is it?",
+    }).search_id is None
 
 
 def test_one_frame_vqa_contract_is_explicitly_provider_scoped() -> None:
-    request = VQAInferenceRequest(frame_id="frame-1", question="Màu gì?")
+    request = VQAInferenceRequest(
+        frame_id="frame-1", video_id="video-1", question="Màu gì?"
+    )
     response = VQAInferenceResponse(
         request_id="inference-1",
-        frame_id=request.frame_id,
+        video_id=request.video_id,
+        frame_ids=[request.frame_id],
+        selected_frame_id=request.frame_id,
         question=request.question,
         answer="đỏ",
         grounded=True,
@@ -86,6 +179,8 @@ def test_one_frame_vqa_contract_is_explicitly_provider_scoped() -> None:
     )
 
     assert response.evidence.caption == "Một ô vuông đỏ."
+    assert response.frame_ids == [request.frame_id]
+    assert response.selected_frame_id == request.frame_id
 
 
 def test_text_embedding_contract_uses_shared_text_source_name() -> None:

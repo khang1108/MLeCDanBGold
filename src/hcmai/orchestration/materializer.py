@@ -35,6 +35,7 @@ class SearchMaterializer:
         ]
         return SearchResponse(
             request_id=request_id,
+            search_id=request.search_id,
             query=request.query,
             query_type=request.query_type,
             top_k=request.top_k,

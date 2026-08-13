@@ -10,6 +10,36 @@ stores, or generators directly. `build_benchmark.py` is the sole deliberate
 exception: it uses the internal dense-baseline `RetrievalBenchmark`, which is
 not an end-to-end `EvaluationService`.
 
+## Validate the repository
+
+Run the complete deterministic release gate from the repository root:
+
+```bash
+scripts/validate_repository.sh
+```
+
+The command runs focused temporal/VQA/TRAKE tests, the complete backend suite,
+frontend tests, the frontend production build, and whitespace validation in
+that order. It uses `aic/bin/python` when available; set `HCMAI_PYTHON` to an
+alternative interpreter when validating another supported environment.
+
+Plan 01 deliberately retires three historical suites instead of skipping
+them:
+
+- `tests/test_minichallenge.py` covered removed KISC/MiniChallenge behavior;
+- `tests/test_removed_conversation.py` asserted deleted conversation APIs;
+- `tests/unit/evaluation/test_vqa_metrics.py` targeted an orphan evaluator with
+  no runtime consumer; evaluator construction remains deferred.
+
+All other active tests are tracked and collected. Tests use local fixtures and
+deterministic fakes; this validation command must not invoke remote inference or
+rebuild corpus artifacts.
+
+The Plan 01 baseline recorded on 2026-08-13 is 324 passing backend tests with
+two deterministic skips, plus 21 passing frontend tests and a successful
+production build. Both backend skips generate tiny video fixtures and run when
+the optional preprocessing extra supplies PyAV.
+
 ## Organize raw keyframes
 
 If downloaded keyframes are nested as `data/raw/Keyframes_Lxx/keyframes/<video>`,

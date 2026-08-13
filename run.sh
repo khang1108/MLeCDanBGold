@@ -16,6 +16,7 @@ PYTHON_BIN="${HCMAI_PYTHON_BIN:-${REPO_ROOT}/aic/bin/python}"
 LOG_RETRY_SECONDS="${HCMAI_LOG_RETRY_SECONDS:-5}"
 
 INSTANCE_ID_FILE=""
+CONNECTION_INFO_FILE=""
 REMOTE_LOG_PID=""
 
 log() {
@@ -30,10 +31,10 @@ die() {
 usage() {
     cat <<'EOF'
 Usage:
-  ./run.sh --gpu a6000|l40 [launcher options] -- [model options]
+  ./run.sh (--gpu a6000|l40 | --instance ID) [launcher options] -- [model options]
 
 This command:
-  1. creates and bootstraps a Thunder Compute instance;
+  1. creates or reuses and bootstraps a Thunder Compute instance;
   2. follows /opt/hcmai/logs/llm.log as [thunder:llm];
   3. runs the local API from src/hcmai/app.py with Uvicorn.
 
@@ -50,6 +51,9 @@ All command-line arguments are forwarded to launch_thunder_instance.sh.
 Example:
   ./run.sh --gpu l40 --token "$TNR_TOKEN" -- \
       --caption true --caption-embedding true
+
+Recover an existing instance after a local launcher failure:
+  ./run.sh --instance 0 -- --caption-embedding true --reranker true --vqa true
 
 Press Ctrl-C to stop local Uvicorn and log streaming. The Thunder instance and
 its remote services are intentionally left running.
@@ -101,11 +105,17 @@ cleanup() {
     if [[ -n "${INSTANCE_ID_FILE}" && -f "${INSTANCE_ID_FILE}" ]]; then
         rm -f -- "${INSTANCE_ID_FILE}"
     fi
+    if [[ -n "${CONNECTION_INFO_FILE}" && -f "${CONNECTION_INFO_FILE}" ]]; then
+        rm -f -- "${CONNECTION_INFO_FILE}"
+    fi
     exit "${exit_code}"
 }
 
 follow_remote_llm_log() {
-    local ssh_alias=$1
+    local instance_id=$1
+    local ssh_host=$2
+    local ssh_port=$3
+    local ssh_key_file=$4
     local ssh_pid=""
 
     trap '
@@ -117,8 +127,20 @@ follow_remote_llm_log() {
     ' TERM INT
 
     while true; do
-        log "Following ${ssh_alias}:${REMOTE_LLM_LOG}."
-        ssh "${ssh_alias}" \
+        log "Following Thunder instance ${instance_id} log ${REMOTE_LLM_LOG}."
+        ssh \
+            -T \
+            -i "${ssh_key_file}" \
+            -p "${ssh_port}" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o PasswordAuthentication=no \
+            -o KbdInteractiveAuthentication=no \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR \
+            -o ConnectTimeout=30 \
+            "ubuntu@${ssh_host}" \
             "sudo tail -n 100 -F '${REMOTE_LLM_LOG}' | sed -u 's/^/[thunder:llm] /'" &
         ssh_pid=$!
         if wait "${ssh_pid}"; then
@@ -164,12 +186,14 @@ main() {
 
     validate
     INSTANCE_ID_FILE="$(mktemp /tmp/hcmai-thunder-instance-id.XXXXXX)"
+    CONNECTION_INFO_FILE="$(mktemp /tmp/hcmai-thunder-connection.XXXXXX)"
     trap cleanup EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
 
     log "Launching the Thunder Compute model service."
     HCMAI_THUNDER_INSTANCE_ID_FILE="${INSTANCE_ID_FILE}" \
+    HCMAI_THUNDER_CONNECTION_FILE="${CONNECTION_INFO_FILE}" \
         "${THUNDER_LAUNCHER}" "$@"
 
     local instance_id
@@ -178,7 +202,16 @@ main() {
         || die "Launcher did not return a valid Thunder instance ID."
     log "Thunder instance ID: ${instance_id}."
 
-    follow_remote_llm_log "tnr-${instance_id}" &
+    local -a connection_fields=()
+    mapfile -t connection_fields < "${CONNECTION_INFO_FILE}"
+    (( ${#connection_fields[@]} == 3 )) \
+        || die "Launcher did not return complete SSH connection information."
+    local ssh_host="${connection_fields[0]}"
+    local ssh_port="${connection_fields[1]}"
+    local ssh_key_file="${connection_fields[2]}"
+
+    follow_remote_llm_log \
+        "${instance_id}" "${ssh_host}" "${ssh_port}" "${ssh_key_file}" &
     REMOTE_LOG_PID=$!
     run_local_api
 }

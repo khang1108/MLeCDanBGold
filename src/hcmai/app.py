@@ -20,14 +20,11 @@ from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.api.routers import (
     create_frames_router,
-    create_minichallenge_router,
     create_search_router,
     create_system_router,
     create_trake_router,
     create_vqa_router,
 )
-from hcmai.common.schemas import MiniChallengeLoginRequest
-from hcmai.submission.pipeline import MiniChallengeService
 
 logger = get_logger(__name__)
 
@@ -36,8 +33,10 @@ def _configure_backend_logging() -> None:
     """Make hcmai progress logs visible alongside Uvicorn output."""
     level = os.getenv("HCMAI_LOG_LEVEL", "INFO").upper()
     log_file = os.getenv("HCMAI_LOG_FILE") or None
+
     configure_logging(level, log_file=log_file)
     get_logger("hcmai").setLevel(level)
+
     logger.info(
         "Backend logging configured level=%s file=%s",
         level,
@@ -47,21 +46,11 @@ def _configure_backend_logging() -> None:
 
 def create_app(
     search_service: SearchService | None = None,
-    minichallenge_service: MiniChallengeService | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     service_container: dict[str, Any] = {
         "service": search_service,
         "startup_messages": [],
-        "minichallenge_service": minichallenge_service or MiniChallengeService.remote(
-            os.getenv(
-                "HCMAI_MINICHALLENGE_BASE_URL",
-                "http://if-wan4.selab.edu.vn:20740",
-            ),
-            timeout_seconds=float(
-                os.getenv("HCMAI_MINICHALLENGE_TIMEOUT_SECONDS", "10")
-            ),
-        ),
     }
     dataset_root = Path(os.getenv(
         "HCMAI_DATASET_ROOT", "artifacts/frame_store"
@@ -88,35 +77,6 @@ def create_app(
         for message in service_container["startup_messages"]:
             logger.warning("Backend startup note: %s", message)
 
-        mini_service = service_container["minichallenge_service"]
-        refresh_username = (
-            os.getenv("DES_USERNAME") or os.getenv("DRES_USERNAME") or ""
-        ).strip().strip('"').strip("'")
-        refresh_password = (
-            os.getenv("DES_PASSWORD") or os.getenv("DRES_PASSWORD") or ""
-        ).strip().strip('"').strip("'")
-        if refresh_username and refresh_password:
-            refresh_interval = float(
-                os.getenv(
-                    "HCMAI_MINICHALLENGE_SESSION_REFRESH_SECONDS", "300"
-                )
-            )
-            await mini_service.start_session_refresh(
-                MiniChallengeLoginRequest(
-                    username=refresh_username,
-                    password=refresh_password,
-                ),
-                interval_seconds=refresh_interval,
-            )
-            logger.info(
-                "DRES automatic session refresh enabled interval_seconds=%s",
-                refresh_interval,
-            )
-        elif refresh_username or refresh_password:
-            logger.warning(
-                "DRES automatic session refresh disabled because credentials are incomplete"
-            )
-
         try:
             yield
         finally:
@@ -124,7 +84,6 @@ def create_app(
             close = getattr(service, "close", None)
             if close is not None:
                 close()
-            await mini_service.close()
             logger.info("Backend shutdown completed")
 
     app = FastAPI(
@@ -152,7 +111,6 @@ def create_app(
     app.include_router(create_search_router(service_container))
     app.include_router(create_vqa_router(service_container))
     app.include_router(create_trake_router(service_container))
-    app.include_router(create_minichallenge_router(service_container))
     app.include_router(create_frames_router(service_container, dataset_root))
 
     return app

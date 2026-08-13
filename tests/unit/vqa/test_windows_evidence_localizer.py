@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from hcmai.common.schemas import FrameRecord, RetrievalSource, VQARequest
-from hcmai.pipelines.vqa.evidence import build_evidence_bundle
-from hcmai.pipelines.vqa.localizer import SimilarityLocalizer
-from hcmai.pipelines.vqa.models import BranchCandidate, VideoEvidenceCandidate
-from hcmai.pipelines.vqa.parser import parse_vqa_query
-from hcmai.pipelines.vqa.windows import build_windows, expand_neighbor_window
+from hcmai.common.schemas import FrameEvidence, FrameRecord, RetrievalSource, VQARequest
+from hcmai.pipelines.vqa.domain.models import VideoEvidenceCandidate
+from hcmai.pipelines.vqa.legacy_localization.localizer import SimilarityLocalizer
+from hcmai.pipelines.vqa.legacy_localization.windows import (
+    build_windows,
+    expand_neighbor_window,
+)
+from hcmai.pipelines.vqa.query.parser import parse_vqa_query
+from hcmai.pipelines.vqa.reasoning.evidence import build_evidence_bundle
 
 
 def frame(frame_id, index, timestamp):
@@ -34,7 +37,13 @@ class FakeData:
 
 
 def candidate(value, score):
-    return BranchCandidate(value, {"event": score}, {RetrievalSource.VISUAL: score}, {}, score, ("event",))
+    return FrameEvidence(
+        frame=value,
+        unit_scores={"event": score},
+        source_scores={RetrievalSource.VISUAL: score},
+        score=score,
+        provenance=("event",),
+    )
 
 
 def video_candidate(*frames):
@@ -46,10 +55,10 @@ def test_windows_clamp_merge_and_expand_once():
     data = FakeData(frames)
     windows = build_windows([video_candidate(candidate(frames[0], 1.0), candidate(frames[1], 0.9))], data, duration_ms=10_000)
     assert len(windows) == 1
-    assert windows[0].start_ms == 0
-    assert windows[0].end_ms == 10_000
+    assert windows[0].scene.start_ms == 0
+    assert windows[0].scene.end_ms == 10_000
     expanded = expand_neighbor_window(windows[0], data, expansion_ms=10_000)
-    assert expanded is not None and expanded.end_ms == 20_000
+    assert expanded is not None and expanded.scene.end_ms == 20_000
     assert expand_neighbor_window(expanded, data, expansion_ms=10_000) is None
 
 
@@ -65,7 +74,7 @@ def test_evidence_deduplicates_text_and_localizer_is_deterministic():
     assert [item.value for item in bundle.items] == ["red car", "STOP"]
     parsed = parse_vqa_query(VQARequest(event_description="a red car", question="What is written?"))
     localized = SimilarityLocalizer().localize(parsed, [bundle], limit=1)
-    assert localized[0].reason_labels == ("retrieval_similarity", "lexical_overlap")
+    assert localized[0].scene.reason_labels == ("retrieval_similarity", "lexical_overlap")
 
 
 def test_missing_evidence_is_warning_not_negative_evidence():

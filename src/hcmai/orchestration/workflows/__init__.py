@@ -1,4 +1,6 @@
-"""Executable task workflows used by the orchestration facade."""
+"""Workflow interfaces and compatibility exports used by orchestration."""
+
+from typing import TYPE_CHECKING
 
 from hcmai.orchestration.workflows.base import (
     TaskPipeline,
@@ -7,7 +9,9 @@ from hcmai.orchestration.workflows.base import (
 )
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
-from hcmai.orchestration.workflows.vqa import VQAPipeline
+
+if TYPE_CHECKING:
+    from hcmai.pipelines.vqa.pipeline import VQAPipeline
 
 __all__ = [
     "KISPipeline",
@@ -17,3 +21,13 @@ __all__ = [
     "TaskPipelineDependencyError",
     "TaskPipelineRequestError",
 ]
+
+
+def __getattr__(name: str):
+    """Lazily preserve the former VQAPipeline export without a cycle."""
+
+    if name == "VQAPipeline":
+        from hcmai.pipelines.vqa.pipeline import VQAPipeline
+
+        return VQAPipeline
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

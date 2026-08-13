@@ -9,8 +9,8 @@ import numpy as np
 
 from hcmai.common.schemas import StageTrace
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
-from hcmai.observability import PipelineStage
-from hcmai.observability.tracing import StageTimer
+from hcmai.common.observability import PipelineStage
+from hcmai.common.observability.tracing import StageTimer
 from hcmai.retrieval.retriever.cache import EmbeddingCache, EmbeddingCacheKey
 
 SourceFamily = Literal["visual", "text"]

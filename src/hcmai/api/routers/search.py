@@ -14,6 +14,7 @@ from hcmai.orchestration.pipeline import (
     SearchServiceUnavailableError,
     UnsupportedSearchTaskError,
 )
+from hcmai.temporal import ProgressiveStateConflictError, StaleProgressiveStateError
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,8 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
 
     @router.post("/api/v1/search", response_model=SearchResponse)
     async def search_frames(request: SearchRequest) -> SearchResponse:
+        """Validate and delegate one standalone KIS-family search request."""
+
         if request.query_type is TaskType.VQA:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -38,6 +41,16 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
             )
         try:
             return await run_in_threadpool(service.search, request)
+        except StaleProgressiveStateError as error:
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail=str(error),
+            ) from error
+        except ProgressiveStateConflictError as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(error),
+            ) from error
         except UnsupportedSearchTaskError as error:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
