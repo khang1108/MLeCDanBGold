@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Literal, Self
+from uuid import UUID
 
 from pydantic import Field, model_validator
 
@@ -88,6 +89,7 @@ class VQARequest(ContractModel):
     language_hint: QueryLanguage | None = None
     execution_profile: ExecutionProfile | None = None
     baseline_profile: VQABaselineProfile = VQABaselineProfile.LOCALIZER
+    search_id: UUID | None = None
 
 
 class VQASubmission(ContractModel):
@@ -145,6 +147,7 @@ class VQAResponse(ContractModel):
     warnings: list[NonEmptyString] = Field(default_factory=list)
     latency_ms: int = Field(default=0, ge=0)
     trace: PipelineTrace = Field(default_factory=PipelineTrace)
+    search_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_submissions(self) -> Self:

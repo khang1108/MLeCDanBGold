@@ -174,6 +174,17 @@ def test_trake_rejects_invalid_event_and_frame_sequences() -> None:
         )
 
 
+def test_progressive_search_id_is_optional_and_must_be_a_uuid() -> None:
+    search_id = "12345678-1234-5678-1234-567812345678"
+    request = SearchRequest(query="red bus", search_id=search_id)
+
+    assert SearchRequest.model_validate_json(request.model_dump_json()) == request
+    assert SearchRequest(query="red bus").search_id is None
+    assert VQARequest(event_description="event", question="question").search_id is None
+    with pytest.raises(ValidationError):
+        SearchRequest.model_validate({"query": "red bus", "search_id": "not-a-uuid"})
+
+
 def test_task_unions_discriminate_all_request_and_response_types() -> None:
     request_adapter = TypeAdapter(TaskRequest)
     response_adapter = TypeAdapter(TaskResponse)

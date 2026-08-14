@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Self
+from uuid import UUID
 from pydantic import Field, field_validator, model_validator
 
 from hcmai.common.schemas.base import ContractModel, NonEmptyString
@@ -47,6 +48,7 @@ class SearchRequest(ContractModel):
     query_type: TaskType = TaskType.KIS
     top_k: int = Field(default=20, ge=1, le=100)
     filters: SearchFilters | None = None
+    search_id: UUID | None = None
 
 
 class SearchLatency(ContractModel):
@@ -92,6 +94,7 @@ class SearchResponse(ContractModel):
     results: list[SearchResult] = Field(default_factory=list)
     warnings: list[NonEmptyString] = Field(default_factory=list)
     trace: PipelineTrace = Field(default_factory=PipelineTrace)
+    search_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_result_count(self) -> Self:
