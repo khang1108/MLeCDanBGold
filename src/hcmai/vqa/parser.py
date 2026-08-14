@@ -10,13 +10,17 @@ from hcmai.common.schemas import QueryLanguage, RetrievalSource, VQARequest
 from .models import ParsedVQAQuery, QuestionType
 
 
-_RULES: tuple[tuple[QuestionType, tuple[str, ...]], ...] = (
-    (QuestionType.COUNT, ("how many", "bao nhiêu", "mấy ", "số lượng")),
-    (QuestionType.COLOR, ("what color", "which color", "màu gì", "màu nào")),
-    (QuestionType.TEXT, ("what does", "written", "read", "chữ gì", "ghi gì", "biển")),
-    (QuestionType.SPEECH, ("say", "said", "tell", "nói gì", "đọc gì", "hỏi gì")),
-    (QuestionType.TEMPORAL, ("before", "after", "then", "trước", "sau", "tiếp theo", "vì sao")),
-    (QuestionType.IDENTITY, ("who", "what is", "which object", "ai ", "là gì", "vật gì")),
+_RULES: tuple[tuple[QuestionType, str], ...] = (
+    (QuestionType.COUNT, r"how many|bao nhiêu|\bmấy\b|số lượng"),
+    (QuestionType.COLOR, r"what colou?r|which colou?r|màu gì|màu nào"),
+    (
+        QuestionType.TEXT,
+        r"\bwritten\b|\b(text|sign|label|screen|board|banner|subtitle)s?\b"
+        r"|chữ gì|ghi gì|viết gì|biển ghi|màn hình",
+    ),
+    (QuestionType.SPEECH, r"\b(says?|said|saying|tells?|told|speaks?|spoken)\b|nói gì|hỏi gì"),
+    (QuestionType.TEMPORAL, r"\b(before|after|then|next)\b|\btrước\b|\bsau\b|tiếp theo"),
+    (QuestionType.IDENTITY, r"\bwho\b|what is|which object|\bai\b|là gì|vật gì"),
 )
 
 
@@ -29,7 +33,7 @@ def parse_vqa_query(request: VQARequest) -> ParsedVQAQuery:
         raise ValueError("event_description and question must be non-empty")
     folded = unicodedata.normalize("NFKC", question).casefold()
     question_type = next(
-        (kind for kind, terms in _RULES if any(term in folded for term in terms)),
+        (kind for kind, pattern in _RULES if re.search(pattern, folded)),
         QuestionType.GENERAL,
     )
     language = request.language_hint or _detect_language(folded)

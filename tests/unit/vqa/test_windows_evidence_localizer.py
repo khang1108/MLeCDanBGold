@@ -53,6 +53,35 @@ def test_windows_clamp_merge_and_expand_once():
     assert expand_neighbor_window(expanded, data, expansion_ms=10_000) is None
 
 
+def test_merging_stays_inside_the_duration_and_keeps_every_anchor():
+    frames = [frame(f"f{index}", index, index * 1_000) for index in range(31)]
+    data = FakeData(frames)
+    anchors = (candidate(frames[10], 0.9), candidate(frames[11], 0.8), candidate(frames[20], 0.7))
+
+    windows = build_windows(
+        [video_candidate(*anchors)], data, duration_ms=15_000, max_frames=4
+    )
+
+    assert [window.end_ms - window.start_ms for window in windows] == [15_000, 14_000]
+    assert set(windows[0].frame_ids) >= {"f10", "f11"}
+    assert "f20" in windows[1].frame_ids
+
+
+def test_a_merge_that_would_outgrow_the_frame_budget_is_refused():
+    frames = [frame(f"f{index}", index, index * 100) for index in range(30)]
+    data = FakeData(frames)
+    anchors = tuple(candidate(frames[10 + offset], 0.5 + 0.1 * offset) for offset in range(5))
+
+    windows = build_windows(
+        [video_candidate(*anchors)], data, duration_ms=15_000, max_frames=4
+    )
+
+    assert [len(window.source_frames) for window in windows] == [4, 1]
+    for window in windows:
+        assert {item.frame.frame_id for item in window.source_frames} <= set(window.frame_ids)
+    assert "f14" in set(windows[0].frame_ids)
+
+
 def test_evidence_deduplicates_text_and_localizer_is_deterministic():
     frames = [frame("f0", 0, 0), frame("f1", 1, 5_000)]
     data = FakeData(frames, {

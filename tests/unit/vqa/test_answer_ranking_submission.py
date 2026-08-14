@@ -46,7 +46,7 @@ class FakeLLM:
     def __init__(self, responses):
         self.responses = iter(responses)
 
-    def answer_vqa(self, question, image, evidence):
+    def answer_vqa(self, *, request_id, frame_id, question, image, evidence):
         value = next(self.responses)
         if isinstance(value, BaseException):
             raise value
@@ -105,6 +105,73 @@ def test_answer_normalize_rank_and_materialize_canonical_identity():
     rows = materialize_submissions(ranked, data, top_k=2)
     assert [row.rank for row in rows] == [1, 2]
     assert {(row.video_id, row.frame_idx) for row in rows} == {("v1", 7), ("v2", 8)}
+
+
+def test_plain_text_answer_from_the_in_process_model_is_kept():
+    # Given: the local adapter answers with bare text, carrying no identity or confidence.
+    data, parsed, localized = setup_localized()
+    llm = FakeLLM(["Two"])
+
+    answers, warnings = answer_windows(
+        localized[:1], parsed, llm, max_calls=1, image_loader=lambda _: object()
+    )
+
+    # Then: the text is the answer, bound to the frame the caller sent.
+    assert not warnings
+    assert [item.normalized_answer for item in answers] == ["2"]
+    assert answers[0].evidence_frame_id in localized[0].bundle.image_frame_ids
+    assert answers[0].answer_confidence == 0.5
+
+
+class MultiFrameLLM(FakeLLM):
+    def __init__(self, response):
+        super().__init__([])
+        self.response = response
+        self.multi_calls = []
+        self.single_calls = 0
+
+    def capability_health(self):
+        return {"multi_image_vqa": True}
+
+    def answer_vqa(self, *, request_id, frame_id, question, image, evidence):
+        self.single_calls += 1
+        return {"answer": "one", "frame_id": "f1", "confidence": 0.1}
+
+    def answer_vqa_multi(self, *, request_id, frame_ids, question, images, evidence):
+        assert len(images) == len(frame_ids)
+        self.multi_calls.append(tuple(frame_ids))
+        return self.response
+
+
+def test_multi_frame_path_sends_every_sampled_frame_and_binds_the_selected_id():
+    f1, f2 = frame("f1", "v1", 7, 1_000), frame("f2", "v1", 8, 1_500)
+    data = FakeData([f1, f2])
+    candidates = (
+        BranchCandidate(f1, {"event": 0.9}, {RetrievalSource.VISUAL: 0.9}, {}, 0.9, ("event",)),
+        BranchCandidate(f2, {"event": 0.8}, {RetrievalSource.VISUAL: 0.8}, {}, 0.8, ("event",)),
+    )
+    videos = [VideoEvidenceCandidate("v1", candidates, 0.9, 2, None, 2, 1, 0.0)]
+    bundles = [
+        build_evidence_bundle(window, data)
+        for window in build_windows(videos, data, duration_ms=2_000)
+    ]
+    parsed = parse_vqa_query(VQARequest(event_description="two people", question="How many people?"))
+    localized = SimilarityLocalizer().localize(parsed, bundles, limit=1)
+    llm = MultiFrameLLM(
+        {"answer": "two", "selected_frame_id": "f2", "answerable": True, "confidence": 0.7}
+    )
+
+    answers, warnings = answer_windows(
+        localized, parsed, llm, max_calls=1, image_loader=lambda _: object()
+    )
+
+    window = localized[0].bundle.window
+    assert len(window.frame_ids) > 1
+    assert llm.multi_calls == [window.frame_ids]
+    assert llm.single_calls == 0
+    assert not warnings
+    assert [item.evidence_frame_id for item in answers] == ["f2"]
+    assert answers[0].window == window
 
 
 def test_invalid_grounding_cannot_win_and_normalization_is_conservative():

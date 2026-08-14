@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from hcmai.common.schemas import VQASubmission
-from .contracts import FrameLookup
+from hcmai.common.schemas import FrameLookup, VQASubmission
 from .models import GroundedAnswerCandidate
 
 

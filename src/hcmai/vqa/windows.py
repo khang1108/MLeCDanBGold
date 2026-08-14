@@ -35,7 +35,7 @@ def build_windows(
                 start_ms=start, end_ms=end, source_frames=(source,), sampled_frames=sampled,
                 score=source.score,
             ))
-    return _merge_overlaps(raw, max_frames)
+    return _merge_overlaps(raw, max_frames, duration_ms)
 
 
 def expand_neighbor_window(
@@ -88,19 +88,36 @@ def _sample(frames, start: int, end: int, limit: int, required: set[str]):
     return tuple(sorted(selected.values(), key=lambda frame: (frame.timestamp_ms, frame.frame_idx, frame.frame_id)))
 
 
-def _merge_overlaps(windows: list[TemporalWindow], max_frames: int) -> list[TemporalWindow]:
+def _merge_overlaps(
+    windows: list[TemporalWindow], max_frames: int, duration_ms: int
+) -> list[TemporalWindow]:
     merged: list[TemporalWindow] = []
     for window in sorted(windows, key=lambda item: (item.video_id, item.start_ms, item.end_ms, -item.score)):
         prior = merged[-1] if merged else None
-        if prior is None or prior.video_id != window.video_id or window.start_ms > prior.end_ms:
+        end = window.end_ms if prior is None else max(prior.end_ms, window.end_ms)
+        if (
+            prior is None
+            or prior.video_id != window.video_id
+            or window.start_ms > prior.end_ms
+            or end - prior.start_ms > duration_ms
+        ):
+            merged.append(window)
+            continue
+        source_map = {item.frame.frame_id: item for item in prior.source_frames + window.source_frames}
+        if len(source_map) > max_frames:
             merged.append(window)
             continue
         frame_map = {frame.frame_id: frame for frame in prior.sampled_frames + window.sampled_frames}
-        source_map = {item.frame.frame_id: item for item in prior.source_frames + window.source_frames}
-        frames = tuple(sorted(frame_map.values(), key=lambda frame: (frame.timestamp_ms, frame.frame_idx, frame.frame_id))[:max_frames])
+        frames = _sample(
+            sorted(frame_map.values(), key=lambda frame: (frame.timestamp_ms, frame.frame_idx, frame.frame_id)),
+            prior.start_ms,
+            end,
+            max_frames,
+            set(source_map),
+        )
         merged[-1] = TemporalWindow(
-            window_id=f"{prior.video_id}:{prior.start_ms}-{max(prior.end_ms, window.end_ms)}",
-            video_id=prior.video_id, start_ms=prior.start_ms, end_ms=max(prior.end_ms, window.end_ms),
+            window_id=f"{prior.video_id}:{prior.start_ms}-{end}",
+            video_id=prior.video_id, start_ms=prior.start_ms, end_ms=end,
             source_frames=tuple(source_map.values()), sampled_frames=frames,
             score=max(prior.score, window.score) + 0.05 * min(len(source_map), 4),
         )

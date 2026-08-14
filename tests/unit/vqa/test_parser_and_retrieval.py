@@ -51,6 +51,35 @@ def test_parser_detects_vietnamese_ocr_and_preserves_raw_event():
     assert parsed.required_modalities == (RetrievalSource.OCR, RetrievalSource.VISUAL)
 
 
+def test_a_spoken_question_is_asr_and_only_a_named_surface_is_ocr():
+    expected = {
+        "What does he say?": QuestionType.SPEECH,
+        "What does the man say to her?": QuestionType.SPEECH,
+        "What does the sign say?": QuestionType.TEXT,
+        "What does that screen say?": QuestionType.TEXT,
+        "What is written on the board?": QuestionType.TEXT,
+        "Which object is already broken?": QuestionType.IDENTITY,
+        "What is he spreading?": QuestionType.IDENTITY,
+        "Người đó nói gì?": QuestionType.SPEECH,
+        "Biển ghi gì?": QuestionType.TEXT,
+    }
+
+    parsed = {
+        question: parse_vqa_query(
+            VQARequest(event_description="a street scene", question=question)
+        )
+        for question in expected
+    }
+
+    assert {question: item.question_type for question, item in parsed.items()} == expected
+    assert parsed["What does he say?"].required_modalities == (
+        RetrievalSource.ASR, RetrievalSource.VISUAL,
+    )
+    assert parsed["What does the sign say?"].required_modalities == (
+        RetrievalSource.OCR, RetrievalSource.VISUAL,
+    )
+
+
 def test_parser_detects_english_temporal_question():
     parsed = parse_vqa_query(VQARequest(
         event_description="A person enters a room", question="What happens after they sit?",
@@ -78,6 +107,30 @@ def test_retrieval_merges_duplicate_frame_identity_and_aggregates_consistency():
     videos = aggregate_videos(merged, top_videos=2)
     assert {item.video_id for item in videos} == {"v1", "v2"}
     assert next(item for item in videos if item.video_id == "v1").modality_count == 2
+
+
+def test_the_question_modality_outranks_a_stronger_visual_only_frame():
+    ocr, *visual = (frame(f"f{index}", "v1", index, index * 1_000) for index in range(4))
+    result = RetrievalResult(candidates=[
+        RetrievalCandidate(frame_id="f0", fusion_score=0.014, source_scores={RetrievalSource.OCR: 0.95}),
+        *(
+            RetrievalCandidate(frame_id=item.frame_id, fusion_score=0.016, source_scores={RetrievalSource.VISUAL: 0.3})
+            for item in visual
+        ),
+    ])
+    parsed = parse_vqa_query(VQARequest(event_description="A sign appears", question="What is written?"))
+
+    merged, _ = retrieve_candidates(
+        FakeRetrieval([result]), FakeData([ocr, *visual]), parsed, event_only=True
+    )
+
+    assert [item.frame.frame_id for item in merged] == ["f0", "f1", "f2", "f3"]
+    assert merged[0].source_scores == {RetrievalSource.OCR: 0.95}
+    general = parse_vqa_query(VQARequest(event_description="A sign appears", question="Describe it"))
+    plain, _ = retrieve_candidates(
+        FakeRetrieval([result]), FakeData([ocr, *visual]), general, event_only=True
+    )
+    assert [item.frame.frame_id for item in plain] == ["f1", "f2", "f3", "f0"]
 
 
 def test_retrieval_flags_are_mutually_exclusive():

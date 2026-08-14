@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from hcmai.common.schemas import RetrievalCandidate, RetrievalResult, RetrievalSource, TaskType
+from hcmai.common.schemas import (
+    FrameLookup,
+    RetrievalCandidate,
+    RetrievalResult,
+    RetrievalSource,
+    TaskType,
+)
 from hcmai.common.schemas.search import SearchFilters
-from .contracts import FrameLookup, RetrievalGateway
+from .contracts import RetrievalGateway
 from .models import BranchCandidate, ParsedVQAQuery
 
 
@@ -17,6 +23,7 @@ def retrieve_candidates(
     filters: SearchFilters | None = None,
     event_only: bool = False,
     question_only: bool = False,
+    modality_boost: float = 1.15,
 ) -> tuple[list[BranchCandidate], list[str]]:
     if top_k < 1:
         raise ValueError("top_k must be positive")
@@ -28,11 +35,13 @@ def retrieve_candidates(
     if not event_only:
         branches.append(("question", parsed.question))
         branches.extend(("clue", clue) for clue in parsed.clue_queries if clue != parsed.question)
+    if modality_boost < 1.0:
+        raise ValueError("modality_boost must be at least 1")
     results = retrieval.search_batch(
         [query for _, query in branches], top_k, filters, TaskType.VQA
     )
     warnings = [warning for result in results for warning in result.warnings]
-    return _merge(branches, results, data, parsed), warnings
+    return _merge(branches, results, data, parsed, modality_boost), warnings
 
 
 def _merge(
@@ -40,38 +49,35 @@ def _merge(
     results: list[RetrievalResult],
     data: FrameLookup,
     parsed: ParsedVQAQuery,
+    modality_boost: float,
 ) -> list[BranchCandidate]:
-    by_id: dict[str, dict[str, object]] = {}
+    branches_by_id: dict[str, dict[str, float]] = {}
+    candidates_by_id: dict[str, list[RetrievalCandidate]] = {}
     for (branch, _), result in zip(branches, results, strict=True):
         for rank, candidate in enumerate(result.candidates, 1):
-            entry = by_id.setdefault(candidate.frame_id, {"branches": {}, "candidates": []})
-            score = _candidate_score(candidate, rank)
-            branch_weight = 1.0 if branch == "event" else 0.9
-            entry["branches"][branch] = max(  # type: ignore[index]
-                entry["branches"].get(branch, 0.0), score * branch_weight  # type: ignore[union-attr]
-            )
-            entry["candidates"].append(candidate)  # type: ignore[union-attr]
+            branch_scores = branches_by_id.setdefault(candidate.frame_id, {})
+            score = _candidate_score(candidate, rank) * (1.0 if branch == "event" else 0.9)
+            branch_scores[branch] = max(branch_scores.get(branch, 0.0), score)
+            candidates_by_id.setdefault(candidate.frame_id, []).append(candidate)
+    primary = next(iter(parsed.required_modalities), None)
     merged: list[BranchCandidate] = []
-    for frame_id, entry in by_id.items():
-        candidates = entry["candidates"]
-        branch_scores = entry["branches"]
+    for frame_id, branch_scores in branches_by_id.items():
         source_scores: dict[RetrievalSource, float] = {}
         source_ranks: dict[RetrievalSource, int] = {}
-        for candidate in candidates:  # type: ignore[union-attr]
+        for candidate in candidates_by_id[frame_id]:
             for source, score in candidate.source_scores.items():
-                boost = 1.15 if source in parsed.required_modalities else 1.0
-                source_scores[source] = max(source_scores.get(source, float("-inf")), score * boost)
+                source_scores[source] = max(source_scores.get(source, float("-inf")), score)
             for source, rank in candidate.source_ranks.items():
                 current = source_ranks.get(source)
                 source_ranks[source] = rank if current is None else min(current, rank)
-        score = max(branch_scores.values()) + 0.15 * sum(branch_scores.values())  # type: ignore[union-attr]
+        boost = modality_boost if primary in source_scores else 1.0
         merged.append(BranchCandidate(
             frame=data.get_frame(frame_id),
-            branch_scores=dict(branch_scores),  # type: ignore[arg-type]
+            branch_scores=branch_scores,
             source_scores=source_scores,
             source_ranks=source_ranks,
-            score=score,
-            provenance=tuple(sorted(branch_scores)),  # type: ignore[arg-type]
+            score=boost * (max(branch_scores.values()) + 0.15 * sum(branch_scores.values())),
+            provenance=tuple(sorted(branch_scores)),
         ))
     return sorted(merged, key=lambda item: (-item.score, item.frame.video_id, item.frame.frame_idx, item.frame.frame_id))
 
