@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Protocol
 from pydantic import Field, field_validator
 
 from .base import ContractModel, NonEmptyString
@@ -19,6 +20,12 @@ class FrameRecord(ContractModel):
     height: int = Field(gt=0)
     shot_id: NonEmptyString | None = None
     is_anchor: bool = True
+
+
+class FrameLookup(Protocol):
+    """Resolve one frame's canonical metadata by id."""
+
+    def get_frame(self, frame_id: str) -> FrameRecord: ...
 
 
 class FrameEnrichment(ContractModel):
