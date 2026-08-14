@@ -123,7 +123,7 @@ class RetrievalBenchmark:
         if torch is not None and torch.cuda.is_available():
             gpu_peak_bytes = int(torch.cuda.max_memory_allocated())
 
-        metrics = {
+        metrics: dict[str, Any] = {
             "run_name": self.run_name,
             "num_queries": len(self.queries),
             "recall": {

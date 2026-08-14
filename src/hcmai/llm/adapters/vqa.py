@@ -123,7 +123,7 @@ class GroundedVQAModel:
             return_dict=True,
             return_tensors="pt",
         ).to(getattr(self.model, "device", self.config.device))
-        generation = {
+        generation: dict[str, Any] = {
             "max_new_tokens": max_new_tokens or self.config.max_new_tokens,
             "do_sample": temperature > 0,
         }

@@ -13,7 +13,7 @@ from hcmai.data.prepare import prepare_frames
 from hcmai.data.stores import ASRStore, CaptionStore, FrameStore, OCRStore
 
 EvidenceStore = CaptionStore | OCRStore | ASRStore
-_EVIDENCE_STORES = {
+_EVIDENCE_STORES: dict[RetrievalSource, type[EvidenceStore]] = {
     RetrievalSource.CAPTION: CaptionStore,
     RetrievalSource.OCR: OCRStore,
     RetrievalSource.ASR: ASRStore,

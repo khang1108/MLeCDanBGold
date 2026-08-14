@@ -29,7 +29,7 @@ def read_audio(path: Path, sample_rate: int) -> np.ndarray:
 
     import av  # pyright: ignore[reportMissingImports]
 
-    chunks = []
+    chunks: list[np.ndarray] = []
     with av.open(str(path)) as container:
         if not container.streams.audio:
             return np.empty(0, dtype=np.float32)
@@ -164,7 +164,7 @@ class ASRAdapter:
             Path(video_path), self.config.audio_sample_rate
         )
         regions = self._speech_regions(audio) if audio.size else []
-        records = []
+        records: list[TranscriptSegment] = []
         for offset in range(0, len(regions), self.config.batch_size):
             batch = regions[offset:offset + self.config.batch_size]
             clips = [

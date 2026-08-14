@@ -21,7 +21,7 @@ def _records(
         if metadata_path.is_dir()
         else [metadata_path]
     )
-    records = []
+    records: list[TranscriptSegment] = []
     for path in paths:
         table = pd.read_parquet(path).astype(object)
         rows = table.where(table.notna(), None).to_dict(orient="records")

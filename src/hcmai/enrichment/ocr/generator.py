@@ -45,9 +45,9 @@ def _resume(
     for frame in frames:
         frame_id = str(frame["frame_id"])
         old = groups.get(frame_id, [])
-        row = valid_ocr(old[0], config) if len(old) == 1 else None
-        if row:
-            rows[frame_id], skipped = row, skipped + 1
+        resumable = valid_ocr(old[0], config) if len(old) == 1 else None
+        if resumable:
+            rows[frame_id], skipped = resumable, skipped + 1
         else:
             retried += bool(old)
             todo.append(frame)

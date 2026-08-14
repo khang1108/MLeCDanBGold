@@ -82,7 +82,7 @@ class RRFFusionRetriever:
             and hasattr(retriever, "source_family")
             for retriever in self.retrievers
         ):
-            results = [
+            legacy = [
                 self._search_legacy(query, top_k, filters, query_type)
                 for query in queries
             ]
@@ -91,7 +91,7 @@ class RRFFusionRetriever:
                 result.model_copy(
                     update={"time_to_first_candidate_ms": first_candidate_ms}
                 )
-                for result in results
+                for result in legacy
             ]
 
         batches: dict[str, Any] = {}

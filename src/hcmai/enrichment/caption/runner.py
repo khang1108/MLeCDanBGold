@@ -80,13 +80,13 @@ def run_batches(
             latencies.append((perf_counter() - began) * 1000)
             for (frame_id, _), result in zip(valid, results):
                 if isinstance(result, Exception) or result is None or not str(result).strip():
-                    error = (
+                    cause = (
                         result
                         if isinstance(result, Exception)
                         else ValueError("empty caption")
                     )
                     rows[frame_id], failures[frame_id] = _failure(
-                        frame_id, config, "model", error
+                        frame_id, config, "model", cause
                     )
                 else:
                     rows[frame_id] = FrameEnrichment.model_validate(
