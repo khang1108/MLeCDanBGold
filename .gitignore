@@ -87,6 +87,8 @@ temp/
 .codex/
 .claude/
 .agents/
+.omo/
+.codegraph/
 /aic
 # Frontend
 frontend/build
