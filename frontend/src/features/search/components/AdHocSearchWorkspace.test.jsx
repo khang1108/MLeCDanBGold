@@ -10,12 +10,14 @@ beforeEach(() => {
 });
 
 test('clicking Search sends KIS request and renders retrieved frame', async () => {
+  const onFrameClick = jest.fn();
   searchFrames.mockResolvedValueOnce({
     results: [{
       rank: 1,
       frame_id: 'frame-1',
-      video_id: 'video-1',
+      video_id: 'L21_a_b.folder2.L21_V001',
       frame_idx: 42,
+      fps: 25,
       timestamp_ms: 1200,
       caption: 'A red boat',
       thumbnail_url: null,
@@ -38,7 +40,7 @@ test('clicking Search sends KIS request and renders retrieved frame', async () =
     <AdHocSearchWorkspace
       topK={100}
       setTopK={jest.fn()}
-      onFrameClick={jest.fn()}
+      onFrameClick={onFrameClick}
     />,
   );
   fireEvent.change(screen.getByPlaceholderText(/Start with/), {
@@ -49,6 +51,12 @@ test('clicking Search sends KIS request and renders retrieved frame', async () =
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
     expect.objectContaining({ query: 'red boat', topK: 100, queryType: 'kis' }),
   ));
-  expect(await screen.findByText(/video-1 · frame 42/)).toBeTruthy();
+  expect(await screen.findByText(/L21_V001 · frame 42/)).toBeTruthy();
   expect(screen.getAllByText('A red boat')).toHaveLength(2);
+  fireEvent.click(screen.getByText(/L21_V001 · frame 42/));
+  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
+    video_id: 'L21_a_b.folder2.L21_V001',
+    frame_idx: 42,
+    fps: 25,
+  }));
 });

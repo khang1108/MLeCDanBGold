@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import ScoreBreakdown from "./ScoreBreakdown";
+import { displayVideoId } from "../videoSource";
 
 // Compact result card; clicking opens the inspector while controls stop propagation.
 const FrameCard = ({
@@ -9,6 +10,8 @@ const FrameCard = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const previewUrl = frame.thumbnail_url || frame.frame_url;
+  const hasScore = Number.isFinite(frame.scores?.final);
+  const hasTimestamp = Number.isFinite(frame.timestamp_ms);
   const copy = (event) => {
     event.stopPropagation();
     navigator.clipboard.writeText(`${frame.video_id},${frame.frame_idx}`);
@@ -22,7 +25,7 @@ const FrameCard = ({
     >
       <div className="frame-card-header">
         <span className="frame-index-text">
-          {frame.video_id} &middot; frame {frame.frame_idx}
+          {displayVideoId(frame.video_id)} &middot; frame {frame.frame_idx}
         </span>
         <div className="frame-card-actions">
           <button
@@ -64,8 +67,8 @@ const FrameCard = ({
           </p>
         </div>
       )}
-      <div className="frame-card-footer">
-        <div className="frame-score-badge-wrapper">
+      {(hasScore || hasTimestamp) && <div className="frame-card-footer">
+        {hasScore && <div className="frame-score-badge-wrapper">
           <span className="frame-score-badge">
             Score: {Math.round(frame.scores.final * 100)}%
           </span>
@@ -74,9 +77,9 @@ const FrameCard = ({
             <ScoreBreakdown scores={frame.scores} />
             <div className="score-tooltip-arrow" />
           </div>
-        </div>
-        <span className="frame-time-badge">{frame.timestamp_ms} ms</span>
-      </div>
+        </div>}
+        {hasTimestamp && <span className="frame-time-badge">{frame.timestamp_ms} ms</span>}
+      </div>}
     </div>
   );
 };

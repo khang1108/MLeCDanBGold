@@ -5,7 +5,7 @@ export const resolveApiUrl = (value) => {
   return `${API_BASE_URL}/${value.replace(/^\/+/, "")}`;
 };
 
-const frameAssetUrl = (frameId, asset) => (
+export const frameAssetUrl = (frameId, asset) => (
   frameId
     ? resolveApiUrl(`/api/v1/frames/${encodeURIComponent(frameId)}/${asset}`)
     : undefined
@@ -87,7 +87,7 @@ export const searchTrake = async ({ events, topK, signal }) => {
     method: 'POST',
     body: {
       query_type: 'trake',
-      query: orderedEvents.join(' -> '),
+      query: orderedEvents.join(' | '),
       events: orderedEvents,
       top_k: topK,
     },
