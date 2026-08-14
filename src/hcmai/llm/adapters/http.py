@@ -40,19 +40,23 @@ class InferenceClient:
         config = (
             timeout_seconds
             if isinstance(timeout_seconds, InferenceConfig)
-            else _legacy_config(timeout_seconds)
+            # A bare number is the legacy shape: the same timeout on every phase.
+            else InferenceConfig(
+                timeout_seconds=timeout_seconds,
+                connect_timeout_seconds=timeout_seconds,
+                read_timeout_seconds=timeout_seconds,
+                write_timeout_seconds=timeout_seconds,
+                pool_timeout_seconds=timeout_seconds,
+            )
         )
-        self.gateway = gateway or InferenceGateway(
-            base_url,
-            config,
-            client,
-        )
+        self.gateway = gateway or InferenceGateway(base_url, config, client)
         self.client = self.gateway.client
 
     def embed_text(
         self, texts: list[str], source: str = "visual"
     ) -> TextEmbeddingResponse:
-        payload = self._post(
+        payload = self._request(
+            "POST",
             "/v1/embeddings/text",
             json={"source": source, "texts": texts},
         )
@@ -68,7 +72,8 @@ class InferenceClient:
             ("images", (f"{item_id}.jpg", _jpeg(image), "image/jpeg"))
             for item_id, image in zip(item_ids, images)
         ]
-        payload = self._post(
+        payload = self._request(
+            "POST",
             "/v1/captions",
             data={"item_ids": json.dumps(item_ids)},
             files=files,
@@ -84,7 +89,8 @@ class InferenceClient:
             ("images", (f"{item_id}.jpg", _jpeg(image), "image/jpeg"))
             for item_id, image in zip(item_ids, images)
         ]
-        payload = self._post(
+        payload = self._request(
+            "POST",
             "/v1/rerank",
             data={"query": query, "item_ids": json.dumps(item_ids)},
             files=files,
@@ -96,6 +102,7 @@ class InferenceClient:
 
     def answer_vqa(
         self,
+        *,
         request_id: str,
         frame_id: str,
         question: str,
@@ -103,7 +110,8 @@ class InferenceClient:
         evidence: VQAInferenceEvidence | None = None,
     ) -> VQAInferenceResponse:
         context = evidence or VQAInferenceEvidence()
-        payload = self._post(
+        payload = self._request(
+            "POST",
             "/v1/vqa",
             data={
                 "request_id": request_id,
@@ -122,6 +130,7 @@ class InferenceClient:
 
     def answer_vqa_multi(
         self,
+        *,
         request_id: str,
         frame_ids: list[str],
         question: str,
@@ -131,7 +140,8 @@ class InferenceClient:
         if not frame_ids or len(frame_ids) != len(images):
             raise ValueError("frame_ids and images must be non-empty and aligned")
         context = evidence or VQAInferenceEvidence()
-        payload = self._post(
+        payload = self._request(
+            "POST",
             "/v1/vqa/multi",
             data={
                 "request_id": request_id,
@@ -150,9 +160,6 @@ class InferenceClient:
         if response.question != question:
             raise InferenceClientError("VQA provider changed the question")
         return response
-
-    def _post(self, path: str, **kwargs: Any) -> Any:
-        return self._request("POST", path, **kwargs)
 
     def _request(
         self,
@@ -234,16 +241,6 @@ def _jpeg(image: Image.Image) -> bytes:
     value.save(output, format="JPEG", quality=85)
     value.close()
     return output.getvalue()
-
-
-def _legacy_config(timeout_seconds: float) -> InferenceConfig:
-    return InferenceConfig(
-        timeout_seconds=timeout_seconds,
-        connect_timeout_seconds=timeout_seconds,
-        read_timeout_seconds=timeout_seconds,
-        write_timeout_seconds=timeout_seconds,
-        pool_timeout_seconds=timeout_seconds,
-    )
 
 
 def _validated(model: Any, payload: Any) -> Any:

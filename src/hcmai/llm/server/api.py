@@ -183,7 +183,13 @@ async def vqa(
     started = perf_counter()
     runtime = request.app.state.runtime
     try:
-        answer = runtime.answer_vqa(question, decoded[0], context)
+        answer = runtime.answer_vqa(
+            request_id=request_id,
+            frame_id=frame_id,
+            question=question,
+            image=decoded[0],
+            evidence=context,
+        )
     except Exception as error:
         raise _unavailable("VQA inference failed", error) from error
     finally:
@@ -217,7 +223,11 @@ async def vqa_multi(
     runtime = request.app.state.runtime
     try:
         result = runtime.answer_vqa_multi(
-            question, decoded, identifiers, context
+            request_id=request_id,
+            frame_ids=identifiers,
+            question=question,
+            images=decoded,
+            evidence=context,
         )
     except Exception as error:
         raise _unavailable("Multi-frame VQA inference failed", error) from error

@@ -69,7 +69,9 @@ class LocalAdapter:
             else None
         )
         self.reranker = reranker or (
-            RerankingService.create_qwen_adapter(_reranker_config(config))
+            RerankingService.create_qwen_adapter(
+                QwenRerankerConfig(**config.reranker.model_dump())
+            )
             if enable_reranker
             else None
         )
@@ -131,7 +133,6 @@ class LocalAdapter:
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
 
-
     def embed_text(self, texts: list[str], source: str = "visual") -> np.ndarray:
         encoder = (
             self.caption_encoder if source == "text" else self.visual_encoder
@@ -160,26 +161,39 @@ class LocalAdapter:
         return list(self.reranker.score_batch(query, images))
 
     def answer_vqa(
-        self, question: str, image: Image.Image, evidence: VQAInferenceEvidence
+        self,
+        *,
+        request_id: str,
+        frame_id: str,
+        question: str,
+        image: Image.Image,
+        evidence: VQAInferenceEvidence,
     ) -> str:
+        # An in-process call has no transport to echo identity back over.
+        del request_id, frame_id
         if self.vqa_model is None:
             raise RuntimeError("vision-language model is disabled")
         return self.vqa_model.answer_vqa(question, image, evidence)
 
     def answer_vqa_multi(
         self,
+        *,
+        request_id: str,
+        frame_ids: list[str],
         question: str,
         images: list[Image.Image],
-        frame_ids: list[str],
         evidence: VQAInferenceEvidence,
     ) -> dict[str, Any]:
+        del request_id
         if self.vqa_model is None:
             raise RuntimeError("vision-language model is disabled")
         return self.vqa_model.answer_vqa_multi(
             question, images, frame_ids, evidence
         )
 
-    def readiness(self) -> InferenceReadiness:
+    def readiness(self, deadline_at: float | None = None) -> InferenceReadiness:
+        # Loading happens in this process, so there is no deadline to race against.
+        del deadline_at
         generator_loaded = (
             self.captioner is not None and self.captioner.model is not None
         )
@@ -273,16 +287,3 @@ def _env_bool(name: str, default: bool = True) -> bool:
     if value not in {"true", "false"}:
         raise ValueError(f"{name} must be true or false")
     return value == "true"
-
-
-def _reranker_config(config: LLMServiceConfig) -> QwenRerankerConfig:
-    values = config.reranker
-    return QwenRerankerConfig(
-        checkpoint=values.checkpoint,
-        revision=values.revision,
-        device=values.device,
-        dtype=values.dtype,
-        batch_size=values.batch_size,
-        max_length=values.max_length,
-        max_pixels=values.max_pixels,
-    )

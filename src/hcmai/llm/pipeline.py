@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from hcmai.common.config import InferenceConfig
+from hcmai.common.schemas import (
+    InferenceCapabilities,
+    InferenceReadiness,
+    VQAInferenceEvidence,
+)
 from hcmai.llm.config import (
     HostedVQAConfig,
     LLMServiceConfig,
@@ -22,7 +27,7 @@ class LLMService:
 
     def __init__(self, adapter: Any) -> None:
         self.adapter = adapter
-        self._last_readiness: Any | None = None
+        self._last_readiness: InferenceReadiness | None = None
 
     @classmethod
     def from_environment(cls) -> LLMService:
@@ -62,26 +67,17 @@ class LLMService:
         method = getattr(self.adapter, "close", None)
         if method is not None:
             method()
-            return
-        client = getattr(self.adapter, "client", None)
-        method = getattr(client, "close", None)
-        if method is not None:
-            method()
 
-    def readiness(self, *args: Any, **kwargs: Any) -> Any:
-        self._last_readiness = self.adapter.readiness(*args, **kwargs)
+    def readiness(self, deadline_at: float | None = None) -> InferenceReadiness:
+        self._last_readiness = self.adapter.readiness(deadline_at=deadline_at)
         return self._last_readiness
 
     def capability_health(self) -> dict[str, bool]:
         readiness = self._last_readiness
-        if readiness is None:
-            return {
-                "embedding": False,
-                "reranking": False,
-                "multi_image_vqa": False,
-                "structured_parsing": False,
-            }
-        return readiness.capabilities.model_dump()
+        capabilities = (
+            InferenceCapabilities() if readiness is None else readiness.capabilities
+        )
+        return capabilities.model_dump()
 
     def gateway_health(self) -> dict[str, Any]:
         method = getattr(self.adapter, "health", None)
@@ -101,11 +97,39 @@ class LLMService:
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
 
-    def answer_vqa(self, *args: Any, **kwargs: Any) -> Any:
-        return self.adapter.answer_vqa(*args, **kwargs)
+    def answer_vqa(
+        self,
+        *,
+        request_id: str,
+        frame_id: str,
+        question: str,
+        image: Any,
+        evidence: VQAInferenceEvidence,
+    ) -> Any:
+        return self.adapter.answer_vqa(
+            request_id=request_id,
+            frame_id=frame_id,
+            question=question,
+            image=image,
+            evidence=evidence,
+        )
 
-    def answer_vqa_multi(self, *args: Any, **kwargs: Any) -> Any:
+    def answer_vqa_multi(
+        self,
+        *,
+        request_id: str,
+        frame_ids: list[str],
+        question: str,
+        images: list[Any],
+        evidence: VQAInferenceEvidence,
+    ) -> Any:
         method = getattr(self.adapter, "answer_vqa_multi", None)
         if method is None:
             raise RuntimeError("multi-frame VQA is not supported by this provider")
-        return method(*args, **kwargs)
+        return method(
+            request_id=request_id,
+            frame_ids=frame_ids,
+            question=question,
+            images=images,
+            evidence=evidence,
+        )
