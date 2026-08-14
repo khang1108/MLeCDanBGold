@@ -27,6 +27,7 @@ from hcmai.orchestration.pipelines.vqa import VQAPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.reranking.pipeline import RerankingService
 from hcmai.retriever.pipeline import RetrievalService
+from hcmai.temporal.settings import TemporalSettings
 from hcmai.observability import METRICS
 
 logger = get_logger(__name__)
@@ -200,6 +201,8 @@ class SearchService:
 
     def _default_registry(self) -> PipelineRegistry:
         task_types = (TaskType.KIS, TaskType.VKIS)
+        # One read of the temporal env, shared so KIS and VQA cannot disagree.
+        temporal_settings = TemporalSettings()
         pipelines = [
             KISPipeline(
                 task_type,
@@ -207,6 +210,7 @@ class SearchService:
                 self.retrieval,
                 self.reranking,
                 self.config,
+                temporal_settings,
             )
             for task_type in task_types
         ]
@@ -218,6 +222,8 @@ class SearchService:
                     self.retrieval,
                     self.llm,
                     self.vqa_config,
+                    self.config,
+                    temporal_settings,
                 ),
             )
         )

@@ -17,6 +17,11 @@ from hcmai.orchestration.pipelines.base import (
     TaskPipelineRequestError,
 )
 from hcmai.retriever.pipeline import RetrievalService
+from hcmai.temporal.alignment.monotonic import (
+    MonotonicDPAligner,
+    ordered_events,
+    plan_from_events,
+)
 from hcmai.trake import TRAKESettings, rank_paths
 
 logger = get_logger(__name__)
@@ -50,20 +55,29 @@ class TRAKEPipeline:
             )
         digest = sha1(f"trake\0{request.query}\0{request.top_k}".encode())
         request_id = f"trake-{digest.hexdigest()[:12]}"
+        plan = plan_from_events(events)
         videos = self.retrieval.score_visual_videos(
-            events,
+            ordered_events(plan),
             self.settings.top_k,
             self.settings.max_videos,
             self.settings.rrf_k,
             self.settings.chunk_size,
         )
-        rows = rank_paths(
-            videos,
-            self.settings.lambda_gap,
-            request.top_k,
-            self.settings.event_power,
-            self.settings.cluster_delta,
-        )
+        if self.settings.temporal_core_enabled:
+            rows = MonotonicDPAligner(
+                self.settings.lambda_gap,
+                request.top_k,
+                self.settings.event_power,
+                self.settings.cluster_delta,
+            ).align(plan, videos).candidates
+        else:
+            rows = tuple(rank_paths(
+                videos,
+                self.settings.lambda_gap,
+                request.top_k,
+                self.settings.event_power,
+                self.settings.cluster_delta,
+            ))
         logger.info(
             "[%s] trake completed events=%d videos=%d rows=%d",
             request_id,

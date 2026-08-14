@@ -22,3 +22,4 @@ class TRAKESettings(BaseSettings):
     event_power: float = Field(default=1.0, gt=0.0, le=1.0, description="Similarity exponent; below 1.0 penalizes weak events.")
     chunk_size: int = Field(default=65_536, ge=1, description="Vectors reconstructed per rescoring chunk.")
     cluster_delta: float = Field(default=0.0, ge=0.0, description="Cluster radius; above 0.0 events must land in different clusters.")
+    temporal_core_enabled: bool = Field(default=False, description="Route alignment through the shared temporal adapter instead of calling it directly.")

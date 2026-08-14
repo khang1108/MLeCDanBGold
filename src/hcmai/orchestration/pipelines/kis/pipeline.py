@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from time import perf_counter
 
 from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
+    RetrievalCandidate,
     RetrievalTrace,
     SearchRequest,
     SearchResponse,
+    StageTrace,
     TaskRequest,
     TaskType,
 )
@@ -20,11 +23,17 @@ from hcmai.orchestration.pipelines.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,
 )
+from hcmai.orchestration.pipelines.kis.representative import RepresentativeFrameSelector
+from hcmai.orchestration.pipelines.kis.scene_rerank import rerank_scenes
 from hcmai.orchestration.ranking import elapsed_ms, rank_candidates, request_id
 from hcmai.observability import PipelineStage
 from hcmai.observability.tracing import StageTimer, log_stage
 from hcmai.reranking.pipeline import RerankingService
 from hcmai.retriever.pipeline import RetrievalService
+from hcmai.temporal.engine import TemporalEvidenceEngine
+from hcmai.temporal.retrieval import SparseEvidenceProvider
+from hcmai.temporal.settings import TemporalSettings
+from hcmai.temporal.state import ProgressiveStateStore
 
 logger = get_logger(__name__)
 
@@ -39,6 +48,7 @@ class KISPipeline:
         retrieval: RetrievalService | None,
         reranking: RerankingService | None,
         config: SearchConfig,
+        temporal_settings: TemporalSettings | None = None,
     ) -> None:
         if task_type not in {TaskType.KIS, TaskType.VKIS}:
             raise ValueError(f"KISPipeline cannot handle {task_type.value!r}")
@@ -48,6 +58,23 @@ class KISPipeline:
         self.reranking = reranking
         self.config = config
         self.materializer = SearchMaterializer(data) if data is not None else None
+        self.representative = RepresentativeFrameSelector()
+        self.temporal_settings = temporal_settings or TemporalSettings()
+        # VKIS stays on the legacy frame path until it is evaluated separately.
+        self.progressive: TemporalEvidenceEngine | None = None
+        if (
+            config.progressive_scene_enabled
+            and task_type is TaskType.KIS
+            and data is not None
+            and retrieval is not None
+        ):
+            self.progressive = self.temporal_settings.engine(
+                SparseEvidenceProvider(retrieval, data),
+                ProgressiveStateStore(
+                    ttl_seconds=config.progressive_state_ttl_seconds,
+                    max_states=config.progressive_max_states,
+                ),
+            )
 
     @property
     def task_type(self) -> TaskType:
@@ -83,6 +110,15 @@ class KISPipeline:
             request.top_k,
             candidate_count,
         )
+        if self.progressive is not None:
+            return self._scene_response(
+                request,
+                self.progressive,
+                self.materializer,
+                started,
+                parse_trace,
+                request_id_value,
+            )
         retrieval_result, reranking_ms = rank_candidates(
             request,
             self.retrieval,
@@ -171,3 +207,100 @@ class KISPipeline:
             response.total_results,
         )
         return response
+
+    def _scene_response(
+        self,
+        request: SearchRequest,
+        engine: TemporalEvidenceEngine,
+        materializer: SearchMaterializer,
+        started: float,
+        parse_trace: StageTrace,
+        request_id_value: str,
+    ) -> SearchResponse:
+        """Assemble scenes from progressive evidence, then materialize one frame per scene."""
+        result = replace(
+            engine, top_k=self.config.candidate_count, max_total=request.top_k
+        ).search(
+            request.query,
+            task_type=TaskType.KIS,
+            search_id=request.search_id,
+            filters=request.filters,
+            allow_missing_state_fallback=True,
+        )
+        if result.commit_required:
+            engine.states.commit(result.state, expected_version=result.state.version)
+        logger.info(
+            "[%s] scenes assembled search_id=%s scenes=%d",
+            request_id_value,
+            result.search_id,
+            len(result.scenes),
+        )
+        scenes = result.scenes
+        warnings = list(result.warnings)
+        stages = [parse_trace]
+        # The state keeps the engine's own order; reranking only reorders this response.
+        if self.config.scene_rerank_enabled and self.reranking is not None:
+            reranked = rerank_scenes(
+                request.query,
+                scenes,
+                self.reranking,
+                self.representative,
+                self.config,
+            )
+            scenes = reranked.scenes
+            warnings.extend(reranked.warnings)
+            stages.append(reranked.trace)
+            logger.info(
+                "[%s] scene reranking probes=%d elapsed_ms=%d",
+                request_id_value,
+                reranked.trace.input_count,
+                int(reranked.trace.duration_ms),
+            )
+
+        materialization_started = perf_counter()
+        materialization_timer = StageTimer(PipelineStage.MATERIALIZATION.value)
+        by_frame: dict[str, RetrievalCandidate] = {}
+        for scene in scenes:
+            candidate = self.representative.select(scene)
+            if candidate is not None:
+                by_frame.setdefault(candidate.frame_id, candidate)
+        candidates = list(by_frame.values())
+        response = materializer.build_response(request, candidates, request_id_value)
+        materialization_trace = materialization_timer.finish(
+            input_count=len(candidates),
+            output_count=response.total_results,
+            backend="canonical_frame_store",
+        )
+        trace = result.trace
+        for stage in (*stages, materialization_trace):
+            trace = trace.merged(RetrievalTrace(stages={stage.stage: stage}))
+            log_stage(
+                logger,
+                request_id=request_id_value,
+                task_type=request.query_type,
+                trace=stage,
+            )
+        total_ms = elapsed_ms(started)
+        logger.info(
+            "[%s] search completed results=%d",
+            request_id_value,
+            response.total_results,
+        )
+        return response.model_copy(
+            update={
+                "search_id": result.search_id,
+                "latency_ms": response.latency_ms.model_copy(
+                    update={
+                        "candidate_retrieval": int(
+                            trace.duration_for("search") or trace.duration_for("retrieval")
+                        ),
+                        "reranking": int(trace.duration_for("rerank")),
+                        "materialization": elapsed_ms(materialization_started),
+                        "time_to_first_submission": total_ms,
+                        "total": total_ms,
+                    }
+                ),
+                "warnings": [*response.warnings, *warnings],
+                "trace": trace,
+            }
+        )

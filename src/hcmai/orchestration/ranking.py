@@ -118,7 +118,7 @@ def rank_candidates(
             error_category=error.category,
             input_count=depth,
             output_count=len(candidates),
-            backend=_reranker_backend(reranking),
+            backend=reranker_backend(reranking),
             fallback_used=True,
         )
         log_stage(
@@ -151,7 +151,7 @@ def rank_candidates(
     reranking_trace = reranking_timer.finish(
         input_count=depth,
         output_count=len(ranked),
-        backend=_reranker_backend(reranking),
+        backend=reranker_backend(reranking),
     )
     reranking_ms = int(reranking_trace.duration_ms)
     log_stage(
@@ -181,6 +181,11 @@ def elapsed_ms(started: float) -> int:
     return max(0, int((perf_counter() - started) * 1_000))
 
 
+def reranker_backend(reranking: RerankingService) -> str:
+    adapter = getattr(reranking, "adapter", reranking)
+    return type(adapter).__name__
+
+
 def _with_reranking_trace(
     result: RetrievalResult,
     stage: StageTrace,
@@ -191,6 +196,3 @@ def _with_reranking_trace(
     return result.model_copy(update={"trace": trace})
 
 
-def _reranker_backend(reranking: RerankingService) -> str:
-    adapter = getattr(reranking, "adapter", reranking)
-    return type(adapter).__name__
