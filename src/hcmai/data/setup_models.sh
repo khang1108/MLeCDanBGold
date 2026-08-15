@@ -308,11 +308,8 @@ if [[ "${FORCE_DOWNLOAD}" == "1" || ! -f "${HCMAI_CHECKPOINT}" ]]; then
         info "Found local output.zip in current directory, skipping gdown..."
         cp "output.zip" "${OUTPUT_ZIP}"
     else
-        info "Downloading official pretrained output.zip..."
-
-        "${PYTHON_BIN}" -m gdown \
-            "${CHECKPOINT_URL}" \
-            -O "${OUTPUT_ZIP}"
+        info "Downloading pretrained output.zip from HuggingFace mirror..."
+        wget -qO "${OUTPUT_ZIP}" "https://huggingface.co/zrchen03/efficient-gebd-kinetics-output/resolve/main/output.zip"
     fi
 
     [[ -s "${OUTPUT_ZIP}" ]] \
