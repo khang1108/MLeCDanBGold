@@ -200,7 +200,7 @@ info "EfficientGEBD source OK"
 
 log "Installing required Python dependencies"
 
-"${PYTHON_BIN}" -m pip install -e ".[preprocessing,s3,transcripts,embedding,reranking]" \
+"${PYTHON_BIN}" -m pip install -e ".[preprocessing,s3,transcripts,embedding]" \
     "gdown"
 
 
