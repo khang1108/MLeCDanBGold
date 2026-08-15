@@ -7,7 +7,7 @@ set -Eeuo pipefail
 readonly REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "${REPO_ROOT}"
 
-PYTHON_BIN="aic/bin/python"
+export PYTHON_BIN="aic/bin/python"
 
 if [[ ! -x "${PYTHON_BIN}" ]]; then
     echo "ERROR: Virtual environment python (${PYTHON_BIN}) not found!"
@@ -18,6 +18,9 @@ fi
 log() {
     printf '\n[Data Pipeline %s] %s\n' "$(date '+%H:%M:%S')" "$*"
 }
+
+log "Step 0: Setup TransNetV2 & EfficientGEBD models"
+bash src/hcmai/data/setup_models.sh
 
 log "Step 1: Starting Video Preprocessing (Extracting frames, GEBD, DINO dedup)"
 bash scripts/thunder_batch_launcher.sh
