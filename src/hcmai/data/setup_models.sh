@@ -327,14 +327,14 @@ if [[ "${FORCE_DOWNLOAD}" == "1" || ! -f "${HCMAI_CHECKPOINT}" ]]; then
     CHECKPOINT_FOUND="$(
         find "${OUTPUT_EXTRACT}" \
             -type f \
-            -path "*/x2x3x4_r50/model_best.pth" \
+            -path "*/x2x3x4_r50_eff/model_best.pth" \
             -print \
             -quit
     )"
 
     if [[ -z "${CHECKPOINT_FOUND}" ]]; then
         echo
-        warn "Could not find x2x3x4_r50/model_best.pth"
+        warn "Could not find x2x3x4_r50_eff/model_best.pth"
         warn "Available model_best.pth files:"
         find "${OUTPUT_EXTRACT}" -type f -name "model_best.pth" -print || true
         die "Required EfficientGEBD ResNet50 L2L3L4 checkpoint not found"
