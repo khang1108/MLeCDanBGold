@@ -40,7 +40,7 @@ preparation:
   preprocessing:
     s3:
       bucket: mlecdanbgold-hcmai-hk
-      videos_prefix: videos
+      videos_prefix: data
       artifacts_prefix: artifacts/production/hcmai2026-videos-20260813-v1
       smoke_artifacts_prefix: artifacts/smoke/hcmai2026-videos-20260813-v1
       region: ap-southeast-1
