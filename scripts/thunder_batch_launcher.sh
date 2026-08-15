@@ -43,10 +43,11 @@ df -h /
 # Credentials Injection
 # Thunder provides secrets via environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, HF_TOKEN)
 # We ensure we don't copy or persist plaintext credentials to disk.
-if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-    echo "ERROR: AWS credentials not found in environment."
-    exit 1
-fi
+# Bỏ qua check biến môi trường để hỗ trợ aws configure
+# if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+#     echo "ERROR: AWS credentials not found in environment."
+#     exit 1
+# fi
 if [[ -z "${HF_TOKEN:-}" ]]; then
     echo "ERROR: HF_TOKEN not found in environment."
     exit 1
