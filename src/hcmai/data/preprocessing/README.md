@@ -76,7 +76,8 @@ preprocessing:
   s3:
     bucket: hcmai-dataset
     videos_prefix: videos
-    artifacts_prefix: artifacts
+    artifacts_prefix: artifacts/production/frame-store
+    smoke_artifacts_prefix: artifacts/smoke/frame-store
     region: ap-southeast-1
     # endpoint_url: http://localhost:9000  # chỉ dùng cho S3-compatible storage
     # staging_root: /local-nvme/hcmai
@@ -121,8 +122,27 @@ PYTHONPATH=src python scripts/preprocess_videos.py \
 `--limit N` luôn ghi vào FrameStore riêng
 `<output_root>.limit-N`; nó không sửa hoặc truncate full-corpus FrameStore.
 Với S3, limited run publish vào
-`<artifacts_prefix>/limited/limit-N/`; nó không cập nhật production
+`<smoke_artifacts_prefix>/limit-N/`; nó không cập nhật production
 `<artifacts_prefix>/latest.json`.
+
+### Chạy preparation đầy đủ từ S3
+
+Để chạy FrameStore, ASR, caption, OCR, embeddings và indexes trong cùng một
+run cô lập, dùng production contract thay vì entry point FrameStore ở trên:
+
+```bash
+PYTHONPATH=src python scripts/prepare_s3_corpus.py \
+  --config configs/preparation.s3.yaml
+```
+
+Smoke run dùng `--limit 1`; output local được tách vào
+`<work_root>/artifacts.limit-1/`. Service ghi exact S3 inventory, run ID và
+completion marker dưới `<work_root>/.preparation/`, nên lần chạy sau chỉ bỏ qua
+stage khi run identity và output bắt buộc vẫn khớp.
+
+Composed preparation service **không** upload hay cập nhật production
+`latest.json`. Complete-bundle publication là bước riêng sau khi tất cả
+artifact đã được kiểm tra.
 
 ## Output
 

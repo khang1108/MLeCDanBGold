@@ -1,4 +1,11 @@
-"""Public service boundary for canonical frame data."""
+"""Entry point cho Data Pipeline chính.
+
+Cung cấp `DataService`, là giao diện trung tâm điều phối toàn bộ quá trình xử lý dữ liệu từ video thô đến khi ra corpus.
+
+Các tính năng chính:
+1. Điều phối Preprocessing: Kích hoạt quá trình trích xuất và lọc frame từ video thô.
+2. Điều phối Enrichment: Chạy các luồng OCR, Captioning, và Transcript để làm giàu metadata.
+3. Quản lý trạng thái: Theo dõi tiến độ của pipeline, hỗ trợ resume an toàn khi có tác vụ bị lỗi."""
 
 from __future__ import annotations
 
@@ -9,7 +16,6 @@ from pathlib import Path
 from hcmai.common.schemas import FrameRecord, RetrievalSource
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.data.assets import FrameAssetResolver, FrameAssetStatus
-from hcmai.data.prepare import prepare_frames
 from hcmai.data.stores import ASRStore, CaptionStore, FrameStore, OCRStore
 
 EvidenceStore = CaptionStore | OCRStore | ASRStore
@@ -66,11 +72,7 @@ class DataService:
         return store
 
     @staticmethod
-    def prepare(dataset_root: str | Path, output_path: str | Path) -> Path:
-        return prepare_frames(Path(dataset_root), Path(output_path))
-
-    @staticmethod
-    def prepare_adaptive(
+    def prepare(
         config_path: str | Path,
         *,
         resume: bool = True,

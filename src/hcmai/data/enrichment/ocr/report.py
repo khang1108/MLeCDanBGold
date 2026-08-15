@@ -1,4 +1,11 @@
-"""OCR report construction."""
+"""Tạo báo cáo cho quá trình OCR (Trích xuất chữ trong ảnh).
+
+Tổng hợp thông tin về tiến trình xử lý, các ảnh đã nhận diện và thống kê lỗi (nếu có).
+
+Các tính năng chính:
+1. Tracking tiến trình: Đếm số khung hình thành công và thất bại trong quá trình OCR.
+2. Đánh giá chất lượng: Thống kê trung bình lượng văn bản tìm thấy trên mỗi frame.
+3. Xuất báo cáo (Export): Đẩy các chỉ số (metrics) ra hệ thống monitor hoặc lưu dưới dạng văn bản."""
 
 from __future__ import annotations
 

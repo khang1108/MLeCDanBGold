@@ -1,4 +1,11 @@
-"""Configuration for adaptive frame preprocessing."""
+"""Cấu hình cho Video Preprocessing.
+
+Chứa các thông số cấu hình và ngưỡng quyết định (thresholds) cho quá trình tiền xử lý video.
+
+Các thiết lập chính:
+1. Kích thước (Resolutions): Kích thước ảnh dùng để chạy TransNet, GEBD và lưu trữ.
+2. Ngưỡng lọc (Thresholds): Điểm số tối thiểu của thuật toán Shot/Event để giữ lại một frame ứng viên.
+3. Tần suất lấy mẫu: Khoảng cách thời gian tối đa (max gap) để đảm bảo không bỏ sót ngữ cảnh."""
 
 from __future__ import annotations
 
@@ -29,6 +36,7 @@ class S3PreprocessingConfig(BaseModel):
     bucket: str = Field(min_length=3)
     videos_prefix: str = "videos"
     artifacts_prefix: str = "artifacts"
+    smoke_artifacts_prefix: str = "artifacts/smoke"
     region: str | None = None
     endpoint_url: str | None = None
     staging_root: Path | None = None
@@ -44,7 +52,9 @@ class S3PreprocessingConfig(BaseModel):
             raise ValueError("bucket must be a plain S3 bucket name")
         return bucket
 
-    @field_validator("videos_prefix", "artifacts_prefix")
+    @field_validator(
+        "videos_prefix", "artifacts_prefix", "smoke_artifacts_prefix"
+    )
     @classmethod
     def normalize_prefix(cls, value: str) -> str:
         return _s3_prefix(value)
@@ -54,7 +64,7 @@ class S3PreprocessingConfig(BaseModel):
 
         if limit is None:
             return self.artifacts_prefix
-        return f"{self.artifacts_prefix}/limited/limit-{limit}"
+        return f"{self.smoke_artifacts_prefix}/limit-{limit}"
 
 
 class PreprocessingConfig(BaseModel):
@@ -72,7 +82,8 @@ class PreprocessingConfig(BaseModel):
     dino_model: str = "facebook/dinov2-small"
     dino_revision: str | None = None
     dino_dtype: str = "float16"
-    dino_batch_size: int = Field(default=16, gt=0)
+    dino_batch_size: int = Field(default=64, gt=0)
+    max_video_workers: int = Field(default=3, ge=1)
     efficientgebd_sample_fps: float = Field(default=10.0, gt=0)
     motion_threshold: float = Field(default=0.012, ge=0)
     shot_threshold: float = Field(default=0.5, ge=0, le=1)

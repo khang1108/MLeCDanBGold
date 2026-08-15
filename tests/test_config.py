@@ -57,6 +57,14 @@ def test_llm_config_is_the_model_authority() -> None:
     )
     assert config.visual_embedding.backend == "siglip"
     assert config.caption_embedding.backend == "bge_m3"
+    assert (
+        config.visual_embedding.revision
+        == "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2"
+    )
+    assert (
+        config.caption_embedding.revision
+        == "5617a9f61b028005a4858fdac845db406aefb181"
+    )
     assert config.reranker.checkpoint == "Qwen/Qwen3-VL-Reranker-2B"
 
 

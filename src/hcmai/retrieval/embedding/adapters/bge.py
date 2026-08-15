@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from sentence_transformers import SentenceTransformer
 from hcmai.common.config import EncoderConfig
 from hcmai.retrieval.embedding.models.stats import EncodingStats
 
@@ -31,12 +32,16 @@ class BGEAdapter:
     def _load_model(self) -> None:
         if self.model is not None:
             return
+
         loader = self._loader
         if loader is None:
-            from sentence_transformers import SentenceTransformer  # pyright: ignore[reportMissingImports]
-
             loader = SentenceTransformer
-        self.model = loader(self.config.model_name, device=self.config.device)
+
+        options = {"device": self.config.device}
+        if self.config.revision is not None:
+            options["revision"] = self.config.revision
+
+        self.model = loader(self.config.model_name, **options)
         self.model.max_seq_length = self.config.max_length
         self.embedding_dim = _dimension(self.model)
 
@@ -47,8 +52,10 @@ class BGEAdapter:
     ) -> np.ndarray:
         if not texts:
             return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
+
         self._load_model()
         assert self.model is not None
+
         started = perf_counter()
         vectors = np.asarray(
             self.model.encode(
@@ -60,14 +67,18 @@ class BGEAdapter:
             ),
             dtype=self.config.dtype,
         )
+
         if vectors.ndim != 2 or len(vectors) != len(texts):
             raise ValueError("BGE-M3 returned an invalid embedding shape")
         if not np.isfinite(vectors).all():
             raise ValueError("BGE-M3 returned non-finite embeddings")
+        
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        
         if np.any(norms <= 0):
             raise ValueError("BGE-M3 returned a zero embedding")
         vectors = vectors / norms
+        
         self.embedding_dim = int(vectors.shape[1])
         if stats is not None:
             elapsed = (perf_counter() - started) * 1_000

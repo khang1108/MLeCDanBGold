@@ -162,6 +162,7 @@ def test_trake_request_reaches_the_pipeline_and_returns_a_submission(
             "video_id": "video_001",
             "frame_ids": ["frame_10", "frame_20"],
             "frame_idxs": [10, 20],
+            "fps": 25.0,
             "warnings": [],
         }
     ]
@@ -189,7 +190,7 @@ def test_kis_still_works_on_its_own_route(app: FastAPI) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["query_type"] == "kis"
-    assert payload["results"][0]["frame_id"] == "frame_10"
+    assert payload["results"][0]["frame_ids"] == ["frame_10"]
     assert payload["results"][0]["video_id"] == "video_001"
     assert payload["results"][0]["frame_idx"] == 10
 

@@ -32,3 +32,30 @@ def test_bge_encoder_returns_finite_unit_vectors_and_stats():
     np.testing.assert_allclose(np.linalg.norm(vectors, axis=1), 1.0)
     assert stats.num_encoded == 2
     assert stats.embedding_dim == 3
+
+
+def test_bge_loader_receives_the_pinned_revision():
+    calls = []
+
+    def loader(name, **options):
+        calls.append((name, options))
+        return FakeSentenceTransformer()
+
+    encoder = BGEAdapter(
+        EncoderConfig(
+            backend="bge_m3",
+            model_name="BAAI/bge-m3",
+            revision="commit-sha",
+            batch_size=2,
+        ),
+        loader=loader,
+    )
+
+    encoder.encode_text(["xin chào"])
+
+    assert calls == [
+        (
+            "BAAI/bge-m3",
+            {"device": "cpu", "revision": "commit-sha"},
+        )
+    ]

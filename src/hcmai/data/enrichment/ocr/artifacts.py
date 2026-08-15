@@ -1,4 +1,11 @@
-"""Validation and persistence for OCR artifacts."""
+"""Quản lý Artifacts (Dữ liệu đầu ra) của OCR.
+
+Kiểm tra, xác thực và lưu trữ kết quả nhận diện văn bản (OCR artifacts).
+
+Các tính năng chính:
+1. Định dạng lưu trữ: Ghi kết quả OCR (tọa độ hộp, nội dung chữ) ra định dạng JSON hoặc Parquet.
+2. Đảm bảo toàn vẹn: Kiểm tra checksum và tính hợp lệ của file sau khi quá trình ghi hoàn tất.
+3. Khôi phục dữ liệu: Cung cấp tiện ích load lại danh sách kết quả OCR để hợp nhất (fusion)."""
 
 from __future__ import annotations
 

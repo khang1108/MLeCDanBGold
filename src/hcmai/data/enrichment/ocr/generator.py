@@ -1,4 +1,11 @@
-"""Independent resumable OCR enrichment pipeline."""
+"""Bộ sinh dữ liệu (Generator) cho OCR.
+
+Quản lý luồng thực thi mô hình nhận diện chữ trên các khung hình video (OCR pipeline).
+
+Các tính năng chính:
+1. Nhận diện (Detection): Quét ảnh để tìm các vùng chữ (Bounding Box).
+2. Trích xuất (Recognition): Chuyển đổi vùng ảnh chứa chữ thành chuỗi ký tự (Text).
+3. Cơ chế Resume: Khôi phục tiến trình tự động bằng cách bỏ qua các frames đã có kết quả OCR."""
 
 from __future__ import annotations
 
@@ -11,7 +18,7 @@ from typing import Any, cast
 import pandas as pd
 from PIL import Image
 
-from hcmai.common.schemas import FrameEnrichment
+from hcmai.common.schemas import FrameEnrichment, validate_frame_enrichment
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.io import atomic_write, read_json, write_json
 
@@ -29,7 +36,7 @@ from .report import build_ocr_report
 
 
 def _resume(
-    frames: list[FrameRow], path: Path, config: OCRConfig
+    frames: list[FrameRow], path: Path, config: OCRConfig, frame_store_id: str | None = None
 ) -> tuple[dict[str, FrameEnrichment], list[FrameRow], int, int]:
     groups: dict[str, list[FrameRow]] = {}
     if path.exists():
@@ -37,7 +44,9 @@ def _resume(
             list[FrameRow], pd.read_parquet(path).to_dict(orient="records")
         )
         for row in prior:
-            if row.get("enrichment_version") == config.enrichment_version:
+            if row.get("enrichment_version") == config.enrichment_version and (
+                frame_store_id is None or row.get("frame_store_id") == frame_store_id
+            ):
                 groups.setdefault(str(row.get("frame_id")), []).append(row)
     rows: dict[str, FrameEnrichment] = {}
     todo: list[FrameRow] = []
@@ -106,10 +115,11 @@ def generate_ocr(
     frames_path: str | Path,
     output_dir: str | Path,
     config: OCRConfig,
-    engine: OCRAdapter | None = None,
+    engine: OCRAdapter | None ,
     engine_factory: Callable[[OCRConfig], OCRAdapter] | None = None,
     *,
     dataset_root: str | Path = ".",
+    frame_store_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate or resume one deterministic independent OCR artifact."""
     started, began = datetime.now(timezone.utc), perf_counter()
@@ -130,7 +140,7 @@ def generate_ocr(
         else {}
     )
     rows, todo, skipped, retried = (
-        _resume(frames, output / "frame_enrichment.parquet", config)
+        _resume(frames, output / "frame_enrichment.parquet", config, frame_store_id)
         if config.enabled
         else ({}, [], 0, 0)
     )
@@ -142,8 +152,19 @@ def generate_ocr(
     }
     failures: dict[str, FailureDetail] = {}
     if todo:
-        engine = engine or (engine_factory or FlorenceAdapter)(config)
+        if engine is None and engine_factory is None:
+            if config.backend == "remote":
+                raise NotImplementedError("Remote OCR adapter is not implemented.")
+            engine_factory = FlorenceAdapter
+
+        engine = engine or engine_factory(config)
         _process(todo, rows, failures, evidence, engine, config, root)
+
+    for row in rows.values():
+        if frame_store_id is not None:
+            row.frame_store_id = frame_store_id
+
+    validate_frame_enrichment(rows, order, frame_store_id)
     write_ocr_artifacts(output, order, rows, failures)
     revision = (
         getattr(engine, "resolved_revision", None)

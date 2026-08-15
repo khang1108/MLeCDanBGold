@@ -1,4 +1,12 @@
-"""Public service boundary for transcript preparation and access."""
+"""Pipeline xử lý Transcript (Lời thoại).
+
+Điều phối luồng công việc trích xuất lời thoại từ âm thanh video thành văn bản có timestamp.
+
+Các tính năng chính:
+1. Tiền xử lý âm thanh: Trích xuất audio từ video và tối ưu hóa định dạng (sample rate, mono/stereo).
+2. Speech-to-Text (ASR): Dùng mô hình nhận diện giọng nói để sinh văn bản thô theo thời gian.
+3. Diarization: Phân biệt người nói (Speaker A, Speaker B) cho từng phân đoạn âm thanh.
+4. Đồng bộ (Alignment): Khớp text với timestamp để map chính xác vào đúng khung hình video."""
 
 from __future__ import annotations
 
@@ -11,6 +19,7 @@ from hcmai.data.enrichment.transcripts.adapters.diarization import (
 )
 from hcmai.data.enrichment.transcripts.prepare import (
     TranscriptReport,
+    prepare_transcript_video,
     prepare_transcripts,
 )
 from hcmai.data.enrichment.transcripts.store import TranscriptStore
@@ -63,6 +72,29 @@ class TranscriptService:
             diarizer=self.diarization,
             resume=resume,
             limit=limit,
+            schema_version=schema_version,
+            pipeline_version=pipeline_version,
+        )
+
+    def prepare_video(
+        self,
+        video_path: str | Path,
+        output_root: str | Path,
+        *,
+        resume: bool = True,
+        schema_version: str = "transcript-segment-v1",
+        pipeline_version: str = "transcript-pipeline-v1",
+    ) -> tuple[Path, int]:
+        """Consume one already-staged video without another source download."""
+
+        if self.asr is None:
+            raise RuntimeError("ASR adapter is not configured")
+        return prepare_transcript_video(
+            video_path,
+            output_root,
+            self.asr,
+            diarizer=self.diarization,
+            resume=resume,
             schema_version=schema_version,
             pipeline_version=pipeline_version,
         )

@@ -1,4 +1,11 @@
-"""Indexed access to offline text-enrichment artifacts."""
+"""Store lưu trữ dữ liệu Evidence (Bằng chứng văn bản).
+
+Cung cấp quyền truy cập in-memory/indexed vào toàn bộ dữ liệu text liên quan đến video (OCR, Caption, Transcript).
+
+Các tính năng chính:
+1. Gộp bằng chứng (Fusion): Hợp nhất các loại text (ASR, OCR, Caption) theo cùng một Frame ID.
+2. Tìm kiếm (Lookup): Hỗ trợ tìm nhanh nội dung text của một frame để phục vụ ranking.
+3. Hỗ trợ VQA: Liên kết đoạn text (kèm timestamp) với metadata video để tạo context cho câu hỏi VQA."""
 
 from __future__ import annotations
 

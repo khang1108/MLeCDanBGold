@@ -1,0 +1,246 @@
+"""Production configuration tests for the S3-first corpus preparation job."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from hcmai.common.config import TranscriptJobConfig
+from hcmai.data.enrichment.caption.config import CaptionJobConfig
+from hcmai.data.enrichment.ocr.config import OCRConfig
+from hcmai.data.corpus_build import S3CorpusPreparationConfig
+from hcmai.llm.config import LLMServiceConfig
+
+
+SHA = "a" * 40
+
+
+def _values(root: Path) -> dict[str, object]:
+    work_root = (root / "run").resolve()
+    return {
+        "corpus_revision": "hcmai2026-videos-20260813-v1",
+        "work_root": work_root,
+        "stages": {
+            "frame_store": True,
+            "caption": True,
+            "ocr": True,
+            "asr": True,
+            "visual_index": True,
+            "caption_index": True,
+            "ocr_index": True,
+            "asr_index": True,
+        },
+        "models": {
+            role: {"model_name": f"fixture/{role}", "revision": SHA}
+            for role in (
+                "dino",
+                "caption",
+                "ocr",
+                "asr",
+                "diarization",
+                "visual_embedding",
+                "text_embedding",
+            )
+        },
+        "preprocessing": {
+            "s3": {
+                "bucket": "hcmai-dataset",
+                "videos_prefix": "/videos/",
+                "artifacts_prefix": "/artifacts/production/corpus-v1/",
+                "smoke_artifacts_prefix": "/artifacts/smoke/corpus-v1/",
+                "staging_root": work_root / "staging",
+            },
+            "output_root": work_root / "artifacts/frame_store",
+            "transnet_repo": "/models/TransNetV2",
+            "transnet_weights": "/models/TransNetV2/weights",
+            "efficientgebd_repo": "/models/EfficientGEBD",
+            "efficientgebd_config": "/models/EfficientGEBD/model.yaml",
+            "efficientgebd_checkpoint": "/models/EfficientGEBD/model.pth",
+            "dino_model": "fixture/dino",
+            "dino_revision": SHA,
+        },
+    }
+
+
+def test_production_config_accepts_only_isolated_s3_inputs(tmp_path: Path) -> None:
+    config = S3CorpusPreparationConfig.model_validate(_values(tmp_path))
+
+    assert config.preprocessing.videos_root is None
+    assert config.preprocessing.s3 is not None
+    assert config.preprocessing.s3.videos_prefix == "videos"
+    assert config.full_artifacts_prefix == "artifacts/production/corpus-v1"
+    assert config.smoke_artifacts_prefix == "artifacts/smoke/corpus-v1"
+    assert config.artifacts_root == config.work_root / "artifacts"
+
+
+def test_checked_in_production_config_is_s3_only_and_fully_pinned() -> None:
+    config = S3CorpusPreparationConfig.from_yaml(
+        "configs/preparation.s3.yaml"
+    )
+
+    assert config.preprocessing.s3 is not None
+    assert config.preprocessing.s3.videos_prefix == "videos"
+    assert all(
+        len(model["revision"]) == 40
+        for model in config.models.model_dump().values()
+    )
+    assert config.preprocessing.dino_revision == config.models.dino.revision
+    assert all(config.stages.model_dump().values())
+
+    caption = CaptionJobConfig.from_yaml()
+    transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
+    inference = LLMServiceConfig.from_yaml("llm/config.yaml")
+    assert (caption.caption.model_checkpoint, caption.caption.revision) == (
+        config.models.caption.model_name,
+        config.models.caption.revision,
+    )
+    assert (OCRConfig().model_name, OCRConfig().revision) == (
+        config.models.ocr.model_name,
+        config.models.ocr.revision,
+    )
+    assert (transcript.asr.model_name, transcript.asr.revision) == (
+        config.models.asr.model_name,
+        config.models.asr.revision,
+    )
+    assert (
+        transcript.diarization.model_name,
+        transcript.diarization.revision,
+    ) == (
+        config.models.diarization.model_name,
+        config.models.diarization.revision,
+    )
+    assert (
+        inference.visual_embedding.model_name,
+        inference.visual_embedding.revision,
+    ) == (
+        config.models.visual_embedding.model_name,
+        config.models.visual_embedding.revision,
+    )
+    assert (
+        inference.caption_embedding.model_name,
+        inference.caption_embedding.revision,
+    ) == (
+        config.models.text_embedding.model_name,
+        config.models.text_embedding.revision,
+    )
+
+
+def test_stage_toggles_allow_a_dependency_complete_partial_run(
+    tmp_path: Path,
+) -> None:
+    values = _values(tmp_path)
+    values["stages"] = {
+        "frame_store": True,
+        "caption": False,
+        "ocr": False,
+        "asr": False,
+        "visual_index": True,
+        "caption_index": False,
+        "ocr_index": False,
+        "asr_index": False,
+    }
+
+    config = S3CorpusPreparationConfig.model_validate(values)
+
+    assert config.stages.visual_index is True
+    assert config.stages.caption is False
+
+
+def test_stage_toggles_reject_missing_frame_store_dependency(
+    tmp_path: Path,
+) -> None:
+    values = _values(tmp_path)
+    stages = values["stages"]
+    assert isinstance(stages, dict)
+    stages["frame_store"] = False
+
+    with pytest.raises(ValidationError, match="require frame_store"):
+        S3CorpusPreparationConfig.model_validate(values)
+
+
+@pytest.mark.parametrize("source", ["local", "mixed"])
+def test_production_config_rejects_local_or_mixed_video_sources(
+    tmp_path: Path,
+    source: str,
+) -> None:
+    values = _values(tmp_path)
+    preprocessing = values["preprocessing"]
+    assert isinstance(preprocessing, dict)
+    preprocessing["videos_root"] = "data/videos"
+    if source == "local":
+        preprocessing.pop("s3")
+
+    with pytest.raises(ValidationError, match="S3-only|exactly one"):
+        S3CorpusPreparationConfig.model_validate(values)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("floating_corpus", "immutable corpus revision"),
+        ("floating_model", "40-character"),
+        ("missing_dino", "DINO revision"),
+        ("mismatched_dino", "DINO model pin"),
+    ],
+)
+def test_production_config_rejects_unpinned_inputs(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    values = deepcopy(_values(tmp_path))
+    preprocessing = values["preprocessing"]
+    models = values["models"]
+    assert isinstance(preprocessing, dict) and isinstance(models, dict)
+    if mutation == "floating_corpus":
+        values["corpus_revision"] = "latest"
+    elif mutation == "floating_model":
+        model = models["caption"]
+        assert isinstance(model, dict)
+        model["revision"] = "main"
+    elif mutation == "missing_dino":
+        preprocessing["dino_revision"] = None
+    else:
+        model = models["dino"]
+        assert isinstance(model, dict)
+        model["revision"] = "b" * 40
+
+    with pytest.raises(ValidationError, match=message):
+        S3CorpusPreparationConfig.model_validate(values)
+
+
+@pytest.mark.parametrize("legacy_name", ["data", "artifacts"])
+def test_production_config_rejects_repository_legacy_roots(
+    tmp_path: Path,
+    legacy_name: str,
+) -> None:
+    values = _values(tmp_path)
+    project_root = Path(__file__).resolve().parents[2]
+    work_root = project_root / legacy_name / "new-corpus"
+    values["work_root"] = work_root
+    preprocessing = values["preprocessing"]
+    assert isinstance(preprocessing, dict)
+    preprocessing["output_root"] = work_root / "artifacts/frame_store"
+    storage = preprocessing["s3"]
+    assert isinstance(storage, dict)
+    storage["staging_root"] = work_root / "staging"
+
+    with pytest.raises(ValidationError, match="legacy local"):
+        S3CorpusPreparationConfig.model_validate(values)
+
+
+def test_production_config_requires_separate_smoke_publication(
+    tmp_path: Path,
+) -> None:
+    values = _values(tmp_path)
+    preprocessing = values["preprocessing"]
+    assert isinstance(preprocessing, dict)
+    storage = preprocessing["s3"]
+    assert isinstance(storage, dict)
+    storage["smoke_artifacts_prefix"] = storage["artifacts_prefix"]
+
+    with pytest.raises(ValidationError, match="smoke and full"):
+        S3CorpusPreparationConfig.model_validate(values)

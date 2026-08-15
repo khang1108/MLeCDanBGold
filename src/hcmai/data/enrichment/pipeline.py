@@ -1,4 +1,11 @@
-"""Public service boundary for offline frame enrichment."""
+"""Pipeline chính cho Data Enrichment (Làm giàu dữ liệu).
+
+Điều phối các luồng xử lý offline (Captioning, OCR, Transcript) trên các frames đã tiền xử lý.
+
+Các tính năng chính:
+1. Quản lý luồng (Workflow): Chạy tuần tự hoặc song song các tác vụ AI enrichment (OCR, Caption, Audio).
+2. Tổng hợp Artifacts: Gom nhóm kết quả text từ các mô hình thành dữ liệu chuẩn bị cho indexing.
+3. Cập nhật trạng thái: Báo cáo tiến độ và duy trì manifest để đảm bảo dữ liệu không bị xử lý lặp."""
 
 from __future__ import annotations
 
@@ -25,6 +32,7 @@ class EnrichmentService:
         adapter: CaptionAdapter | None = None,
         *,
         dataset_root: str | Path = ".",
+        frame_store_id: str | None = None,
     ) -> dict[str, Any]:
         return generate_captions(
             frames_path,
@@ -32,6 +40,7 @@ class EnrichmentService:
             config,
             adapter,
             dataset_root=dataset_root,
+            frame_store_id=frame_store_id,
         )
 
     @staticmethod
@@ -42,6 +51,7 @@ class EnrichmentService:
         adapter: OCRAdapter | None = None,
         *,
         dataset_root: str | Path = ".",
+        frame_store_id: str | None = None,
     ) -> dict[str, Any]:
         return generate_ocr(
             frames_path,
@@ -49,6 +59,7 @@ class EnrichmentService:
             config,
             adapter,
             dataset_root=dataset_root,
+            frame_store_id=frame_store_id,
         )
 
     @staticmethod
@@ -59,3 +70,10 @@ class EnrichmentService:
     @staticmethod
     def create_caption_adapter(config: CaptionConfig) -> CaptionAdapter:
         return TransformersCaptionAdapter(config)
+
+    @staticmethod
+    def create_ocr_adapter(config: OCRConfig) -> OCRAdapter:
+        if config.backend == "remote":
+            raise NotImplementedError("Remote OCR adapter is not implemented.")
+        from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
+        return FlorenceAdapter(config)

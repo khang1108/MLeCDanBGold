@@ -1,4 +1,11 @@
-"""Multilingual speech-to-text for video files."""
+"""Adapter cho mô hình ASR (Speech-to-Text).
+
+Giao tiếp trực tiếp với các mô hình nhận diện giọng nói (như Whisper) để trích xuất text.
+
+Các tính năng chính:
+1. Called Inference: Đưa luồng audio vào mô hình và nhận về chuỗi văn bản kèm timestamp từ/câu.
+2. Cấu hình Ngôn ngữ: Hỗ trợ tuỳ chỉnh tham số ngôn ngữ cho mô hình (VD: Tiếng Việt, Tiếng Anh).
+3. Tối ưu hoá bộ nhớ: Quản lý thiết bị (GPU/CPU) và giải phóng VRAM sau khi nhận diện xong."""
 
 from __future__ import annotations
 

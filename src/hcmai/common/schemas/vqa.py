@@ -105,19 +105,27 @@ class VQASubmission(ContractModel):
     """One ranked official VQA row with grounding and ranking provenance."""
 
     rank: int = Field(ge=1, le=100)
+
     video_id: NonEmptyString
-    frame_id: NonEmptyString
     frame_idx: int = Field(ge=0)
+    fps: float = Field(default=25.0, gt=0)
+    frame_ids: list[NonEmptyString] = Field(default_factory=list)
+    
     answer: NonEmptyString = Field(max_length=100)
     normalized_answer: NonEmptyString | None = Field(default=None, max_length=100)
+    
     retrieval_score: float
     grounding_score: float
     answer_score: float
     joint_score: float
+    
     timestamp_ms: int | None = Field(default=None, ge=0)
+    
     temporal_window: tuple[int, int] | None = None
+    
     evidence_consistency_score: float | None = None
     provenance: dict[str, Any] = Field(default_factory=dict)
+    
     warnings: list[NonEmptyString] = Field(default_factory=list)
     caption: NonEmptyString | None = None
     evidence_summary: NonEmptyString | None = None
@@ -129,6 +137,9 @@ class VQASubmission(ContractModel):
             and self.temporal_window[1] < self.temporal_window[0]
         ):
             raise ValueError("temporal_window end must not precede its start")
+        frame_id = getattr(self, "frame_id", None)
+        if not self.frame_ids and frame_id:
+            self.frame_ids = [frame_id]
         return self
 
 
@@ -139,8 +150,16 @@ class VQARetrievalEvidence(ContractModel):
     video_id: NonEmptyString
     frame_id: NonEmptyString
     frame_idx: int = Field(ge=0)
+    fps: float = Field(default=25.0, gt=0)
+    frame_ids: list[NonEmptyString] = Field(default_factory=list)
     timestamp_ms: int = Field(ge=0)
     retrieval_score: float
+
+    @model_validator(mode="after")
+    def populate_frame_ids(self) -> Self:
+        if not self.frame_ids and self.frame_id:
+            self.frame_ids = [self.frame_id]
+        return self
 
 
 class VQAResponse(ContractModel):

@@ -1,16 +1,19 @@
-"""S3 transport for offline adaptive video preprocessing."""
+"""Tích hợp S3 cho quá trình Preprocessing (Tiền xử lý).
+
+Hỗ trợ tương tác với S3 để tải video nguồn và lưu kết quả FrameStore.
+
+Các tính năng chính:
+1. Tải Video (Download): Kéo file video gốc từ bucket S3 xuống ổ cứng cục bộ (cache) để xử lý offline.
+2. Upload Artifacts: Đẩy các frames hình ảnh và metadata đã trích xuất lên lại S3 an toàn.
+3. Publish FrameStore: Đồng bộ hoá thư mục FrameStore và metadata (dạng parquet) thành bản release bất biến."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import os
-import tempfile
-from contextlib import contextmanager
 from dataclasses import asdict, dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from hcmai.data.preprocessing.config import (
     PreprocessingConfig,
@@ -26,27 +29,15 @@ from hcmai.data.preprocessing.prepare import (
     _write_json,
 )
 from hcmai.data.preprocessing.selection import DinoEncoder
-from hcmai.data.preprocessing.video import VIDEO_EXTENSIONS
+from hcmai.data.s3 import S3VideoObject as _S3VideoObject
+from hcmai.data.s3 import (
+    create_s3_client,
+    list_video_objects,
+    staged_video,
+)
 from hcmai.data.stores import FrameStore
 
-
-@dataclass(frozen=True, slots=True)
-class S3VideoObject:
-    """Stable identity and local-checkpoint metadata for one S3 video."""
-
-    key: str
-    size: int
-    etag: str
-    last_modified_ns: int
-
-    @property
-    def video_id(self) -> str:
-        return Path(self.key).stem
-
-    @property
-    def source_version(self) -> str:
-        payload = f"{self.key}\0{self.size}\0{self.etag}\0{self.last_modified_ns}"
-        return hashlib.sha256(payload.encode()).hexdigest()
+S3VideoObject = _S3VideoObject
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,105 +59,6 @@ class S3Publication:
     bundle_id: str
     file_count: int
     total_bytes: int
-
-
-def create_s3_client(config: S3PreprocessingConfig) -> Any:
-    """Create an S3 client using boto3's standard credential chain."""
-
-    try:
-        import boto3
-        from botocore.config import Config
-    except ImportError as error:
-        raise RuntimeError(
-            'boto3 is required; install with: python -m pip install -e ".[s3]"'
-        ) from error
-    arguments = {
-        name: value
-        for name, value in {
-            "region_name": config.region,
-            "endpoint_url": config.endpoint_url,
-        }.items()
-        if value is not None
-    }
-    arguments["config"] = Config(
-        connect_timeout=config.connect_timeout_seconds,
-        read_timeout=config.read_timeout_seconds,
-        retries={"max_attempts": config.max_attempts, "mode": "standard"},
-    )
-    return boto3.client("s3", **arguments)
-
-
-def _last_modified_ns(value: object) -> int:
-    if isinstance(value, datetime):
-        return round(value.timestamp() * 1_000_000_000)
-    raise ValueError("S3 video object is missing LastModified")
-
-
-def list_video_objects(
-    client: Any,
-    config: S3PreprocessingConfig,
-    *,
-    limit: int | None = None,
-) -> list[S3VideoObject]:
-    """List supported source videos below the configured prefix."""
-
-    prefix = f"{config.videos_prefix}/"
-    pages = client.get_paginator("list_objects_v2").paginate(
-        Bucket=config.bucket,
-        Prefix=prefix,
-    )
-    objects = sorted(
-        (
-            S3VideoObject(
-                key=str(item["Key"]),
-                size=int(item["Size"]),
-                etag=str(item.get("ETag", "")).strip('"'),
-                last_modified_ns=_last_modified_ns(item.get("LastModified")),
-            )
-            for page in pages
-            for item in page.get("Contents", ())
-            if int(item.get("Size", 0)) > 0
-            and Path(str(item.get("Key", ""))).suffix.lower()
-            in VIDEO_EXTENSIONS
-        ),
-        key=lambda item: item.key,
-    )
-    if limit is not None:
-        objects = objects[:limit]
-    video_ids = [item.video_id for item in objects]
-    if len(video_ids) != len(set(video_ids)):
-        raise ValueError("Video IDs must be unique across the S3 corpus")
-    if not objects:
-        raise FileNotFoundError(
-            f"No supported videos found at s3://{config.bucket}/{prefix}"
-        )
-    return objects
-
-
-@contextmanager
-def staged_video(
-    client: Any,
-    config: S3PreprocessingConfig,
-    source: S3VideoObject,
-) -> Iterator[Path]:
-    """Download one source video and remove it after both decode passes."""
-
-    staging_root = config.staging_root
-    if staging_root is not None:
-        staging_root = staging_root.expanduser().resolve()
-        staging_root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="hcmai-s3-video-",
-        dir=staging_root,
-    ) as directory:
-        path = Path(directory) / Path(source.key).name
-        client.download_file(config.bucket, source.key, str(path))
-        if not path.is_file() or path.stat().st_size != source.size:
-            raise OSError(
-                f"Downloaded size mismatch for s3://{config.bucket}/{source.key}"
-            )
-        os.utime(path, ns=(source.last_modified_ns, source.last_modified_ns))
-        yield path
 
 
 def _sha256(path: Path) -> str:

@@ -2,8 +2,8 @@ preprocessing:
   s3:
     bucket: hcmai-dataset
     videos_prefix: videos
-    artifacts_prefix: artifacts
-    region: ap-southeast-1
+    artifacts_prefix: artifacts/production/frame-store
+    region: ap-east-1
     # For MinIO or another S3-compatible service only:
     # endpoint_url: http://localhost:9000
     # Optional fast local disk for one-video staging:
@@ -23,8 +23,7 @@ preprocessing:
 
   device: cuda
   dino_model: facebook/dinov2-small
-  # Pin an immutable revision to enable safe resume.
-  dino_revision: null
+  dino_revision: ed25f3a31f01632728cabb09d1542f84ab7b0056
   dino_dtype: float16
   dino_batch_size: 16
 

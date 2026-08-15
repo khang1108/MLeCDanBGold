@@ -1,4 +1,11 @@
-"""Build validated, resumable transcript artifacts per canonical video."""
+"""Chuẩn bị dữ liệu cho quá trình trích xuất Transcript.
+
+Thực hiện các công việc tiền xử lý video/audio (như tách âm thanh) trước khi gọi AI.
+
+Các tính năng chính:
+1. Audio Extraction: Dùng FFmpeg tách file âm thanh (mp3/wav) từ các video định dạng mp4.
+2. Chuẩn hoá tần số: Chuyển sample rate về chuẩn 16kHz thường được các mô hình ASR yêu cầu.
+3. Quản lý Cache: Lưu tạm file âm thanh đã tách để tránh phải chạy lại nếu pipeline gặp sự cố."""
 
 from __future__ import annotations
 
@@ -20,6 +27,7 @@ from hcmai.data.enrichment.transcripts.manifest import (
 )
 from hcmai.data.enrichment.transcripts.publication import publish_staged, staging_path
 from hcmai.data.enrichment.transcripts.store import load_transcript_records
+from hcmai.data.s3 import VIDEO_EXTENSIONS
 
 TRANSCRIPT_DTYPES = {
     "segment_id": "string",
@@ -31,7 +39,6 @@ TRANSCRIPT_DTYPES = {
     "language": "string",
     "speaker_id": "string",
 }
-VIDEO_SUFFIXES = {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"}
 
 
 @dataclass(frozen=True)
@@ -183,6 +190,34 @@ def _prepare_video(
         raise
 
 
+def prepare_transcript_video(
+    video_path: str | Path,
+    output_root: str | Path,
+    engine: ASRAdapter,
+    *,
+    diarizer: DiarizationAdapter | None = None,
+    resume: bool = True,
+    schema_version: str = "transcript-segment-v1",
+    pipeline_version: str = "transcript-pipeline-v1",
+) -> tuple[Path, int]:
+    """Prepare one staged video without rediscovering or copying its source."""
+
+    video = Path(video_path).expanduser().resolve()
+    if not video.is_file() or video.suffix.lower() not in VIDEO_EXTENSIONS:
+        raise FileNotFoundError(f"Supported staged video does not exist: {video}")
+    root = Path(output_root).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return _prepare_video(
+        video=video,
+        output=_video_output(root, video.stem),
+        engine=engine,
+        diarizer=diarizer,
+        resume=resume,
+        schema_version=schema_version,
+        pipeline_version=pipeline_version,
+    )
+
+
 def _video_files(root: Path, limit: int | None) -> list[Path]:
     """Find supported videos in deterministic canonical-ID order."""
 
@@ -193,7 +228,7 @@ def _video_files(root: Path, limit: int | None) -> list[Path]:
         path.resolve()
         for video_root in video_roots
         for path in video_root.rglob("*")
-        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
+        if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
     )
     videos: dict[str, Path] = {}
     for path in candidates:
@@ -234,9 +269,9 @@ def prepare_transcripts(
     segment_counts: list[int] = []
     for video in videos:
         try:
-            _, count = _prepare_video(
-                video=video,
-                output=_video_output(output_root, video.stem),
+            _, count = prepare_transcript_video(
+                video_path=video,
+                output_root=output_root,
                 engine=engine,
                 diarizer=diarizer,
                 resume=resume,

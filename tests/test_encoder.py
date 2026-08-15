@@ -47,9 +47,15 @@ def _encoder() -> SigLIPAdapter:
 
 def test_config_alias_and_defaults() -> None:
     config = EncoderConfig.from_dict(
-        {"name": "custom/model", "device": "cuda", "batch_size": 64}
+        {
+            "name": "custom/model",
+            "revision": "model-commit",
+            "device": "cuda",
+            "batch_size": 64,
+        }
     )
     assert config.model_name == "custom/model"
+    assert config.revision == "model-commit"
     assert config.device == "cuda"
     assert config.batch_size == 64
     assert config.image_size == 224
@@ -60,6 +66,47 @@ def test_constructor_does_not_load_model() -> None:
     assert encoder.model is None
     assert encoder.processor is None
     assert encoder.embedding_dim == 0
+
+
+def test_siglip_loads_the_pinned_revision(monkeypatch) -> None:
+    calls: list[tuple[str, str, str | None]] = []
+
+    class ProcessorLoader:
+        @staticmethod
+        def from_pretrained(name: str, *, revision: str | None = None):
+            calls.append(("processor", name, revision))
+            return FakeProcessor()
+
+    class LoadableModel(FakeModel):
+        def to(self, _device: str):
+            return self
+
+        def eval(self):
+            return self
+
+    class ModelLoader:
+        @staticmethod
+        def from_pretrained(name: str, *, revision: str | None = None):
+            calls.append(("model", name, revision))
+            return LoadableModel()
+
+    monkeypatch.setattr(
+        "hcmai.retrieval.embedding.adapters.siglip.AutoProcessor",
+        ProcessorLoader,
+    )
+    monkeypatch.setattr(
+        "hcmai.retrieval.embedding.adapters.siglip.AutoModel", ModelLoader
+    )
+    encoder = SigLIPAdapter(
+        EncoderConfig(model_name="fixture/siglip", revision="commit-sha")
+    )
+
+    encoder._load_model()
+
+    assert calls == [
+        ("processor", "fixture/siglip", "commit-sha"),
+        ("model", "fixture/siglip", "commit-sha"),
+    ]
 
 
 def test_image_batches_are_normalized_and_recorded() -> None:

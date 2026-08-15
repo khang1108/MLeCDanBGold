@@ -12,6 +12,7 @@ from hcmai.common.schemas import (
     TRAKESubmission,
 )
 from hcmai.common.utils.logging import get_logger
+from hcmai.common.utils.video import derive_fps, format_video_id
 from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,
@@ -69,9 +70,18 @@ class TRAKEPipeline:
             submissions=[
                 TRAKESubmission(
                     rank=rank,
-                    video_id=row.video_id,
+                    video_id=format_video_id(
+                        row.video_id,
+                        fallback_path=row.frames[0].image_path if row.frames else None,
+                    ),
                     frame_ids=[frame.frame_id for frame in row.frames],
-                    frame_idxs=[frame.frame_idx for frame in row.frames],
+                    frame_idxs=[
+                        frame.frame_idx
+                        if frame.frame_idx is not None
+                        else round(frame.timestamp_ms * derive_fps(frame) / 1000.0)
+                        for frame in row.frames
+                    ],
+                    fps=derive_fps(row.frames[0] if row.frames else None),
                 )
                 for rank, row in enumerate(rows, start=1)
             ],

@@ -105,7 +105,7 @@ def _vqa_submission(**updates) -> VQASubmission:
     values = {
         "rank": 1,
         "video_id": "L01_V001",
-        "frame_id": "frame-42",
+        "frame_ids": ["frame-42"],
         "frame_idx": 42,
         "answer": "red",
         "retrieval_score": 0.8,

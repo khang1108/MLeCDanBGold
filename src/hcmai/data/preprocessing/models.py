@@ -1,4 +1,11 @@
-"""Lazy adapters for the official boundary-detection models."""
+"""Adapters cho các mô hình phân tích Video (Preprocessing).
+
+Khởi tạo lười (Lazy initialization) cho các mô hình AI dùng để phát hiện ranh giới cảnh quay.
+
+Các tính năng chính:
+1. Shot Boundary Detection: Tích hợp mô hình TransNetV2 để tìm ranh giới các cú máy (shot).
+2. Event Boundary Detection: Tích hợp mô hình GEBD để tìm các sự kiện chuyển động chính yếu.
+3. Lazy Loading: Chỉ nạp tệp weights của mô hình vào GPU khi hàm xử lý video được gọi lần đầu."""
 
 from __future__ import annotations
 

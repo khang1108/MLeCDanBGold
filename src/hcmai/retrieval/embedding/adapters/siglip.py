@@ -34,8 +34,16 @@ class SigLIPAdapter:
 
         logger.info(f"Loading model: {self.config.model_name}")
 
-        processor = AutoProcessor.from_pretrained(self.config.model_name)
-        model = AutoModel.from_pretrained(self.config.model_name)
+        revision = (
+            {"revision": self.config.revision}
+            if self.config.revision is not None
+            else {}
+        )
+        processor = AutoProcessor.from_pretrained(
+            self.config.model_name, **revision
+        )
+        
+        model = AutoModel.from_pretrained(self.config.model_name, **revision)
         model = model.to(self.config.device)
         model.eval()
 
@@ -45,9 +53,10 @@ class SigLIPAdapter:
 
         dimension = self.embedding_dim or "pending"
         logger.info(
-            f"Successfully loaded model as %d and processor as %d. Embedding dimension: {dimension}",
+            "Successfully loaded model=%s processor=%s embedding_dimension=%s",
             self.config.model_name,
             self.config.model_name,
+            dimension,
         )
 
     def _encode(

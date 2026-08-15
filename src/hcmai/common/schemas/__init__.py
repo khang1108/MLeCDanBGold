@@ -1,6 +1,6 @@
 from .base import *
 from .enum import *
-from .frame import FrameEnrichment, FrameRecord
+from .frame import FrameEnrichment, FrameRecord, validate_frame_enrichment
 from .inference import (
     CaptionItem,
     CaptionResponse,
@@ -83,6 +83,7 @@ __all__ = [
     "SubmissionResult",
     "FrameRecord",
     "FrameEnrichment",
+    "validate_frame_enrichment",
     "QueryUnit",
     "FrameEvidence",
     "OrderedPathCandidate",

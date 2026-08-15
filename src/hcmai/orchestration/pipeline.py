@@ -244,9 +244,8 @@ class SearchService:
                 task_type,
                 self.data,
                 self.retrieval,
-                self.reranking,
                 self.config,
-                progressive_core,
+                temporal_core,
             )
             for task_type in task_types
         ]

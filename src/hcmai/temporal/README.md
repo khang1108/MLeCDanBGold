@@ -1,3 +1,5 @@
+1
+
 # Shared temporal evidence and alignment facade
 
 All task adapters create a validated `TemporalQueryPlan` and select one
@@ -5,7 +7,7 @@ explicit alignment mode:
 
 ```text
 progressive_scene
-  -> SparseProgressiveEvidenceProvider
+  -> ProgressiveEvidenceProvider
   -> ProgressiveSceneAligner
   -> SceneCandidate[] for KIS/VQA
 

@@ -1,4 +1,17 @@
-"""Select informative frames and remove local semantic duplicates."""
+"""Frame Selection & Deduplication Module.
+
+Module này cung cấp các thuật toán để chắt lọc (select) và loại bỏ trùng lặp (deduplicate)
+các khung hình (frames) từ video, nhằm tối ưu hóa lượng dữ liệu đầu ra mà không làm mất đi các 
+khoảnh khắc quan trọng.
+
+Các tính năng chính:
+1. Candidate Selection: Dựa vào điểm số của Shot (TransNet) và Event (GEBD), module sẽ chọn ra 
+   các khung hình ứng viên, bao gồm các peak frames và các khung hình có chuyển động mạnh (dynamic coverage).
+2. Semantic Deduplication: Sử dụng mô hình DINO để trích xuất đặc trưng hình ảnh, sau đó 
+   loại bỏ các khung hình liền kề có sự tương đồng về mặt ngữ nghĩa (semantic similarity) quá cao.
+3. Gap Restoration: Đảm bảo khoảng cách thời gian giữa các khung hình (gap) không vượt quá 
+   giới hạn tối đa (maximum_gap_ms), tránh việc bỏ sót bối cảnh khi cảnh quay tĩnh kéo dài.
+4. Burst Sampling: Hỗ trợ lấy mẫu dày đặc (burst) xung quanh các sự kiện quan trọng."""
 
 from __future__ import annotations
 
@@ -13,6 +26,8 @@ from hcmai.data.preprocessing.video import (
     add_dynamic_coverage,
     peak_indices,
 )
+import bisect
+import cv2
 
 BURST_RADIUS_MS = 500
 BURST_STEP_MS = 200
@@ -26,6 +41,7 @@ class CandidateFrame:
 
     frame: FrameMeta
     shot_id: int
+    event_id: int
     shot_score: float
     event_score: float
     reasons: tuple[str, ...]
@@ -55,31 +71,48 @@ class DinoEncoder:
                 revision=self.config.dino_revision,
                 dtype=getattr(torch, self.config.dino_dtype),
             ).to(self.config.device).eval()
+
         assert self.processor is not None
         inputs = self.processor(images=images, return_tensors="pt").to(
             self.config.device
         )
+
         assert self.model is not None
         with torch.inference_mode():
             output = self.model(**inputs)
+
+        # Normalize output vectors
         vectors = torch.nn.functional.normalize(output.pooler_output.float(), dim=1)
         return vectors.cpu().numpy()
 
 
 def _expand_burst(
-    frames: list[FrameMeta], center: int, reason: str,
+    timestamps: list[int],
+    center: int,
+    reason: str,
     reasons: list[set[str]],
 ) -> None:
     """Keep regularly spaced context around one trigger."""
-    center_ms = frames[center].timestamp_ms
+    center_ms = timestamps[center]
+
+    # Tìm khoảng frame để mở rộng burst xung quanh frame trigger
+    # Dùng binary search để tìm index của frame đầu tiên và cuối cùng 
+    # trong khoảng burst (tức là -500ms và +500ms so với frame trigger)
+
+    # Ví dụ:
+    # timestamps = [0, 100, 200, 1000, 1100, 1200, 2000, 2100]
+    # center = 3 (1000ms)
+    # left = bisect.bisect_left(timestamps, 500ms) -> 3
+    # right = bisect.bisect_right(timestamps, 1500ms) -> 6
+    # index chạy từ 3 đến 5
+    left = bisect.bisect_left(timestamps, center_ms - BURST_RADIUS_MS)
+    right = bisect.bisect_right(timestamps, center_ms + BURST_RADIUS_MS)
+
     last_ms = -BURST_STEP_MS
-    for index, frame in enumerate(frames):
-        if (
-            abs(frame.timestamp_ms - center_ms) <= BURST_RADIUS_MS
-            and (index == center or frame.timestamp_ms - last_ms >= BURST_STEP_MS)
-        ):
+    for index in range(left, right):
+        if index == center or timestamps[index] - last_ms >= BURST_STEP_MS:
             reasons[index].add(f"{reason}_context")
-            last_ms = frame.timestamp_ms
+            last_ms = timestamps[index]
 
 
 def select_candidates(
@@ -94,10 +127,21 @@ def select_candidates(
     if len(shot_scores) != len(frames) or len(event_scores) != len(frames):
         raise ValueError("Boundary score count does not match decoded frames")
 
+    # Khởi tạo danh sách reasons và protected frames
+    # reasons: danh sách các lý do tại sao frame được chọn 
+    # (shot_boundary, event_boundary, motion_peak, ...)
+    # protected: tập hợp các index của các frame được bảo vệ 
+    # (luôn được giữ lại)
     reasons = [set() for _ in frames]
+    
+    # Luôn bảo vệ frame đầu tiên và cuối cùng
     protected = {0, len(frames) - 1}
+    
+    # Tìm các peak frames dựa trên shot_threshold và event_threshold
     shot_peaks = peak_indices(shot_scores, config.shot_threshold)
     event_peaks = peak_indices(event_scores, config.event_threshold)
+    
+    # Tìm các frames có motion_score cao (local maxima)
     motion_peaks = {
         index
         for index, frame in enumerate(frames)
@@ -106,39 +150,78 @@ def select_candidates(
             item.motion_score for item in frames[max(0, index - 1) : index + 2]
         )
     }
+
+    # Thêm coverage anchors
     reasons[0].add("coverage_anchor")
     reasons[-1].add("coverage_anchor")
+    timestamps = [frame.timestamp_ms for frame in frames]
 
+    # Xử lý các loại triggers
     triggers = (
         ("shot_boundary", shot_peaks),
         ("event_boundary", event_peaks),
         ("motion_peak", motion_peaks),
     )
+
+    # Xử lý các loại triggers
     for trigger, indices in triggers:
+        # Với mỗi trigger, thêm reason vào reasons và protected set
         for index in indices:
             reasons[index].add(trigger)
             protected.add(index)
+            # Mở rộng burst xung quanh trigger
             _expand_burst(
-                frames, index, trigger.removesuffix("_boundary"), reasons
+                timestamps, index, trigger.removesuffix("_boundary"), reasons
             )
 
+    # Thêm dynamic coverage
+    # Dynamic coverage là việc đảm bảo rằng không có khoảng trống thời gian nào 
+    # giữa các frame được chọn vượt quá giới hạn tối đa (maximum_gap_ms)
     add_dynamic_coverage(frames, reasons, protected, config)
+    
     selected = []
     shot_id = 0
+    event_id = 0
+
+    # Tạo danh sách các frame được chọn
     for index, (frame, frame_reasons) in enumerate(zip(frames, reasons)):
+        # Cập nhật shot_id và event_id
         if index in shot_peaks and index > 0:
             shot_id += 1
+        if index in event_peaks and index > 0:
+            event_id += 1
+
+        # Nếu có reasons thì thêm vào selected
+        # Shot/event ID: cập nhật ID dựa trên các peak frames đã tìm thấy
+        # Score: điểm shot và event tương ứng
+        # Reasons: lý do frame được chọn (shot_boundary, event_boundary, motion_peak, ...)
+        # Protected: frame có được bảo vệ không (luôn được giữ lại)
         if frame_reasons:
             selected.append(CandidateFrame(
-                frame, shot_id, float(shot_scores[index]),
+                frame, shot_id, event_id, float(shot_scores[index]),
                 float(event_scores[index]), tuple(sorted(frame_reasons)),
                 index in protected,
             ))
     return selected
 
 
+def _text_region_changed(path1: Any, path2: Any) -> bool:
+    img1 = cv2.imread(str(path1), cv2.IMREAD_GRAYSCALE)
+    img2 = cv2.imread(str(path2), cv2.IMREAD_GRAYSCALE)
+    if img1 is None or img2 is None:
+        return True
+    h, w = img1.shape
+    roi_top = int(h * 0.7)
+    roi1 = img1[roi_top:, :]
+    roi2 = img2[roi_top:, :]
+    mse = np.mean((roi1.astype("float") - roi2.astype("float")) ** 2)
+    return mse > 200.0
+
+
 def deduplicate(
-    candidates: list[CandidateFrame], embeddings: np.ndarray,
+    candidates: list[CandidateFrame],
+    embeddings: np.ndarray,
+    image_paths: list[Any],
     config: PreprocessingConfig,
 ) -> list[CandidateFrame]:
     """Drop only nearby, same-shot, unprotected semantic duplicates."""
@@ -148,11 +231,13 @@ def deduplicate(
             kept.append(index)
             continue
         previous = candidates[kept[-1]]
+        text_changed = _text_region_changed(image_paths[kept[-1]], image_paths[index])
         duplicate = (
             candidate.shot_id == previous.shot_id
             and candidate.frame.timestamp_ms - previous.frame.timestamp_ms
             <= DEDUP_WINDOW_MS
             and candidate.frame.motion_score <= DEDUP_MOTION_THRESHOLD
+            and not text_changed
             and float(embeddings[index] @ embeddings[kept[-1]])
             >= config.dedup_similarity
         )

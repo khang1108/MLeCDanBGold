@@ -1,3 +1,12 @@
+"""Adapter cho mô hình Captioning (Transformers).
+
+Giao tiếp với các mô hình HuggingFace (ví dụ: BLIP, LLaVA) để sinh mô tả trực quan cho ảnh.
+
+Các tính năng chính:
+1. Lazy Loading: Chỉ load weights của mô hình vào VRAM khi hàm sinh (generate) được gọi lần đầu.
+2. Tiền xử lý (Preprocessing): Resize và chuẩn hoá ảnh bằng bộ Processor của thư viện Transformers.
+3. Sinh Text (Inference): Chạy hàm tạo ngôn ngữ (text generation) và trả về danh sách chuỗi."""
+
 from __future__ import annotations
 
 from typing import Callable, Any, Sequence
