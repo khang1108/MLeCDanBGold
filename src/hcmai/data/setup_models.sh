@@ -304,11 +304,16 @@ if [[ "${FORCE_DOWNLOAD}" == "1" || ! -f "${HCMAI_CHECKPOINT}" ]]; then
     OUTPUT_ZIP="${TMP_DIR}/efficientgebd_output.zip"
     OUTPUT_EXTRACT="${TMP_DIR}/output"
 
-    info "Downloading official pretrained output.zip..."
+    if [[ -f "output.zip" ]]; then
+        info "Found local output.zip in current directory, skipping gdown..."
+        cp "output.zip" "${OUTPUT_ZIP}"
+    else
+        info "Downloading official pretrained output.zip..."
 
-    "${PYTHON_BIN}" -m gdown \
-        "${CHECKPOINT_URL}" \
-        -O "${OUTPUT_ZIP}"
+        "${PYTHON_BIN}" -m gdown \
+            "${CHECKPOINT_URL}" \
+            -O "${OUTPUT_ZIP}"
+    fi
 
     [[ -s "${OUTPUT_ZIP}" ]] \
         || die "Downloaded output.zip is empty"
