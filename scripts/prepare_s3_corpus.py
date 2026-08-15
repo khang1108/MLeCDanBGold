@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -46,6 +47,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run preparation and print stable, automation-friendly completion data."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S"
+    )
 
     args = parse_args(argv)
     try:
