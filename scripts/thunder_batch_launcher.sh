@@ -66,7 +66,7 @@ pip install -e '.[s3,preprocessing,transcripts,embedding]'
 LOG_FILE="runs/thunder_batch_$(date +%Y%m%d_%H%M%S).log"
 mkdir -p runs
 
-CMD=("python" "scripts/prepare_s3_corpus.py")
+CMD=("python" "-u" "scripts/prepare_s3_corpus.py")
 if [[ -n "$LIMIT" ]]; then
     CMD+=("--limit" "$LIMIT")
 fi
