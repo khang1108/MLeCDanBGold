@@ -1,0 +1,61 @@
+models_root: artifacts/models
+huggingface_home: ~/.cache/huggingface
+
+transnetv2:
+  repository: https://github.com/soCzech/TransNetV2.git
+  revision: 85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed
+  weights:
+    - path: inference/transnetv2-weights/saved_model.pb
+      url: https://media.githubusercontent.com/media/soCzech/TransNetV2/85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed/inference/transnetv2-weights/saved_model.pb
+      sha256: 8ac2a52c5719690d512805b6eaf5ce12097c1d8860b3d9de245dcbbc3100f554
+    - path: inference/transnetv2-weights/variables/variables.data-00000-of-00001
+      url: https://media.githubusercontent.com/media/soCzech/TransNetV2/85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed/inference/transnetv2-weights/variables/variables.data-00000-of-00001
+      sha256: b8c9dc3eb807583e6215cabee9ca61737b3eb1bceff68418b43bf71459669367
+    - path: inference/transnetv2-weights/variables/variables.index
+      url: https://media.githubusercontent.com/media/soCzech/TransNetV2/85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed/inference/transnetv2-weights/variables/variables.index
+      sha256: 8b99e28b4ad11372d9a1ad9703298c2e370df14859da4245fdbe818e92dd403f
+
+efficientgebd:
+  repository: https://github.com/Ziwei-Zheng/EfficientGEBD.git
+  revision: 7f6dd7ba52c0e29c21222fc3e19852d97a7d27f9
+  checkpoint_url: https://drive.usercontent.google.com/download?id=1S4M-xnKpjWFGBimcRYzlEDFhDsWQWF_-&export=download&confirm=t
+  config:
+    source: efficientgebd_runtime.yaml
+    path: output/x2x3x4_r50_eff/baseline_end_to_end_diff_former.yaml
+    sha256: b2c6745c5a15dbd190e13b3462f26b992a7b3a4f8462f442cafacdf1c456def4
+  checkpoint:
+    archive_path: output/x2x3x4_r50_eff/model_best.pth
+    path: output/x2x3x4_r50_eff/model_best.pth
+    sha256: a7bb7ebefb417f7d29a3bfa8866d99de3e3df2e32cb327cb714dcb6c5afb0c8d
+
+huggingface:
+  - name: DINOv2 Small
+    repository: facebook/dinov2-small
+    revision: ed25f3a31f01632728cabb09d1542f84ab7b0056
+  - name: Qwen3 ASR 1.7B
+    repository: Qwen/Qwen3-ASR-1.7B-hf
+    revision: bcd2b5b7f32b480ab5790554cfa8347f246a14f3
+  - name: Pyannote Community-1
+    repository: pyannote/speaker-diarization-community-1
+    revision: 3533c8cf8e369892e6b79ff1bf80f7b0286a54ee
+    gated: true
+
+silero_vad:
+  filename: silero_vad.jit
+  sha256: e1122837f4154c511485fe0b9c64455f7b929c96fbb8d79fbdb336383ebd3720
+
+preprocessing:
+  videos_root: data/video
+  output_root: artifacts/frame_store
+  device: cuda
+  dino_model: facebook/dinov2-small
+  dino_dtype: float16
+  dino_batch_size: 16
+  efficientgebd_sample_fps: 10
+  motion_threshold: 0.012
+  shot_threshold: 0.5
+  event_threshold: 0.5
+  minimum_gap_ms: 500
+  maximum_gap_ms: 2000
+  dedup_similarity: 0.985
+  image_quality: 92

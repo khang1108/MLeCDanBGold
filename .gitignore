@@ -31,6 +31,10 @@ frontend/build/
 frontend/dist/
 frontend/.cache/
 
+# Local package build output
+/build/
+/dist/
+
 # Local datasets and data directories
 /data/
 /dataset/

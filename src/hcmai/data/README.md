@@ -6,6 +6,53 @@
 Xem [preprocessing/README.md](preprocessing/README.md) để biết cây output chuẩn
 và cách KIS, Q&A, TRAKE truy cập FrameStore.
 
+## Cài toàn bộ model
+
+Model source, revision và checksum được khóa trong
+[`model_sources.yaml`](model_sources.yaml). Cài dependency, chấp nhận điều kiện
+truy cập Pyannote Community-1 rồi chạy:
+
+```bash
+python -m pip install -e ".[preprocessing,transcripts]"
+export HF_TOKEN="hf_..."
+PYTHONPATH=src python -m hcmai.data.setup_models
+```
+
+Script tải đúng model đang được preprocessing và transcript sử dụng:
+
+- TransNetV2 và ba TensorFlow weights từ GitHub chính thức.
+- EfficientGEBD và checkpoint từ Google Drive chính thức.
+- DINOv2 Small, Qwen3-ASR-1.7B và Pyannote Community-1 từ Hugging Face.
+- Silero VAD được kiểm tra từ weight đi kèm package.
+
+Weights nằm trong `artifacts/models/` hoặc Hugging Face cache, không nằm trong
+Git. Link EfficientGEBD chứa archive khoảng 9.46 GB, nhưng script dùng HTTP
+Range để chỉ tải checkpoint và config cần cho pipeline rồi kiểm tra SHA-256.
+
+Kiểm tra model đã tải mà không gọi mạng:
+
+```bash
+PYTHONPATH=src python -m hcmai.data.setup_models --verify-only
+```
+
+Kết quả tạo thêm:
+
+```text
+artifacts/models/
+├── TransNetV2/
+├── EfficientGEBD/
+└── preprocessing.yaml
+```
+
+Chạy FrameStore bằng cấu hình vừa sinh:
+
+```bash
+PYTHONPATH=src python scripts/preprocess_videos.py \
+  --config artifacts/models/preprocessing.yaml
+```
+
+Có thể đổi nơi lưu bằng `--root`, `HCMAI_MODELS_ROOT` và `HF_HOME`.
+
 ```text
 data/
 ├── pipeline.py              # DataService public facade

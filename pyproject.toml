@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">= 3.11"
 dependencies = [
     "gdown>=6.1.0",
+    "huggingface-hub>=0.34, <2.0",
     "pandas>=2.0, <4.0",
     "pillow>=10.0, <13.0",
     "pyarrow>=14.0, <26.0",
@@ -68,6 +69,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"hcmai.data" = ["model_sources.yaml", "efficientgebd_runtime.yaml"]
 
 [dependency-groups]
 dev = [
