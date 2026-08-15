@@ -195,15 +195,13 @@ info "EfficientGEBD source OK"
 
 
 # ------------------------------------------------------------
-# Install SMALL dependencies only
+# Install required Python dependencies
 # ------------------------------------------------------------
 
-log "Installing safe Python dependencies"
+log "Installing required Python dependencies"
 
-"${PYTHON_BIN}" -m pip install \
-    "gdown" \
-    "yacs==0.1.8" \
-    "einops==0.8.0"
+"${PYTHON_BIN}" -m pip install -e ".[preprocessing,s3,transcripts,embedding,reranking]" \
+    "gdown"
 
 
 # ------------------------------------------------------------
