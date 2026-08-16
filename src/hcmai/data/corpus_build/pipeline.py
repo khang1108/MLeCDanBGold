@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Sequence
+from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -480,6 +484,8 @@ class S3CorpusPreparationService:
             self.storage,
             limit=self.limit,
         )
+        logger.info(f"Loaded {len(sources)} videos from S3 inventory.")
+
         # Tính toán mã băm Run ID để bảo toàn Data Lineage
         run_id, inventory = self._record_inventory(sources)
         completed: list[str] = []
@@ -500,7 +506,9 @@ class S3CorpusPreparationService:
         )
         prepared: list[Any] = []
         if frame_pending or asr_pending:
-            for source in sources:
+            logger.info("Starting Video Frame & ASR Preparation Stage...")
+            for i, source in enumerate(tqdm(sources, desc="Videos Processed", unit="video")):
+                logger.info(f"Processing video {i + 1}/{len(sources)}: {source.video_id}")
                 with staged_video(self.client, self.storage, source) as video:
                     if frame_pending:
                         prepared.append(
@@ -512,6 +520,7 @@ class S3CorpusPreparationService:
                 self.operations.finalize_frames(prepared, sources)
                 self._complete_stage("frame_store", run_id)
                 completed.append("frame_store")
+            logger.info("Completed Video Frame & ASR Preparation Stage.")
 
         # Các stage đơn giản (tuyến tính) chạy tiếp theo (Caption, OCR, Indexing)
         simple_stages = (
@@ -539,14 +548,15 @@ class S3CorpusPreparationService:
                 lambda: self.operations.build_text_index(RetrievalSource.ASR),
             ),
         )
-        for name, enabled, operation in simple_stages:
-            if not enabled:
-                continue
-            if not self._pending(name, run_id, self._stage_outputs(name), skipped):
-                continue
-            operation()
-            self._complete_stage(name, run_id)
-            completed.append(name)
+        for stage_name, condition, executor in simple_stages:
+            if condition and self._pending(
+                stage_name, run_id, self._stage_outputs(stage_name), skipped
+            ):
+                logger.info(f"Starting enrichment stage: {stage_name.upper()}")
+                executor()
+                self._complete_stage(stage_name, run_id)
+                completed.append(stage_name)
+                logger.info(f"Completed enrichment stage: {stage_name.upper()}")
 
         publication = None
 
