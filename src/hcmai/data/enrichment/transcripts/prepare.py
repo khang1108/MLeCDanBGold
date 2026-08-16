@@ -9,14 +9,16 @@ Các tính năng chính:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 import pandas as pd
 
 from hcmai.common.schemas import TranscriptSegment
 from hcmai.common.utils.io import atomic_write, write_json
-from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
+from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, read_audio
 from hcmai.data.enrichment.transcripts.adapters.diarization import DiarizationAdapter
 from hcmai.data.enrichment.transcripts.manifest import (
     TranscriptManifest,
@@ -39,6 +41,7 @@ TRANSCRIPT_DTYPES = {
     "language": "string",
     "speaker_id": "string",
 }
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -168,18 +171,61 @@ def _prepare_video(
         if records is not None and reusable_transcript(
             output, _manifest_path(output), expected, records
         ):
+            logger.info(
+                "Transcript checkpoint reused: video=%s segments=%d",
+                video.stem,
+                len(records),
+            )
             return output, len(records)
 
     try:
-        records = engine.transcribe(video, video.stem)
+        started = perf_counter()
+        decode_seconds = 0.0
+        decoded_api = callable(getattr(engine, "transcribe_audio", None)) and (
+            diarizer is None
+            or callable(getattr(diarizer, "assign_speakers_audio", None))
+        )
+        if decoded_api:
+            decode_started = perf_counter()
+            decoded = read_audio(video, engine.config.audio_sample_rate)
+            decode_seconds = perf_counter() - decode_started
+            asr_started = perf_counter()
+            records = engine.transcribe_audio(decoded, video.stem)
+        else:
+            decoded = None
+            asr_started = perf_counter()
+            records = engine.transcribe(video, video.stem)
+        asr_seconds = perf_counter() - asr_started
         if engine.resolved_revision != engine.config.revision:
             raise ValueError("ASR backend resolved a revision different from its pin")
         if diarizer is not None:
-            records = diarizer.assign_speakers(video, records)
+            diarization_started = perf_counter()
+            if decoded is None:
+                records = diarizer.assign_speakers(video, records)
+            else:
+                if diarizer.config.audio_sample_rate != decoded.sample_rate:
+                    raise ValueError(
+                        "ASR and diarization must use the same audio sample rate"
+                    )
+                records = diarizer.assign_speakers_audio(decoded, records)
+            diarization_seconds = perf_counter() - diarization_started
+        else:
+            diarization_seconds = 0.0
         records = _validate_records(records, video.stem)
         completed = expected.model_copy(update={"segment_count": len(records)})
         _write_validated_pair(records, completed, output)
         _failure_path(output).unlink(missing_ok=True)
+        logger.info(
+            "Transcript preparation completed: video=%s segments=%d "
+            "audio_decode_seconds=%.1f asr_seconds=%.1f "
+            "diarization_seconds=%.1f total_seconds=%.1f",
+            video.stem,
+            len(records),
+            decode_seconds,
+            asr_seconds,
+            diarization_seconds,
+            perf_counter() - started,
+        )
         return output, len(records)
     except Exception as error:
         failed = failure_manifest(expected, error)

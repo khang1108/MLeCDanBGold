@@ -9,6 +9,7 @@ Các tính năng chính:
 
 from hcmai.data.corpus_build.config import (
     PinnedModelConfig,
+    PreparationExecutionConfig,
     PreparationModelPins,
     PreparationStagesConfig,
     S3CorpusPreparationConfig,
@@ -24,6 +25,7 @@ from hcmai.data.corpus_build.pipeline import (
 __all__ = [
     "DefaultPreparationOperations",
     "PinnedModelConfig",
+    "PreparationExecutionConfig",
     "PreparationModelPins",
     "PreparationOperations",
     "PreparationPaths",

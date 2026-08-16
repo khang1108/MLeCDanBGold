@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import shutil
 import concurrent.futures
+from time import perf_counter
 
 from pathlib import Path
 from typing import Any
@@ -43,6 +45,7 @@ from hcmai.data.preprocessing.video import (
 
 _CHECKPOINT_COLUMNS = ["_config_hash", "_source_size", "_source_mtime_ns"]
 _PIPELINE_VERSION = "adaptive-frame-store-v2"
+logger = logging.getLogger(__name__)
 
 
 class FramePreparationSession:
@@ -365,21 +368,29 @@ def _prepare_video(
 
     # 3. Tạo FramePreparationSession nếu chưa có
     if cached is not None:
+        logger.info("Frame checkpoint reused: video=%s rows=%d", path.stem, len(cached))
         return cached
 
     # 4. Nếu chưa có checkpoint, tiến hành xử lý Video
+    started = perf_counter()
+    analysis_started = perf_counter()
     analysis = analyze_video(path, config, event_detector)
+    analysis_seconds = perf_counter() - analysis_started
 
     # 5. Chọn Frame
+    selection_started = perf_counter()
     candidates = select_candidates(
         analysis.frames,
         shot_detector.score(path, analysis.shot_frames),
         analysis.event_scores,
         config,
     )
+    selection_seconds = perf_counter() - selection_started
 
     # 6. Tạo DataFrame chứa các frame candidate đã chọn
+    materialize_started = perf_counter()
     table = _materialize(path, candidates, config, encoder)
+    materialize_seconds = perf_counter() - materialize_started
     stat = path.stat()
 
     # 7. Ghi Checkpoint
@@ -394,7 +405,20 @@ def _prepare_video(
         checkpoint["_source_version"] = source_version
 
     # 9. Ghi checkpoint
-    _write_parquet(checkpoint, _checkpoint_path(config, path.stem)) 
+    _write_parquet(checkpoint, _checkpoint_path(config, path.stem))
+    logger.info(
+        "Frame preparation completed: video=%s decoded=%d candidates=%d "
+        "retained=%d analysis_seconds=%.1f selection_seconds=%.1f "
+        "materialize_seconds=%.1f total_seconds=%.1f",
+        path.stem,
+        len(analysis.frames),
+        len(candidates),
+        len(table),
+        analysis_seconds,
+        selection_seconds,
+        materialize_seconds,
+        perf_counter() - started,
+    )
     return table
 
 

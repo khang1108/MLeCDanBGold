@@ -121,7 +121,7 @@ def write_asr_enrichment(
     rows: Sequence[FrameEnrichment],
     *,
     canonical_frame_ids: set[str],
-    canonical_order: list[str],
+    canonical_order: list[str] | None = None,
     frame_store_id: str | None = None,
 ) -> Path:
     """Validate every foreign key and atomically replace one online artifact."""
@@ -136,30 +136,41 @@ def write_asr_enrichment(
             + ", ".join(sorted(unknown))
         )
     rows_dict = {row.frame_id: row for row in rows}
-    validate_frame_enrichment(rows_dict, canonical_order, frame_store_id)
+    validate_frame_enrichment(
+        rows_dict,
+        canonical_order or identifiers,
+        frame_store_id,
+    )
     
     table = pd.DataFrame(
         [row.model_dump(mode="json") for row in rows],
         columns=list(FrameEnrichment.model_fields),
     )
 
+    def restore_value(value: object) -> object:
+        if value is None:
+            return None
+        if callable(getattr(value, "tolist", None)):
+            return value.tolist()  # type: ignore[union-attr]
+        if isinstance(value, (list, tuple)):
+            return list(value)
+        missing = pd.isna(value)
+        return None if bool(missing) else value
+
     def write_and_validate(staging: Path) -> None:
         table.to_parquet(staging, index=False)
         values = pd.read_parquet(staging).astype(object)
-        restored = [
-            FrameEnrichment.model_validate({
-                key: (None if pd.isna(value) else value)
+        restored = []
+        for record in values.where(values.notna(), None).to_dict(
+            orient="records"
+        ):
+            raw_objects = restore_value(record.get("objects"))
+            objects = list(raw_objects) if raw_objects is not None else []
+            restored.append(FrameEnrichment.model_validate({
+                key: restore_value(value)
                 for key, value in record.items()
                 if key != "objects"
-            } | {
-                "objects": (
-                    record.get("objects").tolist()
-                    if callable(getattr(record.get("objects"), "tolist", None))
-                    else record.get("objects") or []
-                )
-            })
-            for record in values.where(values.notna(), None).to_dict(orient="records")
-        ]
+            } | {"objects": objects}))
         if [row.frame_id for row in restored] != identifiers:
             raise ValueError("staged ASR enrichment changed canonical frame order")
 

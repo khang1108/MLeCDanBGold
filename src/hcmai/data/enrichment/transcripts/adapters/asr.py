@@ -220,14 +220,13 @@ class ASRAdapter:
             raise RuntimeError("Model returned an incomplete ASR batch")
         return results
 
-    def transcribe(
-        self, video_path: str | Path, video_id: str
+    def transcribe_audio(
+        self,
+        decoded: DecodedAudio,
+        video_id: str,
     ) -> list[TranscriptSegment]:
-        """Return normalized transcript segments for one video."""
+        """Return normalized transcript segments from already-decoded audio."""
 
-        decoded = read_audio(
-            Path(video_path), self.config.audio_sample_rate
-        )
         audio = decoded.samples
         regions = self._speech_regions(audio) if audio.size else []
         records = []
@@ -259,6 +258,16 @@ class ASRAdapter:
                 ))
         _validate_segments(records)
         return records
+
+    def transcribe(
+        self, video_path: str | Path, video_id: str
+    ) -> list[TranscriptSegment]:
+        """Decode and transcribe one video through the compatibility API."""
+
+        decoded = read_audio(
+            Path(video_path), self.config.audio_sample_rate
+        )
+        return self.transcribe_audio(decoded, video_id)
 
 
 def _validate_segments(records: list[TranscriptSegment]) -> None:

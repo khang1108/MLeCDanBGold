@@ -9,6 +9,7 @@ Các tính năng chính:
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -134,6 +135,12 @@ class PreparationModelPins(BaseModel):
     text_embedding: PinnedModelConfig
 
 
+class PreparationExecutionConfig(BaseModel):
+    """Resource policy for one offline preparation run."""
+
+    pass
+
+
 class S3CorpusPreparationConfig(BaseModel):
     """Authoritative production contract for the newest S3 video corpus."""
 
@@ -144,6 +151,9 @@ class S3CorpusPreparationConfig(BaseModel):
     )
     models: PreparationModelPins
     preprocessing: PreprocessingConfig
+    execution: PreparationExecutionConfig = Field(
+        default_factory=PreparationExecutionConfig
+    )
 
     @field_validator("corpus_revision")
     @classmethod
@@ -233,4 +243,15 @@ class S3CorpusPreparationConfig(BaseModel):
         preparation = values.get("preparation", values)
         if not isinstance(preparation, dict):
             raise ValueError("preparation YAML requires a mapping")
+        preparation = dict(preparation)
+        preprocessing = dict(preparation.get("preprocessing", {}))
+        storage = dict(preprocessing.get("s3", {}))
+        bucket = os.getenv("HCMAI_S3_BUCKET")
+        region = os.getenv("HCMAI_S3_REGION")
+        if bucket:
+            storage["bucket"] = bucket
+        if region:
+            storage["region"] = region
+        preprocessing["s3"] = storage
+        preparation["preprocessing"] = preprocessing
         return cls.model_validate(preparation)

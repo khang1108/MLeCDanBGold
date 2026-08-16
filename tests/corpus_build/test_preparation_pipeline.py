@@ -11,6 +11,7 @@ import pytest
 
 from hcmai.common.schemas import RetrievalSource
 from hcmai.data.corpus_build import (
+    PreparationCacheRun,
     PreparationPaths,
     PreparationRun,
     S3CorpusPreparationConfig,
@@ -88,7 +89,7 @@ class _Operations:
 
     def prepare_transcript(self, video: Path) -> Path:
         assert video.is_file()
-        assert video == self.staged_paths[-1]
+        assert video.read_bytes().startswith(b"newest-s3-")
         self.events.append(f"transcript:{video.stem}")
         output = self.paths.transcripts_root / f"{video.stem}.parquet"
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +158,7 @@ def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
     return S3CorpusPreparationConfig.model_validate({
         "corpus_revision": "hcmai2026-s3-fixture-v1",
         "work_root": work,
+        "execution": {"minimum_free_gib_after_cache": 0},
         "models": {
             name: {"model_name": model, "revision": SHA}
             for name, model in model_names.items()
@@ -168,6 +170,7 @@ def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
                 "artifacts_prefix": "artifacts/production/fixture",
                 "smoke_artifacts_prefix": "artifacts/smoke/fixture",
                 "staging_root": work / "staging",
+                "cache_root": work / "source-cache",
             },
             "output_root": work / "artifacts/frame_store",
             "transnet_repo": work / "models/transnet",
@@ -199,7 +202,7 @@ def test_two_video_run_resumes_every_stage_without_legacy_local_reads(
     second = service.run()
 
     assert config.preprocessing.videos_root is None
-    assert client.downloads == [
+    assert sorted(client.downloads) == [
         "videos/L21_V001.mp4",
         "videos/L21_V002.mp4",
     ]
@@ -218,7 +221,7 @@ def test_two_video_run_resumes_every_stage_without_legacy_local_reads(
         "asr_index",
     )
     assert tuple(operations.events) == events_after_first
-    assert all(not path.exists() for path in operations.staged_paths)
+    assert all(path.exists() for path in operations.staged_paths)
     assert first.completed_stages == (
         "frame_store",
         "caption",
@@ -287,6 +290,97 @@ def test_cli_is_a_thin_service_boundary(
     assert f"Run ID: {expected.run_id}" in output
     assert "S3 videos: 2" in output
     assert "Status: PASSED" in output
+
+
+def test_cache_only_records_inventory_without_model_work(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.execution.minimum_free_gib_after_cache = 0
+    client = _FakeS3()
+    operations = _Operations(PreparationPaths.from_config(config, None))
+    result = S3CorpusPreparationService(
+        config,
+        client=client,
+        operations=operations,
+    ).cache_sources()
+
+    assert result.source_count == 2
+    assert result.downloaded_count == 2
+    assert result.reused_count == 0
+    assert result.total_bytes == sum(map(len, client.objects.values()))
+    assert operations.events == []
+    assert result.inventory_path.is_file()
+
+
+def test_cached_run_can_overlap_frame_and_asr_lanes(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    config.execution.overlap_frame_asr = True
+    client = _FakeS3()
+    paths = PreparationPaths.from_config(config, None)
+    operations = _Operations(paths)
+
+    result = S3CorpusPreparationService(
+        config,
+        client=client,
+        operations=operations,
+    ).run()
+
+    assert operations.events[:2] == [
+        "frame:L21_V001",
+        "transcript:L21_V001",
+    ]
+    assert {
+        "frame:L21_V002",
+        "transcript:L21_V002",
+    }.issubset(operations.events)
+    assert result.source_count == 2
+    assert paths.frames_path.is_file()
+    assert paths.asr_enrichment_path.is_file()
+
+
+def test_cli_cache_only_uses_cache_boundary(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    config = object()
+    expected = PreparationCacheRun(
+        run_id="c" * 64,
+        inventory_path=tmp_path / "run.json",
+        cache_root=tmp_path / "source-cache",
+        source_count=2,
+        downloaded_count=2,
+        reused_count=0,
+        total_bytes=30,
+        duration_seconds=1.5,
+    )
+
+    class _Config:
+        @staticmethod
+        def from_yaml(path: Path):
+            return config
+
+    class _Service:
+        def __init__(self, active, **options) -> None:
+            assert active is config
+
+        @staticmethod
+        def cache_sources() -> PreparationCacheRun:
+            return expected
+
+    monkeypatch.setattr(cli, "S3CorpusPreparationConfig", _Config)
+    monkeypatch.setattr(cli, "S3CorpusPreparationService", _Service)
+
+    result = cli.main([
+        "--config",
+        str(tmp_path / "config.yaml"),
+        "--cache-only",
+    ])
+
+    assert result == 0
+    output = capsys.readouterr().out
+    assert "Cache downloaded: 2" in output
+    assert "Cache reused: 0" in output
+    assert "Status: CACHED" in output
 
 
 def test_changed_s3_inventory_cannot_reuse_an_existing_run(

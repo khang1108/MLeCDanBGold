@@ -1,9 +1,9 @@
 preprocessing:
   s3:
-    bucket: hcmai-dataset
-    videos_prefix: videos
+    bucket: mlecdanbgold-hcmai-us-east-2
+    videos_prefix: data
     artifacts_prefix: artifacts/production/frame-store
-    region: ap-east-1
+    region: us-east-2
     # For MinIO or another S3-compatible service only:
     # endpoint_url: http://localhost:9000
     # Optional fast local disk for one-video staging:

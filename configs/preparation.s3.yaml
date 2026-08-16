@@ -2,7 +2,7 @@
 # supplied through boto3's standard AWS credential chain, never this file.
 preparation:
   corpus_revision: "hcmai2026-videos-20260813-v1"
-  work_root: /home/ubuntu/MLeCDanBGold/runs/hcmai2026-videos-20260813-v1
+  work_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1
 
   stages:
     frame_store: true
@@ -39,17 +39,17 @@ preparation:
 
   preprocessing:
     s3:
-      bucket: mlecdanbgold-hcmai-hk
+      bucket: mlecdanbgold-hcmai-us-east-2
       videos_prefix: data
-      artifacts_prefix: artifacts/production/hcmai2026-videos-20260813-v1
-      smoke_artifacts_prefix: artifacts/smoke/hcmai2026-videos-20260813-v1
-      region: ap-southeast-1
-      staging_root: /home/ubuntu/MLeCDanBGold/runs/hcmai2026-videos-20260813-v1/staging
+      artifacts_prefix: artifacts/production/hcmai2026-videos-v1
+      smoke_artifacts_prefix: artifacts/smoke/hcmai2026-videos-v1
+      region: us-east-2
+      staging_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1/staging
       connect_timeout_seconds: 10
       read_timeout_seconds: 300
       max_attempts: 4
 
-    output_root: /home/ubuntu/MLeCDanBGold/runs/hcmai2026-videos-20260813-v1/artifacts/frame_store
+    output_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1/artifacts/frame_store
 
     # Official source/checkpoint content is hashed into the run manifest.
     transnet_repo: /models/TransNetV2

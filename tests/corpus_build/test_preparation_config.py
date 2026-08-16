@@ -6,6 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from hcmai.common.config import TranscriptJobConfig
@@ -76,13 +77,79 @@ def test_production_config_accepts_only_isolated_s3_inputs(tmp_path: Path) -> No
     assert config.artifacts_root == config.work_root / "artifacts"
 
 
+def test_thunder_cache_and_execution_policy_are_validated(tmp_path: Path) -> None:
+    values = _values(tmp_path)
+    preprocessing = values["preprocessing"]
+    assert isinstance(preprocessing, dict)
+    storage = preprocessing["s3"]
+    assert isinstance(storage, dict)
+    work_root = values["work_root"]
+    assert isinstance(work_root, Path)
+    storage["cache_root"] = work_root / "source-cache"
+    values["execution"] = {
+        "cache_download_workers": 4,
+        "minimum_free_gib_after_cache": 80,
+        "overlap_frame_asr": True,
+    }
+
+    config = S3CorpusPreparationConfig.model_validate(values)
+
+    assert config.preprocessing.s3 is not None
+    assert config.preprocessing.s3.cache_root == (
+        config.work_root / "source-cache"
+    ).resolve()
+    assert config.execution.cache_download_workers == 4
+    assert config.execution.minimum_free_gib_after_cache == 80
+    assert config.execution.overlap_frame_asr is True
+
+
+def test_overlap_requires_a_persistent_source_cache(tmp_path: Path) -> None:
+    values = _values(tmp_path)
+    values["execution"] = {"overlap_frame_asr": True}
+
+    with pytest.raises(ValidationError, match="persistent source cache"):
+        S3CorpusPreparationConfig.model_validate(values)
+
+
+def test_source_cache_must_stay_inside_work_root(tmp_path: Path) -> None:
+    values = _values(tmp_path)
+    preprocessing = values["preprocessing"]
+    assert isinstance(preprocessing, dict)
+    storage = preprocessing["s3"]
+    assert isinstance(storage, dict)
+    storage["cache_root"] = (tmp_path / "other-run/cache").resolve()
+
+    with pytest.raises(ValidationError, match="cache_root must be inside work_root"):
+        S3CorpusPreparationConfig.model_validate(values)
+
+
+def test_s3_location_accepts_environment_overrides(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline = S3CorpusPreparationConfig.model_validate(_values(tmp_path))
+    path = tmp_path / "preparation.yaml"
+    path.write_text(
+        yaml.safe_dump({"preparation": baseline.model_dump(mode="json")}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HCMAI_S3_BUCKET", "verified-us-bucket")
+    monkeypatch.setenv("HCMAI_S3_REGION", "us-east-2")
+
+    loaded = S3CorpusPreparationConfig.from_yaml(path)
+
+    assert loaded.preprocessing.s3 is not None
+    assert loaded.preprocessing.s3.bucket == "verified-us-bucket"
+    assert loaded.preprocessing.s3.region == "us-east-2"
+
+
 def test_checked_in_production_config_is_s3_only_and_fully_pinned() -> None:
     config = S3CorpusPreparationConfig.from_yaml(
         "configs/preparation.s3.yaml"
     )
 
     assert config.preprocessing.s3 is not None
-    assert config.preprocessing.s3.videos_prefix == "videos"
+    assert config.preprocessing.s3.videos_prefix == "data"
     assert all(
         len(model["revision"]) == 40
         for model in config.models.model_dump().values()

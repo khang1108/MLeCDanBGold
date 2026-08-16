@@ -42,6 +42,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--no-resume", action="store_true")
+    parser.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="Populate and verify the persistent source cache, then exit.",
+    )
     return parser.parse_args(argv)
 
 
@@ -56,14 +61,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         config = S3CorpusPreparationConfig.from_yaml(args.config)
-        run = S3CorpusPreparationService(
+        service = S3CorpusPreparationService(
             config,
             resume=not args.no_resume,
             limit=args.limit,
             enrichment_config=args.enrichment_config,
             model_config=args.model_config,
             retrieval_config=args.retrieval_config,
-        ).run()
+        )
+        if args.cache_only:
+            cached = service.cache_sources()
+            print(f"Run ID: {cached.run_id}")
+            print(f"S3 videos: {cached.source_count}")
+            print(f"Inventory: {cached.inventory_path}")
+            print(f"Cache root: {cached.cache_root}")
+            print(f"Cache downloaded: {cached.downloaded_count}")
+            print(f"Cache reused: {cached.reused_count}")
+            print(f"Cache bytes: {cached.total_bytes}")
+            print(f"Cache seconds: {cached.duration_seconds:.1f}")
+            print("Status: CACHED")
+            return 0
+        run = service.run()
     except Exception as error:  # noqa: BLE001 - top-level batch failure boundary
         print(f"ERROR: {type(error).__name__}: {error}", file=sys.stderr)
         return 1

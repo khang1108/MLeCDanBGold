@@ -8,13 +8,17 @@ import pandas as pd
 import pytest
 
 import hcmai.data.enrichment.transcripts.adapters.asr as asr_module
+import hcmai.data.enrichment.transcripts.prepare as prepare_module
 from hcmai.common.config import ASRConfig, DiarizationConfig
 from hcmai.common.schemas import TranscriptSegment
 from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
 from hcmai.data.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,
 )
-from hcmai.data.enrichment.transcripts.prepare import prepare_transcripts
+from hcmai.data.enrichment.transcripts.prepare import (
+    prepare_transcript_video,
+    prepare_transcripts,
+)
 from hcmai.data.enrichment.transcripts.store import TranscriptStore
 
 
@@ -89,6 +93,61 @@ class FakeDiarizer:
             record.model_copy(update={"speaker_id": "SPEAKER_00"})
             for record in records
         ]
+
+
+def test_asr_and_diarization_share_one_decoded_audio(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    decoded = DecodedAudio(np.ones(16_000, dtype=np.float32), 16_000, 250)
+    decode_calls: list[Path] = []
+    seen: list[DecodedAudio] = []
+    video = tmp_path / "L21_V001.mp4"
+    video.write_bytes(b"video")
+    asr = ASRAdapter(ASRConfig(device="cpu"))
+    diarizer = DiarizationAdapter(DiarizationConfig(device="cpu"))
+
+    def decode(path: Path, sample_rate: int) -> DecodedAudio:
+        decode_calls.append(path)
+        assert sample_rate == 16_000
+        return decoded
+
+    def transcribe_audio(
+        audio: DecodedAudio,
+        video_id: str,
+    ) -> list[TranscriptSegment]:
+        seen.append(audio)
+        return [TranscriptSegment(
+            segment_id=f"{video_id}_segment_000000",
+            video_id=video_id,
+            segment_index=0,
+            start_ms=250,
+            end_ms=1_000,
+            text="text",
+            language="vi",
+        )]
+
+    def assign_audio(
+        audio: DecodedAudio,
+        records: list[TranscriptSegment],
+    ) -> list[TranscriptSegment]:
+        seen.append(audio)
+        return records
+
+    monkeypatch.setattr(prepare_module, "read_audio", decode)
+    monkeypatch.setattr(asr, "transcribe_audio", transcribe_audio)
+    monkeypatch.setattr(diarizer, "assign_speakers_audio", assign_audio)
+
+    prepare_transcript_video(
+        video,
+        tmp_path / "transcripts",
+        asr,
+        diarizer=diarizer,
+        resume=False,
+    )
+
+    assert decode_calls == [video]
+    assert seen == [decoded, decoded]
 
 
 def test_prepare_resume_and_stores(tmp_path: Path) -> None:

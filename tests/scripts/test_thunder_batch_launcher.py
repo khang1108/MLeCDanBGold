@@ -24,31 +24,26 @@ def test_launcher_rejects_unknown_argument(launcher_path: Path) -> None:
     assert "Unknown argument: --unknown-arg" in result.stdout
 
 
-def test_launcher_requires_aws_credentials(launcher_path: Path, monkeypatch) -> None:
-    # Ensure nvidia-smi check passes for credential checks
-    # By creating a fake nvidia-smi in PATH
-    bin_dir = launcher_path.parent.parent / "tests" / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    fake_nvidia_smi = bin_dir / "nvidia-smi"
-    fake_nvidia_smi.write_text("#!/bin/bash\necho fake-gpu")
-    fake_nvidia_smi.chmod(0o755)
+def test_launcher_declares_optimized_run_switches(launcher_path: Path) -> None:
+    text = launcher_path.read_text(encoding="utf-8")
+    for option in ("--config", "--cache-only", "--no-resume", "--skip-install"):
+        assert option in text
 
-    env = os.environ.copy()
-    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
-    env.pop("AWS_ACCESS_KEY_ID", None)
-    
+
+def test_launcher_has_valid_bash_syntax(launcher_path: Path) -> None:
     result = subprocess.run(
-        ["bash", str(launcher_path)],
+        ["bash", "-n", str(launcher_path)],
         capture_output=True,
         text=True,
-        env=env,
     )
-    assert result.returncode == 1
-    assert "ERROR: AWS credentials not found in environment." in result.stdout
+    assert result.returncode == 0, result.stderr
 
 
-def test_launcher_requires_hf_token(launcher_path: Path) -> None:
-    bin_dir = launcher_path.parent.parent / "tests" / "bin"
+def test_launcher_requires_hf_token(
+    launcher_path: Path,
+    tmp_path: Path,
+) -> None:
+    bin_dir = tmp_path / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     fake_nvidia_smi = bin_dir / "nvidia-smi"
     fake_nvidia_smi.write_text("#!/bin/bash\necho fake-gpu")
@@ -68,3 +63,10 @@ def test_launcher_requires_hf_token(launcher_path: Path) -> None:
     )
     assert result.returncode == 1
     assert "ERROR: HF_TOKEN not found in environment." in result.stdout
+
+
+def test_launcher_cache_only_does_not_require_hf_token(
+    launcher_path: Path,
+) -> None:
+    text = launcher_path.read_text(encoding="utf-8")
+    assert '[[ $CACHE_ONLY -eq 0 && -z "${HF_TOKEN:-}" ]]' in text

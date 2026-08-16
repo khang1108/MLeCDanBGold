@@ -139,6 +139,7 @@ class PreparationRun:
     publication: S3Publication | None = None
 
 
+
 class PreparationOperations(Protocol):
     """Existing stage services adapted to the shared S3 source lifecycle."""
 
@@ -468,26 +469,17 @@ class S3CorpusPreparationService:
             model_config=model_config,
             retrieval_config=retrieval_config,
         )
-
     def run(self) -> PreparationRun:
         """Thực thi chuỗi Pipeline Preparation qua từng Stage.
-        
+
         Lifecycle:
         1. Kéo danh sách S3 Video (Inventory).
         2. Tính toán Fingerprint (run_id) của lượt chạy.
         3. Resume/Skip những stage đã hoàn thành (nhờ marker .json).
-        4. Chạy Preprocessing & ASR Extraction (song song hoặc đồng bộ).
+        4. Chạy Preprocessing & ASR Extraction.
         5. Lần lượt chạy các Enrichment (Caption, OCR, Indexing).
         """
-        sources = list_video_objects(
-            self.client,
-            self.storage,
-            limit=self.limit,
-        )
-        logger.info(f"Loaded {len(sources)} videos from S3 inventory.")
-
-        # Tính toán mã băm Run ID để bảo toàn Data Lineage
-        run_id, inventory = self._record_inventory(sources)
+        sources, run_id, inventory = self._sources_and_inventory()
         completed: list[str] = []
         skipped: list[str] = []
 
@@ -503,12 +495,19 @@ class S3CorpusPreparationService:
             run_id,
             self._stage_outputs("asr"),
             skipped,
+            record_skip=False,
         )
         prepared: list[Any] = []
         if frame_pending or asr_pending:
-            logger.info("Starting Video Frame & ASR Preparation Stage...")
-            for i, source in enumerate(tqdm(sources, desc="Videos Processed", unit="video")):
-                logger.info(f"Processing video {i + 1}/{len(sources)}: {source.video_id}")
+            for i, source in enumerate(
+                tqdm(sources, desc="Videos Processed", unit="video")
+            ):
+                logger.info(
+                    "Processing video %d/%d: %s",
+                    i + 1,
+                    len(sources),
+                    source.video_id,
+                )
                 with staged_video(self.client, self.storage, source) as video:
                     if frame_pending:
                         prepared.append(
@@ -549,9 +548,21 @@ class S3CorpusPreparationService:
             ),
         )
         for stage_name, condition, executor in simple_stages:
-            if condition and self._pending(
-                stage_name, run_id, self._stage_outputs(stage_name), skipped
-            ):
+            if not condition:
+                continue
+            stage_pending = (
+                asr_pending
+                if stage_name == "asr"
+                else self._pending(
+                    stage_name,
+                    run_id,
+                    self._stage_outputs(stage_name),
+                    skipped,
+                )
+            )
+            if stage_name == "asr" and not stage_pending:
+                skipped.append("asr")
+            if stage_pending:
                 logger.info(f"Starting enrichment stage: {stage_name.upper()}")
                 executor()
                 self._complete_stage(stage_name, run_id)
@@ -624,6 +635,8 @@ class S3CorpusPreparationService:
         run_id: str,
         outputs: Sequence[Path],
         skipped: list[str],
+        *,
+        record_skip: bool = True,
     ) -> bool:
         """State Machine Marker: Kiểm tra xem một Stage có cần chạy lại không.
         
@@ -639,7 +652,8 @@ class S3CorpusPreparationService:
             if value.get("run_id") == run_id:
                 sizes = value.get("sizes", {})
                 if all(path.exists() and path.stat().st_size == sizes.get(str(path), -1) for path in outputs):
-                    skipped.append(stage)
+                    if record_skip:
+                        skipped.append(stage)
                     return False
         return True
 

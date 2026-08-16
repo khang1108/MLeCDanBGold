@@ -57,7 +57,7 @@ class TransNetDetector:
         # tránh việc TF chiếm trọn toàn bộ GPU memory ngay từ đầu
         # khiến các PyTorch model (Florence-2, DINOv2) không còn chỗ.
         try:
-            import tensorflow as tf
+            import tensorflow as tf # ignore[import-untyped]
             gpus = tf.config.list_physical_devices("GPU")
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
