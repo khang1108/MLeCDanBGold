@@ -15,6 +15,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import pandas as pd
+from tqdm import tqdm
 
 from hcmai.common.schemas import (
     FrameEnrichment,
@@ -82,7 +83,7 @@ def materialize_asr_enrichment(
         )
 
     rows: list[FrameEnrichment] = []
-    for frame in frames:
+    for frame in tqdm(frames, desc="Aligning ASR to frames", unit="frame"):
         if frame.video_id not in evaluated_video_ids:
             continue
         start_ms = max(0, frame.timestamp_ms - window_ms)

@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from PIL import Image
+from tqdm import tqdm
 
 from hcmai.common.schemas.frame import FrameRecord
 from hcmai.data.preprocessing.config import PreprocessingConfig
@@ -230,7 +231,7 @@ def _encode_images(paths: list[Path], encoder: Any, batch_size: int) -> np.ndarr
     chunks = []
 
     # Batch size nhỏ giúp giảm tải bộ nhớ
-    for start in range(0, len(paths), batch_size):
+    for start in tqdm(range(0, len(paths), batch_size), desc="Extracting DINOv2 Embeddings", unit="batch", leave=False):
         images = []
         for path in paths[start : start + batch_size]:
             with Image.open(path) as image:

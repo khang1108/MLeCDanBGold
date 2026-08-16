@@ -17,6 +17,7 @@ from typing import Any, cast
 
 import pandas as pd
 from PIL import Image
+from tqdm import tqdm
 
 from hcmai.common.schemas import FrameEnrichment, validate_frame_enrichment
 from hcmai.common.utils.image import load_image
@@ -72,7 +73,7 @@ def _process(
     config: OCRConfig,
     root: Path,
 ) -> None:
-    for start in range(0, len(todo), config.batch_size):
+    for start in tqdm(range(0, len(todo), config.batch_size), desc="Generating OCR", unit="batch"):
         valid: list[tuple[str, Image.Image]] = []
         for frame in todo[start : start + config.batch_size]:
             frame_id = str(frame["frame_id"])
