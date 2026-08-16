@@ -53,6 +53,16 @@ class TransNetDetector:
         """Load the official TensorFlow model once."""
         if self.model is not None:
             return self.model
+        # Bật memory growth để TF chỉ cấp phát VRAM khi cần,
+        # tránh việc TF chiếm trọn toàn bộ GPU memory ngay từ đầu
+        # khiến các PyTorch model (Florence-2, DINOv2) không còn chỗ.
+        try:
+            import tensorflow as tf
+            gpus = tf.config.list_physical_devices("GPU")
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+        except Exception:
+            pass  # Bỏ qua nếu TF không available hoặc GPU không có
         source = self.config.transnet_repo / "inference" / "transnetv2.py"
         weights = self.config.transnet_weights
         if not source.is_file() or not weights.exists():
