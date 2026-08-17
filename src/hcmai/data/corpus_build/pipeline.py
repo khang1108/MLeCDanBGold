@@ -674,6 +674,7 @@ class S3CorpusPreparationService:
         operations: PreparationOperations | None = None,
         resume: bool = True,
         limit: int | None = None,
+        offset: int | None = None,
         enrichment_config: str | Path = "configs/enrichment.yaml",
         model_config: str | Path = "llm/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
@@ -900,7 +901,12 @@ class S3CorpusPreparationService:
     def _sources_and_inventory(
         self,
     ) -> tuple[list[S3VideoObject], str, Path]:
-        sources = list_video_objects(self.client, self.storage, limit=self.limit)
+        sources = list_video_objects(self.client, self.storage, limit=None)
+        if self.offset is not None:
+            sources = sources[self.offset:]
+        if self.limit is not None:
+            sources = sources[:self.limit]
+            
         run_id, inventory = self._record_inventory(sources)
         return sources, run_id, inventory
 
@@ -945,6 +951,7 @@ class S3CorpusPreparationService:
             "pipeline_version": _PIPELINE_VERSION,
             "corpus_revision": self.config.corpus_revision,
             "limit": self.limit,
+            "offset": self.offset,
             "configuration": self.config.model_dump(mode="json"),
             "source": {
                 "bucket": self.storage.bucket,

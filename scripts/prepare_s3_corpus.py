@@ -41,6 +41,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=PROJECT_ROOT / "configs/baseline.yaml",
     )
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--offset", type=int)
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument(
         "--cache-only",
@@ -65,6 +66,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             config,
             resume=not args.no_resume,
             limit=args.limit,
+            offset=args.offset,
             enrichment_config=args.enrichment_config,
             model_config=args.model_config,
             retrieval_config=args.retrieval_config,
