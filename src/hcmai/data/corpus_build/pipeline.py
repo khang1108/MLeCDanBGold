@@ -690,6 +690,7 @@ class S3CorpusPreparationService:
         self.client = client if client is not None else create_s3_client(storage)
         self.resume = resume
         self.limit = limit
+        self.offset = offset
         self.operations = operations or DefaultPreparationOperations(
             config,
             self.paths,
