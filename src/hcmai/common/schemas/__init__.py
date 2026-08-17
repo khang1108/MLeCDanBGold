@@ -2,15 +2,22 @@ from .base import *
 from .enum import *
 from .frame import FrameEnrichment, FrameRecord, validate_frame_enrichment
 from .inference import (
+    AudioReferenceRequest,
+    BoundaryScoreResponse,
     CaptionItem,
     CaptionResponse,
+    DiarizationRequest,
+    EmbeddingResponse,
     InferenceCapabilities,
     InferenceReadiness,
     ModelStatus,
+    OCRItem,
+    OCRResponse,
     RerankItem,
     RerankResponse,
     TextEmbeddingRequest,
     TextEmbeddingResponse,
+    TranscriptInferenceResponse,
 )
 from .retrieval import RetrievalCandidate, RetrievalResult, SearchScores
 from .search import (
@@ -94,13 +101,20 @@ __all__ = [
     "TemporalRelation",
     "CaptionItem",
     "CaptionResponse",
+    "AudioReferenceRequest",
+    "BoundaryScoreResponse",
+    "DiarizationRequest",
+    "EmbeddingResponse",
     "InferenceCapabilities",
     "InferenceReadiness",
     "ModelStatus",
+    "OCRItem",
+    "OCRResponse",
     "RerankItem",
     "RerankResponse",
     "TextEmbeddingRequest",
     "TextEmbeddingResponse",
+    "TranscriptInferenceResponse",
     "VQAInferenceEvidence",
     "VQAInferenceEvidenceItem",
     "VQABaselineProfile",

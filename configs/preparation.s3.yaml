@@ -4,6 +4,55 @@ preparation:
   corpus_revision: "hcmai2026-videos-20260813-v1"
   work_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1
 
+  # Five dedicated Cloudflare Tunnels — each maps one subdomain to localhost:8100
+  # on the matching Kaggle notebook. All notebooks can run simultaneously.
+  # Model identity is pinned in `models:` below — do not duplicate here.
+  remote_inference:
+    transnet_model:
+      model_name: TransNetV2
+      revision: 85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed
+
+    efficientgebd_model:
+      model_name: EfficientGEBD
+      revision: 7f6dd7ba52c0e29c21222fc3e19852d97a7d27f9
+
+    preprocessing:
+      urls:
+        - "https://preprocess.iamphuckhang.dev"
+      batch_size: 1
+
+    dino:
+      urls:
+        - "https://dino.iamphuckhang.dev"
+      batch_size: 32
+
+    caption:
+      urls:
+        - "https://api.iamphuckhang.dev"
+      batch_size: 64
+
+    ocr:
+      urls:
+        - "https://api.iamphuckhang.dev"   # caption + ocr share the same notebook
+      batch_size: 32
+
+    visual_embedding:
+      urls:
+        - "https://emb.iamphuckhang.dev"
+      batch_size: 32
+
+    text_embedding:
+      urls:
+        - "https://emb.iamphuckhang.dev"   # visual_emb + text_emb share the same notebook
+      batch_size: 32
+
+    transcript:
+      urls:
+        - "https://asr.iamphuckhang.dev"
+      timeout_seconds: 300
+      read_timeout_seconds: 300
+
+
   stages:
     frame_store: true
     caption: true

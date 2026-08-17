@@ -2,4 +2,6 @@
 
 Nơi chứa mã nguồn giao tiếp với các mô hình nhận diện chữ viết khác nhau."""
 
-__all__: list[str] = []
+from .remote import RemoteOCRAdapter
+
+__all__ = ["RemoteOCRAdapter"]

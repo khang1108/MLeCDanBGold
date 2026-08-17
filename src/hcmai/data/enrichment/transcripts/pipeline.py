@@ -17,6 +17,10 @@ from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
 from hcmai.data.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,
 )
+from hcmai.data.enrichment.transcripts.adapters.remote import (
+    RemoteASRAdapter,
+    RemoteDiarizationAdapter,
+)
 from hcmai.data.enrichment.transcripts.prepare import (
     TranscriptReport,
     prepare_transcript_video,
@@ -30,8 +34,8 @@ class TranscriptService:
 
     def __init__(
         self,
-        asr: ASRAdapter | None = None,
-        diarization: DiarizationAdapter | None = None,
+        asr: ASRAdapter | RemoteASRAdapter | None = None,
+        diarization: DiarizationAdapter | RemoteDiarizationAdapter | None = None,
     ) -> None:
         self.asr = asr
         self.diarization = diarization

@@ -12,6 +12,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import shutil
+from contextlib import contextmanager
 from collections.abc import Sequence
 from tqdm import tqdm
 
@@ -88,6 +90,28 @@ class PreparationPaths:
             asr_index_root=artifacts / "indexes/asr",
         )
 
+    @classmethod
+    def for_group(
+        cls,
+        config: S3CorpusPreparationConfig,
+        group_id: str,
+    ) -> PreparationPaths:
+        root = config.work_root / "groups" / group_id
+        artifacts = root / "artifacts"
+        return cls(
+            artifacts_root=artifacts,
+            state_root=root / ".preparation",
+            frame_store_root=artifacts / "frame_store",
+            transcripts_root=artifacts / "transcripts",
+            asr_root=artifacts / "enrichment/asr",
+            caption_root=artifacts / "enrichment/caption",
+            ocr_root=artifacts / "enrichment/ocr",
+            visual_index_root=artifacts / "embeddings/visual",
+            caption_index_root=artifacts / "embeddings/caption",
+            ocr_index_root=artifacts / "embeddings/ocr",
+            asr_index_root=artifacts / "embeddings/asr",
+        )
+
     @property
     def frames_path(self) -> Path:
         return self.frame_store_root / "frames.parquet"
@@ -139,6 +163,20 @@ class PreparationRun:
     publication: S3Publication | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PreparationCacheRun:
+    """Result of materializing an immutable S3 inventory into local cache."""
+
+    run_id: str
+    inventory_path: Path
+    cache_root: Path
+    source_count: int
+    downloaded_count: int
+    reused_count: int
+    total_bytes: int
+    duration_seconds: float
+
+
 
 class PreparationOperations(Protocol):
     """Existing stage services adapted to the shared S3 source lifecycle."""
@@ -163,6 +201,12 @@ class PreparationOperations(Protocol):
 
     def build_text_index(self, source: RetrievalSource) -> Path: ...
 
+    def build_visual_artifacts(self) -> tuple[Path, Path]: ...
+
+    def build_text_embeddings(
+        self, source: RetrievalSource
+    ) -> tuple[Path, Path]: ...
+
 
 class DefaultPreparationOperations:
     """Production adapter over the repository's current offline services."""
@@ -177,6 +221,7 @@ class DefaultPreparationOperations:
         enrichment_config: str | Path = "configs/enrichment.yaml",
         model_config: str | Path = "llm/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
+        s3_client: Any | None = None,
     ) -> None:
         from hcmai.common.config import TranscriptJobConfig
         from hcmai.data.enrichment.caption.config import CaptionJobConfig
@@ -196,6 +241,7 @@ class DefaultPreparationOperations:
         self.enrichment_config = Path(enrichment_config)
         self.model_config_path = Path(model_config)
         self.retrieval_config = Path(retrieval_config)
+        self.s3_client = s3_client
         self.caption_job = CaptionJobConfig.from_yaml(self.enrichment_config)
         self.transcript_job = TranscriptJobConfig.from_yaml(self.enrichment_config)
         self.model_config = LLMServiceConfig.from_yaml(self.model_config_path)
@@ -204,6 +250,20 @@ class DefaultPreparationOperations:
         self._frames: FramePreparationSession | None = None
         self._transcripts: Any | None = None
         self._text_encoder: Any | None = None
+        self._remote_pools: dict[str, Any] = {}
+        self._audio_references: Any | None = None
+
+    def _remote_pool(self, capability: str) -> Any | None:
+        pool_config = getattr(self.config.remote_inference, capability)
+        if pool_config is None:
+            return None
+        if capability not in self._remote_pools:
+            from hcmai.llm.adapters.pool import InferenceClientPool
+
+            self._remote_pools[capability] = InferenceClientPool.from_config(
+                pool_config
+            )
+        return self._remote_pools[capability]
 
     def _validate_model_pins(self) -> None:
         """Kiểm tra tính nhất quán giữa các phiên bản mô hình (Model Pins)."""
@@ -266,8 +326,51 @@ class DefaultPreparationOperations:
             preprocessing = self.config.preprocessing.model_copy()
             # Set output về thư mục FrameStore
             preprocessing.output_root = self.paths.frame_store_root
+            shot_detector = event_detector = encoder = None
+            preprocessing_pool = self._remote_pool("preprocessing")
+            
+            if preprocessing_pool is not None:
+                from hcmai.data.preprocessing.adapters.remote import (
+                    RemoteEfficientGEBDDetector,
+                    RemoteTransNetDetector,
+                )
+
+                transnet = self.config.remote_inference.transnet_model
+                gebd = self.config.remote_inference.efficientgebd_model
+                
+                assert transnet is not None and gebd is not None
+                
+                shot_detector = RemoteTransNetDetector(
+                    preprocessing_pool,
+                    model_name=transnet.model_name,
+                    revision=transnet.revision,
+                )
+                event_detector = RemoteEfficientGEBDDetector(
+                    preprocessing_pool,
+                    model_name=gebd.model_name,
+                    revision=gebd.revision,
+                    sample_fps=preprocessing.efficientgebd_sample_fps,
+                    resolution=preprocessing.efficientgebd_resolution,
+                    sequence_length=preprocessing.efficientgebd_sequence_length,
+                    overlap=preprocessing.efficientgebd_overlap,
+                )
+            
+            dino_pool = self._remote_pool("dino")
+            if dino_pool is not None:
+                from hcmai.data.preprocessing.adapters.remote import RemoteDinoEncoder
+
+                pin = self.config.models.dino
+                encoder = RemoteDinoEncoder(
+                    dino_pool,
+                    model_name=pin.model_name,
+                    revision=pin.revision,
+                    dtype=preprocessing.dino_dtype,
+                )
             self._frames = FramePreparationSession(
                 preprocessing,
+                shot_detector=shot_detector,
+                event_detector=event_detector,
+                encoder=encoder,
                 resume=self.resume,
             )
         return self._frames
@@ -277,9 +380,43 @@ class DefaultPreparationOperations:
         if self._transcripts is None:
             from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
 
-            self._transcripts = TranscriptService.from_job_config(
-                self.transcript_job
-            )
+            pool = self._remote_pool("transcript")
+            if pool is None:
+                self._transcripts = TranscriptService.from_job_config(
+                    self.transcript_job
+                )
+            else:
+                from hcmai.data.corpus_build.audio import S3AudioReferenceProvider
+                from hcmai.data.enrichment.transcripts.adapters.remote import (
+                    RemoteASRAdapter,
+                    RemoteDiarizationAdapter,
+                )
+
+                if self.s3_client is None:
+                    raise RuntimeError("remote transcripts require an S3 client")
+                
+                run_id = getattr(self, "_current_run_id", "unbound")
+                self._audio_references = S3AudioReferenceProvider(
+                    self.s3_client,
+                    bucket=self.storage.bucket,
+                    prefix=f"{self.storage.artifacts_prefix}/runs/{run_id}",
+                    work_root=self.paths.state_root,
+                )
+                
+                asr = RemoteASRAdapter(
+                    pool, self.transcript_job.asr, self._audio_references
+                )
+                diarization = (
+                    RemoteDiarizationAdapter(
+                        pool,
+                        self.transcript_job.diarization,
+                        self._audio_references,
+                    )
+                    if self.transcript_job.diarization.enabled
+                    else None
+                )
+                
+                self._transcripts = TranscriptService(asr, diarization)
         return self._transcripts
 
     def prepare_frame(self, video: Path, source: S3VideoObject) -> Any:
@@ -351,7 +488,15 @@ class DefaultPreparationOperations:
             self.caption_job.caption,
             dataset_version=self.config.corpus_revision,
         )
-        adapter = EnrichmentService.create_caption_adapter(caption)
+        pool = self._remote_pool("caption")
+        if pool is None:
+            adapter = EnrichmentService.create_caption_adapter(caption)
+        else:
+            from hcmai.data.enrichment.caption.adapters.remote import (
+                RemoteCaptionAdapter,
+            )
+
+            adapter = RemoteCaptionAdapter(pool, caption)
         try:
             EnrichmentService.generate_captions(
                 self.paths.frames_path,
@@ -376,7 +521,13 @@ class DefaultPreparationOperations:
             device=self.config.preprocessing.device,
             dataset_version=self.config.corpus_revision,
         )
-        adapter = EnrichmentService.create_ocr_adapter(ocr)
+        pool = self._remote_pool("ocr")
+        if pool is None:
+            adapter = EnrichmentService.create_ocr_adapter(ocr)
+        else:
+            from hcmai.data.enrichment.ocr.adapters.remote import RemoteOCRAdapter
+
+            adapter = RemoteOCRAdapter(pool, replace(ocr, backend="remote"))
         try:
             EnrichmentService.generate_ocr(
                 self.paths.frames_path,
@@ -397,12 +548,21 @@ class DefaultPreparationOperations:
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
         from hcmai.retrieval.retriever.pipeline import RetrievalService
 
+        pool = self._remote_pool("visual_embedding")
+        encoder = (
+            EmbeddingService.create_remote_visual_adapter(
+                pool, self.model_config.visual_embedding
+            )
+            if pool is not None
+            else None
+        )
         run = EmbeddingService.build_visual_artifacts(
             self.paths.frames_path,
             self.paths.frame_store_root,
             self.paths.artifacts_root,
             self.model_config.visual_embedding,
             self.config.corpus_revision,
+            encoder=encoder,
         )
         if not run.generated_count:
             raise RuntimeError("No visual embeddings were generated")
@@ -415,13 +575,46 @@ class DefaultPreparationOperations:
         index.save(self.paths.visual_index_root)
         return self.paths.visual_index_root / RetrievalService.INDEX_FILENAME
 
+    def build_visual_artifacts(self) -> tuple[Path, Path]:
+        from hcmai.retrieval.embedding.pipeline import EmbeddingService
+
+        pool = self._remote_pool("visual_embedding")
+        encoder = (
+            EmbeddingService.create_remote_visual_adapter(
+                pool, self.model_config.visual_embedding
+            )
+            if pool is not None
+            else None
+        )
+        run = EmbeddingService.build_visual_artifacts(
+            self.paths.frames_path,
+            self.paths.frame_store_root,
+            self.paths.artifacts_root,
+            self.model_config.visual_embedding,
+            self.config.corpus_revision,
+            encoder=encoder,
+        )
+        if not run.generated_count:
+            raise RuntimeError("No visual embeddings were generated")
+        return run.embeddings_file, run.mapping_file
+
     def build_text_index(self, source: RetrievalSource) -> Path:
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
         from hcmai.retrieval.retriever.pipeline import RetrievalService
 
         if self._text_encoder is None:
-            self._text_encoder = EmbeddingService.create_text_adapter(
-                self.model_config.caption_embedding
+            pool = self._remote_pool("text_embedding")
+            self._text_encoder = (
+                EmbeddingService.create_remote_adapter(
+                    pool,
+                    self.model_config.caption_embedding,
+                    embedding_dim=0,
+                    source="text",
+                )
+                if pool is not None
+                else EmbeddingService.create_text_adapter(
+                    self.model_config.caption_embedding
+                )
             )
         RetrievalService.build_text_artifacts(
             self.retrieval_config,
@@ -433,6 +626,41 @@ class DefaultPreparationOperations:
             encoder=self._text_encoder,
         )
         return self.paths.index_root(source) / RetrievalService.INDEX_FILENAME
+
+    def build_text_embeddings(
+        self, source: RetrievalSource
+    ) -> tuple[Path, Path]:
+        from hcmai.common.config import AppConfig
+        from hcmai.data.pipeline import DataService
+        from hcmai.retrieval.embedding.pipeline import EmbeddingService
+        from hcmai.retrieval.retriever.pipeline import RetrievalService
+
+        if self._text_encoder is None:
+            pool = self._remote_pool("text_embedding")
+            self._text_encoder = (
+                EmbeddingService.create_remote_adapter(
+                    pool,
+                    self.model_config.caption_embedding,
+                    embedding_dim=0,
+                    source="text",
+                )
+                if pool is not None
+                else EmbeddingService.create_text_adapter(
+                    self.model_config.caption_embedding
+                )
+            )
+        settings = AppConfig.from_yaml(self.retrieval_config)
+        data = DataService.load(
+            self.paths.frames_path,
+            {source: self.paths.enrichment_path(source)},
+        )
+        return RetrievalService.build_text_embedding_artifacts(
+            data,
+            self._text_encoder,
+            source,
+            self.paths.index_root(source),
+            embeddings_filename=settings.index.text_embedding_filenames[source],
+        )
 
 
 class S3CorpusPreparationService:
@@ -449,13 +677,14 @@ class S3CorpusPreparationService:
         enrichment_config: str | Path = "configs/enrichment.yaml",
         model_config: str | Path = "llm/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
+        paths: PreparationPaths | None = None,
     ) -> None:
         storage = config.preprocessing.s3
         if storage is None:
             raise ValueError("S3 corpus preparation requires S3 storage")
         self.config = config
         self.storage = storage
-        self.paths = PreparationPaths.from_config(config, limit)
+        self.paths = paths or PreparationPaths.from_config(config, limit)
         self.paths.state_root.mkdir(parents=True, exist_ok=True)
         self.client = client if client is not None else create_s3_client(storage)
         self.resume = resume
@@ -468,6 +697,7 @@ class S3CorpusPreparationService:
             enrichment_config=enrichment_config,
             model_config=model_config,
             retrieval_config=retrieval_config,
+            s3_client=self.client,
         )
     def run(self) -> PreparationRun:
         """Thực thi chuỗi Pipeline Preparation qua từng Stage.
@@ -479,17 +709,29 @@ class S3CorpusPreparationService:
         4. Chạy Preprocessing & ASR Extraction.
         5. Lần lượt chạy các Enrichment (Caption, OCR, Indexing).
         """
+        # =====================================================================
+        # 1. INVENTORY & RUN ID INITIALIZATION
+        # =====================================================================
+        # Kéo danh sách file từ S3 và tạo ID cho lần chạy này
         sources, run_id, inventory = self._sources_and_inventory()
+        setattr(self.operations, "_current_run_id", run_id)
+        
+        # Danh sách theo dõi tiến độ các stage
         completed: list[str] = []
         skipped: list[str] = []
 
-        # Kiểm tra xem có cần xử lý FrameStore hay ASR từ Video gốc không
+        # =====================================================================
+        # 2. STAGE 1: VIDEO PREPROCESSING & ASR EXTRACTION
+        # =====================================================================
+        # Kiểm tra trạng thái hoàn thành của FrameStore (lưu khung hình) 
+        # và ASR (trích xuất âm thanh gốc) từ file marker.json
         frame_pending = self._pending(
             "frame_store",
             run_id,
             self._stage_outputs("frame_store"),
             skipped,
         )
+        
         asr_pending = self.config.stages.asr and self._pending(
             "asr",
             run_id,
@@ -497,8 +739,14 @@ class S3CorpusPreparationService:
             skipped,
             record_skip=False,
         )
+        
         prepared: list[Any] = []
+        
+        # Nếu một trong hai công đoạn này chưa làm xong, cần duyệt video từ S3
         if frame_pending or asr_pending:
+            logger.info("Starting Video Frame & ASR Preparation Stage...")
+            
+            # Xử lý tuần tự từng video
             for i, source in enumerate(
                 tqdm(sources, desc="Videos Processed", unit="video")
             ):
@@ -508,20 +756,33 @@ class S3CorpusPreparationService:
                     len(sources),
                     source.video_id,
                 )
-                with staged_video(self.client, self.storage, source) as video:
+                
+                # Quản lý vòng đời video: Tải tạm thời -> Decode -> Xoá file sau khi xong
+                with self._source_video(source) as video:
+                    
+                    # Bước trích xuất Frame, chấm điểm bằng TransNetV2 & GEBD, dedup bằng DINO
                     if frame_pending:
                         prepared.append(
                             self.operations.prepare_frame(video, source)
                         )
+                    
+                    # Bước lấy Audio track từ Video phục vụ cho ASR
                     if asr_pending:
                         self.operations.prepare_transcript(video)
+            
+            # Sau khi xử lý hết các Video, lưu lại kết quả Frame Store chung ra file Parquet
             if frame_pending:
                 self.operations.finalize_frames(prepared, sources)
                 self._complete_stage("frame_store", run_id)
                 completed.append("frame_store")
+                
             logger.info("Completed Video Frame & ASR Preparation Stage.")
 
-        # Các stage đơn giản (tuyến tính) chạy tiếp theo (Caption, OCR, Indexing)
+        # =====================================================================
+        # 3. STAGE 2: ENRICHMENT & INDEXING
+        # =====================================================================
+        # Định nghĩa các stage phía sau theo định dạng: 
+        # (Tên stage, Điều kiện kích hoạt trong config, Hàm callback để thực thi)
         simple_stages = (
             ("caption", self.config.stages.caption, self.operations.generate_caption),
             ("ocr", self.config.stages.ocr, self.operations.generate_ocr),
@@ -547,9 +808,15 @@ class S3CorpusPreparationService:
                 lambda: self.operations.build_text_index(RetrievalSource.ASR),
             ),
         )
+        
+        # Chạy tuyến tính từng Enrichment Stage
         for stage_name, condition, executor in simple_stages:
+            
+            # Nếu người dùng disable tính năng này trong config
             if not condition:
                 continue
+                
+            # Kiểm tra xem stage này đã có marker báo đã xong chưa
             stage_pending = (
                 asr_pending
                 if stage_name == "asr"
@@ -560,8 +827,12 @@ class S3CorpusPreparationService:
                     skipped,
                 )
             )
+            
+            # Xử lý log "Skip" cho riêng ASR (để không in 2 lần do ASR gồm 2 bước: Audio Extract + Transcribe)
             if stage_name == "asr" and not stage_pending:
                 skipped.append("asr")
+                
+            # Bắt đầu chạy nếu nó chưa hoàn thành
             if stage_pending:
                 logger.info(f"Starting enrichment stage: {stage_name.upper()}")
                 executor()
@@ -580,6 +851,82 @@ class S3CorpusPreparationService:
             skipped_stages=tuple(skipped),
             publication=publication,
         )
+
+    def cache_sources(self) -> PreparationCacheRun:
+        """Download and verify the source inventory without running any model."""
+
+        from time import perf_counter
+
+        started = perf_counter()
+        sources, run_id, inventory = self._sources_and_inventory()
+        cache_root = self.storage.cache_root
+        if cache_root is None:
+            raise ValueError("cache-only preparation requires s3.cache_root")
+        root = cache_root.expanduser().resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        downloaded = reused = total = 0
+        for source in sources:
+            path = root / Path(source.key).name
+            if path.is_file() and path.stat().st_size == source.size:
+                reused += 1
+            else:
+                partial = path.with_suffix(f"{path.suffix}.partial")
+                partial.unlink(missing_ok=True)
+                try:
+                    self.client.download_file(
+                        self.storage.bucket, source.key, str(partial)
+                    )
+                    if partial.stat().st_size != source.size:
+                        raise OSError(f"cached source size mismatch: {source.key}")
+                    partial.replace(path)
+                finally:
+                    partial.unlink(missing_ok=True)
+                downloaded += 1
+            total += source.size
+        free_gib = shutil.disk_usage(root).free / (1024 ** 3)
+        if free_gib < self.config.execution.minimum_free_gib_after_cache:
+            raise OSError("source cache leaves less free disk than configured")
+        return PreparationCacheRun(
+            run_id=run_id,
+            inventory_path=inventory,
+            cache_root=root,
+            source_count=len(sources),
+            downloaded_count=downloaded,
+            reused_count=reused,
+            total_bytes=total,
+            duration_seconds=perf_counter() - started,
+        )
+
+    def _sources_and_inventory(
+        self,
+    ) -> tuple[list[S3VideoObject], str, Path]:
+        sources = list_video_objects(self.client, self.storage, limit=self.limit)
+        run_id, inventory = self._record_inventory(sources)
+        return sources, run_id, inventory
+
+    @contextmanager
+    def _source_video(self, source: S3VideoObject):
+        cache_root = self.storage.cache_root
+        if cache_root is not None:
+            root = cache_root.expanduser().resolve()
+            root.mkdir(parents=True, exist_ok=True)
+            path = root / Path(source.key).name
+            if not path.is_file() or path.stat().st_size != source.size:
+                partial = path.with_suffix(f"{path.suffix}.partial")
+                partial.unlink(missing_ok=True)
+                try:
+                    self.client.download_file(
+                        self.storage.bucket, source.key, str(partial)
+                    )
+                    if partial.stat().st_size != source.size:
+                        raise OSError(f"cached source size mismatch: {source.key}")
+                    partial.replace(path)
+                finally:
+                    partial.unlink(missing_ok=True)
+            yield path
+            return
+        with staged_video(self.client, self.storage, source) as video:
+            yield video
 
     def _record_inventory(
         self,

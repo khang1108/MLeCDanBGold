@@ -136,3 +136,81 @@ def publish_run_artifacts(
         file_count=len(files),
         total_bytes=sum(item.size for item in files),
     )
+
+
+def publish_group_artifacts(
+    client: Any,
+    paths: PreparationPaths,
+    config: S3CorpusPreparationConfig,
+    *,
+    group_id: str,
+    run_id: str,
+    source_manifest: dict[str, Any],
+) -> S3Publication:
+    """Tải tất cả các artifact của MỘT group lên S3 (không cập nhật biến global latest).
+    Các file được lưu vào prefix độc lập (theo group_id và run_id) kèm theo COMMITTED.json
+    để đánh dấu group này đã hoàn tất và sẵn sàng cho bước Reduce.
+    """
+
+    storage = config.preprocessing.s3
+    if storage is None:
+        raise ValueError("group publication requires S3 storage")
+    
+    files = inventory_artifacts(paths.artifacts_root.resolve())
+    inventory = [asdict(item) for item in files]
+    
+    base = config.full_artifacts_prefix.rstrip("/")
+    version_prefix = f"{base}/groups/{group_id}/runs/{run_id}"
+    
+    for item in files:
+        key = f"{version_prefix}/{item.path}"
+        client.upload_file(str(paths.artifacts_root / item.path), storage.bucket, key)
+        _verify_remote_size(client, storage.bucket, key, item.size)
+
+    manifest = _json_bytes({
+        "schema_version": "group-artifact-manifest-v1",
+        "corpus_revision": config.corpus_revision,
+        "group_id": group_id,
+        "run_id": run_id,
+        "source": source_manifest,
+        "files": inventory,
+        "file_count": len(files),
+        "total_bytes": sum(item.size for item in files),
+    })
+    
+    manifest_key = f"{version_prefix}/manifest.json"
+    client.put_object(
+        Bucket=storage.bucket,
+        Key=manifest_key,
+        Body=manifest,
+        ContentType="application/json",
+    )
+    
+    _verify_remote_size(client, storage.bucket, manifest_key, len(manifest))
+    
+    manifest_sha256 = hashlib.sha256(manifest).hexdigest()
+    committed = _json_bytes({
+        "schema_version": "group-commit-v1",
+        "group_id": group_id,
+        "run_id": run_id,
+        "manifest_key": manifest_key,
+        "manifest_sha256": manifest_sha256,
+    })
+    
+    commit_key = f"{version_prefix}/COMMITTED.json"
+    client.put_object(
+        Bucket=storage.bucket,
+        Key=commit_key,
+        Body=committed,
+        ContentType="application/json",
+    )
+    _verify_remote_size(client, storage.bucket, commit_key, len(committed))
+    
+    return S3Publication(
+        bucket=storage.bucket,
+        version_prefix=version_prefix,
+        latest_key=commit_key,
+        bundle_id=run_id,
+        file_count=len(files),
+        total_bytes=sum(item.size for item in files),
+    )

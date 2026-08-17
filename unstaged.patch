@@ -1,0 +1,2027 @@
+diff --git a/configs/preparation.s3.yaml b/configs/preparation.s3.yaml
+index d33bad6..72d7075 100644
+--- a/configs/preparation.s3.yaml
++++ b/configs/preparation.s3.yaml
+@@ -4,6 +4,42 @@ preparation:
+   corpus_revision: "hcmai2026-videos-20260813-v1"
+   work_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1
+ 
++  # Uncomment pools after starting the corresponding Kaggle workers. All URLs
++  # in one pool must advertise the same pinned model/revision through /ready.
++  remote_inference: {}
++  #   transnet_model:
++  #     model_name: TransNetV2
++  #     revision: 0000000000000000000000000000000000000000
++  #   efficientgebd_model:
++  #     model_name: EfficientGEBD
++  #     revision: 0000000000000000000000000000000000000000
++  #   preprocessing:
++  #     urls: ["https://preprocessing.example.com"]
++  #     batch_size: 1
++  #   dino:
++  #     urls: ["https://dino.example.com"]
++  #     batch_size: 64
++  #   caption:
++  #     urls:
++  #       - "https://florence-a.example.com"
++  #       - "https://florence-b.example.com"
++  #     batch_size: 16
++  #   ocr:
++  #     urls:
++  #       - "https://florence-a.example.com"
++  #       - "https://florence-b.example.com"
++  #     batch_size: 16
++  #   visual_embedding:
++  #     urls: ["https://embeddings.example.com"]
++  #     batch_size: 32
++  #   text_embedding:
++  #     urls: ["https://embeddings.example.com"]
++  #     batch_size: 64
++  #   transcript:
++  #     urls: ["https://transcript.example.com"]
++  #     timeout_seconds: 300
++  #     read_timeout_seconds: 300
++
+   stages:
+     frame_store: true
+     caption: true
+diff --git a/src/hcmai/common/schemas/__init__.py b/src/hcmai/common/schemas/__init__.py
+index 985cbf8..aa73c8a 100644
+--- a/src/hcmai/common/schemas/__init__.py
++++ b/src/hcmai/common/schemas/__init__.py
+@@ -2,15 +2,22 @@ from .base import *
+ from .enum import *
+ from .frame import FrameEnrichment, FrameRecord, validate_frame_enrichment
+ from .inference import (
++    AudioReferenceRequest,
++    BoundaryScoreResponse,
+     CaptionItem,
+     CaptionResponse,
++    DiarizationRequest,
++    EmbeddingResponse,
+     InferenceCapabilities,
+     InferenceReadiness,
+     ModelStatus,
++    OCRItem,
++    OCRResponse,
+     RerankItem,
+     RerankResponse,
+     TextEmbeddingRequest,
+     TextEmbeddingResponse,
++    TranscriptInferenceResponse,
+ )
+ from .retrieval import RetrievalCandidate, RetrievalResult, SearchScores
+ from .search import (
+@@ -94,13 +101,20 @@ __all__ = [
+     "TemporalRelation",
+     "CaptionItem",
+     "CaptionResponse",
++    "AudioReferenceRequest",
++    "BoundaryScoreResponse",
++    "DiarizationRequest",
++    "EmbeddingResponse",
+     "InferenceCapabilities",
+     "InferenceReadiness",
+     "ModelStatus",
++    "OCRItem",
++    "OCRResponse",
+     "RerankItem",
+     "RerankResponse",
+     "TextEmbeddingRequest",
+     "TextEmbeddingResponse",
++    "TranscriptInferenceResponse",
+     "VQAInferenceEvidence",
+     "VQAInferenceEvidenceItem",
+     "VQABaselineProfile",
+diff --git a/src/hcmai/common/schemas/inference.py b/src/hcmai/common/schemas/inference.py
+index 12594d5..23765ea 100644
+--- a/src/hcmai/common/schemas/inference.py
++++ b/src/hcmai/common/schemas/inference.py
+@@ -4,9 +4,10 @@ from __future__ import annotations
+ 
+ from typing import Any, Literal
+ 
+-from pydantic import Field, field_validator
++from pydantic import Field, field_validator, model_validator
+ 
+ from .base import ContractModel, NonEmptyString
++from .transcript import TranscriptSegment
+ 
+ 
+ class TextEmbeddingRequest(ContractModel):
+@@ -16,13 +17,14 @@ class TextEmbeddingRequest(ContractModel):
+     texts: list[NonEmptyString] = Field(min_length=1, max_length=64)
+ 
+ 
+-class TextEmbeddingResponse(ContractModel):
+-    """Normalized vectors plus index-compatibility provenance."""
++class EmbeddingResponse(ContractModel):
++    """Ordered vectors plus index-compatibility provenance."""
+ 
+     model: NonEmptyString
+     revision: str | None = None
+     dimension: int = Field(gt=0)
+     normalized: bool
++    item_ids: list[NonEmptyString] | None = None
+     embeddings: list[list[float]]
+     latency_ms: float = Field(ge=0)
+ 
+@@ -35,6 +37,79 @@ class TextEmbeddingResponse(ContractModel):
+             raise ValueError("embedding rows must have equal dimensions")
+         return values
+ 
++    @model_validator(mode="after")
++    def validate_metadata(self) -> EmbeddingResponse:
++        if len(self.embeddings[0]) != self.dimension:
++            raise ValueError("embedding dimension metadata does not match vectors")
++        if self.item_ids is not None:
++            if len(self.item_ids) != len(self.embeddings):
++                raise ValueError("item/embedding count mismatch")
++            if len(set(self.item_ids)) != len(self.item_ids):
++                raise ValueError("embedding item_ids must be unique")
++        return self
++
++
++# Compatibility name retained for existing online text-embedding consumers.
++TextEmbeddingResponse = EmbeddingResponse
++
++
++class BoundaryScoreResponse(ContractModel):
++    """One caller-owned temporal tensor and its ordered boundary scores."""
++
++    request_id: NonEmptyString
++    model: NonEmptyString
++    revision: str | None = None
++    scores: list[float] = Field(min_length=1)
++    latency_ms: float = Field(ge=0)
++
++
++class AudioReferenceRequest(ContractModel):
++    """Short-lived immutable audio object supplied to a transcript worker."""
++
++    request_id: NonEmptyString
++    video_id: NonEmptyString
++    audio_url: NonEmptyString
++    audio_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
++    sample_rate: int = Field(default=16_000, ge=8_000, le=48_000)
++
++    @field_validator("audio_url")
++    @classmethod
++    def require_https_audio(cls, value: str) -> str:
++        if not value.startswith("https://"):
++            raise ValueError("audio_url must use HTTPS")
++        return value
++
++
++class DiarizationRequest(AudioReferenceRequest):
++    """Assign speakers to an existing canonical transcript."""
++
++    segments: list[TranscriptSegment]
++
++
++class TranscriptInferenceResponse(ContractModel):
++    """Canonical transcript segments returned by one pinned model capability."""
++
++    request_id: NonEmptyString
++    video_id: NonEmptyString
++    model: NonEmptyString
++    revision: str | None = None
++    segments: list[TranscriptSegment]
++    latency_ms: float = Field(ge=0)
++
++    @model_validator(mode="after")
++    def validate_segments(self) -> TranscriptInferenceResponse:
++        previous_start = previous_end = -1
++        for index, segment in enumerate(self.segments):
++            if segment.video_id != self.video_id or segment.segment_index != index:
++                raise ValueError("transcript identity/order mismatch")
++            if (
++                segment.start_ms < previous_start
++                or segment.end_ms < previous_end
++            ):
++                raise ValueError("transcript segments must be chronological")
++            previous_start, previous_end = segment.start_ms, segment.end_ms
++        return self
++
+ 
+ class CaptionItem(ContractModel):
+     """One caller-owned image and its generated caption."""
+@@ -101,6 +176,14 @@ class InferenceCapabilities(ContractModel):
+     reranking: bool = False
+     multi_image_vqa: bool = False
+     structured_parsing: bool = False
++    shot_detection: bool = False
++    event_detection: bool = False
++    dino_embedding: bool = False
++    image_embedding: bool = False
++    caption: bool = False
++    ocr: bool = False
++    asr: bool = False
++    diarization: bool = False
+ 
+ 
+ class InferenceReadiness(ContractModel):
+diff --git a/src/hcmai/data/corpus_build/__init__.py b/src/hcmai/data/corpus_build/__init__.py
+index 243ce36..b252417 100644
+--- a/src/hcmai/data/corpus_build/__init__.py
++++ b/src/hcmai/data/corpus_build/__init__.py
+@@ -11,26 +11,45 @@ from hcmai.data.corpus_build.config import (
+     PinnedModelConfig,
+     PreparationExecutionConfig,
+     PreparationModelPins,
++    RemoteEndpointPoolConfig,
++    RemoteInferencePoolsConfig,
+     PreparationStagesConfig,
+     S3CorpusPreparationConfig,
+ )
+ from hcmai.data.corpus_build.pipeline import (
+     DefaultPreparationOperations,
+     PreparationOperations,
++    PreparationCacheRun,
+     PreparationPaths,
+     PreparationRun,
+     S3CorpusPreparationService,
+ )
++from hcmai.data.corpus_build.group import (
++    GroupPreparationService,
++    GroupSourceInventory,
++    GroupSourceObject,
++    verify_local_group,
++)
++from hcmai.data.corpus_build.reducer import CommittedGroup, S3GroupIndexReducer
+ 
+ __all__ = [
+     "DefaultPreparationOperations",
++    "CommittedGroup",
++    "GroupPreparationService",
++    "GroupSourceInventory",
++    "GroupSourceObject",
+     "PinnedModelConfig",
+     "PreparationExecutionConfig",
+     "PreparationModelPins",
++    "RemoteEndpointPoolConfig",
++    "RemoteInferencePoolsConfig",
+     "PreparationOperations",
++    "PreparationCacheRun",
+     "PreparationPaths",
+     "PreparationRun",
+     "PreparationStagesConfig",
+     "S3CorpusPreparationConfig",
+     "S3CorpusPreparationService",
++    "S3GroupIndexReducer",
++    "verify_local_group",
+ ]
+diff --git a/src/hcmai/data/corpus_build/config.py b/src/hcmai/data/corpus_build/config.py
+index ce066c5..0d0be75 100644
+--- a/src/hcmai/data/corpus_build/config.py
++++ b/src/hcmai/data/corpus_build/config.py
+@@ -138,7 +138,58 @@ class PreparationModelPins(BaseModel):
+ class PreparationExecutionConfig(BaseModel):
+     """Resource policy for one offline preparation run."""
+ 
+-    pass
++    overlap_frame_asr: bool = False
++    minimum_free_gib_after_cache: float = Field(default=10.0, ge=0)
++    cache_download_workers: int = Field(default=4, ge=1, le=32)
++
++
++class RemoteEndpointPoolConfig(BaseModel):
++    """Bounded interchangeable endpoints for one pinned model capability."""
++
++    urls: list[str] = Field(min_length=1)
++    timeout_seconds: float = Field(default=120, gt=0, le=600)
++    connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
++    read_timeout_seconds: float = Field(default=120, gt=0, le=600)
++    write_timeout_seconds: float = Field(default=30, gt=0, le=600)
++    pool_timeout_seconds: float = Field(default=5, gt=0, le=120)
++    max_attempts: int = Field(default=3, ge=1, le=10)
++    max_concurrency: int = Field(default=2, ge=1, le=32)
++    batch_size: int = Field(default=32, ge=1, le=256)
++
++    @field_validator("urls")
++    @classmethod
++    def normalize_urls(cls, values: list[str]) -> list[str]:
++        normalized = [value.strip().rstrip("/") for value in values]
++        if any(not value for value in normalized):
++            raise ValueError("remote endpoint URLs must not be empty")
++        if len(set(normalized)) != len(normalized):
++            raise ValueError("remote endpoint URLs must be unique")
++        if any(
++            not value.startswith("https://")
++            and not value.startswith("http://127.0.0.1")
++            and not value.startswith("http://localhost")
++            for value in normalized
++        ):
++            raise ValueError("remote endpoints require HTTPS except localhost")
++        return normalized
++
++
++class RemoteInferencePoolsConfig(BaseModel):
++    """Optional offline capability pools; omitted means local model execution."""
++
++    preprocessing: RemoteEndpointPoolConfig | None = None
++    dino: RemoteEndpointPoolConfig | None = None
++    caption: RemoteEndpointPoolConfig | None = None
++    ocr: RemoteEndpointPoolConfig | None = None
++    visual_embedding: RemoteEndpointPoolConfig | None = None
++    text_embedding: RemoteEndpointPoolConfig | None = None
++    transcript: RemoteEndpointPoolConfig | None = None
++    transnet_model: PinnedModelConfig | None = None
++    efficientgebd_model: PinnedModelConfig | None = None
++
++    @property
++    def enabled(self) -> bool:
++        return any(value is not None for value in self.__dict__.values())
+ 
+ 
+ class S3CorpusPreparationConfig(BaseModel):
+@@ -154,6 +205,9 @@ class S3CorpusPreparationConfig(BaseModel):
+     execution: PreparationExecutionConfig = Field(
+         default_factory=PreparationExecutionConfig
+     )
++    remote_inference: RemoteInferencePoolsConfig = Field(
++        default_factory=RemoteInferencePoolsConfig
++    )
+ 
+     @field_validator("corpus_revision")
+     @classmethod
+@@ -214,6 +268,22 @@ class S3CorpusPreparationConfig(BaseModel):
+             raise ValueError(
+                 "preprocessing DINO model pin must match preparation.models.dino"
+             )
++        if self.remote_inference.preprocessing is not None and (
++            self.remote_inference.transnet_model is None
++            or self.remote_inference.efficientgebd_model is None
++        ):
++            raise ValueError(
++                "remote preprocessing requires transnet and efficientgebd model pins"
++            )
++        cache_root = preprocessing.s3.cache_root
++        if cache_root is not None:
++            resolved_cache = _resolved_absolute(cache_root, "s3.cache_root")
++            _reject_legacy_local(resolved_cache, "s3.cache_root")
++            if not _inside(resolved_cache, self.work_root):
++                raise ValueError("s3.cache_root must be inside work_root")
++            preprocessing.s3.cache_root = resolved_cache
++        if self.execution.overlap_frame_asr and cache_root is None:
++            raise ValueError("overlap_frame_asr requires a persistent source cache")
+         return self
+ 
+     @property
+diff --git a/src/hcmai/data/corpus_build/pipeline.py b/src/hcmai/data/corpus_build/pipeline.py
+index 8d56f13..ca7a669 100644
+--- a/src/hcmai/data/corpus_build/pipeline.py
++++ b/src/hcmai/data/corpus_build/pipeline.py
+@@ -12,6 +12,8 @@ from __future__ import annotations
+ import hashlib
+ import json
+ import logging
++import shutil
++from contextlib import contextmanager
+ from collections.abc import Sequence
+ from tqdm import tqdm
+ 
+@@ -88,6 +90,28 @@ class PreparationPaths:
+             asr_index_root=artifacts / "indexes/asr",
+         )
+ 
++    @classmethod
++    def for_group(
++        cls,
++        config: S3CorpusPreparationConfig,
++        group_id: str,
++    ) -> PreparationPaths:
++        root = config.work_root / "groups" / group_id
++        artifacts = root / "artifacts"
++        return cls(
++            artifacts_root=artifacts,
++            state_root=root / ".preparation",
++            frame_store_root=artifacts / "frame_store",
++            transcripts_root=artifacts / "transcripts",
++            asr_root=artifacts / "enrichment/asr",
++            caption_root=artifacts / "enrichment/caption",
++            ocr_root=artifacts / "enrichment/ocr",
++            visual_index_root=artifacts / "embeddings/visual",
++            caption_index_root=artifacts / "embeddings/caption",
++            ocr_index_root=artifacts / "embeddings/ocr",
++            asr_index_root=artifacts / "embeddings/asr",
++        )
++
+     @property
+     def frames_path(self) -> Path:
+         return self.frame_store_root / "frames.parquet"
+@@ -139,6 +163,20 @@ class PreparationRun:
+     publication: S3Publication | None = None
+ 
+ 
++@dataclass(frozen=True, slots=True)
++class PreparationCacheRun:
++    """Result of materializing an immutable S3 inventory into local cache."""
++
++    run_id: str
++    inventory_path: Path
++    cache_root: Path
++    source_count: int
++    downloaded_count: int
++    reused_count: int
++    total_bytes: int
++    duration_seconds: float
++
++
+ 
+ class PreparationOperations(Protocol):
+     """Existing stage services adapted to the shared S3 source lifecycle."""
+@@ -163,6 +201,12 @@ class PreparationOperations(Protocol):
+ 
+     def build_text_index(self, source: RetrievalSource) -> Path: ...
+ 
++    def build_visual_artifacts(self) -> tuple[Path, Path]: ...
++
++    def build_text_embeddings(
++        self, source: RetrievalSource
++    ) -> tuple[Path, Path]: ...
++
+ 
+ class DefaultPreparationOperations:
+     """Production adapter over the repository's current offline services."""
+@@ -177,6 +221,7 @@ class DefaultPreparationOperations:
+         enrichment_config: str | Path = "configs/enrichment.yaml",
+         model_config: str | Path = "llm/config.yaml",
+         retrieval_config: str | Path = "configs/baseline.yaml",
++        s3_client: Any | None = None,
+     ) -> None:
+         from hcmai.common.config import TranscriptJobConfig
+         from hcmai.data.enrichment.caption.config import CaptionJobConfig
+@@ -196,6 +241,7 @@ class DefaultPreparationOperations:
+         self.enrichment_config = Path(enrichment_config)
+         self.model_config_path = Path(model_config)
+         self.retrieval_config = Path(retrieval_config)
++        self.s3_client = s3_client
+         self.caption_job = CaptionJobConfig.from_yaml(self.enrichment_config)
+         self.transcript_job = TranscriptJobConfig.from_yaml(self.enrichment_config)
+         self.model_config = LLMServiceConfig.from_yaml(self.model_config_path)
+@@ -204,6 +250,20 @@ class DefaultPreparationOperations:
+         self._frames: FramePreparationSession | None = None
+         self._transcripts: Any | None = None
+         self._text_encoder: Any | None = None
++        self._remote_pools: dict[str, Any] = {}
++        self._audio_references: Any | None = None
++
++    def _remote_pool(self, capability: str) -> Any | None:
++        pool_config = getattr(self.config.remote_inference, capability)
++        if pool_config is None:
++            return None
++        if capability not in self._remote_pools:
++            from hcmai.llm.adapters.pool import InferenceClientPool
++
++            self._remote_pools[capability] = InferenceClientPool.from_config(
++                pool_config
++            )
++        return self._remote_pools[capability]
+ 
+     def _validate_model_pins(self) -> None:
+         """Kiểm tra tính nhất quán giữa các phiên bản mô hình (Model Pins)."""
+@@ -266,8 +326,47 @@ class DefaultPreparationOperations:
+             preprocessing = self.config.preprocessing.model_copy()
+             # Set output về thư mục FrameStore
+             preprocessing.output_root = self.paths.frame_store_root
++            shot_detector = event_detector = encoder = None
++            preprocessing_pool = self._remote_pool("preprocessing")
++            if preprocessing_pool is not None:
++                from hcmai.data.preprocessing.adapters.remote import (
++                    RemoteEfficientGEBDDetector,
++                    RemoteTransNetDetector,
++                )
++
++                transnet = self.config.remote_inference.transnet_model
++                gebd = self.config.remote_inference.efficientgebd_model
++                assert transnet is not None and gebd is not None
++                shot_detector = RemoteTransNetDetector(
++                    preprocessing_pool,
++                    model_name=transnet.model_name,
++                    revision=transnet.revision,
++                )
++                event_detector = RemoteEfficientGEBDDetector(
++                    preprocessing_pool,
++                    model_name=gebd.model_name,
++                    revision=gebd.revision,
++                    sample_fps=preprocessing.efficientgebd_sample_fps,
++                    resolution=preprocessing.efficientgebd_resolution,
++                    sequence_length=preprocessing.efficientgebd_sequence_length,
++                    overlap=preprocessing.efficientgebd_overlap,
++                )
++            dino_pool = self._remote_pool("dino")
++            if dino_pool is not None:
++                from hcmai.data.preprocessing.adapters.remote import RemoteDinoEncoder
++
++                pin = self.config.models.dino
++                encoder = RemoteDinoEncoder(
++                    dino_pool,
++                    model_name=pin.model_name,
++                    revision=pin.revision,
++                    dtype=preprocessing.dino_dtype,
++                )
+             self._frames = FramePreparationSession(
+                 preprocessing,
++                shot_detector=shot_detector,
++                event_detector=event_detector,
++                encoder=encoder,
+                 resume=self.resume,
+             )
+         return self._frames
+@@ -277,9 +376,40 @@ class DefaultPreparationOperations:
+         if self._transcripts is None:
+             from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
+ 
+-            self._transcripts = TranscriptService.from_job_config(
+-                self.transcript_job
+-            )
++            pool = self._remote_pool("transcript")
++            if pool is None:
++                self._transcripts = TranscriptService.from_job_config(
++                    self.transcript_job
++                )
++            else:
++                from hcmai.data.corpus_build.audio import S3AudioReferenceProvider
++                from hcmai.data.enrichment.transcripts.adapters.remote import (
++                    RemoteASRAdapter,
++                    RemoteDiarizationAdapter,
++                )
++
++                if self.s3_client is None:
++                    raise RuntimeError("remote transcripts require an S3 client")
++                run_id = getattr(self, "_current_run_id", "unbound")
++                self._audio_references = S3AudioReferenceProvider(
++                    self.s3_client,
++                    bucket=self.storage.bucket,
++                    prefix=f"{self.storage.artifacts_prefix}/runs/{run_id}",
++                    work_root=self.paths.state_root,
++                )
++                asr = RemoteASRAdapter(
++                    pool, self.transcript_job.asr, self._audio_references
++                )
++                diarization = (
++                    RemoteDiarizationAdapter(
++                        pool,
++                        self.transcript_job.diarization,
++                        self._audio_references,
++                    )
++                    if self.transcript_job.diarization.enabled
++                    else None
++                )
++                self._transcripts = TranscriptService(asr, diarization)
+         return self._transcripts
+ 
+     def prepare_frame(self, video: Path, source: S3VideoObject) -> Any:
+@@ -351,7 +481,15 @@ class DefaultPreparationOperations:
+             self.caption_job.caption,
+             dataset_version=self.config.corpus_revision,
+         )
+-        adapter = EnrichmentService.create_caption_adapter(caption)
++        pool = self._remote_pool("caption")
++        if pool is None:
++            adapter = EnrichmentService.create_caption_adapter(caption)
++        else:
++            from hcmai.data.enrichment.caption.adapters.remote import (
++                RemoteCaptionAdapter,
++            )
++
++            adapter = RemoteCaptionAdapter(pool, caption)
+         try:
+             EnrichmentService.generate_captions(
+                 self.paths.frames_path,
+@@ -376,7 +514,13 @@ class DefaultPreparationOperations:
+             device=self.config.preprocessing.device,
+             dataset_version=self.config.corpus_revision,
+         )
+-        adapter = EnrichmentService.create_ocr_adapter(ocr)
++        pool = self._remote_pool("ocr")
++        if pool is None:
++            adapter = EnrichmentService.create_ocr_adapter(ocr)
++        else:
++            from hcmai.data.enrichment.ocr.adapters.remote import RemoteOCRAdapter
++
++            adapter = RemoteOCRAdapter(pool, replace(ocr, backend="remote"))
+         try:
+             EnrichmentService.generate_ocr(
+                 self.paths.frames_path,
+@@ -397,12 +541,21 @@ class DefaultPreparationOperations:
+         from hcmai.retrieval.embedding.pipeline import EmbeddingService
+         from hcmai.retrieval.retriever.pipeline import RetrievalService
+ 
++        pool = self._remote_pool("visual_embedding")
++        encoder = (
++            EmbeddingService.create_remote_visual_adapter(
++                pool, self.model_config.visual_embedding
++            )
++            if pool is not None
++            else None
++        )
+         run = EmbeddingService.build_visual_artifacts(
+             self.paths.frames_path,
+             self.paths.frame_store_root,
+             self.paths.artifacts_root,
+             self.model_config.visual_embedding,
+             self.config.corpus_revision,
++            encoder=encoder,
+         )
+         if not run.generated_count:
+             raise RuntimeError("No visual embeddings were generated")
+@@ -415,13 +568,46 @@ class DefaultPreparationOperations:
+         index.save(self.paths.visual_index_root)
+         return self.paths.visual_index_root / RetrievalService.INDEX_FILENAME
+ 
++    def build_visual_artifacts(self) -> tuple[Path, Path]:
++        from hcmai.retrieval.embedding.pipeline import EmbeddingService
++
++        pool = self._remote_pool("visual_embedding")
++        encoder = (
++            EmbeddingService.create_remote_visual_adapter(
++                pool, self.model_config.visual_embedding
++            )
++            if pool is not None
++            else None
++        )
++        run = EmbeddingService.build_visual_artifacts(
++            self.paths.frames_path,
++            self.paths.frame_store_root,
++            self.paths.artifacts_root,
++            self.model_config.visual_embedding,
++            self.config.corpus_revision,
++            encoder=encoder,
++        )
++        if not run.generated_count:
++            raise RuntimeError("No visual embeddings were generated")
++        return run.embeddings_file, run.mapping_file
++
+     def build_text_index(self, source: RetrievalSource) -> Path:
+         from hcmai.retrieval.embedding.pipeline import EmbeddingService
+         from hcmai.retrieval.retriever.pipeline import RetrievalService
+ 
+         if self._text_encoder is None:
+-            self._text_encoder = EmbeddingService.create_text_adapter(
+-                self.model_config.caption_embedding
++            pool = self._remote_pool("text_embedding")
++            self._text_encoder = (
++                EmbeddingService.create_remote_adapter(
++                    pool,
++                    self.model_config.caption_embedding,
++                    embedding_dim=0,
++                    source="text",
++                )
++                if pool is not None
++                else EmbeddingService.create_text_adapter(
++                    self.model_config.caption_embedding
++                )
+             )
+         RetrievalService.build_text_artifacts(
+             self.retrieval_config,
+@@ -434,6 +620,41 @@ class DefaultPreparationOperations:
+         )
+         return self.paths.index_root(source) / RetrievalService.INDEX_FILENAME
+ 
++    def build_text_embeddings(
++        self, source: RetrievalSource
++    ) -> tuple[Path, Path]:
++        from hcmai.common.config import AppConfig
++        from hcmai.data.pipeline import DataService
++        from hcmai.retrieval.embedding.pipeline import EmbeddingService
++        from hcmai.retrieval.retriever.pipeline import RetrievalService
++
++        if self._text_encoder is None:
++            pool = self._remote_pool("text_embedding")
++            self._text_encoder = (
++                EmbeddingService.create_remote_adapter(
++                    pool,
++                    self.model_config.caption_embedding,
++                    embedding_dim=0,
++                    source="text",
++                )
++                if pool is not None
++                else EmbeddingService.create_text_adapter(
++                    self.model_config.caption_embedding
++                )
++            )
++        settings = AppConfig.from_yaml(self.retrieval_config)
++        data = DataService.load(
++            self.paths.frames_path,
++            {source: self.paths.enrichment_path(source)},
++        )
++        return RetrievalService.build_text_embedding_artifacts(
++            data,
++            self._text_encoder,
++            source,
++            self.paths.index_root(source),
++            embeddings_filename=settings.index.text_embedding_filenames[source],
++        )
++
+ 
+ class S3CorpusPreparationService:
+     """Coordinate an immutable S3 inventory through resumable offline stages."""
+@@ -449,13 +670,14 @@ class S3CorpusPreparationService:
+         enrichment_config: str | Path = "configs/enrichment.yaml",
+         model_config: str | Path = "llm/config.yaml",
+         retrieval_config: str | Path = "configs/baseline.yaml",
++        paths: PreparationPaths | None = None,
+     ) -> None:
+         storage = config.preprocessing.s3
+         if storage is None:
+             raise ValueError("S3 corpus preparation requires S3 storage")
+         self.config = config
+         self.storage = storage
+-        self.paths = PreparationPaths.from_config(config, limit)
++        self.paths = paths or PreparationPaths.from_config(config, limit)
+         self.paths.state_root.mkdir(parents=True, exist_ok=True)
+         self.client = client if client is not None else create_s3_client(storage)
+         self.resume = resume
+@@ -468,6 +690,7 @@ class S3CorpusPreparationService:
+             enrichment_config=enrichment_config,
+             model_config=model_config,
+             retrieval_config=retrieval_config,
++            s3_client=self.client,
+         )
+     def run(self) -> PreparationRun:
+         """Thực thi chuỗi Pipeline Preparation qua từng Stage.
+@@ -479,17 +702,29 @@ class S3CorpusPreparationService:
+         4. Chạy Preprocessing & ASR Extraction.
+         5. Lần lượt chạy các Enrichment (Caption, OCR, Indexing).
+         """
++        # =====================================================================
++        # 1. INVENTORY & RUN ID INITIALIZATION
++        # =====================================================================
++        # Kéo danh sách file từ S3 và tạo ID cho lần chạy này
+         sources, run_id, inventory = self._sources_and_inventory()
++        setattr(self.operations, "_current_run_id", run_id)
++        
++        # Danh sách theo dõi tiến độ các stage
+         completed: list[str] = []
+         skipped: list[str] = []
+ 
+-        # Kiểm tra xem có cần xử lý FrameStore hay ASR từ Video gốc không
++        # =====================================================================
++        # 2. STAGE 1: VIDEO PREPROCESSING & ASR EXTRACTION
++        # =====================================================================
++        # Kiểm tra trạng thái hoàn thành của FrameStore (lưu khung hình) 
++        # và ASR (trích xuất âm thanh gốc) từ file marker.json
+         frame_pending = self._pending(
+             "frame_store",
+             run_id,
+             self._stage_outputs("frame_store"),
+             skipped,
+         )
++        
+         asr_pending = self.config.stages.asr and self._pending(
+             "asr",
+             run_id,
+@@ -497,8 +732,14 @@ class S3CorpusPreparationService:
+             skipped,
+             record_skip=False,
+         )
++        
+         prepared: list[Any] = []
++        
++        # Nếu một trong hai công đoạn này chưa làm xong, cần duyệt video từ S3
+         if frame_pending or asr_pending:
++            logger.info("Starting Video Frame & ASR Preparation Stage...")
++            
++            # Xử lý tuần tự từng video
+             for i, source in enumerate(
+                 tqdm(sources, desc="Videos Processed", unit="video")
+             ):
+@@ -508,20 +749,33 @@ class S3CorpusPreparationService:
+                     len(sources),
+                     source.video_id,
+                 )
+-                with staged_video(self.client, self.storage, source) as video:
++                
++                # Quản lý vòng đời video: Tải tạm thời -> Decode -> Xoá file sau khi xong
++                with self._source_video(source) as video:
++                    
++                    # Bước trích xuất Frame, chấm điểm bằng TransNetV2 & GEBD, dedup bằng DINO
+                     if frame_pending:
+                         prepared.append(
+                             self.operations.prepare_frame(video, source)
+                         )
++                    
++                    # Bước lấy Audio track từ Video phục vụ cho ASR
+                     if asr_pending:
+                         self.operations.prepare_transcript(video)
++            
++            # Sau khi xử lý hết các Video, lưu lại kết quả Frame Store chung ra file Parquet
+             if frame_pending:
+                 self.operations.finalize_frames(prepared, sources)
+                 self._complete_stage("frame_store", run_id)
+                 completed.append("frame_store")
++                
+             logger.info("Completed Video Frame & ASR Preparation Stage.")
+ 
+-        # Các stage đơn giản (tuyến tính) chạy tiếp theo (Caption, OCR, Indexing)
++        # =====================================================================
++        # 3. STAGE 2: ENRICHMENT & INDEXING
++        # =====================================================================
++        # Định nghĩa các stage phía sau theo định dạng: 
++        # (Tên stage, Điều kiện kích hoạt trong config, Hàm callback để thực thi)
+         simple_stages = (
+             ("caption", self.config.stages.caption, self.operations.generate_caption),
+             ("ocr", self.config.stages.ocr, self.operations.generate_ocr),
+@@ -547,9 +801,15 @@ class S3CorpusPreparationService:
+                 lambda: self.operations.build_text_index(RetrievalSource.ASR),
+             ),
+         )
++        
++        # Chạy tuyến tính từng Enrichment Stage
+         for stage_name, condition, executor in simple_stages:
++            
++            # Nếu người dùng disable tính năng này trong config
+             if not condition:
+                 continue
++                
++            # Kiểm tra xem stage này đã có marker báo đã xong chưa
+             stage_pending = (
+                 asr_pending
+                 if stage_name == "asr"
+@@ -560,8 +820,12 @@ class S3CorpusPreparationService:
+                     skipped,
+                 )
+             )
++            
++            # Xử lý log "Skip" cho riêng ASR (để không in 2 lần do ASR gồm 2 bước: Audio Extract + Transcribe)
+             if stage_name == "asr" and not stage_pending:
+                 skipped.append("asr")
++                
++            # Bắt đầu chạy nếu nó chưa hoàn thành
+             if stage_pending:
+                 logger.info(f"Starting enrichment stage: {stage_name.upper()}")
+                 executor()
+@@ -581,6 +845,82 @@ class S3CorpusPreparationService:
+             publication=publication,
+         )
+ 
++    def cache_sources(self) -> PreparationCacheRun:
++        """Download and verify the source inventory without running any model."""
++
++        from time import perf_counter
++
++        started = perf_counter()
++        sources, run_id, inventory = self._sources_and_inventory()
++        cache_root = self.storage.cache_root
++        if cache_root is None:
++            raise ValueError("cache-only preparation requires s3.cache_root")
++        root = cache_root.expanduser().resolve()
++        root.mkdir(parents=True, exist_ok=True)
++        downloaded = reused = total = 0
++        for source in sources:
++            path = root / Path(source.key).name
++            if path.is_file() and path.stat().st_size == source.size:
++                reused += 1
++            else:
++                partial = path.with_suffix(f"{path.suffix}.partial")
++                partial.unlink(missing_ok=True)
++                try:
++                    self.client.download_file(
++                        self.storage.bucket, source.key, str(partial)
++                    )
++                    if partial.stat().st_size != source.size:
++                        raise OSError(f"cached source size mismatch: {source.key}")
++                    partial.replace(path)
++                finally:
++                    partial.unlink(missing_ok=True)
++                downloaded += 1
++            total += source.size
++        free_gib = shutil.disk_usage(root).free / (1024 ** 3)
++        if free_gib < self.config.execution.minimum_free_gib_after_cache:
++            raise OSError("source cache leaves less free disk than configured")
++        return PreparationCacheRun(
++            run_id=run_id,
++            inventory_path=inventory,
++            cache_root=root,
++            source_count=len(sources),
++            downloaded_count=downloaded,
++            reused_count=reused,
++            total_bytes=total,
++            duration_seconds=perf_counter() - started,
++        )
++
++    def _sources_and_inventory(
++        self,
++    ) -> tuple[list[S3VideoObject], str, Path]:
++        sources = list_video_objects(self.client, self.storage, limit=self.limit)
++        run_id, inventory = self._record_inventory(sources)
++        return sources, run_id, inventory
++
++    @contextmanager
++    def _source_video(self, source: S3VideoObject):
++        cache_root = self.storage.cache_root
++        if cache_root is not None:
++            root = cache_root.expanduser().resolve()
++            root.mkdir(parents=True, exist_ok=True)
++            path = root / Path(source.key).name
++            if not path.is_file() or path.stat().st_size != source.size:
++                partial = path.with_suffix(f"{path.suffix}.partial")
++                partial.unlink(missing_ok=True)
++                try:
++                    self.client.download_file(
++                        self.storage.bucket, source.key, str(partial)
++                    )
++                    if partial.stat().st_size != source.size:
++                        raise OSError(f"cached source size mismatch: {source.key}")
++                    partial.replace(path)
++                finally:
++                    partial.unlink(missing_ok=True)
++            yield path
++            return
++        with staged_video(self.client, self.storage, source) as video:
++            yield video
++
+     def _record_inventory(
+         self,
+         sources: Sequence[S3VideoObject],
+diff --git a/src/hcmai/data/corpus_build/publish.py b/src/hcmai/data/corpus_build/publish.py
+index 3fceff9..e1c82f9 100644
+--- a/src/hcmai/data/corpus_build/publish.py
++++ b/src/hcmai/data/corpus_build/publish.py
+@@ -136,3 +136,70 @@ def publish_run_artifacts(
+         file_count=len(files),
+         total_bytes=sum(item.size for item in files),
+     )
++
++
++def publish_group_artifacts(
++    client: Any,
++    paths: PreparationPaths,
++    config: S3CorpusPreparationConfig,
++    *,
++    group_id: str,
++    run_id: str,
++    source_manifest: dict[str, Any],
++) -> S3Publication:
++    """Commit one immutable group bundle without mutating a global latest pointer."""
++
++    storage = config.preprocessing.s3
++    if storage is None:
++        raise ValueError("group publication requires S3 storage")
++    files = inventory_artifacts(paths.artifacts_root.resolve())
++    inventory = [asdict(item) for item in files]
++    base = config.full_artifacts_prefix.rstrip("/")
++    version_prefix = f"{base}/groups/{group_id}/runs/{run_id}"
++    for item in files:
++        key = f"{version_prefix}/{item.path}"
++        client.upload_file(str(paths.artifacts_root / item.path), storage.bucket, key)
++        _verify_remote_size(client, storage.bucket, key, item.size)
++
++    manifest = _json_bytes({
++        "schema_version": "group-artifact-manifest-v1",
++        "corpus_revision": config.corpus_revision,
++        "group_id": group_id,
++        "run_id": run_id,
++        "source": source_manifest,
++        "files": inventory,
++        "file_count": len(files),
++        "total_bytes": sum(item.size for item in files),
++    })
++    manifest_key = f"{version_prefix}/manifest.json"
++    client.put_object(
++        Bucket=storage.bucket,
++        Key=manifest_key,
++        Body=manifest,
++        ContentType="application/json",
++    )
++    _verify_remote_size(client, storage.bucket, manifest_key, len(manifest))
++    manifest_sha256 = hashlib.sha256(manifest).hexdigest()
++    committed = _json_bytes({
++        "schema_version": "group-commit-v1",
++        "group_id": group_id,
++        "run_id": run_id,
++        "manifest_key": manifest_key,
++        "manifest_sha256": manifest_sha256,
++    })
++    commit_key = f"{version_prefix}/COMMITTED.json"
++    client.put_object(
++        Bucket=storage.bucket,
++        Key=commit_key,
++        Body=committed,
++        ContentType="application/json",
++    )
++    _verify_remote_size(client, storage.bucket, commit_key, len(committed))
++    return S3Publication(
++        bucket=storage.bucket,
++        version_prefix=version_prefix,
++        latest_key=commit_key,
++        bundle_id=run_id,
++        file_count=len(files),
++        total_bytes=sum(item.size for item in files),
++    )
+diff --git a/src/hcmai/data/enrichment/ocr/adapters/__init__.py b/src/hcmai/data/enrichment/ocr/adapters/__init__.py
+index 3cd149b..860ca79 100644
+--- a/src/hcmai/data/enrichment/ocr/adapters/__init__.py
++++ b/src/hcmai/data/enrichment/ocr/adapters/__init__.py
+@@ -2,4 +2,6 @@
+ 
+ Nơi chứa mã nguồn giao tiếp với các mô hình nhận diện chữ viết khác nhau."""
+ 
+-__all__: list[str] = []
++from .remote import RemoteOCRAdapter
++
++__all__ = ["RemoteOCRAdapter"]
+diff --git a/src/hcmai/data/enrichment/transcripts/adapters/__init__.py b/src/hcmai/data/enrichment/transcripts/adapters/__init__.py
+index 5328896..8b8976b 100644
+--- a/src/hcmai/data/enrichment/transcripts/adapters/__init__.py
++++ b/src/hcmai/data/enrichment/transcripts/adapters/__init__.py
+@@ -2,4 +2,6 @@
+ 
+ Chứa các lớp giao tiếp trực tiếp với các mô hình AI cụ thể (ASR, Diarization)."""
+ 
+-__all__: list[str] = []
++from .remote import RemoteASRAdapter, RemoteDiarizationAdapter
++
++__all__ = ["RemoteASRAdapter", "RemoteDiarizationAdapter"]
+diff --git a/src/hcmai/data/preprocessing/config.py b/src/hcmai/data/preprocessing/config.py
+index 614c2ba..1634d9e 100644
+--- a/src/hcmai/data/preprocessing/config.py
++++ b/src/hcmai/data/preprocessing/config.py
+@@ -40,6 +40,7 @@ class S3PreprocessingConfig(BaseModel):
+     region: str | None = None
+     endpoint_url: str | None = None
+     staging_root: Path | None = None
++    cache_root: Path | None = None
+     connect_timeout_seconds: float = Field(default=10.0, gt=0)
+     read_timeout_seconds: float = Field(default=300.0, gt=0)
+     max_attempts: int = Field(default=4, ge=1, le=10)
+@@ -73,11 +74,11 @@ class PreprocessingConfig(BaseModel):
+     videos_root: Path | None = None
+     s3: S3PreprocessingConfig | None = None
+     output_root: Path
+-    transnet_repo: Path
+-    transnet_weights: Path
+-    efficientgebd_repo: Path
+-    efficientgebd_config: Path
+-    efficientgebd_checkpoint: Path
++    transnet_repo: Path = Path("/models/TransNetV2")
++    transnet_weights: Path = Path("/models/TransNetV2/inference/transnetv2-weights")
++    efficientgebd_repo: Path = Path("/models/EfficientGEBD")
++    efficientgebd_config: Path = Path("/models/EfficientGEBD/model_config.yaml")
++    efficientgebd_checkpoint: Path = Path("/models/EfficientGEBD/model_best.pth")
+     device: str = "cuda"
+     dino_model: str = "facebook/dinov2-small"
+     dino_revision: str | None = None
+@@ -85,6 +86,9 @@ class PreprocessingConfig(BaseModel):
+     dino_batch_size: int = Field(default=64, gt=0)
+     max_video_workers: int = Field(default=3, ge=1)
+     efficientgebd_sample_fps: float = Field(default=10.0, gt=0)
++    efficientgebd_resolution: int = Field(default=224, gt=0)
++    efficientgebd_sequence_length: int = Field(default=100, gt=0)
++    efficientgebd_overlap: int = Field(default=20, ge=0)
+     motion_threshold: float = Field(default=0.012, ge=0)
+     shot_threshold: float = Field(default=0.5, ge=0, le=1)
+     event_threshold: float = Field(default=0.5, ge=0, le=1)
+@@ -99,6 +103,10 @@ class PreprocessingConfig(BaseModel):
+ 
+         if self.minimum_gap_ms > self.maximum_gap_ms:
+             raise ValueError("minimum_gap_ms must not exceed maximum_gap_ms")
++        if self.efficientgebd_overlap >= self.efficientgebd_sequence_length:
++            raise ValueError(
++                "efficientgebd_overlap must be shorter than sequence length"
++            )
+         if (self.videos_root is None) == (self.s3 is None):
+             raise ValueError("configure exactly one of videos_root or s3")
+         return self
+diff --git a/src/hcmai/llm/adapters/__init__.py b/src/hcmai/llm/adapters/__init__.py
+index eda2394..3da1612 100644
+--- a/src/hcmai/llm/adapters/__init__.py
++++ b/src/hcmai/llm/adapters/__init__.py
+@@ -2,5 +2,11 @@
+ 
+ from hcmai.llm.adapters.http import InferenceClient, InferenceClientError
+ from hcmai.llm.adapters.local import LocalAdapter
++from hcmai.llm.adapters.pool import InferenceClientPool
+ 
+-__all__ = ["InferenceClient", "InferenceClientError", "LocalAdapter"]
++__all__ = [
++    "InferenceClient",
++    "InferenceClientError",
++    "InferenceClientPool",
++    "LocalAdapter",
++]
+diff --git a/src/hcmai/llm/adapters/http.py b/src/hcmai/llm/adapters/http.py
+index 74d1ba9..fb7f32a 100644
+--- a/src/hcmai/llm/adapters/http.py
++++ b/src/hcmai/llm/adapters/http.py
+@@ -8,14 +8,21 @@ from time import monotonic, perf_counter
+ from typing import Any, Sequence
+ 
+ import httpx
++import numpy as np
+ from PIL import Image
+ 
+ from hcmai.common.config import InferenceConfig
+ from hcmai.common.schemas import (
++    AudioReferenceRequest,
++    BoundaryScoreResponse,
+     CaptionResponse,
++    DiarizationRequest,
++    EmbeddingResponse,
+     InferenceReadiness,
++    OCRResponse,
+     RerankResponse,
+     TextEmbeddingResponse,
++    TranscriptInferenceResponse,
+     VQAInferenceEvidence,
+     VQAInferenceResponse,
+ )
+@@ -77,6 +84,116 @@ class InferenceClient:
+             raise InferenceClientError("captioner changed item identity or order")
+         return response
+ 
++    def ocr(self, images: Sequence[Image.Image]) -> OCRResponse:
++        item_ids = [str(index) for index in range(len(images))]
++        payload = self._image_batch("/v1/enrichment/ocr", item_ids, images)
++        response = _validated(OCRResponse, payload)
++        if [item.item_id for item in response.items] != item_ids:
++            raise InferenceClientError("OCR provider changed item identity or order")
++        return response
++
++    def embed_images(
++        self,
++        images: Sequence[Image.Image],
++        *,
++        source: str = "visual",
++        item_ids: list[str] | None = None,
++    ) -> EmbeddingResponse:
++        identifiers = item_ids or [str(index) for index in range(len(images))]
++        if len(identifiers) != len(images):
++            raise ValueError("item_ids and images must be aligned")
++        endpoint = (
++            "/v1/embeddings/dino"
++            if source == "dino"
++            else "/v1/embeddings/images"
++        )
++        payload = self._image_batch(endpoint, identifiers, images)
++        response = _validated(EmbeddingResponse, payload)
++        if response.item_ids != identifiers:
++            raise InferenceClientError(
++                "image embedding provider changed item identity or order"
++            )
++        return response
++
++    def boundary_scores(
++        self,
++        frames: np.ndarray,
++        *,
++        request_id: str,
++        source: str,
++    ) -> BoundaryScoreResponse:
++        if source not in {"shot", "event"}:
++            raise ValueError("boundary source must be shot or event")
++        if frames.ndim != 4 or frames.shape[-1] != 3 or frames.shape[0] == 0:
++            raise ValueError("frames must have shape [T,H,W,3]")
++        if frames.dtype not in {np.dtype("uint8"), np.dtype("float32")}:
++            raise ValueError("frames must use uint8 or float32")
++        output = io.BytesIO()
++        np.save(output, np.ascontiguousarray(frames), allow_pickle=False)
++        endpoint = (
++            "/v1/preprocessing/shot-scores"
++            if source == "shot"
++            else "/v1/preprocessing/event-window-scores"
++        )
++        payload = self._post(
++            endpoint,
++            data={"request_id": request_id},
++            files=[("tensor", ("frames.npy", output.getvalue(), "application/x-npy"))],
++        )
++        response = _validated(BoundaryScoreResponse, payload)
++        if response.request_id != request_id:
++            raise InferenceClientError("boundary provider changed request identity")
++        if len(response.scores) != len(frames):
++            raise InferenceClientError("boundary provider returned wrong score count")
++        return response
++
++    def transcribe_audio_reference(
++        self, payload: AudioReferenceRequest
++    ) -> TranscriptInferenceResponse:
++        value = self._post(
++            "/v1/transcripts/asr",
++            json=payload.model_dump(mode="json"),
++        )
++        return self._validated_transcript(payload, value)
++
++    def diarize_audio_reference(
++        self, payload: DiarizationRequest
++    ) -> TranscriptInferenceResponse:
++        value = self._post(
++            "/v1/transcripts/diarization",
++            json=payload.model_dump(mode="json"),
++        )
++        return self._validated_transcript(payload, value)
++
++    @staticmethod
++    def _validated_transcript(
++        request: AudioReferenceRequest, payload: Any
++    ) -> TranscriptInferenceResponse:
++        response = _validated(TranscriptInferenceResponse, payload)
++        if response.request_id != request.request_id:
++            raise InferenceClientError("transcript provider changed request identity")
++        if response.video_id != request.video_id:
++            raise InferenceClientError("transcript provider changed video identity")
++        return response
++
++    def _image_batch(
++        self,
++        path: str,
++        item_ids: list[str],
++        images: Sequence[Image.Image],
++    ) -> Any:
++        if not item_ids or len(item_ids) != len(images):
++            raise ValueError("image batch must be non-empty and aligned")
++        files = [
++            ("images", (f"{item_id}.jpg", _jpeg(image), "image/jpeg"))
++            for item_id, image in zip(item_ids, images)
++        ]
++        return self._post(
++            path,
++            data={"item_ids": json.dumps(item_ids)},
++            files=files,
++        )
++
+     def rerank(self, query: str, images: Sequence[Image.Image]) -> list[float]:
+         item_ids = [str(index) for index in range(len(images))]
+         files = [
+diff --git a/src/hcmai/llm/adapters/local.py b/src/hcmai/llm/adapters/local.py
+index a098e28..db5df29 100644
+--- a/src/hcmai/llm/adapters/local.py
++++ b/src/hcmai/llm/adapters/local.py
+@@ -227,11 +227,13 @@ class LocalAdapter:
+                     enabled=self.enable_visual_embedding,
+                     loaded=visual_loaded,
+                     checkpoint=self.config.visual_embedding.model_name,
++                    revision=self.config.visual_embedding.revision,
+                 ),
+                 "caption_embedding": ModelStatus(
+                     enabled=self.enable_caption_embedding,
+                     loaded=caption_loaded,
+                     checkpoint=self.config.caption_embedding.model_name,
++                    revision=self.config.caption_embedding.revision,
+                 ),
+                 "reranker": ModelStatus(
+                     enabled=self.enable_reranker,
+@@ -261,6 +263,11 @@ class LocalAdapter:
+                         if self.ocr_adapter is not None
+                         else None
+                     ),
++                    revision=(
++                        self.ocr_adapter.config.revision
++                        if self.ocr_adapter is not None
++                        else None
++                    ),
+                 ),
+             },
+             capabilities=InferenceCapabilities(
+diff --git a/src/hcmai/llm/server/api.py b/src/hcmai/llm/server/api.py
+index 6f47e58..7d4169a 100644
+--- a/src/hcmai/llm/server/api.py
++++ b/src/hcmai/llm/server/api.py
+@@ -9,16 +9,24 @@ from time import perf_counter
+ from typing import AsyncIterator
+ 
+ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
++import numpy as np
+ from PIL import Image
+ 
+ from hcmai.common.schemas import (
++    AudioReferenceRequest,
++    BoundaryScoreResponse,
+     CaptionItem,
+     CaptionResponse,
++    DiarizationRequest,
++    EmbeddingResponse,
+     InferenceReadiness,
++    OCRItem,
++    OCRResponse,
+     RerankItem,
+     RerankResponse,
+     TextEmbeddingRequest,
+     TextEmbeddingResponse,
++    TranscriptInferenceResponse,
+     VQAInferenceEvidence,
+     VQAInferenceResponse,
+ )
+@@ -41,6 +49,12 @@ def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
+         methods=["POST"],
+         response_model=CaptionResponse,
+     )
++    app.add_api_route(
++        "/v1/enrichment/ocr",
++        ocr,
++        methods=["POST"],
++        response_model=OCRResponse,
++    )
+     app.add_api_route(
+         "/ready", ready, methods=["GET"], response_model=InferenceReadiness
+     )
+@@ -50,6 +64,49 @@ def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
+         methods=["POST"],
+         response_model=TextEmbeddingResponse,
+     )
++    app.add_api_route(
++        "/v1/embeddings/images",
++        embed_images,
++        methods=["POST"],
++        response_model=EmbeddingResponse,
++    )
++    app.add_api_route(
++        "/v1/embeddings/dino",
++        embed_dino,
++        methods=["POST"],
++        response_model=EmbeddingResponse,
++    )
++    app.add_api_route(
++        "/v1/preprocessing/shot-scores",
++        shot_scores,
++        methods=["POST"],
++        response_model=BoundaryScoreResponse,
++    )
++    app.add_api_route(
++        "/v1/preprocessing/event-scores",
++        event_scores,
++        methods=["POST"],
++        response_model=BoundaryScoreResponse,
++        include_in_schema=False,
++    )
++    app.add_api_route(
++        "/v1/preprocessing/event-window-scores",
++        event_scores,
++        methods=["POST"],
++        response_model=BoundaryScoreResponse,
++    )
++    app.add_api_route(
++        "/v1/transcripts/asr",
++        transcribe,
++        methods=["POST"],
++        response_model=TranscriptInferenceResponse,
++    )
++    app.add_api_route(
++        "/v1/transcripts/diarization",
++        diarize,
++        methods=["POST"],
++        response_model=TranscriptInferenceResponse,
++    )
+     app.add_api_route(
+         "/v1/rerank", rerank, methods=["POST"], response_model=RerankResponse
+     )
+@@ -100,13 +157,174 @@ async def embed(
+         raise _unavailable("Embedding inference failed", error) from error
+     return TextEmbeddingResponse(
+         model=embedding_config.model_name,
++        revision=embedding_config.revision,
++        dimension=int(vectors.shape[1]),
++        normalized=True,
++        embeddings=vectors.tolist(),
++        latency_ms=(perf_counter() - started) * 1_000,
++    )
++
++
++async def embed_images(
++    request: Request,
++    item_ids: str = Form(),
++    images: list[UploadFile] = File(),
++) -> EmbeddingResponse:
++    return await _embed_image_batch(request, item_ids, images, source="visual")
++
++
++async def embed_dino(
++    request: Request,
++    item_ids: str = Form(),
++    images: list[UploadFile] = File(),
++) -> EmbeddingResponse:
++    return await _embed_image_batch(request, item_ids, images, source="dino")
++
++
++async def _embed_image_batch(
++    request: Request,
++    item_ids: str,
++    images: list[UploadFile],
++    *,
++    source: str,
++) -> EmbeddingResponse:
++    identifiers, decoded = _decode_images(item_ids, images, maximum=64)
++    started = perf_counter()
++    runtime = request.app.state.runtime
++    try:
++        vectors = np.asarray(runtime.embed_images(decoded, source=source))
++        if vectors.ndim != 2 or vectors.shape[0] != len(identifiers):
++            raise ValueError("image encoder returned the wrong result shape")
++        if not np.all(np.isfinite(vectors)):
++            raise ValueError("image encoder returned non-finite vectors")
++        status = _model_status(runtime, "dino" if source == "dino" else "visual_embedding")
++    except Exception as error:
++        raise _unavailable("Image embedding inference failed", error) from error
++    finally:
++        for image in decoded:
++            image.close()
++    return EmbeddingResponse(
++        model=status.checkpoint or source,
++        revision=status.revision,
+         dimension=int(vectors.shape[1]),
+         normalized=True,
++        item_ids=identifiers,
+         embeddings=vectors.tolist(),
+         latency_ms=(perf_counter() - started) * 1_000,
+     )
+ 
+ 
++async def ocr(
++    request: Request,
++    item_ids: str = Form(),
++    images: list[UploadFile] = File(),
++) -> OCRResponse:
++    identifiers, decoded = _decode_images(item_ids, images, maximum=64)
++    started = perf_counter()
++    runtime = request.app.state.runtime
++    try:
++        values = runtime.ocr(decoded)
++        if len(values) != len(identifiers):
++            raise ValueError("OCR returned the wrong result count")
++        status = _model_status(runtime, "ocr")
++    except Exception as error:
++        raise _unavailable("OCR inference failed", error) from error
++    finally:
++        for image in decoded:
++            image.close()
++    return OCRResponse(
++        model=status.checkpoint or "ocr",
++        revision=status.revision,
++        items=[
++            OCRItem(item_id=item_id, text=str(value))
++            for item_id, value in zip(identifiers, values)
++        ],
++        latency_ms=(perf_counter() - started) * 1_000,
++    )
++
++
++async def shot_scores(
++    request: Request,
++    request_id: str = Form(min_length=1),
++    tensor: UploadFile = File(),
++) -> BoundaryScoreResponse:
++    return await _boundary_scores(request, request_id, tensor, source="shot")
++
++
++async def event_scores(
++    request: Request,
++    request_id: str = Form(min_length=1),
++    tensor: UploadFile = File(),
++) -> BoundaryScoreResponse:
++    return await _boundary_scores(request, request_id, tensor, source="event")
++
++
++async def _boundary_scores(
++    request: Request,
++    request_id: str,
++    tensor: UploadFile,
++    *,
++    source: str,
++) -> BoundaryScoreResponse:
++    frames = _decode_tensor(tensor)
++    started = perf_counter()
++    runtime = request.app.state.runtime
++    try:
++        values = np.asarray(runtime.boundary_scores(frames, source=source)).reshape(-1)
++        if len(values) != len(frames) or not np.all(np.isfinite(values)):
++            raise ValueError("boundary scorer returned invalid scores")
++        status = _model_status(runtime, "transnet" if source == "shot" else "efficientgebd")
++    except Exception as error:
++        raise _unavailable("Boundary inference failed", error) from error
++    return BoundaryScoreResponse(
++        request_id=request_id,
++        model=status.checkpoint or source,
++        revision=status.revision,
++        scores=values.astype(float).tolist(),
++        latency_ms=(perf_counter() - started) * 1_000,
++    )
++
++
++async def transcribe(
++    payload: AudioReferenceRequest, request: Request
++) -> TranscriptInferenceResponse:
++    started = perf_counter()
++    runtime = request.app.state.runtime
++    try:
++        segments = runtime.transcribe_reference(payload)
++        status = _model_status(runtime, "asr")
++    except Exception as error:
++        raise _unavailable("ASR inference failed", error) from error
++    return TranscriptInferenceResponse(
++        request_id=payload.request_id,
++        video_id=payload.video_id,
++        model=status.checkpoint or "asr",
++        revision=status.revision,
++        segments=segments,
++        latency_ms=(perf_counter() - started) * 1_000,
++    )
++
++
++async def diarize(
++    payload: DiarizationRequest, request: Request
++) -> TranscriptInferenceResponse:
++    started = perf_counter()
++    runtime = request.app.state.runtime
++    try:
++        segments = runtime.diarize_reference(payload)
++        status = _model_status(runtime, "diarization")
++    except Exception as error:
++        raise _unavailable("Diarization inference failed", error) from error
++    return TranscriptInferenceResponse(
++        request_id=payload.request_id,
++        video_id=payload.video_id,
++        model=status.checkpoint or "diarization",
++        revision=status.revision,
++        segments=segments,
++        latency_ms=(perf_counter() - started) * 1_000,
++    )
++
++
+ async def caption(
+     request: Request,
+     item_ids: str = Form(),
+@@ -279,6 +497,30 @@ def _decode_images(
+     return identifiers, decoded
+ 
+ 
++def _decode_tensor(upload: UploadFile) -> np.ndarray:
++    try:
++        payload = upload.file.read(64 * 1024 * 1024 + 1)
++        if len(payload) > 64 * 1024 * 1024:
++            raise ValueError("tensor exceeds 64 MiB")
++        value = np.load(io.BytesIO(payload), allow_pickle=False)
++        if value.ndim != 4 or value.shape[0] == 0 or value.shape[-1] != 3:
++            raise ValueError("tensor must have shape [T,H,W,3]")
++        if value.dtype not in {np.dtype("uint8"), np.dtype("float32")}:
++            raise ValueError("tensor must use uint8 or float32")
++        if value.dtype == np.float32 and not np.all(np.isfinite(value)):
++            raise ValueError("tensor contains non-finite values")
++        return np.ascontiguousarray(value)
++    except Exception as error:
++        raise HTTPException(status_code=400, detail="invalid frame tensor") from error
++
++
++def _model_status(runtime: object, name: str):
++    status = runtime.readiness().models.get(name)
++    if status is None or not status.loaded:
++        raise RuntimeError(f"{name} model is not ready")
++    return status
++
++
+ def _unavailable(prefix: str, error: Exception) -> HTTPException:
+     detail = (str(error).strip() or type(error).__name__)[:160]
+     return HTTPException(status_code=503, detail=f"{prefix}: {detail}")
+diff --git a/src/hcmai/retrieval/embedding/adapters/__init__.py b/src/hcmai/retrieval/embedding/adapters/__init__.py
+index ea3b8d8..66aef02 100644
+--- a/src/hcmai/retrieval/embedding/adapters/__init__.py
++++ b/src/hcmai/retrieval/embedding/adapters/__init__.py
+@@ -1,3 +1,6 @@
+ """Concrete embedding model adapters."""
+ 
+ __all__: list[str] = []
++from .remote import RemoteEmbeddingAdapter, RemoteImageEmbeddingAdapter
++
++__all__ = ["RemoteEmbeddingAdapter", "RemoteImageEmbeddingAdapter"]
+diff --git a/src/hcmai/retrieval/embedding/adapters/remote.py b/src/hcmai/retrieval/embedding/adapters/remote.py
+index 3d5857f..894f61b 100644
+--- a/src/hcmai/retrieval/embedding/adapters/remote.py
++++ b/src/hcmai/retrieval/embedding/adapters/remote.py
+@@ -3,12 +3,13 @@
+ from __future__ import annotations
+ 
+ from time import perf_counter
+-from typing import Protocol
++from typing import Protocol, Sequence
+ 
+ import numpy as np
++from PIL import Image
+ 
+ from hcmai.common.config import EncoderConfig
+-from hcmai.common.schemas import TextEmbeddingResponse
++from hcmai.common.schemas import EmbeddingResponse, TextEmbeddingResponse
+ from hcmai.retrieval.embedding.models.stats import EncodingStats
+ 
+ 
+@@ -18,6 +19,16 @@ class EmbeddingClient(Protocol):
+     ) -> TextEmbeddingResponse: ...
+ 
+ 
++class ImageEmbeddingClient(Protocol):
++    def embed_images(
++        self,
++        images: Sequence[Image.Image],
++        *,
++        source: str = "visual",
++        item_ids: list[str] | None = None,
++    ) -> EmbeddingResponse: ...
++
++
+ class RemoteEmbeddingAdapter:
+     """Use hosted text embeddings and validate their identity and shape."""
+ 
+@@ -58,6 +69,8 @@ class RemoteEmbeddingAdapter:
+     ) -> np.ndarray:
+         if response.model != self.config.model_name:
+             raise ValueError("remote embedding checkpoint mismatch")
++        if self.config.revision is not None and response.revision != self.config.revision:
++            raise ValueError("remote embedding revision mismatch")
+         if self.embedding_dim == 0:
+             self.embedding_dim = response.dimension
+         if response.dimension != self.embedding_dim or not response.normalized:
+@@ -67,4 +80,65 @@ class RemoteEmbeddingAdapter:
+             raise ValueError("remote embedding shape mismatch")
+         if not np.all(np.isfinite(vectors)):
+             raise ValueError("remote embedding contains non-finite values")
++        if not np.allclose(np.linalg.norm(vectors, axis=1), 1.0, atol=1e-4):
++            raise ValueError("remote embedding vectors are not L2-normalized")
++        return vectors
++
++
++class RemoteImageEmbeddingAdapter:
++    """Use hosted image embeddings without changing ordered frame identity."""
++
++    def __init__(
++        self,
++        client: ImageEmbeddingClient,
++        config: EncoderConfig,
++        embedding_dim: int = 0,
++    ) -> None:
++        self.client = client
++        self.config = config
++        self.embedding_dim = embedding_dim
++
++    def encode_images(
++        self,
++        images: list[Image.Image],
++        stats: EncodingStats | None = None,
++    ) -> np.ndarray:
++        if not images:
++            return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
++        started, batches = perf_counter(), []
++        size = min(self.config.batch_size, 64)
++        for start in range(0, len(images), size):
++            batch = images[start : start + size]
++            identifiers = [str(index) for index in range(start, start + len(batch))]
++            response = self.client.embed_images(
++                batch, source="visual", item_ids=identifiers
++            )
++            batches.append(self._validate(response, identifiers))
++        vectors = np.vstack(batches)
++        if stats is not None:
++            elapsed = (perf_counter() - started) * 1_000
++            stats.num_encoded += len(images)
++            stats.total_time_ms += elapsed
++            stats.batch_times_ms.append(elapsed)
++            stats.embedding_dim = self.embedding_dim
++        return vectors
++
++    def _validate(
++        self, response: EmbeddingResponse, identifiers: list[str]
++    ) -> np.ndarray:
++        if response.model != self.config.model_name:
++            raise ValueError("remote image embedding checkpoint mismatch")
++        if self.config.revision is not None and response.revision != self.config.revision:
++            raise ValueError("remote image embedding revision mismatch")
++        if response.item_ids != identifiers or not response.normalized:
++            raise ValueError("remote image embedding metadata mismatch")
++        if self.embedding_dim == 0:
++            self.embedding_dim = response.dimension
++        vectors = np.asarray(response.embeddings, dtype=self.config.dtype)
++        if vectors.shape != (len(identifiers), self.embedding_dim):
++            raise ValueError("remote image embedding shape mismatch")
++        if not np.all(np.isfinite(vectors)):
++            raise ValueError("remote image embedding contains non-finite values")
++        if not np.allclose(np.linalg.norm(vectors, axis=1), 1.0, atol=1e-4):
++            raise ValueError("remote image embedding vectors are not L2-normalized")
+         return vectors
+diff --git a/src/hcmai/retrieval/embedding/pipeline.py b/src/hcmai/retrieval/embedding/pipeline.py
+index 5ae047c..7bc1990 100644
+--- a/src/hcmai/retrieval/embedding/pipeline.py
++++ b/src/hcmai/retrieval/embedding/pipeline.py
+@@ -80,6 +80,23 @@ class EmbeddingService:
+             source,
+         )
+ 
++    @staticmethod
++    def create_remote_visual_adapter(
++        client: object,
++        config: EncoderConfig,
++        embedding_dim: int = 0,
++    ) -> ImageEmbeddingAdapter:
++        from hcmai.retrieval.embedding.adapters.remote import (
++            ImageEmbeddingClient,
++            RemoteImageEmbeddingAdapter,
++        )
++
++        return RemoteImageEmbeddingAdapter(
++            cast(ImageEmbeddingClient, client),
++            config,
++            embedding_dim,
++        )
++
+     def encode_visual_images(
+         self,
+         images: list[Image.Image],
+diff --git a/src/hcmai/retrieval/retriever/pipeline.py b/src/hcmai/retrieval/retriever/pipeline.py
+index e5e4b7b..947bd76 100644
+--- a/src/hcmai/retrieval/retriever/pipeline.py
++++ b/src/hcmai/retrieval/retriever/pipeline.py
+@@ -228,6 +228,27 @@ class RetrievalService:
+             encoder=encoder,
+         )
+ 
++    @staticmethod
++    def build_text_embedding_artifacts(
++        data: Any,
++        encoder: TextEmbeddingAdapter,
++        source: RetrievalSource,
++        output_dir: str | Path,
++        *,
++        embeddings_filename: str,
++    ) -> tuple[Path, Path]:
++        from hcmai.retrieval.retriever.text.retriever import (
++            build_text_embedding_artifacts,
++        )
++
++        return build_text_embedding_artifacts(
++            data,
++            encoder,
++            source,
++            output_dir,
++            embeddings_filename=embeddings_filename,
++        )
++
+ 
+ def _embedding_cache(
+     config: RetrievalCacheConfig | None,
+diff --git a/src/hcmai/retrieval/retriever/text/retriever.py b/src/hcmai/retrieval/retriever/text/retriever.py
+index 0dc7ae8..e9c68c3 100644
+--- a/src/hcmai/retrieval/retriever/text/retriever.py
++++ b/src/hcmai/retrieval/retriever/text/retriever.py
+@@ -179,6 +179,43 @@ def build_text_index(
+     return index
+ 
+ 
++def build_text_embedding_artifacts(
++    data: DataService,
++    encoder: TextEmbeddingAdapter,
++    source: RetrievalSource,
++    output_dir: str | Path,
++    *,
++    embeddings_filename: str,
++) -> tuple[Path, Path]:
++    """Persist deterministic frame-aligned text vectors without an index."""
++
++    if source not in _TEXT_SOURCES:
++        raise ValueError(f"Unsupported text evidence source {source.value!r}")
++    artifact_name = Path(embeddings_filename)
++    if artifact_name.name != embeddings_filename or artifact_name.suffix != ".npy":
++        raise ValueError("embeddings_filename must be a plain .npy filename")
++    texts, mapping = _text_corpus(data, source)
++    vectors = _normalized(_encode_texts(texts, encoder, source))
++    if len(vectors) != len(mapping):
++        raise ValueError("text embedding count does not match mapping rows")
++    output = Path(output_dir)
++    output.mkdir(parents=True, exist_ok=True)
++    vectors_path = output / artifact_name
++    mapping_path = output / "frame_mapping.parquet"
++    vectors_partial = vectors_path.with_suffix(f"{vectors_path.suffix}.partial")
++    mapping_partial = mapping_path.with_suffix(f"{mapping_path.suffix}.partial")
++    try:
++        with vectors_partial.open("wb") as handle:
++            np.save(handle, vectors)
++        mapping.to_parquet(mapping_partial, index=False)
++        vectors_partial.replace(vectors_path)
++        mapping_partial.replace(mapping_path)
++    finally:
++        vectors_partial.unlink(missing_ok=True)
++        mapping_partial.unlink(missing_ok=True)
++    return vectors_path, mapping_path
++
++
+ def build_caption_index(
+     data: DataService,
+     encoder: TextEmbeddingAdapter,
+diff --git a/tests/test_llm_api.py b/tests/test_llm_api.py
+index 0b2fe09..eacc091 100644
+--- a/tests/test_llm_api.py
++++ b/tests/test_llm_api.py
+@@ -12,8 +12,11 @@ from PIL import Image
+ 
+ from hcmai.common.config import EncoderConfig
+ from hcmai.common.schemas import (
++    AudioReferenceRequest,
++    DiarizationRequest,
+     InferenceReadiness,
+     ModelStatus,
++    TranscriptSegment,
+     VQAInferenceResponse,
+ )
+ from hcmai.llm.adapters.http import InferenceClient
+@@ -33,7 +36,30 @@ class FakeRuntime:
+ 
+     def readiness(self):
+         return InferenceReadiness(
+-            ready=True, models={"visual_embedding": ModelStatus(loaded=True)}
++            ready=True,
++            models={
++                "visual_embedding": ModelStatus(
++                    loaded=True, checkpoint="visual/model", revision="visual-sha"
++                ),
++                "dino": ModelStatus(
++                    loaded=True, checkpoint="dino/model", revision="dino-sha"
++                ),
++                "ocr": ModelStatus(
++                    loaded=True, checkpoint="ocr/model", revision="ocr-sha"
++                ),
++                "transnet": ModelStatus(
++                    loaded=True, checkpoint="transnet", revision="transnet-sha"
++                ),
++                "efficientgebd": ModelStatus(
++                    loaded=True, checkpoint="gebd", revision="gebd-sha"
++                ),
++                "asr": ModelStatus(
++                    loaded=True, checkpoint="asr/model", revision="asr-sha"
++                ),
++                "diarization": ModelStatus(
++                    loaded=True, checkpoint="diar/model", revision="diar-sha"
++                ),
++            },
+         )
+ 
+     def embed_text(self, texts, source="visual"):
+@@ -45,6 +71,20 @@ class FakeRuntime:
+     def ocr(self, images):
+         return [f"text {image.getpixel((0, 0))[0]}" for image in images]
+ 
++    def embed_images(self, images, source="visual"):
++        assert source in {"visual", "dino"}
++        return np.asarray([[0.0, 1.0]] * len(images), dtype=np.float32)
++
++    def boundary_scores(self, frames, source="shot"):
++        assert source in {"shot", "event"}
++        return np.linspace(0, 1, len(frames), dtype=np.float32)
++
++    def transcribe_reference(self, payload):
++        return [_segment(payload.video_id)]
++
++    def diarize_reference(self, payload):
++        return [segment.model_copy(update={"speaker_id": "SPEAKER_00"}) for segment in payload.segments]
++
+     def rerank(self, query, images):
+         assert query == "red car"
+         return [image.getpixel((0, 0))[0] / 255 for image in images]
+@@ -72,6 +112,24 @@ def _jpeg(red):
+     output = io.BytesIO()
+     Image.new("RGB", (2, 2), (red, 0, 0)).save(output, "JPEG")
+     return output.getvalue()
++
++
++def _segment(video_id="video-1"):
++    return TranscriptSegment(
++        segment_id=f"{video_id}_segment_000000",
++        video_id=video_id,
++        segment_index=0,
++        start_ms=0,
++        end_ms=1000,
++        text="xin chao",
++        language="vi",
++    )
++
++
++def _npy(value):
++    output = io.BytesIO()
++    np.save(output, value, allow_pickle=False)
++    return output.getvalue()
+ def request(app, method, path, **kwargs):
+     async def send():
+         transport = httpx.ASGITransport(app=app)
+@@ -281,6 +339,126 @@ def test_remote_captioner_validates_readiness_and_identity():
+     ]
+ 
+ 
++def test_offline_inference_endpoints_preserve_identity_and_provenance():
++    app = create_llm_app(cast(LLMService, FakeRuntime()))
++    files = [
++        ("images", ("a.jpg", _jpeg(10), "image/jpeg")),
++        ("images", ("b.jpg", _jpeg(200), "image/jpeg")),
++    ]
++
++    ocr = request(
++        app,
++        "POST",
++        "/v1/enrichment/ocr",
++        data={"item_ids": json.dumps(["a", "b"])},
++        files=files,
++    )
++    assert ocr.status_code == 200
++    assert [item["item_id"] for item in ocr.json()["items"]] == ["a", "b"]
++    assert ocr.json()["model"] == "ocr/model"
++
++    embedded = request(
++        app,
++        "POST",
++        "/v1/embeddings/dino",
++        data={"item_ids": json.dumps(["a", "b"])},
++        files=files,
++    )
++    assert embedded.status_code == 200
++    assert embedded.json()["item_ids"] == ["a", "b"]
++    assert embedded.json()["revision"] == "dino-sha"
++
++    frames = np.zeros((3, 27, 48, 3), dtype=np.uint8)
++    scored = request(
++        app,
++        "POST",
++        "/v1/preprocessing/shot-scores",
++        data={"request_id": "shot-1"},
++        files=[("tensor", ("frames.npy", _npy(frames), "application/x-npy"))],
++    )
++    assert scored.status_code == 200
++    assert scored.json()["request_id"] == "shot-1"
++    assert len(scored.json()["scores"]) == 3
++
++    audio = AudioReferenceRequest(
++        request_id="asr-1",
++        video_id="video-1",
++        audio_url="https://s3.test/audio.flac?signature=test",
++        audio_sha256="a" * 64,
++    )
++    transcript = request(
++        app, "POST", "/v1/transcripts/asr", json=audio.model_dump(mode="json")
++    )
++    assert transcript.status_code == 200
++    assert transcript.json()["segments"][0]["video_id"] == "video-1"
++
++    diarization = DiarizationRequest(
++        **audio.model_dump(), segments=[_segment()]
++    )
++    diarized = request(
++        app,
++        "POST",
++        "/v1/transcripts/diarization",
++        json=diarization.model_dump(mode="json"),
++    )
++    assert diarized.status_code == 200
++    assert diarized.json()["segments"][0]["speaker_id"] == "SPEAKER_00"
++
++
++def test_offline_inference_client_validates_returned_identity():
++    def handler(request):
++        if request.url.path == "/v1/embeddings/images":
++            return httpx.Response(200, json={
++                "model": "visual/model",
++                "revision": "visual-sha",
++                "dimension": 2,
++                "normalized": True,
++                "item_ids": ["frame-1"],
++                "embeddings": [[0.0, 1.0]],
++                "latency_ms": 1,
++            })
++        if request.url.path == "/v1/preprocessing/shot-scores":
++            return httpx.Response(200, json={
++                "request_id": "shot-1",
++                "model": "transnet",
++                "revision": "transnet-sha",
++                "scores": [0.1, 0.2],
++                "latency_ms": 1,
++            })
++        return httpx.Response(200, json={
++            "request_id": "asr-1",
++            "video_id": "video-1",
++            "model": "asr/model",
++            "revision": "asr-sha",
++            "segments": [_segment().model_dump(mode="json")],
++            "latency_ms": 1,
++        })
++
++    http = httpx.Client(
++        transport=httpx.MockTransport(handler), base_url="https://model.test"
++    )
++    client = InferenceClient("https://model.test", client=http)
++    embedded = client.embed_images(
++        [Image.new("RGB", (2, 2))], item_ids=["frame-1"]
++    )
++    assert embedded.item_ids == ["frame-1"]
++
++    scores = client.boundary_scores(
++        np.zeros((2, 27, 48, 3), dtype=np.uint8),
++        request_id="shot-1",
++        source="shot",
++    )
++    assert scores.scores == [0.1, 0.2]
++
++    transcript = client.transcribe_audio_reference(AudioReferenceRequest(
++        request_id="asr-1",
++        video_id="video-1",
++        audio_url="https://s3.test/audio.flac?signature=test",
++        audio_sha256="a" * 64,
++    ))
++    assert transcript.segments == [_segment()]
++
++
+ def test_runtime_does_not_construct_or_require_disabled_models():
+     runtime = LLMService(LocalAdapter(
+         LLMServiceConfig(),

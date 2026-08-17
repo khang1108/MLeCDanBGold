@@ -11,26 +11,45 @@ from hcmai.data.corpus_build.config import (
     PinnedModelConfig,
     PreparationExecutionConfig,
     PreparationModelPins,
+    RemoteEndpointPoolConfig,
+    RemoteInferencePoolsConfig,
     PreparationStagesConfig,
     S3CorpusPreparationConfig,
 )
 from hcmai.data.corpus_build.pipeline import (
     DefaultPreparationOperations,
     PreparationOperations,
+    PreparationCacheRun,
     PreparationPaths,
     PreparationRun,
     S3CorpusPreparationService,
 )
+from hcmai.data.corpus_build.group import (
+    GroupPreparationService,
+    GroupSourceInventory,
+    GroupSourceObject,
+    verify_local_group,
+)
+from hcmai.data.corpus_build.reducer import CommittedGroup, S3GroupIndexReducer
 
 __all__ = [
     "DefaultPreparationOperations",
+    "CommittedGroup",
+    "GroupPreparationService",
+    "GroupSourceInventory",
+    "GroupSourceObject",
     "PinnedModelConfig",
     "PreparationExecutionConfig",
     "PreparationModelPins",
+    "RemoteEndpointPoolConfig",
+    "RemoteInferencePoolsConfig",
     "PreparationOperations",
+    "PreparationCacheRun",
     "PreparationPaths",
     "PreparationRun",
     "PreparationStagesConfig",
     "S3CorpusPreparationConfig",
     "S3CorpusPreparationService",
+    "S3GroupIndexReducer",
+    "verify_local_group",
 ]

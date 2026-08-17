@@ -15,6 +15,7 @@ Các tính năng chính:
 
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,8 +27,6 @@ from hcmai.data.preprocessing.video import (
     add_dynamic_coverage,
     peak_indices,
 )
-import bisect
-import cv2
 
 BURST_RADIUS_MS = 500
 BURST_STEP_MS = 200
@@ -206,11 +205,16 @@ def select_candidates(
 
 
 def _text_region_changed(path1: Any, path2: Any) -> bool:
-    img1 = cv2.imread(str(path1), cv2.IMREAD_GRAYSCALE)
-    img2 = cv2.imread(str(path2), cv2.IMREAD_GRAYSCALE)
+    try:
+        import cv2 as _cv2  # type: ignore[import-not-found]
+    except ModuleNotFoundError:
+        # cv2 unavailable — conservatively treat as changed so the frame is kept
+        return True
+    img1 = _cv2.imread(str(path1), _cv2.IMREAD_GRAYSCALE)
+    img2 = _cv2.imread(str(path2), _cv2.IMREAD_GRAYSCALE)
     if img1 is None or img2 is None:
         return True
-    h, w = img1.shape
+    h, _ = img1.shape
     roi_top = int(h * 0.7)
     roi1 = img1[roi_top:, :]
     roi2 = img2[roi_top:, :]

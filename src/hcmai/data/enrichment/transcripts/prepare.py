@@ -20,6 +20,10 @@ from hcmai.common.schemas import TranscriptSegment
 from hcmai.common.utils.io import atomic_write, write_json
 from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, read_audio
 from hcmai.data.enrichment.transcripts.adapters.diarization import DiarizationAdapter
+from hcmai.data.enrichment.transcripts.adapters.remote import (
+    RemoteASRAdapter,
+    RemoteDiarizationAdapter,
+)
 from hcmai.data.enrichment.transcripts.manifest import (
     TranscriptManifest,
     expected_manifest,
@@ -139,8 +143,8 @@ def _write_validated_pair(
 
 
 def _prepare_video(
-    engine: ASRAdapter,
-    diarizer: DiarizationAdapter | None,
+    engine: ASRAdapter | RemoteASRAdapter,
+    diarizer: DiarizationAdapter | RemoteDiarizationAdapter | None,
     video: Path,
     output: Path,
     *,
@@ -181,16 +185,17 @@ def _prepare_video(
     try:
         started = perf_counter()
         decode_seconds = 0.0
-        decoded_api = callable(getattr(engine, "transcribe_audio", None)) and (
+        transcribe_audio_fn = getattr(engine, "transcribe_audio", None)
+        decoded_api = callable(transcribe_audio_fn) and (
             diarizer is None
             or callable(getattr(diarizer, "assign_speakers_audio", None))
         )
-        if decoded_api:
+        if decoded_api and callable(transcribe_audio_fn):
             decode_started = perf_counter()
             decoded = read_audio(video, engine.config.audio_sample_rate)
             decode_seconds = perf_counter() - decode_started
             asr_started = perf_counter()
-            records = engine.transcribe_audio(decoded, video.stem)
+            records = transcribe_audio_fn(decoded, video.stem)
         else:
             decoded = None
             asr_started = perf_counter()
@@ -239,9 +244,9 @@ def _prepare_video(
 def prepare_transcript_video(
     video_path: str | Path,
     output_root: str | Path,
-    engine: ASRAdapter,
+    engine: ASRAdapter | RemoteASRAdapter,
     *,
-    diarizer: DiarizationAdapter | None = None,
+    diarizer: DiarizationAdapter | RemoteDiarizationAdapter | None = None,
     resume: bool = True,
     schema_version: str = "transcript-segment-v1",
     pipeline_version: str = "transcript-pipeline-v1",
@@ -297,9 +302,9 @@ def _video_output(root: Path, video_id: str) -> Path:
 def prepare_transcripts(
     videos_root: str | Path,
     output_path: str | Path,
-    engine: ASRAdapter,
+    engine: ASRAdapter | RemoteASRAdapter,
     *,
-    diarizer: DiarizationAdapter | None = None,
+    diarizer: DiarizationAdapter | RemoteDiarizationAdapter | None = None,
     resume: bool = True,
     limit: int | None = None,
     schema_version: str = "transcript-segment-v1",

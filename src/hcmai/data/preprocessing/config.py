@@ -40,6 +40,7 @@ class S3PreprocessingConfig(BaseModel):
     region: str | None = None
     endpoint_url: str | None = None
     staging_root: Path | None = None
+    cache_root: Path | None = None
     connect_timeout_seconds: float = Field(default=10.0, gt=0)
     read_timeout_seconds: float = Field(default=300.0, gt=0)
     max_attempts: int = Field(default=4, ge=1, le=10)
@@ -73,11 +74,11 @@ class PreprocessingConfig(BaseModel):
     videos_root: Path | None = None
     s3: S3PreprocessingConfig | None = None
     output_root: Path
-    transnet_repo: Path
-    transnet_weights: Path
-    efficientgebd_repo: Path
-    efficientgebd_config: Path
-    efficientgebd_checkpoint: Path
+    transnet_repo: Path = Path("/models/TransNetV2")
+    transnet_weights: Path = Path("/models/TransNetV2/inference/transnetv2-weights")
+    efficientgebd_repo: Path = Path("/models/EfficientGEBD")
+    efficientgebd_config: Path = Path("/models/EfficientGEBD/model_config.yaml")
+    efficientgebd_checkpoint: Path = Path("/models/EfficientGEBD/model_best.pth")
     device: str = "cuda"
     dino_model: str = "facebook/dinov2-small"
     dino_revision: str | None = None
@@ -85,6 +86,9 @@ class PreprocessingConfig(BaseModel):
     dino_batch_size: int = Field(default=64, gt=0)
     max_video_workers: int = Field(default=3, ge=1)
     efficientgebd_sample_fps: float = Field(default=10.0, gt=0)
+    efficientgebd_resolution: int = Field(default=224, gt=0)
+    efficientgebd_sequence_length: int = Field(default=100, gt=0)
+    efficientgebd_overlap: int = Field(default=20, ge=0)
     motion_threshold: float = Field(default=0.012, ge=0)
     shot_threshold: float = Field(default=0.5, ge=0, le=1)
     event_threshold: float = Field(default=0.5, ge=0, le=1)
@@ -99,6 +103,10 @@ class PreprocessingConfig(BaseModel):
 
         if self.minimum_gap_ms > self.maximum_gap_ms:
             raise ValueError("minimum_gap_ms must not exceed maximum_gap_ms")
+        if self.efficientgebd_overlap >= self.efficientgebd_sequence_length:
+            raise ValueError(
+                "efficientgebd_overlap must be shorter than sequence length"
+            )
         if (self.videos_root is None) == (self.s3 is None):
             raise ValueError("configure exactly one of videos_root or s3")
         return self

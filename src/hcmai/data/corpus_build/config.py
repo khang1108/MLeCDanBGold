@@ -138,7 +138,63 @@ class PreparationModelPins(BaseModel):
 class PreparationExecutionConfig(BaseModel):
     """Resource policy for one offline preparation run."""
 
-    pass
+    overlap_frame_asr: bool = False
+    minimum_free_gib_after_cache: float = Field(default=10.0, ge=0)
+    cache_download_workers: int = Field(default=4, ge=1, le=32)
+
+
+class RemoteEndpointPoolConfig(BaseModel):
+    """Cấu hình Pool kết nối cho một nhóm các worker remote trên Kaggle.
+    Quản lý danh sách URLs endpoint, timeout, retry và giới hạn kết nối đồng thời.
+    Giúp phân tán tải (load balancing) cho các tính năng nặng về GPU.
+    """
+
+    urls: list[str] = Field(min_length=1)
+    timeout_seconds: float = Field(default=120, gt=0, le=600)
+    connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
+    read_timeout_seconds: float = Field(default=120, gt=0, le=600)
+    write_timeout_seconds: float = Field(default=30, gt=0, le=600)
+    pool_timeout_seconds: float = Field(default=5, gt=0, le=120)
+    max_attempts: int = Field(default=3, ge=1, le=10)
+    max_concurrency: int = Field(default=2, ge=1, le=32)
+    batch_size: int = Field(default=32, ge=1, le=256)
+
+    @field_validator("urls")
+    @classmethod
+    def normalize_urls(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip().rstrip("/") for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("remote endpoint URLs must not be empty")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("remote endpoint URLs must be unique")
+        if any(
+            not value.startswith("https://")
+            and not value.startswith("http://127.0.0.1")
+            and not value.startswith("http://localhost")
+            for value in normalized
+        ):
+            raise ValueError("remote endpoints require HTTPS except localhost")
+        return normalized
+
+
+class RemoteInferencePoolsConfig(BaseModel):
+    """Khai báo toàn bộ các remote workers phục vụ cho Data Pipeline.
+    Nếu trường nào bị bỏ trống (None), pipeline sẽ chạy mô hình đó tại máy local.
+    """
+
+    preprocessing: RemoteEndpointPoolConfig | None = None
+    dino: RemoteEndpointPoolConfig | None = None
+    caption: RemoteEndpointPoolConfig | None = None
+    ocr: RemoteEndpointPoolConfig | None = None
+    visual_embedding: RemoteEndpointPoolConfig | None = None
+    text_embedding: RemoteEndpointPoolConfig | None = None
+    transcript: RemoteEndpointPoolConfig | None = None
+    transnet_model: PinnedModelConfig | None = None
+    efficientgebd_model: PinnedModelConfig | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return any(value is not None for value in self.__dict__.values())
 
 
 class S3CorpusPreparationConfig(BaseModel):
@@ -153,6 +209,9 @@ class S3CorpusPreparationConfig(BaseModel):
     preprocessing: PreprocessingConfig
     execution: PreparationExecutionConfig = Field(
         default_factory=PreparationExecutionConfig
+    )
+    remote_inference: RemoteInferencePoolsConfig = Field(
+        default_factory=RemoteInferencePoolsConfig
     )
 
     @field_validator("corpus_revision")
@@ -214,6 +273,22 @@ class S3CorpusPreparationConfig(BaseModel):
             raise ValueError(
                 "preprocessing DINO model pin must match preparation.models.dino"
             )
+        if self.remote_inference.preprocessing is not None and (
+            self.remote_inference.transnet_model is None
+            or self.remote_inference.efficientgebd_model is None
+        ):
+            raise ValueError(
+                "remote preprocessing requires transnet and efficientgebd model pins"
+            )
+        cache_root = preprocessing.s3.cache_root
+        if cache_root is not None:
+            resolved_cache = _resolved_absolute(cache_root, "s3.cache_root")
+            _reject_legacy_local(resolved_cache, "s3.cache_root")
+            if not _inside(resolved_cache, self.work_root):
+                raise ValueError("s3.cache_root must be inside work_root")
+            preprocessing.s3.cache_root = resolved_cache
+        if self.execution.overlap_frame_asr and cache_root is None:
+            raise ValueError("overlap_frame_asr requires a persistent source cache")
         return self
 
     @property
