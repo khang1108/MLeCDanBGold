@@ -19,6 +19,8 @@ from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.pipeline import EnrichmentService
+from hcmai.data.corpus_build.config import S3CorpusPreparationConfig
+from hcmai.common.config import TranscriptJobConfig
 from hcmai.llm.adapters.vqa import GroundedVQAModel
 from hcmai.llm.pipeline import LLMServiceConfig
 from hcmai.retrieval.reranking.pipeline import QwenRerankerConfig, RerankingService
@@ -45,14 +47,35 @@ class LocalAdapter:
         enable_reranker: bool = True,
         enable_vqa: bool = True,
         enable_ocr: bool = False,
+        enable_asr: bool = False,
+        enable_diarization: bool = False,
+        enable_transnet: bool = False,
+        enable_gebd: bool = False,
+        enable_dino: bool = False,
+        preparation_config: S3CorpusPreparationConfig | None = None,
+        transcript_config: TranscriptJobConfig | None = None,
     ) -> None:
         self.config = config
+        self.preparation_config = preparation_config
+        self.transcript_config = transcript_config
         self.enable_caption = enable_caption
         self.enable_visual_embedding = enable_visual_embedding
         self.enable_caption_embedding = enable_caption_embedding
         self.enable_reranker = enable_reranker
         self.enable_vqa = enable_vqa
         self.enable_ocr = enable_ocr
+        self.enable_asr = enable_asr
+        self.enable_diarization = enable_diarization
+        self.enable_transnet = enable_transnet
+        self.enable_gebd = enable_gebd
+        self.enable_dino = enable_dino
+
+        self.transnet = None
+        self.gebd = None
+        self.dino = None
+        self.asr = None
+        self.diarization = None
+
         self.visual_encoder = visual_encoder or (
             cast(Any, EmbeddingService.create_text_adapter(config.visual_embedding))
             if enable_visual_embedding
@@ -95,6 +118,13 @@ class LocalAdapter:
     def from_environment(cls) -> LocalAdapter:
         path = Path(os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml"))
         config = LLMServiceConfig.from_yaml(path)
+        
+        prep_path = Path(os.getenv("HCMAI_PREPARATION_CONFIG", "configs/preparation.s3.yaml"))
+        preparation_config = S3CorpusPreparationConfig.from_yaml(prep_path) if prep_path.exists() else None
+        
+        enrichment_path = Path(os.getenv("HCMAI_ENRICHMENT_CONFIG", "configs/enrichment.yaml"))
+        transcript_config = TranscriptJobConfig.from_yaml(enrichment_path) if enrichment_path.exists() else None
+
         checkpoint = os.getenv("HCMAI_VQA_MODEL")
         if checkpoint:
             vqa_model = config.vqa_model.model_copy(
@@ -113,6 +143,13 @@ class LocalAdapter:
             enable_reranker=_env_bool("HCMAI_ENABLE_RERANKER"),
             enable_vqa=_env_bool("HCMAI_ENABLE_VQA"),
             enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
+            enable_asr=_env_bool("HCMAI_ENABLE_ASR", default=False),
+            enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", default=False),
+            enable_transnet=_env_bool("HCMAI_ENABLE_TRANSNET", default=False),
+            enable_gebd=_env_bool("HCMAI_ENABLE_GEBD", default=False),
+            enable_dino=_env_bool("HCMAI_ENABLE_DINO", default=False),
+            preparation_config=preparation_config,
+            transcript_config=transcript_config,
         )
 
     def load(self) -> None:
@@ -135,6 +172,35 @@ class LocalAdapter:
             self.vqa_model.load()
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
+
+        if self.enable_transnet and self.preparation_config:
+            from hcmai.data.preprocessing.models import TransNetDetector
+            self.transnet = TransNetDetector(self.preparation_config.preprocessing)
+            self.transnet._load()
+
+        if self.enable_gebd and self.preparation_config:
+            from hcmai.data.preprocessing.models import EfficientGEBDDetector
+            self.gebd = EfficientGEBDDetector(self.preparation_config.preprocessing)
+            self.gebd._load()
+
+        if self.enable_dino and self.preparation_config:
+            from hcmai.data.preprocessing.selection import DinoEncoder
+            self.dino = DinoEncoder(self.preparation_config.preprocessing)
+            probe = Image.new("RGB", (self.preparation_config.preprocessing.efficientgebd_resolution,) * 2)
+            try:
+                self.dino.encode([probe])
+            finally:
+                probe.close()
+
+        if self.enable_asr and self.transcript_config:
+            from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
+            self.asr = ASRAdapter(self.transcript_config.asr)
+            self.asr._load_asr()
+
+        if self.enable_diarization and self.transcript_config:
+            from hcmai.data.enrichment.transcripts.adapters.diarization import DiarizationAdapter
+            self.diarization = DiarizationAdapter(self.transcript_config.diarization)
+            self.diarization._load_pipeline()
 
 
     def embed_text(self, texts: list[str], source: str = "visual") -> np.ndarray:
@@ -210,6 +276,12 @@ class LocalAdapter:
         ocr_loaded = (
             self.ocr_adapter is not None and self.ocr_adapter.model is not None
         )
+        transnet_loaded = self.transnet is not None
+        gebd_loaded = self.gebd is not None
+        dino_loaded = self.dino is not None
+        asr_loaded = self.asr is not None
+        diarization_loaded = self.diarization is not None
+        
         return InferenceReadiness(
             ready=(not self.enable_caption or generator_loaded)
             and (not self.enable_visual_embedding or visual_loaded)
@@ -274,6 +346,35 @@ class LocalAdapter:
                         else None
                     ),
                 ),
+                "transnet": ModelStatus(
+                    enabled=self.enable_transnet,
+                    loaded=transnet_loaded,
+                    checkpoint=self.preparation_config.remote_inference.transnet_model.model_name if self.preparation_config and self.preparation_config.remote_inference.transnet_model else None,
+                    revision=self.preparation_config.remote_inference.transnet_model.revision if self.preparation_config and self.preparation_config.remote_inference.transnet_model else None,
+                ),
+                "efficientgebd": ModelStatus(
+                    enabled=self.enable_gebd,
+                    loaded=gebd_loaded,
+                    checkpoint=self.preparation_config.remote_inference.efficientgebd_model.model_name if self.preparation_config and self.preparation_config.remote_inference.efficientgebd_model else None,
+                    revision=self.preparation_config.remote_inference.efficientgebd_model.revision if self.preparation_config and self.preparation_config.remote_inference.efficientgebd_model else None,
+                ),
+                "dino": ModelStatus(
+                    enabled=self.enable_dino,
+                    loaded=dino_loaded,
+                    checkpoint=self.preparation_config.preprocessing.dino_model if self.preparation_config else None,
+                ),
+                "asr": ModelStatus(
+                    enabled=self.enable_asr,
+                    loaded=asr_loaded,
+                    checkpoint=self.transcript_config.asr.model_name if self.transcript_config else None,
+                    revision=self.transcript_config.asr.revision if self.transcript_config else None,
+                ),
+                "diarization": ModelStatus(
+                    enabled=self.enable_diarization,
+                    loaded=diarization_loaded,
+                    checkpoint=self.transcript_config.diarization.model_name if self.transcript_config else None,
+                    revision=self.transcript_config.diarization.revision if self.transcript_config else None,
+                ),
             },
             capabilities=InferenceCapabilities(
                 embedding=visual_loaded or caption_loaded,
@@ -283,8 +384,70 @@ class LocalAdapter:
                     and bool(getattr(self.vqa_model, "supports_multi_image", False))
                 ),
                 structured_parsing=False,
+                shot_detection=transnet_loaded,
+                event_detection=gebd_loaded,
+                dino_embedding=dino_loaded,
+                image_embedding=visual_loaded,
+                caption=generator_loaded,
+                ocr=ocr_loaded,
+                asr=asr_loaded,
+                diarization=diarization_loaded,
             ),
         )
+
+    def boundary_scores(self, frames: np.ndarray, *, source: str) -> np.ndarray:
+        if source == "shot":
+            if self.transnet is None:
+                raise RuntimeError("TransNet capability is disabled")
+            return self.transnet.score(Path("remote-tensor"), frames)
+        if self.gebd is None:
+            raise RuntimeError("GEBD capability is disabled")
+        import torch
+        from hcmai.data.preprocessing.models import IMAGE_MEAN, IMAGE_STD
+
+        tensor = torch.from_numpy(frames.copy()).permute(0, 3, 1, 2).float() / 255
+        mean = torch.tensor(IMAGE_MEAN)[None, :, None, None]
+        std = torch.tensor(IMAGE_STD)[None, :, None, None]
+        return self.gebd._predict(list((tensor - mean) / std), len(frames))
+
+    def transcribe_reference(self, payload: Any):
+        import tempfile
+        if self.asr is None:
+            raise RuntimeError("ASR capability is disabled")
+        with tempfile.TemporaryDirectory(prefix="hcmai-audio-") as directory:
+            path = Path(directory) / f"{payload.video_id}.flac"
+            _download_audio(payload, path)
+            return self.asr.transcribe(path, payload.video_id)
+
+    def diarize_reference(self, payload: Any):
+        import tempfile
+        if self.diarization is None:
+            raise RuntimeError("diarization capability is disabled")
+        with tempfile.TemporaryDirectory(prefix="hcmai-audio-") as directory:
+            path = Path(directory) / f"{payload.video_id}.flac"
+            _download_audio(payload, path)
+            return self.diarization.assign_speakers(path, payload.segments)
+
+
+def _download_audio(payload: Any, target: Path) -> None:
+    import hashlib
+    import httpx
+    maximum = int(os.getenv("HCMAI_MAX_AUDIO_BYTES", str(1024 * 1024 * 1024)))
+    digest = hashlib.sha256()
+
+    total = 0
+    with httpx.stream("GET", payload.audio_url, timeout=300, follow_redirects=False) as response:
+        response.raise_for_status()
+        with target.open("wb") as handle:
+            for chunk in response.iter_bytes(1024 * 1024):
+                total += len(chunk)
+                if total > maximum:
+                    raise ValueError("remote audio exceeds configured byte limit")
+                digest.update(chunk)
+                handle.write(chunk)
+    
+    if digest.hexdigest() != payload.audio_sha256:
+        raise ValueError("remote audio checksum mismatch")
 
 
 def _env_bool(name: str, default: bool = True) -> bool:
