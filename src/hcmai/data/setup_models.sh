@@ -309,7 +309,7 @@ if [[ "${FORCE_DOWNLOAD}" == "1" || ! -f "${HCMAI_CHECKPOINT}" ]]; then
         cp "output.zip" "${OUTPUT_ZIP}"
     else
         info "Downloading pretrained output.zip from HuggingFace mirror..."
-        wget -q --show-progress -O "${OUTPUT_ZIP}" "https://huggingface.co/zrchen03/efficient-gebd-kinetics-output/resolve/main/output.zip"
+        wget -q -O "${OUTPUT_ZIP}" "https://huggingface.co/zrchen03/efficient-gebd-kinetics-output/resolve/main/output.zip"
     fi
 
     [[ -s "${OUTPUT_ZIP}" ]] \
