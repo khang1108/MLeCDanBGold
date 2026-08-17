@@ -65,17 +65,29 @@ class PreparationPaths:
         cls,
         config: S3CorpusPreparationConfig,
         limit: int | None,
+        offset: int | None = None,
     ) -> PreparationPaths:
         if limit is not None and limit <= 0:
             raise ValueError("limit must be greater than zero")
-        if limit is None:
+        if offset is not None and offset < 0:
+            raise ValueError("offset must be non-negative")
+            
+        suffix_parts = []
+        if limit is not None:
+            suffix_parts.append(f"limit-{limit}")
+        if offset is not None:
+            suffix_parts.append(f"offset-{offset}")
+
+        if not suffix_parts:
             artifacts = config.artifacts_root
             frame_store = artifacts / "frame_store"
             state = config.work_root / ".preparation"
         else:
-            artifacts = config.work_root / f"artifacts.limit-{limit}"
+            suffix = "-".join(suffix_parts)
+            artifacts = config.work_root / f"artifacts.{suffix}"
             frame_store = artifacts / "frame_store"
-            state = config.work_root / ".preparation" / f"limit-{limit}"
+            state = config.work_root / ".preparation" / suffix
+
         return cls(
             artifacts_root=artifacts,
             state_root=state,
@@ -685,7 +697,7 @@ class S3CorpusPreparationService:
             raise ValueError("S3 corpus preparation requires S3 storage")
         self.config = config
         self.storage = storage
-        self.paths = paths or PreparationPaths.from_config(config, limit)
+        self.paths = paths or PreparationPaths.from_config(config, limit, offset)
         self.paths.state_root.mkdir(parents=True, exist_ok=True)
         self.client = client if client is not None else create_s3_client(storage)
         self.resume = resume
