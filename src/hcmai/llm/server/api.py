@@ -535,4 +535,17 @@ def _unavailable(prefix: str, error: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail=f"{prefix}: {detail}")
 
 
-app = create_llm_app()
+# Lazy default app — only constructed when this attribute is accessed
+# (e.g. `uvicorn hcmai.llm.server.api:app`), NOT at import time.
+# Importing only `create_llm_app` from this module will NOT trigger LLMService
+# construction, avoiding the BGE → sentence_transformers → torchcodec chain
+# on environments where those libraries are unavailable.
+def __getattr__(name: str):
+    if name == "app":
+        import sys as _sys
+        _mod = _sys.modules[__name__]
+        _app = create_llm_app()
+        # Cache so subsequent accesses return the same object
+        setattr(_mod, "app", _app)
+        return _app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
