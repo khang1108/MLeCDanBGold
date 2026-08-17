@@ -36,7 +36,10 @@ _TEXT_RETRIEVERS = {
 
 
 class RetrievalService:
-    """Own visual/text retrievers, fusion, and offline index operations."""
+    """Quản lý các module tìm kiếm (retriever) cho hình ảnh và văn bản.
+    Hỗ trợ cấu hình tìm kiếm đơn luồng (một retriever) hoặc đa luồng (Fusion Retriever)
+    với cơ chế cache (embedding cache) để tăng tốc độ truy vấn.
+    """
 
     INDEX_FILENAME = INDEX_FILENAME
 
@@ -226,6 +229,30 @@ class RetrievalService:
             frames_path=frames_path,
             output_dir=output_dir,
             encoder=encoder,
+        )
+
+    @staticmethod
+    def build_text_embedding_artifacts(
+        data: Any,
+        encoder: TextEmbeddingAdapter,
+        source: RetrievalSource,
+        output_dir: str | Path,
+        *,
+        embeddings_filename: str,
+    ) -> tuple[Path, Path]:
+        """Tiện ích giúp sinh vector nhúng (embedding) và file mapping
+        cho dữ liệu văn bản (như OCR, Caption, ASR) thông qua encoder.
+        """
+        from hcmai.retrieval.retriever.text.retriever import (
+            build_text_embedding_artifacts,
+        )
+
+        return build_text_embedding_artifacts(
+            data,
+            encoder,
+            source,
+            output_dir,
+            embeddings_filename=embeddings_filename,
         )
 
 

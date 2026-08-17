@@ -1,0 +1,123 @@
+# Production contract for the newest HCMAI corpus in S3. Credentials are
+# supplied through boto3's standard AWS credential chain, never this file.
+preparation:
+  corpus_revision: "hcmai2026-videos-20260813-v1"
+  work_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1
+
+  # Five dedicated Cloudflare Tunnels — each maps one subdomain to localhost:8100
+  # on the matching Kaggle notebook. All notebooks can run simultaneously.
+  # Model identity is pinned in `models:` below — do not duplicate here.
+  remote_inference:
+    transnet_model:
+      model_name: TransNetV2
+      revision: 85cef72af9a916bdfd7cc94a670c9cdfbf12d1ed
+
+    efficientgebd_model:
+      model_name: EfficientGEBD
+      revision: 7f6dd7ba52c0e29c21222fc3e19852d97a7d27f9
+
+    preprocessing:
+      urls:
+        - "https://preprocess.iamphuckhang.dev"
+      batch_size: 1
+
+    dino:
+      urls:
+        - "https://dino.iamphuckhang.dev"
+      batch_size: 32
+
+    caption:
+      urls:
+        - "https://api.iamphuckhang.dev"
+      batch_size: 64
+
+    ocr:
+      urls:
+        - "https://api.iamphuckhang.dev"   # caption + ocr share the same notebook
+      batch_size: 32
+
+    visual_embedding:
+      urls:
+        - "https://emb.iamphuckhang.dev"
+      batch_size: 32
+
+    text_embedding:
+      urls:
+        - "https://emb.iamphuckhang.dev"   # visual_emb + text_emb share the same notebook
+      batch_size: 32
+
+    transcript:
+      urls:
+        - "https://asr.iamphuckhang.dev"
+      timeout_seconds: 300
+      read_timeout_seconds: 300
+
+
+  stages:
+    frame_store: true
+    caption: true
+    ocr: true
+    asr: true
+    visual_index: true
+    caption_index: true
+    ocr_index: true
+    asr_index: true
+
+  models:
+    dino:
+      model_name: facebook/dinov2-small
+      revision: ed25f3a31f01632728cabb09d1542f84ab7b0056
+    caption:
+      model_name: florence-community/Florence-2-base-ft
+      revision: 0b03b6f15a4a211370fb204aee4e7dd48887ea37
+    ocr:
+      model_name: florence-community/Florence-2-base-ft
+      revision: 0b03b6f15a4a211370fb204aee4e7dd48887ea37
+    asr:
+      model_name: Qwen/Qwen3-ASR-1.7B-hf
+      revision: bcd2b5b7f32b480ab5790554cfa8347f246a14f3
+    diarization:
+      model_name: pyannote/speaker-diarization-community-1
+      revision: 3533c8cf8e369892e6b79ff1bf80f7b0286a54ee
+    visual_embedding:
+      model_name: google/siglip2-base-patch16-224
+      revision: 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2
+    text_embedding:
+      model_name: BAAI/bge-m3
+      revision: 5617a9f61b028005a4858fdac845db406aefb181
+
+  preprocessing:
+    s3:
+      bucket: mlecdanbgold-hcmai-hk
+      videos_prefix: data
+      artifacts_prefix: artifacts/production/hcmai2026-videos-v1
+      smoke_artifacts_prefix: artifacts/smoke/hcmai2026-videos-v1
+      region: ap-east-1
+      staging_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1/staging
+      connect_timeout_seconds: 10
+      read_timeout_seconds: 300
+      max_attempts: 4
+
+    output_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1/artifacts/frame_store
+
+    # Official source/checkpoint content is hashed into the run manifest.
+    transnet_repo: /models/TransNetV2
+    transnet_weights: /models/TransNetV2/inference/transnetv2-weights
+    efficientgebd_repo: /models/EfficientGEBD
+    efficientgebd_config: /models/EfficientGEBD/model_config.yaml
+    efficientgebd_checkpoint: /models/EfficientGEBD/model_best.pth
+
+    device: cuda
+    dino_model: facebook/dinov2-small
+    dino_revision: ed25f3a31f01632728cabb09d1542f84ab7b0056
+    dino_dtype: float32
+    dino_batch_size: 32
+
+    efficientgebd_sample_fps: 10
+    motion_threshold: 0.012
+    shot_threshold: 0.5
+    event_threshold: 0.5
+    minimum_gap_ms: 500
+    maximum_gap_ms: 2000
+    dedup_similarity: 0.985
+    image_quality: 92

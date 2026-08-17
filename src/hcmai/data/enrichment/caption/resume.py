@@ -1,4 +1,11 @@
-"""Resume validation for caption enrichment artifacts."""
+"""Cơ chế phục hồi (Resume) cho Captioning.
+
+Kiểm tra các artifacts đã xử lý trước đó, giúp hệ thống tiếp tục công việc bị gián đoạn.
+
+Các tính năng chính:
+1. Đọc lịch sử: Quét các file artifacts hiện có để lập danh sách các frame đã hoàn thành.
+2. Loại trừ (Diff): Xoá các frame đã có caption ra khỏi hàng đợi cần xử lý (queue) hiện tại.
+3. Tối ưu thời gian: Đảm bảo tính idempotent, chạy pipeline bao nhiêu lần cũng không bị trùng dữ liệu."""
 
 from __future__ import annotations
 
@@ -19,6 +26,7 @@ def guard_resume(
     config: CaptionConfig,
     root: Path,
     resolved_revision: str | None = None,
+    frame_store_id: str | None = None,
 ) -> None:
     if not path.exists():
         return
@@ -35,6 +43,9 @@ def guard_resume(
     if resolved_revision is not None:
         if old.get("resolved_model_revision") != resolved_revision:
             changed.append("resolved_model_revision")
+    if frame_store_id is not None:
+        if old.get("frame_store_id") != frame_store_id:
+            changed.append("frame_store_id")
     if changed:
         fields = ", ".join(sorted(set(changed)))
         raise ValueError(
@@ -44,7 +55,7 @@ def guard_resume(
 
 
 def resume_rows(
-    frames: list[dict[str, Any]], path: Path, config: CaptionConfig
+    frames: list[dict[str, Any]], path: Path, config: CaptionConfig, frame_store_id: str | None = None
 ) -> tuple[dict[str, FrameEnrichment], list[dict[str, Any]], int, int]:
     groups: dict[str, list[dict[str, Any]]] = {}
     if path.exists():
@@ -57,7 +68,9 @@ def resume_rows(
             message = str(error).strip()[:200] or type(error).__name__
             raise RuntimeError(f"Cannot resume corrupted Parquet {path}: {message}") from error
         for data in prior:
-            if data.get(ENRICHMENT_VERSION) == config.enrichment_version:
+            if data.get(ENRICHMENT_VERSION) == config.enrichment_version and (
+                frame_store_id is None or data.get("frame_store_id") == frame_store_id
+            ):
                 groups.setdefault(str(data.get("frame_id")), []).append(data)
 
     rows: dict[str, FrameEnrichment] = {}
@@ -73,6 +86,7 @@ def resume_rows(
         rows[frame_id] = FrameEnrichment.model_validate(
             {
                 "frame_id": frame_id,
+                "frame_store_id": frame_store_id,
                 "model_name": config.model_checkpoint,
                 "enrichment_version": config.enrichment_version,
                 "status": ProcessingStatus.PENDING,

@@ -1,3 +1,12 @@
+"""Bộ sinh (Generator) Caption.
+
+Quản lý toàn bộ quá trình chạy mô hình sinh mô tả ảnh (captioning) cho các frames.
+
+Các tính năng chính:
+1. Lấy dữ liệu: Lấy danh sách các frames cần xử lý hình ảnh dựa trên manifest đầu vào.
+2. Điều khiển Batch (Batching): Gom nhóm nhiều frames (vd: batch=32) để xử lý trên GPU nhanh hơn.
+3. Ghi nhận kết quả: Lưu văn bản mô tả thu được vào các artifacts với cơ chế chống mất dữ liệu."""
+
 from __future__ import annotations
 
 import argparse
@@ -10,6 +19,7 @@ from typing import Any, cast
 
 import pandas as pd
 
+from hcmai.common.schemas import validate_frame_enrichment
 from hcmai.common.utils.io import atomic_write, read_json, write_json
 from hcmai.common.config import AppConfig
 from hcmai.data.enrichment.caption.artifacts import write_caption_artifacts
@@ -32,27 +42,38 @@ def generate_captions(
     config: CaptionConfig,
     captioner: CaptionAdapter | None = None,
     *,
-    dataset_root: str | Path = "."
+    dataset_root: str | Path = ".",
+    frame_store_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate or resume one deterministic caption enrichment artifact."""
     started, began, frames_path = datetime.now(timezone.utc), perf_counter(), Path(frames_path)
     root = Path(dataset_root).expanduser().resolve()
+
     frames = cast(
         list[dict[str, Any]],
         pd.read_parquet(frames_path).to_dict(orient="records"),
     )
     order = [frame["frame_id"] for frame in frames]
+
     if len(order) != len(set(order)):
         raise ValueError("input frames contain duplicate frame_id values")
+
     output = Path(output_dir)
     captioner = captioner or TransformersCaptionAdapter(config)
     output.mkdir(parents=True, exist_ok=True)
+
     manifest_path, parquet_path = output / "manifest.json", output / "frame_enrichment.parquet"
     old = read_json(manifest_path) if manifest_path.exists() else {}
-    guard_resume(parquet_path, old, config, root)
-    rows, todo, skipped, retried = resume_rows(frames, parquet_path, config)
+
+    # Kiểm tra trạng thái resume
+    guard_resume(parquet_path, old, config, root, frame_store_id=frame_store_id)
+    rows, todo, skipped, retried = resume_rows(frames, parquet_path, config, frame_store_id)
+
+    # Kiểm tra model revision
     resolved_revision = captioner.resolve_revision()
-    guard_resume(parquet_path, old, config, root, resolved_revision)
+    guard_resume(parquet_path, old, config, root, resolved_revision, frame_store_id=frame_store_id)
+
+    # Cập nhật thông tin vào manifest tạm thời
     provisional = {
         **old,
         ENRICHMENT_VERSION: config.enrichment_version,
@@ -61,10 +82,20 @@ def generate_captions(
         "resolved_model_revision": resolved_revision,
     }
     atomic_write(manifest_path, lambda path: write_json(provisional, path))
+
+    # Xử lý từng batch
     failures: dict[str, dict[str, str]] = {}
     latencies = run_batches(
         todo, order, rows, failures, captioner, config, output, root
     )
+
+    # Gán frame_store_id
+    for row in rows.values():
+        if frame_store_id is not None:
+            row.frame_store_id = frame_store_id
+    validate_frame_enrichment(rows, order, frame_store_id)
+    
+    # Ghi nhận kết quả
     write_caption_artifacts(output, order, rows, failures)
     manifest = build_manifest(
         config,

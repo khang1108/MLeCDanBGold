@@ -1,4 +1,6 @@
-"""Backend boundary consumed by the OCR pipeline."""
+"""Định nghĩa giao ước (Contracts) cho OCR.
+
+Quy định interface đầu vào/đầu ra mà các mô hình OCR cần phải trả về để tương thích với pipeline chính."""
 
 from __future__ import annotations
 

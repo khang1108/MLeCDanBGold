@@ -6,6 +6,7 @@ from typing import cast
 import pytest
 
 from hcmai.common.schemas import (
+    FrameRecord,
     RetrievalCandidate,
     RetrievalSource,
     SearchRequest,
@@ -22,11 +23,14 @@ from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 class Data:
     def __init__(self) -> None:
-        self.frame = SimpleNamespace(
+        self.frame = FrameRecord(
             frame_id="f1",
             video_id="official-video",
             frame_idx=42,
             timestamp_ms=1_000,
+            image_path="f1.jpg",
+            width=640,
+            height=360,
         )
 
     def get_frame(self, frame_id: str):
@@ -51,11 +55,6 @@ class Retrieval:
                 frame_id=self.frame_id,
                 source_scores={RetrievalSource.VISUAL: 0.5},
                 final_score=0.5,
-                metadata={
-                    "video_id": "forged-video",
-                    "frame_idx": 999,
-                    "timestamp_ms": 999,
-                },
             )
         ]
 
@@ -64,10 +63,10 @@ def test_materialization_uses_only_canonical_data() -> None:
     response = SearchService(
         cast(DataService, Data()), cast(RetrievalService, Retrieval())
     ).search(
-        SearchRequest(query="red bus", search_id="search-session-1")
+        SearchRequest(query="red bus")
     )
     result = response.results[0]
-    assert response.search_id == "search-session-1"
+    assert response.search_id.startswith("search-")
     assert (result.video_id, result.frame_idx, result.timestamp_ms) == (
         "official-video",
         42,

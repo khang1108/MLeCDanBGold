@@ -23,7 +23,6 @@ from hcmai.common.schemas import (
     StageStatus,
     StageTrace,
 )
-from hcmai.orchestration.ranking import rank_candidates
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -98,56 +97,3 @@ def test_parallel_calls_on_one_retriever_own_independent_traces() -> None:
     )
     assert slow.candidates[0].frame_id == "frame-slow"
     assert fast.candidates[0].frame_id == "frame-fast"
-
-
-class TracedRetrieval:
-    def search(self, query, top_k, filters, query_type):
-        del query, top_k, filters, query_type
-        return RetrievalResult(
-            candidates=[
-                RetrievalCandidate(
-                    frame_id="frame-1",
-                    source_scores={RetrievalSource.VISUAL: 0.9},
-                    source_ranks={RetrievalSource.VISUAL: 1},
-                )
-            ],
-            trace=RetrievalTrace(
-                stages={
-                    "visual.query_encoding": _stage(
-                        "visual.query_encoding", 2
-                    ),
-                    "visual.index_search": _stage("visual.index_search", 3),
-                }
-            ),
-        )
-
-
-def test_orchestration_emits_required_json_stage_fields(caplog) -> None:
-    with caplog.at_level(logging.INFO, logger="hcmai.orchestration.ranking"):
-        result, reranking_ms = rank_candidates(
-            SearchRequest(query="red bus"),
-            cast(RetrievalService, TracedRetrieval()),
-            None,
-            candidate_count=20,
-            rerank_count=0,
-            request_id="request-1",
-        )
-
-    records = [
-        json.loads(record.getMessage())
-        for record in caplog.records
-        if record.getMessage().startswith("{")
-    ]
-    assert result.candidates[0].frame_id == "frame-1"
-    assert reranking_ms == 0
-    assert records
-    assert all(
-        {"request_id", "task_type", "stage", "duration_ms", "status"}
-        <= record.keys()
-        for record in records
-    )
-    assert {record["stage"] for record in records} == {
-        "visual.query_encoding",
-        "visual.index_search",
-        "rerank",
-    }

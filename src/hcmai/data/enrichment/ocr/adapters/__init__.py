@@ -1,3 +1,7 @@
-"""Concrete OCR model adapters."""
+"""Các Adapters cho mô hình OCR.
 
-__all__: list[str] = []
+Nơi chứa mã nguồn giao tiếp với các mô hình nhận diện chữ viết khác nhau."""
+
+from .remote import RemoteOCRAdapter
+
+__all__ = ["RemoteOCRAdapter"]

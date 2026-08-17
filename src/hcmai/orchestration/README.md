@@ -10,7 +10,6 @@ orchestration/
 ├── task_router.py           # Task-pipeline registry
 ├── workflows/               # Executable task-specific orchestration
 ├── setup.py                 # Single application composition root
-├── ranking.py               # Bounded retrieval/reranking sequence
 └── materializer.py          # Canonical SearchResponse construction
 ```
 

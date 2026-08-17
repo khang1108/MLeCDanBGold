@@ -24,7 +24,10 @@ _TEXT_SOURCES = {
 
 
 class TextEvidenceRetriever(DenseRetriever):
-    """Search a frame-aligned text channel without changing frame identity."""
+    """Lớp cơ sở (Base class) cho các Retriever văn bản (như Caption, OCR, ASR).
+    Sử dụng FAISS (qua DenseRetriever) để tìm kiếm các đoạn text liên quan nhất đến câu truy vấn,
+    sau đó trả về kết quả kèm theo thông tin frame (video_id, frame_idx).
+    """
 
     def __init__(
         self,
@@ -147,7 +150,9 @@ def build_text_index(
     dataset_version: str,
     index_type: str = "flat_ip",
 ) -> DenseIndex:
-    """Encode frame-aligned caption/OCR/ASR text and persist an exact index."""
+    """Đọc dữ liệu (text) từ DataService, gọi encoder để trích xuất vector đặc trưng,
+    và xây dựng (build) một index hoàn chỉnh (bao gồm metadata và vector index) rồi lưu xuống đĩa.
+    """
 
     if source not in _TEXT_SOURCES:
         raise ValueError(f"Unsupported text evidence source {source.value!r}")
@@ -177,6 +182,43 @@ def build_text_index(
     )
     index.save(output)
     return index
+
+
+def build_text_embedding_artifacts(
+    data: DataService,
+    encoder: TextEmbeddingAdapter,
+    source: RetrievalSource,
+    output_dir: str | Path,
+    *,
+    embeddings_filename: str,
+) -> tuple[Path, Path]:
+    """Persist deterministic frame-aligned text vectors without an index."""
+
+    if source not in _TEXT_SOURCES:
+        raise ValueError(f"Unsupported text evidence source {source.value!r}")
+    artifact_name = Path(embeddings_filename)
+    if artifact_name.name != embeddings_filename or artifact_name.suffix != ".npy":
+        raise ValueError("embeddings_filename must be a plain .npy filename")
+    texts, mapping = _text_corpus(data, source)
+    vectors = _normalized(_encode_texts(texts, encoder, source))
+    if len(vectors) != len(mapping):
+        raise ValueError("text embedding count does not match mapping rows")
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    vectors_path = output / artifact_name
+    mapping_path = output / "frame_mapping.parquet"
+    vectors_partial = vectors_path.with_suffix(f"{vectors_path.suffix}.partial")
+    mapping_partial = mapping_path.with_suffix(f"{mapping_path.suffix}.partial")
+    try:
+        with vectors_partial.open("wb") as handle:
+            np.save(handle, vectors)
+        mapping.to_parquet(mapping_partial, index=False)
+        vectors_partial.replace(vectors_path)
+        mapping_partial.replace(mapping_path)
+    finally:
+        vectors_partial.unlink(missing_ok=True)
+        mapping_partial.unlink(missing_ok=True)
+    return vectors_path, mapping_path
 
 
 def build_caption_index(

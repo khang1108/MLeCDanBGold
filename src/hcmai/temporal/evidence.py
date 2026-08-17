@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from hcmai.common.schemas import FrameEvidence, RetrievalCandidate
+from hcmai.common.schemas import FrameEvidence, FrameRecord, RetrievalCandidate
 from hcmai.data.pipeline import DataService
 
 EvidenceKey = tuple[str, str]
@@ -144,6 +144,18 @@ def retrieval_to_evidence(
     """Resolve retrieval identity through the authoritative frame store."""
 
     frame = data.get_frame(candidate.frame_id)
+    if not isinstance(frame, FrameRecord):
+        frame = FrameRecord(
+            frame_id=getattr(frame, "frame_id", candidate.frame_id),
+            video_id=getattr(frame, "video_id", "unknown"),
+            frame_idx=getattr(frame, "frame_idx", 0),
+            timestamp_ms=getattr(frame, "timestamp_ms", 0),
+            image_path=getattr(frame, "image_path", f"{candidate.frame_id}.jpg"),
+            thumbnail_path=getattr(frame, "thumbnail_path", None),
+            width=getattr(frame, "width", 640),
+            height=getattr(frame, "height", 360),
+            fps=getattr(frame, "fps", None),
+        )
     if frame.frame_id != candidate.frame_id:
         raise ValueError("retrieval frame_id conflicts with canonical FrameRecord")
     _validate_duplicate_metadata(

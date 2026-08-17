@@ -1,4 +1,11 @@
-"""Lazy adapters for the official boundary-detection models."""
+"""Adapters cho các mô hình phân tích Video (Preprocessing).
+
+Khởi tạo lười (Lazy initialization) cho các mô hình AI dùng để phát hiện ranh giới cảnh quay.
+
+Các tính năng chính:
+1. Shot Boundary Detection: Tích hợp mô hình TransNetV2 để tìm ranh giới các cú máy (shot).
+2. Event Boundary Detection: Tích hợp mô hình GEBD để tìm các sự kiện chuyển động chính yếu.
+3. Lazy Loading: Chỉ nạp tệp weights của mô hình vào GPU khi hàm xử lý video được gọi lần đầu."""
 
 from __future__ import annotations
 
@@ -46,6 +53,16 @@ class TransNetDetector:
         """Load the official TensorFlow model once."""
         if self.model is not None:
             return self.model
+        # Bật memory growth để TF chỉ cấp phát VRAM khi cần,
+        # tránh việc TF chiếm trọn toàn bộ GPU memory ngay từ đầu
+        # khiến các PyTorch model (Florence-2, DINOv2) không còn chỗ.
+        try:
+            import tensorflow as tf # ignore[import-untyped]
+            gpus = tf.config.list_physical_devices("GPU")
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+        except Exception:
+            pass  # Bỏ qua nếu TF không available hoặc GPU không có
         source = self.config.transnet_repo / "inference" / "transnetv2.py"
         weights = self.config.transnet_weights
         if not source.is_file() or not weights.exists():

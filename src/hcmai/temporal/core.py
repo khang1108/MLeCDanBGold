@@ -28,7 +28,7 @@ from .ports import (
     ProgressiveEvidenceProvider,
     SceneAligner,
 )
-from .providers import DenseOrderedEvidenceProvider, SparseProgressiveEvidenceProvider
+from .providers import DenseOrderedEvidenceProvider, ProgressiveEvidenceProvider
 from .query import SnapshotDiffMode, SnapshotDiffResult, diff_snapshot
 from .relations import parse_temporal_constraints
 from .state import (
@@ -57,6 +57,7 @@ class ProgressiveLocalizationResult:
     warnings: tuple[str, ...]
     diagnostics: dict[str, int | float]
     trace: RetrievalTrace = field(default_factory=RetrievalTrace)
+    time_to_first_candidate_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -98,7 +99,7 @@ class TemporalEvidenceCore:
         )
         settings = trake_settings or TRAKESettings()
         self.progressive_provider = progressive_provider or (
-            SparseProgressiveEvidenceProvider(data, retrieval, progressive)
+            ProgressiveEvidenceProvider(data, retrieval, progressive)
         )
         self.scene_aligner = scene_aligner or ProgressiveSceneAligner(progressive)
         self.ordered_provider = ordered_provider or DenseOrderedEvidenceProvider(
@@ -188,6 +189,7 @@ class TemporalEvidenceCore:
                 diff,
                 acquisition.warnings,
                 acquisition.trace,
+                time_to_first_candidate_ms=acquisition.time_to_first_candidate_ms,
             )
 
     def align_ordered(
@@ -268,6 +270,7 @@ class TemporalEvidenceCore:
         diff: SnapshotDiffResult,
         warnings: tuple[str, ...],
         trace: RetrievalTrace,
+        time_to_first_candidate_ms: float | None = None,
     ) -> ProgressiveLocalizationResult:
         return ProgressiveLocalizationResult(
             search_id=state.search_id,
@@ -277,6 +280,7 @@ class TemporalEvidenceCore:
             warnings=warnings,
             diagnostics=self.config.progressive.diagnostics(),
             trace=trace,
+            time_to_first_candidate_ms=time_to_first_candidate_ms,
         )
 
 

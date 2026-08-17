@@ -84,11 +84,11 @@ def test_search_response_and_health_expose_canonical_observability() -> None:
 
     assert set(response.trace.stages) == {
         "parse",
-        "visual.encode",
-        "visual.search",
-        "fusion",
-        "rerank",
+        "localization",
         "materialization",
+        "global.visual.encode",
+        "global.visual.search",
+        "global.fusion",
     }
     assert response.latency_ms.time_to_first_candidate == 4
     assert response.latency_ms.time_to_first_submission >= 0

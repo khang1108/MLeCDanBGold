@@ -75,10 +75,12 @@ class SearchResult(ContractModel):
 
     rank: int = Field(ge=1)
 
-    frame_id: NonEmptyString
+    # Use these filed to calculate the interval
     video_id: NonEmptyString
-
     frame_idx: int = Field(ge=0)
+    fps: float = Field(default=25.0, gt=0)
+    frame_ids: list[NonEmptyString] = Field(default_factory=list)
+    
     timestamp_ms: int = Field(ge=0)
     thumbnail_url: NonEmptyString | None = None
     frame_url: NonEmptyString | None = None
@@ -89,6 +91,14 @@ class SearchResult(ContractModel):
     asr_text: NonEmptyString | None = None
 
     scores: SearchScores
+
+    @model_validator(mode="after")
+    def populate_frame_ids(self) -> Self:
+        """Ensure frame_ids is populated if frame_id attribute is present."""
+        frame_id = getattr(self, "frame_id", None)
+        if not self.frame_ids and frame_id:
+            self.frame_ids = [frame_id]
+        return self
 
 
 class SearchResponse(ContractModel):

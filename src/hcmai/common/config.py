@@ -50,6 +50,7 @@ class EncoderConfig(BaseModel):
 
     backend: Literal["siglip", "bge_m3"] = "siglip"
     model_name: str = "google/siglip2-base-patch16-224"
+    revision: str | None = None
     device: str = "cpu"
     batch_size: int = 32
     image_size: int = 224
@@ -67,6 +68,7 @@ class EncoderConfig(BaseModel):
         return cls(
             backend=data.get("backend", default_inst.backend),
             model_name=data.get("model_name", default_inst.model_name),
+            revision=data.get("revision", default_inst.revision),
             device=data.get("device", default_inst.device),
             batch_size=data.get("batch_size", default_inst.batch_size),
             image_size=data.get("image_size", default_inst.image_size),
@@ -89,7 +91,7 @@ class ASRConfig(BaseModel):
     language: str | None = None
     prompt: str | None = None
     max_new_tokens: int = 256
-    batch_size: int = Field(default=8, gt=0)
+    batch_size: int = Field(default=32, gt=0)
     attn_implementation: str | None = None
     compile_model: bool = False
     audio_sample_rate: int = Field(default=16_000, gt=0)

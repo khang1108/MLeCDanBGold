@@ -27,6 +27,7 @@ class ProgressiveAcquisition:
     candidate_video_ids: tuple[str, ...]
     warnings: tuple[str, ...]
     trace: RetrievalTrace
+    time_to_first_candidate_ms: float | None = None
 
 
 class ProgressiveEvidenceProvider(Protocol):

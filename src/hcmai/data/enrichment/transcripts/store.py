@@ -1,4 +1,11 @@
-"""In-memory access to canonical transcript metadata."""
+"""Cấu trúc dữ liệu lưu trữ Transcript in-memory.
+
+Cung cấp giao diện truy xuất nhanh (in-memory) cho các metadata của transcript.
+
+Các tính năng chính:
+1. Load nhanh vào RAM: Tải dữ liệu transcript (đã materialized) lên bộ nhớ để phục vụ online.
+2. Truy vấn (Lookup): Hỗ trợ hàm tìm kiếm nhanh các đoạn thoại liên quan đến một khung hình.
+3. Format trả về: Trả về dữ liệu Transcript chuẩn hoá để đưa thẳng vào VQA prompt hoặc frontend."""
 
 from __future__ import annotations
 

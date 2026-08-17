@@ -1,16 +1,29 @@
-"""Build validated, resumable transcript artifacts per canonical video."""
+"""Chuẩn bị dữ liệu cho quá trình trích xuất Transcript.
+
+Thực hiện các công việc tiền xử lý video/audio (như tách âm thanh) trước khi gọi AI.
+
+Các tính năng chính:
+1. Audio Extraction: Dùng FFmpeg tách file âm thanh (mp3/wav) từ các video định dạng mp4.
+2. Chuẩn hoá tần số: Chuyển sample rate về chuẩn 16kHz thường được các mô hình ASR yêu cầu.
+3. Quản lý Cache: Lưu tạm file âm thanh đã tách để tránh phải chạy lại nếu pipeline gặp sự cố."""
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 import pandas as pd
 
 from hcmai.common.schemas import TranscriptSegment
 from hcmai.common.utils.io import atomic_write, write_json
-from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
+from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, read_audio
 from hcmai.data.enrichment.transcripts.adapters.diarization import DiarizationAdapter
+from hcmai.data.enrichment.transcripts.adapters.remote import (
+    RemoteASRAdapter,
+    RemoteDiarizationAdapter,
+)
 from hcmai.data.enrichment.transcripts.manifest import (
     TranscriptManifest,
     expected_manifest,
@@ -20,6 +33,7 @@ from hcmai.data.enrichment.transcripts.manifest import (
 )
 from hcmai.data.enrichment.transcripts.publication import publish_staged, staging_path
 from hcmai.data.enrichment.transcripts.store import load_transcript_records
+from hcmai.data.s3 import VIDEO_EXTENSIONS
 
 TRANSCRIPT_DTYPES = {
     "segment_id": "string",
@@ -31,7 +45,7 @@ TRANSCRIPT_DTYPES = {
     "language": "string",
     "speaker_id": "string",
 }
-VIDEO_SUFFIXES = {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"}
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -129,8 +143,8 @@ def _write_validated_pair(
 
 
 def _prepare_video(
-    engine: ASRAdapter,
-    diarizer: DiarizationAdapter | None,
+    engine: ASRAdapter | RemoteASRAdapter,
+    diarizer: DiarizationAdapter | RemoteDiarizationAdapter | None,
     video: Path,
     output: Path,
     *,
@@ -161,18 +175,62 @@ def _prepare_video(
         if records is not None and reusable_transcript(
             output, _manifest_path(output), expected, records
         ):
+            logger.info(
+                "Transcript checkpoint reused: video=%s segments=%d",
+                video.stem,
+                len(records),
+            )
             return output, len(records)
 
     try:
-        records = engine.transcribe(video, video.stem)
+        started = perf_counter()
+        decode_seconds = 0.0
+        transcribe_audio_fn = getattr(engine, "transcribe_audio", None)
+        decoded_api = callable(transcribe_audio_fn) and (
+            diarizer is None
+            or callable(getattr(diarizer, "assign_speakers_audio", None))
+        )
+        if decoded_api and callable(transcribe_audio_fn):
+            decode_started = perf_counter()
+            decoded = read_audio(video, engine.config.audio_sample_rate)
+            decode_seconds = perf_counter() - decode_started
+            asr_started = perf_counter()
+            records = transcribe_audio_fn(decoded, video.stem)
+        else:
+            decoded = None
+            asr_started = perf_counter()
+            records = engine.transcribe(video, video.stem)
+        asr_seconds = perf_counter() - asr_started
         if engine.resolved_revision != engine.config.revision:
             raise ValueError("ASR backend resolved a revision different from its pin")
         if diarizer is not None:
-            records = diarizer.assign_speakers(video, records)
+            diarization_started = perf_counter()
+            if decoded is None:
+                records = diarizer.assign_speakers(video, records)
+            else:
+                if diarizer.config.audio_sample_rate != decoded.sample_rate:
+                    raise ValueError(
+                        "ASR and diarization must use the same audio sample rate"
+                    )
+                records = diarizer.assign_speakers_audio(decoded, records)
+            diarization_seconds = perf_counter() - diarization_started
+        else:
+            diarization_seconds = 0.0
         records = _validate_records(records, video.stem)
         completed = expected.model_copy(update={"segment_count": len(records)})
         _write_validated_pair(records, completed, output)
         _failure_path(output).unlink(missing_ok=True)
+        logger.info(
+            "Transcript preparation completed: video=%s segments=%d "
+            "audio_decode_seconds=%.1f asr_seconds=%.1f "
+            "diarization_seconds=%.1f total_seconds=%.1f",
+            video.stem,
+            len(records),
+            decode_seconds,
+            asr_seconds,
+            diarization_seconds,
+            perf_counter() - started,
+        )
         return output, len(records)
     except Exception as error:
         failed = failure_manifest(expected, error)
@@ -181,6 +239,34 @@ def _prepare_video(
             lambda path: write_json(failed.model_dump(mode="json"), path),
         )
         raise
+
+
+def prepare_transcript_video(
+    video_path: str | Path,
+    output_root: str | Path,
+    engine: ASRAdapter | RemoteASRAdapter,
+    *,
+    diarizer: DiarizationAdapter | RemoteDiarizationAdapter | None = None,
+    resume: bool = True,
+    schema_version: str = "transcript-segment-v1",
+    pipeline_version: str = "transcript-pipeline-v1",
+) -> tuple[Path, int]:
+    """Prepare one staged video without rediscovering or copying its source."""
+
+    video = Path(video_path).expanduser().resolve()
+    if not video.is_file() or video.suffix.lower() not in VIDEO_EXTENSIONS:
+        raise FileNotFoundError(f"Supported staged video does not exist: {video}")
+    root = Path(output_root).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return _prepare_video(
+        video=video,
+        output=_video_output(root, video.stem),
+        engine=engine,
+        diarizer=diarizer,
+        resume=resume,
+        schema_version=schema_version,
+        pipeline_version=pipeline_version,
+    )
 
 
 def _video_files(root: Path, limit: int | None) -> list[Path]:
@@ -193,7 +279,7 @@ def _video_files(root: Path, limit: int | None) -> list[Path]:
         path.resolve()
         for video_root in video_roots
         for path in video_root.rglob("*")
-        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
+        if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
     )
     videos: dict[str, Path] = {}
     for path in candidates:
@@ -216,9 +302,9 @@ def _video_output(root: Path, video_id: str) -> Path:
 def prepare_transcripts(
     videos_root: str | Path,
     output_path: str | Path,
-    engine: ASRAdapter,
+    engine: ASRAdapter | RemoteASRAdapter,
     *,
-    diarizer: DiarizationAdapter | None = None,
+    diarizer: DiarizationAdapter | RemoteDiarizationAdapter | None = None,
     resume: bool = True,
     limit: int | None = None,
     schema_version: str = "transcript-segment-v1",
@@ -234,9 +320,9 @@ def prepare_transcripts(
     segment_counts: list[int] = []
     for video in videos:
         try:
-            _, count = _prepare_video(
-                video=video,
-                output=_video_output(output_root, video.stem),
+            _, count = prepare_transcript_video(
+                video_path=video,
+                output_root=output_root,
                 engine=engine,
                 diarizer=diarizer,
                 resume=resume,

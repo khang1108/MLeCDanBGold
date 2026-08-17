@@ -213,7 +213,7 @@ không ép chúng vào cùng một thuật toán:
 ```mermaid
 flowchart LR
     PLAN["TemporalQueryPlan"] --> MODE{"alignment_mode"}
-    MODE -->|progressive_scene| SPARSE["SparseProgressiveEvidenceProvider"]
+    MODE -->|progressive_scene| SPARSE["ProgressiveEvidenceProvider"]
     SPARSE --> SCENE["ProgressiveSceneAligner"]
     SCENE --> SCENES["SceneCandidate[]<br/>KIS + VQA"]
     MODE -->|ordered_path| DENSE["DenseOrderedEvidenceProvider"]

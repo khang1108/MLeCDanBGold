@@ -25,7 +25,9 @@ from hcmai.retrieval.reranking.pipeline import QwenRerankerConfig, RerankingServ
 
 
 class LocalAdapter:
-    """Load each configured model once and expose bounded inference methods."""
+    """Tải và quản lý vòng đời của các mô hình Machine Learning chạy trên máy cục bộ (local).
+    Cung cấp các API chuẩn hóa để Inference Service có thể gọi (Embedding, VQA, OCR, Captioning).
+    """
 
     def __init__(
         self,
@@ -114,7 +116,10 @@ class LocalAdapter:
         )
 
     def load(self) -> None:
-        """Warm configured models during service lifespan, never at import."""
+        """Tải các mô hình vào bộ nhớ (RAM/VRAM) trong suốt vòng đời của service.
+        Việc tải mô hình chỉ thực hiện khi gọi hàm này, không thực hiện lúc import module
+        để tiết kiệm tài nguyên và khởi động ứng dụng nhanh hơn.
+        """
         if self.captioner is not None:
             self.captioner.resolve_revision()
         if self.visual_encoder is not None:
@@ -227,11 +232,13 @@ class LocalAdapter:
                     enabled=self.enable_visual_embedding,
                     loaded=visual_loaded,
                     checkpoint=self.config.visual_embedding.model_name,
+                    revision=self.config.visual_embedding.revision,
                 ),
                 "caption_embedding": ModelStatus(
                     enabled=self.enable_caption_embedding,
                     loaded=caption_loaded,
                     checkpoint=self.config.caption_embedding.model_name,
+                    revision=self.config.caption_embedding.revision,
                 ),
                 "reranker": ModelStatus(
                     enabled=self.enable_reranker,
@@ -261,6 +268,11 @@ class LocalAdapter:
                         if self.ocr_adapter is not None
                         else None
                     ),
+                    revision=(
+                        self.ocr_adapter.config.revision
+                        if self.ocr_adapter is not None
+                        else None
+                    ),
                 ),
             },
             capabilities=InferenceCapabilities(
@@ -276,6 +288,7 @@ class LocalAdapter:
 
 
 def _env_bool(name: str, default: bool = True) -> bool:
+    """Hàm hỗ trợ đọc biến môi trường dạng boolean (true/false)."""
     value = os.getenv(name, str(default)).strip().lower()
     if value not in {"true", "false"}:
         raise ValueError(f"{name} must be true or false")

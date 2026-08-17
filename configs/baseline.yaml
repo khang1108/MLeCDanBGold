@@ -146,7 +146,7 @@ api:
 
 inference:
   enabled: true
-  base_url: "https://api.iamphuckhang.dev"
+  base_url: "http://127.0.0.1:8100"
   timeout_seconds: 120
   connect_timeout_seconds: 5
   read_timeout_seconds: 120

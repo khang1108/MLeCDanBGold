@@ -1,4 +1,6 @@
-"""Contracts consumed by caption enrichment."""
+"""Định nghĩa giao ước (Contracts) cho Caption Enrichment.
+
+Chứa các interfaces (giao thức) mà các mô hình hoặc module captioning cần phải tuân thủ để tích hợp vào hệ thống."""
 
 from __future__ import annotations
 

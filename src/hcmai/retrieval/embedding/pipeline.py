@@ -27,7 +27,10 @@ __all__ = [
 
 
 class EmbeddingService:
-    """Own reusable embedding adapters and offline artifact generation."""
+    """Quản lý các adapter mã hóa (encoder) cho hình ảnh và văn bản.
+    Hỗ trợ cả adapter chạy local và remote (thông qua InferenceClientPool)
+    để phục vụ việc sinh embeddings cho pipeline chuẩn bị dữ liệu (Data Preparation).
+    """
 
     def __init__(
         self,
@@ -68,6 +71,7 @@ class EmbeddingService:
         embedding_dim: int,
         source: str = "visual",
     ) -> TextEmbeddingAdapter:
+        """Khởi tạo Remote Adapter để mã hóa văn bản (Text) trên Kaggle."""
         from hcmai.retrieval.embedding.adapters.remote import (
             EmbeddingClient,
             RemoteEmbeddingAdapter,
@@ -78,6 +82,24 @@ class EmbeddingService:
             config,
             embedding_dim,
             source,
+        )
+
+    @staticmethod
+    def create_remote_visual_adapter(
+        client: object,
+        config: EncoderConfig,
+        embedding_dim: int = 0,
+    ) -> ImageEmbeddingAdapter:
+        """Khởi tạo Remote Adapter để mã hóa hình ảnh (Visual) trên Kaggle."""
+        from hcmai.retrieval.embedding.adapters.remote import (
+            ImageEmbeddingClient,
+            RemoteImageEmbeddingAdapter,
+        )
+
+        return RemoteImageEmbeddingAdapter(
+            cast(ImageEmbeddingClient, client),
+            config,
+            embedding_dim,
         )
 
     def encode_visual_images(

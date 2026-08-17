@@ -1,4 +1,11 @@
-"""Validation and persistence for caption enrichment artifacts."""
+"""Quản lý Artifacts (Dữ liệu đầu ra) của quá trình Captioning.
+
+Đảm nhiệm việc kiểm tra tính hợp lệ và lưu trữ kết quả tạo sinh văn bản vào đĩa cứng.
+
+Các tính năng chính:
+1. Định dạng lưu trữ: Lưu file (ví dụ: JSONLines, Parquet) chứa mapping giữa Frame ID và Caption.
+2. Checksum/Validation: Đảm bảo dữ liệu không bị lỗi (corrupt) trong quá trình ghi.
+3. Đọc dữ liệu: Cung cấp hàm nạp lại các caption đã tạo để phục vụ quá trình tổng hợp (fusion)."""
 
 from __future__ import annotations
 

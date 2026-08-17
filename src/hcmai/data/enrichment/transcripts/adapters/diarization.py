@@ -1,4 +1,11 @@
-"""Speaker diarization for video files."""
+"""Adapter cho mô hình Diarization (Phân biệt người nói).
+
+Giao tiếp với mô hình phân tách giọng nói để đánh dấu (tag) người phát biểu.
+
+Các tính năng chính:
+1. Phân mảnh (Segmentation): Chia audio thành các phần theo sự thay đổi giọng người nói.
+2. Gán nhãn (Clustering): Gán định danh (Speaker 1, Speaker 2) cho từng phân mảnh.
+3. Ghép nối ASR: Hỗ trợ gộp kết quả người nói vào chung với văn bản (Transcript) đã trích xuất."""
 
 from __future__ import annotations
 
@@ -8,7 +15,7 @@ from typing import Any
 
 from hcmai.common.config import DiarizationConfig
 from hcmai.common.schemas import TranscriptSegment
-from hcmai.data.enrichment.transcripts.adapters.asr import read_audio
+from hcmai.data.enrichment.transcripts.adapters.asr import DecodedAudio, read_audio
 
 
 def _speaker_id(
@@ -67,21 +74,16 @@ class DiarizationAdapter:
 
         return self.config.revision
 
-    def assign_speakers(
+    def assign_speakers_audio(
         self,
-        video_path: str | Path,
+        audio: DecodedAudio,
         segments: list[TranscriptSegment],
     ) -> list[TranscriptSegment]:
-        """Assign one dominant speaker to each transcript segment."""
+        """Assign speakers using an already-decoded immutable waveform."""
 
         import torch
 
-        if not segments:
-            return segments
-        audio = read_audio(
-            Path(video_path), self.config.audio_sample_rate
-        )
-        if not audio.samples.size:
+        if not segments or not audio.samples.size:
             return segments
         output = self._load_pipeline()({
             "waveform": torch.from_numpy(audio.samples.copy()).unsqueeze(0),
@@ -96,3 +98,15 @@ class DiarizationAdapter:
             })
             for segment in segments
         ]
+
+    def assign_speakers(
+        self,
+        video_path: str | Path,
+        segments: list[TranscriptSegment],
+    ) -> list[TranscriptSegment]:
+        """Decode audio and assign speakers through the compatibility API."""
+
+        audio = read_audio(
+            Path(video_path), self.config.audio_sample_rate
+        )
+        return self.assign_speakers_audio(audio, segments)

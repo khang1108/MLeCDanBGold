@@ -38,7 +38,7 @@ class FakeSearchService:
                 VQASubmission(
                     rank=1,
                     video_id="video-1",
-                    frame_id="frame-1",
+                    frame_ids=["frame-1"],
                     frame_idx=42,
                     answer="blue",
                     normalized_answer="blue",
@@ -88,7 +88,7 @@ def test_vqa_route_validates_delegates_and_serializes_response() -> None:
     assert response.json()["search_id"] == "search-session-1"
     submission = response.json()["submissions"][0]
     assert submission["video_id"] == "video-1"
-    assert submission["frame_id"] == "frame-1"
+    assert submission["frame_ids"] == ["frame-1"]
     assert submission["frame_idx"] == 42
     assert submission["answer"] == "blue"
 

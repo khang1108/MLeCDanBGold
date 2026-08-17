@@ -1,4 +1,11 @@
-"""Materialize canonical frame-aligned ASR evidence for online retrieval."""
+"""Cụ thể hóa (Materialize) dữ liệu Transcript.
+
+Đồng bộ và căn chỉnh kết quả ASR (nhận diện giọng nói) với các khung hình cụ thể để truy xuất.
+
+Các tính năng chính:
+1. Frame Alignment: So khớp khoảng thời gian của câu thoại (start/end) với timestamp của frames.
+2. Phân tách (Chunking): Chia nhỏ các đoạn thoại dài thành các câu/từ phù hợp với độ dài cảnh.
+3. Chuẩn hoá Metadata: Tạo ra bản ghi text-to-frame chuẩn để nạp vào hệ thống Evidence Store."""
 
 from __future__ import annotations
 
@@ -8,12 +15,14 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import pandas as pd
+from tqdm import tqdm
 
 from hcmai.common.schemas import (
     FrameEnrichment,
     FrameRecord,
     ProcessingStatus,
     TranscriptSegment,
+    validate_frame_enrichment,
 )
 from hcmai.common.utils.io import atomic_write
 from hcmai.data.enrichment.transcripts.manifest import load_manifest
@@ -45,6 +54,7 @@ def materialize_asr_enrichment(
     window_ms: int,
     enrichment_version: str,
     model_name: str,
+    frame_store_id: str | None = None,
 ) -> list[FrameEnrichment]:
     """Align half-open transcript intervals to evaluated canonical frames."""
 
@@ -73,19 +83,21 @@ def materialize_asr_enrichment(
         )
 
     rows: list[FrameEnrichment] = []
-    for frame in frames:
+    for frame in tqdm(frames, desc="Aligning ASR to frames", unit="frame"):
         if frame.video_id not in evaluated_video_ids:
             continue
         start_ms = max(0, frame.timestamp_ms - window_ms)
         end_ms = frame.timestamp_ms + window_ms + 1
-        overlapping = (
+        overlapping = [
             segment
             for segment in by_video.get(frame.video_id, ())
             if segment.start_ms < end_ms and segment.end_ms > start_ms
-        )
+        ]
         rows.append(FrameEnrichment(
             frame_id=frame.frame_id,
+            frame_store_id=frame_store_id,
             asr_text=_deduplicated_text(overlapping),
+            source_segment_ids=[segment.segment_id for segment in overlapping],
             enrichment_version=enrichment_version,
             model_name=model_name,
             status=ProcessingStatus.COMPLETED,
@@ -109,6 +121,8 @@ def write_asr_enrichment(
     rows: Sequence[FrameEnrichment],
     *,
     canonical_frame_ids: set[str],
+    canonical_order: list[str] | None = None,
+    frame_store_id: str | None = None,
 ) -> Path:
     """Validate every foreign key and atomically replace one online artifact."""
 
@@ -121,28 +135,42 @@ def write_asr_enrichment(
             "ASR enrichment references unknown frame IDs: "
             + ", ".join(sorted(unknown))
         )
+    rows_dict = {row.frame_id: row for row in rows}
+    validate_frame_enrichment(
+        rows_dict,
+        canonical_order or identifiers,
+        frame_store_id,
+    )
+    
     table = pd.DataFrame(
         [row.model_dump(mode="json") for row in rows],
         columns=list(FrameEnrichment.model_fields),
     )
 
+    def restore_value(value: object) -> object:
+        if value is None:
+            return None
+        if callable(getattr(value, "tolist", None)):
+            return value.tolist()  # type: ignore[union-attr]
+        if isinstance(value, (list, tuple)):
+            return list(value)
+        missing = pd.isna(value)
+        return None if bool(missing) else value
+
     def write_and_validate(staging: Path) -> None:
         table.to_parquet(staging, index=False)
         values = pd.read_parquet(staging).astype(object)
-        restored = [
-            FrameEnrichment.model_validate({
-                key: (None if pd.isna(value) else value)
+        restored = []
+        for record in values.where(values.notna(), None).to_dict(
+            orient="records"
+        ):
+            raw_objects = restore_value(record.get("objects"))
+            objects = list(raw_objects) if raw_objects is not None else []
+            restored.append(FrameEnrichment.model_validate({
+                key: restore_value(value)
                 for key, value in record.items()
                 if key != "objects"
-            } | {
-                "objects": (
-                    record.get("objects").tolist()
-                    if callable(getattr(record.get("objects"), "tolist", None))
-                    else record.get("objects") or []
-                )
-            })
-            for record in values.where(values.notna(), None).to_dict(orient="records")
-        ]
+            } | {"objects": objects}))
         if [row.frame_id for row in restored] != identifiers:
             raise ValueError("staged ASR enrichment changed canonical frame order")
 
@@ -158,6 +186,7 @@ def materialize_transcript_artifact(
     window_ms: int,
     enrichment_version: str,
     model_name: str,
+    frame_store_id: str | None = None,
 ) -> Path:
     """Load canonical offline inputs and publish the online ASR evidence table."""
 
@@ -172,9 +201,12 @@ def materialize_transcript_artifact(
         window_ms=window_ms,
         enrichment_version=enrichment_version,
         model_name=model_name,
+        frame_store_id=frame_store_id,
     )
     return write_asr_enrichment(
         Path(output_path),
         rows,
         canonical_frame_ids={frame.frame_id for frame in frames},
+        canonical_order=[frame.frame_id for frame in frames],
+        frame_store_id=frame_store_id,
     )

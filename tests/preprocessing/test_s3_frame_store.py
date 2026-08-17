@@ -105,6 +105,7 @@ def _config(root: Path, **updates: Any) -> PreprocessingConfig:
             "bucket": "hcmai-dataset",
             "videos_prefix": "/raw/videos/",
             "artifacts_prefix": "/artifacts/frame-store/",
+            "smoke_artifacts_prefix": "/artifacts/frame-store-smoke/",
             "staging_root": root / "staging",
         },
         "output_root": root / "frame_store",
@@ -157,6 +158,7 @@ def test_s3_config_requires_exactly_one_source_and_normalizes_prefixes(
     assert config.s3 is not None
     assert config.s3.videos_prefix == "raw/videos"
     assert config.s3.artifacts_prefix == "artifacts/frame-store"
+    assert config.s3.smoke_artifacts_prefix == "artifacts/frame-store-smoke"
 
     with pytest.raises(ValidationError, match="exactly one"):
         _config(tmp_path, videos_root=tmp_path / "videos")
@@ -300,7 +302,7 @@ def test_limited_s3_run_cannot_advance_full_corpus_latest(
     assert output == tmp_path / "frame_store.limit-1/frames.parquet"
     assert "artifacts/frame-store/latest.json" not in client.objects
     assert (
-        "artifacts/frame-store/limited/limit-1/latest.json" in client.objects
+        "artifacts/frame-store-smoke/limit-1/latest.json" in client.objects
     )
 
 

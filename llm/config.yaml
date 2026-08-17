@@ -16,6 +16,7 @@ caption_generation:
 visual_embedding:
   backend: "siglip"
   name: "google/siglip2-base-patch16-224"
+  revision: "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2"
   device: "cuda"
   batch_size: 32
   image_size: 224
@@ -24,6 +25,7 @@ visual_embedding:
 caption_embedding:
   backend: "bge_m3"
   name: "BAAI/bge-m3"
+  revision: "5617a9f61b028005a4858fdac845db406aefb181"
   device: "cuda"
   batch_size: 16
   max_length: 8192

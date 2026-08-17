@@ -1,4 +1,11 @@
-"""Batch execution for caption enrichment."""
+"""Trình thực thi (Runner) cho quá trình Captioning.
+
+Quản lý vòng lặp thực thi mô hình sinh caption để tối ưu hoá hiệu năng trên phần cứng.
+
+Các tính năng chính:
+1. Điều phối Worker: Phân bổ dữ liệu cho luồng xử lý GPU nếu có nhiều model được load.
+2. Xử lý lỗi (Graceful failure): Catch các lỗi OOM (Out Of Memory) và chia nhỏ batch size tự động.
+3. Ghi log tiến trình: Hiển thị thanh tiến trình (progress bar) và ghi log sau mỗi đợt batch xong."""
 
 from __future__ import annotations
 

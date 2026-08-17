@@ -130,3 +130,6 @@ docs/template/
 .codex/
 .claude/
 .agents/
+
+# Kaggle Notebooks
+kaggle/notebook_template.ipynb

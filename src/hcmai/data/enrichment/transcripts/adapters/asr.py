@@ -1,4 +1,11 @@
-"""Multilingual speech-to-text for video files."""
+"""Adapter cho mô hình ASR (Speech-to-Text).
+
+Giao tiếp trực tiếp với các mô hình nhận diện giọng nói (như Whisper) để trích xuất text.
+
+Các tính năng chính:
+1. Called Inference: Đưa luồng audio vào mô hình và nhận về chuỗi văn bản kèm timestamp từ/câu.
+2. Cấu hình Ngôn ngữ: Hỗ trợ tuỳ chỉnh tham số ngôn ngữ cho mô hình (VD: Tiếng Việt, Tiếng Anh).
+3. Tối ưu hoá bộ nhớ: Quản lý thiết bị (GPU/CPU) và giải phóng VRAM sau khi nhận diện xong."""
 
 from __future__ import annotations
 
@@ -213,14 +220,13 @@ class ASRAdapter:
             raise RuntimeError("Model returned an incomplete ASR batch")
         return results
 
-    def transcribe(
-        self, video_path: str | Path, video_id: str
+    def transcribe_audio(
+        self,
+        decoded: DecodedAudio,
+        video_id: str,
     ) -> list[TranscriptSegment]:
-        """Return normalized transcript segments for one video."""
+        """Return normalized transcript segments from already-decoded audio."""
 
-        decoded = read_audio(
-            Path(video_path), self.config.audio_sample_rate
-        )
         audio = decoded.samples
         regions = self._speech_regions(audio) if audio.size else []
         records = []
@@ -252,6 +258,16 @@ class ASRAdapter:
                 ))
         _validate_segments(records)
         return records
+
+    def transcribe(
+        self, video_path: str | Path, video_id: str
+    ) -> list[TranscriptSegment]:
+        """Decode and transcribe one video through the compatibility API."""
+
+        decoded = read_audio(
+            Path(video_path), self.config.audio_sample_rate
+        )
+        return self.transcribe_audio(decoded, video_id)
 
 
 def _validate_segments(records: list[TranscriptSegment]) -> None:

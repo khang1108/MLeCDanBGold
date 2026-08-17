@@ -12,8 +12,11 @@ from PIL import Image
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import (
+    AudioReferenceRequest,
+    DiarizationRequest,
     InferenceReadiness,
     ModelStatus,
+    TranscriptSegment,
     VQAInferenceResponse,
 )
 from hcmai.llm.adapters.http import InferenceClient
@@ -33,7 +36,30 @@ class FakeRuntime:
 
     def readiness(self):
         return InferenceReadiness(
-            ready=True, models={"visual_embedding": ModelStatus(loaded=True)}
+            ready=True,
+            models={
+                "visual_embedding": ModelStatus(
+                    loaded=True, checkpoint="visual/model", revision="visual-sha"
+                ),
+                "dino": ModelStatus(
+                    loaded=True, checkpoint="dino/model", revision="dino-sha"
+                ),
+                "ocr": ModelStatus(
+                    loaded=True, checkpoint="ocr/model", revision="ocr-sha"
+                ),
+                "transnet": ModelStatus(
+                    loaded=True, checkpoint="transnet", revision="transnet-sha"
+                ),
+                "efficientgebd": ModelStatus(
+                    loaded=True, checkpoint="gebd", revision="gebd-sha"
+                ),
+                "asr": ModelStatus(
+                    loaded=True, checkpoint="asr/model", revision="asr-sha"
+                ),
+                "diarization": ModelStatus(
+                    loaded=True, checkpoint="diar/model", revision="diar-sha"
+                ),
+            },
         )
 
     def embed_text(self, texts, source="visual"):
@@ -44,6 +70,20 @@ class FakeRuntime:
 
     def ocr(self, images):
         return [f"text {image.getpixel((0, 0))[0]}" for image in images]
+
+    def embed_images(self, images, source="visual"):
+        assert source in {"visual", "dino"}
+        return np.asarray([[0.0, 1.0]] * len(images), dtype=np.float32)
+
+    def boundary_scores(self, frames, source="shot"):
+        assert source in {"shot", "event"}
+        return np.linspace(0, 1, len(frames), dtype=np.float32)
+
+    def transcribe_reference(self, payload):
+        return [_segment(payload.video_id)]
+
+    def diarize_reference(self, payload):
+        return [segment.model_copy(update={"speaker_id": "SPEAKER_00"}) for segment in payload.segments]
 
     def rerank(self, query, images):
         assert query == "red car"
@@ -71,6 +111,24 @@ class FakeRuntime:
 def _jpeg(red):
     output = io.BytesIO()
     Image.new("RGB", (2, 2), (red, 0, 0)).save(output, "JPEG")
+    return output.getvalue()
+
+
+def _segment(video_id="video-1"):
+    return TranscriptSegment(
+        segment_id=f"{video_id}_segment_000000",
+        video_id=video_id,
+        segment_index=0,
+        start_ms=0,
+        end_ms=1000,
+        text="xin chao",
+        language="vi",
+    )
+
+
+def _npy(value):
+    output = io.BytesIO()
+    np.save(output, value, allow_pickle=False)
     return output.getvalue()
 def request(app, method, path, **kwargs):
     async def send():
@@ -279,6 +337,126 @@ def test_remote_captioner_validates_readiness_and_identity():
     assert captioner.caption_batch([Image.new("RGB", (2, 2))]) == [
         "A red square."
     ]
+
+
+def test_offline_inference_endpoints_preserve_identity_and_provenance():
+    app = create_llm_app(cast(LLMService, FakeRuntime()))
+    files = [
+        ("images", ("a.jpg", _jpeg(10), "image/jpeg")),
+        ("images", ("b.jpg", _jpeg(200), "image/jpeg")),
+    ]
+
+    ocr = request(
+        app,
+        "POST",
+        "/v1/enrichment/ocr",
+        data={"item_ids": json.dumps(["a", "b"])},
+        files=files,
+    )
+    assert ocr.status_code == 200
+    assert [item["item_id"] for item in ocr.json()["items"]] == ["a", "b"]
+    assert ocr.json()["model"] == "ocr/model"
+
+    embedded = request(
+        app,
+        "POST",
+        "/v1/embeddings/dino",
+        data={"item_ids": json.dumps(["a", "b"])},
+        files=files,
+    )
+    assert embedded.status_code == 200
+    assert embedded.json()["item_ids"] == ["a", "b"]
+    assert embedded.json()["revision"] == "dino-sha"
+
+    frames = np.zeros((3, 27, 48, 3), dtype=np.uint8)
+    scored = request(
+        app,
+        "POST",
+        "/v1/preprocessing/shot-scores",
+        data={"request_id": "shot-1"},
+        files=[("tensor", ("frames.npy", _npy(frames), "application/x-npy"))],
+    )
+    assert scored.status_code == 200
+    assert scored.json()["request_id"] == "shot-1"
+    assert len(scored.json()["scores"]) == 3
+
+    audio = AudioReferenceRequest(
+        request_id="asr-1",
+        video_id="video-1",
+        audio_url="https://s3.test/audio.flac?signature=test",
+        audio_sha256="a" * 64,
+    )
+    transcript = request(
+        app, "POST", "/v1/transcripts/asr", json=audio.model_dump(mode="json")
+    )
+    assert transcript.status_code == 200
+    assert transcript.json()["segments"][0]["video_id"] == "video-1"
+
+    diarization = DiarizationRequest(
+        **audio.model_dump(), segments=[_segment()]
+    )
+    diarized = request(
+        app,
+        "POST",
+        "/v1/transcripts/diarization",
+        json=diarization.model_dump(mode="json"),
+    )
+    assert diarized.status_code == 200
+    assert diarized.json()["segments"][0]["speaker_id"] == "SPEAKER_00"
+
+
+def test_offline_inference_client_validates_returned_identity():
+    def handler(request):
+        if request.url.path == "/v1/embeddings/images":
+            return httpx.Response(200, json={
+                "model": "visual/model",
+                "revision": "visual-sha",
+                "dimension": 2,
+                "normalized": True,
+                "item_ids": ["frame-1"],
+                "embeddings": [[0.0, 1.0]],
+                "latency_ms": 1,
+            })
+        if request.url.path == "/v1/preprocessing/shot-scores":
+            return httpx.Response(200, json={
+                "request_id": "shot-1",
+                "model": "transnet",
+                "revision": "transnet-sha",
+                "scores": [0.1, 0.2],
+                "latency_ms": 1,
+            })
+        return httpx.Response(200, json={
+            "request_id": "asr-1",
+            "video_id": "video-1",
+            "model": "asr/model",
+            "revision": "asr-sha",
+            "segments": [_segment().model_dump(mode="json")],
+            "latency_ms": 1,
+        })
+
+    http = httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="https://model.test"
+    )
+    client = InferenceClient("https://model.test", client=http)
+    embedded = client.embed_images(
+        [Image.new("RGB", (2, 2))], item_ids=["frame-1"]
+    )
+    assert embedded.item_ids == ["frame-1"]
+
+    scores = client.boundary_scores(
+        np.zeros((2, 27, 48, 3), dtype=np.uint8),
+        request_id="shot-1",
+        source="shot",
+    )
+    assert scores.scores == [0.1, 0.2]
+
+    transcript = client.transcribe_audio_reference(AudioReferenceRequest(
+        request_id="asr-1",
+        video_id="video-1",
+        audio_url="https://s3.test/audio.flac?signature=test",
+        audio_sha256="a" * 64,
+    ))
+    assert transcript.segments == [_segment()]
 
 
 def test_runtime_does_not_construct_or_require_disabled_models():

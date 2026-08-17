@@ -1,16 +1,31 @@
-"""Build one public FrameStore from raw videos."""
+"""Video Preprocessing & Frame Extraction Module.
+
+Module này chịu trách nhiệm chuẩn bị dữ liệu (FrameStore) từ các raw videos.
+Các chức năng chính bao gồm:
+1. Phân tích video (Shot/Event boundary detection) sử dụng TransNet và GEBD.
+2. Trích xuất frame (Keyframe extraction) kết hợp thuật toán khử trùng lặp (Deduplication) qua DinoEncoder.
+3. Cơ chế cache/checkpoint (Resume-friendly) cho phép lưu tạm các frame đã xử lý để không phải chạy lại khi gặp lỗi.
+4. Hỗ trợ chạy đa luồng (Multi-threading) để tối ưu hoá khả năng giải mã phần cứng và tận dụng tối đa GPU.
+
+Toàn bộ siêu dữ liệu của các frame đã được chuẩn bị sẽ được tổng hợp vào file `frames.parquet`.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import shutil
+import concurrent.futures
+from time import perf_counter
+
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from PIL import Image
+from tqdm import tqdm
 
 from hcmai.common.schemas.frame import FrameRecord
 from hcmai.data.preprocessing.config import PreprocessingConfig
@@ -30,6 +45,67 @@ from hcmai.data.preprocessing.video import (
 
 _CHECKPOINT_COLUMNS = ["_config_hash", "_source_size", "_source_mtime_ns"]
 _PIPELINE_VERSION = "adaptive-frame-store-v2"
+logger = logging.getLogger(__name__)
+
+
+class FramePreparationSession:
+    """Prepare staged videos incrementally and finalize one canonical store."""
+
+    def __init__(
+        self,
+        config: PreprocessingConfig,
+        *,
+        shot_detector: Any | None = None,
+        event_detector: Any | None = None,
+        encoder: Any | None = None,
+        resume: bool = True,
+    ) -> None:
+        self.config = config
+        self.config.output_root.mkdir(parents=True, exist_ok=True)
+        self.model_fingerprints = _model_fingerprints(config)
+        self.config_hash = _config_hash(config, self.model_fingerprints)
+        self.resume = resume and config.dino_revision is not None
+        self.shot_detector = shot_detector or TransNetDetector(config)
+        self.event_detector = event_detector or EfficientGEBDDetector(config)
+        self.encoder = encoder or DinoEncoder(config)
+
+    def prepare_video(
+        self,
+        path: str | Path,
+        *,
+        source_version: str | None = None,
+    ) -> pd.DataFrame:
+        """Prepare or resume one already-local source video."""
+
+        return _prepare_video(
+            Path(path),
+            self.config,
+            self.shot_detector,
+            self.event_detector,
+            self.encoder,
+            self.resume,
+            self.config_hash,
+            source_version,
+        )
+
+    def finalize(
+        self,
+        tables: list[pd.DataFrame],
+        *,
+        limited_run: bool = False,
+        source: dict[str, object] | None = None,
+    ) -> Path:
+        """Publish metadata only after every requested video is prepared."""
+
+        return _finalize_frame_store(
+            self.config,
+            tables,
+            config_hash=self.config_hash,
+            model_fingerprints=self.model_fingerprints,
+            limited_run=limited_run,
+            resume_enabled=self.resume,
+            source=source,
+        )
 
 
 def _path_fingerprint(path: Path) -> str:
@@ -39,6 +115,8 @@ def _path_fingerprint(path: Path) -> str:
     if not path.exists():
         digest.update(b"missing")
         return digest.hexdigest()
+    
+    # Nếu là file thì hash file, nếu là directory thì hash tất cả file trong directory
     paths = [path] if path.is_file() else sorted(
         item for item in path.rglob("*")
         if item.is_file()
@@ -154,7 +232,9 @@ def _load_checkpoint(
 def _encode_images(paths: list[Path], encoder: Any, batch_size: int) -> np.ndarray:
     """Encode candidate images in small batches."""
     chunks = []
-    for start in range(0, len(paths), batch_size):
+
+    # Batch size nhỏ giúp giảm tải bộ nhớ
+    for start in tqdm(range(0, len(paths), batch_size), desc="Extracting DINOv2 Embeddings", unit="batch", leave=False):
         images = []
         for path in paths[start : start + batch_size]:
             with Image.open(path) as image:
@@ -175,6 +255,7 @@ def _record(candidate: CandidateFrame, image_path: Path) -> dict[str, object]:
         width=frame.width,
         height=frame.height,
         shot_id=f"{frame.video_id}_shot_{candidate.shot_id:06d}",
+        event_id=f"{frame.video_id}_event_{candidate.event_id:06d}",
         is_anchor=candidate.protected,
         pts=frame.pts,
         time_base=frame.time_base,
@@ -222,34 +303,50 @@ def _materialize(
 ) -> pd.DataFrame:
     """Write, deduplicate, and atomically publish one video's candidates."""
     group = video_path.stem.split("_", 1)[0]
+
+    # 1. Định nghĩa đường dẫn chứa Frame đã xử lý
     final_dir = config.output_root / "images" / group / video_path.stem
     partial_dir = final_dir.parent / f".{video_path.stem}.partial"
     _recover_publication(final_dir, partial_dir)
     partial_dir.mkdir(parents=True)
 
+    # 2. Lọc frame và lưu ảnh
     by_index = {item.frame.decode_index: item for item in candidates}
     images: dict[int, Path] = {}
+
+    # Lặp qua từng frame của video
     for frame, source in iter_source_frames(video_path):
         candidate = by_index.get(frame.decode_index)
+
         if candidate is None:
             continue
+
+        # Lưu ảnh vào thư mục tạm
         image_path = partial_dir / f"{frame.decode_index:09d}.jpg"
         source.to_image().convert("RGB").save(
             image_path, quality=config.image_quality
         )
+
+        # Map lại index với đường dẫn
         images[frame.decode_index] = image_path
+
+    # Kiểm tra và báo lỗi nếu có frame bị thiếu
     if len(images) != len(candidates):
         raise ValueError(f"Could not extract every candidate from {video_path.name}")
 
+    # 3. Encoding và Deduplication
     paths = [images[item.frame.decode_index] for item in candidates]
     vectors = _encode_images(paths, encoder, config.dino_batch_size)
-    retained = deduplicate(candidates, vectors, config)
+    retained = deduplicate(candidates, vectors, paths, config)
     retained = restore_maximum_gap(candidates, retained, config)
     retained_ids = {item.frame.decode_index for item in retained}
+
+    # Xóa frame không được chọn
     for decode_index, image_path in images.items():
         if decode_index not in retained_ids:
             image_path.unlink()
 
+    # 4. Publish
     _publish_directory(partial_dir, final_dir)
     image_root = Path("images") / group / video_path.stem
     rows = [
@@ -268,25 +365,60 @@ def _prepare_video(
     cached = _load_checkpoint(
         config, path, resume, config_hash, source_version
     )
+
+    # 3. Tạo FramePreparationSession nếu chưa có
     if cached is not None:
+        logger.info("Frame checkpoint reused: video=%s rows=%d", path.stem, len(cached))
         return cached
+
+    # 4. Nếu chưa có checkpoint, tiến hành xử lý Video
+    started = perf_counter()
+    analysis_started = perf_counter()
     analysis = analyze_video(path, config, event_detector)
+    analysis_seconds = perf_counter() - analysis_started
+
+    # 5. Chọn Frame
+    selection_started = perf_counter()
     candidates = select_candidates(
         analysis.frames,
         shot_detector.score(path, analysis.shot_frames),
         analysis.event_scores,
         config,
     )
+    selection_seconds = perf_counter() - selection_started
+
+    # 6. Tạo DataFrame chứa các frame candidate đã chọn
+    materialize_started = perf_counter()
     table = _materialize(path, candidates, config, encoder)
+    materialize_seconds = perf_counter() - materialize_started
     stat = path.stat()
+
+    # 7. Ghi Checkpoint
     checkpoint = table.assign(
         _config_hash=config_hash,
         _source_size=stat.st_size,
         _source_mtime_ns=stat.st_mtime_ns,
     )
+
+    # 8. Gán Source Version nếu có
     if source_version is not None:
         checkpoint["_source_version"] = source_version
+
+    # 9. Ghi checkpoint
     _write_parquet(checkpoint, _checkpoint_path(config, path.stem))
+    logger.info(
+        "Frame preparation completed: video=%s decoded=%d candidates=%d "
+        "retained=%d analysis_seconds=%.1f selection_seconds=%.1f "
+        "materialize_seconds=%.1f total_seconds=%.1f",
+        path.stem,
+        len(analysis.frames),
+        len(candidates),
+        len(table),
+        analysis_seconds,
+        selection_seconds,
+        materialize_seconds,
+        perf_counter() - started,
+    )
     return table
 
 
@@ -318,11 +450,16 @@ def _finalize_frame_store(
 ) -> Path:
     """Atomically publish canonical metadata after every video succeeds."""
 
+    # 10. Nối các frame đã xử lý lại với nhau
     frames = pd.concat(tables, ignore_index=True).sort_values(
         ["video_id", "timestamp_ms", "frame_idx"], kind="stable"
     )
+    
+    # 11. Ghi file frames.parquet
     output = config.output_root / "frames.parquet"
     _write_parquet(frames.reset_index(drop=True), output)
+    
+    # 12. Tạo và ghi file manifest.json
     manifest: dict[str, object] = {
         "pipeline_version": _PIPELINE_VERSION,
         "config_hash": config_hash,
@@ -332,8 +469,10 @@ def _finalize_frame_store(
         "limited_run": limited_run,
         "resume_enabled": resume_enabled,
     }
+
     if source is not None:
         manifest["source"] = source
+    
     _write_json(manifest, config.output_root / "manifest.json")
     return output
 
@@ -350,26 +489,45 @@ def prepare_frame_store(
     """Build and return the canonical ``frames.parquet`` path."""
     if config.videos_root is None:
         raise ValueError("local preprocessing requires videos_root")
+
+    # 1. Kiểm tra và tạo thư mục Output
     config = _limit_config(config, limit)
     config.output_root.mkdir(parents=True, exist_ok=True)
+
+    # 2. Tính toán Hash của Config và Model
     model_fingerprints = _model_fingerprints(config)
     config_hash = _config_hash(config, model_fingerprints)
+
+    # 3. Kiểm tra Resume
     checkpoint_resume = resume and config.dino_revision is not None
+
+    # 4. Khởi tạo các Models
     shot_detector = shot_detector or TransNetDetector(config)
     event_detector = event_detector or EfficientGEBDDetector(config)
     encoder = encoder or DinoEncoder(config)
-    tables = [
-        _prepare_video(
-            path,
-            config,
-            shot_detector,
-            event_detector,
-            encoder,
-            checkpoint_resume,
-            config_hash,
-        )
-        for path in discover_videos(config, limit)
-    ]
+    
+    # 5. Xử lý nhiều Video song song (tối ưu cho L40)
+    video_paths = list(discover_videos(config, limit))
+    tables = []
+    
+    # Sử dụng config.max_video_workers để tuỳ chỉnh linh hoạt
+    with concurrent.futures.ThreadPoolExecutor(max_workers=config.max_video_workers) as executor:
+        future_to_path = {
+            executor.submit(
+                _prepare_video,
+                path,
+                config,
+                shot_detector,
+                event_detector,
+                encoder,
+                checkpoint_resume,
+                config_hash,
+            ): path
+            for path in video_paths
+        }
+        for future in concurrent.futures.as_completed(future_to_path):
+            tables.append(future.result())
+    
     return _finalize_frame_store(
         config,
         tables,

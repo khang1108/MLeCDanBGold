@@ -29,6 +29,7 @@ class TRAKESubmission(ContractModel):
     video_id: NonEmptyString
     frame_ids: list[NonEmptyString] = Field(min_length=2)
     frame_idxs: list[NonNegativeFrameIndex] = Field(min_length=2)
+    fps: float = Field(default=25.0, gt=0)
 
     warnings: list[NonEmptyString] = Field(default_factory=list)
 

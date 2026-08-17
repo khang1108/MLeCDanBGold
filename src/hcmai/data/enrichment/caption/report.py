@@ -1,4 +1,11 @@
-"""Manifest construction for caption enrichment."""
+"""Tạo báo cáo và Manifest cho quá trình Captioning.
+
+Theo dõi và tổng hợp danh sách các khung hình cần tạo caption, hỗ trợ quản lý tiến độ.
+
+Các tính năng chính:
+1. Lập danh sách: Liệt kê số lượng video và frames cần làm giàu dựa trên đầu vào.
+2. Cảnh báo thiếu hụt: Phát hiện những video/frames bị lỗi không thể sinh caption.
+3. Thống kê (Metrics): Xuất các báo cáo về thời gian chạy trung bình và tỷ lệ hoàn thành."""
 
 from __future__ import annotations
 

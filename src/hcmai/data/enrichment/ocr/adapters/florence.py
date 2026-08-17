@@ -1,4 +1,11 @@
-"""Native Florence-2 OCR backend."""
+"""Adapter cho mô hình OCR Florence-2.
+
+Giao tiếp trực tiếp với mô hình Florence-2 (Microsoft) cho nhiệm vụ OCR đa năng.
+
+Các tính năng chính:
+1. Tạo Task Prompt: Định dạng câu lệnh (VD: `<OCR>`) chuyên dụng cho Florence-2.
+2. Xử lý Tensor: Chuyển đổi ảnh PIL sang dạng tensor và chạy mô hình (hỗ trợ fp16 tối ưu RAM).
+3. Phân tích kết quả (Parsing): Tách chuỗi text trả về thành danh sách các cặp (Bounding Box, Text)."""
 
 from __future__ import annotations
 
@@ -35,7 +42,7 @@ class FlorenceAdapter:
             )
             options = {
                 "revision": self.config.revision,
-                "trust_remote_code": False,
+                "trust_remote_code": True,
             }
             self.processor = AutoProcessor.from_pretrained(
                 self.config.model_name, **options
