@@ -739,7 +739,7 @@ class S3CorpusPreparationService:
         # =====================================================================
         # Kiểm tra trạng thái hoàn thành của FrameStore (lưu khung hình) 
         # và ASR (trích xuất âm thanh gốc) từ file marker.json
-        frame_pending = self._pending(
+        frame_pending = self.config.stages.frame_store and self._pending(
             "frame_store",
             run_id,
             self._stage_outputs("frame_store"),

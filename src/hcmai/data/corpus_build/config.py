@@ -76,10 +76,6 @@ class PreparationStagesConfig(BaseModel):
         values = self.model_dump()
         if not any(values.values()):
             raise ValueError("at least one preparation stage must be enabled")
-        if any(
-            enabled for name, enabled in values.items() if name != "frame_store"
-        ) and not self.frame_store:
-            raise ValueError("downstream stages require frame_store")
         dependencies = {
             "caption_index": self.caption,
             "ocr_index": self.ocr,

@@ -54,7 +54,7 @@ preparation:
 
 
   stages:
-    frame_store: true
+    frame_store: false
     caption: true
     ocr: true
     asr: true
