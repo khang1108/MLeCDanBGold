@@ -1,4 +1,4 @@
-import { searchFrames, searchTrake, searchVqa } from './search';
+import { frameAssetUrl, searchFrames, searchTrake, searchVqa } from './search';
 
 const response = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -7,6 +7,15 @@ const response = (payload, status = 200) => ({
 });
 
 afterEach(() => jest.restoreAllMocks());
+
+test('builds canonical frame asset URLs for materialized TRAKE cards', () => {
+  expect(frameAssetUrl('folder/frame 1', 'thumbnail')).toBe(
+    'http://127.0.0.1:8000/api/v1/frames/folder%2Fframe%201/thumbnail',
+  );
+  expect(frameAssetUrl('folder/frame 1', 'image')).toBe(
+    'http://127.0.0.1:8000/api/v1/frames/folder%2Fframe%201/image',
+  );
+});
 
 test('posts the canonical standalone search request', async () => {
   const payload = { results: [], latency_ms: { total: 1 } };
@@ -35,6 +44,9 @@ test('resolves API-relative frame asset URLs', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     results: [{
       frame_id: 'f1',
+      video_id: 'L21_a_b.folder2.L21_V001',
+      frame_idx: 125,
+      fps: 25,
       thumbnail_url: '/api/v1/frames/f1/thumbnail',
       frame_url: '/api/v1/frames/f1/image',
     }],
@@ -52,6 +64,11 @@ test('resolves API-relative frame asset URLs', async () => {
   expect(payload.results[0].frame_url).toBe(
     'http://127.0.0.1:8000/api/v1/frames/f1/image',
   );
+  expect(payload.results[0]).toEqual(expect.objectContaining({
+    video_id: 'L21_a_b.folder2.L21_V001',
+    frame_idx: 125,
+    fps: 25,
+  }));
 });
 
 test('surfaces the backend error message', async () => {
@@ -123,6 +140,9 @@ test('adds canonical frame asset URLs to VQA submissions', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     submissions: [{
       frame_id: 'frame/1',
+      video_id: 'L21_a_b.folder2.L21_V001',
+      frame_idx: 125,
+      fps: 25,
       caption: 'A person reads a city sign.',
     }],
     latency_ms: 4,
@@ -136,6 +156,9 @@ test('adds canonical frame asset URLs to VQA submissions', async () => {
 
   expect(payload.submissions[0]).toEqual(expect.objectContaining({
     caption: 'A person reads a city sign.',
+    video_id: 'L21_a_b.folder2.L21_V001',
+    frame_idx: 125,
+    fps: 25,
     thumbnail_url: 'http://127.0.0.1:8000/api/v1/frames/frame%2F1/thumbnail',
     frame_url: 'http://127.0.0.1:8000/api/v1/frames/frame%2F1/image',
   }));
@@ -159,7 +182,7 @@ test('posts explicit ordered events to the dedicated TRAKE route', async () => {
       method: 'POST',
       body: JSON.stringify({
         query_type: 'trake',
-        query: 'person enters -> person leaves',
+        query: 'person enters | person leaves',
         events: ['person enters', 'person leaves'],
         top_k: 20,
       }),

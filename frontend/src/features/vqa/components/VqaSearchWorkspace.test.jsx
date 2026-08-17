@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { searchFrames, searchTrake, searchVqa } from '../../../api/search';
+import { frameAssetUrl, searchFrames, searchTrake, searchVqa } from '../../../api/search';
 import VqaSearchWorkspace, { progressiveSearchIdKey } from './VqaSearchWorkspace';
 
 jest.mock('../../../api/search');
@@ -9,6 +9,7 @@ beforeEach(() => {
   searchFrames.mockReset();
   searchTrake.mockReset();
   searchVqa.mockReset();
+  frameAssetUrl.mockImplementation((frameId, asset) => `http://example.test/${frameId}/${asset}`);
   window.sessionStorage.clear();
 });
 
@@ -28,12 +29,14 @@ const submit = (eventDescription, question = '') => {
 };
 
 test('clicking Search sends both VQA intents and renders grounded answer', async () => {
+  const onFrameClick = jest.fn();
   searchVqa.mockResolvedValueOnce({
     submissions: [{
       rank: 1,
-      video_id: 'video-2',
+      video_id: 'L21_a_b.folder2.L21_V001',
       frame_id: 'frame-2',
       frame_idx: 81,
+      fps: 25,
       answer: 'Hồ Chí Minh',
       normalized_answer: 'hồ chí minh',
       joint_score: 0.86,
@@ -45,7 +48,7 @@ test('clicking Search sends both VQA intents and renders grounded answer', async
     latency_ms: 25,
   });
 
-  render(<VqaSearchWorkspace topK={100} setTopK={jest.fn()} />);
+  render(<VqaSearchWorkspace topK={100} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
   submit('A person reads a city sign', 'Which city is shown?');
 
   await waitFor(() => expect(searchVqa).toHaveBeenCalledWith(
@@ -56,9 +59,16 @@ test('clicking Search sends both VQA intents and renders grounded answer', async
     }),
   ));
   expect(await screen.findByText('Hồ Chí Minh')).toBeTruthy();
-  expect(screen.getByAltText('Frame frame-2').getAttribute('src')).toBe(
+  const frameImage = screen.getByAltText('Frame frame-2');
+  expect(frameImage.getAttribute('src')).toBe(
     'http://example.test/frame-2.jpg',
   );
+  fireEvent.click(frameImage);
+  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
+    video_id: 'L21_a_b.folder2.L21_V001',
+    frame_idx: 81,
+    fps: 25,
+  }));
 });
 
 test('a question always routes through VQA and strips prefixes', async () => {
@@ -97,28 +107,57 @@ test.each([
   expect(searchTrake).not.toHaveBeenCalled();
 });
 
-test('TRAKE uses the dedicated route and renders ordered path submissions', async () => {
+test('TRAKE groups clickable event frame cards by video and orders them by frame index', async () => {
+  const onFrameClick = jest.fn();
   searchTrake.mockResolvedValueOnce({
     events: ['person enters', 'person leaves'],
-    submissions: [{
-      rank: 1,
-      video_id: 'video-7',
-      frame_ids: ['f10', 'f20'],
-      frame_idxs: [10, 20],
-    }],
-    total_results: 1,
+    submissions: [
+      {
+        rank: 2,
+        video_id: 'L21_a_b.folder2.video-8',
+        frame_ids: ['f40', 'f20'],
+        frame_idxs: [40, 20],
+        fps: 29.97,
+      },
+      {
+        rank: 1,
+        video_id: 'L21_a_b.folder2.video-7',
+        frame_ids: ['f30', 'f10'],
+        frame_idxs: [30, 10],
+        fps: 25,
+      },
+      {
+        rank: 3,
+        video_id: 'L21_a_b.folder2.video-7',
+        frame_ids: ['f25', 'f5'],
+        frame_idxs: [25, 5],
+        fps: 25,
+      },
+    ],
+    total_results: 3,
     warnings: [],
   });
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  submit('/trake person enters -> person leaves');
+  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
+  submit('/trake person enters | person leaves');
 
   await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
     expect.objectContaining({ events: ['person enters', 'person leaves'], topK: 20 }),
   ));
   expect(searchFrames).not.toHaveBeenCalled();
-  expect(await screen.findByText('Ordered TRAKE paths')).toBeTruthy();
-  expect(screen.getByText('person enters: frame 10 (f10)')).toBeTruthy();
-  expect(screen.getByText('person leaves: frame 20 (f20)')).toBeTruthy();
+  expect(await screen.findByRole('heading', { name: 'video-7' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'video-8' })).toBeTruthy();
+  expect(screen.getAllByRole('heading', { level: 3 }).slice(1).map((heading) => heading.textContent))
+    .toEqual(['video-7', 'video-8']);
+  expect(screen.getAllByAltText(/Frame f5|Frame f10|Frame f25|Frame f30/).map((item) => item.alt)).toEqual([
+    'Frame f5', 'Frame f10', 'Frame f25', 'Frame f30',
+  ]);
+  fireEvent.click(screen.getByAltText('Frame f20'));
+  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
+    frame_id: 'f20',
+    video_id: 'L21_a_b.folder2.video-8',
+    frame_idx: 20,
+    fps: 29.97,
+  }));
 });
 
 test('TRAKE requires at least two events without making a request', () => {
@@ -136,6 +175,36 @@ test('requires a task prefix when the question is empty', () => {
   );
   expect(searchFrames).not.toHaveBeenCalled();
   expect(searchVqa).not.toHaveBeenCalled();
+});
+
+test('active KIS results preserve backend fps when the user opens a frame', async () => {
+  const onFrameClick = jest.fn();
+  searchFrames.mockResolvedValueOnce({
+    results: [{
+      rank: 1,
+      frame_id: 'frame-kis',
+      video_id: 'L21_a_b.folder2.L21_V001',
+      frame_idx: 300,
+      fps: 29.97,
+      timestamp_ms: 10_010,
+      caption: 'A red boat',
+      thumbnail_url: 'http://example.test/frame-kis.jpg',
+      scores: { final: 0.91 },
+    }],
+    warnings: [],
+    latency_ms: { total: 4 },
+  });
+  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
+  submit('/kis red boat');
+
+  const frameImage = await screen.findByAltText('Frame frame-kis');
+  fireEvent.click(frameImage);
+
+  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
+    video_id: 'L21_a_b.folder2.L21_V001',
+    frame_idx: 300,
+    fps: 29.97,
+  }));
 });
 
 test('task-scoped search IDs never leak from KIS into VQA or TRAKE', async () => {

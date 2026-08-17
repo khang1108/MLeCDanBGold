@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { searchFrames, searchTrake, searchVqa } from "../../../api/search";
+import { frameAssetUrl, searchFrames, searchTrake, searchVqa } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
+import FrameCard from "../../frames/components/FrameCard";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
+import { displayVideoId } from "../../frames/videoSource";
 
 const RETRIEVAL_PREFIX = /^\/(kis|tkis|vkis)\b\s*/i;
 const ANY_PREFIX = /^\/(vqa|kis|tkis|vkis|trake)\b\s*/i;
@@ -24,7 +26,7 @@ export const parseTrakeEvents = (description) => {
   if (!TRAKE_PREFIX.test(description)) return null;
   return description
     .replace(TRAKE_PREFIX, "")
-    .split(/\s*(?:->|\r?\n)\s*/)
+    .split(/\s*\|\s*/)
     .map((event) => event.trim())
     .filter(Boolean);
 };
@@ -43,7 +45,40 @@ export const progressiveSearchIdKey = (task) => (
   `${SEARCH_ID_PREFIX}.${task}.${sessionFingerprint()}`
 );
 
-const TrakeResults = ({ events, submissions, warnings, error, hasSearched }) => (
+export const materializeTrakeFrames = (submission, events) => (
+  submission.frame_ids
+    .map((frameId, eventIndex) => ({
+      frame_id: frameId,
+      video_id: submission.video_id,
+      frame_idx: submission.frame_idxs[eventIndex],
+      fps: submission.fps,
+      caption: events[eventIndex] || `TRAKE event ${eventIndex + 1}`,
+      thumbnail_url: frameAssetUrl(frameId, 'thumbnail'),
+      frame_url: frameAssetUrl(frameId, 'image'),
+      submission_rank: submission.rank,
+      event_index: eventIndex,
+    }))
+);
+
+export const groupTrakeFramesByVideo = (submissions, events) => {
+  const groups = new Map();
+  submissions.forEach((submission) => {
+    const frames = groups.get(submission.video_id) || [];
+    frames.push(...materializeTrakeFrames(submission, events));
+    groups.set(submission.video_id, frames);
+  });
+  return Array.from(groups, ([videoId, frames]) => ({
+    video_id: videoId,
+    best_rank: Math.min(...frames.map((frame) => frame.submission_rank)),
+    frames: frames.sort((left, right) => (
+      left.frame_idx - right.frame_idx
+      || left.submission_rank - right.submission_rank
+      || left.event_index - right.event_index
+    )),
+  })).sort((left, right) => left.best_rank - right.best_rank || left.video_id.localeCompare(right.video_id));
+};
+
+const TrakeResults = ({ events, submissions, warnings, error, hasSearched, onFrameClick }) => (
   <section className="frames-container" aria-label="TRAKE ordered paths">
     {error && (
       <div className="error-alert" role="alert">
@@ -61,17 +96,18 @@ const TrakeResults = ({ events, submissions, warnings, error, hasSearched }) => 
     )}
     {!error && submissions.length > 0 && (
       <div className="frames-scroll-region">
-        <h3>Ordered TRAKE paths</h3>
-        {submissions.map((submission) => (
-          <article key={`${submission.rank}-${submission.video_id}`}>
-            <h4>Rank {submission.rank}: {submission.video_id}</h4>
-            <ol>
-              {events.map((event, index) => (
-                <li key={`${submission.frame_ids[index]}-${index}`}>
-                  {event}: frame {submission.frame_idxs[index]} ({submission.frame_ids[index]})
-                </li>
+        {groupTrakeFramesByVideo(submissions, events).map((group) => (
+          <article className="trake-video-group" key={group.video_id} aria-label={`TRAKE frames for ${displayVideoId(group.video_id)}`}>
+            <h3>{displayVideoId(group.video_id)}</h3>
+            <div className="frames-grid">
+              {group.frames.map((frame) => (
+                <FrameCard
+                  key={`${frame.frame_id}-${frame.submission_rank}-${frame.event_index}`}
+                  frame={frame}
+                  onClick={() => onFrameClick?.(frame)}
+                />
               ))}
-            </ol>
+            </div>
           </article>
         ))}
       </div>
@@ -294,6 +330,7 @@ const VqaSearchWorkspace = ({
               warnings={warnings}
               error={error}
               hasSearched
+              onFrameClick={onFrameClick}
             />
           )}
           {!isSearching && resultType === "retrieval" && (

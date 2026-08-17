@@ -84,6 +84,34 @@
   display: block;
 }
 
+.modal-video-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.modal-viewer-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.modal-video-frame-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 56px;
+  padding: 5px 9px;
+  border-radius: var(--rounded-sm);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  pointer-events: none;
+}
+
 .modal-caption-container {
   padding: var(--spacing-md) var(--spacing-lg);
   background-color: var(--color-surface);
