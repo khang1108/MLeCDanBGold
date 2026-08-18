@@ -56,102 +56,70 @@ transport is 367 passing backend tests with the same two optional PyAV skips,
 plus 27 passing frontend tests and a successful production build. The focused
 temporal/VQA/TRAKE/data-reliability gate contains 120 passing tests.
 
-## Organize raw keyframes
+## HCMAI 2026 BTC-native enrichment V1
 
-If downloaded keyframes are nested as `data/raw/Keyframes_Lxx/keyframes/<video>`,
-consolidate them into the layout consumed by the data pipeline:
-
-```bash
-PYTHONPATH=src aic/bin/python scripts/organize_keyframes.py --dry-run
-PYTHONPATH=src aic/bin/python scripts/organize_keyframes.py
-```
-
-The default destination is `data/keyframes`. The script validates duplicate or
-already-existing video folders before moving anything. Use custom locations
-with `--source` and `--destination`.
-
-## Build embeddings and index
-
-`build_embeddings.py` resolves canonical relative image paths against
-`--dataset-root`, generates normalized visual embeddings, writes their exact
-frame mapping, and builds the FAISS index.
-
-```bash
-PYTHONPATH=src aic/bin/python scripts/build_embeddings.py \
-  --config configs/baseline.yaml \
-  --model-config llm/config.yaml \
-  --dataset-root artifacts/frame_store \
-  --frames artifacts/frame_store/frames.parquet \
-  --output artifacts
-```
-
-Outputs:
+The active competition preparation path starts from BTC keyframes and BTC
+objects. Video preprocessing remains available for non-BTC experiments, but it
+is not part of this profile.
 
 ```text
-artifacts/embeddings/visual_embeddings.npy
-artifacts/embeddings/frame_mapping.parquet
-artifacts/embeddings/metadata.yaml
-artifacts/indexes/visual/dense.index
-artifacts/indexes/visual/frame_mapping.parquet
-artifacts/indexes/visual/metadata.json
+BTC keyframes ──> Caption ──────┐
+              └─> OCR ──────────┤
+BTC objects ────> Object Import ├─> FrameContext V1
+Videos ─────────> ASR segments  │   (ASR excluded)
+                                 └─> specialist artifacts
 ```
 
-The dataset and index paths come from `configs/baseline.yaml`; the visual
-checkpoint comes from `llm/config.yaml`. The first non-empty batch loads that
-checkpoint. Ensure the machine has enough memory and that the checkpoint is
-already cached or network access is available.
-
-## Generate captions
-
-Caption generation reads dataset, model, decoding, and output settings from
-`configs/enrichment.yaml` by default:
+Run these commands from the repository root:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py
+# BTC frame-store ingest
+PYTHONPATH=src aic/bin/python scripts/ingest_btc_keyframes.py \
+  --btc-root data --data-root data \
+  --output-root artifacts/frame_store \
+  --frame-store-id btc-keyframes-v1
+
+# Caption
+PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py \
+  --config configs/enrichment.yaml
+
+# OCR
+PYTHONPATH=src aic/bin/python scripts/generate_ocr_enrichment.py \
+  --config configs/enrichment.yaml
+
+# BTC Object Import
+PYTHONPATH=src aic/bin/python scripts/generate_object_enrichment.py \
+  --config configs/enrichment.yaml
+
+# Timestamped ASR segments; change data/videos if the source lives elsewhere.
+PYTHONPATH=src aic/bin/python scripts/prepare_transcripts.py \
+  --config configs/enrichment.yaml --videos-root data/videos
+
+# Deterministic Caption + OCR + Object context; ASR is excluded.
+PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
+  --config configs/enrichment.yaml
 ```
 
-When `inference.enabled` is true in `configs/baseline.yaml`, the command sends
-bounded JPEG batches to the hosted `/v1/captions` endpoint. It validates the
-hosted checkpoint and immutable revision before writing resumable local
-artifacts. Set `HCMAI_INFERENCE_BASE_URL` to override the configured URL.
-The `Generating captions` progress bar includes already completed frames when
-resuming and reports the current failure count.
+The authoritative and compatibility outputs are:
 
-Pass `--config`, `--frames`, `--dataset-root`, or `--output` only when a run
-needs to override those values.
-
-## Build caption, OCR, and ASR text indexes
-
-Build each frame-aligned text source with the BGE-M3 configuration:
-
-```bash
-PYTHONPATH=src aic/bin/python scripts/build_caption_index.py --source caption
-PYTHONPATH=src aic/bin/python scripts/build_caption_index.py --source ocr
-PYTHONPATH=src aic/bin/python scripts/build_caption_index.py --source asr
+```text
+captions.parquet                  source of truth
+ocr/frames.parquet               source of truth
+ocr/regions.parquet              source of truth
+objects/frames.parquet           source of truth
+objects/detections.parquet       source of truth
+transcripts/*.parquet            source of truth
+context/frame_context_v1.parquet derived cross-modal view
+frame_enrichment.parquet         temporary compatibility projection only
 ```
 
-The command reads the selected enrichment and index paths from
-`configs/baseline.yaml`, including `index.text_embedding_filenames`, and the
-shared text encoder from `llm/config.yaml`. Override them only when needed:
+This V1 sequence intentionally ends at FrameContext. It does not build a
+retrieval index.
 
-```bash
-PYTHONPATH=src aic/bin/python scripts/build_caption_index.py \
-  --source asr \
-  --config configs/baseline.yaml \
-  --model-config llm/config.yaml \
-  --enrichment artifacts/enrichment/asr/frame_enrichment.parquet \
-  --frames artifacts/frame_store/frames.parquet \
-  --output artifacts/indexes/asr
-```
+## Separate retrieval utilities
 
-It writes the configured text embedding filename, `dense.index`,
-`frame_mapping.parquet`, and `metadata.json` under the output directory.
-With hosted inference enabled, all three text channels are embedded remotely in
-batches of
-at most 64 with the configured BGE-M3 encoder while all vectors, mappings, and
-FAISS files remain local. Each source preserves the canonical frame mapping.
-The ASR smoke test uses a tiny frame-aligned transcript artifact and does not
-decode or generate transcripts for the full video corpus.
+The commands below are retained for retrieval development and are not part of
+the BTC-native Enrichment V1 preparation sequence.
 
 ## Rebuild only the index
 
