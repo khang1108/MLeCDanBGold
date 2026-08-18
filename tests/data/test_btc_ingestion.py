@@ -175,6 +175,9 @@ def test_data_service_prepare_uses_btc_dataset_config(tmp_path, monkeypatch):
 
     assert output == output_root / "frames.parquet"
     assert pd.read_parquet(output).iloc[0]["frame_idx"] == 120
+    data = DataService.load(output)
+    assert data.contains_submission("L01_V001", 120)
+    assert not data.contains_submission("L01_V001", 1)
     manifest = json.loads((output_root / "manifest.json").read_text())
     assert manifest["frame_store_id"] == "btc-service-v1"
 
