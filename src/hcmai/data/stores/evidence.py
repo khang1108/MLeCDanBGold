@@ -58,6 +58,48 @@ def _nullable_rows(table: pd.DataFrame) -> list[dict[str, Any]]:
     return cast(list[dict[str, Any]], values.to_dict(orient="records"))
 
 
+def _strict_int(value: object, field: str) -> int:
+    """Reject boolean, floating-point, and string integer representations."""
+
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError(f"{field} must be an integer")
+    return int(value)
+
+
+def _canonical_string(value: object, field: str) -> str:
+    """Require identity strings to already use their canonical representation."""
+
+    if not isinstance(value, str) or not value or value.strip() != value:
+        raise ValueError(f"{field} must use its canonical representation")
+    return value
+
+
+def _frame_identity(row: dict[str, Any]) -> tuple[str, str, int]:
+    """Validate the exact stored representation of canonical frame identity."""
+
+    return (
+        _canonical_string(row.get("frame_id"), "frame_id"),
+        _canonical_string(row.get("video_id"), "video_id"),
+        _strict_int(row.get("frame_idx"), "frame_idx"),
+    )
+
+
+def _index_records(
+    records: Iterable[_EvidenceT], artifact_path: Path
+) -> dict[str, _EvidenceT]:
+    """Index validated canonical IDs without allowing normalized collisions."""
+
+    record_list = tuple(records)
+    indexed = {
+        cast(str, getattr(record, "frame_id")): record for record in record_list
+    }
+    if len(indexed) != len(record_list):
+        raise ValueError(
+            f"Duplicate frame_id values after normalization in {artifact_path}"
+        )
+    return indexed
+
+
 class _TypedEvidenceStore(Generic[_EvidenceT]):
     """Validate one typed Parquet artifact and index exact frame IDs."""
 
@@ -70,23 +112,27 @@ class _TypedEvidenceStore(Generic[_EvidenceT]):
         table = pd.read_parquet(self.artifact_path)
         if "frame_id" not in table.columns:
             raise ValueError(f"{self.artifact_path} is missing column: frame_id")
-        frame_ids = table["frame_id"].tolist()
-        if len(frame_ids) != len(set(frame_ids)):
-            raise ValueError(f"Duplicate frame_id values in {self.artifact_path}")
-
         records: list[_EvidenceT] = []
         for index, row in enumerate(_nullable_rows(table)):
+            frame_id, video_id, frame_idx = _frame_identity(row)
             try:
-                records.append(contract.model_validate(row))
+                record = contract.model_validate(row)
             except Exception as error:
                 raise ValueError(
                     f"Malformed {contract.__name__} row {index} "
                     f"in {self.artifact_path}"
                 ) from error
+            if (
+                getattr(record, "frame_id") != frame_id
+                or getattr(record, "video_id") != video_id
+                or getattr(record, "frame_idx") != frame_idx
+            ):
+                raise ValueError(
+                    f"{contract.__name__} row {index} changed canonical identity"
+                )
+            records.append(record)
         self._records = tuple(records)
-        self._by_frame_id = {
-            str(getattr(record, "frame_id")): record for record in records
-        }
+        self._by_frame_id = _index_records(self._records, self.artifact_path)
 
     def __len__(self) -> int:
         """Return the number of validated evidence rows."""
@@ -161,14 +207,6 @@ class FrameContextStore(_TypedEvidenceStore[FrameContext]):
         return value if value is not None and value.strip() else None
 
 
-def _strict_int(value: object, field: str) -> int:
-    """Reject coercible non-integer values in object artifact identities."""
-
-    if isinstance(value, bool) or not isinstance(value, Integral):
-        raise ValueError(f"{field} must be an integer")
-    return int(value)
-
-
 def _object_counts(value: object) -> dict[str, int]:
     """Decode deterministic object counts from the flattened frame row."""
 
@@ -212,29 +250,37 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
             raise ValueError(
                 f"{self.artifact_path} is missing columns: {', '.join(missing)}"
             )
-        frame_ids = frame_table["frame_id"].tolist()
-        if len(frame_ids) != len(set(frame_ids)):
-            raise ValueError(f"Duplicate frame_id values in {self.artifact_path}")
-
         frame_rows = _nullable_rows(frame_table)
+        identities = [_frame_identity(row) for row in frame_rows]
         detections = self._load_detections(frame_rows)
         records: list[ObjectEvidence] = []
-        for index, row in enumerate(frame_rows):
-            frame_id = row.get("frame_id")
+        for index, (row, identity) in enumerate(
+            zip(frame_rows, identities, strict=True)
+        ):
+            frame_id, video_id, frame_idx = identity
             values = dict(row)
             values["counts"] = _object_counts(values.pop("counts_json", None))
             values["detection_count"] = _strict_int(
                 values.get("detection_count"), "detection_count"
             )
-            values["detections"] = detections.get(str(frame_id), [])
+            values["detections"] = detections.get(frame_id, [])
             try:
-                records.append(ObjectEvidence.model_validate(values))
+                record = ObjectEvidence.model_validate(values)
             except Exception as error:
                 raise ValueError(
                     f"Malformed ObjectEvidence row {index} in {self.artifact_path}"
                 ) from error
+            if (
+                record.frame_id != frame_id
+                or record.video_id != video_id
+                or record.frame_idx != frame_idx
+            ):
+                raise ValueError(
+                    f"ObjectEvidence row {index} changed canonical identity"
+                )
+            records.append(record)
         self._records = tuple(records)
-        self._by_frame_id = {record.frame_id: record for record in records}
+        self._by_frame_id = _index_records(self._records, self.artifact_path)
 
     def _load_detections(
         self, frame_rows: list[dict[str, Any]]
@@ -268,7 +314,11 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
             )
         rows = _nullable_rows(table)
         identities = [
-            (row.get("frame_id"), row.get("detection_index")) for row in rows
+            (
+                _canonical_string(row.get("frame_id"), "frame_id"),
+                _strict_int(row.get("detection_index"), "detection_index"),
+            )
+            for row in rows
         ]
         if len(identities) != len(set(identities)):
             raise ValueError(
@@ -276,18 +326,20 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
             )
 
         frame_video = {
-            str(row["frame_id"]): str(row["video_id"]) for row in frame_rows
+            frame_id: video_id
+            for frame_id, video_id, _ in map(_frame_identity, frame_rows)
         }
         grouped: defaultdict[
             str, list[tuple[int, dict[str, object | None]]]
         ] = defaultdict(list)
         for row in rows:
-            frame_id = str(row.get("frame_id"))
+            frame_id = _canonical_string(row.get("frame_id"), "frame_id")
+            video_id = _canonical_string(row.get("video_id"), "video_id")
             if frame_id not in frame_video:
                 raise ValueError(
                     f"Object detection references unknown frame_id {frame_id!r}"
                 )
-            if row.get("video_id") != frame_video[frame_id]:
+            if video_id != frame_video[frame_id]:
                 raise ValueError(
                     f"Object detection video_id mismatch for frame_id {frame_id!r}"
                 )

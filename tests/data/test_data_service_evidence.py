@@ -285,7 +285,7 @@ def test_public_stores_validate_malformed_and_incomplete_artifacts(
             }
         ]
     ).to_parquet(malformed, index=False)
-    with pytest.raises(ValueError, match="Malformed CaptionEvidence row 0"):
+    with pytest.raises(ValueError, match="video_id.*canonical representation"):
         CaptionStore(malformed)
 
     object_dir = tmp_path / "incomplete-objects"
@@ -323,3 +323,127 @@ def test_frame_context_store_exposes_context_text(tmp_path: Path) -> None:
     store = FrameContextStore(context_path)
 
     assert store.get_text("f1") == "[CAPTION]\nA person runs."
+
+
+def _caption_row(**updates: object) -> dict[str, object]:
+    """Return one raw typed-caption artifact row for validation tests."""
+
+    row: dict[str, object] = {
+        "frame_id": "f1",
+        "video_id": "v1",
+        "frame_idx": 10,
+        "text": "caption",
+        "artifact_version": "caption-v1",
+        "model_name": "caption-model",
+    }
+    row.update(updates)
+    return row
+
+
+def test_typed_store_rejects_whitespace_normalized_duplicate_ids(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "duplicate-normalized-caption.parquet"
+    pd.DataFrame(
+        [_caption_row(), _caption_row(frame_id=" f1")]
+    ).to_parquet(path, index=False)
+
+    with pytest.raises(ValueError, match="frame_id.*canonical representation"):
+        CaptionStore(path)
+
+
+@pytest.mark.parametrize(
+    ("updates", "field"),
+    [
+        ({"frame_id": " f1 "}, "frame_id"),
+        ({"video_id": " v1 "}, "video_id"),
+        ({"frame_idx": 10.0}, "frame_idx"),
+        ({"frame_idx": True}, "frame_idx"),
+        ({"frame_idx": "10"}, "frame_idx"),
+    ],
+)
+def test_typed_store_rejects_coercible_raw_identity(
+    tmp_path: Path,
+    updates: dict[str, object],
+    field: str,
+) -> None:
+    path = tmp_path / f"coercible-{field}.parquet"
+    pd.DataFrame([_caption_row(**updates)]).to_parquet(path, index=False)
+
+    with pytest.raises(ValueError, match=field):
+        CaptionStore(path)
+
+
+def test_object_store_rejects_coercible_frame_identity(tmp_path: Path) -> None:
+    object_dir = tmp_path / "coercible-objects"
+    object_dir.mkdir()
+    path = object_dir / "frames.parquet"
+    pd.DataFrame(
+        [
+            {
+                "frame_id": "f1",
+                "video_id": "v1",
+                "frame_idx": 10.0,
+                "counts_json": "{}",
+                "summary": None,
+                "detection_count": 0,
+                "artifact_version": "object-v1",
+                "status": "completed",
+            }
+        ]
+    ).to_parquet(path, index=False)
+
+    with pytest.raises(ValueError, match="frame_idx"):
+        ObjectStore(path)
+
+
+@pytest.mark.parametrize(
+    ("updates", "field"),
+    [
+        ({"frame_id": " f1"}, "frame_id"),
+        ({"video_id": " v1"}, "video_id"),
+        ({"detection_index": 0.0}, "detection_index"),
+        ({"detection_index": True}, "detection_index"),
+        ({"detection_index": "0"}, "detection_index"),
+    ],
+)
+def test_object_store_rejects_coercible_detection_identity(
+    tmp_path: Path,
+    updates: dict[str, object],
+    field: str,
+) -> None:
+    object_dir = tmp_path / f"coercible-detection-{field}"
+    object_dir.mkdir()
+    frame_path = object_dir / "frames.parquet"
+    pd.DataFrame(
+        [
+            {
+                "frame_id": "f1",
+                "video_id": "v1",
+                "frame_idx": 10,
+                "counts_json": json.dumps({"person": 1}),
+                "summary": "person x1",
+                "detection_count": 1,
+                "artifact_version": "object-v1",
+                "status": "completed",
+            }
+        ]
+    ).to_parquet(frame_path, index=False)
+    detection: dict[str, object] = {
+        "frame_id": "f1",
+        "video_id": "v1",
+        "detection_index": 0,
+        "label": "person",
+        "confidence": 0.9,
+        "x_min": 0.1,
+        "y_min": 0.2,
+        "x_max": 0.3,
+        "y_max": 0.4,
+    }
+    detection.update(updates)
+    pd.DataFrame([detection]).to_parquet(
+        object_dir / "detections.parquet", index=False
+    )
+
+    with pytest.raises(ValueError, match=field):
+        ObjectStore(frame_path)
