@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import json
+import numpy as np
 import pandas as pd
 import pytest
 from PIL import Image
@@ -298,3 +300,62 @@ def test_missing_canonical_frames_does_not_overwrite_existing_artifacts(tmp_path
         name: (output / name).read_bytes()
         for name in before
     } == before
+
+
+def test_generation_sanitizes_raw_output_before_publishing_complete_set(tmp_path):
+    source = _frames(tmp_path, count=1)
+    raw = {
+        "array": np.asarray([1, 2], dtype=np.int64),
+        "nested": [float("nan"), {"infinite": float("inf")}],
+        "unsupported": object(),
+    }
+
+    generate_ocr(
+        source,
+        tmp_path / "ocr",
+        _config(),
+        engine=_Engine([OCRResult("one", (_region("one"),), raw)]),
+    )
+
+    output = tmp_path / "ocr"
+    assert {
+        "frames.parquet",
+        "regions.parquet",
+        "failures.json",
+        "manifest.json",
+        "frame_enrichment.parquet",
+        "ocr_report.json",
+    } <= {path.name for path in output.iterdir()}
+    report = json.loads((output / "ocr_report.json").read_text())
+    assert report["raw_evidence"][0]["raw_output"] == {
+        "array": [1, 2],
+        "nested": [None, {"infinite": None}],
+        "unsupported": None,
+    }
+
+
+def test_revision_full_reprocess_counts_only_prior_rows_as_retried(tmp_path):
+    source = _frames(tmp_path, count=1)
+    generate_ocr(
+        source,
+        tmp_path / "ocr",
+        _config(),
+        engine=_Engine([OCRResult("one", (_region("one"),))]),
+    )
+
+    expanded = _frames(tmp_path, count=2)
+    outputs = [
+        OCRResult("one", (_region("one"),)),
+        OCRResult("two", (_region("two"),)),
+    ]
+    retry = _Engine(outputs, resolved_revision="r2")
+    report = generate_ocr(
+        expanded,
+        tmp_path / "ocr",
+        _config(),
+        engine_factory=lambda _: retry,
+    )
+
+    assert retry.calls == [1, 2]
+    assert report["processed_frames"] == 2
+    assert report["retried_frames"] == 1

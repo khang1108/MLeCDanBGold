@@ -6,7 +6,7 @@ import io
 import json
 from contextlib import asynccontextmanager
 from time import perf_counter
-from typing import Any, AsyncIterator
+from typing import AsyncIterator
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 import numpy as np
@@ -31,6 +31,7 @@ from hcmai.common.schemas import (
     VQAInferenceResponse,
 )
 from hcmai.common.schemas.inference import OCRRegionItem
+from hcmai.data.enrichment.ocr.models.entities import json_safe_ocr_raw
 from hcmai.llm.pipeline import LLMService
 
 
@@ -121,27 +122,6 @@ def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
         response_model=VQAInferenceResponse,
     )
     return app
-
-
-def _json_safe_ocr_raw(value: object) -> Any:
-    """Normalize backend OCR diagnostics to deterministic JSON-safe values."""
-
-    if value is None or isinstance(value, (str, bool, int)):
-        return value
-    if isinstance(value, float):
-        return value if np.isfinite(value) else None
-    if isinstance(value, np.ndarray):
-        return _json_safe_ocr_raw(value.tolist())
-    if isinstance(value, np.generic):
-        return _json_safe_ocr_raw(value.item())
-    if isinstance(value, dict):
-        return {
-            str(key): _json_safe_ocr_raw(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
-        return [_json_safe_ocr_raw(item) for item in value]
-    return None
 
 
 def _lifespan(runtime: LLMService):
@@ -265,7 +245,7 @@ async def ocr(
             OCRItem(
                 item_id=item_id,
                 text=value.text,
-                raw_output=_json_safe_ocr_raw(value.raw_output),
+                raw_output=json_safe_ocr_raw(value.raw_output),
                 regions=[
                     OCRRegionItem(
                         text=region.text,

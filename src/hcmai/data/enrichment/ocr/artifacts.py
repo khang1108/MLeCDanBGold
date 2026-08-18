@@ -22,7 +22,14 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.io import atomic_write, write_json, write_parquet
 
 from .config import OCRConfig
-from .models.entities import Evidence, FailureDetail, FrameRow, OCRRegionResult, OCRResult
+from .models.entities import (
+    Evidence,
+    FailureDetail,
+    FrameRow,
+    OCRRegionResult,
+    OCRResult,
+    json_safe_ocr_raw,
+)
 
 
 @dataclass(frozen=True)
@@ -203,7 +210,7 @@ def parsed_row(
     )
     evidence: Evidence = {
         "frame_id": frame_id,
-        "raw_output": result.raw_output,
+        "raw_output": json_safe_ocr_raw(result.raw_output),
         "usable_region_count": normalized.usable_region_count,
     }
     return row, region_rows, evidence

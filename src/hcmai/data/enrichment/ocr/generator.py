@@ -244,6 +244,7 @@ def generate_ocr(
         )
     else:
         rows, regions, todo, skipped, retried = {}, {}, [], 0, 0
+    prior_row_count = skipped + retried
 
     prior = old.get("raw_evidence", [])
     evidence: dict[str, Evidence] = {
@@ -298,7 +299,7 @@ def generate_ocr(
             raise RuntimeError("OCR runtime revision changed during generation")
         todo = frames
         skipped = 0
-        retried = len(frames)
+        retried = prior_row_count
     elif revision != expected_revision:
         for frame_id in rows:
             rows[frame_id] = rows[frame_id].model_copy(
