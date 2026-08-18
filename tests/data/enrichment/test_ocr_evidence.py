@@ -279,6 +279,40 @@ def test_resume_retries_ocr_with_mismatched_region_identity(tmp_path):
     ]
 
 
+def test_resume_retries_ocr_with_coercible_region_identity(tmp_path):
+    """Reject region identity that only matches after contract normalization."""
+
+    source = _frames(tmp_path)
+    generate_ocr(
+        source,
+        tmp_path / "ocr",
+        _config(),
+        engine=_Engine(
+            [
+                OCRResult("one", (_region("one"),)),
+                OCRResult("two", (_region("two"),)),
+            ]
+        ),
+        frame_store_id="btc-v1",
+    )
+    regions_path = tmp_path / "ocr/regions.parquet"
+    regions = pd.read_parquet(regions_path)
+    regions.loc[regions.frame_id == "f1", "video_id"] = " v1 "
+    regions.to_parquet(regions_path, index=False)
+
+    retry = _Engine([OCRResult("two fixed", (_region("two fixed"),))])
+    report = generate_ocr(
+        source,
+        tmp_path / "ocr",
+        _config(),
+        engine=retry,
+        frame_store_id="btc-v1",
+    )
+
+    assert retry.calls == [1]
+    assert report["retried_frames"] == 1
+
+
 def test_requested_revision_change_reprocesses_all_rows(tmp_path):
     source = _frames(tmp_path)
     outputs = [

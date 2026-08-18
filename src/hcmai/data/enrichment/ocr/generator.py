@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+from numbers import Integral
 from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
@@ -49,6 +50,19 @@ def _consistent_regions(
     parsed: list[OCRRegion] = []
     try:
         for candidate in candidates:
+            if (
+                not isinstance(candidate.get("frame_id"), str)
+                or not candidate["frame_id"]
+                or candidate["frame_id"].strip() != candidate["frame_id"]
+                or not isinstance(candidate.get("video_id"), str)
+                or not candidate["video_id"]
+                or candidate["video_id"].strip() != candidate["video_id"]
+                or isinstance(candidate.get("frame_idx"), bool)
+                or not isinstance(candidate.get("frame_idx"), Integral)
+                or isinstance(candidate.get("timestamp_ms"), bool)
+                or not isinstance(candidate.get("timestamp_ms"), Integral)
+            ):
+                return None
             values = {
                 key: None
                 if isinstance(value, float) and pd.isna(value)
