@@ -397,6 +397,7 @@ def test_prepare_data_cli_delegates_config_and_optional_dataset_root(
         ({"frame_idx": -1}, "frame_idx"),
         ({"timestamp_ms": -1}, "timestamp_ms"),
         ({"keyframe_order": 0}, "keyframe_order"),
+        ({"image_path": ["not-a-scalar.jpg"]}, "image_path"),
         ({"width": 0}, "width"),
         ({"height": -1}, "height"),
     ],

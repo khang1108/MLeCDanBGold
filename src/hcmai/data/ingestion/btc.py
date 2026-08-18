@@ -82,8 +82,15 @@ def _validate_source_columns(frames: pd.DataFrame, source_path: Path) -> None:
 
 
 def _resolve_image_path(data_root: Path, image_path: object) -> str:
-    if image_path is None or pd.isna(image_path):
+    if (
+        image_path is None
+        or image_path is pd.NA
+        or isinstance(image_path, float)
+        and np.isnan(image_path)
+    ):
         raise ValueError("image_path must not be null")
+    if not isinstance(image_path, str):
+        raise ValueError("image_path must be a string")
     normalized = str(image_path).strip()
     if not normalized:
         raise ValueError("image_path must not be blank")
