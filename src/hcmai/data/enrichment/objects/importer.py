@@ -131,6 +131,7 @@ def _failure_evidence(
         frame_id=frame.frame_id,
         video_id=frame.video_id,
         frame_idx=frame.frame_idx,
+        timestamp_ms=frame.timestamp_ms,
         frame_store_id=frame_store_id,
         artifact_version=config.artifact_version,
         status=ProcessingStatus.FAILED,
@@ -203,6 +204,7 @@ def import_objects(
                 frame_id=frame.frame_id,
                 video_id=frame.video_id,
                 frame_idx=frame.frame_idx,
+                timestamp_ms=frame.timestamp_ms,
                 detections=detections,
                 counts=counts,
                 summary=summary,
@@ -215,6 +217,8 @@ def import_objects(
                     {
                         "frame_id": evidence.frame_id,
                         "video_id": evidence.video_id,
+                        "frame_idx": evidence.frame_idx,
+                        "timestamp_ms": evidence.timestamp_ms,
                         "detection_index": detection_index,
                         **detection.model_dump(mode="json"),
                     }

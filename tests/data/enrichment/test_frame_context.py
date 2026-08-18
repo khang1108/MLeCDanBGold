@@ -141,6 +141,7 @@ def _artifacts(root: Path, *, count: int = 2) -> tuple[Path, Path, Path, Path]:
                 frame_id=f"f{index}",
                 video_id="v1",
                 frame_idx=index,
+                timestamp_ms=index * 1000,
                 text=f"caption {index}",
                 frame_store_id="btc-v1",
                 artifact_version="caption-v1",
@@ -162,6 +163,7 @@ def _artifacts(root: Path, *, count: int = 2) -> tuple[Path, Path, Path, Path]:
                 frame_id=f"f{index}",
                 video_id="v1",
                 frame_idx=index,
+                timestamp_ms=index * 1000,
                 normalized_text=f"ocr {index}",
                 quality_score=0.75,
                 frame_store_id="btc-v1",
@@ -184,6 +186,7 @@ def _artifacts(root: Path, *, count: int = 2) -> tuple[Path, Path, Path, Path]:
                 "frame_id": f"f{index}",
                 "video_id": "v1",
                 "frame_idx": index,
+                "timestamp_ms": index * 1000,
                 "counts_json": json.dumps({"person": index + 1}),
                 "summary": f"person x{index + 1}",
                 "detection_count": index + 1,
@@ -224,6 +227,7 @@ def test_builder_writes_canonical_rows_and_lineage(tmp_path: Path) -> None:
     manifest = json.loads((path.parent / "manifest.json").read_text())
 
     assert rows.frame_id.tolist() == ["f0", "f1"]
+    assert rows.timestamp_ms.tolist() == [0, 1000]
     assert rows.caption_version.tolist() == ["caption-v1", "caption-v1"]
     assert rows.ocr_version.tolist() == ["ocr-v1", "ocr-v1"]
     assert rows.object_version.tolist() == ["object-v1", "object-v1"]
@@ -242,6 +246,29 @@ def test_builder_writes_canonical_rows_and_lineage(tmp_path: Path) -> None:
         },
     }
     assert "asr" not in json.dumps(manifest).casefold()
+
+
+@pytest.mark.parametrize("source", ["caption", "ocr", "object"])
+def test_builder_rejects_specialist_timestamp_mismatch(
+    tmp_path: Path, source: str
+) -> None:
+    """Reject specialist evidence aligned to a different canonical timestamp."""
+
+    frames, caption, ocr, objects = _artifacts(tmp_path)
+    path = {"caption": caption, "ocr": ocr, "object": objects}[source]
+    rows = pd.read_parquet(path)
+    rows.loc[0, "timestamp_ms"] = 999
+    rows.to_parquet(path, index=False)
+
+    with pytest.raises(ValueError, match="canonical identity"):
+        build_frame_context(
+            frames,
+            caption,
+            ocr,
+            objects,
+            tmp_path / "context",
+            FrameContextConfig(),
+        )
 
 
 def test_missing_failed_and_low_quality_evidence_is_omitted(tmp_path: Path) -> None:

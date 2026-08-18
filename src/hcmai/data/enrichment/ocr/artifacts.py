@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from numbers import Integral
 from pathlib import Path
 import unicodedata
 
@@ -100,6 +101,19 @@ def valid_ocr(
     """Return a completed frame row only when all reusable lineage matches."""
 
     try:
+        if (
+            not isinstance(data.get("frame_id"), str)
+            or not data["frame_id"]
+            or data["frame_id"].strip() != data["frame_id"]
+            or not isinstance(data.get("video_id"), str)
+            or not data["video_id"]
+            or data["video_id"].strip() != data["video_id"]
+            or isinstance(data.get("frame_idx"), bool)
+            or not isinstance(data.get("frame_idx"), Integral)
+            or isinstance(data.get("timestamp_ms"), bool)
+            or not isinstance(data.get("timestamp_ms"), Integral)
+        ):
+            return None
         values = {
             key: None if isinstance(value, float) and math.isnan(value) else value
             for key, value in dict(data).items()
@@ -138,6 +152,7 @@ def failure_row(
         frame_id=frame_id,
         video_id=str(frame["video_id"]),
         frame_idx=int(frame["frame_idx"]),
+        timestamp_ms=int(frame["timestamp_ms"]),
         frame_store_id=frame_store_id,
         artifact_version=config.artifact_version,
         model_name=config.model_name,
@@ -173,14 +188,18 @@ def parsed_row(
         raise TypeError("OCR backend returned malformed regions")
 
     frame_id = str(frame["frame_id"])
+    video_id = str(frame["video_id"])
     frame_idx = int(frame["frame_idx"])
+    timestamp_ms = int(frame["timestamp_ms"])
     normalized = normalize_regions(
         result.regions, min_confidence=config.min_region_confidence
     )
     region_rows = [
         OCRRegion(
             frame_id=frame_id,
+            video_id=video_id,
             frame_idx=frame_idx,
+            timestamp_ms=timestamp_ms,
             region_id=f"{frame_id}:{order}",
             region_order=order,
             text=region.text,
@@ -199,6 +218,7 @@ def parsed_row(
         frame_id=frame_id,
         video_id=str(frame["video_id"]),
         frame_idx=frame_idx,
+        timestamp_ms=timestamp_ms,
         raw_text=raw_text,
         normalized_text=normalized.text,
         quality_score=normalized.quality_score,

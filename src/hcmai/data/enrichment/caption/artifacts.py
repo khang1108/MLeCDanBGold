@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from numbers import Integral
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,19 @@ def valid_caption(
     """Return a reusable completed ``CaptionEvidence`` row, if valid."""
 
     try:
+        if (
+            not isinstance(data.get("frame_id"), str)
+            or not data["frame_id"]
+            or data["frame_id"].strip() != data["frame_id"]
+            or not isinstance(data.get("video_id"), str)
+            or not data["video_id"]
+            or data["video_id"].strip() != data["video_id"]
+            or isinstance(data.get("frame_idx"), bool)
+            or not isinstance(data.get("frame_idx"), Integral)
+            or isinstance(data.get("timestamp_ms"), bool)
+            or not isinstance(data.get("timestamp_ms"), Integral)
+        ):
+            return None
         values = dict(data)
         for field in (
             "text",

@@ -74,13 +74,14 @@ def _canonical_string(value: object, field: str) -> str:
     return value
 
 
-def _frame_identity(row: dict[str, Any]) -> tuple[str, str, int]:
+def _frame_identity(row: dict[str, Any]) -> tuple[str, str, int, int]:
     """Validate the exact stored representation of canonical frame identity."""
 
     return (
         _canonical_string(row.get("frame_id"), "frame_id"),
         _canonical_string(row.get("video_id"), "video_id"),
         _strict_int(row.get("frame_idx"), "frame_idx"),
+        _strict_int(row.get("timestamp_ms"), "timestamp_ms"),
     )
 
 
@@ -114,7 +115,7 @@ class _TypedEvidenceStore(Generic[_EvidenceT]):
             raise ValueError(f"{self.artifact_path} is missing column: frame_id")
         records: list[_EvidenceT] = []
         for index, row in enumerate(_nullable_rows(table)):
-            frame_id, video_id, frame_idx = _frame_identity(row)
+            frame_id, video_id, frame_idx, timestamp_ms = _frame_identity(row)
             try:
                 record = contract.model_validate(row)
             except Exception as error:
@@ -126,6 +127,7 @@ class _TypedEvidenceStore(Generic[_EvidenceT]):
                 getattr(record, "frame_id") != frame_id
                 or getattr(record, "video_id") != video_id
                 or getattr(record, "frame_idx") != frame_idx
+                or getattr(record, "timestamp_ms") != timestamp_ms
             ):
                 raise ValueError(
                     f"{contract.__name__} row {index} changed canonical identity"
@@ -243,6 +245,7 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
             "frame_id",
             "video_id",
             "frame_idx",
+            "timestamp_ms",
             "counts_json",
             "detection_count",
             "artifact_version",
@@ -259,7 +262,7 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
         for index, (row, identity) in enumerate(
             zip(frame_rows, identities, strict=True)
         ):
-            frame_id, video_id, frame_idx = identity
+            frame_id, video_id, frame_idx, timestamp_ms = identity
             values = dict(row)
             values["counts"] = _object_counts(values.pop("counts_json", None))
             values["detection_count"] = _strict_int(
@@ -276,6 +279,7 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
                 record.frame_id != frame_id
                 or record.video_id != video_id
                 or record.frame_idx != frame_idx
+                or record.timestamp_ms != timestamp_ms
             ):
                 raise ValueError(
                     f"ObjectEvidence row {index} changed canonical identity"
@@ -306,6 +310,8 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
         required = {
             "frame_id",
             "video_id",
+            "frame_idx",
+            "timestamp_ms",
             "detection_index",
             *ObjectDetection.model_fields,
         }
@@ -327,9 +333,11 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
                 f"Duplicate object detection identity in {detection_path}"
             )
 
-        frame_video = {
-            frame_id: video_id
-            for frame_id, video_id, _ in map(_frame_identity, frame_rows)
+        frame_identity = {
+            frame_id: (video_id, frame_idx, timestamp_ms)
+            for frame_id, video_id, frame_idx, timestamp_ms in map(
+                _frame_identity, frame_rows
+            )
         }
         grouped: defaultdict[
             str, list[tuple[int, dict[str, object | None]]]
@@ -337,13 +345,15 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
         for row in rows:
             frame_id = _canonical_string(row.get("frame_id"), "frame_id")
             video_id = _canonical_string(row.get("video_id"), "video_id")
-            if frame_id not in frame_video:
+            frame_idx = _strict_int(row.get("frame_idx"), "frame_idx")
+            timestamp_ms = _strict_int(row.get("timestamp_ms"), "timestamp_ms")
+            if frame_id not in frame_identity:
                 raise ValueError(
                     f"Object detection references unknown frame_id {frame_id!r}"
                 )
-            if video_id != frame_video[frame_id]:
+            if (video_id, frame_idx, timestamp_ms) != frame_identity[frame_id]:
                 raise ValueError(
-                    f"Object detection video_id mismatch for frame_id {frame_id!r}"
+                    f"Object detection canonical identity mismatch for frame_id {frame_id!r}"
                 )
             order = _strict_int(row.get("detection_index"), "detection_index")
             detection = {

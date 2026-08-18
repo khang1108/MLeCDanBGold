@@ -16,6 +16,72 @@ from hcmai.common.schemas import (
 )
 
 
+@pytest.mark.parametrize(
+    ("contract", "values"),
+    [
+        (
+            CaptionEvidence,
+            {
+                "artifact_version": "caption-v1",
+                "model_name": "captioner",
+            },
+        ),
+        (
+            OCREvidence,
+            {"artifact_version": "ocr-v1", "model_name": "ocr"},
+        ),
+        (
+            ObjectEvidence,
+            {"artifact_version": "object-v1"},
+        ),
+        (
+            FrameContext,
+            {
+                "context_version": "frame-context-v1",
+                "caption_version": "caption-v1",
+                "ocr_version": "ocr-v1",
+                "object_version": "object-v1",
+            },
+        ),
+    ],
+)
+def test_frame_aligned_contracts_preserve_full_canonical_identity(
+    contract: type[CaptionEvidence | OCREvidence | ObjectEvidence | FrameContext],
+    values: dict[str, object],
+) -> None:
+    """Keep the organizer timestamp alongside every frame-aligned identity."""
+
+    row = contract(
+        frame_id="f1",
+        video_id="v1",
+        frame_idx=10,
+        timestamp_ms=1_234,
+        **values,
+    )
+
+    assert row.timestamp_ms == 1_234
+
+
+def test_ocr_region_preserves_full_parent_frame_identity() -> None:
+    """Keep video and timestamp identity on every authoritative OCR region."""
+
+    region = OCRRegion(
+        frame_id="f1",
+        video_id="v1",
+        frame_idx=10,
+        timestamp_ms=1_234,
+        region_id="f1:0",
+        region_order=0,
+        text="HCMAI",
+        x_min=0.1,
+        y_min=0.2,
+        x_max=0.8,
+        y_max=0.9,
+    )
+
+    assert (region.video_id, region.timestamp_ms) == ("v1", 1_234)
+
+
 def test_object_evidence_preserves_repeated_instances() -> None:
     """Keep raw repeated detections while accepting thresholded counts."""
 
@@ -41,6 +107,7 @@ def test_object_evidence_preserves_repeated_instances() -> None:
         frame_id="L01_V001:0000",
         video_id="L01_V001",
         frame_idx=10,
+        timestamp_ms=1_000,
         detections=detections,
         counts={"person": 1},
         summary="person x1",
@@ -70,6 +137,7 @@ def test_object_counts_cannot_exceed_raw_detection_multiplicity() -> None:
             frame_id="f1",
             video_id="v1",
             frame_idx=1,
+            timestamp_ms=1_000,
             detections=[detection],
             counts={"person": 2},
             detection_count=1,
@@ -85,6 +153,7 @@ def test_failed_evidence_requires_diagnostics() -> None:
             frame_id="f1",
             video_id="v1",
             frame_idx=1,
+            timestamp_ms=1_000,
             artifact_version="caption-v1",
             model_name="captioner",
             status=ProcessingStatus.FAILED,
@@ -98,6 +167,7 @@ def test_completed_empty_evidence_is_valid_but_not_usable_text() -> None:
         frame_id="f1",
         video_id="v1",
         frame_idx=1,
+        timestamp_ms=1_000,
         text="  ",
         artifact_version="caption-v1",
         model_name="captioner",
@@ -106,6 +176,7 @@ def test_completed_empty_evidence_is_valid_but_not_usable_text() -> None:
         frame_id="f1",
         video_id="v1",
         frame_idx=1,
+        timestamp_ms=1_000,
         normalized_text="",
         artifact_version="ocr-v1",
         model_name="ocr",
@@ -120,7 +191,9 @@ def test_region_bounds_preserve_raw_geometry() -> None:
 
     region = OCRRegion(
         frame_id="f1",
+        video_id="v1",
         frame_idx=1,
+        timestamp_ms=1_000,
         region_id="f1:r0",
         region_order=0,
         text="HCMAI",
@@ -134,7 +207,9 @@ def test_region_bounds_preserve_raw_geometry() -> None:
     with pytest.raises(ValidationError, match="maximum coordinates"):
         OCRRegion(
             frame_id="f1",
+            video_id="v1",
             frame_idx=1,
+            timestamp_ms=1_000,
             region_id="f1:r1",
             region_order=1,
             text="invalid",
@@ -152,6 +227,7 @@ def test_frame_context_records_upstream_versions() -> None:
         frame_id="f1",
         video_id="v1",
         frame_idx=1,
+        timestamp_ms=1_000,
         context_text="[CAPTION]\nA person runs.",
         caption_text="A person runs.",
         ocr_text=None,

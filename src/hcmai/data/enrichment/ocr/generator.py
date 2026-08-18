@@ -19,6 +19,7 @@ from tqdm import tqdm
 from hcmai.common.schemas import OCREvidence, OCRRegion
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.io import atomic_write, read_json, write_json
+from hcmai.data.stores.frame import FrameStore
 
 from .adapters.florence import FlorenceAdapter
 from .artifacts import failure_row, parsed_row, valid_ocr, write_ocr_artifacts
@@ -65,7 +66,9 @@ def _consistent_regions(
         [region.region_order for region in parsed] == expected_orders
         and [region.region_id for region in parsed] == expected_ids
         and all(region.frame_id == row.frame_id for region in parsed)
+        and all(region.video_id == row.video_id for region in parsed)
         and all(region.frame_idx == row.frame_idx for region in parsed)
+        and all(region.timestamp_ms == row.timestamp_ms for region in parsed)
     ) else None
 
 
@@ -114,6 +117,7 @@ def _resume(
         if row is not None and (
             row.video_id != str(frame["video_id"])
             or row.frame_idx != int(frame["frame_idx"])
+            or row.timestamp_ms != int(frame["timestamp_ms"])
         ):
             region_rows = None
         if row is not None and region_rows is not None:
@@ -217,7 +221,10 @@ def generate_ocr(
 
     started, began = datetime.now(timezone.utc), perf_counter()
     path, root = Path(frames_path), Path(dataset_root).expanduser().resolve()
-    frames = _read_rows(path, required=True)
+    frames = [
+        frame.model_dump(mode="python")
+        for frame in FrameStore.load(path).iter_frames()
+    ]
     order = [str(frame["frame_id"]) for frame in frames]
     if len(order) != len(set(order)):
         raise ValueError("input frames contain duplicate frame_id values")

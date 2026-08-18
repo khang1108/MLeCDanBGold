@@ -15,9 +15,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Any, cast
-
-import pandas as pd
+from typing import Any
 
 from hcmai.common.utils.io import atomic_write, read_json, write_json
 from hcmai.common.config import AppConfig
@@ -33,7 +31,9 @@ from hcmai.data.enrichment.caption.report import build_manifest
 from hcmai.data.enrichment.caption.resume import guard_resume, resume_rows
 from hcmai.data.enrichment.caption.runner import run_batches
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
+from hcmai.data.stores.frame import FrameStore
 from hcmai.llm.pipeline import LLMService, LLMServiceConfig
+
 
 def generate_captions(
     frames_path: str | Path,
@@ -48,10 +48,10 @@ def generate_captions(
     started, began, frames_path = datetime.now(timezone.utc), perf_counter(), Path(frames_path)
     root = Path(dataset_root).expanduser().resolve()
 
-    frames = cast(
-        list[dict[str, Any]],
-        pd.read_parquet(frames_path).to_dict(orient="records"),
-    )
+    frames = [
+        frame.model_dump(mode="python")
+        for frame in FrameStore.load(frames_path).iter_frames()
+    ]
     order = [str(frame["frame_id"]) for frame in frames]
 
     if len(order) != len(set(order)):

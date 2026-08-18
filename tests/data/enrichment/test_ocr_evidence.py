@@ -178,11 +178,17 @@ def test_parquet_rows_and_regions_keep_canonical_input_order(tmp_path):
     projection = pd.read_parquet(tmp_path / "ocr/frame_enrichment.parquet")
     assert frames.frame_id.tolist() == ["f0", "f1"]
     assert frames.frame_idx.tolist() == [0, 1]
+    assert frames.timestamp_ms.tolist() == [0, 100]
     assert frames.raw_text.tolist() == ["second\nfirst", "only"]
     assert regions[["frame_id", "region_order", "text"]].values.tolist() == [
         ["f0", 0, "second"],
         ["f0", 1, "first"],
         ["f1", 0, "only"],
+    ]
+    assert regions[["video_id", "frame_idx", "timestamp_ms"]].values.tolist() == [
+        ["v1", 0, 0],
+        ["v1", 0, 0],
+        ["v1", 1, 100],
     ]
     assert projection.frame_id.tolist() == ["f0", "f1"]
     assert report["frames_with_raw_text"] == 2
@@ -231,6 +237,46 @@ def test_resume_retries_failed_and_inconsistent_region_rows(tmp_path):
     assert report["retried_frames"] == 1
     assert frames.normalized_text.tolist() == ["one", "two fixed"]
     assert regions.text.tolist() == ["one", "two fixed"]
+
+
+def test_resume_retries_ocr_with_mismatched_region_identity(tmp_path):
+    """Never reuse OCR when a region disagrees with its parent frame identity."""
+
+    source = _frames(tmp_path)
+    generate_ocr(
+        source,
+        tmp_path / "ocr",
+        _config(),
+        engine=_Engine(
+            [
+                OCRResult("one", (_region("one"),)),
+                OCRResult("two", (_region("two"),)),
+            ]
+        ),
+        frame_store_id="btc-v1",
+    )
+    regions_path = tmp_path / "ocr/regions.parquet"
+    regions = pd.read_parquet(regions_path)
+    regions.loc[regions.frame_id == "f1", "video_id"] = "wrong-video"
+    regions.loc[regions.frame_id == "f1", "timestamp_ms"] = 999
+    regions.to_parquet(regions_path, index=False)
+
+    retry = _Engine([OCRResult("two fixed", (_region("two fixed"),))])
+    report = generate_ocr(
+        source,
+        tmp_path / "ocr",
+        _config(),
+        engine=retry,
+        frame_store_id="btc-v1",
+    )
+
+    regions = pd.read_parquet(regions_path)
+    assert retry.calls == [1]
+    assert report["retried_frames"] == 1
+    assert regions[["video_id", "timestamp_ms"]].values.tolist() == [
+        ["v1", 0],
+        ["v1", 100],
+    ]
 
 
 def test_requested_revision_change_reprocesses_all_rows(tmp_path):

@@ -91,13 +91,21 @@ def test_btc_object_import_preserves_counts_multiplicity_and_boxes(tmp_path):
     assert row["frame_id"] == "L01_V001:0000"
     assert row["video_id"] == "L01_V001"
     assert row["frame_idx"] == 120
+    assert row["timestamp_ms"] == 4000
     assert row["frame_store_id"] == "btc-v1"
     assert detections[
-        ["frame_id", "video_id", "detection_index", "label"]
+        [
+            "frame_id",
+            "video_id",
+            "frame_idx",
+            "timestamp_ms",
+            "detection_index",
+            "label",
+        ]
     ].values.tolist() == [
-        ["L01_V001:0000", "L01_V001", 0, "person"],
-        ["L01_V001:0000", "L01_V001", 1, "person"],
-        ["L01_V001:0000", "L01_V001", 2, "car"],
+        ["L01_V001:0000", "L01_V001", 120, 4000, 0, "person"],
+        ["L01_V001:0000", "L01_V001", 120, 4000, 1, "person"],
+        ["L01_V001:0000", "L01_V001", 120, 4000, 2, "car"],
     ]
     assert detections.iloc[0][
         ["x_min", "y_min", "x_max", "y_max"]
@@ -160,6 +168,7 @@ def test_object_contract_allows_thresholded_counts_but_bounds_multiplicity():
         "frame_id": "f1",
         "video_id": "v1",
         "frame_idx": 1,
+        "timestamp_ms": 1_000,
         "detections": detections,
         "detection_count": 2,
         "artifact_version": "object-v1",

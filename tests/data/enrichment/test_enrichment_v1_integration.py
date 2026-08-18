@@ -204,6 +204,18 @@ def test_two_frame_offline_enrichment_and_context_only_rebuild(
     assert ocr_report["completed_frames"] == 2
     assert object_report["detection_count"] == 4
     rows = pd.read_parquet(context_path).set_index("frame_id")
+    for artifact in (
+        job.caption_output_dir / "captions.parquet",
+        job.ocr_output_dir / "frames.parquet",
+        job.object_output_dir / "frames.parquet",
+        context_path,
+    ):
+        identity = pd.read_parquet(artifact).set_index("frame_id")
+        assert identity.loc["f1", ["video_id", "frame_idx", "timestamp_ms"]].tolist() == [
+            "v1",
+            10,
+            0,
+        ]
     assert "[CAPTION]\nA person reads a sign." in rows.loc["f1", "context_text"]
     assert "[VISIBLE_TEXT]\nHCMAI 2026" in rows.loc["f1", "context_text"]
     assert "[OBJECTS]\nperson x2" in rows.loc["f1", "context_text"]

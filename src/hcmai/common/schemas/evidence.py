@@ -30,6 +30,7 @@ class CaptionEvidence(_SpecialistEvidence):
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
     text: str | None = None
     frame_store_id: NonEmptyString | None = None
     artifact_version: NonEmptyString
@@ -39,7 +40,9 @@ class CaptionEvidence(_SpecialistEvidence):
 
 class OCRRegion(ContractModel):
     frame_id: NonEmptyString
+    video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
     region_id: NonEmptyString
     region_order: int = Field(ge=0)
     text: str
@@ -60,6 +63,7 @@ class OCREvidence(_SpecialistEvidence):
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
     raw_text: str | None = None
     normalized_text: str | None = None
     quality_score: float = Field(default=0.0, ge=0, le=1)
@@ -89,6 +93,7 @@ class ObjectEvidence(_SpecialistEvidence):
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
     detections: list[ObjectDetection] = Field(default_factory=list)
     counts: dict[NonEmptyString, int] = Field(default_factory=dict)
     summary: str | None = None
@@ -113,6 +118,7 @@ class FrameContext(ContractModel):
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
     caption_text: str | None = None
     ocr_text: str | None = None
     object_summary: str | None = None

@@ -46,6 +46,10 @@ Stage-local `manifest.json` and failure reports carry version and resume
 metadata. `frame_enrichment.parquet` may be emitted beside a specialist output
 for existing retrieval consumers, but it is never the source of truth.
 
+Every frame and flat region/detection row carries exact `frame_id`, `video_id`,
+`frame_idx`, and `timestamp_ms`. These fields are required: specialist V1
+Parquet created before this identity contract must be regenerated or migrated.
+
 ## Commands
 
 Run the complete V1 preparation sequence from the repository root:

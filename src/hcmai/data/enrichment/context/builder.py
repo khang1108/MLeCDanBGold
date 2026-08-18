@@ -173,7 +173,7 @@ def _validated_rows(
     name: str,
     contract: type[_EvidenceT],
     version: str,
-    canonical: dict[str, tuple[str, int]],
+    canonical: dict[str, tuple[str, int, int]],
     lineage: str | None,
 ) -> dict[str, _EvidenceT]:
     """Validate specialist rows, uniqueness, canonical identity, and lineage."""
@@ -186,6 +186,21 @@ def _validated_rows(
 
     rows: dict[str, _EvidenceT] = {}
     for raw in cast(list[dict[str, Any]], table.to_dict(orient="records")):
+        raw_frame_id = raw.get("frame_id")
+        raw_video_id = raw.get("video_id")
+        raw_frame_idx = _strict_integer(raw.get("frame_idx"), "frame_idx")
+        raw_timestamp_ms = _strict_integer(
+            raw.get("timestamp_ms"), "timestamp_ms"
+        )
+        if (
+            not isinstance(raw_frame_id, str)
+            or not raw_frame_id
+            or raw_frame_id.strip() != raw_frame_id
+            or not isinstance(raw_video_id, str)
+            or not raw_video_id
+            or raw_video_id.strip() != raw_video_id
+        ):
+            raise ValueError(f"{name} row has non-canonical string identity")
         values = (
             _object_values(raw)
             if contract is ObjectEvidence
@@ -199,8 +214,16 @@ def _validated_rows(
             raise ValueError(
                 f"{name} artifact contains foreign frame_id: {row.frame_id}"
             )
-        video_id, frame_idx = canonical[row.frame_id]
-        if row.video_id != video_id or row.frame_idx != frame_idx:
+        video_id, frame_idx, timestamp_ms = canonical[row.frame_id]
+        if (
+            row.frame_id != raw_frame_id
+            or row.video_id != raw_video_id
+            or row.frame_idx != raw_frame_idx
+            or row.timestamp_ms != raw_timestamp_ms
+            or row.video_id != video_id
+            or row.frame_idx != frame_idx
+            or row.timestamp_ms != timestamp_ms
+        ):
             raise ValueError(
                 f"{name} row does not match canonical identity: {row.frame_id}"
             )
@@ -280,6 +303,7 @@ def _build_context_rows(
                 frame_id=frame.frame_id,
                 video_id=frame.video_id,
                 frame_idx=frame.frame_idx,
+                timestamp_ms=frame.timestamp_ms,
                 caption_text=caption,
                 ocr_text=ocr,
                 object_summary=objects,
@@ -443,7 +467,8 @@ def build_frame_context(
         raise ValueError("canonical frame store must contain at least one frame")
     canonical_order = [frame.frame_id for frame in frames]
     canonical = {
-        frame.frame_id: (frame.video_id, frame.frame_idx) for frame in frames
+        frame.frame_id: (frame.video_id, frame.frame_idx, frame.timestamp_ms)
+        for frame in frames
     }
     if len(canonical) != len(canonical_order):
         raise ValueError("canonical frame store contains duplicate frame_id values")

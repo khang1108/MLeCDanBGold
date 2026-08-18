@@ -81,6 +81,12 @@ def resume_rows(
             if len(old) == 1
             else None
         )
+        if row is not None and (
+            row.video_id != str(frame["video_id"])
+            or row.frame_idx != int(frame["frame_idx"])
+            or row.timestamp_ms != int(frame["timestamp_ms"])
+        ):
+            row = None
         if row is not None:
             rows[frame_id] = row
             skipped += 1
@@ -90,6 +96,7 @@ def resume_rows(
             frame_id=frame_id,
             video_id=str(frame["video_id"]),
             frame_idx=int(frame["frame_idx"]),
+            timestamp_ms=int(frame["timestamp_ms"]),
             frame_store_id=frame_store_id,
             artifact_version=config.enrichment_version,
             model_name=config.model_checkpoint,

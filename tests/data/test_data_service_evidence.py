@@ -49,6 +49,7 @@ def _write_specialist_artifacts(root: Path) -> tuple[Path, Path, Path, Path]:
                 frame_id="f1",
                 video_id="v1",
                 frame_idx=10,
+                timestamp_ms=1_000,
                 text="A person runs.",
                 artifact_version="caption-v1",
                 model_name="caption-model",
@@ -63,6 +64,7 @@ def _write_specialist_artifacts(root: Path) -> tuple[Path, Path, Path, Path]:
                 frame_id="f1",
                 video_id="v1",
                 frame_idx=10,
+                timestamp_ms=1_000,
                 raw_text="Café",
                 normalized_text="cafe",
                 quality_score=0.9,
@@ -82,6 +84,7 @@ def _write_specialist_artifacts(root: Path) -> tuple[Path, Path, Path, Path]:
                 "frame_id": "f1",
                 "video_id": "v1",
                 "frame_idx": 10,
+                "timestamp_ms": 1_000,
                 "counts_json": json.dumps({"person": 2}),
                 "summary": "person x2",
                 "detection_count": 2,
@@ -98,6 +101,8 @@ def _write_specialist_artifacts(root: Path) -> tuple[Path, Path, Path, Path]:
             {
                 "frame_id": "f1",
                 "video_id": "v1",
+                "frame_idx": 10,
+                "timestamp_ms": 1_000,
                 "detection_index": index,
                 "label": "person",
                 "confidence": confidence,
@@ -117,6 +122,7 @@ def _write_specialist_artifacts(root: Path) -> tuple[Path, Path, Path, Path]:
                 frame_id="f1",
                 video_id="v1",
                 frame_idx=10,
+                timestamp_ms=1_000,
                 caption_text="A person runs.",
                 ocr_text="cafe",
                 object_summary="person x2",
@@ -238,6 +244,7 @@ def test_load_evidence_rejects_noncanonical_typed_identity(tmp_path: Path) -> No
                 frame_id="f1",
                 video_id="wrong-video",
                 frame_idx=10,
+                timestamp_ms=1_000,
                 text="caption",
                 artifact_version="caption-v1",
                 model_name="caption-model",
@@ -259,6 +266,7 @@ def test_missing_or_null_specialist_evidence_returns_none(tmp_path: Path) -> Non
                 frame_id="f1",
                 video_id="v1",
                 frame_idx=10,
+                timestamp_ms=1_000,
                 text=None,
                 model_revision=None,
                 artifact_version="caption-v1",
@@ -288,6 +296,7 @@ def test_public_stores_validate_malformed_and_incomplete_artifacts(
                 "frame_id": "f1",
                 "video_id": None,
                 "frame_idx": 10,
+                "timestamp_ms": 1_000,
                 "text": "caption",
                 "artifact_version": "caption-v1",
                 "model_name": "caption-model",
@@ -306,6 +315,7 @@ def test_public_stores_validate_malformed_and_incomplete_artifacts(
                 "frame_id": "f1",
                 "video_id": "v1",
                 "frame_idx": 10,
+                "timestamp_ms": 1_000,
                 "counts_json": json.dumps({"person": 1}),
                 "summary": "person x1",
                 "detection_count": 1,
@@ -341,6 +351,7 @@ def _caption_row(**updates: object) -> dict[str, object]:
         "frame_id": "f1",
         "video_id": "v1",
         "frame_idx": 10,
+        "timestamp_ms": 1_000,
         "text": "caption",
         "artifact_version": "caption-v1",
         "model_name": "caption-model",
@@ -369,6 +380,8 @@ def test_typed_store_rejects_whitespace_normalized_duplicate_ids(
         ({"frame_idx": 10.0}, "frame_idx"),
         ({"frame_idx": True}, "frame_idx"),
         ({"frame_idx": "10"}, "frame_idx"),
+        ({"timestamp_ms": 1_000.0}, "timestamp_ms"),
+        ({"timestamp_ms": "1000"}, "timestamp_ms"),
     ],
 )
 def test_typed_store_rejects_coercible_raw_identity(
@@ -393,6 +406,7 @@ def test_object_store_rejects_coercible_frame_identity(tmp_path: Path) -> None:
                 "frame_id": "f1",
                 "video_id": "v1",
                 "frame_idx": 10.0,
+                "timestamp_ms": 1_000,
                 "counts_json": "{}",
                 "summary": None,
                 "detection_count": 0,
@@ -406,11 +420,33 @@ def test_object_store_rejects_coercible_frame_identity(tmp_path: Path) -> None:
         ObjectStore(path)
 
 
+def test_data_service_rejects_timestamp_mismatch_with_canonical_frame(
+    tmp_path: Path,
+) -> None:
+    """Reject evidence whose timestamp disagrees with its canonical frame."""
+
+    frames_path = _write_frames(tmp_path)
+    caption_path = tmp_path / "timestamp-mismatch.parquet"
+    pd.DataFrame(
+        [
+            _caption_row(timestamp_ms=999),
+        ]
+    ).to_parquet(caption_path, index=False)
+
+    with pytest.raises(ValueError, match="canonical identity"):
+        DataService.load(
+            frames_path,
+            {RetrievalSource.CAPTION: caption_path},
+        )
+
+
 @pytest.mark.parametrize(
     ("updates", "field"),
     [
         ({"frame_id": " f1"}, "frame_id"),
         ({"video_id": " v1"}, "video_id"),
+        ({"frame_idx": 10.0}, "frame_idx"),
+        ({"timestamp_ms": 1_000.0}, "timestamp_ms"),
         ({"detection_index": 0.0}, "detection_index"),
         ({"detection_index": True}, "detection_index"),
         ({"detection_index": "0"}, "detection_index"),
@@ -430,6 +466,7 @@ def test_object_store_rejects_coercible_detection_identity(
                 "frame_id": "f1",
                 "video_id": "v1",
                 "frame_idx": 10,
+                "timestamp_ms": 1_000,
                 "counts_json": json.dumps({"person": 1}),
                 "summary": "person x1",
                 "detection_count": 1,
@@ -441,6 +478,8 @@ def test_object_store_rejects_coercible_detection_identity(
     detection: dict[str, object] = {
         "frame_id": "f1",
         "video_id": "v1",
+        "frame_idx": 10,
+        "timestamp_ms": 1_000,
         "detection_index": 0,
         "label": "person",
         "confidence": 0.9,
@@ -473,6 +512,66 @@ def test_object_store_requires_contiguous_detection_indices(
         ObjectStore(object_path)
 
 
+def test_object_store_rejects_detection_frame_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Reject flat detections aligned to a different canonical frame timestamp."""
+
+    _, _, object_path, _ = _write_specialist_artifacts(tmp_path)
+    detections_path = object_path.with_name("detections.parquet")
+    table = pd.read_parquet(detections_path)
+    table.loc[0, "timestamp_ms"] = 999
+    table.to_parquet(detections_path, index=False)
+
+    with pytest.raises(ValueError, match="canonical identity mismatch"):
+        ObjectStore(object_path)
+
+
+def test_object_writer_rejects_detection_frame_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Reject inconsistent flat identities before publishing object artifacts."""
+
+    row = ObjectEvidence(
+        frame_id="f1",
+        video_id="v1",
+        frame_idx=10,
+        timestamp_ms=1_000,
+        detections=[
+            ObjectDetection(
+                label="person",
+                confidence=0.9,
+                x_min=0.1,
+                y_min=0.2,
+                x_max=0.3,
+                y_max=0.4,
+            )
+        ],
+        counts={"person": 1},
+        summary="person x1",
+        detection_count=1,
+        artifact_version="object-v1",
+    )
+
+    with pytest.raises(ValueError, match="canonical identity"):
+        write_object_artifacts(
+            tmp_path / "objects",
+            ["f1"],
+            [row],
+            [
+                {
+                    "frame_id": "f1",
+                    "video_id": "v1",
+                    "frame_idx": 10,
+                    "timestamp_ms": 999,
+                    "detection_index": 0,
+                    **row.detections[0].model_dump(mode="json"),
+                }
+            ],
+            {"artifact_version": "object-v1"},
+        )
+
+
 def test_object_store_requires_serialized_counts_json(tmp_path: Path) -> None:
     object_dir = tmp_path / "object-count-shape"
     object_dir.mkdir()
@@ -483,6 +582,7 @@ def test_object_store_requires_serialized_counts_json(tmp_path: Path) -> None:
                 "frame_id": "f1",
                 "video_id": "v1",
                 "frame_idx": 10,
+                "timestamp_ms": 1_000,
                 "counts_json": {"person": 0},
                 "summary": None,
                 "detection_count": 0,
@@ -510,6 +610,7 @@ def test_object_store_loads_real_producer_bundle(tmp_path: Path) -> None:
             frame_id="f1",
             video_id="v1",
             frame_idx=10,
+            timestamp_ms=1_000,
             detections=[detection],
             counts={"person": 1},
             summary="person x1",
@@ -520,12 +621,14 @@ def test_object_store_loads_real_producer_bundle(tmp_path: Path) -> None:
             frame_id="f2",
             video_id="v1",
             frame_idx=20,
+            timestamp_ms=2_000,
             artifact_version="object-v1",
         ),
         ObjectEvidence(
             frame_id="f3",
             video_id="v1",
             frame_idx=30,
+            timestamp_ms=3_000,
             artifact_version="object-v1",
             status=ProcessingStatus.FAILED,
             error_code="MissingSource",
@@ -541,6 +644,8 @@ def test_object_store_loads_real_producer_bundle(tmp_path: Path) -> None:
             {
                 "frame_id": "f1",
                 "video_id": "v1",
+                "frame_idx": 10,
+                "timestamp_ms": 1_000,
                 "detection_index": 0,
                 **detection.model_dump(mode="json"),
             }

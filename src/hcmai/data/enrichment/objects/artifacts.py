@@ -7,6 +7,7 @@ table preserves every valid source detection in organizer order.
 from __future__ import annotations
 
 import json
+from numbers import Integral
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ FRAME_COLUMNS = [
     "frame_id",
     "video_id",
     "frame_idx",
+    "timestamp_ms",
     "counts_json",
     "summary",
     "detection_count",
@@ -38,6 +40,8 @@ FRAME_COLUMNS = [
 DETECTION_COLUMNS = [
     "frame_id",
     "video_id",
+    "frame_idx",
+    "timestamp_ms",
     "detection_index",
     "label",
     "confidence",
@@ -55,6 +59,7 @@ def frame_artifact_row(evidence: ObjectEvidence) -> dict[str, Any]:
         "frame_id": evidence.frame_id,
         "video_id": evidence.video_id,
         "frame_idx": evidence.frame_idx,
+        "timestamp_ms": evidence.timestamp_ms,
         "counts_json": json.dumps(
             dict(sorted(evidence.counts.items())),
             ensure_ascii=False,
@@ -91,6 +96,34 @@ def _validate_artifact_tables(
         )
     if not set(detection_table["frame_id"].astype(str)).issubset(set(frame_ids)):
         raise ValueError("object detection references an unknown canonical frame")
+
+    canonical = {
+        row["frame_id"]: (
+            row["video_id"],
+            row["frame_idx"],
+            row["timestamp_ms"],
+        )
+        for row in frame_table.to_dict(orient="records")
+    }
+    for row in detection_table.to_dict(orient="records"):
+        frame_id = row["frame_id"]
+        if (
+            not isinstance(frame_id, str)
+            or not frame_id
+            or frame_id.strip() != frame_id
+            or not isinstance(row["video_id"], str)
+            or not row["video_id"]
+            or row["video_id"].strip() != row["video_id"]
+            or isinstance(row["frame_idx"], bool)
+            or not isinstance(row["frame_idx"], Integral)
+            or isinstance(row["timestamp_ms"], bool)
+            or not isinstance(row["timestamp_ms"], Integral)
+            or canonical.get(frame_id)
+            != (row["video_id"], row["frame_idx"], row["timestamp_ms"])
+        ):
+            raise ValueError(
+                "object detection canonical identity does not match its frame row"
+            )
 
     expected = detection_table.groupby("frame_id", sort=False).size().to_dict()
     for row in frame_table.to_dict(orient="records"):

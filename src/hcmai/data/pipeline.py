@@ -365,6 +365,7 @@ def _validate_canonical_identity(
         if (
             evidence.video_id != frame.video_id
             or evidence.frame_idx != frame.frame_idx
+            or evidence.timestamp_ms != frame.timestamp_ms
         ):
             raise ValueError(
                 "Evidence does not match canonical identity for frame_id "

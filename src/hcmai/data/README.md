@@ -44,9 +44,14 @@ The compatibility projection exists for retrieval code that has not yet moved
 to the typed specialist stores. It must not be treated as an authoritative
 enrichment artifact.
 
-All frame-aligned evidence preserves `video_id`, `frame_id`, `frame_idx`, and
-`frame_store_id`. `frame_idx` is the competition-facing coordinate; keyframe
-order and array position must never replace it.
+All frame-aligned evidence preserves `video_id`, `frame_id`, `frame_idx`,
+`timestamp_ms`, and `frame_store_id`. `frame_idx` is the competition-facing
+coordinate; keyframe order and array position must never replace it.
+
+The identity fields are required in specialist V1 Parquet. Existing Caption,
+OCR, Object, or FrameContext artifacts without `timestamp_ms` (or OCR region
+artifacts without `video_id`) must be regenerated or explicitly migrated before
+they can be loaded.
 
 ## Run the V1 stages
 

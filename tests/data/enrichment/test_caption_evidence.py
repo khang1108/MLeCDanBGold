@@ -84,6 +84,7 @@ def test_caption_artifact_keeps_failure_identity_and_retries_only_incomplete_row
     table = pd.read_parquet(output / "captions.parquet")
     assert table.loc[0, "video_id"] == "v1"
     assert table.loc[0, "frame_idx"] == 0
+    assert table.loc[0, "timestamp_ms"] == 0
     assert table.loc[0, "text"] == "A person runs."
     assert table.loc[1, "status"] == "failed"
     assert table.loc[1, "error_code"] == "RuntimeError"
@@ -108,3 +109,38 @@ def test_caption_artifact_keeps_failure_identity_and_retries_only_incomplete_row
     assert pd.read_parquet(output / "captions.parquet")["status"].eq("completed").all()
     legacy = pd.read_parquet(output / "frame_enrichment.parquet")
     assert legacy["objects"].map(len).eq(0).all()
+
+
+def test_resume_retries_caption_with_mismatched_canonical_timestamp(
+    tmp_path: Path,
+) -> None:
+    """Never reuse a caption row aligned to a different source timestamp."""
+
+    frames_path = _frames(tmp_path)
+    output = tmp_path / "captions"
+    generate_captions(
+        frames_path,
+        output,
+        _config(),
+        FakeCaptionAdapter(["zero", "one", "two"]),
+        dataset_root=tmp_path,
+        frame_store_id="btc-test-v1",
+    )
+    rows = pd.read_parquet(output / "captions.parquet")
+    rows.loc[1, "timestamp_ms"] = 999
+    rows.to_parquet(output / "captions.parquet", index=False)
+
+    retry = FakeCaptionAdapter(["one fixed"])
+    report = generate_captions(
+        frames_path,
+        output,
+        _config(),
+        retry,
+        dataset_root=tmp_path,
+        frame_store_id="btc-test-v1",
+    )
+
+    rows = pd.read_parquet(output / "captions.parquet")
+    assert retry.calls == [1]
+    assert report["retried_count"] == 1
+    assert rows.timestamp_ms.tolist() == [0, 1_000, 2_000]
