@@ -176,6 +176,43 @@ def test_data_service_prepare_rejects_non_btc_source(tmp_path):
         DataService.prepare(config_path)
 
 
+def test_data_service_prepare_adaptive_keeps_legacy_local_entry(
+    tmp_path, monkeypatch
+):
+    from hcmai.data.pipeline import DataService
+
+    config_path = tmp_path / "preprocessing.yaml"
+    write_yaml(
+        {
+            "preprocessing": {
+                "videos_root": str(tmp_path / "videos"),
+                "output_root": str(tmp_path / "frame_store"),
+            }
+        },
+        config_path,
+    )
+    expected = tmp_path / "legacy-frames.parquet"
+    calls = []
+
+    def fake_prepare(config, *, resume, limit):
+        calls.append((config, resume, limit))
+        return expected
+
+    monkeypatch.setattr(
+        "hcmai.data.preprocessing.prepare_frame_store", fake_prepare
+    )
+
+    output = DataService.prepare_adaptive(config_path, resume=False, limit=2)
+
+    assert output == expected
+    assert len(calls) == 1
+    config, resume, limit = calls[0]
+    assert config.videos_root == tmp_path / "videos"
+    assert config.s3 is None
+    assert resume is False
+    assert limit == 2
+
+
 def test_prepare_data_cli_uses_btc_enrichment_config(tmp_path):
     source = tmp_path / "btc"
     (source / "metadata").mkdir(parents=True)

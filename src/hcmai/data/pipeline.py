@@ -133,6 +133,28 @@ class DataService:
             )
         )
 
+    @staticmethod
+    def prepare_adaptive(
+        config_path: str | Path,
+        *,
+        resume: bool = True,
+        limit: int | None = None,
+    ) -> Path:
+        """Run the explicit legacy/custom-video preprocessing workflow."""
+
+        from hcmai.data.preprocessing import (
+            PreprocessingConfig,
+            prepare_frame_store,
+            prepare_frame_store_from_s3,
+        )
+
+        config = PreprocessingConfig.from_yaml(config_path)
+        if config.s3 is not None:
+            return prepare_frame_store_from_s3(
+                config, resume=resume, limit=limit
+            )
+        return prepare_frame_store(config, resume=resume, limit=limit)
+
     def get_frame(self, frame_id: str) -> FrameRecord:
         return self._frames().get(frame_id)
 
