@@ -390,6 +390,57 @@ def test_schema_valid_context_corruption_forces_rebuild(
     pd.testing.assert_frame_equal(pd.read_parquet(path), expected)
 
 
+@pytest.mark.parametrize("field", ["caption_text", "context_text"])
+def test_padded_context_strings_force_rebuild(tmp_path: Path, field: str) -> None:
+    """Do not let contract whitespace normalization hide stored corruption."""
+
+    path = _build(tmp_path)
+    expected = pd.read_parquet(path)
+    corrupted = expected.copy()
+    corrupted.loc[0, field] = f"  {expected.loc[0, field]}  "
+    corrupted.to_parquet(path, index=False)
+
+    build_frame_context(
+        tmp_path / "frames.parquet",
+        tmp_path / "caption/captions.parquet",
+        tmp_path / "ocr/frames.parquet",
+        tmp_path / "objects/frames.parquet",
+        path.parent,
+        FrameContextConfig(),
+        frame_store_id="btc-v1",
+    )
+
+    pd.testing.assert_frame_equal(pd.read_parquet(path), expected)
+
+
+@pytest.mark.parametrize("field", ["caption_available", "object_count"])
+def test_coercible_context_scalar_representations_force_rebuild(
+    tmp_path: Path, field: str
+) -> None:
+    """Reject schema-valid scalar coercions whose stored types are not canonical."""
+
+    path = _build(tmp_path)
+    expected = pd.read_parquet(path)
+    corrupted = expected.copy()
+    if field == "caption_available":
+        corrupted[field] = [1, 1]
+    else:
+        corrupted[field] = corrupted[field].astype(float)
+    corrupted.to_parquet(path, index=False)
+
+    build_frame_context(
+        tmp_path / "frames.parquet",
+        tmp_path / "caption/captions.parquet",
+        tmp_path / "ocr/frames.parquet",
+        tmp_path / "objects/frames.parquet",
+        path.parent,
+        FrameContextConfig(),
+        frame_store_id="btc-v1",
+    )
+
+    pd.testing.assert_frame_equal(pd.read_parquet(path), expected)
+
+
 @pytest.mark.parametrize("source", ["canonical", "caption", "ocr", "object"])
 def test_duplicate_or_foreign_identity_is_rejected(
     tmp_path: Path, source: str

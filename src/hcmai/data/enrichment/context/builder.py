@@ -321,17 +321,33 @@ def _valid_existing_bundle(
         if read_json(manifest_path) != identity:
             return False
         table = pd.read_parquet(context_path)
-        rows = [
-            FrameContext.model_validate(
-                {key: _optional(value) for key, value in raw.items()}
-            )
+        if table.columns.tolist() != list(FrameContext.model_fields):
+            return False
+        raw_rows = [
+            {key: _optional(value) for key, value in raw.items()}
             for raw in cast(list[dict[str, Any]], table.to_dict(orient="records"))
         ]
+        for raw in raw_rows:
+            FrameContext.model_validate(raw)
     except Exception:
         return False
-    return [row.model_dump(mode="json") for row in rows] == [
-        row.model_dump(mode="json") for row in expected_rows
-    ]
+    expected = [row.model_dump(mode="json") for row in expected_rows]
+    if len(raw_rows) != len(expected):
+        return False
+
+    # Contract validation above protects field semantics. This raw comparison
+    # independently prevents Pydantic stripping/coercion from hiding corruption.
+    for actual, expected_row in zip(raw_rows, expected, strict=True):
+        if list(actual) != list(expected_row):
+            return False
+        for key, expected_value in expected_row.items():
+            actual_value = actual[key]
+            if (
+                type(actual_value) is not type(expected_value)
+                or actual_value != expected_value
+            ):
+                return False
+    return True
 
 
 def _publish_staged_bundle(
