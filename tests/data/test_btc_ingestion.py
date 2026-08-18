@@ -89,6 +89,10 @@ def test_btc_import_does_not_require_preprocessing_fields(
     assert manifest["frame_store_id"] == "btc-test-v1"
     assert manifest["video_count"] == 1
     assert manifest["frame_count"] == 1
+    assert not (output.parent / ".frames.parquet.staged").exists()
+    assert not (output.parent / ".manifest.json.staged").exists()
+    assert not (output.parent / ".frames.parquet.backup").exists()
+    assert not (output.parent / ".manifest.json.backup").exists()
 
 
 def test_ingestion_cli_delegates_to_reusable_importer(
@@ -462,3 +466,49 @@ def test_manifest_staging_failure_preserves_published_bundle(
     assert manifest_path.read_text() == '{"frame_store_id":"previous"}\n'
     assert not (output_root / ".frames.parquet.staged").exists()
     assert not (output_root / ".manifest.json.staged").exists()
+
+
+def test_manifest_publish_failure_restores_previous_bundle(
+    tmp_path, monkeypatch
+):
+    import hcmai.data.ingestion.btc as btc
+
+    source = tmp_path / "btc"
+    _write_btc_metadata(source, [_valid_btc_row()])
+    output_root = tmp_path / "frame_store"
+    output_root.mkdir()
+    frames_path = output_root / "frames.parquet"
+    manifest_path = output_root / "manifest.json"
+    previous_frames = b"previous frames"
+    previous_manifest = '{"frame_store_id":"previous"}\n'
+    frames_path.write_bytes(previous_frames)
+    manifest_path.write_text(previous_manifest)
+
+    original_replace = btc.Path.replace
+
+    def fail_final_manifest_replace(path, target):
+        if (
+            path.name == ".manifest.json.staged"
+            and btc.Path(target) == manifest_path
+        ):
+            raise OSError("simulated final manifest replacement failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(btc.Path, "replace", fail_final_manifest_replace)
+
+    with pytest.raises(OSError, match="final manifest replacement failure"):
+        btc.import_btc_frame_store(
+            btc.BTCIngestionConfig(
+                btc_root=source,
+                data_root=source,
+                output_root=output_root,
+                frame_store_id="btc-new-v1",
+            )
+        )
+
+    assert frames_path.read_bytes() == previous_frames
+    assert manifest_path.read_text() == previous_manifest
+    assert not (output_root / ".frames.parquet.staged").exists()
+    assert not (output_root / ".manifest.json.staged").exists()
+    assert not (output_root / ".frames.parquet.backup").exists()
+    assert not (output_root / ".manifest.json.backup").exists()

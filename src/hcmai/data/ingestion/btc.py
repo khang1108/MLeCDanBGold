@@ -191,6 +191,54 @@ def _warn_about_missing_images(frames: pd.DataFrame) -> None:
         logger.warning("Missing BTC keyframe image: %s", image_path)
 
 
+def _publish_staged_bundle(
+    *,
+    staged_frames: Path,
+    staged_manifest: Path,
+    output_path: Path,
+    manifest_path: Path,
+) -> None:
+    """Publish both staged files or restore the complete previous bundle."""
+
+    frames_backup = output_path.parent / ".frames.parquet.backup"
+    manifest_backup = manifest_path.parent / ".manifest.json.backup"
+    for backup in (frames_backup, manifest_backup):
+        if backup.exists():
+            raise RuntimeError(f"Refusing to overwrite stale backup: {backup}")
+
+    frames_publish_attempted = False
+    manifest_publish_attempted = False
+    cleanup_backups = False
+    try:
+        if output_path.exists():
+            output_path.replace(frames_backup)
+        if manifest_path.exists():
+            manifest_path.replace(manifest_backup)
+
+        frames_publish_attempted = True
+        staged_frames.replace(output_path)
+        # The manifest is the final commit marker for the published bundle.
+        manifest_publish_attempted = True
+        staged_manifest.replace(manifest_path)
+        cleanup_backups = True
+    except Exception:
+        if manifest_publish_attempted:
+            manifest_path.unlink(missing_ok=True)
+        if frames_publish_attempted:
+            output_path.unlink(missing_ok=True)
+        if frames_backup.exists():
+            frames_backup.replace(output_path)
+        if manifest_backup.exists():
+            # Restore the previous manifest last as its commit marker.
+            manifest_backup.replace(manifest_path)
+        cleanup_backups = True
+        raise
+    finally:
+        if cleanup_backups:
+            frames_backup.unlink(missing_ok=True)
+            manifest_backup.unlink(missing_ok=True)
+
+
 def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
     """Materialize BTC metadata as a canonical, lineage-stamped frame store.
 
@@ -253,9 +301,12 @@ def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
         if read_json(staged_manifest) != manifest:
             raise ValueError("Staged BTC manifest failed round-trip validation")
 
-        staged_frames.replace(output_path)
-        # The manifest is the final commit marker for the published bundle.
-        staged_manifest.replace(manifest_path)
+        _publish_staged_bundle(
+            staged_frames=staged_frames,
+            staged_manifest=staged_manifest,
+            output_path=output_path,
+            manifest_path=manifest_path,
+        )
     finally:
         staged_frames.unlink(missing_ok=True)
         staged_manifest.unlink(missing_ok=True)
