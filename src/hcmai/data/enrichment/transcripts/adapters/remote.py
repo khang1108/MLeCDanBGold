@@ -141,7 +141,7 @@ class RemoteDiarizationAdapter:
             item.segment_id for item in segments
         ]:
             raise ValueError("remote diarization changed segment identity/order")
-        return _preserve_asr_lineage(segments, response.segments)
+        return _apply_speaker_labels(segments, response.segments)
 
     def assign_speakers(
         self,
@@ -208,26 +208,19 @@ def _stamp_asr_lineage(
     return stamped
 
 
-def _preserve_asr_lineage(
+def _apply_speaker_labels(
     original: list[TranscriptSegment],
     diarized: list[TranscriptSegment],
 ) -> list[TranscriptSegment]:
-    """Accept speaker updates only when the provider kept ASR provenance."""
+    """Accept only speaker labels while preserving canonical ASR segments."""
 
-    preserved: list[TranscriptSegment] = []
-    lineage_fields = ("model_name", "model_revision", "artifact_version")
+    merged: list[TranscriptSegment] = []
     for source, result in zip(original, diarized, strict=True):
-        for field in lineage_fields:
-            if getattr(result, field) != getattr(source, field):
-                result_value = getattr(result, field)
-                # Legacy remote diarization responses omit optional model
-                # lineage; restore it from the source ASR segment.
-                if field != "artifact_version" and result_value is None:
-                    continue
-                raise ValueError(
-                    f"remote diarization changed ASR {field}"
-                )
-        preserved.append(result.model_copy(update={
-            field: getattr(source, field) for field in lineage_fields
-        }))
-    return preserved
+        source_fields = source.model_dump(exclude={"speaker_id"})
+        result_fields = result.model_dump(exclude={"speaker_id"})
+        if result_fields != source_fields:
+            raise ValueError("remote diarization changed canonical ASR segment")
+        merged.append(
+            source.model_copy(update={"speaker_id": result.speaker_id})
+        )
+    return merged
