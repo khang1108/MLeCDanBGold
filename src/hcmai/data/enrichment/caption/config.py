@@ -79,11 +79,12 @@ class CaptionJobConfig:
         output_dir = values.pop("output_dir", None)
         dataset_root = dataset.get("data_root", dataset.get("root"))
         missing = sorted({"version", "frames_path"} - set(dataset))
-        if dataset_root is None:
+        if not isinstance(dataset_root, (str, Path)):
             missing.append("data_root")
         if missing or output_dir is None:
             fields = missing + ([] if output_dir is not None else ["caption.output_dir"])
             raise ValueError(f"Missing enrichment configuration: {', '.join(fields)}")
+        assert isinstance(dataset_root, (str, Path))
 
         values["dataset_version"] = dataset["version"]
         return cls(

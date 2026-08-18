@@ -135,3 +135,15 @@ def test_relative_caption_paths_do_not_depend_on_process_working_directory(
     assert config.dataset_root == project_root / "fixture/data"
     assert config.frames_path == project_root / "fixture/data/frames.parquet"
     assert config.output_dir == project_root / "fixture/captions"
+
+
+def test_caption_job_rejects_non_path_dataset_root(tmp_path: Path) -> None:
+    """Reject malformed YAML paths before passing them to ``pathlib``."""
+
+    raw = yaml.safe_load(Path("configs/enrichment.yaml").read_text(encoding="utf-8"))
+    raw["dataset"]["data_root"] = 123
+    config_path = tmp_path / "enrichment.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="data_root"):
+        CaptionJobConfig.from_yaml(config_path)
