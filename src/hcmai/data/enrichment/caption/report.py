@@ -55,7 +55,9 @@ def build_manifest(
         return ordered[round((len(ordered) - 1) * part)] if ordered else 0.0
 
     return {
-        "artifact_version": "caption-evidence.v1",
+        # Rows and manifest share one version so downstream validation can
+        # prove that the whole specialist bundle has matching lineage.
+        "artifact_version": config.enrichment_version,
         "source_artifact": "captions.parquet",
         ENRICHMENT_VERSION: config.enrichment_version,
         "dataset_version": config.dataset_version,

@@ -79,9 +79,10 @@ def test_enrichment_config_is_loaded_from_root_yaml() -> None:
     assert config.caption.revision == "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
     assert config.caption.decoding["num_beams"] == 3
     assert config.caption.dataset_version == "hcmai2026_v1"
-    assert config.dataset_root == project_root / "artifacts/frame_store"
+    assert config.dataset_root == project_root / "data"
     assert config.frames_path == project_root / "artifacts/frame_store/frames.parquet"
-    assert config.output_dir == project_root / "artifacts/enrichment/caption"
+    assert config.output_dir == project_root / "artifacts/enrichment/captions"
+    assert config.frame_store_id == "btc-keyframes-v1"
 
     transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
     assert transcript.asr.revision == "bcd2b5b7f32b480ab5790554cfa8347f246a14f3"

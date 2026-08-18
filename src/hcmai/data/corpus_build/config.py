@@ -64,8 +64,10 @@ class PreparationStagesConfig(BaseModel):
     frame_store: bool = True
     caption: bool = True
     ocr: bool = True
+    objects: bool = True
     asr: bool = True
-    
+    frame_context: bool = True
+
     visual_index: bool = True
     caption_index: bool = True
     ocr_index: bool = True

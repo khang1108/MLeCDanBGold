@@ -28,7 +28,9 @@ def _values(root: Path) -> dict[str, object]:
             "frame_store": True,
             "caption": True,
             "ocr": True,
+            "objects": True,
             "asr": True,
+            "frame_context": True,
             "visual_index": True,
             "caption_index": True,
             "ocr_index": True,
@@ -155,7 +157,18 @@ def test_checked_in_production_config_is_s3_only_and_fully_pinned() -> None:
         for model in config.models.model_dump().values()
     )
     assert config.preprocessing.dino_revision == config.models.dino.revision
-    assert all(config.stages.model_dump().values())
+    assert config.stages.model_dump() == {
+        "frame_store": True,
+        "caption": True,
+        "ocr": True,
+        "objects": True,
+        "asr": True,
+        "frame_context": True,
+        "visual_index": False,
+        "caption_index": False,
+        "ocr_index": False,
+        "asr_index": False,
+    }
 
     caption = CaptionJobConfig.from_yaml()
     transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
@@ -203,7 +216,9 @@ def test_stage_toggles_allow_a_dependency_complete_partial_run(
         "frame_store": True,
         "caption": False,
         "ocr": False,
+        "objects": False,
         "asr": False,
+        "frame_context": False,
         "visual_index": True,
         "caption_index": False,
         "ocr_index": False,

@@ -88,7 +88,8 @@ def test_caption_artifact_keeps_failure_identity_and_retries_only_incomplete_row
     assert table.loc[1, "status"] == "failed"
     assert table.loc[1, "error_code"] == "RuntimeError"
     assert table.loc[2, "error_code"] == "EmptyCaption"
-    assert first["artifact_version"] == "caption-evidence.v1"
+    assert first["artifact_version"] == "caption-test-v1"
+    assert table["artifact_version"].eq("caption-test-v1").all()
     assert first["source_artifact"] == "captions.parquet"
 
     second_adapter = FakeCaptionAdapter(["Recovered one.", "Recovered two."])

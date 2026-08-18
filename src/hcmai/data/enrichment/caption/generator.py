@@ -166,6 +166,7 @@ def main() -> int:
         job.caption,
         captioner,
         dataset_root=args.dataset_root or job.dataset_root,
+        frame_store_id=job.frame_store_id,
     )
     keys = "completed_count", "failed_count", "skipped_count", "retried_count"
     print({key: manifest[key] for key in keys})

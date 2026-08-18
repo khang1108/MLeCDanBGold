@@ -54,14 +54,16 @@ preparation:
 
 
   stages:
-    frame_store: false
+    frame_store: true
     caption: true
     ocr: true
+    objects: true
     asr: true
-    visual_index: true
-    caption_index: true
-    ocr_index: true
-    asr_index: true
+    frame_context: true
+    visual_index: false
+    caption_index: false
+    ocr_index: false
+    asr_index: false
 
   models:
     dino:
