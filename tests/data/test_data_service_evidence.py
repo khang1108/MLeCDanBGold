@@ -11,11 +11,14 @@ import pytest
 from hcmai.common.schemas import (
     CaptionEvidence,
     FrameContext,
+    ObjectDetection,
     ObjectEvidence,
     OCREvidence,
+    ProcessingStatus,
     RetrievalSource,
     TranscriptSegment,
 )
+from hcmai.data.enrichment.objects.artifacts import write_object_artifacts
 from hcmai.data.pipeline import DataService
 from hcmai.data.stores import CaptionStore, FrameContextStore, ObjectStore
 
@@ -218,6 +221,12 @@ def test_data_service_returns_half_open_transcript_overlap_chronologically(
         for segment in data.get_transcript_segments("v1", 1_000, 2_000)
     ] == ["first", "second"]
     assert data.get_transcript_segments("missing", 1_000, 2_000) == []
+    assert data.get_transcript_segments("v1", 1_200, 1_200) == []
+
+    with pytest.raises(ValueError, match="start_ms.*non-negative"):
+        data.get_transcript_segments("v1", -1, 1_000)
+    with pytest.raises(ValueError, match="end_ms.*start_ms"):
+        data.get_transcript_segments("v1", 2_000, 1_000)
 
 
 def test_load_evidence_rejects_noncanonical_typed_identity(tmp_path: Path) -> None:
@@ -447,3 +456,100 @@ def test_object_store_rejects_coercible_detection_identity(
 
     with pytest.raises(ValueError, match=field):
         ObjectStore(frame_path)
+
+
+@pytest.mark.parametrize("indices", [(-1, 1), (0, 2), (1, 0)])
+def test_object_store_requires_contiguous_detection_indices(
+    tmp_path: Path,
+    indices: tuple[int, int],
+) -> None:
+    _, _, object_path, _ = _write_specialist_artifacts(tmp_path)
+    detections_path = object_path.with_name("detections.parquet")
+    table = pd.read_parquet(detections_path)
+    table["detection_index"] = list(indices)
+    table.to_parquet(detections_path, index=False)
+
+    with pytest.raises(ValueError, match="contiguous.*detection_index"):
+        ObjectStore(object_path)
+
+
+def test_object_store_requires_serialized_counts_json(tmp_path: Path) -> None:
+    object_dir = tmp_path / "object-count-shape"
+    object_dir.mkdir()
+    path = object_dir / "frames.parquet"
+    pd.DataFrame(
+        [
+            {
+                "frame_id": "f1",
+                "video_id": "v1",
+                "frame_idx": 10,
+                "counts_json": {"person": 0},
+                "summary": None,
+                "detection_count": 0,
+                "artifact_version": "object-v1",
+                "status": "completed",
+            }
+        ]
+    ).to_parquet(path, index=False)
+
+    with pytest.raises(ValueError, match="counts_json.*JSON string"):
+        ObjectStore(path)
+
+
+def test_object_store_loads_real_producer_bundle(tmp_path: Path) -> None:
+    detection = ObjectDetection(
+        label="person",
+        confidence=0.9,
+        x_min=0.1,
+        y_min=0.2,
+        x_max=0.3,
+        y_max=0.4,
+    )
+    rows = [
+        ObjectEvidence(
+            frame_id="f1",
+            video_id="v1",
+            frame_idx=10,
+            detections=[detection],
+            counts={"person": 1},
+            summary="person x1",
+            detection_count=1,
+            artifact_version="object-v1",
+        ),
+        ObjectEvidence(
+            frame_id="f2",
+            video_id="v1",
+            frame_idx=20,
+            artifact_version="object-v1",
+        ),
+        ObjectEvidence(
+            frame_id="f3",
+            video_id="v1",
+            frame_idx=30,
+            artifact_version="object-v1",
+            status=ProcessingStatus.FAILED,
+            error_code="MissingSource",
+            error_message="source object file is missing",
+        ),
+    ]
+    output = tmp_path / "producer-objects"
+    write_object_artifacts(
+        output,
+        ["f1", "f2", "f3"],
+        rows,
+        [
+            {
+                "frame_id": "f1",
+                "video_id": "v1",
+                "detection_index": 0,
+                **detection.model_dump(mode="json"),
+            }
+        ],
+        {"artifact_version": "object-v1"},
+    )
+
+    store = ObjectStore(output / "frames.parquet")
+
+    assert store.get("f1").detections == [detection]
+    assert store.get("f2").detection_count == 0
+    assert store.get("f3").status == ProcessingStatus.FAILED

@@ -304,6 +304,12 @@ class DataService:
     ) -> list[TranscriptSegment]:
         """Return segments overlapping a half-open range chronologically."""
 
+        if start_ms < 0:
+            raise ValueError("start_ms must be non-negative")
+        if end_ms < start_ms:
+            raise ValueError("end_ms must be greater than or equal to start_ms")
+        if end_ms == start_ms:
+            return []
         if self.transcript_store is None:
             return []
         records = self.transcript_store.get_in_range(video_id, start_ms, end_ms)

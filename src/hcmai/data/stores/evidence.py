@@ -210,8 +210,10 @@ class FrameContextStore(_TypedEvidenceStore[FrameContext]):
 def _object_counts(value: object) -> dict[str, int]:
     """Decode deterministic object counts from the flattened frame row."""
 
+    if not isinstance(value, str):
+        raise ValueError("counts_json must be a serialized JSON string")
     try:
-        raw = json.loads(value) if isinstance(value, str) else value
+        raw = json.loads(value)
     except json.JSONDecodeError as error:
         raise ValueError("counts_json must contain valid JSON") from error
     if not isinstance(raw, dict):
@@ -354,10 +356,17 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
                     f"Malformed object detection for frame_id {frame_id!r}"
                 ) from error
             grouped[frame_id].append((order, detection))
-        return {
-            frame_id: [item for _, item in sorted(items, key=lambda pair: pair[0])]
-            for frame_id, items in grouped.items()
-        }
+        detections: dict[str, list[dict[str, object | None]]] = {}
+        for frame_id, items in grouped.items():
+            indices = [index for index, _ in items]
+            if indices != list(range(len(items))):
+                raise ValueError(
+                    "Object detections require contiguous detection_index "
+                    f"values for frame_id {frame_id!r}"
+                )
+            ordered = sorted(items, key=lambda pair: pair[0])
+            detections[frame_id] = [item for _, item in ordered]
+        return detections
 
 
 class ASRStore:
