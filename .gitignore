@@ -49,6 +49,10 @@ output/
 /outputs/
 outputs/
 
+# This is Python source, not generated output.
+!/src/hcmai/pipelines/vqa/output/
+!/src/hcmai/pipelines/vqa/output/*.py
+
 # Large binary files, models, datasets, and archives
 *.ckpt
 *.pt
