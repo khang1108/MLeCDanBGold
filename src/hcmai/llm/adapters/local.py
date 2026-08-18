@@ -188,7 +188,10 @@ class LocalAdapter:
         if self.enable_dino and self.preparation_config:
             from hcmai.data.preprocessing.selection import DinoEncoder
             self.dino = DinoEncoder(self.preparation_config.preprocessing)
-            probe = Image.new("RGB", (self.preparation_config.preprocessing.efficientgebd_resolution,) * 2)
+            resolution = (
+                self.preparation_config.preprocessing.efficientgebd_resolution
+            )
+            probe = Image.new("RGB", (resolution, resolution))
             try:
                 self.dino.encode([probe])
             finally:
@@ -479,8 +482,13 @@ def _download_audio(payload: Any, target: Path) -> None:
         raise ValueError("remote audio checksum mismatch")
 
 
-def _env_bool(name: str, default: bool = True) -> bool:
-    """Hàm hỗ trợ đọc biến môi trường dạng boolean (true/false)."""
+def _env_bool(name: str, default: bool = False) -> bool:
+    """Read an explicit capability flag, defaulting hosted models to off.
+
+    A service must opt into every model it owns. This prevents a narrowly
+    configured ASR or Caption/OCR process from loading unrelated embedding,
+    reranking, or VQA checkpoints during application startup.
+    """
     value = os.getenv(name, str(default)).strip().lower()
     if value not in {"true", "false"}:
         raise ValueError(f"{name} must be true or false")

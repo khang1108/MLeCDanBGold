@@ -368,7 +368,7 @@ def test_invalid_canonical_rows_are_rejected_before_string_conversion(
     assert not (tmp_path / "output/manifest.json").exists()
 
 
-def test_duplicate_submission_coordinate_is_rejected(tmp_path):
+def test_distinct_frames_at_one_submission_coordinate_are_preserved(tmp_path):
     source = _frames(tmp_path)
     frames = pd.read_parquet(source)
     duplicate = frames.iloc[0].copy()
@@ -378,14 +378,21 @@ def test_duplicate_submission_coordinate_is_rejected(tmp_path):
     pd.concat([frames, duplicate.to_frame().T], ignore_index=True).to_parquet(
         source, index=False
     )
+    _write_object(tmp_path / "objects", "0000", _empty_payload())
+    _write_object(tmp_path / "objects", "0001", _empty_payload())
 
-    with pytest.raises(ValueError, match="duplicate submission coordinate"):
-        import_objects(
-            source,
-            tmp_path / "objects",
-            tmp_path / "output",
-            _config(tmp_path),
-        )
+    report = import_objects(
+        source,
+        tmp_path / "objects",
+        tmp_path / "output",
+        _config(tmp_path),
+    )
+
+    evidence = pd.read_parquet(tmp_path / "output/frames.parquet")
+    assert evidence["frame_id"].tolist() == ["L01_V001:0000", "L01_V001:0001"]
+    assert evidence["frame_idx"].tolist() == [120, 120]
+    assert report["completed_frames"] == 2
+    assert report["failed_frames"] == 0
 
 
 def test_empty_canonical_store_is_rejected(tmp_path):

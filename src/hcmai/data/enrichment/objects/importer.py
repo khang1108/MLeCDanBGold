@@ -150,7 +150,7 @@ def _object_path(frame: FrameRecord, objects_root: Path) -> Path:
 
 
 def _load_canonical_frames(path: Path) -> list[FrameRecord]:
-    """Load fully validated canonical rows and reject identity ambiguity."""
+    """Load canonical rows keyed by their unique internal ``frame_id``."""
 
     store = FrameStore.load(path)
     frames = list(store.iter_frames())
@@ -159,15 +159,6 @@ def _load_canonical_frames(path: Path) -> list[FrameRecord]:
             f"canonical frame store {path} must contain at least one frame"
         )
 
-    seen_coordinates: set[tuple[str, int]] = set()
-    for frame in frames:
-        coordinate = (frame.video_id, frame.frame_idx)
-        if coordinate in seen_coordinates:
-            raise ValueError(
-                "duplicate submission coordinate: "
-                f"video_id={frame.video_id}, frame_idx={frame.frame_idx}"
-            )
-        seen_coordinates.add(coordinate)
     return frames
 
 

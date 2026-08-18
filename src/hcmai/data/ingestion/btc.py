@@ -109,21 +109,19 @@ def _validated_record(values: dict[str, object]) -> FrameRecord:
     return FrameRecord.model_validate(values)
 
 
-def _validate_unique_identity(records: list[FrameRecord]) -> None:
+def _validate_unique_frame_ids(records: list[FrameRecord]) -> None:
+    """Reject ambiguous internal identities without rewriting BTC coordinates.
+
+    Multiple BTC keyframes may legitimately map to the same competition-facing
+    ``(video_id, frame_idx)``. Their distinct ``frame_id`` values remain the
+    authoritative identities for joins and enrichment.
+    """
+
     seen_frame_ids: set[str] = set()
-    seen_submission_coordinates: set[tuple[str, int]] = set()
     for record in records:
         if record.frame_id in seen_frame_ids:
             raise ValueError(f"Duplicate frame_id: {record.frame_id}")
         seen_frame_ids.add(record.frame_id)
-
-        coordinate = (record.video_id, record.frame_idx)
-        if coordinate in seen_submission_coordinates:
-            raise ValueError(
-                "Duplicate submission coordinate: "
-                f"video_id={record.video_id}, frame_idx={record.frame_idx}"
-            )
-        seen_submission_coordinates.add(coordinate)
 
 
 def _validate_canonical_table(frames: pd.DataFrame) -> list[FrameRecord]:
@@ -133,8 +131,26 @@ def _validate_canonical_table(frames: pd.DataFrame) -> list[FrameRecord]:
             list[dict[str, Any]], frames.to_dict(orient="records")
         )
     ]
-    _validate_unique_identity(records)
+    _validate_unique_frame_ids(records)
     return records
+
+
+def _submission_coordinate_diagnostics(frames: pd.DataFrame) -> dict[str, int]:
+    """Summarize non-injective competition coordinates for observability."""
+
+    multiplicities = frames.groupby(
+        ["video_id", "frame_idx"], sort=False, dropna=False
+    ).size()
+    collisions = multiplicities[multiplicities > 1]
+    collision_counts = cast(list[int], collisions.astype("int64").tolist())
+    all_counts = cast(list[int], multiplicities.astype("int64").tolist())
+    return {
+        "duplicate_submission_coordinate_groups": len(collision_counts),
+        "duplicate_submission_coordinate_rows": sum(collision_counts),
+        "maximum_submission_coordinate_multiplicity": max(
+            all_counts, default=0
+        ),
+    }
 
 
 def _build_canonical_rows(
@@ -176,7 +192,7 @@ def _build_canonical_rows(
                 }
             )
         )
-    _validate_unique_identity(canonical_records)
+    _validate_unique_frame_ids(canonical_records)
     return pd.DataFrame(
         [record.model_dump() for record in canonical_records],
         columns=list(FrameRecord.model_fields),
@@ -288,6 +304,7 @@ def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
         "limited_run": False,
         "resume_enabled": False,
         "fps_map_sample": dict(list(fps_by_video.items())[:5]),
+        **_submission_coordinate_diagnostics(canonical),
     }
 
     output_path = config.output_root / "frames.parquet"

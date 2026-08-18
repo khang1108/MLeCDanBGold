@@ -421,34 +421,19 @@ def test_btc_import_rejects_invalid_canonical_rows(
         )
 
 
-@pytest.mark.parametrize(
-    ("rows", "message"),
-    [
-        (
-            [
-                _valid_btc_row(),
-                _valid_btc_row(frame_idx=121, timestamp_ms=4100),
-            ],
-            "Duplicate frame_id",
-        ),
-        (
-            [
-                _valid_btc_row(),
-                _valid_btc_row(frame_id="L01_V001:0001", timestamp_ms=4100),
-            ],
-            "Duplicate submission coordinate",
-        ),
-    ],
-)
-def test_btc_import_rejects_duplicate_canonical_identity(
-    tmp_path, rows, message
-):
+def test_btc_import_rejects_duplicate_frame_id(tmp_path):
     from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
 
     source = tmp_path / "btc"
-    _write_btc_metadata(source, rows)
+    _write_btc_metadata(
+        source,
+        [
+            _valid_btc_row(),
+            _valid_btc_row(frame_idx=121, timestamp_ms=4100),
+        ],
+    )
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match="Duplicate frame_id"):
         import_btc_frame_store(
             BTCIngestionConfig(
                 btc_root=source,
@@ -457,6 +442,43 @@ def test_btc_import_rejects_duplicate_canonical_identity(
                 frame_store_id="btc-duplicate-v1",
             )
         )
+
+
+def test_btc_import_preserves_distinct_frames_at_one_submission_coordinate(
+    tmp_path,
+):
+    from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+
+    source = tmp_path / "btc"
+    _write_btc_metadata(
+        source,
+        [
+            _valid_btc_row(),
+            _valid_btc_row(
+                frame_id="L01_V001:0001",
+                keyframe_order=2,
+                timestamp_ms=4040,
+                image_path="keyframes/L01_V001/0001.jpg",
+            ),
+        ],
+    )
+
+    output = import_btc_frame_store(
+        BTCIngestionConfig(
+            btc_root=source,
+            data_root=source,
+            output_root=tmp_path / "frame_store",
+            frame_store_id="btc-collision-v1",
+        )
+    )
+
+    frames = pd.read_parquet(output)
+    assert frames["frame_id"].tolist() == ["L01_V001:0000", "L01_V001:0001"]
+    assert frames["frame_idx"].tolist() == [120, 120]
+    manifest = json.loads((output.parent / "manifest.json").read_text())
+    assert manifest["duplicate_submission_coordinate_groups"] == 1
+    assert manifest["duplicate_submission_coordinate_rows"] == 2
+    assert manifest["maximum_submission_coordinate_multiplicity"] == 2
 
 
 def test_btc_import_rejects_empty_metadata(tmp_path):

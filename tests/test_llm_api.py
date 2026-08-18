@@ -532,6 +532,37 @@ def test_asr_readiness_requires_the_enabled_model_to_be_loaded():
     assert adapter.readiness().ready is True
 
 
+def test_asr_only_environment_does_not_construct_unrequested_models(
+    monkeypatch,
+):
+    capability_flags = (
+        "HCMAI_ENABLE_CAPTION",
+        "HCMAI_ENABLE_OCR",
+        "HCMAI_ENABLE_VISUAL_EMBEDDING",
+        "HCMAI_ENABLE_CAPTION_EMBEDDING",
+        "HCMAI_ENABLE_RERANKER",
+        "HCMAI_ENABLE_VQA",
+        "HCMAI_ENABLE_DIARIZATION",
+        "HCMAI_ENABLE_TRANSNET",
+        "HCMAI_ENABLE_GEBD",
+        "HCMAI_ENABLE_DINO",
+    )
+    for name in capability_flags:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HCMAI_ENABLE_ASR", "true")
+
+    adapter = LocalAdapter.from_environment()
+
+    assert adapter.enable_asr is True
+    assert adapter.captioner is None
+    assert adapter.ocr_adapter is None
+    assert adapter.visual_encoder is None
+    assert adapter.caption_encoder is None
+    assert adapter.reranker is None
+    assert adapter.vqa_model is None
+    assert adapter.enable_diarization is False
+
+
 def test_caption_and_ocr_share_one_identically_pinned_florence_backend():
     config = LLMServiceConfig.from_yaml("llm/config.yaml")
     model = object()
