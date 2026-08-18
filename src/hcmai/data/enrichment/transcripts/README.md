@@ -1,7 +1,8 @@
 # Canonical transcript data
 
 `hcmai.data.enrichment.transcripts` đọc audio từ video, chia các vùng có lời
-nói và ghi riêng một file Parquet cho mỗi video. Caller dùng `TranscriptService` trong
+nói và ghi riêng một file Parquet cho mỗi video. Các transcript segment là
+**source of truth** của ASR và giữ nguyên timeline media. Caller dùng `TranscriptService` trong
 `pipeline.py`; ASR và diarization cụ thể nằm sau các adapter nội bộ. Audio giữ
 media-time offset từ PTS, vì vậy VAD/ASR timestamps không bị đặt lại về `0`.
 
@@ -10,7 +11,7 @@ transcripts/
 ├── pipeline.py              # TranscriptService public facade
 ├── prepare.py               # Job implementation
 ├── manifest.py              # Source/config/model resume identity
-├── materialize.py           # Transcript -> canonical FrameEnrichment
+├── materialize.py           # Derived frame-aligned compatibility view
 ├── publication.py           # Recoverable staged promotion
 ├── store.py                 # TranscriptStore
 └── adapters/
@@ -91,11 +92,21 @@ revisions, schema/pipeline versions, segment count và completion status. Resume
 chỉ reuse khi tất cả trường identity khớp và Parquet validate lại thành công.
 Source, config, revision hoặc version đổi sẽ tự động chạy lại.
 
+Manifest cũng khai báo rõ:
+
+```text
+source_of_truth = transcript segments
+frame_alignment = derived compatibility view
+context_dependency = none
+```
+
 Parquet và manifest được ghi vào sibling staging paths, validate đầy đủ rồi mới
 promote. Promotion lỗi sẽ restore artifact hợp lệ trước đó. Failure record chỉ
 chứa exception category, không chứa raw provider error hoặc token.
 
-Sau transcript preparation, script materialize ASR text lên canonical frames.
+Sau transcript preparation, script có thể materialize ASR text lên canonical
+frames như một compatibility artifact dẫn xuất; đây không phải ASR source of
+truth và không phải input của `FrameContext`.
 Chỉ video có completed manifest được emit; video no-speech có completed row với
 `asr_text=None`, còn video chưa evaluate không bị biến thành negative evidence.
 Online `DataService` đọc file này qua existing `ASRStore`.
@@ -112,6 +123,12 @@ Online `DataService` đọc file này qua existing `ASRStore`.
 | `text` | Nội dung transcript |
 | `language` | Nhãn Qwen như `vietnamese`, `english` hoặc `und` |
 | `speaker_id` | Speaker có overlap lớn nhất, ví dụ `SPEAKER_00`; có thể rỗng |
+| `confidence` | Điểm calibrated cấp segment nếu backend có; mặc định rỗng, không phải `0` |
+| `status` | Trạng thái xử lý, mặc định `completed` |
+| `model_name` | Model ASR tạo segment; có thể rỗng cho artifact legacy |
+| `model_revision` | Revision đã resolve; có thể rỗng cho artifact legacy |
+| `artifact_version` | Phiên bản contract segment, mặc định `asr-segment-v1` |
+| `error_code`, `error_message` | Chi tiết lỗi có cấu trúc khi có |
 
 `speaker_id` chỉ có ý nghĩa trong một video. Một segment có nhiều người nói
 chỉ giữ speaker chiếm nhiều thời gian nhất.

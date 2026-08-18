@@ -1,11 +1,8 @@
-"""Cấu trúc dữ liệu lưu trữ Transcript in-memory.
+"""Load validated segment-native transcript evidence for timeline lookup.
 
-Cung cấp giao diện truy xuất nhanh (in-memory) cho các metadata của transcript.
-
-Các tính năng chính:
-1. Load nhanh vào RAM: Tải dữ liệu transcript (đã materialized) lên bộ nhớ để phục vụ online.
-2. Truy vấn (Lookup): Hỗ trợ hàm tìm kiếm nhanh các đoạn thoại liên quan đến một khung hình.
-3. Format trả về: Trả về dữ liệu Transcript chuẩn hoá để đưa thẳng vào VQA prompt hoặc frontend."""
+The store preserves segment timing and provenance from Parquet. It does not
+align speech to frames or depend on deterministic FrameContext generation.
+"""
 
 from __future__ import annotations
 
@@ -42,7 +39,7 @@ def load_transcript_records(
 
 
 class TranscriptStore:
-    """Load transcript metadata once for ID and temporal lookups."""
+    """Load transcript timeline evidence once for ID and temporal lookups."""
 
     def __init__(self, metadata_path: str | Path) -> None:
         """Load and index one transcript file or directory."""

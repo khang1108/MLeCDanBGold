@@ -1,11 +1,9 @@
-"""Cụ thể hóa (Materialize) dữ liệu Transcript.
+"""Derive the legacy frame-aligned ASR compatibility view.
 
-Đồng bộ và căn chỉnh kết quả ASR (nhận diện giọng nói) với các khung hình cụ thể để truy xuất.
-
-Các tính năng chính:
-1. Frame Alignment: So khớp khoảng thời gian của câu thoại (start/end) với timestamp của frames.
-2. Phân tách (Chunking): Chia nhỏ các đoạn thoại dài thành các câu/từ phù hợp với độ dài cảnh.
-3. Chuẩn hoá Metadata: Tạo ra bản ghi text-to-frame chuẩn để nạp vào hệ thống Evidence Store."""
+Transcript segments are the ASR source of truth. This module only projects
+their half-open timeline intervals onto canonical frames for consumers that
+still require ``FrameEnrichment``; it does not feed or depend on FrameContext.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +11,7 @@ import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from tqdm import tqdm
@@ -56,7 +55,7 @@ def materialize_asr_enrichment(
     model_name: str,
     frame_store_id: str | None = None,
 ) -> list[FrameEnrichment]:
-    """Align half-open transcript intervals to evaluated canonical frames."""
+    """Derive a compatibility view aligned to evaluated canonical frames."""
 
     if window_ms < 0:
         raise ValueError("frame evidence window must be non-negative")
@@ -147,7 +146,7 @@ def write_asr_enrichment(
         columns=list(FrameEnrichment.model_fields),
     )
 
-    def restore_value(value: object) -> object:
+    def restore_value(value: object) -> Any:
         if value is None:
             return None
         if callable(getattr(value, "tolist", None)):
@@ -188,7 +187,7 @@ def materialize_transcript_artifact(
     model_name: str,
     frame_store_id: str | None = None,
 ) -> Path:
-    """Load canonical offline inputs and publish the online ASR evidence table."""
+    """Publish a derived frame-aligned view from canonical transcript segments."""
 
     frame_store = FrameStore(frames_path)
     transcript_path = Path(transcript_root)

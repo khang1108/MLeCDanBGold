@@ -29,7 +29,7 @@ class SourceFingerprint(ContractModel):
 
 
 class TranscriptManifest(ContractModel):
-    """All inputs needed to decide whether one transcript can be resumed."""
+    """Resume identity and provenance for segment-native transcript evidence."""
 
     video_id: NonEmptyString
     source: SourceFingerprint
@@ -43,6 +43,11 @@ class TranscriptManifest(ContractModel):
     )
     schema_version: NonEmptyString
     pipeline_version: NonEmptyString
+    source_of_truth: Literal["transcript segments"] = "transcript segments"
+    frame_alignment: Literal["derived compatibility view"] = (
+        "derived compatibility view"
+    )
+    context_dependency: Literal["none"] = "none"
     segment_count: int = Field(ge=0)
     status: Literal["completed", "failed"]
     failure_category: NonEmptyString | None = None
