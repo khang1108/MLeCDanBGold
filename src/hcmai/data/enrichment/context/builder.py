@@ -207,8 +207,6 @@ def _usable_ocr(row: OCREvidence | None, minimum: float) -> str | None:
 
     if row is None or row.status != ProcessingStatus.COMPLETED:
         return None
-    if row.error_code is not None or row.error_message is not None:
-        return None
     if row.quality_score < minimum:
         return None
     text = row.normalized_text
@@ -216,11 +214,9 @@ def _usable_ocr(row: OCREvidence | None, minimum: float) -> str | None:
 
 
 def _usable_objects(row: ObjectEvidence | None) -> str | None:
-    """Return completed error-free object summary text, if present."""
+    """Return completed non-empty object summary text, if present."""
 
     if row is None or row.status != ProcessingStatus.COMPLETED:
-        return None
-    if row.error_code is not None or row.error_message is not None:
         return None
     return row.summary if row.summary is not None and row.summary.strip() else None
 

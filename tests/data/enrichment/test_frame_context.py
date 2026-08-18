@@ -102,6 +102,14 @@ def test_context_config_rejects_invalid_policy(updates: dict[str, object]) -> No
         FrameContextConfig(**updates)
 
 
+def test_context_config_canonicalizes_padded_version() -> None:
+    """Store one canonical version string in both rows and dependency identity."""
+
+    config = FrameContextConfig(context_version="  frame-context-v2  ")
+
+    assert config.context_version == "frame-context-v2"
+
+
 def _write_json(path: Path, value: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
@@ -261,6 +269,27 @@ def test_missing_failed_and_low_quality_evidence_is_omitted(tmp_path: Path) -> N
     assert "[OBJECTS]" not in rows.loc["f1", "context_text"]
 
 
+def test_completed_ocr_and_objects_keep_text_with_diagnostic_metadata(
+    tmp_path: Path,
+) -> None:
+    """Use completed OCR/Object text even when rows retain diagnostics."""
+
+    frames, caption, ocr, objects = _artifacts(tmp_path)
+    for path in (ocr, objects):
+        rows = pd.read_parquet(path)
+        rows.loc[0, "error_code"] = "Diagnostic"
+        rows.loc[0, "error_message"] = "non-fatal diagnostic"
+        rows.to_parquet(path, index=False)
+
+    path = build_frame_context(
+        frames, caption, ocr, objects, tmp_path / "context", FrameContextConfig()
+    )
+    context = pd.read_parquet(path).set_index("frame_id").loc["f0"]
+
+    assert "[VISIBLE_TEXT]\nocr 0" in context["context_text"]
+    assert "[OBJECTS]\nperson x1" in context["context_text"]
+
+
 def test_matching_identity_reuses_and_policy_or_upstream_version_rebuilds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -342,6 +371,31 @@ def test_duplicate_or_foreign_identity_is_rejected(
     table.to_parquet(path, index=False)
 
     with pytest.raises(ValueError, match="(?i)(duplicate|foreign|canonical)"):
+        build_frame_context(
+            frames,
+            caption,
+            ocr,
+            objects,
+            tmp_path / "context",
+            FrameContextConfig(),
+        )
+
+
+@pytest.mark.parametrize("source", ["caption", "ocr", "object"])
+def test_duplicate_specialist_rows_are_rejected(
+    tmp_path: Path, source: str
+) -> None:
+    """Reject duplicate specialist rows before joining canonical evidence."""
+
+    frames, caption, ocr, objects = _artifacts(tmp_path)
+    paths = {"caption": caption, "ocr": ocr, "object": objects}
+    path = paths[source]
+    rows = pd.read_parquet(path)
+    pd.concat([rows, rows.iloc[[0]]], ignore_index=True).to_parquet(
+        path, index=False
+    )
+
+    with pytest.raises(ValueError, match=f"(?i){source}.*duplicate"):
         build_frame_context(
             frames,
             caption,

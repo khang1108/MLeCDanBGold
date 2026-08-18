@@ -23,6 +23,7 @@ class FrameContextConfig:
             or not self.context_version.strip()
         ):
             raise ValueError("context_version must not be empty")
+        object.__setattr__(self, "context_version", self.context_version.strip())
         for name in (
             "caption_token_budget",
             "ocr_token_budget",
