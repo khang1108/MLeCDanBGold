@@ -48,7 +48,11 @@ def test_build_caption_artifacts_from_two_configs(tmp_path: Path) -> None:
         [
             {
                 "frame_id": "frame-1",
-                "caption": "A cook holds a pan.",
+                "video_id": "video-1",
+                "frame_idx": 10,
+                "timestamp_ms": 1000,
+                "text": "A cook holds a pan.",
+                "artifact_version": "caption-v1",
                 "model_name": "fake/caption-generator",
             }
         ]

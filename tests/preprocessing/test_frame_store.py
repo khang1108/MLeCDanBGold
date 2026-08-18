@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from PIL import Image
 import pytest
 
 try:
@@ -109,7 +110,14 @@ def test_candidate_union_gap_and_safe_dedup(tmp_path: Path) -> None:
         for left, right in zip(candidates, candidates[1:])
     )
     embeddings = np.ones((len(candidates), 2), dtype=np.float32) / np.sqrt(2)
-    retained = deduplicate(candidates, embeddings, config)
+    image_path = tmp_path / "unchanged.jpg"
+    Image.new("RGB", (8, 8), "white").save(image_path)
+    retained = deduplicate(
+        candidates,
+        embeddings,
+        [image_path] * len(candidates),
+        config,
+    )
     assert len(retained) < len(candidates)
     assert any(item.frame.frame_idx == 2 for item in retained)
 
@@ -130,10 +138,17 @@ def test_dedup_repairs_the_hard_maximum_gap(tmp_path: Path) -> None:
     shots[10] = 1.0
     candidates = select_candidates(frames, shots, np.zeros(31), config)
     embeddings = np.ones((len(candidates), 2), dtype=np.float32) / np.sqrt(2)
+    image_path = tmp_path / "unchanged.jpg"
+    Image.new("RGB", (8, 8), "white").save(image_path)
 
     retained = restore_maximum_gap(
         candidates,
-        deduplicate(candidates, embeddings, config),
+        deduplicate(
+            candidates,
+            embeddings,
+            [image_path] * len(candidates),
+            config,
+        ),
         config,
     )
 
@@ -147,12 +162,22 @@ def test_internal_identity_does_not_depend_on_submission_frame_idx() -> None:
     """Allow decoded frames to share a submission mapping without collision."""
 
     first = CandidateFrame(
-        FrameMeta("V", 7, 3, 7, "1/10", 300, 8, 8),
-        0, 0.0, 0.0, ("coverage_anchor",), True,
+        frame=FrameMeta("V", 7, 3, 7, "1/10", 300, 8, 8),
+        shot_id=0,
+        event_id=0,
+        shot_score=0.0,
+        event_score=0.0,
+        reasons=("coverage_anchor",),
+        protected=True,
     )
     second = CandidateFrame(
-        FrameMeta("V", 8, 3, 8, "1/10", 350, 8, 8),
-        0, 0.0, 0.0, ("coverage_anchor",), True,
+        frame=FrameMeta("V", 8, 3, 8, "1/10", 350, 8, 8),
+        shot_id=0,
+        event_id=0,
+        shot_score=0.0,
+        event_score=0.0,
+        reasons=("coverage_anchor",),
+        protected=True,
     )
 
     rows = [_record(first, Path("7.jpg")), _record(second, Path("8.jpg"))]
@@ -243,6 +268,8 @@ def test_prepare_publishes_one_resumable_frame_store(
 ) -> None:
     """Publish only images and metadata, then reuse the completed checkpoint."""
 
+    if av is None:
+        pytest.skip("PyAV is installed by the preprocessing extra")
     videos = tmp_path / "videos"
     videos.mkdir()
     _video(videos / "L21_V001.mp4")
@@ -306,8 +333,13 @@ def test_limit_uses_an_isolated_frame_store(tmp_path: Path, monkeypatch) -> None
 
     def fake_prepare(path: Path, *_args, **_kwargs) -> pd.DataFrame:
         candidate = CandidateFrame(
-            FrameMeta(path.stem, 0, 0, 0, "1/10", 0, 8, 8),
-            0, 0.0, 0.0, ("coverage_anchor",), True,
+            frame=FrameMeta(path.stem, 0, 0, 0, "1/10", 0, 8, 8),
+            shot_id=0,
+            event_id=0,
+            shot_score=0.0,
+            event_score=0.0,
+            reasons=("coverage_anchor",),
+            protected=True,
         )
         return pd.DataFrame(
             [_record(candidate, Path("images") / f"{path.stem}.jpg")],

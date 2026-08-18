@@ -61,9 +61,9 @@ def test_text_index_round_trip_and_source_identity(
             for index in (1, 2)
         ]
     ).to_parquet(frames_path, index=False)
-    rows = []
+    rows: list[dict[str, object]] = []
     for index, text in ((1, "A cook holds a pan."), (2, "A dog runs outside.")):
-        row = {
+        row: dict[str, object] = {
             "frame_id": f"frame-{index}",
             field: text,
             "model_name": "fixture",
@@ -73,6 +73,7 @@ def test_text_index_round_trip_and_source_identity(
                 {
                     "video_id": "video-1",
                     "frame_idx": index,
+                    "timestamp_ms": index * 1000,
                     "artifact_version": f"{source.value}-v1",
                 }
             )

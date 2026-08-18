@@ -41,7 +41,7 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.vqa.default_profile is VQABaselineProfile.LOCALIZER
     assert set(config.vqa.profiles) == set(VQABaselineProfile)
     assert config.vqa.profiles[VQABaselineProfile.SINGLE_FRAME].max_vlm_calls == 1
-    assert config.inference.base_url == "https://api.iamphuckhang.dev"
+    assert config.inference.base_url == "http://127.0.0.1:8100"
 
 
 def test_llm_config_is_the_model_authority() -> None:
