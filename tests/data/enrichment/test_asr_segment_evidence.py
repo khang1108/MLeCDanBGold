@@ -131,22 +131,42 @@ def test_frame_context_modules_do_not_depend_on_asr_compatibility_view() -> None
     """Prevent deterministic FrameContext from acquiring frame-aligned ASR inputs."""
 
     source_root = Path(__file__).resolve().parents[3] / "src" / "hcmai"
-    candidates = [source_root / "common/schemas/evidence.py"]
-    context_root = source_root / "data/enrichment/context"
-    if context_root.exists():
-        candidates.extend(sorted(context_root.rglob("*.py")))
-
     forbidden = {
         "materialize_asr_enrichment",
         "ASRStore",
     }
-    imported: set[str] = set()
-    for path in candidates:
+
+    context_imports: set[str] = set()
+    for path in sorted(source_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        relative_parts = path.relative_to(source_root).parts
+        owns_context = any("context" in part.casefold() for part in relative_parts)
+        owns_frame_context = any(
+            isinstance(node, ast.ClassDef) and node.name == "FrameContext"
+            for node in tree.body
+        )
+        if not owns_context and not owns_frame_context:
+            continue
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                context_imports.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.Import):
+                context_imports.update(
+                    alias.name.rsplit(".", maxsplit=1)[-1]
+                    for alias in node.names
+                )
+
+    transcript_imports: set[str] = set()
+    transcript_paths = [source_root / "common/schemas/transcript.py"]
+    transcript_paths.extend(
+        sorted((source_root / "data/enrichment/transcripts").rglob("*.py"))
+    )
+    for path in transcript_paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                imported.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.Import):
-                imported.update(alias.name.rsplit(".", maxsplit=1)[-1] for alias in node.names)
+                transcript_imports.update(alias.name for alias in node.names)
 
-    assert imported.isdisjoint(forbidden)
+    assert context_imports.isdisjoint(forbidden)
+    assert "FrameContext" not in transcript_imports
