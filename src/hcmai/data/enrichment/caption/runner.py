@@ -1,11 +1,4 @@
-"""Trình thực thi (Runner) cho quá trình Captioning.
-
-Quản lý vòng lặp thực thi mô hình sinh caption để tối ưu hoá hiệu năng trên phần cứng.
-
-Các tính năng chính:
-1. Điều phối Worker: Phân bổ dữ liệu cho luồng xử lý GPU nếu có nhiều model được load.
-2. Xử lý lỗi (Graceful failure): Catch các lỗi OOM (Out Of Memory) và chia nhỏ batch size tự động.
-3. Ghi log tiến trình: Hiển thị thanh tiến trình (progress bar) và ghi log sau mỗi đợt batch xong."""
+"""Batch execution for independently materialized caption evidence."""
 
 from __future__ import annotations
 
@@ -15,31 +8,43 @@ from typing import Any
 
 from tqdm.auto import tqdm
 
-from hcmai.common.schemas import FrameEnrichment, ProcessingStatus
+from hcmai.common.schemas import CaptionEvidence, ProcessingStatus
 from hcmai.common.utils.image import load_image
 from hcmai.data.enrichment.caption.artifacts import write_caption_artifacts
+from hcmai.data.enrichment.caption.config import CaptionConfig
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
-from hcmai.data.enrichment.caption.config import CaptionConfig, ENRICHMENT_VERSION
 
 
 def _failure(
-    frame_id: str, config: CaptionConfig, stage: str, error: Exception
-) -> tuple[FrameEnrichment, dict[str, str]]:
-    message = str(error).strip()[:300] or type(error).__name__
-    row = FrameEnrichment.model_validate(
-        {
-            "frame_id": frame_id,
-            "model_name": config.model_checkpoint,
-            "enrichment_version": config.enrichment_version,
-            "status": ProcessingStatus.FAILED,
-            "error_message": message,
-        }
+    frame: dict[str, Any],
+    config: CaptionConfig,
+    *,
+    frame_store_id: str | None,
+    resolved_revision: str | None,
+    stage: str,
+    error_code: str,
+    error_message: str,
+) -> tuple[CaptionEvidence, dict[str, str]]:
+    message = error_message.strip()[:300] or error_code
+    code = error_code[:100]
+    row = CaptionEvidence(
+        frame_id=str(frame["frame_id"]),
+        video_id=str(frame["video_id"]),
+        frame_idx=int(frame["frame_idx"]),
+        frame_store_id=frame_store_id,
+        artifact_version=config.enrichment_version,
+        model_name=config.model_checkpoint,
+        model_revision=resolved_revision,
+        status=ProcessingStatus.FAILED,
+        error_code=code,
+        error_message=message,
     )
     detail = {
-        "frame_id": frame_id,
-        ENRICHMENT_VERSION: config.enrichment_version,
+        "frame_id": row.frame_id,
+        "artifact_version": config.enrichment_version,
         "processing_stage": stage,
-        "exception_category": type(error).__name__,
+        "exception_category": code,
+        "error_code": code,
         "error_message": message,
     }
     return row, detail
@@ -48,14 +53,20 @@ def _failure(
 def run_batches(
     todo: list[dict[str, Any]],
     order: list[str],
-    rows: dict[str, FrameEnrichment],
+    rows: dict[str, CaptionEvidence],
     failures: dict[str, dict[str, str]],
     captioner: CaptionAdapter,
     config: CaptionConfig,
     output: Path,
     root: Path,
+    *,
+    frame_store_id: str | None,
+    resolved_revision: str | None,
 ) -> list[float]:
-    latencies, since_write = [], 0
+    """Run caption batches while retaining a typed row for every frame."""
+
+    latencies: list[float] = []
+    since_write = 0
     progress = tqdm(
         total=len(order),
         initial=len(order) - len(todo),
@@ -64,17 +75,26 @@ def run_batches(
         dynamic_ncols=True,
     )
     for start in range(0, len(todo), config.batch_size):
-        chunk, valid = todo[start : start + config.batch_size], []
+        chunk = todo[start : start + config.batch_size]
+        valid: list[tuple[dict[str, Any], Any]] = []
         for frame in chunk:
-            frame_id = frame["frame_id"]
+            frame_id = str(frame["frame_id"])
             try:
                 path = Path(str(frame["image_path"])).expanduser()
-                image = load_image(path if path.is_absolute() else root / path, mode="RGB")
+                image = load_image(
+                    path if path.is_absolute() else root / path, mode="RGB"
+                )
                 image.thumbnail((config.image_size, config.image_size))
-                valid.append((frame_id, image))
+                valid.append((frame, image))
             except Exception as error:
                 rows[frame_id], failures[frame_id] = _failure(
-                    frame_id, config, "image_load", error
+                    frame,
+                    config,
+                    frame_store_id=frame_store_id,
+                    resolved_revision=resolved_revision,
+                    stage="image_load",
+                    error_code=type(error).__name__,
+                    error_message=str(error),
                 )
         if valid:
             began = perf_counter()
@@ -85,24 +105,39 @@ def run_batches(
             except Exception as error:
                 results = [error] * len(valid)
             latencies.append((perf_counter() - began) * 1000)
-            for (frame_id, _), result in zip(valid, results):
-                if isinstance(result, Exception) or result is None or not str(result).strip():
-                    error = (
-                        result
-                        if isinstance(result, Exception)
-                        else ValueError("empty caption")
-                    )
+            for (frame, _), result in zip(valid, results):
+                frame_id = str(frame["frame_id"])
+                if isinstance(result, Exception):
                     rows[frame_id], failures[frame_id] = _failure(
-                        frame_id, config, "model", error
+                        frame,
+                        config,
+                        frame_store_id=frame_store_id,
+                        resolved_revision=resolved_revision,
+                        stage="model",
+                        error_code=type(result).__name__,
+                        error_message=str(result),
+                    )
+                elif result is None or not str(result).strip():
+                    rows[frame_id], failures[frame_id] = _failure(
+                        frame,
+                        config,
+                        frame_store_id=frame_store_id,
+                        resolved_revision=resolved_revision,
+                        stage="model",
+                        error_code="EmptyCaption",
+                        error_message="caption model returned empty text",
                     )
                 else:
-                    rows[frame_id] = FrameEnrichment.model_validate(
-                        {
-                            "frame_id": frame_id,
-                            "caption": str(result).strip(),
-                            "model_name": config.model_checkpoint,
-                            "enrichment_version": config.enrichment_version,
-                        }
+                    rows[frame_id] = CaptionEvidence(
+                        frame_id=frame_id,
+                        video_id=str(frame["video_id"]),
+                        frame_idx=int(frame["frame_idx"]),
+                        text=str(result).strip(),
+                        frame_store_id=frame_store_id,
+                        artifact_version=config.enrichment_version,
+                        model_name=config.model_checkpoint,
+                        model_revision=resolved_revision,
+                        status=ProcessingStatus.COMPLETED,
                     )
         since_write += len(chunk)
         if since_write >= config.write_interval:

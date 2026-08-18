@@ -19,7 +19,6 @@ from typing import Any, cast
 
 import pandas as pd
 
-from hcmai.common.schemas import validate_frame_enrichment
 from hcmai.common.utils.io import atomic_write, read_json, write_json
 from hcmai.common.config import AppConfig
 from hcmai.data.enrichment.caption.artifacts import write_caption_artifacts
@@ -53,7 +52,7 @@ def generate_captions(
         list[dict[str, Any]],
         pd.read_parquet(frames_path).to_dict(orient="records"),
     )
-    order = [frame["frame_id"] for frame in frames]
+    order = [str(frame["frame_id"]) for frame in frames]
 
     if len(order) != len(set(order)):
         raise ValueError("input frames contain duplicate frame_id values")
@@ -62,16 +61,24 @@ def generate_captions(
     captioner = captioner or TransformersCaptionAdapter(config)
     output.mkdir(parents=True, exist_ok=True)
 
-    manifest_path, parquet_path = output / "manifest.json", output / "frame_enrichment.parquet"
+    manifest_path = output / "manifest.json"
+    captions_path = output / "captions.parquet"
     old = read_json(manifest_path) if manifest_path.exists() else {}
 
-    # Kiểm tra trạng thái resume
-    guard_resume(parquet_path, old, config, root, frame_store_id=frame_store_id)
-    rows, todo, skipped, retried = resume_rows(frames, parquet_path, config, frame_store_id)
-
-    # Kiểm tra model revision
+    # Resume only from source caption evidence, never from the legacy view.
+    guard_resume(captions_path, old, config, root, frame_store_id=frame_store_id)
+    rows, todo, skipped, retried = resume_rows(
+        frames, captions_path, config, frame_store_id
+    )
     resolved_revision = captioner.resolve_revision()
-    guard_resume(parquet_path, old, config, root, resolved_revision, frame_store_id=frame_store_id)
+    guard_resume(
+        captions_path,
+        old,
+        config,
+        root,
+        resolved_revision,
+        frame_store_id=frame_store_id,
+    )
 
     # Cập nhật thông tin vào manifest tạm thời
     provisional = {
@@ -80,22 +87,28 @@ def generate_captions(
         "effective_configuration": asdict(config),
         "dataset_root": str(root),
         "resolved_model_revision": resolved_revision,
+        "frame_store_id": frame_store_id,
     }
     atomic_write(manifest_path, lambda path: write_json(provisional, path))
 
     # Xử lý từng batch
     failures: dict[str, dict[str, str]] = {}
     latencies = run_batches(
-        todo, order, rows, failures, captioner, config, output, root
+        todo,
+        order,
+        rows,
+        failures,
+        captioner,
+        config,
+        output,
+        root,
+        frame_store_id=frame_store_id,
+        resolved_revision=resolved_revision,
     )
 
-    # Gán frame_store_id
-    for row in rows.values():
-        if frame_store_id is not None:
-            row.frame_store_id = frame_store_id
-    validate_frame_enrichment(rows, order, frame_store_id)
-    
-    # Ghi nhận kết quả
+    if set(rows) != set(order):
+        raise RuntimeError("caption processing did not retain one row per frame")
+
     write_caption_artifacts(output, order, rows, failures)
     manifest = build_manifest(
         config,
@@ -108,6 +121,7 @@ def generate_captions(
         latencies,
         skipped,
         retried,
+        frame_store_id=frame_store_id,
     )
     atomic_write(manifest_path, lambda path: write_json(manifest, path))
     return manifest

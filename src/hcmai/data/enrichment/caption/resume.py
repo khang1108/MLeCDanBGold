@@ -1,11 +1,4 @@
-"""Cơ chế phục hồi (Resume) cho Captioning.
-
-Kiểm tra các artifacts đã xử lý trước đó, giúp hệ thống tiếp tục công việc bị gián đoạn.
-
-Các tính năng chính:
-1. Đọc lịch sử: Quét các file artifacts hiện có để lập danh sách các frame đã hoàn thành.
-2. Loại trừ (Diff): Xoá các frame đã có caption ra khỏi hàng đợi cần xử lý (queue) hiện tại.
-3. Tối ưu thời gian: Đảm bảo tính idempotent, chạy pipeline bao nhiêu lần cũng không bị trùng dữ liệu."""
+"""Resume logic for source-of-truth caption evidence."""
 
 from __future__ import annotations
 
@@ -15,7 +8,7 @@ from typing import Any, cast
 
 import pandas as pd
 
-from hcmai.common.schemas import FrameEnrichment, ProcessingStatus
+from hcmai.common.schemas import CaptionEvidence, ProcessingStatus
 from hcmai.data.enrichment.caption.artifacts import valid_caption
 from hcmai.data.enrichment.caption.config import CaptionConfig, ENRICHMENT_VERSION
 
@@ -40,12 +33,10 @@ def guard_resume(
     changed = [key for key, value in current.items() if previous.get(key) != value]
     if old.get("dataset_root") != str(root):
         changed.append("dataset_root")
-    if resolved_revision is not None:
-        if old.get("resolved_model_revision") != resolved_revision:
-            changed.append("resolved_model_revision")
-    if frame_store_id is not None:
-        if old.get("frame_store_id") != frame_store_id:
-            changed.append("frame_store_id")
+    if resolved_revision is not None and old.get("resolved_model_revision") != resolved_revision:
+        changed.append("resolved_model_revision")
+    if frame_store_id is not None and old.get("frame_store_id") != frame_store_id:
+        changed.append("frame_store_id")
     if changed:
         fields = ", ".join(sorted(set(changed)))
         raise ValueError(
@@ -55,42 +46,54 @@ def guard_resume(
 
 
 def resume_rows(
-    frames: list[dict[str, Any]], path: Path, config: CaptionConfig, frame_store_id: str | None = None
-) -> tuple[dict[str, FrameEnrichment], list[dict[str, Any]], int, int]:
+    frames: list[dict[str, Any]],
+    path: Path,
+    config: CaptionConfig,
+    frame_store_id: str | None = None,
+) -> tuple[dict[str, CaptionEvidence], list[dict[str, Any]], int, int]:
+    """Reuse only valid completed rows from ``captions.parquet``."""
+
     groups: dict[str, list[dict[str, Any]]] = {}
     if path.exists():
         try:
             prior = cast(
-                list[dict[str, Any]],
-                pd.read_parquet(path).to_dict(orient="records"),
+                list[dict[str, Any]], pd.read_parquet(path).to_dict(orient="records")
             )
         except Exception as error:
             message = str(error).strip()[:200] or type(error).__name__
             raise RuntimeError(f"Cannot resume corrupted Parquet {path}: {message}") from error
         for data in prior:
-            if data.get(ENRICHMENT_VERSION) == config.enrichment_version and (
-                frame_store_id is None or data.get("frame_store_id") == frame_store_id
-            ):
-                groups.setdefault(str(data.get("frame_id")), []).append(data)
+            groups.setdefault(str(data.get("frame_id")), []).append(data)
 
-    rows: dict[str, FrameEnrichment] = {}
+    rows: dict[str, CaptionEvidence] = {}
     todo: list[dict[str, Any]] = []
-    skipped, retried = 0, 0
+    skipped = retried = 0
     for frame in frames:
-        frame_id, old = frame["frame_id"], groups.get(frame["frame_id"], [])
-        row = valid_caption(old[0], config.enrichment_version) if len(old) == 1 else None
-        if row:
-            rows[frame_id], skipped = row, skipped + 1
+        frame_id = str(frame["frame_id"])
+        old = groups.get(frame_id, [])
+        row = (
+            valid_caption(
+                old[0],
+                artifact_version=config.enrichment_version,
+                model_name=config.model_checkpoint,
+                frame_store_id=frame_store_id,
+            )
+            if len(old) == 1
+            else None
+        )
+        if row is not None:
+            rows[frame_id] = row
+            skipped += 1
             continue
-        retried += bool(old)
-        rows[frame_id] = FrameEnrichment.model_validate(
-            {
-                "frame_id": frame_id,
-                "frame_store_id": frame_store_id,
-                "model_name": config.model_checkpoint,
-                "enrichment_version": config.enrichment_version,
-                "status": ProcessingStatus.PENDING,
-            }
+        retried += int(bool(old))
+        rows[frame_id] = CaptionEvidence(
+            frame_id=frame_id,
+            video_id=str(frame["video_id"]),
+            frame_idx=int(frame["frame_idx"]),
+            frame_store_id=frame_store_id,
+            artifact_version=config.enrichment_version,
+            model_name=config.model_checkpoint,
+            status=ProcessingStatus.PENDING,
         )
         todo.append(frame)
     return rows, todo, skipped, retried
