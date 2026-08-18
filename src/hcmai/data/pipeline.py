@@ -15,7 +15,9 @@ from pathlib import Path
 
 from hcmai.common.schemas import FrameRecord, RetrievalSource
 from hcmai.common.schemas.search import SearchFilters
+from hcmai.common.utils.io import read_yaml
 from hcmai.data.assets import FrameAssetResolver, FrameAssetStatus
+from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
 from hcmai.data.stores import ASRStore, CaptionStore, FrameStore, OCRStore
 
 EvidenceStore = CaptionStore | OCRStore | ASRStore
@@ -78,20 +80,58 @@ class DataService:
         resume: bool = True,
         limit: int | None = None,
     ) -> Path:
-        """Run adaptive offline video preparation behind the data facade."""
+        """Import the BTC-native frame store configured for HCMAI 2026.
 
-        from hcmai.data.preprocessing import (
-            PreprocessingConfig,
-            prepare_frame_store,
-            prepare_frame_store_from_s3,
-        )
+        ``resume`` and ``limit`` remain in the public signature for caller
+        compatibility. BTC V1 ingestion is deterministic and always imports
+        the complete metadata table.
+        """
 
-        config = PreprocessingConfig.from_yaml(config_path)
-        if config.s3 is not None:
-            return prepare_frame_store_from_s3(
-                config, resume=resume, limit=limit
+        raw_config = read_yaml(config_path)
+        if not isinstance(raw_config, Mapping):
+            raise ValueError(f"Expected a YAML mapping in {config_path}")
+        dataset = raw_config.get("dataset")
+        if not isinstance(dataset, Mapping):
+            raise ValueError("Enrichment YAML requires a dataset mapping")
+
+        required = {
+            "version",
+            "source",
+            "btc_root",
+            "data_root",
+            "frame_store_id",
+            "frames_path",
+            "frame_store_output",
+        }
+        missing = sorted(required.difference(dataset))
+        if missing:
+            raise ValueError(
+                "Missing dataset configuration: " + ", ".join(missing)
             )
-        return prepare_frame_store(config, resume=resume, limit=limit)
+
+        source = str(dataset["source"])
+        if source != "btc_keyframes":
+            raise ValueError(
+                f"Unsupported dataset.source {source!r}; expected 'btc_keyframes'"
+            )
+
+        output_root = Path(str(dataset["frame_store_output"])).expanduser()
+        frames_path = Path(str(dataset["frames_path"])).expanduser()
+        expected_frames_path = output_root / "frames.parquet"
+        if frames_path.resolve() != expected_frames_path.resolve():
+            raise ValueError(
+                "dataset.frames_path must equal "
+                "dataset.frame_store_output/frames.parquet"
+            )
+
+        return import_btc_frame_store(
+            BTCIngestionConfig(
+                btc_root=Path(str(dataset["btc_root"])).expanduser(),
+                data_root=Path(str(dataset["data_root"])).expanduser(),
+                output_root=output_root,
+                frame_store_id=str(dataset["frame_store_id"]),
+            )
+        )
 
     def get_frame(self, frame_id: str) -> FrameRecord:
         return self._frames().get(frame_id)

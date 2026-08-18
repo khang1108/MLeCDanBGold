@@ -1,7 +1,12 @@
 dataset:
   version: "hcmai2026_v1"
+  source: "btc_keyframes"
+  btc_root: "data"
+  data_root: "data"
+  frame_store_id: "btc-keyframes-v1"
   root: "artifacts/frame_store"
   frames_path: "artifacts/frame_store/frames.parquet"
+  frame_store_output: "artifacts/frame_store"
 
 caption:
   output_dir: "artifacts/enrichment/caption"
