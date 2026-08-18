@@ -225,5 +225,32 @@ def test_remote_transcript_adapters_share_audio_reference_and_keep_segments() ->
     )
     video = Path("L21_V001.mp4")
     segments = asr.transcribe(video, "L21_V001")
-    assert segments == [_segment()]
-    assert diarization.assign_speakers(video, segments) == [_segment("SPEAKER_00")]
+    assert segments[0].model_name == "asr"
+    assert segments[0].model_revision == SHA
+    assert segments[0].artifact_version == "asr-segment-v1"
+
+    diarized = diarization.assign_speakers(video, segments)
+    assert diarized[0].speaker_id == "SPEAKER_00"
+    assert diarized[0].model_name == "asr"
+    assert diarized[0].model_revision == SHA
+    assert diarized[0].artifact_version == "asr-segment-v1"
+
+
+def test_remote_asr_rejects_segment_lineage_conflicting_with_envelope() -> None:
+    """Do not accept provider segments that contradict a trusted ASR envelope."""
+
+    client, references = FakeClient(), FakeReferences()
+    client.transcribe_audio_reference = lambda payload: TranscriptInferenceResponse(
+        request_id=payload.request_id,
+        video_id=payload.video_id,
+        model="asr",
+        revision=SHA,
+        segments=[_segment().model_copy(update={"model_name": "other/asr"})],
+        latency_ms=1,
+    )
+    adapter = RemoteASRAdapter(
+        client, ASRConfig(model_name="asr", revision=SHA), references
+    )
+
+    with pytest.raises(ValueError, match="segment model_name conflicts"):
+        adapter.transcribe(Path("L21_V001.mp4"), "L21_V001")

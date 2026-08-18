@@ -70,7 +70,10 @@ def materialize_asr_enrichment(
         )
     by_video: defaultdict[str, list[TranscriptSegment]] = defaultdict(list)
     for segment in segments:
-        by_video[segment.video_id].append(segment)
+        # A derived completed frame row must never turn partial or failed ASR
+        # output into positive retrieval evidence.
+        if segment.status == ProcessingStatus.COMPLETED:
+            by_video[segment.video_id].append(segment)
     for values in by_video.values():
         values.sort(
             key=lambda segment: (

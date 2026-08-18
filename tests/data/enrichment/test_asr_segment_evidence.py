@@ -11,12 +11,17 @@ import pytest
 from pydantic import ValidationError
 
 from hcmai.common.config import ASRConfig
-from hcmai.common.schemas import ProcessingStatus, TranscriptSegment
+from hcmai.common.schemas import (
+    FrameRecord,
+    ProcessingStatus,
+    TranscriptSegment,
+)
 from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
 from hcmai.data.enrichment.transcripts.manifest import (
     SourceFingerprint,
     TranscriptManifest,
 )
+from hcmai.data.enrichment.transcripts.materialize import materialize_asr_enrichment
 from hcmai.data.enrichment.transcripts.store import TranscriptStore
 
 
@@ -48,7 +53,8 @@ def test_legacy_segment_defaults_and_round_trips_through_store(
     assert legacy.artifact_version == "asr-segment-v1"
 
     path = tmp_path / "segments.parquet"
-    pd.DataFrame([legacy.model_dump(mode="json")]).to_parquet(path, index=False)
+    pd.DataFrame([_legacy_segment()]).to_parquet(path, index=False)
+    assert list(pd.read_parquet(path)) == list(_legacy_segment())
 
     loaded = TranscriptStore(path).get(legacy.segment_id)
     assert loaded == legacy
@@ -62,6 +68,55 @@ def test_transcript_segment_validates_duration_and_confidence() -> None:
         TranscriptSegment.model_validate(_legacy_segment() | {"end_ms": 1_000})
     with pytest.raises(ValidationError, match="less than or equal to 1"):
         TranscriptSegment.model_validate(_legacy_segment() | {"confidence": 1.01})
+
+
+def test_failed_transcript_segment_requires_diagnostics() -> None:
+    """Match specialist evidence failure diagnostics without breaking old rows."""
+
+    with pytest.raises(ValidationError, match="failed segments require"):
+        TranscriptSegment.model_validate(
+            _legacy_segment() | {"status": ProcessingStatus.FAILED}
+        )
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        ProcessingStatus.PENDING,
+        ProcessingStatus.PROCESSING,
+        ProcessingStatus.FAILED,
+    ],
+)
+def test_frame_alignment_ignores_non_completed_segments(
+    status: ProcessingStatus,
+) -> None:
+    """Prevent incomplete speech from becoming completed frame evidence."""
+
+    frame = FrameRecord(
+        frame_id="f1",
+        video_id="v1",
+        frame_idx=10,
+        timestamp_ms=1_500,
+        image_path="f1.jpg",
+        width=8,
+        height=6,
+    )
+    updates: dict[str, object] = {"status": status}
+    if status is ProcessingStatus.FAILED:
+        updates |= {"error_code": "provider_error", "error_message": "failed"}
+    segment = TranscriptSegment.model_validate(_legacy_segment() | updates)
+
+    rows = materialize_asr_enrichment(
+        [frame],
+        [segment],
+        evaluated_video_ids={"v1"},
+        window_ms=0,
+        enrichment_version="asr-frame-v1",
+        model_name="test/asr@revision",
+    )
+
+    assert rows[0].asr_text is None
+    assert rows[0].source_segment_ids == []
 
 
 def test_local_asr_stamps_lineage_without_inventing_confidence(
@@ -127,6 +182,44 @@ def test_manifest_marks_segment_source_and_compatibility_alignment() -> None:
     assert manifest.context_dependency == "none"
 
 
+def _import_references(tree: ast.AST) -> set[str]:
+    """Collect imported and qualified symbols independent of local aliases."""
+
+    references: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module:
+                references.add(node.module)
+            for alias in node.names:
+                references.add(alias.name)
+                if alias.asname:
+                    references.add(alias.asname)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                references.add(alias.name)
+                if alias.asname:
+                    references.add(alias.asname)
+        elif isinstance(node, ast.Attribute):
+            references.add(node.attr)
+    return references
+
+
+def test_import_reference_scan_catches_alias_and_qualified_imports() -> None:
+    """Keep the dependency boundary effective for common import spellings."""
+
+    tree = ast.parse(
+        "import hcmai.data.stores.evidence as stores\n"
+        "import hcmai.data.enrichment.transcripts.materialize as aligned\n"
+        "store = stores.ASRStore\n"
+        "build = aligned.materialize_asr_enrichment\n"
+    )
+
+    references = _import_references(tree)
+    assert "ASRStore" in references
+    assert "materialize_asr_enrichment" in references
+    assert "hcmai.data.stores.evidence" in references
+
+
 def test_frame_context_modules_do_not_depend_on_asr_compatibility_view() -> None:
     """Prevent deterministic FrameContext from acquiring frame-aligned ASR inputs."""
 
@@ -148,14 +241,7 @@ def test_frame_context_modules_do_not_depend_on_asr_compatibility_view() -> None
         if not owns_context and not owns_frame_context:
             continue
 
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                context_imports.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.Import):
-                context_imports.update(
-                    alias.name.rsplit(".", maxsplit=1)[-1]
-                    for alias in node.names
-                )
+        context_imports.update(_import_references(tree))
 
     transcript_imports: set[str] = set()
     transcript_paths = [source_root / "common/schemas/transcript.py"]
@@ -164,9 +250,7 @@ def test_frame_context_modules_do_not_depend_on_asr_compatibility_view() -> None
     )
     for path in transcript_paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                transcript_imports.update(alias.name for alias in node.names)
+        transcript_imports.update(_import_references(tree))
 
     assert context_imports.isdisjoint(forbidden)
     assert "FrameContext" not in transcript_imports

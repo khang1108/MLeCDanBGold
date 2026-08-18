@@ -1,3 +1,9 @@
+"""Canonical segment-native transcript evidence contracts.
+
+Transcript timing and ASR provenance live on segments. Frame alignment remains
+a derived compatibility concern owned outside this schema module.
+"""
+
 from __future__ import annotations
 
 from pydantic import Field, model_validator
@@ -32,8 +38,14 @@ class TranscriptSegment(ContractModel):
 
     @model_validator(mode="after")
     def validate_time_range(self) -> TranscriptSegment:
-        """Require every transcript segment to have a positive duration."""
+        """Require positive duration and diagnostics for failed segments."""
 
         if self.end_ms <= self.start_ms:
             raise ValueError("end_ms must be greater than start_ms")
+        if self.status == ProcessingStatus.FAILED and (
+            self.error_code is None or self.error_message is None
+        ):
+            raise ValueError(
+                "failed segments require error_code and error_message"
+            )
         return self
