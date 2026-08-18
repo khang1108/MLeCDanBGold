@@ -25,6 +25,7 @@ from hcmai.common.schemas import (
     ProcessingStatus,
 )
 from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
+from hcmai.data.enrichment.bundle import publish_staged_bundle
 from hcmai.data.stores.frame import FrameStore
 
 from .config import FrameContextConfig
@@ -379,36 +380,7 @@ def _publish_staged_bundle(
 ) -> None:
     """Publish context data then manifest, restoring the prior bundle on error."""
 
-    backups = tuple(
-        target.with_name(f".{target.name}.backup") for target in published
-    )
-    for backup in backups:
-        if backup.exists():
-            raise RuntimeError(f"refusing to overwrite stale backup: {backup}")
-
-    replaced: list[Path] = []
-    restore_complete = False
-    try:
-        for target, backup in zip(published, backups):
-            if target.exists():
-                target.replace(backup)
-        for source, target in zip(staged, published):
-            replaced.append(target)
-            source.replace(target)
-    except Exception:
-        for target in replaced:
-            target.unlink(missing_ok=True)
-        for target, backup in zip(published, backups):
-            if backup.exists():
-                backup.replace(target)
-        restore_complete = True
-        raise
-    else:
-        restore_complete = True
-    finally:
-        if restore_complete:
-            for backup in backups:
-                backup.unlink(missing_ok=True)
+    publish_staged_bundle(staged, published)
 
 
 def _write_bundle(

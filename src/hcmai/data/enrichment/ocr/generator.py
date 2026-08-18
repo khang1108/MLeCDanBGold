@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 from hcmai.common.schemas import OCREvidence, OCRRegion
 from hcmai.common.utils.image import load_image
-from hcmai.common.utils.io import atomic_write, read_json, write_json
+from hcmai.common.utils.io import read_json
 from hcmai.data.stores.frame import FrameStore
 
 from .adapters.florence import FlorenceAdapter
@@ -330,8 +330,6 @@ def generate_ocr(
     if len(rows) != len(order) or any(frame_id not in rows for frame_id in order):
         if config.enabled:
             raise ValueError("OCR artifact does not cover every canonical frame")
-    write_ocr_artifacts(output, order, rows, regions, failures, config)
-
     report = build_ocr_report(
         config,
         path,
@@ -349,8 +347,17 @@ def generate_ocr(
         retried,
         revision,
         len(frames) if not config.enabled else 0,
+        frame_store_id=frame_store_id,
     )
-    atomic_write(report_path, lambda target: write_json(report, target))
     manifest = {key: value for key, value in report.items() if key != "raw_evidence"}
-    atomic_write(output / "manifest.json", lambda target: write_json(manifest, target))
+    write_ocr_artifacts(
+        output,
+        order,
+        rows,
+        regions,
+        failures,
+        config,
+        report,
+        manifest,
+    )
     return report

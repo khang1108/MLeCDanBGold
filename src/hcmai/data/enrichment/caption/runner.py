@@ -60,6 +60,7 @@ def run_batches(
     config: CaptionConfig,
     output: Path,
     root: Path,
+    checkpoint_manifest: dict[str, Any],
     *,
     frame_store_id: str | None,
     resolved_revision: str | None,
@@ -143,7 +144,13 @@ def run_batches(
                     )
         since_write += len(chunk)
         if since_write >= config.write_interval:
-            write_caption_artifacts(output, order, rows, failures)
+            write_caption_artifacts(
+                output,
+                order,
+                rows,
+                failures,
+                checkpoint_manifest,
+            )
             since_write = 0
         progress.update(len(chunk))
         progress.set_postfix(failed=len(failures), refresh=False)

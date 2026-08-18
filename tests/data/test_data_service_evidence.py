@@ -441,6 +441,93 @@ def test_data_service_rejects_timestamp_mismatch_with_canonical_frame(
 
 
 @pytest.mark.parametrize(
+    ("field", "second_value"),
+    [
+        ("artifact_version", "caption-v2"),
+        ("frame_store_id", "btc-v2"),
+    ],
+)
+def test_typed_store_rejects_mixed_specialist_lineage(
+    tmp_path: Path, field: str, second_value: str
+) -> None:
+    """Require one specialist artifact to have uniform version and lineage."""
+
+    first = _caption_row(frame_store_id="btc-v1")
+    second = _caption_row(
+        frame_id="f2",
+        frame_idx=20,
+        timestamp_ms=2_000,
+        frame_store_id="btc-v1",
+    )
+    second[field] = second_value
+    path = tmp_path / "mixed-caption.parquet"
+    pd.DataFrame([first, second]).to_parquet(path, index=False)
+
+    with pytest.raises(ValueError, match="uniform.*(version|lineage)"):
+        CaptionStore(path)
+
+
+def test_typed_store_rejects_adjacent_manifest_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Reject a valid row table coupled to a manifest for another artifact."""
+
+    root = tmp_path / "caption"
+    root.mkdir()
+    path = root / "captions.parquet"
+    pd.DataFrame(
+        [_caption_row(frame_store_id="btc-v1")]
+    ).to_parquet(path, index=False)
+    (root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_version": "caption-v2",
+                "frame_store_id": "btc-v1",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="manifest.*artifact_version"):
+        CaptionStore(path)
+
+
+def test_data_service_compares_specialist_lineage_to_canonical_manifest(
+    tmp_path: Path,
+) -> None:
+    """Tie typed specialist evidence to the loaded canonical frame store."""
+
+    frame_root = tmp_path / "frame-store"
+    frame_root.mkdir()
+    frames_path = _write_frames(frame_root)
+    (frame_root / "manifest.json").write_text(
+        json.dumps({"frame_store_id": "btc-v1"}), encoding="utf-8"
+    )
+
+    caption_root = tmp_path / "caption"
+    caption_root.mkdir()
+    caption_path = caption_root / "captions.parquet"
+    pd.DataFrame(
+        [_caption_row(frame_store_id="btc-v2")]
+    ).to_parquet(caption_path, index=False)
+    (caption_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_version": "caption-v1",
+                "frame_store_id": "btc-v2",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="frame_store_id.*canonical"):
+        DataService.load(
+            frames_path,
+            {RetrievalSource.CAPTION: caption_path},
+        )
+
+
+@pytest.mark.parametrize(
     ("updates", "field"),
     [
         ({"frame_id": " f1"}, "frame_id"),

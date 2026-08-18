@@ -62,6 +62,33 @@ def test_frame_aligned_contracts_preserve_full_canonical_identity(
     assert row.timestamp_ms == 1_234
 
 
+@pytest.mark.parametrize(
+    "contract",
+    [
+        CaptionEvidence,
+        OCRRegion,
+        OCREvidence,
+        ObjectDetection,
+        ObjectEvidence,
+        FrameContext,
+    ],
+)
+def test_public_evidence_contracts_explain_their_semantics(
+    contract: type[
+        CaptionEvidence
+        | OCRRegion
+        | OCREvidence
+        | ObjectDetection
+        | ObjectEvidence
+        | FrameContext
+    ],
+) -> None:
+    """Keep public schema intent discoverable at the contract boundary."""
+
+    assert contract.__doc__ is not None
+    assert len(contract.__doc__.split()) >= 8
+
+
 def test_ocr_region_preserves_full_parent_frame_identity() -> None:
     """Keep video and timestamp identity on every authoritative OCR region."""
 

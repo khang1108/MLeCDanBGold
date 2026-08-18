@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from PIL import Image
 
+from hcmai.common.schemas import CaptionEvidence, FrameEnrichment
 from hcmai.data.enrichment.caption.config import CaptionConfig
 from hcmai.data.enrichment.caption.generator import generate_captions
 
@@ -144,3 +147,99 @@ def test_resume_retries_caption_with_mismatched_canonical_timestamp(
     assert retry.calls == [1]
     assert report["retried_count"] == 1
     assert rows.timestamp_ms.tolist() == [0, 1_000, 2_000]
+
+
+def test_empty_caption_bundle_keeps_explicit_canonical_schemas(
+    tmp_path: Path,
+) -> None:
+    """Publish readable zero-row source and compatibility Parquet tables."""
+
+    frames_path = tmp_path / "frames.parquet"
+    pd.DataFrame(
+        columns=[
+            "frame_id",
+            "video_id",
+            "frame_idx",
+            "timestamp_ms",
+            "image_path",
+            "width",
+            "height",
+        ]
+    ).to_parquet(frames_path, index=False)
+
+    report = generate_captions(
+        frames_path,
+        tmp_path / "captions",
+        _config(),
+        FakeCaptionAdapter([]),
+        dataset_root=tmp_path,
+        frame_store_id="btc-test-v1",
+    )
+
+    assert report["input_frame_count"] == 0
+    assert list(pd.read_parquet(tmp_path / "captions/captions.parquet")) == list(
+        CaptionEvidence.model_fields
+    )
+    assert list(
+        pd.read_parquet(tmp_path / "captions/frame_enrichment.parquet")
+    ) == list(FrameEnrichment.model_fields)
+
+
+@pytest.mark.parametrize(
+    "failed_name", ["frame_enrichment.parquet", "manifest.json"]
+)
+def test_caption_publication_failure_restores_prior_complete_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_name: str,
+) -> None:
+    """Publish Caption data as one manifest-committed rollback-safe bundle."""
+
+    frames_path = _frames(tmp_path)
+    output = tmp_path / "captions"
+    generate_captions(
+        frames_path,
+        output,
+        _config(),
+        FakeCaptionAdapter(["zero", RuntimeError("retry"), "two"]),
+        dataset_root=tmp_path,
+        frame_store_id="btc-test-v1",
+    )
+    names = (
+        "captions.parquet",
+        "failures.json",
+        "frame_enrichment.parquet",
+        "manifest.json",
+    )
+    before = {name: (output / name).read_bytes() for name in names}
+    assert json.loads(before["manifest.json"])["failed_count"] == 1
+
+    original_replace = Path.replace
+    injected = False
+
+    def fail_publish_once(source: Path, target: Path) -> Path:
+        nonlocal injected
+        if source.name == f".{failed_name}.staged" and not injected:
+            injected = True
+            raise OSError(f"injected {failed_name} publication failure")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", fail_publish_once)
+
+    with pytest.raises(OSError, match="injected"):
+        generate_captions(
+            frames_path,
+            output,
+            _config(),
+            FakeCaptionAdapter(["one recovered"]),
+            dataset_root=tmp_path,
+            frame_store_id="btc-test-v1",
+        )
+
+    assert injected
+    assert {name: (output / name).read_bytes() for name in names} == before
+    assert {
+        path.name
+        for path in output.iterdir()
+        if path.name.endswith((".staged", ".backup", ".tmp"))
+    } == set()

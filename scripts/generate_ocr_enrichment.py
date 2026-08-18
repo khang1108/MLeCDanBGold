@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
             from hcmai.llm.pipeline import LLMService
 
             client = LLMService.remote(base_url, settings.inference.timeout_seconds)
-            engine = RemoteOCRAdapter(client, config)
+            engine = RemoteOCRAdapter(client.adapter, config)
             logger.info("Using remote OCR backend at %s", base_url)
         else:
             logger.info("Using local Florence-2 OCR backend")
@@ -78,11 +78,19 @@ def main(argv: list[str] | None = None) -> int:
     completed = report.get("completed_frames", 0)
     failed = report.get("failed_frames", 0)
     skipped = report.get("skipped_frames", 0)
-    logger.info(
-        "OCR done: completed=%d failed=%d skipped=%d output=%s",
-        completed, failed, skipped, output,
+    status = "DEGRADED" if failed else "COMPLETE"
+    log_result = logger.warning if failed else logger.info
+    log_result(
+        "OCR %s: completed=%d failed=%d skipped=%d output=%s",
+        status,
+        completed,
+        failed,
+        skipped,
+        output,
     )
-    return 0 if not failed else 1
+    # Per-frame failures are represented in the successfully published bundle.
+    # Artifact-level failures still propagate and produce a nonzero process exit.
+    return 0
 
 
 if __name__ == "__main__":

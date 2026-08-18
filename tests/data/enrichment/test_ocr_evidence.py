@@ -18,7 +18,11 @@ from hcmai.data.enrichment.ocr.adapters.florence import _parse_regions
 from hcmai.data.enrichment.ocr.artifacts import normalize_regions
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.generator import generate_ocr
-from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
+from hcmai.data.enrichment.ocr.models.entities import (
+    OCRRegionResult,
+    OCRResult,
+    json_safe_ocr_raw,
+)
 
 
 class _Engine:
@@ -332,6 +336,25 @@ def test_requested_revision_change_reprocesses_all_rows(tmp_path):
     assert rows.model_revision.tolist() == ["r2", "r2"]
 
 
+def test_disabled_ocr_bundle_preserves_requested_frame_store_lineage(tmp_path):
+    """Keep an explicit canonical lineage even when no OCR rows are emitted."""
+
+    source = _frames(tmp_path)
+    output = tmp_path / "ocr"
+
+    report = generate_ocr(
+        source,
+        output,
+        replace(_config(), enabled=False),
+        frame_store_id="btc-v1",
+    )
+
+    assert report["frame_store_id"] == "btc-v1"
+    assert json.loads((output / "manifest.json").read_text())["frame_store_id"] == (
+        "btc-v1"
+    )
+
+
 def test_partial_retry_runtime_revision_change_reprocesses_reused_rows(tmp_path):
     source = _frames(tmp_path)
     outputs = [
@@ -412,6 +435,103 @@ def test_generation_sanitizes_raw_output_before_publishing_complete_set(tmp_path
         "nested": [None, {"infinite": None}],
         "unsupported": None,
     }
+
+
+def test_raw_output_sanitizer_enforces_shared_node_and_byte_budgets() -> None:
+    """Bound aggregate diagnostics rather than granting each child a budget."""
+
+    long_text = "ữ" * 100
+    source = {
+        "first": [long_text, 1, 2, 3],
+        "second": {"nested": [4, 5, 6]},
+        "third": "tail",
+    }
+
+    sanitized = json_safe_ocr_raw(
+        source,
+        max_depth=8,
+        max_nodes=7,
+        max_bytes=80,
+        max_string_bytes=12,
+    )
+
+    def count_nodes(value: object) -> int:
+        if isinstance(value, dict):
+            return 1 + sum(count_nodes(item) for item in value.values())
+        if isinstance(value, list):
+            return 1 + sum(count_nodes(item) for item in value)
+        return 1
+
+    assert sanitized == json_safe_ocr_raw(
+        source,
+        max_depth=8,
+        max_nodes=7,
+        max_bytes=80,
+        max_string_bytes=12,
+    )
+    assert count_nodes(sanitized) <= 7
+    assert len(
+        json.dumps(
+            sanitized,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ) <= 80
+    assert source["first"][0] == long_text
+    assert long_text not in json.dumps(sanitized, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("failed_name", ["regions.parquet", "manifest.json"])
+def test_ocr_publication_failure_restores_prior_complete_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_name: str,
+) -> None:
+    """Publish OCR data, diagnostics, and manifest as one rollback-safe bundle."""
+
+    source = _frames(tmp_path)
+    output = tmp_path / "ocr"
+    values = [
+        OCRResult("one", (_region("one"),)),
+        OCRResult("two", (_region("two"),)),
+    ]
+    generate_ocr(source, output, _config(), engine=_Engine(values))
+    names = (
+        "frames.parquet",
+        "regions.parquet",
+        "failures.json",
+        "frame_enrichment.parquet",
+        "ocr_report.json",
+        "manifest.json",
+    )
+    before = {name: (output / name).read_bytes() for name in names}
+    original_replace = Path.replace
+    injected = False
+
+    def fail_publish_once(staged: Path, target: Path) -> Path:
+        nonlocal injected
+        if staged.name == f".{failed_name}.staged" and not injected:
+            injected = True
+            raise OSError(f"injected {failed_name} publication failure")
+        return original_replace(staged, target)
+
+    monkeypatch.setattr(Path, "replace", fail_publish_once)
+
+    with pytest.raises(OSError, match="injected"):
+        generate_ocr(
+            source,
+            output,
+            replace(_config(), artifact_version="ocr-v2"),
+            engine=_Engine(values),
+        )
+
+    assert injected
+    assert {name: (output / name).read_bytes() for name in names} == before
+    assert {
+        path.name
+        for path in output.iterdir()
+        if path.name.endswith((".staged", ".backup", ".tmp"))
+    } == set()
 
 
 def test_revision_full_reprocess_counts_only_prior_rows_as_retried(tmp_path):

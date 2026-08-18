@@ -17,7 +17,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from hcmai.common.utils.io import atomic_write, read_json, write_json
+from hcmai.common.utils.io import read_json
 from hcmai.common.config import AppConfig
 from hcmai.data.enrichment.caption.artifacts import write_caption_artifacts
 from hcmai.data.enrichment.caption.adapters.transformers import TransformersCaptionAdapter
@@ -80,16 +80,17 @@ def generate_captions(
         frame_store_id=frame_store_id,
     )
 
-    # Cập nhật thông tin vào manifest tạm thời
+    # Checkpoint publication uses the same bundle boundary as final output.
     provisional = {
         **old,
+        "artifact_version": config.enrichment_version,
+        "source_artifact": "captions.parquet",
         ENRICHMENT_VERSION: config.enrichment_version,
         "effective_configuration": asdict(config),
         "dataset_root": str(root),
         "resolved_model_revision": resolved_revision,
         "frame_store_id": frame_store_id,
     }
-    atomic_write(manifest_path, lambda path: write_json(provisional, path))
 
     # Xử lý từng batch
     failures: dict[str, dict[str, str]] = {}
@@ -102,6 +103,7 @@ def generate_captions(
         config,
         output,
         root,
+        provisional,
         frame_store_id=frame_store_id,
         resolved_revision=resolved_revision,
     )
@@ -109,7 +111,6 @@ def generate_captions(
     if set(rows) != set(order):
         raise RuntimeError("caption processing did not retain one row per frame")
 
-    write_caption_artifacts(output, order, rows, failures)
     manifest = build_manifest(
         config,
         frames_path,
@@ -123,7 +124,7 @@ def generate_captions(
         retried,
         frame_store_id=frame_store_id,
     )
-    atomic_write(manifest_path, lambda path: write_json(manifest, path))
+    write_caption_artifacts(output, order, rows, failures, manifest)
     return manifest
 
 def main() -> int:

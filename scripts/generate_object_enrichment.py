@@ -7,10 +7,12 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
+from hcmai.common.utils.logging import get_logger
 from hcmai.data.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/enrichment.yaml"
+logger = get_logger(__name__)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -56,7 +58,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         config,
         frame_store_id=args.frame_store_id or job.frame_store_id,
     )
-    return 0 if report["failed_frames"] == 0 else 1
+    completed = report.get("completed_frames", 0)
+    failed = report.get("failed_frames", 0)
+    status = "DEGRADED" if failed else "COMPLETE"
+    log_result = logger.warning if failed else logger.info
+    log_result(
+        "Object import %s: completed=%d failed=%d output=%s",
+        status,
+        completed,
+        failed,
+        output,
+    )
+    # Missing/malformed per-frame JSON is contained in the published artifact.
+    # Publication and artifact-level exceptions remain nonzero process exits.
+    return 0
 
 
 if __name__ == "__main__":

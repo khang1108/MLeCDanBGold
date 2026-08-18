@@ -36,6 +36,8 @@ def build_ocr_report(
     retried: int,
     revision: str | None,
     disabled: int,
+    *,
+    frame_store_id: str | None,
 ) -> dict[str, Any]:
     """Summarize raw, normalized, and region OCR evidence independently."""
 
@@ -73,9 +75,7 @@ def build_ocr_report(
         "artifact_version": config.artifact_version,
         "enrichment_version": config.enrichment_version,
         "dataset_version": config.dataset_version,
-        "frame_store_id": next(
-            (row.frame_store_id for row in rows.values()), None
-        ),
+        "frame_store_id": frame_store_id,
         "input_parquet_path": str(path),
         "dataset_root": str(root),
         "backend": config.backend,

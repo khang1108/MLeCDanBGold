@@ -37,4 +37,3 @@ def serialize_frame_context(
 
 
 __all__ = ["serialize_frame_context"]
-

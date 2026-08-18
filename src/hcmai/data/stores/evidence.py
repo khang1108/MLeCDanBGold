@@ -29,6 +29,7 @@ from hcmai.common.schemas import (
     RetrievalSource,
     usable_completed_text,
 )
+from hcmai.common.utils.io import read_json
 
 
 _EvidenceT = TypeVar("_EvidenceT", bound=BaseModel)
@@ -101,6 +102,94 @@ def _index_records(
     return indexed
 
 
+def _adjacent_manifest(artifact_path: Path) -> dict[str, Any] | None:
+    """Load an adjacent bundle manifest when the producer published one."""
+
+    manifest_path = artifact_path.with_name("manifest.json")
+    if not manifest_path.exists():
+        return None
+    try:
+        value = read_json(manifest_path)
+    except Exception as error:
+        raise ValueError(
+            f"Malformed adjacent manifest for {artifact_path}: {manifest_path}"
+        ) from error
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"Adjacent manifest must contain an object: {manifest_path}"
+        )
+    return cast(dict[str, Any], value)
+
+
+def _uniform_field(
+    records: Iterable[BaseModel],
+    field: str,
+    artifact_path: Path,
+) -> object | None:
+    """Return one uniform row value or reject mixed artifact identity."""
+
+    values = {getattr(record, field) for record in records}
+    if len(values) > 1:
+        category = "lineage" if field == "frame_store_id" else "version"
+        raise ValueError(
+            f"{artifact_path} requires uniform {field} {category}"
+        )
+    return next(iter(values), None)
+
+
+def _validate_artifact_identity(
+    records: Iterable[BaseModel],
+    artifact_path: Path,
+    version_fields: tuple[str, ...],
+) -> tuple[str | None, dict[str, str]]:
+    """Validate uniform row lineage/version and its adjacent manifest."""
+
+    record_list = tuple(records)
+    lineage_value = _uniform_field(
+        record_list, "frame_store_id", artifact_path
+    )
+    lineage = cast(str | None, lineage_value)
+    versions = {
+        field: cast(str, _uniform_field(record_list, field, artifact_path))
+        for field in version_fields
+        if record_list
+    }
+    manifest = _adjacent_manifest(artifact_path)
+    if manifest is None:
+        return lineage, versions
+
+    for field, expected in versions.items():
+        if manifest.get(field) != expected:
+            raise ValueError(
+                f"Adjacent manifest {field} does not match rows in "
+                f"{artifact_path}"
+            )
+    manifest_lineage = manifest.get("frame_store_id")
+    if manifest_lineage is not None and (
+        not isinstance(manifest_lineage, str)
+        or not manifest_lineage
+        or manifest_lineage.strip() != manifest_lineage
+    ):
+        raise ValueError(
+            f"Adjacent manifest frame_store_id is invalid for {artifact_path}"
+        )
+    if record_list and manifest_lineage != lineage:
+        raise ValueError(
+            "Adjacent manifest frame_store_id does not match rows in "
+            f"{artifact_path}"
+        )
+    if not record_list:
+        lineage = cast(str | None, manifest_lineage)
+        for field in version_fields:
+            value = manifest.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"Adjacent manifest {field} is invalid for {artifact_path}"
+                )
+            versions[field] = value
+    return lineage, versions
+
+
 class _TypedEvidenceStore(Generic[_EvidenceT]):
     """Validate one typed Parquet artifact and index exact frame IDs."""
 
@@ -108,6 +197,7 @@ class _TypedEvidenceStore(Generic[_EvidenceT]):
         self,
         artifact_path: str | Path,
         contract: type[_EvidenceT],
+        version_fields: tuple[str, ...],
     ) -> None:
         self.artifact_path = _require_file(artifact_path, contract.__name__)
         table = pd.read_parquet(self.artifact_path)
@@ -135,6 +225,11 @@ class _TypedEvidenceStore(Generic[_EvidenceT]):
             records.append(record)
         self._records = tuple(records)
         self._by_frame_id = _index_records(self._records, self.artifact_path)
+        self.frame_store_id, self.version_identity = _validate_artifact_identity(
+            self._records,
+            self.artifact_path,
+            version_fields,
+        )
 
     def __len__(self) -> int:
         """Return the number of validated evidence rows."""
@@ -170,7 +265,7 @@ class CaptionStore(_TypedEvidenceStore[CaptionEvidence]):
     def __init__(self, artifact_path: str | Path) -> None:
         """Load and validate a ``CaptionEvidence`` Parquet artifact."""
 
-        super().__init__(artifact_path, CaptionEvidence)
+        super().__init__(artifact_path, CaptionEvidence, ("artifact_version",))
 
     def get_text(self, frame_id: str) -> str | None:
         """Return non-empty text from completed caption evidence."""
@@ -186,7 +281,7 @@ class OCRStore(_TypedEvidenceStore[OCREvidence]):
     def __init__(self, artifact_path: str | Path) -> None:
         """Load and validate an ``OCREvidence`` Parquet artifact."""
 
-        super().__init__(artifact_path, OCREvidence)
+        super().__init__(artifact_path, OCREvidence, ("artifact_version",))
 
     def get_text(self, frame_id: str) -> str | None:
         """Return non-empty normalized text from completed OCR evidence."""
@@ -200,7 +295,16 @@ class FrameContextStore(_TypedEvidenceStore[FrameContext]):
     def __init__(self, artifact_path: str | Path) -> None:
         """Load and validate a ``FrameContext`` Parquet artifact."""
 
-        super().__init__(artifact_path, FrameContext)
+        super().__init__(
+            artifact_path,
+            FrameContext,
+            (
+                "context_version",
+                "caption_version",
+                "ocr_version",
+                "object_version",
+            ),
+        )
 
     def get_text(self, frame_id: str) -> str | None:
         """Return non-empty deterministic context text, when available."""
@@ -287,6 +391,11 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
             records.append(record)
         self._records = tuple(records)
         self._by_frame_id = _index_records(self._records, self.artifact_path)
+        self.frame_store_id, self.version_identity = _validate_artifact_identity(
+            self._records,
+            self.artifact_path,
+            ("artifact_version",),
+        )
 
     def _load_detections(
         self, frame_rows: list[dict[str, Any]]

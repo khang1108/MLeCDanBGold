@@ -27,6 +27,12 @@ class _SpecialistEvidence(ContractModel):
 
 
 class CaptionEvidence(_SpecialistEvidence):
+    """One frame-aligned caption with model and frame-store provenance.
+
+    ``text=None`` distinguishes evaluated-empty or failed evidence from an
+    invented negative match; canonical frame coordinates are organizer-owned.
+    """
+
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
@@ -39,6 +45,12 @@ class CaptionEvidence(_SpecialistEvidence):
 
 
 class OCRRegion(ContractModel):
+    """One raw OCR region aligned to its complete canonical parent identity.
+
+    Region order and geometry preserve backend evidence independently of the
+    normalized text later derived for retrieval and FrameContext.
+    """
+
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
@@ -60,6 +72,12 @@ class OCRRegion(ContractModel):
 
 
 class OCREvidence(_SpecialistEvidence):
+    """Frame-level OCR evidence with raw text and a normalized derived view.
+
+    ``quality_score`` is a deterministic usability heuristic, not OCR accuracy;
+    raw regions remain separately available in the sibling region artifact.
+    """
+
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
@@ -75,6 +93,12 @@ class OCREvidence(_SpecialistEvidence):
 
 
 class ObjectDetection(ContractModel):
+    """One normalized BTC-provided detection without frame identity fields.
+
+    Parent ``ObjectEvidence`` and flat artifact rows own frame alignment so the
+    detection value stays reusable while preserving confidence and geometry.
+    """
+
     label: NonEmptyString
     confidence: float = Field(ge=0, le=1)
     x_min: float = Field(ge=0, le=1)
@@ -90,6 +114,12 @@ class ObjectDetection(ContractModel):
 
 
 class ObjectEvidence(_SpecialistEvidence):
+    """All BTC detections plus a thresholded summary for one canonical frame.
+
+    Raw repeated detections are authoritative; ``counts`` may retain only the
+    configured subset but can never exceed raw label multiplicity.
+    """
+
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)
@@ -115,6 +145,12 @@ class ObjectEvidence(_SpecialistEvidence):
 
 
 class FrameContext(ContractModel):
+    """Deterministic Caption/OCR/Object context derived for one frame.
+
+    Specialist text and upstream versions remain explicit for provenance and
+    ablation. ASR is timeline evidence and is deliberately absent from V1.
+    """
+
     frame_id: NonEmptyString
     video_id: NonEmptyString
     frame_idx: int = Field(ge=0)

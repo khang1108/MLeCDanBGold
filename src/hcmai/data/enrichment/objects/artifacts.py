@@ -20,6 +20,7 @@ from hcmai.common.utils.io import (
     write_json,
     write_parquet,
 )
+from hcmai.data.enrichment.bundle import publish_staged_bundle
 
 
 FRAME_COLUMNS = [
@@ -139,39 +140,7 @@ def _publish_staged_bundle(
 ) -> None:
     """Publish all staged files or restore the prior complete bundle."""
 
-    backups = tuple(
-        target.with_name(f".{target.name}.backup") for target in published
-    )
-    for backup in backups:
-        if backup.exists():
-            raise RuntimeError(f"refusing to overwrite stale backup: {backup}")
-
-    replaced: list[Path] = []
-    restore_complete = False
-    try:
-        for target, backup in zip(published, backups):
-            if target.exists():
-                target.replace(backup)
-
-        for source, target in zip(staged, published):
-            replaced.append(target)
-            # Manifest is deliberately last and remains the bundle commit marker.
-            source.replace(target)
-    except Exception:
-        for target in replaced:
-            target.unlink(missing_ok=True)
-        # Restore data files before restoring the previous manifest marker.
-        for target, backup in zip(published, backups):
-            if backup.exists():
-                backup.replace(target)
-        restore_complete = True
-        raise
-    else:
-        restore_complete = True
-    finally:
-        if restore_complete:
-            for backup in backups:
-                backup.unlink(missing_ok=True)
+    publish_staged_bundle(staged, published)
 
 
 def write_object_artifacts(

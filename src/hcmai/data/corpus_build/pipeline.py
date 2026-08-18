@@ -553,13 +553,137 @@ class DefaultPreparationOperations:
             return self.enrichment_job.frame_store_id
         return getattr(self, "_current_run_id", None)
 
-    def generate_caption(self) -> Path:
-        from hcmai.data.enrichment.pipeline import EnrichmentService
+    def _runtime_caption_config(self) -> Any:
+        """Return Caption policy with only the active dataset version replaced."""
 
-        caption = replace(
+        return replace(
             self.caption_job.caption,
             dataset_version=self.config.corpus_revision,
         )
+
+    def _runtime_ocr_config(self) -> Any:
+        """Preserve configured OCR policy while applying runtime pins/placement."""
+
+        pin = self.config.models.ocr
+        return replace(
+            self.enrichment_job.ocr,
+            checkpoint=pin.model_name,
+            revision=pin.revision,
+            device=self.config.preprocessing.device,
+            dataset_version=self.config.corpus_revision,
+        )
+
+    def _runtime_object_config(self) -> Any:
+        """Return Object policy aligned to this run's isolated output root."""
+
+        return replace(
+            self.enrichment_job.objects,
+            output_dir=self.paths.object_root,
+        )
+
+    def stage_dependency_identity(self, stage: str) -> dict[str, Any]:
+        """Return policy dependencies plus expected stable manifest identity.
+
+        Context includes all three specialist policies because unchanged
+        artifact-version labels do not prove unchanged derived content.
+        """
+
+        lineage = self._specialist_frame_store_id()
+        caption = self._runtime_caption_config()
+        ocr = self._runtime_ocr_config()
+        objects = self._runtime_object_config()
+        context = self.enrichment_job.context
+        common = {
+            "frames_path": str(self.paths.frames_path),
+            "frame_store_id": lineage,
+        }
+        caption_config = _identity_value(asdict(caption))
+        ocr_config = _identity_value(asdict(ocr))
+        object_config = _identity_value(asdict(objects))
+        context_config = _identity_value(asdict(context))
+
+        if stage == "caption":
+            return {
+                "dependencies": {**common, "configuration": caption_config},
+                "manifest": {
+                    "artifact_version": caption.enrichment_version,
+                    "enrichment_version": caption.enrichment_version,
+                    "dataset_version": caption.dataset_version,
+                    "frame_store_id": lineage,
+                    "model_checkpoint": caption.model_checkpoint,
+                    "prompt": caption.prompt,
+                    "decoding": caption.decoding,
+                    "device": caption.device,
+                    "precision": caption.precision,
+                    "dtype": caption.dtype,
+                    "image_size": caption.image_size,
+                    "batch_size": caption.batch_size,
+                    "effective_configuration": caption_config,
+                },
+            }
+        if stage == "ocr":
+            return {
+                "dependencies": {**common, "configuration": ocr_config},
+                "manifest": {
+                    "artifact_version": ocr.artifact_version,
+                    "enrichment_version": ocr.enrichment_version,
+                    "dataset_version": ocr.dataset_version,
+                    "frame_store_id": lineage,
+                    "backend": ocr.backend,
+                    "checkpoint": ocr.checkpoint,
+                    "device": ocr.device,
+                    "dtype": ocr.dtype,
+                    "batch_size": ocr.batch_size,
+                    "runtime_settings": ocr_config,
+                },
+            }
+        if stage == "objects":
+            return {
+                "dependencies": {
+                    **common,
+                    "objects_root": str(self.enrichment_job.objects_root),
+                    "configuration": object_config,
+                },
+                "manifest": {
+                    "artifact_version": objects.artifact_version,
+                    "frame_store_id": lineage,
+                    "objects_root": str(
+                        self.enrichment_job.objects_root.resolve()
+                    ),
+                    "summary_min_confidence": objects.summary_min_confidence,
+                    "max_summary_labels": objects.max_summary_labels,
+                },
+            }
+        if stage == "frame_context":
+            serializer = {
+                "caption_token_budget": context.caption_token_budget,
+                "ocr_token_budget": context.ocr_token_budget,
+                "object_token_budget": context.object_token_budget,
+                "min_ocr_quality": context.min_ocr_quality,
+            }
+            return {
+                "dependencies": {
+                    **common,
+                    "configuration": context_config,
+                    "caption_configuration": caption_config,
+                    "ocr_configuration": ocr_config,
+                    "object_configuration": object_config,
+                },
+                "manifest": {
+                    "context_version": context.context_version,
+                    "caption_version": caption.enrichment_version,
+                    "ocr_version": ocr.artifact_version,
+                    "object_version": objects.artifact_version,
+                    "frame_store_id": lineage,
+                    "serializer_config": serializer,
+                },
+            }
+        return {}
+
+    def generate_caption(self) -> Path:
+        from hcmai.data.enrichment.pipeline import EnrichmentService
+
+        caption = self._runtime_caption_config()
         pool = self._remote_pool("caption")
         if pool is None:
             adapter = EnrichmentService.create_caption_adapter(caption)
@@ -583,16 +707,9 @@ class DefaultPreparationOperations:
         return self.paths.caption_root / "frame_enrichment.parquet"
 
     def generate_ocr(self) -> Path:
-        from hcmai.data.enrichment.ocr.config import OCRConfig
         from hcmai.data.enrichment.pipeline import EnrichmentService
 
-        pin = self.config.models.ocr
-        ocr = OCRConfig(
-            checkpoint=pin.model_name,
-            revision=pin.revision,
-            device=self.config.preprocessing.device,
-            dataset_version=self.config.corpus_revision,
-        )
+        ocr = self._runtime_ocr_config()
         pool = self._remote_pool("ocr")
         if pool is None:
             adapter = EnrichmentService.create_ocr_adapter(ocr)
@@ -618,10 +735,7 @@ class DefaultPreparationOperations:
 
         from hcmai.data.enrichment.pipeline import EnrichmentService
 
-        config = replace(
-            self.enrichment_job.objects,
-            output_dir=self.paths.object_root,
-        )
+        config = self._runtime_object_config()
         EnrichmentService.import_objects(
             self.paths.frames_path,
             self.enrichment_job.objects_root,
@@ -1134,9 +1248,20 @@ class S3CorpusPreparationService:
         marker = self.paths.state_root / "stages" / f"{stage}.json"
         if marker.is_file():
             value = read_json(marker)
-            if value.get("run_id") == run_id:
+            expected_identity = self._stage_marker_identity(stage, run_id)
+            if (
+                value.get("run_id") == run_id
+                and value.get("dependency_fingerprint")
+                == expected_identity["dependency_fingerprint"]
+            ):
                 sizes = value.get("sizes", {})
-                if all(path.exists() and path.stat().st_size == sizes.get(str(path), -1) for path in outputs):
+                if all(
+                    path.exists()
+                    and path.stat().st_size == sizes.get(str(path), -1)
+                    for path in outputs
+                ) and self._stage_manifest_matches(
+                    stage, expected_identity["dependency_identity"]
+                ):
                     if record_skip:
                         skipped.append(stage)
                     return False
@@ -1149,28 +1274,97 @@ class S3CorpusPreparationService:
             raise FileNotFoundError(
                 f"{stage} did not produce required outputs: " + ", ".join(missing)
             )
+        identity = self._stage_marker_identity(stage, run_id)
+        if not self._stage_manifest_matches(
+            stage, identity["dependency_identity"]
+        ):
+            raise ValueError(
+                f"{stage} manifest does not match active stage identity"
+            )
         _atomic_json(
             self.paths.state_root / "stages" / f"{stage}.json",
             {
                 "run_id": run_id,
                 "stage": stage,
                 "completed_at": datetime.now(UTC).isoformat(),
+                **identity,
                 "outputs": [str(path) for path in outputs],
                 "sizes": {str(path): path.stat().st_size for path in outputs if path.exists()},
             },
         )
 
+    def _stage_marker_identity(
+        self, stage: str, run_id: str
+    ) -> dict[str, Any]:
+        """Build one deterministic marker identity for the active stage."""
+
+        provider = getattr(self.operations, "stage_dependency_identity", None)
+        raw = provider(stage) if callable(provider) else {}
+        if not isinstance(raw, dict):
+            raise TypeError("stage_dependency_identity must return a mapping")
+        dependency_identity = _identity_value(raw)
+        fingerprint = _fingerprint(
+            {
+                "run_id": run_id,
+                "stage": stage,
+                "dependency_identity": dependency_identity,
+            }
+        )
+        return {
+            "dependency_identity": dependency_identity,
+            "dependency_fingerprint": fingerprint,
+        }
+
+    def _stage_manifest_matches(
+        self, stage: str, dependency_identity: Any
+    ) -> bool:
+        """Compare stable manifest fields with the active policy identity."""
+
+        if not isinstance(dependency_identity, dict):
+            return False
+        expected = dependency_identity.get("manifest")
+        if not expected:
+            return True
+        if not isinstance(expected, dict):
+            return False
+        manifest_paths = [
+            path
+            for path in self._stage_outputs(stage)
+            if path.name == "manifest.json"
+        ]
+        if len(manifest_paths) != 1 or not manifest_paths[0].is_file():
+            return False
+        try:
+            actual = read_json(manifest_paths[0])
+        except Exception:
+            return False
+        return _identity_subset(actual, expected)
+
     def _stage_outputs(self, stage: str) -> tuple[Path, ...]:
-        specialist_name = (
-            "captions.parquet"
-            if self.config.frame_store_source == "btc_keyframes"
-            else "frame_enrichment.parquet"
-        )
-        ocr_name = (
-            "frames.parquet"
-            if self.config.frame_store_source == "btc_keyframes"
-            else "frame_enrichment.parquet"
-        )
+        if self.config.frame_store_source == "btc_keyframes":
+            caption_outputs = (
+                self.paths.caption_root / "captions.parquet",
+                self.paths.caption_root / "failures.json",
+                self.paths.caption_root / "frame_enrichment.parquet",
+                self.paths.caption_root / "manifest.json",
+            )
+            ocr_outputs = (
+                self.paths.ocr_root / "frames.parquet",
+                self.paths.ocr_root / "regions.parquet",
+                self.paths.ocr_root / "failures.json",
+                self.paths.ocr_root / "frame_enrichment.parquet",
+                self.paths.ocr_root / "ocr_report.json",
+                self.paths.ocr_root / "manifest.json",
+            )
+        else:
+            caption_outputs = (
+                self.paths.caption_root / "frame_enrichment.parquet",
+                self.paths.caption_root / "manifest.json",
+            )
+            ocr_outputs = (
+                self.paths.ocr_root / "frame_enrichment.parquet",
+                self.paths.ocr_root / "manifest.json",
+            )
         outputs = {
             "frame_store": (
                 self.paths.frames_path,
@@ -1180,16 +1374,11 @@ class S3CorpusPreparationService:
                 self.paths.transcripts_root,
                 self.paths.asr_enrichment_path,
             ),
-            "caption": (
-                self.paths.caption_root / specialist_name,
-                self.paths.caption_root / "manifest.json",
-            ),
-            "ocr": (
-                self.paths.ocr_root / ocr_name,
-                self.paths.ocr_root / "manifest.json",
-            ),
+            "caption": caption_outputs,
+            "ocr": ocr_outputs,
             "objects": (
                 self.paths.object_root / "frames.parquet",
+                self.paths.object_root / "detections.parquet",
                 self.paths.object_root / "manifest.json",
             ),
             "frame_context": (
@@ -1216,3 +1405,48 @@ class S3CorpusPreparationService:
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, lambda staging: write_json(value, staging))
+
+
+def _identity_value(value: Any) -> Any:
+    """Normalize dataclass/config identity into deterministic JSON values."""
+
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            str(key): _identity_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_identity_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"unsupported stage identity value: {type(value).__name__}")
+
+
+def _fingerprint(value: dict[str, Any]) -> str:
+    """Hash one normalized stage identity with stable JSON encoding."""
+
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _identity_subset(actual: Any, expected: Any) -> bool:
+    """Return whether every expected manifest field matches recursively."""
+
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(
+            key in actual and _identity_subset(actual[key], value)
+            for key, value in expected.items()
+        )
+    if isinstance(expected, list):
+        return isinstance(actual, list) and len(actual) == len(expected) and all(
+            _identity_subset(item, wanted)
+            for item, wanted in zip(actual, expected, strict=True)
+        )
+    return type(actual) is type(expected) and actual == expected

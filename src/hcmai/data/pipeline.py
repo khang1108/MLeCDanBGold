@@ -21,7 +21,7 @@ from hcmai.common.schemas import (
     TranscriptSegment,
 )
 from hcmai.common.schemas.search import SearchFilters
-from hcmai.common.utils.io import read_yaml
+from hcmai.common.utils.io import read_json, read_yaml
 from hcmai.data.assets import FrameAssetResolver, FrameAssetStatus
 from hcmai.data.enrichment.transcripts.store import TranscriptStore
 from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
@@ -105,6 +105,7 @@ class DataService:
         for store in (*evidence.values(), objects, contexts):
             if store is not None and not isinstance(store, ASRStore):
                 _validate_canonical_identity(frames, store)
+                _validate_canonical_lineage(frames, store)
         resolver = (
             FrameAssetResolver(dataset_root)
             if dataset_root is not None
@@ -133,6 +134,7 @@ class DataService:
         store = store_type(artifact_path)
         if not isinstance(store, ASRStore):
             _validate_canonical_identity(self._frames(), store)
+            _validate_canonical_lineage(self._frames(), store)
         self.evidence_stores[source] = store
         return store
 
@@ -371,3 +373,38 @@ def _validate_canonical_identity(
                 "Evidence does not match canonical identity for frame_id "
                 f"{evidence.frame_id!r}"
             )
+
+
+def _validate_canonical_lineage(
+    frames: FrameStore,
+    store: CaptionStore | OCRStore | ObjectStore | FrameContextStore,
+) -> None:
+    """Compare specialist lineage with the canonical frame manifest, if any."""
+
+    manifest_path = frames.metadata_path.with_name("manifest.json")
+    if not manifest_path.exists():
+        return
+    try:
+        manifest = read_json(manifest_path)
+    except Exception as error:
+        raise ValueError(
+            f"Malformed canonical frame manifest: {manifest_path}"
+        ) from error
+    if not isinstance(manifest, Mapping):
+        raise ValueError("Canonical frame manifest must contain an object")
+    canonical = manifest.get("frame_store_id")
+    if canonical is None:
+        return
+    if (
+        not isinstance(canonical, str)
+        or not canonical
+        or canonical.strip() != canonical
+    ):
+        raise ValueError(
+            "Canonical frame manifest has invalid frame_store_id"
+        )
+    if store.frame_store_id != canonical:
+        raise ValueError(
+            "Evidence frame_store_id does not match canonical frame_store_id: "
+            f"{store.artifact_path}"
+        )

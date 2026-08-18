@@ -20,7 +20,13 @@ from hcmai.common.schemas import (
     OCRRegion,
     ProcessingStatus,
 )
-from hcmai.common.utils.io import atomic_write, write_json, write_parquet
+from hcmai.common.utils.io import (
+    atomic_write,
+    read_json,
+    write_json,
+    write_parquet,
+)
+from hcmai.data.enrichment.bundle import publish_staged_bundle
 
 from .config import OCRConfig
 from .models.entities import (
@@ -257,8 +263,10 @@ def write_ocr_artifacts(
     regions: dict[str, list[OCRRegion]],
     failures: dict[str, FailureDetail],
     config: OCRConfig,
+    report: dict[str, object],
+    manifest: dict[str, object],
 ) -> None:
-    """Atomically write canonical frame order and backend region order."""
+    """Stage, validate, and publish the complete structured OCR bundle."""
 
     frame_table = pd.DataFrame(
         [rows[key].model_dump(mode="json") for key in order if key in rows],
@@ -281,10 +289,109 @@ def write_ocr_artifacts(
         columns=list(FrameEnrichment.model_fields),
     )
 
-    atomic_write(output / "frames.parquet", lambda path: write_parquet(frame_table, path, index=False))
-    atomic_write(output / "regions.parquet", lambda path: write_parquet(region_table, path, index=False))
-    atomic_write(output / "frame_enrichment.parquet", lambda path: write_parquet(projection, path, index=False))
-    atomic_write(
+    failure_rows = [failures[key] for key in order if key in failures]
+    output.mkdir(parents=True, exist_ok=True)
+    published = (
+        output / "frames.parquet",
+        output / "regions.parquet",
         output / "failures.json",
-        lambda path: write_json([failures[key] for key in order if key in failures], path),
+        output / "frame_enrichment.parquet",
+        output / "ocr_report.json",
+        output / "manifest.json",
     )
+    staged = tuple(
+        path.with_name(f".{path.name}.staged") for path in published
+    )
+    try:
+        atomic_write(
+            staged[0],
+            lambda path: write_parquet(frame_table, path, index=False),
+        )
+        atomic_write(
+            staged[1],
+            lambda path: write_parquet(region_table, path, index=False),
+        )
+        atomic_write(staged[2], lambda path: write_json(failure_rows, path))
+        atomic_write(
+            staged[3],
+            lambda path: write_parquet(projection, path, index=False),
+        )
+        atomic_write(staged[4], lambda path: write_json(report, path))
+        atomic_write(staged[5], lambda path: write_json(manifest, path))
+
+        staged_frames = pd.read_parquet(staged[0])
+        staged_regions = pd.read_parquet(staged[1])
+        staged_projection = pd.read_parquet(staged[3])
+        if staged_frames.columns.tolist() != list(OCREvidence.model_fields):
+            raise ValueError("staged OCR frames have an invalid schema")
+        if staged_regions.columns.tolist() != list(OCRRegion.model_fields):
+            raise ValueError("staged OCR regions have an invalid schema")
+        if staged_projection.columns.tolist() != list(FrameEnrichment.model_fields):
+            raise ValueError("staged OCR projection has an invalid schema")
+
+        expected_order = [frame_id for frame_id in order if frame_id in rows]
+        if staged_frames["frame_id"].tolist() != expected_order:
+            raise ValueError("staged OCR frames changed canonical order")
+        if staged_projection["frame_id"].tolist() != expected_order:
+            raise ValueError("staged OCR projection changed canonical order")
+
+        parsed_frames: dict[str, OCREvidence] = {}
+        for data in staged_frames.astype(object).where(
+            staged_frames.notna(), None
+        ).to_dict(orient="records"):
+            row = OCREvidence.model_validate(data)
+            parsed_frames[row.frame_id] = row
+        parsed_regions: dict[str, list[OCRRegion]] = {}
+        for data in staged_regions.astype(object).where(
+            staged_regions.notna(), None
+        ).to_dict(orient="records"):
+            region = OCRRegion.model_validate(data)
+            parsed_regions.setdefault(region.frame_id, []).append(region)
+        for frame_id, row in parsed_frames.items():
+            frame_regions = parsed_regions.get(frame_id, [])
+            if len(frame_regions) != row.region_count:
+                raise ValueError(
+                    f"staged OCR region_count mismatch for {frame_id}"
+                )
+            for region_order, region in enumerate(frame_regions):
+                if (
+                    region.region_order != region_order
+                    or region.region_id != f"{frame_id}:{region_order}"
+                    or region.video_id != row.video_id
+                    or region.frame_idx != row.frame_idx
+                    or region.timestamp_ms != row.timestamp_ms
+                ):
+                    raise ValueError(
+                        f"staged OCR region identity mismatch for {frame_id}"
+                    )
+        if set(parsed_regions).difference(parsed_frames):
+            raise ValueError("staged OCR regions reference an unknown frame")
+
+        for data in staged_projection.astype(object).where(
+            staged_projection.notna(), None
+        ).to_dict(orient="records"):
+            objects = data.get("objects")
+            to_list = getattr(objects, "tolist", None)
+            if callable(to_list):
+                data["objects"] = to_list()
+            FrameEnrichment.model_validate(data)
+        if read_json(staged[2]) != failure_rows:
+            raise ValueError("staged OCR failures failed validation")
+        if read_json(staged[4]) != report:
+            raise ValueError("staged OCR report failed validation")
+        if read_json(staged[5]) != manifest:
+            raise ValueError("staged OCR manifest failed validation")
+
+        versions = {row.artifact_version for row in rows.values()}
+        lineages = {row.frame_store_id for row in rows.values()}
+        if len(versions) > 1 or len(lineages) > 1:
+            raise ValueError("OCR bundle has mixed version or lineage")
+        if versions and manifest.get("artifact_version") not in versions:
+            raise ValueError("OCR manifest artifact_version mismatch")
+        if lineages and manifest.get("frame_store_id") not in lineages:
+            raise ValueError("OCR manifest frame_store_id mismatch")
+
+        publish_staged_bundle(staged, published)
+    finally:
+        for path in staged:
+            path.unlink(missing_ok=True)
