@@ -28,10 +28,12 @@ from .models.entities import Evidence, FailureDetail, FrameRow
 from .report import build_ocr_report
 
 
-def _read_rows(path: Path) -> list[FrameRow]:
-    """Read a Parquet table as record dictionaries when it exists."""
+def _read_rows(path: Path, *, required: bool = False) -> list[FrameRow]:
+    """Read Parquet records, optionally requiring the canonical source."""
 
     if not path.exists():
+        if required:
+            raise FileNotFoundError(f"required canonical frames not found: {path}")
         return []
     return cast(list[FrameRow], pd.read_parquet(path).to_dict(orient="records"))
 
@@ -215,7 +217,7 @@ def generate_ocr(
 
     started, began = datetime.now(timezone.utc), perf_counter()
     path, root = Path(frames_path), Path(dataset_root).expanduser().resolve()
-    frames = _read_rows(path)
+    frames = _read_rows(path, required=True)
     order = [str(frame["frame_id"]) for frame in frames]
     if len(order) != len(set(order)):
         raise ValueError("input frames contain duplicate frame_id values")
@@ -224,7 +226,12 @@ def generate_ocr(
     output.mkdir(parents=True, exist_ok=True)
     report_path = output / "ocr_report.json"
     old = cast(dict[str, Any], read_json(report_path)) if report_path.exists() else {}
-    expected_revision = old.get("resolved_revision") or config.revision
+    # Requested configuration is authoritative over stale report metadata.
+    expected_revision = config.revision
+    if engine is not None:
+        expected_revision = (
+            getattr(engine, "resolved_revision", None) or expected_revision
+        )
 
     if config.enabled:
         rows, regions, todo, skipped, retried = _resume(
@@ -267,13 +274,36 @@ def generate_ocr(
         )
 
     revision = getattr(engine, "resolved_revision", None) or expected_revision
-    if revision != expected_revision:
-        processed_ids = {str(frame["frame_id"]) for frame in todo}
-        for frame_id in processed_ids:
-            if frame_id in rows:
-                rows[frame_id] = rows[frame_id].model_copy(
-                    update={"model_revision": revision}
-                )
+    if revision != expected_revision and skipped:
+        # A lazy runtime may resolve a different immutable revision only after
+        # the partial batch runs. Reprocess reused rows to prevent mixed lineage.
+        assert engine is not None
+        rows.clear()
+        regions.clear()
+        failures.clear()
+        evidence.clear()
+        _process(
+            frames,
+            rows,
+            regions,
+            failures,
+            evidence,
+            engine,
+            config,
+            root,
+            frame_store_id=frame_store_id,
+            model_revision=revision,
+        )
+        if getattr(engine, "resolved_revision", None) not in {None, revision}:
+            raise RuntimeError("OCR runtime revision changed during generation")
+        todo = frames
+        skipped = 0
+        retried = len(frames)
+    elif revision != expected_revision:
+        for frame_id in rows:
+            rows[frame_id] = rows[frame_id].model_copy(
+                update={"model_revision": revision}
+            )
 
     if len(rows) != len(order) or any(frame_id not in rows for frame_id in order):
         if config.enabled:

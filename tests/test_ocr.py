@@ -18,7 +18,7 @@ class Engine:
     def __init__(self, outputs=None, error=None):
         type(self).instances += 1
         self.outputs, self.error, self.calls = outputs, error, []
-        self.resolved_revision: str | None = "fake-revision"
+        self.resolved_revision: str | None = "r1"
     def recognize_batch(self, images):
         self.calls.append(len(images))
         if self.error:

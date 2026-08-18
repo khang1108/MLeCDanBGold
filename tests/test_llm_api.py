@@ -73,6 +73,11 @@ class FakeRuntime:
         return [
             OCRResult(
                 text=f"text {image.getpixel((0, 0))[0]}",
+                raw_output=(
+                    object()
+                    if image.getpixel((0, 0))[0] < 100
+                    else np.asarray([1, 2], dtype=np.int64)
+                ),
                 regions=(
                     OCRRegionResult(
                         text=f"text {image.getpixel((0, 0))[0]}",
@@ -382,6 +387,8 @@ def test_offline_inference_endpoints_preserve_identity_and_provenance():
             "y_max": 1.0,
         }
     ]
+    assert ocr.json()["items"][0]["raw_output"] is None
+    assert ocr.json()["items"][1]["raw_output"] == [1, 2]
 
     embedded = request(
         app,

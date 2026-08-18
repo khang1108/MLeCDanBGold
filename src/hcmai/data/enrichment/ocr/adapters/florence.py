@@ -10,6 +10,7 @@ Các tính năng chính:
 from __future__ import annotations
 
 from collections.abc import Sequence
+import math
 from typing import Any
 
 from PIL import Image
@@ -38,6 +39,8 @@ def _parse_regions(
         if not isinstance(quad, (list, tuple)) or len(quad) != 8:
             raise ValueError("Florence OCR quadrilateral must have 8 values")
         coordinates = [float(value) for value in quad]
+        if any(not math.isfinite(value) for value in coordinates):
+            raise ValueError("Florence OCR quadrilateral coordinates must be finite")
         xs, ys = coordinates[0::2], coordinates[1::2]
 
         def clamp(value: float) -> float:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from PIL import Image
 
 from hcmai.common.schemas import OCRItem, OCRResponse
@@ -20,10 +22,11 @@ from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 class _Engine:
     """Return fixture OCR responses and record batch sizes."""
 
-    resolved_revision = "r1"
-
-    def __init__(self, outputs: list[OCRResult]) -> None:
+    def __init__(
+        self, outputs: list[OCRResult], *, resolved_revision: str = "r1"
+    ) -> None:
         self.outputs = outputs
+        self.resolved_revision = resolved_revision
         self.calls: list[int] = []
 
     def recognize_batch(self, images: list[Image.Image]) -> list[OCRResult]:
@@ -136,12 +139,22 @@ def test_florence_region_quadrilaterals_are_axis_aligned_and_clamped():
         },
         image_size=(10, 8),
     )
-
     assert regions == (
         OCRRegionResult("first", None, 0.0, 0.25, 1.0, 1.0),
         OCRRegionResult("second", None, 0.2, 0.75, 0.4, 1.0),
     )
 
+
+@pytest.mark.parametrize("coordinate", [float("nan"), float("inf")])
+def test_florence_rejects_non_finite_quad_coordinates(coordinate):
+    with pytest.raises(ValueError, match="finite"):
+        _parse_regions(
+            {
+                "labels": ["bad"],
+                "quad_boxes": [[coordinate, 0, 1, 0, 1, 1, 0, 1]],
+            },
+            image_size=(10, 10),
+        )
 
 def test_parquet_rows_and_regions_keep_canonical_input_order(tmp_path):
     source = _frames(tmp_path)
@@ -216,3 +229,72 @@ def test_resume_retries_failed_and_inconsistent_region_rows(tmp_path):
     assert report["retried_frames"] == 1
     assert frames.normalized_text.tolist() == ["one", "two fixed"]
     assert regions.text.tolist() == ["one", "two fixed"]
+
+
+def test_requested_revision_change_reprocesses_all_rows(tmp_path):
+    source = _frames(tmp_path)
+    outputs = [
+        OCRResult("one", (_region("one"),)),
+        OCRResult("two", (_region("two"),)),
+    ]
+    generate_ocr(source, tmp_path / "ocr", _config(), engine=_Engine(outputs))
+
+    changed = replace(_config(), revision="r2")
+    retry = _Engine(outputs, resolved_revision="r2")
+    report = generate_ocr(source, tmp_path / "ocr", changed, engine=retry)
+
+    rows = pd.read_parquet(tmp_path / "ocr/frames.parquet")
+    assert retry.calls == [2]
+    assert report["skipped_frames"] == 0
+    assert report["retried_frames"] == 2
+    assert rows.model_revision.tolist() == ["r2", "r2"]
+
+
+def test_partial_retry_runtime_revision_change_reprocesses_reused_rows(tmp_path):
+    source = _frames(tmp_path)
+    outputs = [
+        OCRResult("one", (_region("one"),)),
+        OCRResult("two", (_region("two"),)),
+    ]
+    generate_ocr(source, tmp_path / "ocr", _config(), engine=_Engine(outputs))
+    regions_path = tmp_path / "ocr/regions.parquet"
+    regions = pd.read_parquet(regions_path)
+    regions[regions.frame_id != "f1"].to_parquet(regions_path, index=False)
+
+    retry = _Engine(outputs, resolved_revision="r2")
+    report = generate_ocr(
+        source,
+        tmp_path / "ocr",
+        _config(),
+        engine_factory=lambda _: retry,
+    )
+
+    rows = pd.read_parquet(tmp_path / "ocr/frames.parquet")
+    assert retry.calls == [1, 2]
+    assert report["processed_frames"] == 2
+    assert report["skipped_frames"] == 0
+    assert report["retried_frames"] == 2
+    assert rows.model_revision.tolist() == ["r2", "r2"]
+
+
+def test_missing_canonical_frames_does_not_overwrite_existing_artifacts(tmp_path):
+    source = _frames(tmp_path)
+    outputs = [
+        OCRResult("one", (_region("one"),)),
+        OCRResult("two", (_region("two"),)),
+    ]
+    output = tmp_path / "ocr"
+    generate_ocr(source, output, _config(), engine=_Engine(outputs))
+    before = {
+        name: (output / name).read_bytes()
+        for name in ("frames.parquet", "regions.parquet", "manifest.json")
+    }
+    source.unlink()
+
+    with pytest.raises(FileNotFoundError):
+        generate_ocr(source, output, _config(), engine=_Engine(outputs))
+
+    assert {
+        name: (output / name).read_bytes()
+        for name in before
+    } == before

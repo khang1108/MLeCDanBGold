@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 
 from .base import ContractModel, NonEmptyString
 from .transcript import TranscriptSegment
@@ -160,7 +160,7 @@ class OCRItem(ContractModel):
 
     item_id: NonEmptyString
     text: str
-    raw_output: Any = None
+    raw_output: JsonValue | None = None
     regions: list[OCRRegionItem] = Field(default_factory=list)
 
 
