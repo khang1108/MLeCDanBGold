@@ -114,6 +114,33 @@ def test_btc_object_import_preserves_counts_multiplicity_and_boxes(tmp_path):
     assert report["failed_frames"] == 0
 
 
+def test_btc_string_encoded_numeric_arrays_are_coerced(tmp_path):
+    source = _frames(tmp_path)
+    _write_object(
+        tmp_path / "objects",
+        "0000",
+        {
+            "detection_class_entities": ["Person"],
+            "detection_scores": ["0.91"],
+            "detection_boxes": [["0.10", "0.20", "0.80", "0.90"]],
+        },
+    )
+
+    report = import_objects(
+        source,
+        tmp_path / "objects",
+        tmp_path / "output",
+        _config(tmp_path),
+    )
+
+    detections = pd.read_parquet(tmp_path / "output/detections.parquet")
+    assert report["completed_frames"] == 1
+    assert report["failed_frames"] == 0
+    assert detections.iloc[0][
+        ["confidence", "x_min", "y_min", "x_max", "y_max"]
+    ].tolist() == [0.91, 0.2, 0.1, 0.9, 0.8]
+
+
 def test_all_detections_are_retained_but_summary_is_thresholded(tmp_path):
     source = _frames(tmp_path)
     _write_object(

@@ -40,9 +40,20 @@ def _normalized_label(value: object) -> str:
 def _finite_unit_number(value: object, name: str) -> float:
     """Validate one normalized score or coordinate."""
 
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool):
         raise TypeError(f"{name} must be numeric")
-    number = float(value)
+    if isinstance(value, str):
+        # BTC's exported JSON encodes TensorFlow numeric arrays as strings.
+        # Coerce only strings accepted by float(); all other source values
+        # remain rejected so malformed artifacts cannot enter the contract.
+        try:
+            number = float(value.strip())
+        except (TypeError, ValueError) as error:
+            raise TypeError(f"{name} must be numeric") from error
+    elif isinstance(value, (int, float)):
+        number = float(value)
+    else:
+        raise TypeError(f"{name} must be numeric")
     if not math.isfinite(number) or not 0.0 <= number <= 1.0:
         raise ValueError(f"{name} must be finite and in [0, 1]")
     return number
