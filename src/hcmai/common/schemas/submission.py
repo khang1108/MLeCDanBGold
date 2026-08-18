@@ -14,7 +14,8 @@ class SubmissionResult(ContractModel):
 
     frame_id: NonEmptyString
     video_id: NonEmptyString
-    frame_idx: int = Field(ge=0)
+    frame_idx: NonEmptyString
+    
     submission_code: NonEmptyString
 
     @model_validator(mode="after")

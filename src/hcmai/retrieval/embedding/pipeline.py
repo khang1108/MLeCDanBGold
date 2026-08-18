@@ -71,7 +71,7 @@ class EmbeddingService:
         embedding_dim: int,
         source: str = "visual",
     ) -> TextEmbeddingAdapter:
-        """Khởi tạo Remote Adapter để mã hóa văn bản (Text) trên Kaggle."""
+        """Khởi tạo remote adapter để mã hóa văn bản trên GPU worker."""
         from hcmai.retrieval.embedding.adapters.remote import (
             EmbeddingClient,
             RemoteEmbeddingAdapter,
@@ -90,7 +90,7 @@ class EmbeddingService:
         config: EncoderConfig,
         embedding_dim: int = 0,
     ) -> ImageEmbeddingAdapter:
-        """Khởi tạo Remote Adapter để mã hóa hình ảnh (Visual) trên Kaggle."""
+        """Khởi tạo remote adapter để mã hóa hình ảnh trên GPU worker."""
         from hcmai.retrieval.embedding.adapters.remote import (
             ImageEmbeddingClient,
             RemoteImageEmbeddingAdapter,

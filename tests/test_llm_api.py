@@ -23,6 +23,8 @@ from hcmai.llm.adapters.http import InferenceClient
 from hcmai.llm.config import LLMServiceConfig
 from hcmai.retrieval.embedding.adapters.remote import RemoteEmbeddingAdapter
 from hcmai.data.enrichment.caption.adapters.remote import RemoteCaptionAdapter
+from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
+from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 from hcmai.llm.adapters.local import LocalAdapter
 from hcmai.llm.pipeline import LLMService
@@ -512,3 +514,56 @@ def test_runtime_does_not_construct_or_require_disabled_models():
         runtime.embed_text(["query"])
     with pytest.raises(RuntimeError, match="caption model is disabled"):
         runtime.caption([Image.new("RGB", (1, 1))])
+
+
+def test_asr_readiness_requires_the_enabled_model_to_be_loaded():
+    adapter = LocalAdapter(
+        LLMServiceConfig(),
+        enable_caption=False,
+        enable_visual_embedding=False,
+        enable_caption_embedding=False,
+        enable_reranker=False,
+        enable_vqa=False,
+        enable_asr=True,
+    )
+
+    assert adapter.readiness().ready is False
+    adapter.asr = object()
+    assert adapter.readiness().ready is True
+
+
+def test_caption_and_ocr_share_one_identically_pinned_florence_backend():
+    config = LLMServiceConfig.from_yaml("llm/config.yaml")
+    model = object()
+    processor = object()
+    captioner = SimpleNamespace(
+        config=config.caption_generation,
+        model=model,
+        processor=processor,
+        resolved_revision=config.caption_generation.revision,
+        resolve_revision=lambda: config.caption_generation.revision,
+    )
+    ocr = FlorenceAdapter(
+        OCRConfig(
+            checkpoint=config.caption_generation.model_checkpoint,
+            revision=config.caption_generation.revision,
+            device=config.caption_generation.device,
+            dtype=config.caption_generation.dtype,
+        )
+    )
+    adapter = LocalAdapter(
+        config,
+        captioner=captioner,
+        ocr_adapter=ocr,
+        enable_caption=True,
+        enable_visual_embedding=False,
+        enable_caption_embedding=False,
+        enable_reranker=False,
+        enable_vqa=False,
+        enable_ocr=True,
+    )
+
+    adapter.load()
+
+    assert ocr.model is model
+    assert ocr.processor is processor

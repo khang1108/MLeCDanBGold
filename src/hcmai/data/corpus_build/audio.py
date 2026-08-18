@@ -64,7 +64,7 @@ class S3AudioReferenceProvider:
     2. Upload file FLAC này lên một thư mục tạm trên S3.
     3. Tạo Presigned URL giới hạn thời gian (mặc định 1 giờ) gửi cho worker.
     
-    Việc này giúp các Inference Worker (ví dụ Kaggle) lấy được âm thanh trực tiếp
+    Việc này giúp các remote inference worker lấy được âm thanh trực tiếp
     mà không cần tải lại toàn bộ file MP4 gốc cồng kềnh.
     """
 
@@ -152,4 +152,3 @@ class S3AudioReferenceProvider:
         for key, _ in sorted(set(self._objects.values())):
             self.client.delete_object(Bucket=self.bucket, Key=key)
         self._objects.clear()
-

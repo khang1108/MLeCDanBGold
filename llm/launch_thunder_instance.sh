@@ -68,26 +68,20 @@ Instance options:
   --tmux-session NAME     Remote tmux session (default: hcmai-deploy).
   --help                  Show this help.
 
-Bootstrap model options (place after --; all default to false):
+Bootstrap service options (place after --; all default to true):
   --caption true|false            Florence-2 frame captioning.
-  --visual-embedding true|false   SigLIP2 visual/text embedding service.
-  --caption-embedding true|false  BGE-M3 caption/text embedding service.
-  --reranker true|false           Qwen3-VL visual reranking service.
-  --vqa true|false                Grounded VQA model service.
-  --conversation true|false       Alias for --vqa.
   --ocr true|false                OCR model service.
+  --asr true|false                Qwen3-ASR service.
 
-At least one bootstrap model must be set to true. Everything after -- is
+At least one bootstrap service must remain enabled. Everything after -- is
 forwarded unchanged to deploy_cloudflared_private.sh on the instance.
 
 Examples:
-  # CaptionStore generation and embedding
-  llm/launch_thunder_instance.sh --gpu l40 --token "$TOKEN" -- \
-      --caption true --caption-embedding true
+  # Start caption, OCR, and ASR using their defaults.
+  llm/launch_thunder_instance.sh --gpu l40 --token "$TOKEN" --
 
-  # Grounded VQA hosting
-  llm/launch_thunder_instance.sh --gpu a6000 --token "$TOKEN" -- \
-      --vqa true
+  # Start only caption and OCR.
+  llm/launch_thunder_instance.sh --gpu l40 --token "$TOKEN" -- --asr false
 EOF
 }
 
@@ -169,8 +163,6 @@ validate() {
         [[ "${GPU}" == "a6000" || "${GPU}" == "l40" ]] \
             || die "--gpu must be either a6000 or l40 when --instance is omitted."
     fi
-    (( ${#DEPLOY_ARGS[@]} > 0 )) \
-        || die "Provide at least one bootstrap model option after --."
     is_positive_integer "${VCPUS}" || die "--vcpus must be a positive integer."
     is_positive_integer "${DISK_GB}" || die "--disk must be a positive integer."
     is_positive_integer "${WAIT_TIMEOUT_SECONDS}" \

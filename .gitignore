@@ -81,13 +81,6 @@ outputs/
 *.mp3
 *.flac
 
-# Local Kaggle subset tooling and generated packages
-/scripts/create_kaggle_subset.py
-/tests/test_kaggle_subset.py
-/create_kaggle_subset.py
-/kaggle_subset*
-/aic_subset*
-
 # Local deployment secrets; the checked-in LLM script reads these from env.
 /llm/.env
 llm/deploy_cloudflared_private.sh
@@ -134,6 +127,3 @@ docs/template/
 .codex/
 .claude/
 .agents/
-
-# Kaggle Notebooks
-kaggle/notebook_template.ipynb

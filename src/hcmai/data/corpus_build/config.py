@@ -156,7 +156,7 @@ class PreparationExecutionConfig(BaseModel):
 
 
 class RemoteEndpointPoolConfig(BaseModel):
-    """Cấu hình Pool kết nối cho một nhóm các worker remote trên Kaggle.
+    """Cấu hình pool kết nối cho một nhóm remote GPU worker.
     Quản lý danh sách URLs endpoint, timeout, retry và giới hạn kết nối đồng thời.
     Giúp phân tán tải (load balancing) cho các tính năng nặng về GPU.
     """
