@@ -13,12 +13,26 @@ from collections.abc import Iterator, Mapping, Sequence
 from itertools import islice
 from pathlib import Path
 
-from hcmai.common.schemas import FrameRecord, RetrievalSource
+from hcmai.common.schemas import (
+    FrameContext,
+    FrameRecord,
+    ObjectEvidence,
+    RetrievalSource,
+    TranscriptSegment,
+)
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.io import read_yaml
 from hcmai.data.assets import FrameAssetResolver, FrameAssetStatus
+from hcmai.data.enrichment.transcripts.store import TranscriptStore
 from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
-from hcmai.data.stores import ASRStore, CaptionStore, FrameStore, OCRStore
+from hcmai.data.stores import (
+    ASRStore,
+    CaptionStore,
+    FrameContextStore,
+    FrameStore,
+    ObjectStore,
+    OCRStore,
+)
 
 EvidenceStore = CaptionStore | OCRStore | ASRStore
 _EVIDENCE_STORES = {
@@ -36,10 +50,18 @@ class DataService:
         frame_store: FrameStore | None = None,
         evidence_stores: Mapping[RetrievalSource, EvidenceStore] | None = None,
         asset_resolver: FrameAssetResolver | None = None,
+        object_store: ObjectStore | None = None,
+        context_store: FrameContextStore | None = None,
+        transcript_store: TranscriptStore | None = None,
     ) -> None:
+        """Initialize the facade from already loaded specialist stores."""
+
         self.frame_store = frame_store
         self.evidence_stores = dict(evidence_stores or {})
         self.asset_resolver = asset_resolver
+        self.object_store = object_store
+        self.context_store = context_store
+        self.transcript_store = transcript_store
 
     @classmethod
     def load(
@@ -48,15 +70,46 @@ class DataService:
         evidence_paths: Mapping[RetrievalSource, str | Path] | None = None,
         *,
         dataset_root: str | Path | None = None,
+        object_path: str | Path | None = None,
+        context_path: str | Path | None = None,
+        transcript_path: str | Path | None = None,
     ) -> "DataService":
         """Load canonical frames and any explicitly configured evidence."""
 
+        frames = FrameStore(frames_path)
         evidence = {
             source: _EVIDENCE_STORES[source](path)
             for source, path in (evidence_paths or {}).items()
         }
-        resolver = FrameAssetResolver(dataset_root) if dataset_root is not None else None
-        return cls(FrameStore(frames_path), evidence, resolver)
+        objects = ObjectStore(object_path) if object_path is not None else None
+        contexts = (
+            FrameContextStore(context_path) if context_path is not None else None
+        )
+        transcripts = None
+        if transcript_path is not None:
+            transcript_artifact = Path(transcript_path)
+            if not transcript_artifact.exists():
+                raise FileNotFoundError(
+                    "Transcript artifact does not exist: "
+                    f"{transcript_artifact}"
+                )
+            transcripts = TranscriptStore(transcript_artifact)
+        for store in (*evidence.values(), objects, contexts):
+            if store is not None and not isinstance(store, ASRStore):
+                _validate_canonical_identity(frames, store)
+        resolver = (
+            FrameAssetResolver(dataset_root)
+            if dataset_root is not None
+            else None
+        )
+        return cls(
+            frames,
+            evidence,
+            resolver,
+            objects,
+            contexts,
+            transcripts,
+        )
 
     def load_evidence(
         self, source: RetrievalSource, artifact_path: str | Path
@@ -70,6 +123,8 @@ class DataService:
                 f"{source.value!r} is not a text evidence source"
             ) from None
         store = store_type(artifact_path)
+        if not isinstance(store, ASRStore):
+            _validate_canonical_identity(self._frames(), store)
         self.evidence_stores[source] = store
         return store
 
@@ -221,6 +276,47 @@ class DataService:
         except KeyError:
             return None
 
+    def get_object_evidence(self, frame_id: str) -> ObjectEvidence | None:
+        """Return structured object evidence without fusing other modalities."""
+
+        if self.object_store is None:
+            return None
+        try:
+            return self.object_store.get(frame_id)
+        except KeyError:
+            return None
+
+    def get_frame_context(self, frame_id: str) -> FrameContext | None:
+        """Return deterministic derived context for one frame, when loaded."""
+
+        if self.context_store is None:
+            return None
+        try:
+            return self.context_store.get(frame_id)
+        except KeyError:
+            return None
+
+    def get_transcript_segments(
+        self,
+        video_id: str,
+        start_ms: int,
+        end_ms: int,
+    ) -> list[TranscriptSegment]:
+        """Return segments overlapping a half-open range chronologically."""
+
+        if self.transcript_store is None:
+            return []
+        records = self.transcript_store.get_in_range(video_id, start_ms, end_ms)
+        return sorted(
+            records,
+            key=lambda row: (
+                row.start_ms,
+                row.end_ms,
+                row.segment_index,
+                row.segment_id,
+            ),
+        )
+
     def has_evidence(self, source: RetrievalSource) -> bool:
         """Report whether one text-evidence artifact is loaded."""
 
@@ -236,3 +332,26 @@ class DataService:
         if self.frame_store is None:
             raise RuntimeError("Canonical frame metadata is not loaded")
         return self.frame_store
+
+
+def _validate_canonical_identity(
+    frames: FrameStore,
+    store: CaptionStore | OCRStore | ObjectStore | FrameContextStore,
+) -> None:
+    """Reject typed evidence that invents or rewrites canonical frame identity."""
+
+    for evidence in store.iter_records():
+        try:
+            frame = frames.get(evidence.frame_id)
+        except KeyError:
+            raise ValueError(
+                f"Evidence contains unknown canonical frame_id: {evidence.frame_id}"
+            ) from None
+        if (
+            evidence.video_id != frame.video_id
+            or evidence.frame_idx != frame.frame_idx
+        ):
+            raise ValueError(
+                "Evidence does not match canonical identity for frame_id "
+                f"{evidence.frame_id!r}"
+            )

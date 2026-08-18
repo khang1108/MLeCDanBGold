@@ -1,25 +1,37 @@
-"""Store lưu trữ dữ liệu Evidence (Bằng chứng văn bản).
+"""Load specialist evidence artifacts into deterministic typed indexes.
 
-Cung cấp quyền truy cập in-memory/indexed vào toàn bộ dữ liệu text liên quan đến video (OCR, Caption, Transcript).
-
-Các tính năng chính:
-1. Gộp bằng chứng (Fusion): Hợp nhất các loại text (ASR, OCR, Caption) theo cùng một Frame ID.
-2. Tìm kiếm (Lookup): Hỗ trợ tìm nhanh nội dung text của một frame để phục vụ ranking.
-3. Hỗ trợ VQA: Liên kết đoạn text (kèm timestamp) với metadata video để tạo context cho câu hỏi VQA."""
+Caption, OCR, object, and frame-context stores expose their authoritative
+public contracts. ASR intentionally retains the temporary frame-aligned
+``FrameEnrichment`` view until text retrieval migrates to timeline evidence.
+"""
 
 from __future__ import annotations
 
+import json
 import math
+from collections import defaultdict
 from collections.abc import Hashable, Iterable, Iterator
-from numbers import Real
+from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Generic, TypeVar, cast
 
 import pandas as pd
+from pydantic import BaseModel
 
-from hcmai.common.schemas import FrameEnrichment, ProcessingStatus, RetrievalSource
+from hcmai.common.schemas import (
+    CaptionEvidence,
+    FrameContext,
+    FrameEnrichment,
+    ObjectDetection,
+    ObjectEvidence,
+    OCREvidence,
+    ProcessingStatus,
+    RetrievalSource,
+    usable_completed_text,
+)
 
 
+_EvidenceT = TypeVar("_EvidenceT", bound=BaseModel)
 _NULLABLE_FIELDS = (
     "caption",
     "detailed_caption",
@@ -29,14 +41,283 @@ _NULLABLE_FIELDS = (
     "error_message",
 )
 
-class _TextEvidenceStore:
-    """Read and index one text channel from a shared enrichment artifact."""
 
-    source: ClassVar[RetrievalSource]
-    text_field: ClassVar[str]
+def _require_file(path: str | Path, artifact: str) -> Path:
+    """Return an existing artifact file or raise a clear path error."""
+
+    resolved = Path(path)
+    if not resolved.is_file():
+        raise FileNotFoundError(f"{artifact} artifact is not a file: {resolved}")
+    return resolved
+
+
+def _nullable_rows(table: pd.DataFrame) -> list[dict[str, Any]]:
+    """Convert pandas null scalars to ``None`` before contract validation."""
+
+    values = table.astype(object).where(table.notna(), None)
+    return cast(list[dict[str, Any]], values.to_dict(orient="records"))
+
+
+class _TypedEvidenceStore(Generic[_EvidenceT]):
+    """Validate one typed Parquet artifact and index exact frame IDs."""
+
+    def __init__(
+        self,
+        artifact_path: str | Path,
+        contract: type[_EvidenceT],
+    ) -> None:
+        self.artifact_path = _require_file(artifact_path, contract.__name__)
+        table = pd.read_parquet(self.artifact_path)
+        if "frame_id" not in table.columns:
+            raise ValueError(f"{self.artifact_path} is missing column: frame_id")
+        frame_ids = table["frame_id"].tolist()
+        if len(frame_ids) != len(set(frame_ids)):
+            raise ValueError(f"Duplicate frame_id values in {self.artifact_path}")
+
+        records: list[_EvidenceT] = []
+        for index, row in enumerate(_nullable_rows(table)):
+            try:
+                records.append(contract.model_validate(row))
+            except Exception as error:
+                raise ValueError(
+                    f"Malformed {contract.__name__} row {index} "
+                    f"in {self.artifact_path}"
+                ) from error
+        self._records = tuple(records)
+        self._by_frame_id = {
+            str(getattr(record, "frame_id")): record for record in records
+        }
+
+    def __len__(self) -> int:
+        """Return the number of validated evidence rows."""
+
+        return len(self._records)
+
+    def get(self, frame_id: str) -> _EvidenceT:
+        """Return typed evidence for an exact canonical frame ID."""
+
+        try:
+            return self._by_frame_id[frame_id]
+        except KeyError:
+            raise KeyError(
+                f"Unknown frame_id {frame_id!r} in {self.artifact_path}"
+            ) from None
+
+    def get_many(self, frame_ids: Iterable[str]) -> list[_EvidenceT]:
+        """Return typed rows in requested order while preserving duplicates."""
+
+        return [self.get(frame_id) for frame_id in frame_ids]
+
+    def iter_records(self) -> Iterator[_EvidenceT]:
+        """Iterate typed rows in deterministic artifact order."""
+
+        return iter(self._records)
+
+
+class CaptionStore(_TypedEvidenceStore[CaptionEvidence]):
+    """Provide typed, indexed access to authoritative caption evidence."""
+
+    source = RetrievalSource.CAPTION
 
     def __init__(self, artifact_path: str | Path) -> None:
-        self.artifact_path = Path(artifact_path)
+        """Load and validate a ``CaptionEvidence`` Parquet artifact."""
+
+        super().__init__(artifact_path, CaptionEvidence)
+
+    def get_text(self, frame_id: str) -> str | None:
+        """Return non-empty text from completed caption evidence."""
+
+        return usable_completed_text(self.get(frame_id))
+
+
+class OCRStore(_TypedEvidenceStore[OCREvidence]):
+    """Provide typed, indexed access to authoritative OCR evidence."""
+
+    source = RetrievalSource.OCR
+
+    def __init__(self, artifact_path: str | Path) -> None:
+        """Load and validate an ``OCREvidence`` Parquet artifact."""
+
+        super().__init__(artifact_path, OCREvidence)
+
+    def get_text(self, frame_id: str) -> str | None:
+        """Return non-empty normalized text from completed OCR evidence."""
+
+        return usable_completed_text(self.get(frame_id))
+
+
+class FrameContextStore(_TypedEvidenceStore[FrameContext]):
+    """Provide typed access to deterministic derived frame context."""
+
+    def __init__(self, artifact_path: str | Path) -> None:
+        """Load and validate a ``FrameContext`` Parquet artifact."""
+
+        super().__init__(artifact_path, FrameContext)
+
+    def get_text(self, frame_id: str) -> str | None:
+        """Return non-empty deterministic context text, when available."""
+
+        value = self.get(frame_id).context_text
+        return value if value is not None and value.strip() else None
+
+
+def _strict_int(value: object, field: str) -> int:
+    """Reject coercible non-integer values in object artifact identities."""
+
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError(f"{field} must be an integer")
+    return int(value)
+
+
+def _object_counts(value: object) -> dict[str, int]:
+    """Decode deterministic object counts from the flattened frame row."""
+
+    try:
+        raw = json.loads(value) if isinstance(value, str) else value
+    except json.JSONDecodeError as error:
+        raise ValueError("counts_json must contain valid JSON") from error
+    if not isinstance(raw, dict):
+        raise ValueError("counts_json must contain an object")
+    counts: dict[str, int] = {}
+    for label, count in raw.items():
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("object count labels must be non-empty strings")
+        counts[label] = _strict_int(count, f"count for {label!r}")
+    return counts
+
+
+class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
+    """Reconstruct strict object evidence from frame and detection artifacts.
+
+    The public frame artifact stores counts and summaries, while its sibling
+    ``detections.parquet`` retains the real detections. Both are required for
+    non-empty evidence because the store never invents detection records.
+    """
+
+    def __init__(self, artifact_path: str | Path) -> None:
+        """Load a flattened object frame artifact and its sibling detections."""
+
+        self.artifact_path = _require_file(artifact_path, "ObjectEvidence")
+        frame_table = pd.read_parquet(self.artifact_path)
+        required = {
+            "frame_id",
+            "video_id",
+            "frame_idx",
+            "counts_json",
+            "detection_count",
+            "artifact_version",
+        }
+        missing = sorted(required.difference(frame_table.columns))
+        if missing:
+            raise ValueError(
+                f"{self.artifact_path} is missing columns: {', '.join(missing)}"
+            )
+        frame_ids = frame_table["frame_id"].tolist()
+        if len(frame_ids) != len(set(frame_ids)):
+            raise ValueError(f"Duplicate frame_id values in {self.artifact_path}")
+
+        frame_rows = _nullable_rows(frame_table)
+        detections = self._load_detections(frame_rows)
+        records: list[ObjectEvidence] = []
+        for index, row in enumerate(frame_rows):
+            frame_id = row.get("frame_id")
+            values = dict(row)
+            values["counts"] = _object_counts(values.pop("counts_json", None))
+            values["detection_count"] = _strict_int(
+                values.get("detection_count"), "detection_count"
+            )
+            values["detections"] = detections.get(str(frame_id), [])
+            try:
+                records.append(ObjectEvidence.model_validate(values))
+            except Exception as error:
+                raise ValueError(
+                    f"Malformed ObjectEvidence row {index} in {self.artifact_path}"
+                ) from error
+        self._records = tuple(records)
+        self._by_frame_id = {record.frame_id: record for record in records}
+
+    def _load_detections(
+        self, frame_rows: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, object | None]]]:
+        """Load real detections and validate their frame identity and order."""
+
+        detection_path = self.artifact_path.with_name("detections.parquet")
+        expected_count = sum(
+            _strict_int(row.get("detection_count"), "detection_count")
+            for row in frame_rows
+        )
+        if not detection_path.is_file():
+            if expected_count:
+                raise FileNotFoundError(
+                    "ObjectEvidence with detections requires sibling artifact: "
+                    f"{detection_path}"
+                )
+            return {}
+
+        table = pd.read_parquet(detection_path)
+        required = {
+            "frame_id",
+            "video_id",
+            "detection_index",
+            *ObjectDetection.model_fields,
+        }
+        missing = sorted(required.difference(table.columns))
+        if missing:
+            raise ValueError(
+                f"{detection_path} is missing columns: {', '.join(missing)}"
+            )
+        rows = _nullable_rows(table)
+        identities = [
+            (row.get("frame_id"), row.get("detection_index")) for row in rows
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError(
+                f"Duplicate object detection identity in {detection_path}"
+            )
+
+        frame_video = {
+            str(row["frame_id"]): str(row["video_id"]) for row in frame_rows
+        }
+        grouped: defaultdict[
+            str, list[tuple[int, dict[str, object | None]]]
+        ] = defaultdict(list)
+        for row in rows:
+            frame_id = str(row.get("frame_id"))
+            if frame_id not in frame_video:
+                raise ValueError(
+                    f"Object detection references unknown frame_id {frame_id!r}"
+                )
+            if row.get("video_id") != frame_video[frame_id]:
+                raise ValueError(
+                    f"Object detection video_id mismatch for frame_id {frame_id!r}"
+                )
+            order = _strict_int(row.get("detection_index"), "detection_index")
+            detection = {
+                field: row.get(field) for field in ObjectDetection.model_fields
+            }
+            try:
+                ObjectDetection.model_validate(detection)
+            except Exception as error:
+                raise ValueError(
+                    f"Malformed object detection for frame_id {frame_id!r}"
+                ) from error
+            grouped[frame_id].append((order, detection))
+        return {
+            frame_id: [item for _, item in sorted(items, key=lambda pair: pair[0])]
+            for frame_id, items in grouped.items()
+        }
+
+
+class ASRStore:
+    """Indexed access to the temporary frame-aligned ASR compatibility view."""
+
+    source: ClassVar[RetrievalSource] = RetrievalSource.ASR
+    text_field: ClassVar[str] = "asr_text"
+
+    def __init__(self, artifact_path: str | Path) -> None:
+        """Load and validate the derived frame-aligned ASR artifact."""
+
+        self.artifact_path = _require_file(artifact_path, "ASR")
         table = pd.read_parquet(self.artifact_path)
         required = {"frame_id", "model_name", self.text_field}
         missing = sorted(required.difference(table.columns))
@@ -44,7 +325,6 @@ class _TextEvidenceStore:
             raise ValueError(
                 f"{self.artifact_path} is missing columns: {', '.join(missing)}"
             )
-
         records = tuple(
             _materialize(row) for row in table.to_dict(orient="records")
         )
@@ -52,17 +332,18 @@ class _TextEvidenceStore:
         for record in records:
             if record.frame_id in self._by_frame_id:
                 raise ValueError(
-                    f"Duplicate frame_id {record.frame_id!r} "
-                    f"in {self.artifact_path}"
+                    f"Duplicate frame_id {record.frame_id!r} in {self.artifact_path}"
                 )
             self._by_frame_id[record.frame_id] = record
         self._records = records
 
     def __len__(self) -> int:
+        """Return the number of compatibility rows."""
+
         return len(self._records)
 
     def get(self, frame_id: str) -> FrameEnrichment:
-        """Return the validated enrichment row for an exact frame ID."""
+        """Return the compatibility row for an exact frame ID."""
 
         try:
             return self._by_frame_id[frame_id]
@@ -72,12 +353,12 @@ class _TextEvidenceStore:
             ) from None
 
     def get_many(self, frame_ids: Iterable[str]) -> list[FrameEnrichment]:
-        """Preserve the requested order and duplicate IDs."""
+        """Return rows in requested order while preserving duplicates."""
 
         return [self.get(frame_id) for frame_id in frame_ids]
 
     def get_text(self, frame_id: str) -> str | None:
-        """Return usable source text, excluding failed or incomplete rows."""
+        """Return usable ASR text, excluding failed compatibility rows."""
 
         record = self.get(frame_id)
         if (
@@ -85,43 +366,25 @@ class _TextEvidenceStore:
             or record.error_message is not None
         ):
             return None
-        value = getattr(record, self.text_field)
-        return value if isinstance(value, str) else None
+        return record.asr_text
 
     def iter_records(self) -> Iterator[FrameEnrichment]:
-        """Iterate rows in their artifact order."""
+        """Iterate compatibility rows in deterministic artifact order."""
 
         return iter(self._records)
 
 
-class CaptionStore(_TextEvidenceStore):
-    """Indexed access to frame captions."""
-
-    source = RetrievalSource.CAPTION
-    text_field = "caption"
-
-
-class OCRStore(_TextEvidenceStore):
-    """Indexed access to text visible in frames."""
-
-    source = RetrievalSource.OCR
-    text_field = "ocr_text"
-
-
-class ASRStore(_TextEvidenceStore):
-    """Indexed access to speech aligned with frames."""
-
-    source = RetrievalSource.ASR
-    text_field = "asr_text"
-
-
 def _is_null(value: object) -> bool:
+    """Return whether one legacy scalar encodes a missing value."""
+
     if value is None or value is pd.NA:
         return True
     return isinstance(value, Real) and math.isnan(float(value))
 
 
 def _materialize(data: dict[Hashable, Any]) -> FrameEnrichment:
+    """Validate one legacy frame-aligned enrichment row."""
+
     values: dict[str, object] = {}
     for key, value in data.items():
         if not isinstance(key, str):
@@ -137,3 +400,12 @@ def _materialize(data: dict[Hashable, Any]) -> FrameEnrichment:
         if _is_null(values.get(field)):
             values[field] = None
     return FrameEnrichment.model_validate(values)
+
+
+__all__ = [
+    "ASRStore",
+    "CaptionStore",
+    "FrameContextStore",
+    "ObjectStore",
+    "OCRStore",
+]

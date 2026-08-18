@@ -17,8 +17,8 @@ from hcmai.retrieval.retriever.text.retriever import (
 )
 
 _CASES = [
-    (RetrievalSource.CAPTION, "caption", CaptionStore, CaptionRetriever),
-    (RetrievalSource.OCR, "ocr_text", OCRStore, OCRRetriever),
+    (RetrievalSource.CAPTION, "text", CaptionStore, CaptionRetriever),
+    (RetrievalSource.OCR, "normalized_text", OCRStore, OCRRetriever),
     (RetrievalSource.ASR, "asr_text", ASRStore, ASRRetriever),
 ]
 
@@ -61,20 +61,23 @@ def test_text_index_round_trip_and_source_identity(
             for index in (1, 2)
         ]
     ).to_parquet(frames_path, index=False)
-    pd.DataFrame(
-        [
-            {
-                "frame_id": "frame-1",
-                field: "A cook holds a pan.",
-                "model_name": "fixture",
-            },
-            {
-                "frame_id": "frame-2",
-                field: "A dog runs outside.",
-                "model_name": "fixture",
-            },
-        ]
-    ).to_parquet(evidence_path, index=False)
+    rows = []
+    for index, text in ((1, "A cook holds a pan."), (2, "A dog runs outside.")):
+        row = {
+            "frame_id": f"frame-{index}",
+            field: text,
+            "model_name": "fixture",
+        }
+        if source != RetrievalSource.ASR:
+            row.update(
+                {
+                    "video_id": "video-1",
+                    "frame_idx": index,
+                    "artifact_version": f"{source.value}-v1",
+                }
+            )
+        rows.append(row)
+    pd.DataFrame(rows).to_parquet(evidence_path, index=False)
 
     data = DataService.load(frames_path, {source: evidence_path})
     output = tmp_path / f"{source.value}-index"

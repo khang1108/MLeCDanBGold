@@ -7,7 +7,20 @@ Các tính năng chính:
 2. Quản lý EvidenceStore: Tra cứu toàn bộ văn bản mô tả (caption, ocr, audio) của khung hình.
 3. Tối ưu tra cứu (Fast Retrieval): Tải dữ liệu vào cấu trúc Dict hoặc Hashmap để có độ trễ O(1)."""
 
-from hcmai.data.stores.evidence import ASRStore, CaptionStore, OCRStore
+from hcmai.data.stores.evidence import (
+    ASRStore,
+    CaptionStore,
+    FrameContextStore,
+    ObjectStore,
+    OCRStore,
+)
 from hcmai.data.stores.frame import FrameStore
 
-__all__ = ["ASRStore", "CaptionStore", "FrameStore", "OCRStore"]
+__all__ = [
+    "ASRStore",
+    "CaptionStore",
+    "FrameContextStore",
+    "FrameStore",
+    "ObjectStore",
+    "OCRStore",
+]
