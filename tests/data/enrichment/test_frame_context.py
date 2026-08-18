@@ -354,6 +354,42 @@ def test_matching_identity_reuses_and_policy_or_upstream_version_rebuilds(
     assert manifest["caption_version"] == "caption-v2"
 
 
+@pytest.mark.parametrize(
+    ("field", "corrupt_value"),
+    [
+        ("caption_text", "corrupt caption"),
+        ("ocr_text", "corrupt OCR"),
+        ("object_summary", "corrupt objects"),
+        ("context_text", "corrupt context"),
+        ("caption_available", False),
+        ("ocr_quality", 0.1),
+        ("object_count", 99),
+    ],
+)
+def test_schema_valid_context_corruption_forces_rebuild(
+    tmp_path: Path, field: str, corrupt_value: object
+) -> None:
+    """Compare every derived context field before accepting a resumed bundle."""
+
+    path = _build(tmp_path)
+    expected = pd.read_parquet(path)
+    corrupted = expected.copy()
+    corrupted.loc[0, field] = corrupt_value
+    corrupted.to_parquet(path, index=False)
+
+    build_frame_context(
+        tmp_path / "frames.parquet",
+        tmp_path / "caption/captions.parquet",
+        tmp_path / "ocr/frames.parquet",
+        tmp_path / "objects/frames.parquet",
+        path.parent,
+        FrameContextConfig(),
+        frame_store_id="btc-v1",
+    )
+
+    pd.testing.assert_frame_equal(pd.read_parquet(path), expected)
+
+
 @pytest.mark.parametrize("source", ["canonical", "caption", "ocr", "object"])
 def test_duplicate_or_foreign_identity_is_rejected(
     tmp_path: Path, source: str
@@ -436,6 +472,87 @@ def test_lineage_mismatch_is_rejected_before_existing_bundle_is_touched(
     } == before
 
 
+@pytest.mark.parametrize("source", ["caption", "ocr", "object"])
+def test_null_specialist_row_lineage_conflicts_with_resolved_store(
+    tmp_path: Path, source: str
+) -> None:
+    """Reject null row lineage once the canonical store identity is known."""
+
+    frames, caption, ocr, objects = _artifacts(tmp_path)
+    paths = {"caption": caption, "ocr": ocr, "object": objects}
+    path = paths[source]
+    rows = pd.read_parquet(path)
+    rows.loc[0, "frame_store_id"] = None
+    rows.to_parquet(path, index=False)
+
+    with pytest.raises(ValueError, match="(?i)lineage"):
+        build_frame_context(
+            frames,
+            caption,
+            ocr,
+            objects,
+            tmp_path / "context",
+            FrameContextConfig(),
+        )
+
+
+@pytest.mark.parametrize("source", ["caption", "ocr", "object"])
+def test_null_specialist_manifest_lineage_conflicts_with_other_manifests(
+    tmp_path: Path, source: str
+) -> None:
+    """Reject mixed null/non-null specialist manifest lineage deterministically."""
+
+    frames, caption, ocr, objects = _artifacts(tmp_path)
+    versions = {
+        "caption": "caption-v1",
+        "ocr": "ocr-v1",
+        "object": "object-v1",
+    }
+    paths = {"caption": caption, "ocr": ocr, "object": objects}
+    _write_json(
+        paths[source].parent / "manifest.json",
+        {"artifact_version": versions[source], "frame_store_id": None},
+    )
+
+    with pytest.raises(ValueError, match="(?i)lineage"):
+        build_frame_context(
+            frames,
+            caption,
+            ocr,
+            objects,
+            tmp_path / "context",
+            FrameContextConfig(),
+        )
+
+
+@pytest.mark.parametrize("target", ["detection_count", "counts_json"])
+@pytest.mark.parametrize("invalid", [1.5, True, "1"])
+def test_object_counts_require_strict_integral_values(
+    tmp_path: Path, target: str, invalid: object
+) -> None:
+    """Reject fractional, Boolean, and string object count representations."""
+
+    frames, caption, ocr, objects = _artifacts(tmp_path)
+    rows = pd.read_parquet(objects)
+    if target == "detection_count":
+        rows["counts_json"] = "{}"
+        rows[target] = [invalid] * len(rows)
+    else:
+        rows["detection_count"] = 3
+        rows[target] = [json.dumps({"person": invalid})] * len(rows)
+    rows.to_parquet(objects, index=False)
+
+    with pytest.raises(ValueError, match="(?i)integer"):
+        build_frame_context(
+            frames,
+            caption,
+            ocr,
+            objects,
+            tmp_path / "context",
+            FrameContextConfig(),
+        )
+
+
 def test_publication_failure_restores_prior_complete_bundle(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -490,6 +607,51 @@ def test_malformed_prerequisite_fails_before_existing_bundle_is_touched(
         )
 
     assert {name: (path.parent / name).read_bytes() for name in names} == before
+
+
+def test_empty_canonical_store_is_rejected_before_output(tmp_path: Path) -> None:
+    """Fail clearly on an empty canonical store without creating context output."""
+
+    frames, caption, ocr, objects = _artifacts(tmp_path)
+    pd.read_parquet(frames).iloc[0:0].to_parquet(frames, index=False)
+
+    with pytest.raises(ValueError, match="at least one frame"):
+        build_frame_context(
+            frames,
+            caption,
+            ocr,
+            objects,
+            tmp_path / "context",
+            FrameContextConfig(),
+        )
+
+    assert not (tmp_path / "context").exists()
+
+
+def test_builder_does_not_modify_specialist_source_artifacts(tmp_path: Path) -> None:
+    """Keep specialist evidence byte-for-byte unchanged after context build."""
+
+    frames, caption, ocr, objects = _artifacts(tmp_path)
+    sources = (
+        caption,
+        caption.parent / "manifest.json",
+        ocr,
+        ocr.parent / "manifest.json",
+        objects,
+        objects.parent / "manifest.json",
+    )
+    before = {path: path.read_bytes() for path in sources}
+
+    build_frame_context(
+        frames,
+        caption,
+        ocr,
+        objects,
+        tmp_path / "context",
+        FrameContextConfig(),
+    )
+
+    assert {path: path.read_bytes() for path in sources} == before
 
 
 def test_service_exposes_the_frozen_builder_interface() -> None:

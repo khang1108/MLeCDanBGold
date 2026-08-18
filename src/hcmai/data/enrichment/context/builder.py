@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+from numbers import Integral
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
@@ -17,6 +18,7 @@ import pandas as pd
 from hcmai.common.schemas import (
     CaptionEvidence,
     FrameContext,
+    FrameRecord,
     ObjectDetection,
     ObjectEvidence,
     OCREvidence,
@@ -85,15 +87,20 @@ def _resolve_lineage(
 ) -> str | None:
     """Require every present artifact lineage to identify the same frame store."""
 
-    values = [requested, canonical]
-    values.extend(manifest.get("frame_store_id") for manifest in manifests)
+    manifest_values = [manifest.get("frame_store_id") for manifest in manifests]
+    values = [requested, canonical, *manifest_values]
     present = [value for value in values if value is not None]
     if any(not isinstance(value, str) or not value.strip() for value in present):
         raise ValueError("frame_store_id lineage must be a non-empty string")
     distinct = set(cast(list[str], present))
     if len(distinct) > 1:
         raise ValueError(f"frame_store_id lineage mismatch: {sorted(distinct)}")
-    return next(iter(distinct), None)
+    resolved = next(iter(distinct), None)
+    if resolved is not None and any(
+        value != resolved for value in manifest_values
+    ):
+        raise ValueError("specialist manifest lineage mismatch")
+    return resolved
 
 
 def _read_table(path: Path, name: str) -> pd.DataFrame:
@@ -105,6 +112,14 @@ def _read_table(path: Path, name: str) -> pd.DataFrame:
         return pd.read_parquet(path)
     except Exception as error:
         raise ValueError(f"malformed {name} artifact: {path}") from error
+
+
+def _strict_integer(value: object, field: str) -> int:
+    """Normalize true integer scalars without coercing strings, floats, or bools."""
+
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError(f"{field} must be an integer")
+    return int(value)
 
 
 def _object_values(raw: dict[str, Any]) -> dict[str, Any]:
@@ -121,16 +136,21 @@ def _object_values(raw: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("object counts_json must contain an object")
         values["counts"] = counts
 
+    counts_value = values.get("counts")
+    if not isinstance(counts_value, dict):
+        raise ValueError("object counts must contain an object")
+    counts = {
+        label: _strict_integer(total, "object count")
+        for label, total in counts_value.items()
+    }
+    values["counts"] = counts
+
+    count = _strict_integer(
+        values.get("detection_count", 0), "object detection_count"
+    )
+    values["detection_count"] = count
     if "detections" not in values:
-        count = values.get("detection_count", 0)
-        if isinstance(count, bool) or not isinstance(count, int):
-            # Parquet commonly materializes integer columns as numpy integers.
-            try:
-                count = int(cast(Any, count))
-            except Exception as error:
-                raise ValueError("object detection_count must be an integer") from error
-        counts = cast(dict[str, int], values.get("counts", {}))
-        labels = [label for label, total in counts.items() for _ in range(int(total))]
+        labels = [label for label, total in counts.items() for _ in range(total)]
         if len(labels) > count:
             raise ValueError("object counts exceed detection_count")
         labels.extend("__unlisted__" for _ in range(count - len(labels)))
@@ -186,7 +206,7 @@ def _validated_rows(
             )
         if row.artifact_version != version:
             raise ValueError(f"{name} row artifact version does not match manifest")
-        if row.frame_store_id is not None and row.frame_store_id != lineage:
+        if row.frame_store_id != lineage:
             raise ValueError(f"{name} row lineage mismatch: {row.frame_id}")
         rows[row.frame_id] = row
     return rows
@@ -232,13 +252,68 @@ def _serializer_identity(config: FrameContextConfig) -> dict[str, int | float]:
     }
 
 
+def _build_context_rows(
+    frames: list[FrameRecord],
+    caption_rows: dict[str, CaptionEvidence],
+    ocr_rows: dict[str, OCREvidence],
+    object_rows: dict[str, ObjectEvidence],
+    config: FrameContextConfig,
+    *,
+    caption_version: str,
+    ocr_version: str,
+    object_version: str,
+    frame_store_id: str | None,
+) -> list[FrameContext]:
+    """Derive the exact expected context rows from validated source evidence.
+
+    ``ocr_quality`` and ``object_count`` retain raw specialist diagnostics even
+    when quality/status rules omit OCR text or the Object summary.
+    """
+
+    contexts: list[FrameContext] = []
+    for frame in frames:
+        caption = _usable_caption(caption_rows.get(frame.frame_id))
+        ocr = _usable_ocr(ocr_rows.get(frame.frame_id), config.min_ocr_quality)
+        objects = _usable_objects(object_rows.get(frame.frame_id))
+        contexts.append(
+            FrameContext(
+                frame_id=frame.frame_id,
+                video_id=frame.video_id,
+                frame_idx=frame.frame_idx,
+                caption_text=caption,
+                ocr_text=ocr,
+                object_summary=objects,
+                context_text=serialize_frame_context(
+                    caption=caption, ocr=ocr, objects=objects, config=config
+                ),
+                caption_available=caption is not None,
+                ocr_quality=(
+                    ocr_rows[frame.frame_id].quality_score
+                    if frame.frame_id in ocr_rows
+                    else 0.0
+                ),
+                object_count=(
+                    object_rows[frame.frame_id].detection_count
+                    if frame.frame_id in object_rows
+                    else 0
+                ),
+                context_version=config.context_version,
+                caption_version=caption_version,
+                ocr_version=ocr_version,
+                object_version=object_version,
+                frame_store_id=frame_store_id,
+            )
+        )
+    return contexts
+
+
 def _valid_existing_bundle(
     context_path: Path,
     manifest_path: Path,
     identity: dict[str, Any],
-    canonical: dict[str, tuple[str, int]],
+    expected_rows: list[FrameContext],
 ) -> bool:
-    """Accept resume only for exact identity, coverage, order, and row lineage."""
+    """Accept resume only when identity and every serialized row field match."""
 
     if not context_path.is_file() or not manifest_path.is_file():
         return False
@@ -254,17 +329,9 @@ def _valid_existing_bundle(
         ]
     except Exception:
         return False
-    if [row.frame_id for row in rows] != list(canonical):
-        return False
-    return all(
-        (row.video_id, row.frame_idx) == canonical[row.frame_id]
-        and row.context_version == identity["context_version"]
-        and row.caption_version == identity["caption_version"]
-        and row.ocr_version == identity["ocr_version"]
-        and row.object_version == identity["object_version"]
-        and row.frame_store_id == identity["frame_store_id"]
-        for row in rows
-    )
+    return [row.model_dump(mode="json") for row in rows] == [
+        row.model_dump(mode="json") for row in expected_rows
+    ]
 
 
 def _publish_staged_bundle(
@@ -308,7 +375,6 @@ def _write_bundle(
     output: Path,
     rows: list[FrameContext],
     identity: dict[str, Any],
-    canonical: dict[str, tuple[str, int]],
 ) -> Path:
     """Stage, validate, and atomically publish the complete context bundle."""
 
@@ -328,7 +394,7 @@ def _write_bundle(
             staged[0], lambda path: write_parquet(table, path, index=False)
         )
         atomic_write(staged[1], lambda path: write_json(identity, path))
-        if not _valid_existing_bundle(staged[0], staged[1], identity, canonical):
+        if not _valid_existing_bundle(staged[0], staged[1], identity, rows):
             raise ValueError("staged FrameContext bundle failed validation")
         _publish_staged_bundle(staged, (context_path, manifest_path))
     finally:
@@ -411,47 +477,23 @@ def build_frame_context(
         "frame_store_id": lineage,
         "serializer_config": _serializer_identity(config),
     }
+    contexts = _build_context_rows(
+        frames,
+        caption_rows,
+        ocr_rows,
+        object_rows,
+        config,
+        caption_version=caption_version,
+        ocr_version=ocr_version,
+        object_version=object_version,
+        frame_store_id=lineage,
+    )
     output = Path(output_dir)
     context_path = output / "frame_context_v1.parquet"
     manifest_path = output / "manifest.json"
-    if _valid_existing_bundle(context_path, manifest_path, identity, canonical):
+    if _valid_existing_bundle(context_path, manifest_path, identity, contexts):
         return context_path
-
-    contexts: list[FrameContext] = []
-    for frame in frames:
-        caption = _usable_caption(caption_rows.get(frame.frame_id))
-        ocr = _usable_ocr(ocr_rows.get(frame.frame_id), config.min_ocr_quality)
-        objects = _usable_objects(object_rows.get(frame.frame_id))
-        contexts.append(
-            FrameContext(
-                frame_id=frame.frame_id,
-                video_id=frame.video_id,
-                frame_idx=frame.frame_idx,
-                caption_text=caption,
-                ocr_text=ocr,
-                object_summary=objects,
-                context_text=serialize_frame_context(
-                    caption=caption, ocr=ocr, objects=objects, config=config
-                ),
-                caption_available=caption is not None,
-                ocr_quality=(
-                    ocr_rows[frame.frame_id].quality_score
-                    if frame.frame_id in ocr_rows
-                    else 0.0
-                ),
-                object_count=(
-                    object_rows[frame.frame_id].detection_count
-                    if frame.frame_id in object_rows
-                    else 0
-                ),
-                context_version=config.context_version,
-                caption_version=caption_version,
-                ocr_version=ocr_version,
-                object_version=object_version,
-                frame_store_id=lineage,
-            )
-        )
-    return _write_bundle(output, contexts, identity, canonical)
+    return _write_bundle(output, contexts, identity)
 
 
 __all__ = ["build_frame_context"]
