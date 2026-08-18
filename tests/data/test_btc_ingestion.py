@@ -12,6 +12,29 @@ from PIL import Image
 from hcmai.common.utils.io import write_yaml
 
 
+def _valid_btc_row(**updates: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "frame_id": "L01_V001:0000",
+        "video_id": "L01_V001",
+        "frame_idx": 120,
+        "keyframe_order": 1,
+        "timestamp_ms": 4000,
+        "image_path": "keyframes/L01_V001/0000.jpg",
+        "width": 32,
+        "height": 24,
+    }
+    row.update(updates)
+    return row
+
+
+def _write_btc_metadata(
+    root: Path, rows: list[dict[str, object]] | pd.DataFrame
+) -> None:
+    metadata = root / "metadata"
+    metadata.mkdir(parents=True)
+    pd.DataFrame(rows).to_parquet(metadata / "frames.parquet", index=False)
+
+
 def test_btc_import_does_not_require_preprocessing_fields(
     tmp_path, monkeypatch
 ):
@@ -315,3 +338,127 @@ def test_prepare_data_cli_delegates_config_and_optional_dataset_root(
         ("load", output, dataset_root),
     ]
     assert "Status: PASSED" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"frame_id": None}, "frame_id"),
+        ({"video_id": "  "}, "video_id"),
+        ({"frame_idx": -1}, "frame_idx"),
+        ({"timestamp_ms": -1}, "timestamp_ms"),
+        ({"keyframe_order": 0}, "keyframe_order"),
+        ({"width": 0}, "width"),
+        ({"height": -1}, "height"),
+    ],
+)
+def test_btc_import_rejects_invalid_canonical_rows(
+    tmp_path, updates, message
+):
+    from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+
+    source = tmp_path / "btc"
+    _write_btc_metadata(source, [_valid_btc_row(**updates)])
+
+    with pytest.raises(ValueError, match=message):
+        import_btc_frame_store(
+            BTCIngestionConfig(
+                btc_root=source,
+                data_root=source,
+                output_root=tmp_path / "frame_store",
+                frame_store_id="btc-invalid-v1",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("rows", "message"),
+    [
+        (
+            [
+                _valid_btc_row(),
+                _valid_btc_row(frame_idx=121, timestamp_ms=4100),
+            ],
+            "Duplicate frame_id",
+        ),
+        (
+            [
+                _valid_btc_row(),
+                _valid_btc_row(frame_id="L01_V001:0001", timestamp_ms=4100),
+            ],
+            "Duplicate submission coordinate",
+        ),
+    ],
+)
+def test_btc_import_rejects_duplicate_canonical_identity(
+    tmp_path, rows, message
+):
+    from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+
+    source = tmp_path / "btc"
+    _write_btc_metadata(source, rows)
+
+    with pytest.raises(ValueError, match=message):
+        import_btc_frame_store(
+            BTCIngestionConfig(
+                btc_root=source,
+                data_root=source,
+                output_root=tmp_path / "frame_store",
+                frame_store_id="btc-duplicate-v1",
+            )
+        )
+
+
+def test_btc_import_rejects_empty_metadata(tmp_path):
+    from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+
+    source = tmp_path / "btc"
+    _write_btc_metadata(
+        source,
+        pd.DataFrame(columns=list(_valid_btc_row())),
+    )
+
+    with pytest.raises(ValueError, match="must contain at least one frame"):
+        import_btc_frame_store(
+            BTCIngestionConfig(
+                btc_root=source,
+                data_root=source,
+                output_root=tmp_path / "frame_store",
+                frame_store_id="btc-empty-v1",
+            )
+        )
+
+
+def test_manifest_staging_failure_preserves_published_bundle(
+    tmp_path, monkeypatch
+):
+    import hcmai.data.ingestion.btc as btc
+
+    source = tmp_path / "btc"
+    _write_btc_metadata(source, [_valid_btc_row()])
+    output_root = tmp_path / "frame_store"
+    output_root.mkdir()
+    frames_path = output_root / "frames.parquet"
+    manifest_path = output_root / "manifest.json"
+    frames_path.write_bytes(b"previous frames")
+    manifest_path.write_text('{"frame_store_id":"previous"}\n')
+
+    def fail_manifest_write(*_args, **_kwargs):
+        raise OSError("simulated manifest staging failure")
+
+    monkeypatch.setattr(btc, "write_json", fail_manifest_write)
+
+    with pytest.raises(OSError, match="manifest staging failure"):
+        btc.import_btc_frame_store(
+            btc.BTCIngestionConfig(
+                btc_root=source,
+                data_root=source,
+                output_root=output_root,
+                frame_store_id="btc-new-v1",
+            )
+        )
+
+    assert frames_path.read_bytes() == b"previous frames"
+    assert manifest_path.read_text() == '{"frame_store_id":"previous"}\n'
+    assert not (output_root / ".frames.parquet.staged").exists()
+    assert not (output_root / ".manifest.json.staged").exists()

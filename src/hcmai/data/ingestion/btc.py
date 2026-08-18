@@ -10,7 +10,13 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
-from hcmai.common.utils.io import atomic_write, write_json, write_parquet
+from hcmai.common.schemas import FrameRecord
+from hcmai.common.utils.io import (
+    atomic_write,
+    read_json,
+    write_json,
+    write_parquet,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -76,7 +82,52 @@ def _validate_source_columns(frames: pd.DataFrame, source_path: Path) -> None:
 
 
 def _resolve_image_path(data_root: Path, image_path: object) -> str:
-    return str((data_root / str(image_path)).resolve())
+    if image_path is None or pd.isna(image_path):
+        raise ValueError("image_path must not be null")
+    normalized = str(image_path).strip()
+    if not normalized:
+        raise ValueError("image_path must not be blank")
+    return str((data_root / normalized).resolve())
+
+
+def _validated_record(values: dict[str, object]) -> FrameRecord:
+    """Validate one normalized canonical row through the shared contract."""
+
+    for name in ("thumbnail_path", "shot_id", "event_id", "pts", "time_base"):
+        value = values.get(name)
+        if value is None or value is pd.NA:
+            values[name] = None
+        elif isinstance(value, float) and np.isnan(value):
+            values[name] = None
+    return FrameRecord.model_validate(values)
+
+
+def _validate_unique_identity(records: list[FrameRecord]) -> None:
+    seen_frame_ids: set[str] = set()
+    seen_submission_coordinates: set[tuple[str, int]] = set()
+    for record in records:
+        if record.frame_id in seen_frame_ids:
+            raise ValueError(f"Duplicate frame_id: {record.frame_id}")
+        seen_frame_ids.add(record.frame_id)
+
+        coordinate = (record.video_id, record.frame_idx)
+        if coordinate in seen_submission_coordinates:
+            raise ValueError(
+                "Duplicate submission coordinate: "
+                f"video_id={record.video_id}, frame_idx={record.frame_idx}"
+            )
+        seen_submission_coordinates.add(coordinate)
+
+
+def _validate_canonical_table(frames: pd.DataFrame) -> list[FrameRecord]:
+    records = [
+        _validated_record(dict(row))
+        for row in cast(
+            list[dict[str, Any]], frames.to_dict(orient="records")
+        )
+    ]
+    _validate_unique_identity(records)
+    return records
 
 
 def _build_canonical_rows(
@@ -85,36 +136,44 @@ def _build_canonical_rows(
     data_root: Path,
     fps_by_video: dict[str, float],
 ) -> pd.DataFrame:
-    rows: list[dict[str, object]] = []
     records = cast(list[dict[str, Any]], source_frames.to_dict(orient="records"))
+    canonical_records: list[FrameRecord] = []
     for row in records:
-        video_id = str(row["video_id"])
-        rows.append(
-            {
-                "frame_id": str(row["frame_id"]),
-                "video_id": video_id,
-                # BTC's frame_idx is the authoritative competition coordinate.
-                "frame_idx": int(row["frame_idx"]),
-                "keyframe_order": int(row["keyframe_order"]),
-                "timestamp_ms": int(row["timestamp_ms"]),
-                "fps": fps_by_video.get(video_id, 30.0),
-                "image_path": _resolve_image_path(data_root, row["image_path"]),
-                "thumbnail_path": None,
-                "width": int(row["width"]),
-                "height": int(row["height"]),
-                "shot_id": None,
-                "event_id": None,
-                "is_anchor": True,
-                # BTC metadata does not establish media PTS/time-base semantics.
-                "pts": None,
-                "time_base": None,
-                "motion_score": 0.0,
-                "shot_score": 0.0,
-                "event_score": 0.0,
-                "selection_reasons": ("btc_keyframe",),
-            }
+        video_id = row["video_id"]
+        canonical_records.append(
+            _validated_record(
+                {
+                    "frame_id": row["frame_id"],
+                    "video_id": video_id,
+                    # BTC frame_idx is the authoritative competition coordinate.
+                    "frame_idx": row["frame_idx"],
+                    "keyframe_order": row["keyframe_order"],
+                    "timestamp_ms": row["timestamp_ms"],
+                    "fps": fps_by_video.get(str(video_id), 30.0),
+                    "image_path": _resolve_image_path(
+                        data_root, row["image_path"]
+                    ),
+                    "thumbnail_path": None,
+                    "width": row["width"],
+                    "height": row["height"],
+                    "shot_id": None,
+                    "event_id": None,
+                    "is_anchor": True,
+                    # BTC metadata does not establish PTS/time-base semantics.
+                    "pts": None,
+                    "time_base": None,
+                    "motion_score": 0.0,
+                    "shot_score": 0.0,
+                    "event_score": 0.0,
+                    "selection_reasons": ("btc_keyframe",),
+                }
+            )
         )
-    return pd.DataFrame(rows)
+    _validate_unique_identity(canonical_records)
+    return pd.DataFrame(
+        [record.model_dump() for record in canonical_records],
+        columns=list(FrameRecord.model_fields),
+    )
 
 
 def _warn_about_missing_images(frames: pd.DataFrame) -> None:
@@ -147,6 +206,10 @@ def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
     logger.info("Reading BTC metadata from %s", source_path)
     source_frames = pd.read_parquet(source_path)
     _validate_source_columns(source_frames, source_path)
+    if source_frames.empty:
+        raise ValueError(
+            f"BTC metadata {source_path} must contain at least one frame"
+        )
     source_frames = source_frames.sort_values(
         ["video_id", "timestamp_ms"], kind="stable"
     ).reset_index(drop=True)
@@ -158,12 +221,6 @@ def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
         fps_by_video=fps_by_video,
     )
     _warn_about_missing_images(canonical)
-
-    output_path = config.output_root / "frames.parquet"
-    atomic_write(
-        output_path,
-        lambda staging: write_parquet(canonical, staging, index=False),
-    )
 
     video_count = len(set(canonical["video_id"].astype(str).tolist()))
     manifest = {
@@ -177,10 +234,31 @@ def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
         "resume_enabled": False,
         "fps_map_sample": dict(list(fps_by_video.items())[:5]),
     }
-    atomic_write(
-        config.output_root / "manifest.json",
-        lambda staging: write_json(manifest, staging),
-    )
+
+    output_path = config.output_root / "frames.parquet"
+    manifest_path = config.output_root / "manifest.json"
+    staged_frames = config.output_root / ".frames.parquet.staged"
+    staged_manifest = config.output_root / ".manifest.json.staged"
+    try:
+        atomic_write(
+            staged_frames,
+            lambda staging: write_parquet(canonical, staging, index=False),
+        )
+        atomic_write(
+            staged_manifest,
+            lambda staging: write_json(manifest, staging),
+        )
+
+        _validate_canonical_table(pd.read_parquet(staged_frames))
+        if read_json(staged_manifest) != manifest:
+            raise ValueError("Staged BTC manifest failed round-trip validation")
+
+        staged_frames.replace(output_path)
+        # The manifest is the final commit marker for the published bundle.
+        staged_manifest.replace(manifest_path)
+    finally:
+        staged_frames.unlink(missing_ok=True)
+        staged_manifest.unlink(missing_ok=True)
 
     logger.info(
         "Wrote %d frames across %d videos to %s",
