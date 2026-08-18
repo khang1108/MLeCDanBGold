@@ -1,11 +1,9 @@
-"""Pipeline chính cho Data Enrichment (Làm giàu dữ liệu).
+"""Expose thin service boundaries for independent offline enrichment stages.
 
-Điều phối các luồng xử lý offline (Captioning, OCR, Transcript) trên các frames đã tiền xử lý.
-
-Các tính năng chính:
-1. Quản lý luồng (Workflow): Chạy tuần tự hoặc song song các tác vụ AI enrichment (OCR, Caption, Audio).
-2. Tổng hợp Artifacts: Gom nhóm kết quả text từ các mô hình thành dữ liệu chuẩn bị cho indexing.
-3. Cập nhật trạng thái: Báo cáo tiến độ và duy trì manifest để đảm bảo dữ liệu không bị xử lý lặp."""
+The service delegates Caption, OCR, BTC Object, and deterministic FrameContext
+materialization. Specialist generation and context serialization remain owned
+by their respective packages.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +14,8 @@ from hcmai.data.enrichment.caption.config import CaptionConfig
 from hcmai.data.enrichment.caption.adapters.transformers import TransformersCaptionAdapter
 from hcmai.data.enrichment.caption.generator import generate_captions
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
+from hcmai.data.enrichment.context.builder import build_frame_context
+from hcmai.data.enrichment.context.config import FrameContextConfig
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.generator import generate_ocr
 from hcmai.data.enrichment.ocr.models.contracts import OCRAdapter
@@ -24,7 +24,7 @@ from hcmai.data.enrichment.objects.importer import import_objects
 
 
 class EnrichmentService:
-    """Run caption, OCR, or BTC object enrichment through explicit boundaries."""
+    """Run independent enrichment stages through explicit boundaries."""
 
     @staticmethod
     def generate_captions(
@@ -84,16 +84,46 @@ class EnrichmentService:
         )
 
     @staticmethod
+    def build_frame_context(
+        frames_path: str | Path,
+        caption_path: str | Path,
+        ocr_frames_path: str | Path,
+        object_frames_path: str | Path,
+        output_dir: str | Path,
+        config: FrameContextConfig,
+        *,
+        frame_store_id: str | None = None,
+    ) -> Path:
+        """Build deterministic context from existing specialist artifacts."""
+
+        return build_frame_context(
+            frames_path,
+            caption_path,
+            ocr_frames_path,
+            object_frames_path,
+            output_dir,
+            config,
+            frame_store_id=frame_store_id,
+        )
+
+    @staticmethod
     def run_caption_cli() -> int:
+        """Run the legacy caption CLI entry point."""
+
         from hcmai.data.enrichment.caption.generator import main
 
         return main()
+
     @staticmethod
     def create_caption_adapter(config: CaptionConfig) -> CaptionAdapter:
+        """Create the configured local caption adapter."""
+
         return TransformersCaptionAdapter(config)
 
     @staticmethod
     def create_ocr_adapter(config: OCRConfig) -> OCRAdapter:
+        """Create the configured local OCR adapter."""
+
         if config.backend == "remote":
             raise NotImplementedError("Remote OCR adapter is not implemented.")
         from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
