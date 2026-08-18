@@ -18,6 +18,7 @@ from hcmai.common.schemas import (
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
 from hcmai.data.enrichment.ocr.config import OCRConfig
+from hcmai.data.enrichment.ocr.models.entities import OCRResult
 from hcmai.data.enrichment.pipeline import EnrichmentService
 from hcmai.data.corpus_build.config import S3CorpusPreparationConfig
 from hcmai.common.config import TranscriptJobConfig
@@ -211,11 +212,11 @@ class LocalAdapter:
             raise RuntimeError("embedding model is disabled")
         return encoder.encode_text(texts)
 
-    def ocr(self, images: Sequence[Image.Image]) -> list[str]:
+    def ocr(self, images: Sequence[Image.Image]) -> list[OCRResult]:
+        """Return structured OCR results without discarding raw regions."""
         if self.ocr_adapter is None:
             raise RuntimeError("ocr model is disabled")
-        results = self.ocr_adapter.recognize_batch(images)
-        return [str(r.text).strip() for r in results]
+        return list(self.ocr_adapter.recognize_batch(images))
 
     def caption(self, images: Sequence[Image.Image]) -> list[str]:
         if self.captioner is None:

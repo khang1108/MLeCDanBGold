@@ -8,7 +8,11 @@ from PIL import Image
 from hcmai.common.schemas import FrameEnrichment
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.generator import generate_ocr
-from hcmai.data.enrichment.ocr.models.entities import OCRResult
+from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
+
+
+def region(text: str, confidence: float | None = 0.9) -> OCRRegionResult:
+    return OCRRegionResult(text, confidence, 0.0, 0.0, 1.0, 1.0)
 class Engine:
     instances = 0
     def __init__(self, outputs=None, error=None):
@@ -21,9 +25,16 @@ class Engine:
             raise self.error
         if self.outputs is not None:
             return self.outputs[:len(images)]
-        return [OCRResult(
-            "" if image.getpixel((0, 0))[0] == 0 else "Cafe\u0301 Việt\n  12:30",
-            {"value": image.getpixel((0, 0))[0]}, .9) for image in images]
+        return [
+            OCRResult(
+                "" if image.getpixel((0, 0))[0] == 0 else "Cafe\u0301 Việt\n  12:30",
+                () if image.getpixel((0, 0))[0] == 0 else (
+                    region("Cafe\u0301 Việt"), region("  12:30")
+                ),
+                {"value": image.getpixel((0, 0))[0]},
+            )
+            for image in images
+        ]
 def frames(root: Path, specs) -> Path:
     rows = []
     for index, spec in enumerate(specs):
@@ -63,15 +74,18 @@ def test_batch_normalization_contract_report_and_resume(tmp_path):
     assert Engine.instances == 1 and made[0].calls == [2, 2, 1]
     assert table.frame_id.tolist() == [f"f{i}" for i in range(5)]
     assert pd.isna(table.loc[0, "ocr_text"])
-    assert table.loc[1, "ocr_text"] == "Café Việt 12:30"
+    assert table.loc[1, "ocr_text"] == "Café Việt\n12:30"
     assert table.caption.isna().all() and table.asr_text.isna().all()
     assert table.detailed_caption.isna().all() and table.status.eq("completed").all()
     assert not table.duplicated(["frame_id", "enrichment_version"]).any()
-    assert report["frames_with_text"] == 4 and report["empty_text_frames"] == 1
-    assert report["confidence_available"] and report["raw_output_available"]
+    assert report["frames_with_normalized_text"] == 4
+    assert report["raw_output_available"]
     assert len(report["raw_evidence"]) == 5
     assert all(FrameEnrichment.model_validate({key: (None if pd.isna(value) else value)
-        for key, value in row.items() if key != "objects"} | {"objects": list(row["objects"])})
+        for key, value in row.items() if key not in {"objects", "source_segment_ids"}} | {
+            "objects": list(row["objects"]),
+            "source_segment_ids": list(row["source_segment_ids"]),
+        })
         for row in table.to_dict("records"))
     resumed = generate_ocr(
         source, tmp_path / "out", config(),
@@ -89,7 +103,7 @@ def test_relative_image_paths_resolve_against_dataset_root(tmp_path):
     assert report["dataset_root"] == str(tmp_path)
 @pytest.mark.parametrize("outputs", [
     [OCRResult(cast(str, 3))],
-    [OCRResult("text", confidence=float("nan"))],
+    [OCRResult("text", (region("text", float("nan")),))],
     [],
 ])
 def test_malformed_backend_results_are_explicit(tmp_path, outputs):

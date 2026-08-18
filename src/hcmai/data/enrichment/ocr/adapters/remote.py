@@ -8,7 +8,7 @@ from PIL import Image
 
 from hcmai.common.schemas import InferenceReadiness, OCRResponse
 from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.ocr.models.entities import OCRResult
+from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 
 
 class OCRClient(Protocol):
@@ -49,7 +49,20 @@ class RemoteOCRAdapter:
             raise ValueError("remote OCR revision changed")
         self.resolved_revision = response.revision
         return [
-            OCRResult(text=item.text, raw_output=item.raw_output)
+            OCRResult(
+                text=item.text,
+                regions=tuple(
+                    OCRRegionResult(
+                        text=region.text,
+                        confidence=region.confidence,
+                        x_min=region.x_min,
+                        y_min=region.y_min,
+                        x_max=region.x_max,
+                        y_max=region.y_max,
+                    )
+                    for region in item.regions
+                ),
+                raw_output=item.raw_output,
+            )
             for item in response.items
         ]
-

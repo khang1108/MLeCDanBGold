@@ -23,6 +23,7 @@ from hcmai.llm.adapters.http import InferenceClient
 from hcmai.llm.config import LLMServiceConfig
 from hcmai.retrieval.embedding.adapters.remote import RemoteEmbeddingAdapter
 from hcmai.data.enrichment.caption.adapters.remote import RemoteCaptionAdapter
+from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 from hcmai.llm.adapters.local import LocalAdapter
 from hcmai.llm.pipeline import LLMService
 from hcmai.llm.server.api import create_llm_app
@@ -69,7 +70,22 @@ class FakeRuntime:
         return [f"red {image.getpixel((0, 0))[0]}" for image in images]
 
     def ocr(self, images):
-        return [f"text {image.getpixel((0, 0))[0]}" for image in images]
+        return [
+            OCRResult(
+                text=f"text {image.getpixel((0, 0))[0]}",
+                regions=(
+                    OCRRegionResult(
+                        text=f"text {image.getpixel((0, 0))[0]}",
+                        confidence=None,
+                        x_min=0.0,
+                        y_min=0.0,
+                        x_max=1.0,
+                        y_max=1.0,
+                    ),
+                ),
+            )
+            for image in images
+        ]
 
     def embed_images(self, images, source="visual"):
         assert source in {"visual", "dino"}
@@ -356,6 +372,16 @@ def test_offline_inference_endpoints_preserve_identity_and_provenance():
     assert ocr.status_code == 200
     assert [item["item_id"] for item in ocr.json()["items"]] == ["a", "b"]
     assert ocr.json()["model"] == "ocr/model"
+    assert ocr.json()["items"][0]["regions"] == [
+        {
+            "text": "text 10",
+            "confidence": None,
+            "x_min": 0.0,
+            "y_min": 0.0,
+            "x_max": 1.0,
+            "y_max": 1.0,
+        }
+    ]
 
     embedded = request(
         app,

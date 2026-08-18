@@ -15,7 +15,45 @@ from typing import Any
 from PIL import Image
 
 from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.ocr.models.entities import OCRResult
+from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
+
+
+def _parse_regions(
+    raw: object, *, image_size: tuple[int, int]
+) -> tuple[OCRRegionResult, ...]:
+    """Convert ordered Florence quadrilaterals to normalized axis-aligned boxes."""
+
+    if not isinstance(raw, dict):
+        return ()
+    labels = raw.get("labels", [])
+    quad_boxes = raw.get("quad_boxes", [])
+    if not isinstance(labels, list) or not isinstance(quad_boxes, list):
+        raise ValueError("Florence OCR regions must be lists")
+    if len(labels) != len(quad_boxes):
+        raise ValueError("Florence OCR label/box count mismatch")
+
+    width, height = image_size
+    parsed: list[OCRRegionResult] = []
+    for label, quad in zip(labels, quad_boxes):
+        if not isinstance(quad, (list, tuple)) or len(quad) != 8:
+            raise ValueError("Florence OCR quadrilateral must have 8 values")
+        coordinates = [float(value) for value in quad]
+        xs, ys = coordinates[0::2], coordinates[1::2]
+
+        def clamp(value: float) -> float:
+            return min(1.0, max(0.0, value))
+
+        parsed.append(
+            OCRRegionResult(
+                text=str(label),
+                confidence=None,
+                x_min=clamp(min(xs) / width),
+                y_min=clamp(min(ys) / height),
+                x_max=clamp(max(xs) / width),
+                y_max=clamp(max(ys) / height),
+            )
+        )
+    return tuple(parsed)
 
 
 class FlorenceAdapter:
@@ -65,7 +103,7 @@ class FlorenceAdapter:
         import torch
 
         inputs = self.processor(
-            text=["<OCR>"] * len(images),
+            text=["<OCR_WITH_REGION>"] * len(images),
             images=list(images),
             return_tensors="pt",
             padding=True,
@@ -89,8 +127,11 @@ class FlorenceAdapter:
         results: list[OCRResult] = []
         for text, image in zip(decoded, images):
             raw = self.processor.post_process_generation(
-                text, task="<OCR>", image_size=image.size
-            ).get("<OCR>", "")
-            value = "" if str(raw).strip().casefold() == "unanswerable" else str(raw)
-            results.append(OCRResult(text=value, raw_output=raw))
+                text, task="<OCR_WITH_REGION>", image_size=image.size
+            ).get("<OCR_WITH_REGION>", {})
+            parsed_regions = _parse_regions(raw, image_size=image.size)
+            value = "\n".join(region.text for region in parsed_regions)
+            results.append(
+                OCRResult(text=value, regions=parsed_regions, raw_output=raw)
+            )
         return results

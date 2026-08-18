@@ -13,9 +13,21 @@ FailureDetail = dict[str, str]
 
 
 @dataclass(frozen=True)
-class OCRResult:
-    """One ordered backend OCR response."""
+class OCRRegionResult:
+    """One immutable OCR region in backend-provided reading order."""
 
     text: str
+    confidence: float | None
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+
+
+@dataclass(frozen=True)
+class OCRResult:
+    """One immutable backend OCR response with lossless regions."""
+
+    text: str
+    regions: tuple[OCRRegionResult, ...] = ()
     raw_output: object | None = None
-    confidence: float | None = None

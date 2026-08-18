@@ -137,12 +137,31 @@ class CaptionResponse(ContractModel):
     latency_ms: float = Field(ge=0)
 
 
+class OCRRegionItem(ContractModel):
+    """One OCR region with normalized axis-aligned image coordinates."""
+
+    text: str
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    x_min: float = Field(ge=0, le=1)
+    y_min: float = Field(ge=0, le=1)
+    x_max: float = Field(ge=0, le=1)
+    y_max: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_box(self) -> OCRRegionItem:
+        """Reject inverted region boxes at the hosted inference boundary."""
+        if self.x_max < self.x_min or self.y_max < self.y_min:
+            raise ValueError("OCR region maximums must not precede minimums")
+        return self
+
+
 class OCRItem(ContractModel):
     """One caller-owned image and its extracted OCR text."""
 
     item_id: NonEmptyString
     text: str
     raw_output: Any = None
+    regions: list[OCRRegionItem] = Field(default_factory=list)
 
 
 class OCRResponse(ContractModel):
