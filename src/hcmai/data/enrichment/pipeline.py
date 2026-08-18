@@ -19,6 +19,8 @@ from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.generator import generate_ocr
 from hcmai.data.enrichment.ocr.models.contracts import OCRAdapter
+from hcmai.data.enrichment.objects.config import ObjectConfig
+from hcmai.data.enrichment.objects.importer import import_objects
 
 
 class EnrichmentService:
@@ -59,6 +61,25 @@ class EnrichmentService:
             config,
             adapter,
             dataset_root=dataset_root,
+            frame_store_id=frame_store_id,
+        )
+
+    @staticmethod
+    def import_objects(
+        frames_path: str | Path,
+        objects_root: str | Path,
+        output_dir: str | Path,
+        config: ObjectConfig,
+        *,
+        frame_store_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Import BTC-provided object JSON without running detection."""
+
+        return import_objects(
+            frames_path,
+            objects_root,
+            output_dir,
+            config,
             frame_store_id=frame_store_id,
         )
 
