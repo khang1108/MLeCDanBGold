@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
 from .base import ContractModel, NonEmptyString
 from .enum import ProcessingStatus
@@ -38,7 +38,11 @@ class FrameRecord(ContractModel):
 
 
 class FrameEnrichment(ContractModel):
-    """Offline caption, OCR, ASR, and object metadata for a frame."""
+    """Deprecated frame-aligned compatibility projection.
+
+    Specialist artifacts in ``common.schemas.evidence`` are the source of
+    truth. Repeated object labels remain repeated in this legacy view.
+    """
 
     frame_id: NonEmptyString
     frame_store_id: NonEmptyString | None = None
@@ -52,13 +56,6 @@ class FrameEnrichment(ContractModel):
     model_name: NonEmptyString
     status: ProcessingStatus = ProcessingStatus.COMPLETED
     error_message: NonEmptyString | None = None
-
-    @field_validator("objects")
-    @classmethod
-    def deduplicate_objects(cls, objects: list[str]) -> list[str]:
-        """Remove duplicate labels while preserving their original order."""
-
-        return list(dict.fromkeys(objects))
 
 
 def validate_frame_enrichment(
@@ -79,4 +76,3 @@ def validate_frame_enrichment(
             raise ValueError(
                 f"Lineage mismatch for {frame_id}: expected {frame_store_id}, got {enrichment.frame_store_id}"
             )
-
