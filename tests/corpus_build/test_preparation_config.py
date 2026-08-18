@@ -157,6 +157,7 @@ def test_checked_in_production_config_is_s3_only_and_fully_pinned() -> None:
         for model in config.models.model_dump().values()
     )
     assert config.preprocessing.dino_revision == config.models.dino.revision
+    assert config.frame_store_source == "btc_keyframes"
     assert config.stages.model_dump() == {
         "frame_store": True,
         "caption": True,

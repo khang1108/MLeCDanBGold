@@ -55,6 +55,8 @@ class PreparationPaths:
     asr_root: Path
     caption_root: Path
     ocr_root: Path
+    object_root: Path
+    context_root: Path
     visual_index_root: Path
     caption_index_root: Path
     ocr_index_root: Path
@@ -96,6 +98,8 @@ class PreparationPaths:
             asr_root=artifacts / "enrichment/asr",
             caption_root=artifacts / "enrichment/caption",
             ocr_root=artifacts / "enrichment/ocr",
+            object_root=artifacts / "enrichment/objects",
+            context_root=artifacts / "enrichment/context",
             visual_index_root=artifacts / "indexes/visual",
             caption_index_root=artifacts / "indexes/caption",
             ocr_index_root=artifacts / "indexes/ocr",
@@ -118,10 +122,36 @@ class PreparationPaths:
             asr_root=artifacts / "enrichment/asr",
             caption_root=artifacts / "enrichment/caption",
             ocr_root=artifacts / "enrichment/ocr",
+            object_root=artifacts / "enrichment/objects",
+            context_root=artifacts / "enrichment/context",
             visual_index_root=artifacts / "embeddings/visual",
             caption_index_root=artifacts / "embeddings/caption",
             ocr_index_root=artifacts / "embeddings/ocr",
             asr_index_root=artifacts / "embeddings/asr",
+        )
+
+    @classmethod
+    def from_enrichment_job(
+        cls, config: S3CorpusPreparationConfig, job: Any
+    ) -> "PreparationPaths":
+        """Align BTC-native orchestration paths with the enrichment contract."""
+
+        artifacts = job.frame_store_output.parent
+        enrichment = artifacts / "enrichment"
+        return cls(
+            artifacts_root=artifacts,
+            state_root=config.work_root / ".preparation",
+            frame_store_root=job.frame_store_output,
+            transcripts_root=job.transcript_output_dir,
+            asr_root=enrichment / "asr",
+            caption_root=job.caption_output_dir,
+            ocr_root=job.ocr_output_dir,
+            object_root=job.object_output_dir,
+            context_root=job.context_output_dir,
+            visual_index_root=artifacts / "indexes/visual",
+            caption_index_root=artifacts / "indexes/caption",
+            ocr_index_root=artifacts / "indexes/ocr",
+            asr_index_root=artifacts / "indexes/asr",
         )
 
     @property
@@ -195,6 +225,8 @@ class PreparationOperations(Protocol):
 
     def prepare_frame(self, video: Path, source: S3VideoObject) -> Any: ...
 
+    def prepare_btc_frame_store(self) -> Path: ...
+
     def finalize_frames(
         self,
         prepared: Sequence[Any],
@@ -208,6 +240,10 @@ class PreparationOperations(Protocol):
     def generate_caption(self) -> Path: ...
 
     def generate_ocr(self) -> Path: ...
+
+    def import_objects(self) -> Path: ...
+
+    def build_frame_context(self) -> Path: ...
 
     def build_visual_index(self) -> Path: ...
 
@@ -237,6 +273,7 @@ class DefaultPreparationOperations:
     ) -> None:
         from hcmai.common.config import TranscriptJobConfig
         from hcmai.data.enrichment.caption.config import CaptionJobConfig
+        from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
         from hcmai.llm.config import LLMServiceConfig
 
         storage = config.preprocessing.s3
@@ -254,6 +291,7 @@ class DefaultPreparationOperations:
         self.model_config_path = Path(model_config)
         self.retrieval_config = Path(retrieval_config)
         self.s3_client = s3_client
+        self.enrichment_job = EnrichmentJobConfig.from_yaml(self.enrichment_config)
         self.caption_job = CaptionJobConfig.from_yaml(self.enrichment_config)
         self.transcript_job = TranscriptJobConfig.from_yaml(self.enrichment_config)
         self.model_config = LLMServiceConfig.from_yaml(self.model_config_path)
@@ -438,6 +476,18 @@ class DefaultPreparationOperations:
             source_version=source.source_version,
         )
 
+    def prepare_btc_frame_store(self) -> Path:
+        """Import organizer keyframes without constructing a video preprocessor."""
+
+        from hcmai.data.pipeline import DataService
+
+        frames_path = DataService.prepare(self.enrichment_config)
+        if frames_path != self.paths.frames_path:
+            raise ValueError(
+                "BTC frame store path differs from the active enrichment contract"
+            )
+        return frames_path
+
     def finalize_frames(
         self,
         prepared: Sequence[Any],
@@ -552,6 +602,39 @@ class DefaultPreparationOperations:
         finally:
             del adapter
         return self.paths.ocr_root / "frame_enrichment.parquet"
+
+    def import_objects(self) -> Path:
+        """Import BTC object evidence through the public enrichment facade."""
+
+        from hcmai.data.enrichment.pipeline import EnrichmentService
+
+        config = replace(
+            self.enrichment_job.objects,
+            output_dir=self.paths.object_root,
+        )
+        EnrichmentService.import_objects(
+            self.paths.frames_path,
+            self.enrichment_job.objects_root,
+            self.paths.object_root,
+            config,
+            frame_store_id=self.enrichment_job.frame_store_id,
+        )
+        return self.paths.object_root / "frames.parquet"
+
+    def build_frame_context(self) -> Path:
+        """Build derived context only from already materialized specialists."""
+
+        from hcmai.data.enrichment.pipeline import EnrichmentService
+
+        return EnrichmentService.build_frame_context(
+            self.paths.frames_path,
+            self.paths.caption_root / "captions.parquet",
+            self.paths.ocr_root / "frames.parquet",
+            self.paths.object_root / "frames.parquet",
+            self.paths.context_root,
+            self.enrichment_job.context,
+            frame_store_id=self.enrichment_job.frame_store_id,
+        )
 
     def build_visual_index(self) -> Path:
         import numpy as np
@@ -697,7 +780,16 @@ class S3CorpusPreparationService:
             raise ValueError("S3 corpus preparation requires S3 storage")
         self.config = config
         self.storage = storage
-        self.paths = paths or PreparationPaths.from_config(config, limit, offset)
+        if paths is not None:
+            self.paths = paths
+        elif config.frame_store_source == "btc_keyframes":
+            from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
+
+            self.paths = PreparationPaths.from_enrichment_job(
+                config, EnrichmentJobConfig.from_yaml(enrichment_config)
+            )
+        else:
+            self.paths = PreparationPaths.from_config(config, limit, offset)
         self.paths.state_root.mkdir(parents=True, exist_ok=True)
         self.client = client if client is not None else create_s3_client(storage)
         self.resume = resume
@@ -754,10 +846,20 @@ class S3CorpusPreparationService:
             record_skip=False,
         )
         
+        if frame_pending and self.config.frame_store_source == "btc_keyframes":
+            self.operations.prepare_btc_frame_store()
+            self._complete_stage("frame_store", run_id)
+            completed.append("frame_store")
+
         prepared: list[Any] = []
-        
-        # Nếu một trong hai công đoạn này chưa làm xong, cần duyệt video từ S3
-        if frame_pending or asr_pending:
+        legacy_frame_pending = (
+            frame_pending
+            and self.config.frame_store_source == "legacy_video_preprocessing"
+        )
+
+        # BTC frame import is independent of videos; videos are needed only for
+        # legacy preprocessing and timestamped ASR preparation.
+        if legacy_frame_pending or asr_pending:
             logger.info("Starting Video Frame & ASR Preparation Stage...")
             
             # Xử lý tuần tự từng video
@@ -775,7 +877,7 @@ class S3CorpusPreparationService:
                 with self._source_video(source) as video:
                     
                     # Bước trích xuất Frame, chấm điểm bằng TransNetV2 & GEBD, dedup bằng DINO
-                    if frame_pending:
+                    if legacy_frame_pending:
                         prepared.append(
                             self.operations.prepare_frame(video, source)
                         )
@@ -785,7 +887,7 @@ class S3CorpusPreparationService:
                         self.operations.prepare_transcript(video)
             
             # Sau khi xử lý hết các Video, lưu lại kết quả Frame Store chung ra file Parquet
-            if frame_pending:
+            if legacy_frame_pending:
                 self.operations.finalize_frames(prepared, sources)
                 self._complete_stage("frame_store", run_id)
                 completed.append("frame_store")
@@ -800,7 +902,13 @@ class S3CorpusPreparationService:
         simple_stages = (
             ("caption", self.config.stages.caption, self.operations.generate_caption),
             ("ocr", self.config.stages.ocr, self.operations.generate_ocr),
+            ("objects", self.config.stages.objects, self.operations.import_objects),
             ("asr", self.config.stages.asr, self.operations.materialize_asr),
+            (
+                "frame_context",
+                self.config.stages.frame_context,
+                self.operations.build_frame_context,
+            ),
             (
                 "visual_index",
                 self.config.stages.visual_index,
@@ -1043,6 +1151,16 @@ class S3CorpusPreparationService:
         )
 
     def _stage_outputs(self, stage: str) -> tuple[Path, ...]:
+        specialist_name = (
+            "captions.parquet"
+            if self.config.frame_store_source == "btc_keyframes"
+            else "frame_enrichment.parquet"
+        )
+        ocr_name = (
+            "frames.parquet"
+            if self.config.frame_store_source == "btc_keyframes"
+            else "frame_enrichment.parquet"
+        )
         outputs = {
             "frame_store": (
                 self.paths.frames_path,
@@ -1053,12 +1171,20 @@ class S3CorpusPreparationService:
                 self.paths.asr_enrichment_path,
             ),
             "caption": (
-                self.paths.caption_root / "frame_enrichment.parquet",
+                self.paths.caption_root / specialist_name,
                 self.paths.caption_root / "manifest.json",
             ),
             "ocr": (
-                self.paths.ocr_root / "frame_enrichment.parquet",
+                self.paths.ocr_root / ocr_name,
                 self.paths.ocr_root / "manifest.json",
+            ),
+            "objects": (
+                self.paths.object_root / "frames.parquet",
+                self.paths.object_root / "manifest.json",
+            ),
+            "frame_context": (
+                self.paths.context_root / "frame_context_v1.parquet",
+                self.paths.context_root / "manifest.json",
             ),
             "visual_index": (
                 self.paths.visual_embeddings_path,

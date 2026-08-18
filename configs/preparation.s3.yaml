@@ -3,6 +3,7 @@
 preparation:
   corpus_revision: "hcmai2026-videos-20260813-v1"
   work_root: ~/MyWorkspace/HCMAI_2026/runs/hcmai2026-videos-20260813-v1
+  frame_store_source: "btc_keyframes"
 
   # Five dedicated Cloudflare Tunnels — each maps one subdomain to localhost:8100
   # on the matching Kaggle notebook. All notebooks can run simultaneously.

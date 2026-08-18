@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from hcmai.common.schemas import RetrievalSource
 from hcmai.data.corpus_build import (
+    DefaultPreparationOperations,
     PreparationCacheRun,
     PreparationPaths,
     PreparationRun,
@@ -110,6 +112,14 @@ class _Operations:
         self.events.append("ocr")
         return self._enrichment(self.paths.ocr_root)
 
+    def import_objects(self) -> Path:
+        self.events.append("objects")
+        return self._enrichment(self.paths.object_root)
+
+    def build_frame_context(self) -> Path:
+        self.events.append("frame_context")
+        return self._enrichment(self.paths.context_root)
+
     def build_visual_index(self) -> Path:
         self.events.append("visual_index")
         self.paths.visual_embeddings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -182,6 +192,182 @@ def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
             "dino_revision": SHA,
         },
     })
+
+
+def test_btc_competition_run_uses_import_then_context_without_preprocessing(
+    tmp_path: Path,
+) -> None:
+    """Route active BTC stages without touching the legacy video frame session."""
+
+    values = _config(tmp_path).model_dump(mode="python")
+    values["frame_store_source"] = "btc_keyframes"
+    stages = values["stages"]
+    assert isinstance(stages, dict)
+    stages.update(
+        {
+            "frame_store": True,
+            "caption": True,
+            "ocr": True,
+            "objects": True,
+            "asr": False,
+            "frame_context": True,
+            "visual_index": False,
+            "caption_index": False,
+            "ocr_index": False,
+            "asr_index": False,
+        }
+    )
+    config = S3CorpusPreparationConfig.model_validate(values)
+    client = _FakeS3()
+    paths = PreparationPaths.from_config(config, None)
+
+    class _CompetitionOperations(_Operations):
+        def prepare_frame(self, video: Path, source: Any) -> str:
+            raise AssertionError("BTC profile must not touch preprocessing")
+
+        def prepare_btc_frame_store(self) -> Path:
+            self.events.append("btc_frame_store")
+            self.paths.frame_store_root.mkdir(parents=True, exist_ok=True)
+            self.paths.frames_path.write_bytes(b"btc-frames")
+            (self.paths.frame_store_root / "manifest.json").write_text(
+                '{"frame_store_id":"btc-fixture-v1"}', encoding="utf-8"
+            )
+            return self.paths.frames_path
+
+        def generate_caption(self) -> Path:
+            self.events.append("caption")
+            self.paths.caption_root.mkdir(parents=True, exist_ok=True)
+            output = self.paths.caption_root / "captions.parquet"
+            output.write_bytes(b"caption")
+            (self.paths.caption_root / "manifest.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            return output
+
+        def generate_ocr(self) -> Path:
+            self.events.append("ocr")
+            self.paths.ocr_root.mkdir(parents=True, exist_ok=True)
+            output = self.paths.ocr_root / "frames.parquet"
+            output.write_bytes(b"ocr")
+            (self.paths.ocr_root / "manifest.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            return output
+
+        def import_objects(self) -> Path:
+            self.events.append("objects")
+            self.paths.object_root.mkdir(parents=True, exist_ok=True)
+            output = self.paths.object_root / "frames.parquet"
+            output.write_bytes(b"objects")
+            (self.paths.object_root / "manifest.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            return output
+
+        def build_frame_context(self) -> Path:
+            self.events.append("frame_context")
+            self.paths.context_root.mkdir(parents=True, exist_ok=True)
+            output = self.paths.context_root / "frame_context_v1.parquet"
+            output.write_bytes(b"context")
+            (self.paths.context_root / "manifest.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            return output
+
+    operations = _CompetitionOperations(paths)
+    result = S3CorpusPreparationService(
+        config,
+        client=client,
+        operations=operations,
+        paths=paths,
+    ).run()
+
+    assert operations.events == [
+        "btc_frame_store",
+        "caption",
+        "ocr",
+        "objects",
+        "frame_context",
+    ]
+    assert result.completed_stages == (
+        "frame_store",
+        "caption",
+        "ocr",
+        "objects",
+        "frame_context",
+    )
+    assert not any(event.endswith("index") for event in operations.events)
+
+
+def test_btc_frame_import_never_opens_the_legacy_preprocessing_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Protect BTC import from accidental TransNet/GEBD/DINO session routing."""
+
+    from hcmai.data.pipeline import DataService
+
+    expected = tmp_path / "frame_store/frames.parquet"
+    operations = object.__new__(DefaultPreparationOperations)
+    operations.enrichment_config = tmp_path / "enrichment.yaml"
+    operations.paths = SimpleNamespace(frames_path=expected)
+
+    def fail_if_preprocessing_is_opened() -> None:
+        raise AssertionError("BTC import must not create FramePreparationSession")
+
+    monkeypatch.setattr(operations, "_frame_session", fail_if_preprocessing_is_opened)
+    monkeypatch.setattr(
+        DataService,
+        "prepare",
+        lambda config_path: expected,
+    )
+
+    assert operations.prepare_btc_frame_store() == expected
+
+
+def test_default_operations_use_public_object_and_context_services_in_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep object import and derived context behind their public boundaries."""
+
+    from hcmai.data.enrichment.context.config import FrameContextConfig
+    from hcmai.data.enrichment.objects.config import ObjectConfig
+    from hcmai.data.enrichment.pipeline import EnrichmentService
+
+    paths = SimpleNamespace(
+        frames_path=tmp_path / "frames.parquet",
+        caption_root=tmp_path / "captions",
+        ocr_root=tmp_path / "ocr",
+        object_root=tmp_path / "objects",
+        context_root=tmp_path / "context",
+    )
+    operations = object.__new__(DefaultPreparationOperations)
+    operations.paths = paths
+    operations.enrichment_job = SimpleNamespace(
+        objects=ObjectConfig(
+            objects_root=tmp_path / "btc-objects",
+            output_dir=paths.object_root,
+        ),
+        objects_root=tmp_path / "btc-objects",
+        frame_store_id="btc-fixture-v1",
+        context=FrameContextConfig(),
+    )
+    calls: list[str] = []
+
+    def import_objects(*args: object, **kwargs: object) -> dict[str, object]:
+        calls.append("objects")
+        return {}
+
+    def build_context(*args: object, **kwargs: object) -> Path:
+        calls.append("frame_context")
+        return paths.context_root / "frame_context_v1.parquet"
+
+    monkeypatch.setattr(EnrichmentService, "import_objects", import_objects)
+    monkeypatch.setattr(EnrichmentService, "build_frame_context", build_context)
+
+    operations.import_objects()
+    operations.build_frame_context()
+
+    assert calls == ["objects", "frame_context"]
 
 
 def test_two_video_run_resumes_every_stage_without_legacy_local_reads(

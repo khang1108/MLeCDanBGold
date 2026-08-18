@@ -243,19 +243,92 @@ def test_checked_in_enrichment_config_loads_all_v1_stage_contracts() -> None:
     """Keep checked-in paths and specialist policies accepted by one loader."""
 
     job = EnrichmentJobConfig.from_yaml("configs/enrichment.yaml")
+    project_root = Path(__file__).resolve().parents[3]
 
     assert job.source == "btc_keyframes"
-    assert job.caption_output_dir == Path("artifacts/enrichment/captions")
-    assert job.ocr_output_dir == Path("artifacts/enrichment/ocr")
-    assert job.object_output_dir == Path("artifacts/enrichment/objects")
-    assert job.transcript_output_dir == Path("artifacts/enrichment/transcripts")
-    assert job.context_output_dir == Path("artifacts/enrichment/context")
+    assert job.caption_output_dir == project_root / "artifacts/enrichment/captions"
+    assert job.ocr_output_dir == project_root / "artifacts/enrichment/ocr"
+    assert job.object_output_dir == project_root / "artifacts/enrichment/objects"
+    assert job.transcript_output_dir == project_root / "artifacts/enrichment/transcripts"
+    assert job.context_output_dir == project_root / "artifacts/enrichment/context"
     assert job.context == replace(job.context)
     assert (
         job.context.caption_token_budget,
         job.context.ocr_token_budget,
         job.context.object_token_budget,
     ) == (80, 80, 40)
+
+
+def test_custom_job_paths_resolve_from_project_root_not_cwd(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Keep a custom config's relative artifact paths independent of the shell."""
+
+    config_path = tmp_path / "enrichment.yaml"
+    config_path.write_text(
+        """
+dataset:
+  version: fixture-v1
+  source: btc_keyframes
+  btc_root: fixture/btc
+  data_root: fixture/data
+  frame_store_id: fixture-frames-v1
+  frames_path: fixture/artifacts/frame_store/frames.parquet
+  frame_store_output: fixture/artifacts/frame_store
+  objects_root: fixture/objects
+caption:
+  output_dir: fixture/artifacts/captions
+  model_checkpoint: fixture/caption
+  revision: fixture-caption-revision
+  prompt: <CAPTION>
+  decoding: {}
+  device: cpu
+  precision: fp32
+  dtype: float32
+  image_size: 16
+  batch_size: 1
+  enrichment_version: caption-v1
+  write_interval: 1
+ocr:
+  output_dir: fixture/artifacts/ocr
+  enabled: true
+  backend: fixture
+  checkpoint: fixture/ocr
+  revision: fixture-ocr-revision
+  device: cpu
+  dtype: float32
+  batch_size: 1
+  image_size: 16
+  enrichment_version: ocr-enrichment-v1
+  artifact_version: ocr-v1
+  min_region_confidence: 0.0
+  min_context_quality: 0.5
+objects:
+  output_dir: fixture/artifacts/objects
+  artifact_version: object-v1
+  summary_min_confidence: 0.25
+  max_summary_labels: 20
+transcript:
+  output_dir: fixture/artifacts/transcripts
+context:
+  output_dir: fixture/artifacts/context
+  context_version: frame-context-v1
+  caption_token_budget: 80
+  ocr_token_budget: 80
+  object_token_budget: 40
+  min_ocr_quality: 0.5
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    job = EnrichmentJobConfig.from_yaml(config_path)
+    project_root = Path(__file__).resolve().parents[3]
+
+    assert job.frames_path == project_root / "fixture/artifacts/frame_store/frames.parquet"
+    assert job.caption_output_dir == project_root / "fixture/artifacts/captions"
+    assert job.context_output_dir == project_root / "fixture/artifacts/context"
 
 
 def test_caption_command_propagates_configured_frame_store_lineage(

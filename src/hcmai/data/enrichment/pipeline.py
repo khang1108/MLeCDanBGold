@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from hcmai.common.utils.io import read_yaml
-from hcmai.data.enrichment.caption.config import CaptionConfig
+from hcmai.data.enrichment.caption.config import CaptionConfig, PROJECT_ROOT
 from hcmai.data.enrichment.caption.adapters.transformers import TransformersCaptionAdapter
 from hcmai.data.enrichment.caption.generator import generate_captions
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
@@ -112,20 +112,20 @@ class EnrichmentJobConfig:
         return cls(
             dataset_version=str(dataset["version"]),
             source=str(dataset["source"]),
-            btc_root=Path(dataset["btc_root"]),
-            data_root=Path(dataset["data_root"]),
+            btc_root=_project_path(dataset["btc_root"]),
+            data_root=_project_path(dataset["data_root"]),
             frame_store_id=str(dataset["frame_store_id"]),
-            frames_path=Path(dataset["frames_path"]),
-            frame_store_output=Path(dataset["frame_store_output"]),
-            objects_root=Path(dataset["objects_root"]),
+            frames_path=_project_path(dataset["frames_path"]),
+            frame_store_output=_project_path(dataset["frame_store_output"]),
+            objects_root=_project_path(dataset["objects_root"]),
             caption_output_dir=caption_output,
             caption=CaptionConfig.from_dict(caption_values),
             ocr_output_dir=ocr_output,
             ocr=OCRConfig(**ocr_values),
             object_output_dir=object_output,
             objects=object_config,
-            transcript_output_dir=transcript_output,
-            context_output_dir=context_output,
+            transcript_output_dir=_project_path(transcript_output),
+            context_output_dir=_project_path(context_output),
             context=FrameContextConfig(**context_values),
         )
 
@@ -136,7 +136,14 @@ def _required_output(values: dict[str, Any], section: str) -> Path:
     output = values.pop("output_dir", None)
     if output is None:
         raise ValueError(f"Missing enrichment configuration: {section}.output_dir")
-    return Path(output)
+    return _project_path(output)
+
+
+def _project_path(value: str | Path) -> Path:
+    """Resolve configured paths from the repository, never the caller's CWD."""
+
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 class EnrichmentService:

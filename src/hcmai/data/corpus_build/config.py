@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -64,9 +64,9 @@ class PreparationStagesConfig(BaseModel):
     frame_store: bool = True
     caption: bool = True
     ocr: bool = True
-    objects: bool = True
+    objects: bool = False
     asr: bool = True
-    frame_context: bool = True
+    frame_context: bool = False
 
     visual_index: bool = True
     caption_index: bool = True
@@ -78,6 +78,20 @@ class PreparationStagesConfig(BaseModel):
         values = self.model_dump()
         if not any(values.values()):
             raise ValueError("at least one preparation stage must be enabled")
+        if not self.frame_store and any(
+            (
+                self.caption,
+                self.ocr,
+                self.objects,
+                self.asr,
+                self.frame_context,
+                self.visual_index,
+                self.caption_index,
+                self.ocr_index,
+                self.asr_index,
+            )
+        ):
+            raise ValueError("enabled preparation stages require frame_store")
         dependencies = {
             "caption_index": self.caption,
             "ocr_index": self.ocr,
@@ -200,6 +214,9 @@ class S3CorpusPreparationConfig(BaseModel):
 
     corpus_revision: str = Field(min_length=3, max_length=128)
     work_root: Path
+    frame_store_source: Literal["btc_keyframes", "legacy_video_preprocessing"] = (
+        "legacy_video_preprocessing"
+    )
     stages: PreparationStagesConfig = Field(
         default_factory=PreparationStagesConfig
     )
