@@ -24,7 +24,7 @@ from hcmai.data.enrichment.objects.importer import import_objects
 
 
 class EnrichmentService:
-    """Run caption or OCR enrichment through explicit model adapters."""
+    """Run caption, OCR, or BTC object enrichment through explicit boundaries."""
 
     @staticmethod
     def generate_captions(

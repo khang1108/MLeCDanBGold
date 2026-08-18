@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import unicodedata
 
 import pandas as pd
 import pytest
@@ -38,6 +39,14 @@ def _write_object(root: Path, stem: str, payload: object) -> None:
     path = root / "L01_V001" / f"{stem}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _empty_payload() -> dict[str, list[object]]:
+    return {
+        "detection_class_entities": [],
+        "detection_scores": [],
+        "detection_boxes": [],
+    }
 
 
 def _config(tmp_path: Path, **updates: object) -> ObjectConfig:
@@ -262,7 +271,7 @@ def test_duplicate_canonical_frame_identity_is_rejected_before_publication(tmp_p
     frames = pd.read_parquet(source)
     pd.concat([frames, frames], ignore_index=True).to_parquet(source, index=False)
 
-    with pytest.raises(ValueError, match="duplicate frame_id"):
+    with pytest.raises(ValueError, match="(?i)duplicate frame_id"):
         import_objects(
             source,
             tmp_path / "objects",
@@ -271,3 +280,155 @@ def test_duplicate_canonical_frame_identity_is_rejected_before_publication(tmp_p
         )
 
     assert not (tmp_path / "output/manifest.json").exists()
+
+
+@pytest.mark.parametrize("failed_name", ["detections.parquet", "manifest.json"])
+def test_publication_failure_restores_prior_complete_bundle(
+    tmp_path, monkeypatch, failed_name
+):
+    source = _frames(tmp_path)
+    _write_object(tmp_path / "objects", "0000", _empty_payload())
+    config = _config(tmp_path)
+    import_objects(source, config.objects_root, config.output_dir, config)
+    names = ("frames.parquet", "detections.parquet", "manifest.json")
+    before = {name: (config.output_dir / name).read_bytes() for name in names}
+
+    _write_object(
+        tmp_path / "objects",
+        "0000",
+        {
+            "detection_class_entities": ["Car"],
+            "detection_scores": [0.9],
+            "detection_boxes": [[0.0, 0.0, 1.0, 1.0]],
+        },
+    )
+    original_replace = Path.replace
+    injected = False
+
+    def fail_publish_once(path: Path, target: Path):
+        nonlocal injected
+        if path.name == f".{failed_name}.staged" and not injected:
+            injected = True
+            raise OSError(f"injected {failed_name} publication failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_publish_once)
+
+    with pytest.raises(OSError, match="injected"):
+        import_objects(source, config.objects_root, config.output_dir, config)
+
+    assert injected
+    assert {
+        name: (config.output_dir / name).read_bytes() for name in names
+    } == before
+    leftovers = {
+        path.name
+        for path in config.output_dir.iterdir()
+        if path.name.endswith((".staged", ".backup", ".tmp"))
+    }
+    assert leftovers == set()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("frame_id", None),
+        ("frame_id", "   "),
+        ("video_id", None),
+        ("video_id", "   "),
+        ("frame_idx", -1),
+        ("timestamp_ms", -1),
+    ],
+)
+def test_invalid_canonical_rows_are_rejected_before_string_conversion(
+    tmp_path, field, value
+):
+    source = _frames(tmp_path)
+    frames = pd.read_parquet(source)
+    frames.loc[0, field] = value
+    frames.to_parquet(source, index=False)
+
+    with pytest.raises((ValueError, TypeError), match=field):
+        import_objects(
+            source,
+            tmp_path / "objects",
+            tmp_path / "output",
+            _config(tmp_path),
+        )
+
+    assert not (tmp_path / "output/manifest.json").exists()
+
+
+def test_duplicate_submission_coordinate_is_rejected(tmp_path):
+    source = _frames(tmp_path)
+    frames = pd.read_parquet(source)
+    duplicate = frames.iloc[0].copy()
+    duplicate["frame_id"] = "L01_V001:0001"
+    duplicate["keyframe_order"] = 2
+    duplicate["image_path"] = "keyframes/L01_V001/0001.jpg"
+    pd.concat([frames, duplicate.to_frame().T], ignore_index=True).to_parquet(
+        source, index=False
+    )
+
+    with pytest.raises(ValueError, match="duplicate submission coordinate"):
+        import_objects(
+            source,
+            tmp_path / "objects",
+            tmp_path / "output",
+            _config(tmp_path),
+        )
+
+
+def test_empty_canonical_store_is_rejected(tmp_path):
+    source = _frames(tmp_path)
+    pd.read_parquet(source).iloc[0:0].to_parquet(source, index=False)
+
+    with pytest.raises(ValueError, match="at least one frame"):
+        import_objects(
+            source,
+            tmp_path / "objects",
+            tmp_path / "output",
+            _config(tmp_path),
+        )
+
+
+def test_lineage_and_casefolded_labels_are_nfc_normalized(tmp_path):
+    source = _frames(tmp_path)
+    _write_object(
+        tmp_path / "objects",
+        "0000",
+        {
+            "detection_class_entities": ["\u0390"],
+            "detection_scores": [0.9],
+            "detection_boxes": [[0.0, 0.0, 1.0, 1.0]],
+        },
+    )
+    config = _config(tmp_path, artifact_version="  obje\u0301ct-v1  ")
+
+    report = import_objects(
+        source,
+        config.objects_root,
+        config.output_dir,
+        config,
+        frame_store_id="  btc-v1  ",
+    )
+
+    frame = pd.read_parquet(config.output_dir / "frames.parquet").iloc[0]
+    detection = pd.read_parquet(config.output_dir / "detections.parquet").iloc[0]
+    assert config.artifact_version == "objéct-v1"
+    assert frame["artifact_version"] == report["artifact_version"] == "objéct-v1"
+    assert frame["frame_store_id"] == report["frame_store_id"] == "btc-v1"
+    assert unicodedata.is_normalized("NFC", detection["label"])
+
+
+def test_blank_frame_store_lineage_is_rejected(tmp_path):
+    source = _frames(tmp_path)
+
+    with pytest.raises(ValueError, match="frame_store_id"):
+        import_objects(
+            source,
+            tmp_path / "objects",
+            tmp_path / "output",
+            _config(tmp_path),
+            frame_store_id="   ",
+        )

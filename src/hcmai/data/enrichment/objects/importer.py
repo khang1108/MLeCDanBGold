@@ -10,20 +10,19 @@ from collections import Counter, defaultdict
 import json
 import math
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 import unicodedata
 
-import pandas as pd
-
-from hcmai.common.schemas import ObjectDetection, ObjectEvidence, ProcessingStatus
+from hcmai.common.schemas import (
+    FrameRecord,
+    ObjectDetection,
+    ObjectEvidence,
+    ProcessingStatus,
+)
+from hcmai.data.stores.frame import FrameStore
 
 from .artifacts import write_object_artifacts
-from .config import ObjectConfig
-
-
-_REQUIRED_FRAME_COLUMNS = frozenset(
-    {"frame_id", "video_id", "frame_idx", "keyframe_order", "image_path"}
-)
+from .config import ObjectConfig, normalize_lineage
 
 
 def _normalized_label(value: object) -> str:
@@ -31,7 +30,8 @@ def _normalized_label(value: object) -> str:
 
     if not isinstance(value, str):
         raise TypeError("detection label must be a string")
-    label = " ".join(unicodedata.normalize("NFC", value).split()).casefold()
+    collapsed = " ".join(unicodedata.normalize("NFC", value).split())
+    label = unicodedata.normalize("NFC", collapsed.casefold())
     if not label:
         raise ValueError("detection label must not be empty")
     return label
@@ -118,7 +118,7 @@ def _derived_summary(
 
 
 def _failure_evidence(
-    frame: dict[str, Any],
+    frame: FrameRecord,
     config: ObjectConfig,
     error: Exception,
     *,
@@ -128,9 +128,9 @@ def _failure_evidence(
 
     message = " ".join(str(error).split())[:300] or type(error).__name__
     return ObjectEvidence(
-        frame_id=str(frame["frame_id"]),
-        video_id=str(frame["video_id"]),
-        frame_idx=int(frame["frame_idx"]),
+        frame_id=frame.frame_id,
+        video_id=frame.video_id,
+        frame_idx=frame.frame_idx,
         frame_store_id=frame_store_id,
         artifact_version=config.artifact_version,
         status=ProcessingStatus.FAILED,
@@ -139,13 +139,35 @@ def _failure_evidence(
     )
 
 
-def _object_path(frame: dict[str, Any], objects_root: Path) -> Path:
+def _object_path(frame: FrameRecord, objects_root: Path) -> Path:
     """Map BTC keyframe identity to its documented sibling JSON name."""
 
-    stem = Path(str(frame["image_path"])).stem
+    stem = Path(frame.image_path).stem
     if not stem:
         raise ValueError("canonical image_path must have a filename stem")
-    return objects_root / str(frame["video_id"]) / f"{stem}.json"
+    return objects_root / frame.video_id / f"{stem}.json"
+
+
+def _load_canonical_frames(path: Path) -> list[FrameRecord]:
+    """Load fully validated canonical rows and reject identity ambiguity."""
+
+    store = FrameStore.load(path)
+    frames = list(store.iter_frames())
+    if not frames:
+        raise ValueError(
+            f"canonical frame store {path} must contain at least one frame"
+        )
+
+    seen_coordinates: set[tuple[str, int]] = set()
+    for frame in frames:
+        coordinate = (frame.video_id, frame.frame_idx)
+        if coordinate in seen_coordinates:
+            raise ValueError(
+                "duplicate submission coordinate: "
+                f"video_id={frame.video_id}, frame_idx={frame.frame_idx}"
+            )
+        seen_coordinates.add(coordinate)
+    return frames
 
 
 def import_objects(
@@ -161,16 +183,11 @@ def import_objects(
     source = Path(frames_path)
     if not source.is_file():
         raise FileNotFoundError(f"required canonical frames not found: {source}")
-    frame_table = pd.read_parquet(source)
-    missing = sorted(_REQUIRED_FRAME_COLUMNS.difference(frame_table.columns))
-    if missing:
-        raise ValueError(
-            "canonical frames are missing required columns: " + ", ".join(missing)
-        )
-    frames = cast(list[dict[str, Any]], frame_table.to_dict(orient="records"))
-    canonical_order = [str(frame["frame_id"]) for frame in frames]
-    if len(canonical_order) != len(set(canonical_order)):
-        raise ValueError("canonical frames contain duplicate frame_id values")
+    frames = _load_canonical_frames(source)
+    canonical_order = [frame.frame_id for frame in frames]
+    normalized_frame_store_id = normalize_lineage(
+        frame_store_id, "frame_store_id"
+    )
 
     root = Path(objects_root)
     evidence_rows: list[ObjectEvidence] = []
@@ -183,14 +200,14 @@ def import_objects(
                 detections = _parse_payload(json.load(file))
             counts, summary = _derived_summary(detections, config)
             evidence = ObjectEvidence(
-                frame_id=str(frame["frame_id"]),
-                video_id=str(frame["video_id"]),
-                frame_idx=int(frame["frame_idx"]),
+                frame_id=frame.frame_id,
+                video_id=frame.video_id,
+                frame_idx=frame.frame_idx,
                 detections=detections,
                 counts=counts,
                 summary=summary,
                 detection_count=len(detections),
-                frame_store_id=frame_store_id,
+                frame_store_id=normalized_frame_store_id,
                 artifact_version=config.artifact_version,
             )
             for detection_index, detection in enumerate(detections):
@@ -205,7 +222,7 @@ def import_objects(
             completed += 1
         except Exception as error:
             evidence = _failure_evidence(
-                frame, config, error, frame_store_id=frame_store_id
+                frame, config, error, frame_store_id=normalized_frame_store_id
             )
             failed += 1
         evidence_rows.append(evidence)
@@ -214,7 +231,7 @@ def import_objects(
     manifest = {
         "artifact_version": config.artifact_version,
         "source": "btc_provided_objects",
-        "frame_store_id": frame_store_id,
+        "frame_store_id": normalized_frame_store_id,
         "objects_root": str(root.resolve()),
         "frame_count": len(frames),
         "completed_frames": completed,

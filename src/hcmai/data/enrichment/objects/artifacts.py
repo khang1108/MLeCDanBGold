@@ -13,7 +13,12 @@ from typing import Any
 import pandas as pd
 
 from hcmai.common.schemas import ObjectEvidence
-from hcmai.common.utils.io import atomic_write, write_json, write_parquet
+from hcmai.common.utils.io import (
+    atomic_write,
+    read_json,
+    write_json,
+    write_parquet,
+)
 
 
 FRAME_COLUMNS = [
@@ -95,6 +100,47 @@ def _validate_artifact_tables(
             )
 
 
+def _publish_staged_bundle(
+    staged: tuple[Path, Path, Path],
+    published: tuple[Path, Path, Path],
+) -> None:
+    """Publish all staged files or restore the prior complete bundle."""
+
+    backups = tuple(
+        target.with_name(f".{target.name}.backup") for target in published
+    )
+    for backup in backups:
+        if backup.exists():
+            raise RuntimeError(f"refusing to overwrite stale backup: {backup}")
+
+    replaced: list[Path] = []
+    restore_complete = False
+    try:
+        for target, backup in zip(published, backups):
+            if target.exists():
+                target.replace(backup)
+
+        for source, target in zip(staged, published):
+            replaced.append(target)
+            # Manifest is deliberately last and remains the bundle commit marker.
+            source.replace(target)
+    except Exception:
+        for target in replaced:
+            target.unlink(missing_ok=True)
+        # Restore data files before restoring the previous manifest marker.
+        for target, backup in zip(published, backups):
+            if backup.exists():
+                backup.replace(target)
+        restore_complete = True
+        raise
+    else:
+        restore_complete = True
+    finally:
+        if restore_complete:
+            for backup in backups:
+                backup.unlink(missing_ok=True)
+
+
 def write_object_artifacts(
     output_dir: Path,
     canonical_order: list[str],
@@ -112,19 +158,38 @@ def write_object_artifacts(
     _validate_artifact_tables(frame_table, detection_table, canonical_order)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    atomic_write(
+    published = (
         output_dir / "frames.parquet",
-        lambda path: write_parquet(frame_table, path, index=False),
-    )
-    atomic_write(
         output_dir / "detections.parquet",
-        lambda path: write_parquet(detection_table, path, index=False),
-    )
-    # The manifest is written last and acts as the complete bundle marker.
-    atomic_write(
         output_dir / "manifest.json",
-        lambda path: write_json(manifest, path),
     )
+    staged = (
+        output_dir / ".frames.parquet.staged",
+        output_dir / ".detections.parquet.staged",
+        output_dir / ".manifest.json.staged",
+    )
+    try:
+        atomic_write(
+            staged[0], lambda path: write_parquet(frame_table, path, index=False)
+        )
+        atomic_write(
+            staged[1],
+            lambda path: write_parquet(detection_table, path, index=False),
+        )
+        atomic_write(staged[2], lambda path: write_json(manifest, path))
+
+        staged_frames = pd.read_parquet(staged[0])
+        staged_detections = pd.read_parquet(staged[1])
+        _validate_artifact_tables(
+            staged_frames, staged_detections, canonical_order
+        )
+        if read_json(staged[2]) != manifest:
+            raise ValueError("staged object manifest failed round-trip validation")
+
+        _publish_staged_bundle(staged, published)
+    finally:
+        for path in staged:
+            path.unlink(missing_ok=True)
 
 
 __all__ = ["write_object_artifacts"]
