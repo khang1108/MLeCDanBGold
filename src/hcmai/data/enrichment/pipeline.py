@@ -96,7 +96,7 @@ class EnrichmentJobConfig:
         object_values = sections["objects"]
         object_output = _required_output(object_values, "objects")
         object_config = ObjectConfig(
-            objects_root=Path(dataset["objects_root"]),
+            objects_root=_project_path(dataset["objects_root"]),
             output_dir=object_output,
             **object_values,
         )

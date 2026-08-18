@@ -23,9 +23,10 @@ from hcmai.data.enrichment.pipeline import EnrichmentJobConfig, EnrichmentServic
 class _CaptionAdapter:
     """Return one caption and one contained per-frame failure."""
 
-    resolved_revision = "fixture-caption-revision"
+    resolved_revision: str | None = "fixture-caption-revision"
 
     def resolve_revision(self) -> str:
+        assert self.resolved_revision is not None
         return self.resolved_revision
 
     def caption_batch(self, images: object) -> list[object]:
@@ -36,7 +37,7 @@ class _CaptionAdapter:
 class _OCRAdapter:
     """Return one usable OCR region and one empty OCR result."""
 
-    resolved_revision = "fixture-ocr-revision"
+    resolved_revision: str | None = "fixture-ocr-revision"
 
     def recognize_batch(self, images: object) -> list[OCRResult]:
         del images
@@ -327,8 +328,77 @@ context:
     project_root = Path(__file__).resolve().parents[3]
 
     assert job.frames_path == project_root / "fixture/artifacts/frame_store/frames.parquet"
+    assert job.objects.objects_root == project_root / "fixture/objects"
     assert job.caption_output_dir == project_root / "fixture/artifacts/captions"
     assert job.context_output_dir == project_root / "fixture/artifacts/context"
+
+
+def test_default_operations_keep_btc_specialist_lineage_for_context(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Run BTC specialists through the active operations before context assembly."""
+
+    from hcmai.data.corpus_build.pipeline import DefaultPreparationOperations
+
+    frames = _write_fixture(tmp_path)
+    job = EnrichmentJobConfig.from_yaml(_write_config(tmp_path, frames))
+    operations = object.__new__(DefaultPreparationOperations)
+    object.__setattr__(operations, "config", SimpleNamespace(
+        corpus_revision=job.dataset_version,
+        frame_store_source="btc_keyframes",
+        preprocessing=SimpleNamespace(device="cpu"),
+        models=SimpleNamespace(
+            ocr=SimpleNamespace(
+                model_name=job.ocr.checkpoint,
+                revision=job.ocr.revision,
+            )
+        ),
+    ))
+    object.__setattr__(operations, "paths", SimpleNamespace(
+        frames_path=job.frames_path,
+        frame_store_root=job.frame_store_output,
+        caption_root=job.caption_output_dir,
+        ocr_root=job.ocr_output_dir,
+        object_root=job.object_output_dir,
+        context_root=job.context_output_dir,
+        asr_enrichment_path=tmp_path / "asr" / "frame_enrichment.parquet",
+        transcripts_root=tmp_path / "transcripts",
+    ))
+    operations.enrichment_job = job
+    object.__setattr__(
+        operations, "caption_job", SimpleNamespace(caption=job.caption)
+    )
+    object.__setattr__(
+        operations, "_current_run_id", "s3-run-id-must-not-be-frame-lineage"
+    )
+    operations._remote_pool = lambda capability: None
+
+    monkeypatch.setattr(
+        EnrichmentService,
+        "create_caption_adapter",
+        lambda config: _CaptionAdapter(),
+    )
+    monkeypatch.setattr(
+        EnrichmentService,
+        "create_ocr_adapter",
+        lambda config: _OCRAdapter(),
+    )
+
+    operations.generate_caption()
+    operations.generate_ocr()
+    operations.import_objects()
+    context_path = operations.build_frame_context()
+
+    assert context_path.exists()
+    assert set(pd.read_parquet(context_path)["frame_id"]) == {"f1", "f2"}
+    for artifact in (
+        job.caption_output_dir / "captions.parquet",
+        job.ocr_output_dir / "frames.parquet",
+        job.object_output_dir / "frames.parquet",
+    ):
+        assert set(pd.read_parquet(artifact)["frame_store_id"]) == {
+            job.frame_store_id
+        }
 
 
 def test_caption_command_propagates_configured_frame_store_lineage(

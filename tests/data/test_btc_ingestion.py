@@ -179,6 +179,48 @@ def test_data_service_prepare_uses_btc_dataset_config(tmp_path, monkeypatch):
     assert manifest["frame_store_id"] == "btc-service-v1"
 
 
+def test_data_service_prepare_resolves_btc_paths_from_project_root(
+    tmp_path, monkeypatch
+):
+    """Keep active BTC output paths independent of the command's CWD."""
+
+    from hcmai.data.pipeline import DataService
+
+    project_root = Path(__file__).resolve().parents[2]
+    config_path = tmp_path / "enrichment.yaml"
+    write_yaml(
+        {
+            "dataset": {
+                "version": "hcmai2026-test-v1",
+                "source": "btc_keyframes",
+                "btc_root": "fixture/btc",
+                "data_root": "fixture/data",
+                "frame_store_id": "btc-cwd-v1",
+                "frames_path": "fixture/artifacts/frame_store/frames.parquet",
+                "frame_store_output": "fixture/artifacts/frame_store",
+            }
+        },
+        config_path,
+    )
+    captured = []
+
+    def fake_import(config):
+        """Expose the resolved BTC configuration without filesystem ingestion."""
+
+        captured.append(config)
+        return config.output_root / "frames.parquet"
+
+    monkeypatch.setattr("hcmai.data.pipeline.import_btc_frame_store", fake_import)
+    monkeypatch.chdir(tmp_path)
+
+    output = DataService.prepare(config_path)
+
+    assert output == project_root / "fixture/artifacts/frame_store/frames.parquet"
+    assert captured[0].btc_root == project_root / "fixture/btc"
+    assert captured[0].data_root == project_root / "fixture/data"
+    assert captured[0].output_root == project_root / "fixture/artifacts/frame_store"
+
+
 def test_data_service_prepare_rejects_non_btc_source(tmp_path):
     from hcmai.data.pipeline import DataService
 

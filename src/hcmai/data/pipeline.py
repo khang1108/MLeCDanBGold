@@ -40,6 +40,14 @@ _EVIDENCE_STORES = {
     RetrievalSource.OCR: OCRStore,
     RetrievalSource.ASR: ASRStore,
 }
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _project_path(value: str | Path) -> Path:
+    """Resolve active-config paths from the repository, preserving absolutes."""
+
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else _PROJECT_ROOT / path
 
 
 class DataService:
@@ -142,7 +150,8 @@ class DataService:
         the complete metadata table.
         """
 
-        raw_config = read_yaml(config_path)
+        resolved_config = Path(config_path).expanduser().resolve()
+        raw_config = read_yaml(resolved_config)
         if not isinstance(raw_config, Mapping):
             raise ValueError(f"Expected a YAML mapping in {config_path}")
         dataset = raw_config.get("dataset")
@@ -170,8 +179,8 @@ class DataService:
                 f"Unsupported dataset.source {source!r}; expected 'btc_keyframes'"
             )
 
-        output_root = Path(str(dataset["frame_store_output"])).expanduser()
-        frames_path = Path(str(dataset["frames_path"])).expanduser()
+        output_root = _project_path(str(dataset["frame_store_output"]))
+        frames_path = _project_path(str(dataset["frames_path"]))
         expected_frames_path = output_root / "frames.parquet"
         if frames_path.resolve() != expected_frames_path.resolve():
             raise ValueError(
@@ -181,8 +190,8 @@ class DataService:
 
         return import_btc_frame_store(
             BTCIngestionConfig(
-                btc_root=Path(str(dataset["btc_root"])).expanduser(),
-                data_root=Path(str(dataset["data_root"])).expanduser(),
+                btc_root=_project_path(str(dataset["btc_root"])),
+                data_root=_project_path(str(dataset["data_root"])),
                 output_root=output_root,
                 frame_store_id=str(dataset["frame_store_id"]),
             )

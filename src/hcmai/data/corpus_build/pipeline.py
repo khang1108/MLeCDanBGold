@@ -540,8 +540,18 @@ class DefaultPreparationOperations:
                 f"{self.transcript_job.asr.revision}:"
                 f"{self.transcript_job.pipeline_version}"
             ),
-            frame_store_id=getattr(self, "_current_run_id", None),
+            frame_store_id=self._specialist_frame_store_id(),
         )
+
+    def _specialist_frame_store_id(self) -> str | None:
+        """Keep BTC evidence tied to its canonical frame store, not an S3 run."""
+
+        source = getattr(
+            getattr(self, "config", None), "frame_store_source", "btc_keyframes"
+        )
+        if source == "btc_keyframes":
+            return self.enrichment_job.frame_store_id
+        return getattr(self, "_current_run_id", None)
 
     def generate_caption(self) -> Path:
         from hcmai.data.enrichment.pipeline import EnrichmentService
@@ -566,7 +576,7 @@ class DefaultPreparationOperations:
                 caption,
                 adapter=adapter,
                 dataset_root=self.paths.frame_store_root,
-                frame_store_id=getattr(self, "_current_run_id", None),
+                frame_store_id=self._specialist_frame_store_id(),
             )
         finally:
             del adapter
@@ -597,7 +607,7 @@ class DefaultPreparationOperations:
                 ocr,
                 adapter=adapter,
                 dataset_root=self.paths.frame_store_root,
-                frame_store_id=getattr(self, "_current_run_id", None),
+                frame_store_id=self._specialist_frame_store_id(),
             )
         finally:
             del adapter
@@ -617,7 +627,7 @@ class DefaultPreparationOperations:
             self.enrichment_job.objects_root,
             self.paths.object_root,
             config,
-            frame_store_id=self.enrichment_job.frame_store_id,
+            frame_store_id=self._specialist_frame_store_id(),
         )
         return self.paths.object_root / "frames.parquet"
 
@@ -633,7 +643,7 @@ class DefaultPreparationOperations:
             self.paths.object_root / "frames.parquet",
             self.paths.context_root,
             self.enrichment_job.context,
-            frame_store_id=self.enrichment_job.frame_store_id,
+            frame_store_id=self._specialist_frame_store_id(),
         )
 
     def build_visual_index(self) -> Path:
