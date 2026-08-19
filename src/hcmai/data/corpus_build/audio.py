@@ -28,7 +28,7 @@ def extract_flac(video: Path, output: Path, sample_rate: int) -> None:
     partial = output.with_suffix(f"{output.suffix}.partial")
     partial.unlink(missing_ok=True)
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "ffmpeg",
                 "-nostdin",
@@ -46,9 +46,19 @@ def extract_flac(video: Path, output: Path, sample_rate: int) -> None:
                 "flac",
                 str(partial),
             ],
-            check=True,
+            check=False,
             capture_output=True,
         )
+        if result.returncode != 0:
+            diagnostic = (result.stderr or result.stdout).decode(
+                "utf-8", errors="replace"
+            ).strip()
+            if len(diagnostic) > 1_000:
+                diagnostic = f"{diagnostic[:997]}..."
+            raise RuntimeError(
+                f"ffmpeg failed for {video.name} (exit {result.returncode}): "
+                f"{diagnostic or 'no diagnostic output'}"
+            )
         if not partial.is_file() or partial.stat().st_size == 0:
             raise RuntimeError("ffmpeg did not produce an audio artifact")
         partial.replace(output)
