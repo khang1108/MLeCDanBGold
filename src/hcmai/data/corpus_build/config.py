@@ -266,6 +266,11 @@ class S3CorpusPreparationConfig(BaseModel):
         _reject_legacy_local(staging_root, "s3.staging_root")
         if not _inside(staging_root, self.work_root):
             raise ValueError("s3.staging_root must be inside work_root")
+        # Keep the normalized value on the nested config object. Runtime
+        # consumers use ``storage.staging_root`` directly when creating
+        # temporary directories, so leaving ``~`` here would produce a
+        # literal path such as ``repo/~/MLeCDanBGold/...``.
+        preprocessing.s3.staging_root = staging_root
 
         full = preprocessing.s3.artifacts_prefix
         smoke = preprocessing.s3.smoke_artifacts_prefix

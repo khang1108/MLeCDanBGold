@@ -79,6 +79,28 @@ def test_production_config_accepts_only_isolated_s3_inputs(tmp_path: Path) -> No
     assert config.artifacts_root == config.work_root / "artifacts"
 
 
+def test_staging_root_is_expanded_before_runtime_use(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persist the expanded staging path instead of leaving a ``~`` literal."""
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    values = _values(tmp_path)
+    preprocessing = values["preprocessing"]
+    assert isinstance(preprocessing, dict)
+    storage = preprocessing["s3"]
+    assert isinstance(storage, dict)
+    storage["staging_root"] = Path("~/run/staging")
+
+    config = S3CorpusPreparationConfig.model_validate(values)
+
+    assert config.preprocessing.s3 is not None
+    assert config.preprocessing.s3.staging_root == (
+        tmp_path / "run/staging"
+    ).resolve()
+
+
 def test_thunder_cache_and_execution_policy_are_validated(tmp_path: Path) -> None:
     values = _values(tmp_path)
     preprocessing = values["preprocessing"]
