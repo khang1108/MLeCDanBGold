@@ -137,7 +137,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.endpoint,
         InferenceConfig(
             enabled=True,
-            timeout_seconds=300,
+            # The gateway's overall attempt deadline is capped at 120s;
+            # ASR's longer response window is carried by read_timeout below.
+            timeout_seconds=120,
             connect_timeout_seconds=10,
             read_timeout_seconds=300,
             write_timeout_seconds=60,
