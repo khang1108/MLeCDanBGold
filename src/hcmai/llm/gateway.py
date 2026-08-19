@@ -9,12 +9,15 @@ from typing import Any, Callable
 import httpx
 
 from hcmai.common.config import InferenceConfig
+from hcmai.common.utils.logging import get_logger
 from hcmai.llm.resilience import (
     Bulkhead,
     CircuitBreaker,
     FailureCategory,
     RetryPolicy,
 )
+
+logger = get_logger(__name__)
 
 _TRANSIENT_STATUS_CODES = {429, 502, 503, 504}
 
@@ -227,6 +230,16 @@ def _status_error(
         category = FailureCategory.CLIENT_ERROR
     else:
         category = FailureCategory.SERVER_ERROR
+    # Log the response body so the actual server-side error message is visible,
+    # not just the HTTP status category.
+    try:
+        detail = response.json().get("detail", response.text[:300])
+    except Exception:
+        detail = response.text[:300]
+    logger.warning(
+        "Remote inference error status=%d category=%s detail=%r",
+        status, category.value, detail,
+    )
     return InferenceGatewayError(
         category,
         attempt_count=attempt_count,
