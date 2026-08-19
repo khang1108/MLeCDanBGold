@@ -514,6 +514,8 @@ def test_runtime_does_not_construct_or_require_disabled_models():
         runtime.embed_text(["query"])
     with pytest.raises(RuntimeError, match="caption model is disabled"):
         runtime.caption([Image.new("RGB", (1, 1))])
+    with pytest.raises(RuntimeError, match="ocr model is disabled"):
+        runtime.ocr([Image.new("RGB", (1, 1))])
 
 
 def test_asr_readiness_requires_the_enabled_model_to_be_loaded():

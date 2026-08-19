@@ -98,6 +98,11 @@ class LLMService:
     def caption(self, images: Any) -> Any:
         return self.adapter.caption(images)
 
+    def ocr(self, images: Any) -> Any:
+        """Run structured OCR through the configured inference adapter."""
+
+        return self.adapter.ocr(images)
+
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
 
