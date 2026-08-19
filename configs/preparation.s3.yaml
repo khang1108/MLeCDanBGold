@@ -75,6 +75,7 @@ preparation:
       artifacts_prefix: artifacts/production/hcmai2026-videos-v1
       smoke_artifacts_prefix: artifacts/smoke/hcmai2026-videos-v1
       region: ap-east-1
+      endpoint_url: https://s3.ap-east-1.amazonaws.com
       staging_root: ~/MLeCDanBGold/runs/hcmai2026-videos-20260813-v1/staging
       connect_timeout_seconds: 10
       read_timeout_seconds: 300
