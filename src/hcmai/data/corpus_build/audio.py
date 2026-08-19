@@ -44,6 +44,8 @@ def extract_flac(video: Path, output: Path, sample_rate: int) -> None:
                 str(sample_rate),
                 "-c:a",
                 "flac",
+                "-f",
+                "flac",
                 str(partial),
             ],
             check=False,
