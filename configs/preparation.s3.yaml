@@ -72,7 +72,7 @@ preparation:
     s3:
       bucket: mlecdanbgold-hcmai-hk
       videos_prefix: data
-      artifacts_prefix: artifacts/production/hcmai2026-videos-v1
+      artifacts_prefix: data/artifacts/enrichment
       smoke_artifacts_prefix: artifacts/smoke/hcmai2026-videos-v1
       region: ap-east-1
       endpoint_url: https://s3.ap-east-1.amazonaws.com
