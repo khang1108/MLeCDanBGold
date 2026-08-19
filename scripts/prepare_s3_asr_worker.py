@@ -120,6 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise ValueError("preparation config must define preprocessing.s3")
     if storage.staging_root is None:
         raise ValueError("preparation config must define s3.staging_root")
+    storage.staging_root.mkdir(parents=True, exist_ok=True)
     enrichment = TranscriptJobConfig.from_yaml(args.enrichment_config)
     client = create_s3_client(storage)
     sources = list_video_objects(client, storage)
