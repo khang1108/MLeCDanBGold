@@ -265,7 +265,7 @@ def test_malformed_object_json_fails_only_its_frame(tmp_path, payload):
     assert frames.iloc[0]["error_code"]
     assert 0 < len(frames.iloc[0]["error_message"]) <= 300
     assert frames.iloc[1]["detection_count"] == 0
-    assert frames.iloc[1]["summary"] is None
+    assert pd.isna(frames.iloc[1]["summary"])
     assert json.loads(frames.iloc[1]["counts_json"]) == {}
     assert report["completed_frames"] == 1
     assert report["failed_frames"] == 1

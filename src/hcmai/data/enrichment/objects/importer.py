@@ -13,15 +13,15 @@ from pathlib import Path
 from typing import Any
 import unicodedata
 
+import pyarrow.parquet as pq
+
 from hcmai.common.schemas import (
     FrameRecord,
     ObjectDetection,
     ObjectEvidence,
     ProcessingStatus,
 )
-from hcmai.data.stores.frame import FrameStore
-
-from .artifacts import write_object_artifacts
+from .artifacts import write_object_artifacts_streaming
 from .config import ObjectConfig, normalize_lineage
 
 
@@ -160,17 +160,23 @@ def _object_path(frame: FrameRecord, objects_root: Path) -> Path:
     return objects_root / frame.video_id / f"{stem}.json"
 
 
-def _load_canonical_frames(path: Path) -> list[FrameRecord]:
-    """Load canonical rows keyed by their unique internal ``frame_id``."""
+def _frame_from_row(row: dict[str, object]) -> FrameRecord:
+    """Validate one streamed canonical frame row without retaining a store."""
 
-    store = FrameStore.load(path)
-    frames = list(store.iter_frames())
-    if not frames:
-        raise ValueError(
-            f"canonical frame store {path} must contain at least one frame"
-        )
+    values = {
+        name: row[name]
+        for name in FrameRecord.model_fields
+        if name in row
+    }
+    return FrameRecord.model_validate(values)
 
-    return frames
+
+def _frame_batches(path: Path, batch_size: int = 512):
+    """Yield validated canonical frames in bounded-memory batches."""
+
+    parquet = pq.ParquetFile(path)
+    for batch in parquet.iter_batches(batch_size=batch_size):
+        yield [_frame_from_row(row) for row in batch.to_pylist()]
 
 
 def import_objects(
@@ -186,70 +192,89 @@ def import_objects(
     source = Path(frames_path)
     if not source.is_file():
         raise FileNotFoundError(f"required canonical frames not found: {source}")
-    frames = _load_canonical_frames(source)
-    canonical_order = [frame.frame_id for frame in frames]
     normalized_frame_store_id = normalize_lineage(
         frame_store_id, "frame_store_id"
     )
 
     root = Path(objects_root)
-    evidence_rows: list[ObjectEvidence] = []
-    detection_rows: list[dict[str, Any]] = []
     completed = failed = 0
-    for frame in frames:
-        try:
-            object_path = _object_path(frame, root)
-            with object_path.open("r", encoding="utf-8") as file:
-                detections = _parse_payload(json.load(file))
-            counts, summary = _derived_summary(detections, config)
-            evidence = ObjectEvidence(
-                frame_id=frame.frame_id,
-                video_id=frame.video_id,
-                frame_idx=frame.frame_idx,
-                timestamp_ms=frame.timestamp_ms,
-                detections=detections,
-                counts=counts,
-                summary=summary,
-                detection_count=len(detections),
-                frame_store_id=normalized_frame_store_id,
-                artifact_version=config.artifact_version,
-            )
-            for detection_index, detection in enumerate(detections):
-                detection_rows.append(
-                    {
-                        "frame_id": evidence.frame_id,
-                        "video_id": evidence.video_id,
-                        "frame_idx": evidence.frame_idx,
-                        "timestamp_ms": evidence.timestamp_ms,
-                        "detection_index": detection_index,
-                        **detection.model_dump(mode="json"),
-                    }
-                )
-            completed += 1
-        except Exception as error:
-            evidence = _failure_evidence(
-                frame, config, error, frame_store_id=normalized_frame_store_id
-            )
-            failed += 1
-        evidence_rows.append(evidence)
-
     output = Path(output_dir)
+    frame_count = detection_count = 0
+
+    def batches():
+        nonlocal completed, failed, frame_count, detection_count
+        seen_frames: set[str] = set()
+        for frames in _frame_batches(source):
+            evidence_rows: list[ObjectEvidence] = []
+            detection_rows: list[dict[str, Any]] = []
+            for frame in frames:
+                if frame.frame_id in seen_frames:
+                    raise ValueError("object frame rows contain duplicate frame_id values")
+                seen_frames.add(frame.frame_id)
+                try:
+                    object_path = _object_path(frame, root)
+                    with object_path.open("r", encoding="utf-8") as file:
+                        detections = _parse_payload(json.load(file))
+                    counts, summary = _derived_summary(detections, config)
+                    evidence = ObjectEvidence(
+                        frame_id=frame.frame_id,
+                        video_id=frame.video_id,
+                        frame_idx=frame.frame_idx,
+                        timestamp_ms=frame.timestamp_ms,
+                        detections=detections,
+                        counts=counts,
+                        summary=summary,
+                        detection_count=len(detections),
+                        frame_store_id=normalized_frame_store_id,
+                        artifact_version=config.artifact_version,
+                    )
+                    for detection_index, detection in enumerate(detections):
+                        detection_rows.append(
+                            {
+                                "frame_id": evidence.frame_id,
+                                "video_id": evidence.video_id,
+                                "frame_idx": evidence.frame_idx,
+                                "timestamp_ms": evidence.timestamp_ms,
+                                "detection_index": detection_index,
+                                **detection.model_dump(mode="json"),
+                            }
+                        )
+                    completed += 1
+                except Exception as error:
+                    evidence = _failure_evidence(
+                        frame, config, error, frame_store_id=normalized_frame_store_id
+                    )
+                    failed += 1
+                evidence_rows.append(evidence)
+            frame_count += len(evidence_rows)
+            detection_count += len(detection_rows)
+            yield evidence_rows, detection_rows
+
     manifest = {
         "artifact_version": config.artifact_version,
         "source": "btc_provided_objects",
         "frame_store_id": normalized_frame_store_id,
         "objects_root": str(root.resolve()),
-        "frame_count": len(frames),
-        "completed_frames": completed,
-        "failed_frames": failed,
-        "detection_count": len(detection_rows),
+        "frame_count": 0,
+        "completed_frames": 0,
+        "failed_frames": 0,
+        "detection_count": 0,
         "summary_min_confidence": config.summary_min_confidence,
         "max_summary_labels": config.max_summary_labels,
         "files": ["frames.parquet", "detections.parquet"],
     }
-    write_object_artifacts(
-        output, canonical_order, evidence_rows, detection_rows, manifest
-    )
+    # The manifest is updated after iteration by the wrapper below, while the
+    # staged Parquet writers consume one bounded batch at a time.
+    def manifest_batches():
+        yield from batches()
+        manifest.update(
+            frame_count=frame_count,
+            completed_frames=completed,
+            failed_frames=failed,
+            detection_count=detection_count,
+        )
+
+    write_object_artifacts_streaming(output, manifest_batches(), manifest)
     return manifest
 
 

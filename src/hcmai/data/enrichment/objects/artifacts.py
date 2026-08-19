@@ -9,8 +9,11 @@ from __future__ import annotations
 import json
 from numbers import Integral
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pandas as pd
 
 from hcmai.common.schemas import ObjectEvidence
@@ -190,6 +193,120 @@ def write_object_artifacts(
 
         _publish_staged_bundle(staged, published)
     finally:
+        for path in staged:
+            path.unlink(missing_ok=True)
+
+
+def write_object_artifacts_streaming(
+    output_dir: Path,
+    batches: Iterable[tuple[list[ObjectEvidence], list[dict[str, Any]]]],
+    manifest: dict[str, Any],
+) -> None:
+    """Atomically write object artifacts without materializing the corpus.
+
+    ``batches`` contains independently validated frame evidence and detection
+    rows.  Only one batch is held in memory; the staged Parquet files are
+    published together with the manifest after all batches have been written.
+    """
+
+    frame_schema = pa.schema([
+        ("frame_id", pa.string()),
+        ("video_id", pa.string()),
+        ("frame_idx", pa.int64()),
+        ("timestamp_ms", pa.int64()),
+        ("counts_json", pa.string()),
+        ("summary", pa.string()),
+        ("detection_count", pa.int64()),
+        ("frame_store_id", pa.string()),
+        ("artifact_version", pa.string()),
+        ("status", pa.string()),
+        ("error_code", pa.string()),
+        ("error_message", pa.string()),
+    ])
+    detection_schema = pa.schema([
+        ("frame_id", pa.string()),
+        ("video_id", pa.string()),
+        ("frame_idx", pa.int64()),
+        ("timestamp_ms", pa.int64()),
+        ("detection_index", pa.int64()),
+        ("label", pa.string()),
+        ("confidence", pa.float64()),
+        ("x_min", pa.float64()),
+        ("y_min", pa.float64()),
+        ("x_max", pa.float64()),
+        ("y_max", pa.float64()),
+    ])
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    published = (
+        output_dir / "frames.parquet",
+        output_dir / "detections.parquet",
+        output_dir / "manifest.json",
+    )
+    staged = (
+        output_dir / ".frames.parquet.staged",
+        output_dir / ".detections.parquet.staged",
+        output_dir / ".manifest.json.staged",
+    )
+    frame_writer: pq.ParquetWriter | None = None
+    detection_writer: pq.ParquetWriter | None = None
+    seen_frames: set[str] = set()
+    frame_count = detection_count = 0
+    try:
+        for evidence_rows, detection_rows in batches:
+            frame_values = [frame_artifact_row(row) for row in evidence_rows]
+            batch_ids = [str(row["frame_id"]) for row in frame_values]
+            if len(batch_ids) != len(set(batch_ids)) or seen_frames.intersection(batch_ids):
+                raise ValueError("object frame rows contain duplicate frame_id values")
+            seen_frames.update(batch_ids)
+            expected_by_frame = {
+                row["frame_id"]: int(row["detection_count"])
+                for row in frame_values
+            }
+            actual_by_frame: dict[str, int] = {}
+            for row in detection_rows:
+                frame_id = row["frame_id"]
+                if frame_id not in expected_by_frame:
+                    raise ValueError("object detection references an unknown batch frame")
+                actual_by_frame[frame_id] = actual_by_frame.get(frame_id, 0) + 1
+            for frame_id, expected in expected_by_frame.items():
+                if expected != actual_by_frame.get(frame_id, 0):
+                    raise ValueError(
+                        f"detection_count does not match detections for {frame_id}"
+                    )
+
+            if frame_values:
+                table = pa.Table.from_pylist(frame_values, schema=frame_schema)
+                if frame_writer is None:
+                    frame_writer = pq.ParquetWriter(staged[0], frame_schema)
+                frame_writer.write_table(table)
+            detection_table = pa.Table.from_pylist(
+                detection_rows, schema=detection_schema
+            )
+            if detection_writer is None:
+                detection_writer = pq.ParquetWriter(staged[1], detection_schema)
+            if detection_table.num_rows:
+                detection_writer.write_table(detection_table)
+            frame_count += len(frame_values)
+            detection_count += len(detection_rows)
+
+        if frame_writer is None or detection_writer is None or frame_count == 0:
+            raise ValueError("canonical frame store must contain at least one frame")
+        frame_writer.close()
+        frame_writer = None
+        detection_writer.close()
+        detection_writer = None
+        if pq.ParquetFile(staged[0]).metadata.num_rows != frame_count:
+            raise ValueError("staged object frame row count mismatch")
+        if pq.ParquetFile(staged[1]).metadata.num_rows != detection_count:
+            raise ValueError("staged object detection row count mismatch")
+        write_json(manifest, staged[2])
+        _publish_staged_bundle(staged, published)
+    finally:
+        if frame_writer is not None:
+            frame_writer.close()
+        if detection_writer is not None:
+            detection_writer.close()
         for path in staged:
             path.unlink(missing_ok=True)
 
