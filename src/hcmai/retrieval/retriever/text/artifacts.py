@@ -190,11 +190,10 @@ def build_context_artifacts(
     context, frames, output = _context_artifact_paths(
         settings, context_path, frames_path, output_dir
     )
+    manifest = _input_file(
+        context.with_name("manifest.json"), "CONTEXT manifest"
+    )
     selected_encoder = _context_encoder(settings, models, encoder)
-    lineage_files = [context]
-    manifest = context.with_name("manifest.json")
-    if manifest.is_file():
-        lineage_files.append(manifest)
     data = DataService.load(frames, context_path=context)
     index = build_context_index(
         data,
@@ -203,7 +202,7 @@ def build_context_artifacts(
         embeddings_filename=settings.index.context_embedding_filename,
         dataset_version=settings.dataset.version,
         index_type=settings.index.type,
-        source_fingerprint=fingerprint_files(lineage_files),
+        source_fingerprint=fingerprint_files([context, manifest]),
     )
     logger.info(
         "CONTEXT index ready output=%s vectors=%d model=%s dimension=%d",

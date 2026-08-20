@@ -9,9 +9,11 @@ import pandas as pd
 import pytest
 
 from hcmai.common.config import (
+    AppConfig,
     EncoderConfig,
     EnrichmentArtifactsConfig,
     FusionConfig,
+    InferenceConfig,
     IndexConfig,
 )
 from hcmai.common.schemas import RetrievalSource, TaskType
@@ -121,6 +123,44 @@ def fake_bge() -> FakeBGE:
     """Supply a fake BGE encoder so tests never need a GPU."""
 
     return FakeBGE()
+
+
+def _context_build_configs(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Write a Context builder config with distinct legacy/evidence encoders."""
+
+    pipeline_config = tmp_path / "baseline.yaml"
+    model_config = tmp_path / "models.yaml"
+    output = tmp_path / "context-index"
+    write_yaml(
+        {
+            "dataset": {
+                "version": "test-v1",
+                "frames_path": str(tmp_path / "frames.parquet"),
+                "enrichment": {
+                    "context_path": str(tmp_path / "frame_context_v1.parquet")
+                },
+            },
+            "index": {
+                "context_path": str(output),
+                "context_embedding_filename": "context_embeddings.npy",
+            },
+        },
+        pipeline_config,
+    )
+    write_yaml(
+        {
+            "caption_embedding": {
+                "backend": "bge_m3",
+                "name": "legacy/caption-bge",
+            },
+            "evidence_embedding": {
+                "backend": "bge_m3",
+                "name": "fake/bge-m3",
+            },
+        },
+        model_config,
+    )
+    return pipeline_config, model_config, output
 
 
 def test_context_corpus_embeds_only_non_empty_context(
@@ -238,36 +278,7 @@ def test_context_artifact_builder_uses_evidence_encoder_and_manifest_lineage(
         },
         manifest,
     )
-    pipeline_config = tmp_path / "baseline.yaml"
-    model_config = tmp_path / "models.yaml"
-    output = tmp_path / "context-index"
-    write_yaml(
-        {
-            "dataset": {
-                "version": "test-v1",
-                "frames_path": str(frames),
-                "enrichment": {"context_path": str(context)},
-            },
-            "index": {
-                "context_path": str(output),
-                "context_embedding_filename": "context_embeddings.npy",
-            },
-        },
-        pipeline_config,
-    )
-    write_yaml(
-        {
-            "caption_embedding": {
-                "backend": "bge_m3",
-                "name": "legacy/caption-bge",
-            },
-            "evidence_embedding": {
-                "backend": "bge_m3",
-                "name": "fake/bge-m3",
-            },
-        },
-        model_config,
-    )
+    pipeline_config, model_config, output = _context_build_configs(tmp_path)
 
     index = RetrievalService.build_context_artifacts(
         pipeline_config, model_config, encoder=fake_bge
@@ -276,6 +287,62 @@ def test_context_artifact_builder_uses_evidence_encoder_and_manifest_lineage(
     assert index.metadata.model_name == "fake/bge-m3"
     assert index.metadata.source_fingerprint == fingerprint_files([context, manifest])
     assert DenseIndex.load(output).metadata.retrieval_source == "context"
+
+
+@pytest.mark.parametrize("manifest_contents", [None, ""], ids=["missing", "empty"])
+def test_context_artifact_builder_requires_non_empty_adjacent_manifest(
+    fake_bge: FakeBGE,
+    tmp_path: Path,
+    manifest_contents: str | None,
+) -> None:
+    """Context lineage cannot be built from a parquet file alone or an empty manifest."""
+
+    from hcmai.retrieval.retriever.text.artifacts import build_context_artifacts
+
+    _context_data(
+        tmp_path,
+        [("f1", "[CAPTION]\nA red cable car.", "v1", 1000)],
+    )
+    if manifest_contents is not None:
+        (tmp_path / "manifest.json").write_text(manifest_contents)
+    pipeline_config, model_config, _ = _context_build_configs(tmp_path)
+
+    with pytest.raises(FileNotFoundError, match="CONTEXT manifest artifact"):
+        build_context_artifacts(pipeline_config, model_config, encoder=fake_bge)
+
+
+def test_remote_context_encoder_uses_text_source_family(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hosted Context embeddings use the BGE text endpoint, not ``context``."""
+
+    from hcmai.llm.pipeline import LLMService
+    from hcmai.retrieval.retriever.text import artifacts
+
+    captured: dict[str, object] = {}
+    remote_encoder = FakeBGE()
+    settings = AppConfig(inference=InferenceConfig(enabled=True))
+    models = LLMServiceConfig(evidence_embedding=remote_encoder.config)
+
+    monkeypatch.setattr(LLMService, "remote", lambda *args: object())
+
+    def create_remote_adapter(client, config, embedding_dim, source):
+        captured.update(
+            client=client,
+            config=config,
+            embedding_dim=embedding_dim,
+            source=source,
+        )
+        return remote_encoder
+
+    monkeypatch.setattr(
+        artifacts.EmbeddingService,
+        "create_remote_adapter",
+        create_remote_adapter,
+    )
+
+    assert artifacts._context_encoder(settings, models, None) is remote_encoder
+    assert captured["source"] == "text"
 
 
 def test_evidence_embedding_falls_back_to_caption_embedding() -> None:
