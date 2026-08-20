@@ -1,0 +1,27 @@
+visual_embedding:
+  backend: siglip
+  model_name: google/siglip2-base-patch16-224
+  revision: 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2
+  device: cuda
+  batch_size: 64
+  image_size: 224
+  dtype: float32
+
+evidence_embedding:
+  backend: bge_m3
+  model_name: BAAI/bge-m3
+  revision: 5617a9f61b028005a4858fdac845db406aefb181
+  device: cuda
+  batch_size: 64
+  max_length: 8192
+  dtype: float32
+
+# Rollback compatibility: legacy text builders still read this field.
+caption_embedding:
+  backend: bge_m3
+  model_name: BAAI/bge-m3
+  revision: 5617a9f61b028005a4858fdac845db406aefb181
+  device: cuda
+  batch_size: 64
+  max_length: 8192
+  dtype: float32

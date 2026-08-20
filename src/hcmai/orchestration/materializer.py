@@ -111,6 +111,7 @@ def _build_scores(candidate: RetrievalCandidate) -> SearchScores:
         final = values.get("visual", 0.0)
     return SearchScores(
         visual=values.get("visual"),
+        context=values.get("context"),
         caption=values.get("caption"),
         ocr=values.get("ocr"),
         asr=values.get("asr"),

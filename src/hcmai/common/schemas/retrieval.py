@@ -1,3 +1,5 @@
+"""Retrieval contracts that preserve canonical candidate identity and provenance."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -67,6 +69,7 @@ class SearchScores(ContractModel):
     """Scores exposed for a returned frame."""
 
     visual: float | None = None
+    context: float | None = None
     caption: float | None = None
     ocr: float | None = None
     asr: float | None = None

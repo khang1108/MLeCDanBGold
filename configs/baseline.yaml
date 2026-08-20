@@ -6,14 +6,23 @@ dataset:
     caption_path: "artifacts/enrichment/caption/frame_enrichment.parquet"
     ocr_path: "artifacts/enrichment/ocr/frame_enrichment.parquet"
     asr_path: "artifacts/enrichment/asr/frame_enrichment.parquet"
+    context_path: "artifacts/enrichment/context/frame_context_v1.parquet"
+    transcripts_path: "artifacts/enrichment/transcripts"
 
 index:
   type: "flat_ip"
 
   path: "artifacts/indexes/visual"
+  profile: "context_asr_segment"
+  context_path: "artifacts/indexes/context"
+  asr_segment_path: "artifacts/indexes/asr_segments"
   caption_path: "artifacts/indexes/caption"
   ocr_path: "artifacts/indexes/ocr"
   asr_path: "artifacts/indexes/asr"
+
+  context_embedding_filename: "context_embeddings.npy"
+  asr_segment_embedding_filename: "asr_embeddings.npy"
+  asr_projection_max_gap_ms: 5000
 
   subset_search_threshold: 100000
 
@@ -84,10 +93,10 @@ search:
     normalize_active_weights: true
     # Neutral starting point only. Tune per task on labeled validation queries.
     task_weights:
-      kis: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      vkis: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      vqa: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      trake: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+      kis: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+      vkis: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+      vqa: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+      trake: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
 
 vqa:
   default_profile: vqa_localizer

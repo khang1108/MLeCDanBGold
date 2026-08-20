@@ -32,6 +32,10 @@ class EnrichmentArtifactsConfig(BaseModel):
     asr_path: Path | None = Path(
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
+    context_path: Path | None = Path(
+        "artifacts/enrichment/context/frame_context_v1.parquet"
+    )
+    transcripts_path: Path | None = Path("artifacts/enrichment/transcripts")
 
 
 class DatasetConfig(BaseModel):
@@ -162,11 +166,19 @@ def _project_path(path: Path, project_root: Path) -> Path:
 class IndexConfig(BaseModel):
     """Configuration for the self-contained FAISS artifact directory."""
 
+    profile: Literal["context_asr_segment", "legacy_specialists"] = (
+        "context_asr_segment"
+    )
     type: str = "flat_ip"
     path: Path = Path("artifacts/indexes/visual")
+    context_path: Path = Path("artifacts/indexes/context")
+    asr_segment_path: Path = Path("artifacts/indexes/asr_segments")
     caption_path: Path = Path("artifacts/indexes/caption")
     ocr_path: Path = Path("artifacts/indexes/ocr")
     asr_path: Path = Path("artifacts/indexes/asr")
+    context_embedding_filename: str = "context_embeddings.npy"
+    asr_segment_embedding_filename: str = "asr_embeddings.npy"
+    asr_projection_max_gap_ms: int = Field(default=5_000, ge=0)
     subset_search_threshold: int = Field(default=100_000, ge=1)
     text_embedding_filenames: dict[RetrievalSource, str] = Field(
         default_factory=lambda: {
@@ -227,7 +239,7 @@ class FusionConfig(BaseModel):
             if set(weights) != expected:
                 raise ValueError(
                     f"fusion task_weights[{task.value!r}] must configure "
-                    "visual, caption, ocr, and asr"
+                    "visual, context, caption, ocr, and asr"
                 )
             if any(weight <= 0 for weight in weights.values()):
                 raise ValueError("fusion weights must be greater than zero")

@@ -50,20 +50,36 @@ class HostedVQAConfig(BaseModel):
 
 
 class LLMServiceConfig(BaseModel):
+    """Hosted inference settings plus pinned dense encoder configurations."""
+
     server: ServiceConfig = Field(default_factory=ServiceConfig)
     caption_generation: HostedCaptionConfig = Field(
         default_factory=HostedCaptionConfig
     )
     visual_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
+    evidence_embedding: EncoderConfig | None = None
     reranker: HostedRerankerConfig = Field(default_factory=HostedRerankerConfig)
     vqa_model: HostedVQAConfig = Field(
         default_factory=HostedVQAConfig
     )
+
+    @property
+    def resolved_evidence_embedding(self) -> EncoderConfig:
+        """Return the generic evidence encoder with caption compatibility fallback."""
+
+        return self.evidence_embedding or self.caption_embedding
+
     @classmethod
     def from_yaml(cls, path: str | Path) -> LLMServiceConfig:
+        """Load model settings while accepting legacy encoder mapping syntax."""
+
         data = read_yaml(path)
-        for field in ("visual_embedding", "caption_embedding"):
+        for field in (
+            "visual_embedding",
+            "caption_embedding",
+            "evidence_embedding",
+        ):
             if field in data:
                 data[field] = EncoderConfig.from_dict(data[field])
         return cls.model_validate(data)
