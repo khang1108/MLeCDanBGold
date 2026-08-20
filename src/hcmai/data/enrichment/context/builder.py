@@ -8,11 +8,14 @@ unchanged. The manifest is the final commit marker for the two-file bundle.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable, Iterator
 import math
 from numbers import Integral
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pandas as pd
 
 from hcmai.common.schemas import (
@@ -24,15 +27,34 @@ from hcmai.common.schemas import (
     OCREvidence,
     ProcessingStatus,
 )
-from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
+from hcmai.common.utils.io import atomic_write, read_json, write_json
 from hcmai.data.enrichment.bundle import publish_staged_bundle
-from hcmai.data.stores.frame import FrameStore
 
 from .config import FrameContextConfig
 from .serializer import serialize_frame_context
 
 
 _EvidenceT = TypeVar("_EvidenceT", CaptionEvidence, OCREvidence, ObjectEvidence)
+_BATCH_SIZE = 4_096
+
+_CONTEXT_SCHEMA = pa.schema([
+    pa.field("frame_id", pa.string(), nullable=False),
+    pa.field("video_id", pa.string(), nullable=False),
+    pa.field("frame_idx", pa.int64(), nullable=False),
+    pa.field("timestamp_ms", pa.int64(), nullable=False),
+    pa.field("caption_text", pa.string()),
+    pa.field("ocr_text", pa.string()),
+    pa.field("object_summary", pa.string()),
+    pa.field("context_text", pa.string()),
+    pa.field("caption_available", pa.bool_(), nullable=False),
+    pa.field("ocr_quality", pa.float64(), nullable=False),
+    pa.field("object_count", pa.int64(), nullable=False),
+    pa.field("context_version", pa.string(), nullable=False),
+    pa.field("caption_version", pa.string(), nullable=False),
+    pa.field("ocr_version", pa.string(), nullable=False),
+    pa.field("object_version", pa.string(), nullable=False),
+    pa.field("frame_store_id", pa.string()),
+])
 
 
 def _optional(value: object) -> object | None:
@@ -104,15 +126,51 @@ def _resolve_lineage(
     return resolved
 
 
-def _read_table(path: Path, name: str) -> pd.DataFrame:
-    """Read a required Parquet artifact without masking schema/read failures."""
+def _iter_parquet_rows(
+    path: Path,
+    name: str,
+    *,
+    columns: list[str] | None = None,
+    batch_size: int | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Yield Parquet rows in bounded batches without materializing a table."""
 
     if not path.is_file():
         raise FileNotFoundError(f"required {name} artifact not found: {path}")
+    effective_batch_size = batch_size or _BATCH_SIZE
     try:
-        return pd.read_parquet(path)
+        parquet = pq.ParquetFile(path)
+        for batch in parquet.iter_batches(
+            batch_size=effective_batch_size,
+            columns=columns,
+            use_threads=True,
+        ):
+            yield from cast(Iterable[dict[str, Any]], batch.to_pylist())
     except Exception as error:
         raise ValueError(f"malformed {name} artifact: {path}") from error
+
+
+def _read_canonical_frames(path: Path) -> list[FrameRecord]:
+    """Validate canonical frames while avoiding FrameStore's extra indexes."""
+
+    columns = list(FrameRecord.model_fields)
+    frames: list[FrameRecord] = []
+    seen: set[str] = set()
+    for raw in _iter_parquet_rows(path, "canonical frames", columns=columns):
+        values = {
+            name: _optional(raw.get(name))
+            for name in columns
+            if name in raw
+        }
+        try:
+            frame = FrameRecord.model_validate(values)
+        except Exception as error:
+            raise ValueError("malformed canonical frame row") from error
+        if frame.frame_id in seen:
+            raise ValueError("canonical frame store contains duplicate frame_id values")
+        seen.add(frame.frame_id)
+        frames.append(frame)
+    return frames
 
 
 def _strict_integer(value: object, field: str) -> int:
@@ -170,7 +228,7 @@ def _object_values(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validated_rows(
-    table: pd.DataFrame,
+    raw_rows: Iterable[dict[str, Any]],
     name: str,
     contract: type[_EvidenceT],
     version: str,
@@ -179,16 +237,12 @@ def _validated_rows(
 ) -> dict[str, _EvidenceT]:
     """Validate specialist rows, uniqueness, canonical identity, and lineage."""
 
-    if "frame_id" not in table.columns:
-        raise ValueError(f"{name} artifact is missing frame_id")
-    frame_ids = table["frame_id"].map(lambda value: str(value)).tolist()
-    if len(frame_ids) != len(set(frame_ids)):
-        raise ValueError(f"{name} artifact contains duplicate frame_id values")
-
     rows: dict[str, _EvidenceT] = {}
-    for raw in cast(list[dict[str, Any]], table.to_dict(orient="records")):
+    for raw in raw_rows:
         raw_frame_id = raw.get("frame_id")
         raw_video_id = raw.get("video_id")
+        if "frame_id" not in raw:
+            raise ValueError(f"{name} artifact is missing frame_id")
         raw_frame_idx = _strict_integer(raw.get("frame_idx"), "frame_idx")
         raw_timestamp_ms = _strict_integer(
             raw.get("timestamp_ms"), "timestamp_ms"
@@ -202,6 +256,8 @@ def _validated_rows(
             or raw_video_id.strip() != raw_video_id
         ):
             raise ValueError(f"{name} row has non-canonical string identity")
+        if raw_frame_id in rows:
+            raise ValueError(f"{name} artifact contains duplicate frame_id values")
         values = (
             _object_values(raw)
             if contract is ObjectEvidence
@@ -332,11 +388,41 @@ def _build_context_rows(
     return contexts
 
 
+def _context_batches(
+    frames: list[FrameRecord],
+    caption_rows: dict[str, CaptionEvidence],
+    ocr_rows: dict[str, OCREvidence],
+    object_rows: dict[str, ObjectEvidence],
+    config: FrameContextConfig,
+    *,
+    caption_version: str,
+    ocr_version: str,
+    object_version: str,
+    frame_store_id: str | None,
+    batch_size: int | None = None,
+) -> Iterator[list[FrameContext]]:
+    """Yield derived context rows in bounded batches for writing/validation."""
+
+    effective_batch_size = batch_size or _BATCH_SIZE
+    for start in range(0, len(frames), effective_batch_size):
+        yield _build_context_rows(
+            frames[start : start + effective_batch_size],
+            caption_rows,
+            ocr_rows,
+            object_rows,
+            config,
+            caption_version=caption_version,
+            ocr_version=ocr_version,
+            object_version=object_version,
+            frame_store_id=frame_store_id,
+        )
+
+
 def _valid_existing_bundle(
     context_path: Path,
     manifest_path: Path,
     identity: dict[str, Any],
-    expected_rows: list[FrameContext],
+    expected_batches: Iterable[list[FrameContext]],
 ) -> bool:
     """Accept resume only when identity and every serialized row field match."""
 
@@ -345,34 +431,45 @@ def _valid_existing_bundle(
     try:
         if read_json(manifest_path) != identity:
             return False
-        table = pd.read_parquet(context_path)
-        if table.columns.tolist() != list(FrameContext.model_fields):
+        parquet = pq.ParquetFile(context_path)
+        if parquet.schema.names != list(FrameContext.model_fields):
             return False
-        raw_rows = [
-            {key: _optional(value) for key, value in raw.items()}
-            for raw in cast(list[dict[str, Any]], table.to_dict(orient="records"))
-        ]
-        for raw in raw_rows:
-            FrameContext.model_validate(raw)
     except Exception:
         return False
-    expected = [row.model_dump(mode="json") for row in expected_rows]
-    if len(raw_rows) != len(expected):
-        return False
 
-    # Contract validation above protects field semantics. This raw comparison
-    # independently prevents Pydantic stripping/coercion from hiding corruption.
-    for actual, expected_row in zip(raw_rows, expected, strict=True):
-        if list(actual) != list(expected_row):
-            return False
-        for key, expected_value in expected_row.items():
-            actual_value = actual[key]
-            if (
-                type(actual_value) is not type(expected_value)
-                or actual_value != expected_value
-            ):
+    try:
+        actual_rows = _iter_parquet_rows(context_path, "context")
+        expected_rows = (
+            row
+            for batch in expected_batches
+            for row in batch
+        )
+        sentinel = object()
+        while True:
+            actual = next(actual_rows, sentinel)
+            expected = next(expected_rows, sentinel)
+            if actual is sentinel or expected is sentinel:
+                return actual is sentinel and expected is sentinel
+            raw = {
+                key: _optional(value)
+                for key, value in cast(dict[str, Any], actual).items()
+            }
+            expected_row = cast(FrameContext, expected).model_dump(mode="json")
+            if list(raw) != list(expected_row):
                 return False
-    return True
+            FrameContext.model_validate(raw)
+            # Contract validation above protects field semantics. This raw
+            # comparison independently prevents Pydantic stripping/coercion
+            # from hiding corruption.
+            for key, expected_value in expected_row.items():
+                actual_value = raw[key]
+                if (
+                    type(actual_value) is not type(expected_value)
+                    or actual_value != expected_value
+                ):
+                    return False
+    except Exception:
+        return False
 
 
 def _publish_staged_bundle(
@@ -385,10 +482,10 @@ def _publish_staged_bundle(
 
 def _write_bundle(
     output: Path,
-    rows: list[FrameContext],
+    batches_factory: Callable[[], Iterable[list[FrameContext]]],
     identity: dict[str, Any],
 ) -> Path:
-    """Stage, validate, and atomically publish the complete context bundle."""
+    """Stage, validate, and atomically publish a bounded context bundle."""
 
     output.mkdir(parents=True, exist_ok=True)
     context_path = output / "frame_context_v1.parquet"
@@ -397,19 +494,31 @@ def _write_bundle(
         output / ".frame_context_v1.parquet.staged",
         output / ".manifest.json.staged",
     )
+    writer: pq.ParquetWriter | None = None
     try:
-        table = pd.DataFrame(
-            [row.model_dump(mode="json") for row in rows],
-            columns=list(FrameContext.model_fields),
-        )
-        atomic_write(
-            staged[0], lambda path: write_parquet(table, path, index=False)
-        )
+        for batch in batches_factory():
+            if not batch:
+                continue
+            table = pa.Table.from_pylist(
+                [row.model_dump(mode="json") for row in batch],
+                schema=_CONTEXT_SCHEMA,
+            )
+            if writer is None:
+                writer = pq.ParquetWriter(str(staged[0]), _CONTEXT_SCHEMA)
+            writer.write_table(table)
+        if writer is None:
+            raise ValueError("cannot publish an empty FrameContext bundle")
+        writer.close()
+        writer = None
         atomic_write(staged[1], lambda path: write_json(identity, path))
-        if not _valid_existing_bundle(staged[0], staged[1], identity, rows):
+        if not _valid_existing_bundle(
+            staged[0], staged[1], identity, batches_factory()
+        ):
             raise ValueError("staged FrameContext bundle failed validation")
         _publish_staged_bundle(staged, (context_path, manifest_path))
     finally:
+        if writer is not None:
+            writer.close()
         for path in staged:
             path.unlink(missing_ok=True)
     return context_path
@@ -434,7 +543,10 @@ def build_frame_context(
     frames_file, caption_file, ocr_file, object_file = paths
 
     # Validate every prerequisite before creating or replacing context output.
-    frames = list(FrameStore.load(frames_file).iter_frames())
+    # The canonical reader uses bounded Arrow batches and keeps only the small
+    # identity list needed for specialist joins; it does not build FrameStore's
+    # runtime indexes for this offline materialization step.
+    frames = _read_canonical_frames(frames_file)
     if not frames:
         raise ValueError("canonical frame store must contain at least one frame")
     canonical_order = [frame.frame_id for frame in frames]
@@ -458,7 +570,7 @@ def build_frame_context(
     object_version = cast(str, object_manifest["artifact_version"])
 
     caption_rows = _validated_rows(
-        _read_table(caption_file, "caption"),
+        _iter_parquet_rows(caption_file, "caption"),
         "caption",
         CaptionEvidence,
         caption_version,
@@ -466,7 +578,7 @@ def build_frame_context(
         lineage,
     )
     ocr_rows = _validated_rows(
-        _read_table(ocr_file, "OCR"),
+        _iter_parquet_rows(ocr_file, "OCR"),
         "OCR",
         OCREvidence,
         ocr_version,
@@ -474,7 +586,7 @@ def build_frame_context(
         lineage,
     )
     object_rows = _validated_rows(
-        _read_table(object_file, "object"),
+        _iter_parquet_rows(object_file, "object"),
         "object",
         ObjectEvidence,
         object_version,
@@ -490,7 +602,7 @@ def build_frame_context(
         "frame_store_id": lineage,
         "serializer_config": _serializer_identity(config),
     }
-    contexts = _build_context_rows(
+    batches_factory = lambda: _context_batches(
         frames,
         caption_rows,
         ocr_rows,
@@ -504,9 +616,11 @@ def build_frame_context(
     output = Path(output_dir)
     context_path = output / "frame_context_v1.parquet"
     manifest_path = output / "manifest.json"
-    if _valid_existing_bundle(context_path, manifest_path, identity, contexts):
+    if _valid_existing_bundle(
+        context_path, manifest_path, identity, batches_factory()
+    ):
         return context_path
-    return _write_bundle(output, contexts, identity)
+    return _write_bundle(output, batches_factory, identity)
 
 
 __all__ = ["build_frame_context"]

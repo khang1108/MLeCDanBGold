@@ -248,6 +248,31 @@ def test_builder_writes_canonical_rows_and_lineage(tmp_path: Path) -> None:
     assert "asr" not in json.dumps(manifest).casefold()
 
 
+def test_builder_publishes_multiple_bounded_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Write a fixture larger than one builder batch without changing output order."""
+
+    monkeypatch.setattr(
+        "hcmai.data.enrichment.context.builder._BATCH_SIZE", 2
+    )
+    frames, caption, ocr, objects = _artifacts(tmp_path, count=5)
+
+    path = build_frame_context(
+        frames,
+        caption,
+        ocr,
+        objects,
+        tmp_path / "context",
+        FrameContextConfig(),
+        frame_store_id="btc-v1",
+    )
+
+    rows = pd.read_parquet(path)
+    assert len(rows) == 5
+    assert rows.frame_id.iloc[[0, -1]].tolist() == ["f0", "f4"]
+
+
 @pytest.mark.parametrize("source", ["caption", "ocr", "object"])
 def test_builder_rejects_specialist_timestamp_mismatch(
     tmp_path: Path, source: str
