@@ -24,6 +24,10 @@ def test_baseline_config_matches_runtime_contract() -> None:
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
     assert config.index.path.as_posix() == "artifacts/indexes/visual"
+    assert config.index.profile == "context_asr_segment"
+    assert config.index.context_path.as_posix() == "artifacts/indexes/context"
+    assert config.index.asr_segment_path.as_posix() == "artifacts/indexes/asr_segments"
+    assert config.index.asr_projection_max_gap_ms == 5_000
     assert config.index.caption_path.as_posix() == "artifacts/indexes/caption"
     assert config.index.ocr_path.as_posix() == "artifacts/indexes/ocr"
     assert config.index.asr_path.as_posix() == "artifacts/indexes/asr"
