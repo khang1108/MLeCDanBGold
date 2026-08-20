@@ -14,9 +14,10 @@ export const displayVideoId = (videoId) => {
 };
 
 export const s3VideoObjectKey = (videoId) => {
-  const parts = String(videoId || '').split('.');
-  if (!parts.every(isSafeKeyPart)) return null;
-  return ['data', ...parts].join('/') + '.mp4';
+  const vidStr = String(videoId || '');
+  if (!vidStr || !isSafeKeyPart(vidStr)) return null;
+  const folder = vidStr.split('_')[0];
+  return `data/${folder}/${vidStr}.mp4`;
 };
 
 export const getS3VideoUrl = async (videoId, config = s3Config()) => {

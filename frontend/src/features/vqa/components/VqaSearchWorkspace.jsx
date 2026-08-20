@@ -5,19 +5,21 @@ import FrameCard from "../../frames/components/FrameCard";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 import { displayVideoId } from "../../frames/videoSource";
+import FileSelectionModal from "../../submission/components/FileSelectionModal";
+import { useSubmission } from "../../submission/contexts/SubmissionContext";
 
-const RETRIEVAL_PREFIX = /^\/(kis|tkis|vkis)\b\s*/i;
-const ANY_PREFIX = /^\/(vqa|kis|tkis|vkis|trake)\b\s*/i;
+const RETRIEVAL_PREFIX = /^\/(kis)\b\s*/i;
+const ANY_PREFIX = /^\/(vqa|kis|trake)\b\s*/i;
 const TRAKE_PREFIX = /^\/trake\b\s*/i;
 const SESSION_FINGERPRINT_KEY = "hcmai.session.fingerprint";
 const SEARCH_ID_PREFIX = "hcmai.progressive.search_id";
-const PROGRESSIVE_TASKS = ["kis", "vkis", "vqa"];
+const PROGRESSIVE_TASKS = ["kis", "vqa"];
 
 export const parseRetrievalDescription = (description) => {
   const match = description.match(RETRIEVAL_PREFIX);
   if (!match) return null;
   const rawType = match[1].toLowerCase();
-  const queryType = rawType === "tkis" ? "kis" : rawType;
+  const queryType = rawType;
   const query = description.slice(match[0].length).trim();
   return query ? { queryType, query } : null;
 };
@@ -78,7 +80,7 @@ export const groupTrakeFramesByVideo = (submissions, events) => {
   })).sort((left, right) => left.best_rank - right.best_rank || left.video_id.localeCompare(right.video_id));
 };
 
-const TrakeResults = ({ events, submissions, warnings, error, hasSearched, onFrameClick }) => (
+const TrakeResults = ({ events, submissions, warnings, error, hasSearched, onFrameClick, onTrakeSubmit, onFrameSubmit }) => (
   <section className="frames-container" aria-label="TRAKE ordered paths">
     {error && (
       <div className="error-alert" role="alert">
@@ -98,13 +100,24 @@ const TrakeResults = ({ events, submissions, warnings, error, hasSearched, onFra
       <div className="frames-scroll-region">
         {groupTrakeFramesByVideo(submissions, events).map((group) => (
           <article className="trake-video-group" key={group.video_id} aria-label={`TRAKE frames for ${displayVideoId(group.video_id)}`}>
-            <h3>{displayVideoId(group.video_id)}</h3>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {displayVideoId(group.video_id)}
+              <button 
+                className="btn-secondary" 
+                style={{ padding: '2px 6px', fontSize: '12px' }}
+                onClick={() => onTrakeSubmit(group)}
+                title="Submit this TRAKE path"
+              >
+                ⬆
+              </button>
+            </h3>
             <div className="frames-grid">
               {group.frames.map((frame) => (
                 <FrameCard
                   key={`${frame.frame_id}-${frame.submission_rank}-${frame.event_index}`}
                   frame={frame}
                   onClick={() => onFrameClick?.(frame)}
+                  onSubmit={onFrameSubmit}
                 />
               ))}
             </div>
@@ -138,6 +151,24 @@ const VqaSearchWorkspace = ({
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
   const [vqaLatencyMs, setVqaLatencyMs] = useState(null);
   const [error, setError] = useState(null);
+  const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const { appendLine } = useSubmission();
+
+  const handleFrameSubmit = (frame) => {
+    const vid = displayVideoId(frame.video_id);
+    if (resultType === 'vqa') {
+      const answer = frame.answer ? frame.answer.replace(/"/g, '""') : '';
+      appendLine(`${vid},${frame.frame_idx},"${answer}"`);
+    } else {
+      appendLine(`${vid},${frame.frame_idx}`);
+    }
+  };
+
+  const handleTrakeSubmit = (group) => {
+    const vid = displayVideoId(group.video_id);
+    const framesStr = group.frames.map(f => f.frame_idx).join(',');
+    appendLine(`${vid},${framesStr}`);
+  };
   const [isSearching, setIsSearching] = useState(false);
   const requestRef = useRef(null);
 
@@ -167,7 +198,7 @@ const VqaSearchWorkspace = ({
       retrieval = parseRetrievalDescription(rawEventText);
       if (!retrieval) {
         setResultType(null);
-        setError("Without a question, Event description must start with /tkis, /vkis, or /trake.");
+        setError("Without a question, Event description must start with /kis or /trake.");
         return;
       }
     }
@@ -260,6 +291,25 @@ const VqaSearchWorkspace = ({
     setVqaLatencyMs(null);
   }, []);
 
+
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      if (event.key.toLowerCase() === 'n') {
+        event.preventDefault();
+        handleNewQuestion();
+      } else if (event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        setIsFileModalOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNewQuestion]);
+
   const vqaFrames = submissions.map((submission) => ({
     ...submission,
     scores: { final: submission.joint_score },
@@ -280,7 +330,7 @@ const VqaSearchWorkspace = ({
               rows={1}
               value={eventDescription}
               onChange={(event) => setEventDescription(event.target.value)}
-              placeholder="Event query (/tkis, /vkis, /trake)..."
+              placeholder="Event query (/kis, /trake)..."
               onFocus={onFocusQueryInput}
               onBlur={onBlurQueryInput}
               disabled={isSearching}
@@ -310,7 +360,10 @@ const VqaSearchWorkspace = ({
           >
             {isSearching ? "Searching..." : "Search"}
           </button>
-          <button type="button" className="btn-secondary" onClick={handleNewQuestion}>
+          <button type="button" className="btn-secondary" onClick={() => setIsFileModalOpen(true)} title="Shortcut: F">
+            Choose CSV
+          </button>
+          <button type="button" className="btn-secondary" onClick={handleNewQuestion} title="Shortcut: N">
             New Question
           </button>
         </div>
@@ -331,6 +384,8 @@ const VqaSearchWorkspace = ({
               error={error}
               hasSearched
               onFrameClick={onFrameClick}
+              onTrakeSubmit={handleTrakeSubmit}
+              onFrameSubmit={handleFrameSubmit}
             />
           )}
           {!isSearching && resultType === "retrieval" && (
@@ -341,6 +396,7 @@ const VqaSearchWorkspace = ({
               latencyMs={searchLatencyMs}
               warnings={warnings}
               onFrameClick={onFrameClick}
+              onSubmit={handleFrameSubmit}
             />
           )}
           {!isSearching && resultType !== "trake" && resultType !== "retrieval" && (
@@ -351,10 +407,12 @@ const VqaSearchWorkspace = ({
               latencyMs={vqaLatencyMs}
               warnings={warnings}
               onFrameClick={onFrameClick}
+              onSubmit={handleFrameSubmit}
             />
           )}
         </div>
       </div>
+      <FileSelectionModal isOpen={isFileModalOpen} onClose={() => setIsFileModalOpen(false)} />
     </div>
   );
 };

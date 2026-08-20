@@ -10,6 +10,8 @@ const VimHelpModal = ({ isOpen, onClose }) => {
       desc: "Exit INSERT mode back to NORMAL mode (or close popups)",
     },
     { key: "t", desc: "Set Top-K number (Quick prompt)" },
+    { key: "f", desc: "Open CSV File Selection & Edit Mode" },
+    { key: "n", desc: "Start a New Question (reset workspace)" },
     { key: "?", desc: "Toggle this Vim Keyboard Shortcuts help cheat sheet" },
   ];
 

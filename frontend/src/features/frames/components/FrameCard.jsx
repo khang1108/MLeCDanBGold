@@ -7,8 +7,10 @@ const FrameCard = ({
   frame,
   feedbackState,
   onClick,
+  onSubmit,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const previewUrl = frame.thumbnail_url || frame.frame_url;
   const hasScore = Number.isFinite(frame.scores?.final);
   const hasTimestamp = Number.isFinite(frame.timestamp_ms);
@@ -18,6 +20,16 @@ const FrameCard = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
+
+  const submitFrame = (event) => {
+    event.stopPropagation();
+    if (onSubmit) {
+      onSubmit(frame);
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 1200);
+    }
+  };
+
   return (
     <div
       className="frame-card"
@@ -25,9 +37,19 @@ const FrameCard = ({
     >
       <div className="frame-card-header">
         <span className="frame-index-text">
-          {displayVideoId(frame.video_id)} &middot; frame {frame.frame_idx}
+          {displayVideoId(frame.video_id)}, {frame.frame_idx}
         </span>
-        <div className="frame-card-actions">
+        <div className="frame-card-actions" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+          {onSubmit && (
+            <button
+              className={`card-copy-btn ${submitted ? "copied" : ""}`}
+              onClick={submitFrame}
+              title="Submit this frame"
+              style={{ marginRight: '4px' }}
+            >
+              {submitted ? "✓" : "⬆"}
+            </button>
+          )}
           <button
             className={`card-copy-btn ${copied ? "copied" : ""}`}
             onClick={copy}
