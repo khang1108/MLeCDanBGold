@@ -40,6 +40,7 @@ def _corpus(tmp_path: Path) -> tuple[Path, Path]:
             "video_id": "L21_V001",
             "frame_idx": order * 90,
             "timestamp_ms": order * 3000,
+            "keyframe_order": order,
             "image_path": f"keyframes/L21_V001/{order:03d}.jpg",
         }
         for order in (1, 2, 3)
@@ -61,6 +62,7 @@ def test_pipeline_resolves_relative_paths_and_aligns_artifacts(
         encoder_config=config,
         dataset_version="fixture-v1",
         encoder=FakeEncoder(config),
+        strict=False,
     )
 
     metadata = pipeline.run()
@@ -70,6 +72,7 @@ def test_pipeline_resolves_relative_paths_and_aligns_artifacts(
     assert vectors.shape == (2, 3)
     assert mapping["frame_id"].tolist() == ["frame-1", "frame-2"]
     assert mapping["embedding_index"].tolist() == [0, 1]
+    assert mapping["keyframe_order"].tolist() == [1, 2]
     assert metadata.total_frames == 3
     assert metadata.successful_frames == 2
     assert metadata.failed_frames == 1
@@ -85,4 +88,7 @@ def test_embedding_metadata_round_trip() -> None:
         "normalization": "l2", "generated_at": "2026-01-01",
         "device": "cpu", "batch_size": 2, "processing_time_sec": 0.1,
     }
-    assert EmbeddingMetadata.from_dict(values).to_dict() == values
+    metadata = EmbeddingMetadata.from_dict(values)
+    assert metadata.model_revision is None
+    assert metadata.source_fingerprint is None
+    assert metadata.schema_version == "visual-embedding-v2"

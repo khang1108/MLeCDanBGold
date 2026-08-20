@@ -97,6 +97,7 @@ def _setup_fixture(tmp_path: Path, paths: PreparationPaths) -> None:
             "video_id": "L21_V001",
             "frame_idx": order * 90,
             "timestamp_ms": order * 3000,
+            "keyframe_order": order,
             "image_path": f"keyframes/L21_V001/{order:03d}.jpg",
             "width": 8,
             "height": 6,

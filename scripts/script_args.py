@@ -22,6 +22,24 @@ def parse_arguments(command: str) -> argparse.Namespace:
         parser.add_argument("--frames")
         parser.add_argument("--dataset-root")
         parser.add_argument("--output", default="artifacts")
+        parser.add_argument(
+            "--strict",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="Refuse publication unless every canonical visual frame is encoded.",
+        )
+        parser.add_argument(
+            "--resume",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="Reuse only valid completed canonical-row embedding shards.",
+        )
+        parser.add_argument(
+            "--shard-size",
+            type=int,
+            default=2_048,
+            help="Canonical frame rows per resumable visual embedding shard.",
+        )
         parser.add_argument("--log-file")
     elif command == "build_index":
         parser.add_argument("--embeddings", required=True)

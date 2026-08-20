@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
-import sys
+import shutil
 from pathlib import Path
+from tempfile import mkdtemp
 from typing import Any
 
 import numpy as np
 
 from hcmai.common.utils.io import read_parquet, read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
+from hcmai.retrieval.embedding.models.metadata import EmbeddingMetadata
 from hcmai.llm.pipeline import LLMServiceConfig
 from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.artifacts import publish_directory
+from hcmai.retrieval.retriever.dense.index import DenseIndex
 from script_args import parse_arguments
 
 logger = get_logger(__name__)
@@ -34,17 +38,18 @@ def _index_output_dir(config: dict[str, Any], output_dir: Path) -> Path:
     return path
 
 
-def _build_index(
-    run: Any,
+def _build_staged_index(
+    embeddings_file: Path,
+    mapping_file: Path,
+    metadata: EmbeddingMetadata,
     config: dict[str, Any],
-    output_dir: Path,
+    index_dir: Path,
 ) -> None:
-    """Build FAISS from one completed embedding run."""
-    if not run.generated_count:
+    """Write and validate an unpublished DenseIndex from complete embeddings."""
+    if not metadata.successful_frames:
         raise RuntimeError("No embeddings were generated")
-    embeddings = np.load(run.embeddings_file, mmap_mode="r")
-    mapping = read_parquet(run.mapping_file)
-    metadata = run.metadata
+    embeddings = np.load(embeddings_file, mmap_mode="r")
+    mapping = read_parquet(mapping_file)
     index = RetrievalService.build_index(
         embeddings,
         mapping,
@@ -52,8 +57,9 @@ def _build_index(
         model_name=metadata.model_name,
         index_type=config.get("index", {}).get("type", "flat_ip"),
     )
-    index_dir = _index_output_dir(config, output_dir)
-    index.save(index_dir)
+    index_dir.mkdir(parents=True, exist_ok=False)
+    index._write_bundle(index_dir)
+    DenseIndex.load(index_dir)
     logger.info(
         "FAISS index saved to %s",
         index_dir / RetrievalService.INDEX_FILENAME,
@@ -61,7 +67,7 @@ def _build_index(
 
 
 def _run(args: Any) -> None:
-    """Generate embeddings and their exact index."""
+    """Stage, validate, and atomically publish visual embeddings and index."""
     config_path = Path(args.config)
     if not config_path.is_file():
         raise FileNotFoundError(f"Config file not found: {config_path}")
@@ -77,16 +83,52 @@ def _run(args: Any) -> None:
         raise FileNotFoundError(f"Frames file not found: {frames_path}")
     if not dataset_root.is_dir():
         raise FileNotFoundError(f"Dataset root not found: {dataset_root}")
-    output_dir = Path(args.output)
+    output_dir = Path(args.output).expanduser().resolve()
+    index_dir = _index_output_dir(config, output_dir).resolve()
+    try:
+        staged_index_relative = index_dir.relative_to(output_dir)
+    except ValueError as error:
+        raise ValueError(
+            "index.path must be inside --output so visual artifacts and their "
+            "DenseIndex can be published together"
+        ) from error
+
     model_config = LLMServiceConfig.from_yaml(args.model_config)
-    run = EmbeddingService.build_visual_artifacts(
-        frames_path=frames_path,
-        dataset_root=dataset_root,
-        output_dir=output_dir,
-        encoder_config=model_config.visual_embedding,
-        dataset_version=dataset.get("version", "unknown"),
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(
+        mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent)
     )
-    _build_index(run, config, output_dir)
+    try:
+        previous_shards = output_dir / "embeddings" / "shards"
+        if args.resume and previous_shards.is_dir():
+            # Preserve completed checkpoints across publication generations;
+            # the builder still validates IDs and vector shape before reuse.
+            shutil.copytree(previous_shards, staging_dir / "embeddings" / "shards")
+        builder = EmbeddingArtifactBuilder(
+            frames_path=frames_path,
+            dataset_root=dataset_root,
+            output_dir=staging_dir,
+            encoder_config=model_config.visual_embedding,
+            dataset_version=dataset.get("version", "unknown"),
+            strict=args.strict,
+            resume=args.resume,
+            shard_size=args.shard_size,
+        )
+        metadata = builder.run()
+        if args.strict and metadata.successful_frames != metadata.total_frames:
+            raise RuntimeError("Visual build does not have complete visual coverage")
+        _build_staged_index(
+            builder.embeddings_file,
+            builder.mapping_file,
+            metadata,
+            config,
+            staging_dir / staged_index_relative,
+        )
+        publish_directory(staging_dir, output_dir)
+    except Exception:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
 
 
 def main() -> int:
