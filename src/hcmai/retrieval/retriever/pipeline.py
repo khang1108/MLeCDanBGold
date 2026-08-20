@@ -12,6 +12,7 @@ import pandas as pd
 from hcmai.common.config import FusionConfig, RetrievalCacheConfig
 from hcmai.common.schemas import RetrievalResult, RetrievalSource, TaskType
 from hcmai.common.schemas.search import SearchFilters
+from hcmai.data.stores.frame import FrameStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME, DenseIndex
 from hcmai.retrieval.retriever.cache import CacheMetricsSnapshot, EmbeddingCache
@@ -24,6 +25,7 @@ from hcmai.retrieval.retriever.segment.artifacts import (
     build_asr_segment_artifacts as build_segment_artifacts,
 )
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+from hcmai.retrieval.retriever.segment.retriever import ASRSegmentRetriever
 from hcmai.retrieval.retriever.text.artifacts import (
     build_context_artifacts,
     build_text_artifacts,
@@ -108,6 +110,74 @@ class RetrievalService:
             )
             for source, index in text_indexes.items()
         )
+        if len(retrievers) == 1:
+            return cls(retrievers[0])
+        return cls(RRFFusionRetriever(retrievers, fusion))
+
+    @classmethod
+    def from_fast_track_indexes(
+        cls,
+        *,
+        visual_index: DenseIndex,
+        visual_encoder: TextEmbeddingAdapter,
+        context_index: DenseIndex | None,
+        asr_segment_index: SegmentDenseIndex | None,
+        text_encoder: TextEmbeddingAdapter | None,
+        frame_store: FrameStore,
+        fusion: FusionConfig,
+        cache_config: RetrievalCacheConfig | None = None,
+        max_projection_gap_ms: int = 5_000,
+    ) -> "RetrievalService":
+        """Compose the explicit Visual, Context, and segment-ASR fast track.
+
+        Context and ASR are optional, but either one requires the shared text
+        query encoder.  ASR candidates are projected to canonical frame IDs by
+        ``ASRSegmentRetriever`` before reciprocal-rank fusion sees them.
+        """
+
+        has_text_index = context_index is not None or asr_segment_index is not None
+        if has_text_index and text_encoder is None:
+            raise ValueError(
+                "text_encoder is required when Context or ASR segment indexes "
+                "are configured"
+            )
+
+        cache = _embedding_cache(cache_config)
+        prompt_version = (
+            cache_config.prompt_version if cache_config is not None else "query-v1"
+        )
+        retrievers: list[Retriever] = [
+            DenseRetriever(
+                visual_encoder,
+                visual_index,
+                RetrievalSource.VISUAL,
+                embedding_cache=cache,
+                prompt_version=prompt_version,
+            )
+        ]
+        if context_index is not None:
+            assert text_encoder is not None
+            retrievers.append(
+                ContextRetriever(
+                    text_encoder,
+                    context_index,
+                    cache,
+                    prompt_version,
+                )
+            )
+        if asr_segment_index is not None:
+            assert text_encoder is not None
+            retrievers.append(
+                ASRSegmentRetriever(
+                    text_encoder,
+                    asr_segment_index,
+                    frame_store,
+                    cache,
+                    prompt_version,
+                    max_projection_gap_ms,
+                )
+            )
+
         if len(retrievers) == 1:
             return cls(retrievers[0])
         return cls(RRFFusionRetriever(retrievers, fusion))
