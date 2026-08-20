@@ -26,6 +26,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Root used to resolve relative BTC image paths",
     )
     parser.add_argument(
+        "--mapping-root",
+        type=Path,
+        default=Path("data/map_keyframes"),
+        help="BTC map_keyframes directory containing per-video CSV files",
+    )
+    parser.add_argument(
         "--output-root",
         type=Path,
         default=Path("runs/btc-keyframes-v1/artifacts/frame_store"),
@@ -44,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     output = import_btc_frame_store(
         BTCIngestionConfig(
             btc_root=args.btc_root,
+            mapping_root=args.mapping_root,
             data_root=args.data_root,
             output_root=args.output_root,
             frame_store_id=args.frame_store_id,

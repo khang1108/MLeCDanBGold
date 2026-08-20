@@ -2,6 +2,7 @@ dataset:
   version: "hcmai2026_v1"
   source: "btc_keyframes"
   btc_root: "data"
+  mapping_root: "data/map_keyframes"
   data_root: "data"
   frame_store_id: "btc-keyframes-v1"
   frames_path: "artifacts/frame_store/frames.parquet"

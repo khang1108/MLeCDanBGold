@@ -17,6 +17,7 @@ from hcmai.common.utils.io import (
     write_json,
     write_parquet,
 )
+from hcmai.data.ingestion.keyframe_map import join_btc_mapping, load_btc_keyframe_map
 
 
 logger = logging.getLogger(__name__)
@@ -27,9 +28,7 @@ _REQUIRED_COLUMNS = frozenset(
     {
         "frame_id",
         "video_id",
-        "frame_idx",
         "keyframe_order",
-        "timestamp_ms",
         "image_path",
         "width",
         "height",
@@ -42,6 +41,7 @@ class BTCIngestionConfig:
     """Paths and lineage used to materialize one canonical BTC frame store."""
 
     btc_root: Path
+    mapping_root: Path
     data_root: Path
     output_root: Path
     frame_store_id: str
@@ -49,27 +49,6 @@ class BTCIngestionConfig:
     def __post_init__(self) -> None:
         if not self.frame_store_id.strip():
             raise ValueError("frame_store_id must not be empty")
-
-
-def _compute_fps_per_video(frames: pd.DataFrame) -> dict[str, float]:
-    """Estimate per-video FPS while preserving BTC frame indices unchanged."""
-
-    fps_by_video: dict[str, float] = {}
-    for video_id, group in frames.groupby("video_id", sort=False):
-        valid = group[group["timestamp_ms"] > 0]
-        if len(valid) < 2:
-            fps_by_video[str(video_id)] = 30.0
-            continue
-
-        estimates = valid["frame_idx"] / (valid["timestamp_ms"] / 1000.0)
-        fps = float(np.median(estimates))
-        for standard_fps in (24.0, 25.0, 30.0):
-            if abs(fps - standard_fps) < 1.5:
-                fps = standard_fps
-                break
-        fps_by_video[str(video_id)] = fps
-
-    return fps_by_video
 
 
 def _validate_source_columns(frames: pd.DataFrame, source_path: Path) -> None:
@@ -157,7 +136,6 @@ def _build_canonical_rows(
     source_frames: pd.DataFrame,
     *,
     data_root: Path,
-    fps_by_video: dict[str, float],
 ) -> pd.DataFrame:
     records = cast(list[dict[str, Any]], source_frames.to_dict(orient="records"))
     canonical_records: list[FrameRecord] = []
@@ -172,7 +150,8 @@ def _build_canonical_rows(
                     "frame_idx": row["frame_idx"],
                     "keyframe_order": row["keyframe_order"],
                     "timestamp_ms": row["timestamp_ms"],
-                    "fps": fps_by_video.get(str(video_id), 30.0),
+                    # The BTC map carries exact per-video media FPS.
+                    "fps": row["fps"],
                     "image_path": _resolve_image_path(
                         data_root, row["image_path"]
                     ),
@@ -265,9 +244,9 @@ def _publish_staged_bundle(
 def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
     """Materialize BTC metadata as a canonical, lineage-stamped frame store.
 
-    The importer never invokes preprocessing. Source frame identifiers, frame
-    indices, keyframe order, and timestamps are preserved; only their pandas
-    scalar types are normalized for stable Parquet serialization.
+    The importer never invokes preprocessing. Internal source frame identities
+    are preserved, while BTC map_keyframes supplies authoritative competition
+    coordinates, timestamps, and FPS.
     """
 
     source_path = config.btc_root / "metadata" / "frames.parquet"
@@ -281,29 +260,34 @@ def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
         raise ValueError(
             f"BTC metadata {source_path} must contain at least one frame"
         )
-    source_frames = source_frames.sort_values(
-        ["video_id", "timestamp_ms"], kind="stable"
+    mapping = load_btc_keyframe_map(config.mapping_root)
+    source_frames = join_btc_mapping(source_frames, mapping).sort_values(
+        ["video_id", "keyframe_order"], kind="stable"
     ).reset_index(drop=True)
 
-    fps_by_video = _compute_fps_per_video(source_frames)
     canonical = _build_canonical_rows(
         source_frames,
         data_root=config.data_root,
-        fps_by_video=fps_by_video,
     )
     _warn_about_missing_images(canonical)
 
     video_count = len(set(canonical["video_id"].astype(str).tolist()))
+    mapping_video_count = len(set(mapping["video_id"].astype(str).tolist()))
     manifest = {
         "pipeline_version": _PIPELINE_VERSION,
         "source": _SOURCE,
         "frame_store_id": config.frame_store_id,
         "btc_root": str(config.btc_root.resolve()),
+        "mapping_root": str(config.mapping_root.resolve()),
         "video_count": video_count,
         "frame_count": int(len(canonical)),
+        "mapping_video_count": mapping_video_count,
+        "mapping_row_count": int(len(mapping)),
         "limited_run": False,
         "resume_enabled": False,
-        "fps_map_sample": dict(list(fps_by_video.items())[:5]),
+        "fps_map_sample": dict(
+            canonical.groupby("video_id", sort=True)["fps"].first().head(5).items()
+        ),
         **_submission_coordinate_diagnostics(canonical),
     }
 

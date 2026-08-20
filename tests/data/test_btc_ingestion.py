@@ -30,9 +30,27 @@ def _valid_btc_row(**updates: object) -> dict[str, object]:
 def _write_btc_metadata(
     root: Path, rows: list[dict[str, object]] | pd.DataFrame
 ) -> None:
+    """Write source metadata with a matching synthetic organizer mapping."""
+
     metadata = root / "metadata"
     metadata.mkdir(parents=True)
-    pd.DataFrame(rows).to_parquet(metadata / "frames.parquet", index=False)
+    frames = pd.DataFrame(rows)
+    frames.to_parquet(metadata / "frames.parquet", index=False)
+    if frames.empty:
+        return
+
+    mapping = root / "map_keyframes"
+    mapping.mkdir(exist_ok=True)
+    for video_id, video_frames in frames.groupby("video_id", sort=False):
+        ordered = video_frames.sort_values("keyframe_order", kind="stable")
+        pd.DataFrame(
+            {
+                "n": ordered["keyframe_order"].astype(int),
+                "pts_time": ordered["timestamp_ms"].astype(float) / 1000.0,
+                "fps": 29.97,
+                "frame_idx": ordered["frame_idx"].astype(int),
+            }
+        ).to_csv(mapping / f"{video_id}.csv", index=False)
 
 
 def test_btc_import_does_not_require_preprocessing_fields(
@@ -46,28 +64,15 @@ def test_btc_import_does_not_require_preprocessing_fields(
     )
 
     source = tmp_path / "btc"
-    (source / "metadata").mkdir(parents=True)
     keyframe = source / "keyframes" / "L01_V001" / "0000.jpg"
     keyframe.parent.mkdir(parents=True)
     Image.new("RGB", (32, 24)).save(keyframe)
-    pd.DataFrame(
-        [
-            {
-                "frame_id": "L01_V001:0000",
-                "video_id": "L01_V001",
-                "frame_idx": 120,
-                "keyframe_order": 1,
-                "timestamp_ms": 4000,
-                "image_path": "keyframes/L01_V001/0000.jpg",
-                "width": 32,
-                "height": 24,
-            }
-        ]
-    ).to_parquet(source / "metadata" / "frames.parquet", index=False)
+    _write_btc_metadata(source, [_valid_btc_row()])
 
     output = import_btc_frame_store(
         BTCIngestionConfig(
             btc_root=source,
+            mapping_root=source / "map_keyframes",
             data_root=source,
             output_root=tmp_path / "frame_store",
             frame_store_id="btc-test-v1",
@@ -114,6 +119,8 @@ def test_ingestion_cli_delegates_to_reusable_importer(
             str(tmp_path / "btc"),
             "--data-root",
             str(tmp_path / "data"),
+            "--mapping-root",
+            str(tmp_path / "map_keyframes"),
             "--output-root",
             str(tmp_path / "out"),
             "--frame-store-id",
@@ -124,6 +131,7 @@ def test_ingestion_cli_delegates_to_reusable_importer(
     assert exit_code == 0
     assert len(captured) == 1
     assert captured[0].btc_root == tmp_path / "btc"
+    assert captured[0].mapping_root == tmp_path / "map_keyframes"
     assert captured[0].data_root == tmp_path / "data"
     assert captured[0].output_root == tmp_path / "out"
     assert captured[0].frame_store_id == "btc-cli-v1"
@@ -135,24 +143,10 @@ def test_data_service_prepare_uses_btc_dataset_config(tmp_path, monkeypatch):
     from hcmai.data.pipeline import DataService
 
     source = tmp_path / "btc"
-    (source / "metadata").mkdir(parents=True)
     keyframe = source / "keyframes" / "L01_V001" / "0000.jpg"
     keyframe.parent.mkdir(parents=True)
     Image.new("RGB", (32, 24)).save(keyframe)
-    pd.DataFrame(
-        [
-            {
-                "frame_id": "L01_V001:0000",
-                "video_id": "L01_V001",
-                "frame_idx": 120,
-                "keyframe_order": 1,
-                "timestamp_ms": 4000,
-                "image_path": "keyframes/L01_V001/0000.jpg",
-                "width": 32,
-                "height": 24,
-            }
-        ]
-    ).to_parquet(source / "metadata" / "frames.parquet", index=False)
+    _write_btc_metadata(source, [_valid_btc_row()])
 
     output_root = tmp_path / "frame_store"
     config_path = tmp_path / "enrichment.yaml"
@@ -162,6 +156,7 @@ def test_data_service_prepare_uses_btc_dataset_config(tmp_path, monkeypatch):
                 "version": "hcmai2026-test-v1",
                 "source": "btc_keyframes",
                 "btc_root": str(source),
+                "mapping_root": str(source / "map_keyframes"),
                 "data_root": str(source),
                 "frame_store_id": "btc-service-v1",
                 "frames_path": str(output_root / "frames.parquet"),
@@ -197,6 +192,7 @@ def test_data_service_prepare_resolves_btc_paths_from_project_root(
                 "version": "hcmai2026-test-v1",
                 "source": "btc_keyframes",
                 "btc_root": "fixture/btc",
+                "mapping_root": "fixture/map_keyframes",
                 "data_root": "fixture/data",
                 "frame_store_id": "btc-cwd-v1",
                 "frames_path": "fixture/artifacts/frame_store/frames.parquet",
@@ -220,6 +216,7 @@ def test_data_service_prepare_resolves_btc_paths_from_project_root(
 
     assert output == project_root / "fixture/artifacts/frame_store/frames.parquet"
     assert captured[0].btc_root == project_root / "fixture/btc"
+    assert captured[0].mapping_root == project_root / "fixture/map_keyframes"
     assert captured[0].data_root == project_root / "fixture/data"
     assert captured[0].output_root == project_root / "fixture/artifacts/frame_store"
 
@@ -235,6 +232,7 @@ def test_data_service_prepare_rejects_non_btc_source(tmp_path):
                 "version": "hcmai2026-test-v1",
                 "source": "custom_videos",
                 "btc_root": str(tmp_path / "btc"),
+                "mapping_root": str(tmp_path / "map_keyframes"),
                 "data_root": str(tmp_path / "btc"),
                 "frame_store_id": "custom-v1",
                 "frames_path": str(output_root / "frames.parquet"),
@@ -287,24 +285,10 @@ def test_data_service_prepare_adaptive_keeps_legacy_local_entry(
 
 def test_prepare_data_cli_uses_btc_enrichment_config(tmp_path):
     source = tmp_path / "btc"
-    (source / "metadata").mkdir(parents=True)
     keyframe = source / "keyframes" / "L01_V001" / "0000.jpg"
     keyframe.parent.mkdir(parents=True)
     Image.new("RGB", (32, 24)).save(keyframe)
-    pd.DataFrame(
-        [
-            {
-                "frame_id": "L01_V001:0000",
-                "video_id": "L01_V001",
-                "frame_idx": 120,
-                "keyframe_order": 1,
-                "timestamp_ms": 4000,
-                "image_path": "keyframes/L01_V001/0000.jpg",
-                "width": 32,
-                "height": 24,
-            }
-        ]
-    ).to_parquet(source / "metadata" / "frames.parquet", index=False)
+    _write_btc_metadata(source, [_valid_btc_row()])
 
     output_root = tmp_path / "frame_store"
     config_path = tmp_path / "enrichment.yaml"
@@ -314,6 +298,7 @@ def test_prepare_data_cli_uses_btc_enrichment_config(tmp_path):
                 "version": "hcmai2026-test-v1",
                 "source": "btc_keyframes",
                 "btc_root": str(source),
+                "mapping_root": str(source / "map_keyframes"),
                 "data_root": str(source),
                 "frame_store_id": "btc-cli-prepare-v1",
                 "frames_path": str(output_root / "frames.parquet"),
@@ -394,9 +379,6 @@ def test_prepare_data_cli_delegates_config_and_optional_dataset_root(
     [
         ({"frame_id": None}, "frame_id"),
         ({"video_id": "  "}, "video_id"),
-        ({"frame_idx": -1}, "frame_idx"),
-        ({"timestamp_ms": -1}, "timestamp_ms"),
-        ({"keyframe_order": 0}, "keyframe_order"),
         ({"image_path": ["not-a-scalar.jpg"]}, "image_path"),
         ({"width": 0}, "width"),
         ({"height": -1}, "height"),
@@ -414,6 +396,7 @@ def test_btc_import_rejects_invalid_canonical_rows(
         import_btc_frame_store(
             BTCIngestionConfig(
                 btc_root=source,
+                mapping_root=source / "map_keyframes",
                 data_root=source,
                 output_root=tmp_path / "frame_store",
                 frame_store_id="btc-invalid-v1",
@@ -429,7 +412,7 @@ def test_btc_import_rejects_duplicate_frame_id(tmp_path):
         source,
         [
             _valid_btc_row(),
-            _valid_btc_row(frame_idx=121, timestamp_ms=4100),
+            _valid_btc_row(keyframe_order=2, frame_idx=121, timestamp_ms=4100),
         ],
     )
 
@@ -437,6 +420,7 @@ def test_btc_import_rejects_duplicate_frame_id(tmp_path):
         import_btc_frame_store(
             BTCIngestionConfig(
                 btc_root=source,
+                mapping_root=source / "map_keyframes",
                 data_root=source,
                 output_root=tmp_path / "frame_store",
                 frame_store_id="btc-duplicate-v1",
@@ -466,6 +450,7 @@ def test_btc_import_preserves_distinct_frames_at_one_submission_coordinate(
     output = import_btc_frame_store(
         BTCIngestionConfig(
             btc_root=source,
+            mapping_root=source / "map_keyframes",
             data_root=source,
             output_root=tmp_path / "frame_store",
             frame_store_id="btc-collision-v1",
@@ -494,6 +479,7 @@ def test_btc_import_rejects_empty_metadata(tmp_path):
         import_btc_frame_store(
             BTCIngestionConfig(
                 btc_root=source,
+                mapping_root=source / "map_keyframes",
                 data_root=source,
                 output_root=tmp_path / "frame_store",
                 frame_store_id="btc-empty-v1",
@@ -524,6 +510,7 @@ def test_manifest_staging_failure_preserves_published_bundle(
         btc.import_btc_frame_store(
             btc.BTCIngestionConfig(
                 btc_root=source,
+                mapping_root=source / "map_keyframes",
                 data_root=source,
                 output_root=output_root,
                 frame_store_id="btc-new-v1",
@@ -568,6 +555,7 @@ def test_manifest_publish_failure_restores_previous_bundle(
         btc.import_btc_frame_store(
             btc.BTCIngestionConfig(
                 btc_root=source,
+                mapping_root=source / "map_keyframes",
                 data_root=source,
                 output_root=output_root,
                 frame_store_id="btc-new-v1",

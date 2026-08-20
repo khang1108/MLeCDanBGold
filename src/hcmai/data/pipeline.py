@@ -164,6 +164,7 @@ class DataService:
             "version",
             "source",
             "btc_root",
+            "mapping_root",
             "data_root",
             "frame_store_id",
             "frames_path",
@@ -193,6 +194,7 @@ class DataService:
         return import_btc_frame_store(
             BTCIngestionConfig(
                 btc_root=_project_path(str(dataset["btc_root"])),
+                mapping_root=_project_path(str(dataset["mapping_root"])),
                 data_root=_project_path(str(dataset["data_root"])),
                 output_root=output_root,
                 frame_store_id=str(dataset["frame_store_id"]),
