@@ -37,7 +37,12 @@ or machine-specific paths.
 export HCMAI_LOCAL_ROOT=/absolute/path/to/local/hcmai
 export HCMAI_THUNDER_HOST=<your-existing-ssh-alias-or-user-at-host>
 export HCMAI_THUNDER_ROOT=/absolute/path/on/thundercompute/hcmai
+export HCMAI_PYTHON="$HCMAI_LOCAL_ROOT/aic/bin/python"
 ```
+
+`pull-indexes` uses `HCMAI_PYTHON` to checksum-load staged FAISS and Parquet
+bundles before promotion. Point it at the local project environment rather
+than relying on an unrelated system Python.
 
 The local root must already contain canonical `frames.parquet` and its
 manifest, BTC keyframes and mappings, FrameContext and its manifest,
@@ -120,5 +125,88 @@ cd "$HCMAI_LOCAL_ROOT"
 bash scripts/sync_thundercompute_indexes.sh pull-indexes
 ```
 
-Do not promote the downloaded indexes to serving if the report is absent, the
-status is not `passed`, or startup rejects any checksum/model contract.
+`pull-indexes` first checks that the remote report has `"status": "passed"`,
+stages every bundle, loads the staged checksummed v2 artifacts, and compares
+their byte sizes, schema, dataset version, model/revision, dimension,
+normalization, entity kind, retrieval source, source/config fingerprints, and
+checksum manifests with the report before promotion to the local index
+destination. Do not bypass that command with a manual copy. Startup performs
+its own checksum/model-contract checks as a separate serving guard.
+
+## Promote a validated bundle safely
+
+Promotion is a serving configuration change, not an opportunity to rebuild or
+repair artifacts. `pull-indexes` verifies the passed remote report and the
+staged bundle contracts before promoting the staged download. Retain the
+promoted `build_report.json` with the exact bundles it describes. Where the
+serving checkout also has the full offline source inputs (especially the
+organizer mapping, FrameContext, and transcripts), independently run the
+source-dependent validator:
+
+```bash
+cd "$HCMAI_LOCAL_ROOT"
+aic/bin/python scripts/build_retrieval_indexes.py \
+  --stage validate \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml
+```
+
+When that local validator is applicable, accept a bundle only when it succeeds
+and its report has `"status": "passed"`. Confirm the Visual row count is the
+complete canonical corpus expected by the active indexing configuration;
+Context and ASR counts must match their own usable source rows. A
+bundle-only serving checkout cannot rerun this validator without those inputs;
+in that case preserve the verified remote report and let startup validate the
+checksums and model contracts. The validator and startup loaders check the v2
+artifact checksums plus dataset version, model name, immutable revision, vector
+dimension, and normalization contracts. A report or bundle from a different
+configuration/model revision is not an acceptable substitute.
+
+The standard profile is Visual + optional FrameContext + optional projected
+ASR. Point any non-default bundle locations at the three complete directories;
+do not point a profile at a partial staging directory:
+
+```bash
+export HCMAI_RETRIEVAL_PROFILE=context_asr_segment
+export HCMAI_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/visual"
+export HCMAI_CONTEXT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/context"
+export HCMAI_ASR_SEGMENT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/asr_segments"
+```
+
+Restart the service using the established deployment command. Startup must
+load the required Visual bundle and must not regenerate an index. Check the
+service's retrieval observability or a controlled query to confirm the active
+sources and canonical frame identities. If Context or ASR is intentionally
+absent, record that degraded state explicitly; it is not evidence that the
+full B1/B2 profile has been validated.
+
+## Emergency rollback
+
+The rollback route keeps the existing specialist-index factory and changes no
+artifacts:
+
+```bash
+export HCMAI_RETRIEVAL_PROFILE=legacy_specialists
+unset HCMAI_CONTEXT_INDEX_PATH HCMAI_ASR_SEGMENT_INDEX_PATH
+```
+
+Restart the service with the normal deployment command. It will use the
+configured Visual, Caption, OCR, and legacy frame-aligned ASR artifacts rather
+than the Context/segment-ASR factories. Ensure those rollback-only artifacts
+exist and pass their usual startup contracts before relying on this path. The
+environment switch alone cannot restore missing or invalid legacy bundles.
+
+To return to the fast-track profile, first resolve the failure offline,
+revalidate the complete bundle and report, then set
+`HCMAI_RETRIEVAL_PROFILE=context_asr_segment` and restart. Do not delete,
+overwrite, or regenerate bundles from an online request during either switch.
+
+## Unperformed external smoke evidence
+
+This repository checkout currently has no extracted
+`data/map_keyframes/` organizer mapping, no published complete index bundles,
+and no repository-held B0/B1/B2 manual query set. Consequently, the commands
+above document the release procedure but do not constitute a completed
+full-corpus validation or qualitative smoke result. Do not infer retrieval
+accuracy or production readiness from unit tests or a successful CLI help
+command.
