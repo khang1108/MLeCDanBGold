@@ -130,11 +130,14 @@ def join_btc_mapping(source_frames: pd.DataFrame, mapping: pd.DataFrame) -> pd.D
     if bool(pts_time.isna().any()):
         raise ValueError("Canonical source contains frames missing from BTC mapping")
 
-    joined["frame_idx"] = joined["frame_idx"].astype("int64")
-    joined["fps"] = joined["fps"].astype(float)
-    joined["timestamp_ms"] = (
-        joined["pts_time"].astype(float) * 1000.0
-    ).round().astype("int64")
+    joined_mapping = Path("<joined-btc-mapping>")
+    frame_idx = _finite_integral_column(joined, "frame_idx", joined_mapping)
+    fps = _finite_numeric_column(joined, "fps", joined_mapping)
+    pts_time = _finite_numeric_column(joined, "pts_time", joined_mapping)
+
+    joined["frame_idx"] = frame_idx
+    joined["fps"] = fps
+    joined["timestamp_ms"] = (pts_time * 1000.0).round().astype("int64")
     return joined
 
 

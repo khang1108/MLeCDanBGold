@@ -139,6 +139,26 @@ def test_join_rejects_source_frame_missing_from_mapping(tmp_path: Path) -> None:
         join_btc_mapping(_source_frames(), load_btc_keyframe_map(root))
 
 
+def test_join_rejects_fractional_submission_coordinate() -> None:
+    """Defend direct callers from truncating an unvalidated frame_idx."""
+
+    source = _source_frames().iloc[:1]
+    mapping = pd.DataFrame(
+        [
+            {
+                "video_id": "L01_V001",
+                "keyframe_order": 1,
+                "pts_time": 0.0,
+                "fps": 25.0,
+                "frame_idx": 1.5,
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="finite integral"):
+        join_btc_mapping(source, mapping)
+
+
 def test_project_keyframe_paths_uses_portable_staged_images(tmp_path: Path) -> None:
     """Replace only image paths when remote workers stage BTC keyframes."""
 
