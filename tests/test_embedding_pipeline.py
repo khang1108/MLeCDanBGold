@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
+import hcmai.retrieval.embedding.artifacts as embedding_artifacts
 from hcmai.common.config import EncoderConfig
 from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
 from hcmai.retrieval.embedding.models.metadata import EmbeddingMetadata
@@ -77,6 +78,60 @@ def test_pipeline_resolves_relative_paths_and_aligns_artifacts(
     assert metadata.successful_frames == 2
     assert metadata.failed_frames == 1
     assert pipeline.metadata_file.is_file()
+
+
+def test_pipeline_progress_covers_all_canonical_rows(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Progress remains tied to canonical rows when one image is unreadable."""
+    dataset_root, frames_path = _corpus(tmp_path)
+    config = EncoderConfig(batch_size=2)
+    pipeline = EmbeddingArtifactBuilder(
+        frames_path=frames_path,
+        dataset_root=dataset_root,
+        output_dir=tmp_path / "artifacts",
+        encoder_config=config,
+        encoder=FakeEncoder(config),
+        strict=False,
+        shard_size=2,
+    )
+
+    class RecordedProgress:
+        """Capture progress updates without rendering a terminal bar in the test."""
+
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+            self.updates: list[int] = []
+            self.closed = False
+
+        def __enter__(self) -> "RecordedProgress":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            self.closed = True
+
+        def update(self, amount: int) -> None:
+            """Record one canonical-row increment."""
+            self.updates.append(amount)
+
+    progress: list[RecordedProgress] = []
+
+    def build_progress(**kwargs: object) -> RecordedProgress:
+        """Construct the one expected progress recorder."""
+        recorder = RecordedProgress(**kwargs)
+        progress.append(recorder)
+        return recorder
+
+    monkeypatch.setattr(embedding_artifacts, "tqdm", build_progress)
+
+    metadata = pipeline.run()
+
+    assert metadata.failed_frames == 1
+    assert len(progress) == 1
+    assert progress[0].kwargs["total"] == 3
+    assert progress[0].updates == [2, 1]
+    assert progress[0].closed
 
 
 def test_embedding_metadata_round_trip() -> None:

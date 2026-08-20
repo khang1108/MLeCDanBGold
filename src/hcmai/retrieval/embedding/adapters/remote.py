@@ -47,11 +47,11 @@ class RemoteEmbeddingAdapter:
     def encode_text(
         self, texts: list[str], stats: EncodingStats | None = None
     ) -> np.ndarray:
-        """Gửi văn bản tới remote worker theo từng batch nhỏ để lấy vector embedding."""
+        """Send text in batches bounded by this encoder's configured ceiling."""
         if not texts:
             return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
         started, batches = perf_counter(), []
-        size = min(self.config.batch_size, 64)
+        size = self.config.batch_size
         for start in range(0, len(texts), size):
             batch = texts[start : start + size]
             response = self.client.embed_text(batch, self.source)
@@ -104,11 +104,11 @@ class RemoteImageEmbeddingAdapter:
         images: list[Image.Image],
         stats: EncodingStats | None = None,
     ) -> np.ndarray:
-        """Gửi danh sách hình ảnh tới remote worker theo từng batch nhỏ để lấy vector embedding."""
+        """Send images in batches bounded by the visual encoder configuration."""
         if not images:
             return np.empty((0, self.embedding_dim), dtype=self.config.dtype)
         started, batches = perf_counter(), []
-        size = min(self.config.batch_size, 64)
+        size = self.config.batch_size
         for start in range(0, len(images), size):
             batch = images[start : start + size]
             identifiers = [str(index) for index in range(start, start + len(batch))]

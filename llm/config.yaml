@@ -18,7 +18,9 @@ visual_embedding:
   name: "google/siglip2-base-patch16-224"
   revision: "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2"
   device: "cuda"
-  batch_size: 32
+  # Initial A6000 request/model batch. Tune against real image resolution and
+  # VRAM telemetry rather than treating this as a universal maximum.
+  batch_size: 128
   image_size: 224
   dtype: "float32"
 
@@ -27,7 +29,9 @@ caption_embedding:
   name: "BAAI/bge-m3"
   revision: "5617a9f61b028005a4858fdac845db406aefb181"
   device: "cuda"
-  batch_size: 16
+  # `source: text` routes BGE requests here. Keep this aligned with the local
+  # indexing model config so a remote build sends one useful GPU-sized batch.
+  batch_size: 128
   max_length: 8192
   dtype: "float32"
 

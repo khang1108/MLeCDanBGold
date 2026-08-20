@@ -11,10 +11,15 @@ from .transcript import TranscriptSegment
 
 
 class TextEmbeddingRequest(ContractModel):
-    """Ordered text batch routed to one configured retrieval encoder."""
+    """Ordered text batch routed to one configured retrieval encoder.
+
+    The service validates the batch ceiling against the selected encoder at
+    runtime. Keeping that limit out of this shared schema lets each deployment
+    tune its visual and text models independently.
+    """
 
     source: Literal["visual", "text"] = "visual"
-    texts: list[NonEmptyString] = Field(min_length=1, max_length=64)
+    texts: list[NonEmptyString] = Field(min_length=1)
 
 
 class EmbeddingResponse(ContractModel):

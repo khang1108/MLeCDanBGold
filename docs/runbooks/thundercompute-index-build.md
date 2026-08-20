@@ -76,6 +76,39 @@ If the environment already exists, activate it without reinstalling. Verify
 that the pinned model revisions in `configs/indexing.models.yaml` are available
 to the remote Hugging Face cache before starting an offline build.
 
+## Use a private embedding VM from the local build host
+
+When SigLIP and BGE are hosted separately through the private Cloudflare
+service, the fast-track builder can keep canonical data and index publication
+local while explicitly offloading only embedding inference. The remote service
+must advertise the exact pinned model names and revisions from
+`configs/indexing.models.yaml` on `/ready`.
+
+```bash
+export HCMAI_INFERENCE_BASE_URL="https://<private-api-hostname>"
+export HCMAI_CF_ACCESS_CLIENT_ID="<service-client-id>"
+export HCMAI_CF_ACCESS_CLIENT_SECRET="<service-client-secret>"
+
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --stage all \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --inference-url "$HCMAI_INFERENCE_BASE_URL"
+```
+
+`--inference-url` is deliberate: the command never silently reads an endpoint
+from the environment. It verifies that requested Visual and BGE capabilities
+are loaded and pinned correctly before an embedding stage begins. It sends
+SigLIP images to the visual endpoint and both FrameContext and ASR text to the
+BGE `text` family. Leave off the option to build with local models instead.
+
+The A6000 starting batch is 128 in both `llm/config.yaml` and
+`configs/indexing.models.yaml`; adjust it only after observing actual VRAM and
+latency with the corpus's real image/text lengths. The builder has one active
+embedding batch at a time. Sending several simultaneous requests to one
+single-worker GPU service does not provide server-side microbatching and can
+increase memory pressure.
+
 ## Run and inspect each stage once
 
 Preflight must pass before GPU work. It requires exactly 873 mapping videos and
@@ -116,6 +149,12 @@ adapter for Context and ASR:
 ```bash
 python scripts/build_retrieval_indexes.py --stage all --config configs/indexing.yaml --model-config configs/indexing.models.yaml
 ```
+
+Visual embedding displays a canonical-frame progress bar. Context and ASR show
+their own text progress bars. If a strict Visual build finds unreadable images,
+the command writes an atomic failure report at
+`artifacts/indexes/.visual-checkpoints/visual_embedding_failures.json` beside
+its resumable checkpoints; a later clean repaired run removes that stale report.
 
 Exit the remote shell and pull only the validated retrieval bundles:
 

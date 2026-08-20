@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import (
     ExecutionProfile,
     FrameEvidence,
@@ -189,6 +190,22 @@ def test_text_embedding_contract_uses_shared_text_source_name() -> None:
     assert request.source == "text"
     with pytest.raises(ValidationError):
         TextEmbeddingRequest(source="caption", texts=["red bus"])
+
+
+def test_text_embedding_contract_defers_batch_ceiling_to_the_service() -> None:
+    """Deployments may raise the model-specific API ceiling above 64 items."""
+
+    request = TextEmbeddingRequest(texts=["red bus"] * 128)
+
+    assert len(request.texts) == 128
+
+
+@pytest.mark.parametrize("batch_size", [0, -1])
+def test_encoder_config_rejects_nonpositive_batch_size(batch_size: int) -> None:
+    """All encoder callers rely on a positive batch size as a range step."""
+
+    with pytest.raises(ValidationError, match="greater than 0"):
+        EncoderConfig(batch_size=batch_size)
 
 
 @pytest.mark.parametrize(

@@ -217,6 +217,39 @@ def test_remote_embedding_rejects_false_normalization_claim() -> None:
         adapter.encode_images([Image.new("RGB", (2, 2))])
 
 
+def test_remote_image_embedding_uses_configured_batch_ceiling() -> None:
+    """A large visual configuration is not reduced to the legacy API cap."""
+
+    class RecordingClient:
+        """Return aligned unit vectors while retaining request batch sizes."""
+
+        def __init__(self) -> None:
+            self.batch_sizes: list[int] = []
+
+        def embed_images(self, images, *, source="visual", item_ids=None):
+            self.batch_sizes.append(len(images))
+            return EmbeddingResponse(
+                model="visual",
+                revision=SHA,
+                dimension=2,
+                normalized=True,
+                item_ids=item_ids,
+                embeddings=[[0.0, 1.0]] * len(images),
+                latency_ms=1,
+            )
+
+    client = RecordingClient()
+    adapter = RemoteImageEmbeddingAdapter(
+        client,
+        EncoderConfig(model_name="visual", revision=SHA, batch_size=128),
+    )
+
+    vectors = adapter.encode_images([Image.new("RGB", (2, 2))] * 130)
+
+    assert vectors.shape == (130, 2)
+    assert client.batch_sizes == [128, 2]
+
+
 def test_remote_transcript_adapters_share_audio_reference_and_keep_segments() -> None:
     client, references = FakeClient(), FakeReferences()
     asr = RemoteASRAdapter(

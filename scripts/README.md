@@ -142,6 +142,23 @@ canonical frame store. Heavy stages run sequentially and validation writes
 `artifacts/indexes/build_report.json` only after all three checksummed bundles
 pass identity and encoder-contract checks.
 
+To offload only SigLIP and BGE inference to an already running private GPU
+service, pass its URL explicitly. The builder intentionally does not infer a
+remote endpoint from environment variables. It checks `/ready` and the exact
+pinned model/revisions before it starts an embedding stage, while local file
+I/O, FAISS publication, and validation remain local:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --stage all \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --inference-url "$HCMAI_INFERENCE_BASE_URL"
+```
+
+Export the appropriate Cloudflare Access client credentials for the HTTP client
+separately; do not place them in a config file or command history.
+
 For the environment-driven local-to-A6000 transfer commands and safe staged
 workflow, follow
 [`docs/runbooks/thundercompute-index-build.md`](../docs/runbooks/thundercompute-index-build.md).

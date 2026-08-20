@@ -13,10 +13,17 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.image import load_image
-from hcmai.common.utils.io import atomic_write, read_parquet, write_parquet, write_yaml
+from hcmai.common.utils.io import (
+    atomic_write,
+    read_parquet,
+    write_json,
+    write_parquet,
+    write_yaml,
+)
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
 from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
@@ -34,6 +41,7 @@ _REQUIRED_FRAME_COLUMNS = (
     "keyframe_order",
     "image_path",
 )
+_FAILURE_REPORT_FILENAME = "visual_embedding_failures.json"
 
 
 class EmbeddingArtifactBuilder:
@@ -83,6 +91,10 @@ class EmbeddingArtifactBuilder:
             if checkpoint_dir is not None
             else self.embeddings_dir / "shards"
         )
+        # Keep this beside resumable checkpoints instead of output staging so
+        # unreadable source frames remain actionable after strict publication
+        # intentionally discards the staged artifact directory.
+        self.failure_report_file = self.shards_dir / _FAILURE_REPORT_FILENAME
         self.embeddings_file = self.embeddings_dir / "visual_embeddings.npy"
         self.mapping_file = self.embeddings_dir / "frame_mapping.parquet"
         self.metadata_file = self.embeddings_dir / "metadata.yaml"
@@ -210,6 +222,29 @@ class EmbeddingArtifactBuilder:
             batches.append(vectors)
         return np.vstack(batches) if batches else np.empty((0, self.encoder.embedding_dim), dtype=np.float32)
 
+    def _sync_failure_report(self) -> Path | None:
+        """Persist unreadable-frame details or remove a stale repaired-run report.
+
+        Checkpoints and this report share a directory so both survive strict
+        publication failures. A report is removed only after a run scans all
+        canonical rows without an image-read failure, preventing an old error
+        list from being mistaken for the current repair state.
+        """
+        if not self.failed_frames:
+            self.failure_report_file.unlink(missing_ok=True)
+            return None
+
+        report = {
+            "schema_version": "visual-embedding-failures-v1",
+            "failure_count": len(self.failed_frames),
+            "failed_frames": self.failed_frames,
+        }
+        atomic_write(
+            self.failure_report_file,
+            lambda path: write_json(report, path),
+        )
+        return self.failure_report_file
+
     def _append_vectors(
         self,
         vectors: np.ndarray,
@@ -316,9 +351,19 @@ class EmbeddingArtifactBuilder:
         timer = Timer()
         records = self._canonical_records(read_parquet(self.frames_path))
         stats = EncodingStats()
-        for start in range(0, len(records), self.shard_size):
-            end = min(start + self.shard_size, len(records))
-            self._process_shard(records[start:end], start, end, stats)
+        with tqdm(
+            total=len(records),
+            desc="Embedding visual keyframes",
+            unit="frame",
+            dynamic_ncols=True,
+        ) as progress:
+            for start in range(0, len(records), self.shard_size):
+                end = min(start + self.shard_size, len(records))
+                self._process_shard(records[start:end], start, end, stats)
+                # Canonical rows, rather than successful encodes, make the
+                # progress total meaningful even when strict mode finds an
+                # unreadable image near the end of a shard.
+                progress.update(end - start)
 
         metadata = self._metadata(len(records), timer.stop() / 1000.0)
         complete = (
@@ -326,8 +371,21 @@ class EmbeddingArtifactBuilder:
             and len(self.frame_mapping) == len(records)
             and len({row["frame_id"] for row in self.frame_mapping}) == len(records)
         )
+        failure_report = self._sync_failure_report()
+        logger.info(
+            "Visual embedding run: total=%d successful=%d failed=%d%s",
+            metadata.total_frames,
+            metadata.successful_frames,
+            metadata.failed_frames,
+            f" failure_report={failure_report}" if failure_report else "",
+        )
         if self.strict and not complete:
-            raise RuntimeError("Visual build does not have complete visual coverage")
+            report_hint = (
+                f"; inspect {failure_report}" if failure_report is not None else ""
+            )
+            raise RuntimeError(
+                "Visual build does not have complete visual coverage" + report_hint
+            )
         if self.frame_mapping:
             self._save(metadata)
         elif not self.strict:
@@ -335,10 +393,4 @@ class EmbeddingArtifactBuilder:
                 self.metadata_file,
                 lambda path: write_yaml(metadata.to_dict(), path),
             )
-        logger.info(
-            "Embedding run: total=%d successful=%d failed=%d",
-            metadata.total_frames,
-            metadata.successful_frames,
-            metadata.failed_frames,
-        )
         return metadata

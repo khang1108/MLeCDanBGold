@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -93,6 +94,11 @@ def test_strict_visual_build_refuses_missing_image(
 
     assert not builder.embeddings_file.exists()
     assert not builder.mapping_file.exists()
+    report = json.loads(builder.failure_report_file.read_text())
+    assert report["schema_version"] == "visual-embedding-failures-v1"
+    assert report["failure_count"] == 1
+    assert report["failed_frames"][0]["frame_id"] == "frame-3"
+    assert report["failed_frames"][0]["error"]
 
 
 def test_visual_build_reuses_valid_completed_shard(
@@ -196,6 +202,8 @@ def test_cli_failed_build_retains_checkpoints_for_repair_resume(
 
     checkpoint_dir = output_dir.with_name(".published.visual-checkpoints")
     assert sorted(checkpoint_dir.glob("*.npz"))
+    failure_report = checkpoint_dir / "visual_embedding_failures.json"
+    assert failure_report.is_file()
     assert encoder.image_count == 2
     assert not output_dir.exists()
     Image.new("RGB", (8, 6)).save(tmp_path / "keyframes" / "L21_V001" / "003.jpg")
@@ -213,6 +221,7 @@ def test_cli_failed_build_retains_checkpoints_for_repair_resume(
     build_embeddings._run(args)
 
     assert encoder.image_count == 3
+    assert not failure_report.exists()
     assert (output_dir / "indexes" / "visual" / "dense.index").is_file()
     assert {path: path.read_text() for path in sentinels} == sentinels
 

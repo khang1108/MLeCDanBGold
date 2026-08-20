@@ -135,6 +135,20 @@ class PreflightResult:
         }
 
 
+@dataclass
+class RemoteEmbeddingAdapters:
+    """One checked private inference client and the adapters needed by a stage.
+
+    The service is retained solely for readiness and cleanup.  Adapters receive
+    its HTTP client so the image adapter can use ``embed_images`` directly.
+    Neither this object nor any index metadata persists the inference URL.
+    """
+
+    service: Any
+    visual: Any | None = None
+    text: Any | None = None
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse the explicit offline stage and optional path overrides."""
 
@@ -150,6 +164,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--context")
     parser.add_argument("--transcripts")
     parser.add_argument("--output-root")
+    parser.add_argument(
+        "--inference-url",
+        help=(
+            "Use this explicit private inference endpoint for remote SigLIP and "
+            "BGE embeddings. The offline builder never reads an inference URL "
+            "from the environment."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -228,6 +250,142 @@ def load_model_config(path: str | Path) -> Any:
                 f"{label}.revision must be a 40-character hexadecimal commit"
             )
     return config
+
+
+def _remote_stage_requirements(stage: str) -> tuple[bool, bool]:
+    """Return whether one requested stage needs Visual and/or BGE embeddings."""
+
+    return stage in {"visual", "all"}, stage in {"context", "asr", "all"}
+
+
+def _check_remote_encoder_status(
+    statuses: dict[str, Any],
+    status_name: str,
+    encoder: Any,
+) -> list[str]:
+    """Describe incompatibilities between one hosted model and a pinned encoder."""
+
+    status = statuses.get(status_name)
+    if status is None:
+        return [f"{status_name} is not advertised"]
+    if not status.enabled:
+        return [f"{status_name} is disabled"]
+    if not status.loaded:
+        return [f"{status_name} is not loaded"]
+    if status.checkpoint != encoder.model_name:
+        return [f"{status_name} checkpoint does not match the pinned model"]
+    if encoder.revision is not None and status.revision != encoder.revision:
+        return [f"{status_name} revision does not match the pinned model"]
+    return []
+
+
+def _require_remote_embedding_readiness(
+    service: Any,
+    models: Any,
+    *,
+    require_visual: bool,
+    require_text: bool,
+) -> None:
+    """Verify remote SigLIP/BGE compatibility before any offline build work.
+
+    Index metadata is stamped from the pinned local model configuration, so a
+    reachable but differently-versioned hosted model would make the published
+    provenance false.  Check the advertised checkpoint and revision before
+    preflight can spend time reading the corpus.
+    """
+
+    try:
+        readiness = service.readiness()
+    except Exception as error:
+        raise RuntimeError(
+            "Remote embedding readiness check failed; ensure the private "
+            "SigLIP+BGE service is reachable and ready"
+        ) from error
+
+    failures: list[str] = []
+    if not readiness.ready:
+        failures.append("service reported not ready")
+
+    statuses = readiness.models
+    capabilities = readiness.capabilities
+    if require_visual:
+        failures.extend(
+            _check_remote_encoder_status(
+                statuses,
+                "visual_embedding",
+                models.visual_embedding,
+            )
+        )
+        if not capabilities.image_embedding:
+            failures.append("visual image-embedding capability is unavailable")
+    if require_text:
+        failures.extend(
+            _check_remote_encoder_status(
+                statuses,
+                "caption_embedding",
+                models.resolved_evidence_embedding,
+            )
+        )
+        if not capabilities.embedding:
+            failures.append("BGE text-embedding capability is unavailable")
+
+    if failures:
+        raise RuntimeError(
+            "Remote embedding service is incompatible with the requested "
+            "offline stage: "
+            + "; ".join(failures)
+        )
+
+
+def create_remote_embedding_adapters(
+    inference_url: str,
+    models: Any,
+    *,
+    require_visual: bool,
+    require_text: bool,
+) -> RemoteEmbeddingAdapters:
+    """Create checked remote adapters without deriving an endpoint from env vars."""
+
+    from hcmai.common.config import InferenceConfig
+    from hcmai.llm.pipeline import LLMService
+    from hcmai.retrieval.embedding.pipeline import EmbeddingService
+
+    base_url = inference_url.strip()
+    if not base_url:
+        raise ValueError("--inference-url must not be empty")
+
+    inference = InferenceConfig(enabled=True, base_url=base_url)
+    service = LLMService.remote(base_url, inference)
+    try:
+        _require_remote_embedding_readiness(
+            service,
+            models,
+            require_visual=require_visual,
+            require_text=require_text,
+        )
+        client = service.adapter
+        visual = (
+            EmbeddingService.create_remote_visual_adapter(
+                client,
+                models.visual_embedding,
+            )
+            if require_visual
+            else None
+        )
+        text = (
+            EmbeddingService.create_remote_adapter(
+                client,
+                models.resolved_evidence_embedding,
+                embedding_dim=0,
+                source="text",
+            )
+            if require_text
+            else None
+        )
+        return RemoteEmbeddingAdapters(service=service, visual=visual, text=text)
+    except Exception:
+        service.close()
+        raise
 
 
 def _require_file(path: Path, label: str) -> Path:
@@ -484,8 +642,10 @@ def build_visual(
     config: OfflineIndexConfig,
     models: Any,
     projected_frames: str | Path,
+    *,
+    encoder: Any | None = None,
 ) -> Any:
-    """Build strict SigLIP2 vectors, then publish one frame-native DenseIndex."""
+    """Build strict SigLIP2 vectors with a local or injected remote encoder."""
 
     from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
     from hcmai.retrieval.retriever.dense.index import DenseIndex
@@ -505,6 +665,7 @@ def build_visual(
             resume=config.build.resume,
             shard_size=config.build.visual_shard_size,
             checkpoint_dir=output.parent / ".visual-checkpoints",
+            encoder=encoder,
         )
         metadata = builder.run()
         if metadata.successful_frames != config.dataset.expected_frame_count:
@@ -883,25 +1044,59 @@ def run(args: argparse.Namespace) -> None:
         output_root=args.output_root,
     )
     models = load_model_config(args.model_config)
+    require_visual, require_text = _remote_stage_requirements(args.stage)
+    remote = (
+        create_remote_embedding_adapters(
+            args.inference_url,
+            models,
+            require_visual=require_visual,
+            require_text=require_text,
+        )
+        if args.inference_url is not None and (require_visual or require_text)
+        else None
+    )
 
-    if args.stage == "preflight":
-        run_preflight(config)
-    elif args.stage == "visual":
-        build_visual(config, models, _require_projected_frames(config))
-    elif args.stage == "context":
-        build_context(config, models, _require_projected_frames(config))
-    elif args.stage == "asr":
-        build_asr(config, models)
-    elif args.stage == "validate":
-        run_validate(config, models)
-    else:
-        projected_frames = run_preflight(config)
-        build_visual(config, models, projected_frames)
-        release_gpu_memory()
-        text_encoder = create_text_encoder(models)
-        build_context(config, models, projected_frames, encoder=text_encoder)
-        build_asr(config, models, encoder=text_encoder)
-        run_validate(config, models)
+    try:
+        if args.stage == "preflight":
+            run_preflight(config)
+        elif args.stage == "visual":
+            projected_frames = _require_projected_frames(config)
+            if remote is None:
+                build_visual(config, models, projected_frames)
+            else:
+                assert remote.visual is not None
+                build_visual(config, models, projected_frames, encoder=remote.visual)
+        elif args.stage == "context":
+            projected_frames = _require_projected_frames(config)
+            if remote is None:
+                build_context(config, models, projected_frames)
+            else:
+                assert remote.text is not None
+                build_context(config, models, projected_frames, encoder=remote.text)
+        elif args.stage == "asr":
+            if remote is None:
+                build_asr(config, models)
+            else:
+                assert remote.text is not None
+                build_asr(config, models, encoder=remote.text)
+        elif args.stage == "validate":
+            run_validate(config, models)
+        else:
+            projected_frames = run_preflight(config)
+            if remote is None:
+                build_visual(config, models, projected_frames)
+            else:
+                assert remote.visual is not None
+                build_visual(config, models, projected_frames, encoder=remote.visual)
+            release_gpu_memory()
+            text_encoder = remote.text if remote is not None else create_text_encoder(models)
+            assert text_encoder is not None
+            build_context(config, models, projected_frames, encoder=text_encoder)
+            build_asr(config, models, encoder=text_encoder)
+            run_validate(config, models)
+    finally:
+        if remote is not None:
+            remote.service.close()
 
 
 def main(argv: list[str] | None = None) -> int:

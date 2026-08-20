@@ -244,6 +244,75 @@ def test_inference_endpoints_preserve_order_and_contracts():
     assert multi.json()["selected_frame_id"] == "f2"
 
 
+def test_embedding_endpoints_use_configured_batch_ceilings():
+    """Visual and BGE endpoints accept their own configured request sizes."""
+
+    runtime = FakeRuntime()
+    runtime.config = runtime.config.model_copy(
+        update={
+            "visual_embedding": runtime.config.visual_embedding.model_copy(
+                update={"batch_size": 128}
+            ),
+            "caption_embedding": runtime.config.caption_embedding.model_copy(
+                update={"batch_size": 96}
+            ),
+        }
+    )
+    app = create_llm_app(cast(LLMService, runtime))
+
+    text = request(
+        app,
+        "POST",
+        "/v1/embeddings/text",
+        json={"source": "text", "texts": ["caption"] * 96},
+    )
+    assert text.status_code == 200
+    assert len(text.json()["embeddings"]) == 96
+
+    text_over_limit = request(
+        app,
+        "POST",
+        "/v1/embeddings/text",
+        json={"source": "text", "texts": ["caption"] * 97},
+    )
+    assert text_over_limit.status_code == 422
+    assert "1..96" in text_over_limit.json()["detail"]
+
+    def image_payload(count: int):
+        return {
+            "data": {
+                "item_ids": json.dumps(
+                    [str(index) for index in range(count)]
+                )
+            },
+            "files": [
+                (
+                    "images",
+                    (f"{index}.jpg", _jpeg(index), "image/jpeg"),
+                )
+                for index in range(count)
+            ],
+        }
+
+    images = request(
+        app,
+        "POST",
+        "/v1/embeddings/images",
+        **image_payload(128),
+    )
+    assert images.status_code == 200
+    assert len(images.json()["item_ids"]) == 128
+
+    images_over_limit = request(
+        app,
+        "POST",
+        "/v1/embeddings/images",
+        **image_payload(129),
+    )
+    assert images_over_limit.status_code == 400
+    assert "1..128" in images_over_limit.json()["detail"]
+
+
 def test_remote_vqa_endpoints_share_one_inference_response_contract():
     def handler(request):
         is_multi = request.url.path.endswith("/multi")
@@ -305,7 +374,7 @@ def test_remote_encoder_validates_model_and_dimension():
     np.testing.assert_allclose(encoder.encode_text(["query"]), [[0.0, 1.0]])
 
 
-def test_remote_encoder_batches_at_api_limit():
+def test_remote_encoder_batches_at_configured_limit():
     calls = []
 
     def handler(request):
@@ -321,12 +390,12 @@ def test_remote_encoder_batches_at_api_limit():
     )
     encoder = RemoteEmbeddingAdapter(
         InferenceClient("https://model.test", client=http),
-        EncoderConfig(model_name="model", batch_size=100),
+        EncoderConfig(model_name="model", batch_size=128),
         embedding_dim=0,
         source="text",
     )
     assert encoder.encode_text(["x"] * 130).shape == (130, 2)
-    assert calls == [64, 64, 2]
+    assert calls == [128, 2]
 
 
 def test_remote_captioner_validates_readiness_and_identity():

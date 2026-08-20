@@ -3,7 +3,9 @@ visual_embedding:
   model_name: google/siglip2-base-patch16-224
   revision: 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2
   device: cuda
-  batch_size: 64
+  # A6000 starting point. Reduce only after measuring an actual OOM or latency
+  # regression; the index builder preserves batch boundaries in its artifacts.
+  batch_size: 128
   image_size: 224
   dtype: float32
 
@@ -12,7 +14,9 @@ evidence_embedding:
   model_name: BAAI/bge-m3
   revision: 5617a9f61b028005a4858fdac845db406aefb181
   device: cuda
-  batch_size: 64
+  # Context and ASR texts are dynamically padded, so this is intentionally
+  # tunable rather than a transport-level hard limit.
+  batch_size: 128
   max_length: 8192
   dtype: float32
 
@@ -22,6 +26,6 @@ caption_embedding:
   model_name: BAAI/bge-m3
   revision: 5617a9f61b028005a4858fdac845db406aefb181
   device: cuda
-  batch_size: 64
+  batch_size: 128
   max_length: 8192
   dtype: float32

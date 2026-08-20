@@ -153,6 +153,15 @@ async def embed(
         if payload.source == "text"
         else runtime.config.visual_embedding
     )
+    if len(payload.texts) > embedding_config.batch_size:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "text batch must contain 1.."
+                f"{embedding_config.batch_size} items for source "
+                f"{payload.source!r}"
+            ),
+        )
     try:
         vectors = runtime.embed_text(list(payload.texts), payload.source)
     except Exception as error:
@@ -193,9 +202,14 @@ async def _embed_image_batch(
     source: str,
 ) -> EmbeddingResponse:
     """Logic xử lý chung để tính toán embedding từ hình ảnh tải lên."""
-    identifiers, decoded = _decode_images(item_ids, images, maximum=64)
-    started = perf_counter()
     runtime = request.app.state.runtime
+    maximum = (
+        runtime.config.visual_embedding.batch_size
+        if source == "visual"
+        else 64
+    )
+    identifiers, decoded = _decode_images(item_ids, images, maximum=maximum)
+    started = perf_counter()
     try:
         vectors = np.asarray(runtime.embed_images(decoded, source=source))
         if vectors.ndim != 2 or vectors.shape[0] != len(identifiers):

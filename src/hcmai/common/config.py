@@ -50,13 +50,18 @@ class DatasetConfig(BaseModel):
 
 
 class EncoderConfig(BaseModel):
-    """Configuration for the dense visual encoder."""
+    """Configuration for one dense visual or text encoder.
+
+    ``batch_size`` is the explicit inference and remote-request ceiling for
+    this encoder. It must remain positive so every caller can safely use it as
+    a range step without silently falling back to a different batch size.
+    """
 
     backend: Literal["siglip", "bge_m3"] = "siglip"
     model_name: str = "google/siglip2-base-patch16-224"
     revision: str | None = None
     device: str = "cpu"
-    batch_size: int = 32
+    batch_size: int = Field(default=32, gt=0)
     image_size: int = 224
     max_length: int = 8192
     dtype: str = "float32"

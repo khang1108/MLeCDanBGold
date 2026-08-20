@@ -178,6 +178,42 @@ def test_context_corpus_embeds_only_non_empty_context(
     assert mapping["timestamp_ms"].tolist() == [1000]
 
 
+@pytest.mark.parametrize(
+    "source",
+    [RetrievalSource.CONTEXT, RetrievalSource.ASR],
+)
+def test_text_encoding_uses_configured_batch_size_without_legacy_cap(
+    source: RetrievalSource,
+) -> None:
+    """Context and ASR builds must pass the configured large BGE batch through."""
+
+    from hcmai.retrieval.retriever.text.retriever import _encode_texts
+
+    class RecordingBGE:
+        """Record input sizes while returning deterministic non-empty vectors."""
+
+        config = EncoderConfig(
+            backend="bge_m3", model_name="fake/bge-m3", batch_size=128
+        )
+        embedding_dim = 2
+
+        def __init__(self) -> None:
+            self.batch_sizes: list[int] = []
+
+        def encode_text(self, texts, stats=None) -> np.ndarray:
+            self.batch_sizes.append(len(texts))
+            return np.tile(
+                np.asarray([[0.0, 1.0]], dtype=np.float32),
+                (len(texts), 1),
+            )
+
+    encoder = RecordingBGE()
+    vectors = _encode_texts(["evidence"] * 130, encoder, source)
+
+    assert vectors.shape == (130, 2)
+    assert encoder.batch_sizes == [128, 2]
+
+
 def test_context_index_is_frame_native_and_keeps_supplemental_vectors(
     fake_bge: FakeBGE,
     data_service_with_context: DataService,

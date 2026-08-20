@@ -1,8 +1,9 @@
 # HCMAI Thunder GPU inference
 
-This directory deploys the batch-oriented caption, OCR, and ASR inference
-services on ThunderCompute. Corpus artifacts, indexes, mappings, and the web
-frontend are not hosted on the GPU VM.
+This directory deploys selected batch-oriented inference capabilities on
+ThunderCompute, including SigLIP image embeddings and BGE text embeddings.
+Corpus artifacts, indexes, mappings, and the web frontend are not hosted on
+the GPU VM.
 
 ## Public services
 
@@ -10,7 +11,7 @@ One remotely managed Cloudflare tunnel exposes two local Uvicorn processes:
 
 | Public hostname | Local origin | Capabilities |
 | --- | --- | --- |
-| `api.iamphuckhang.dev` | `http://127.0.0.1:8100` | Caption and OCR |
+| `api.iamphuckhang.dev` | `http://127.0.0.1:8100` | Selected caption/OCR/SigLIP/BGE capabilities |
 | `asr.iamphuckhang.dev` | `http://127.0.0.1:8101` | ASR/transcripts |
 
 Configure both Published application routes on the Cloudflare tunnel before
@@ -21,6 +22,8 @@ The main inference endpoints are:
 
 - `POST https://api.iamphuckhang.dev/v1/captions`
 - `POST https://api.iamphuckhang.dev/v1/enrichment/ocr`
+- `POST https://api.iamphuckhang.dev/v1/embeddings/images` (SigLIP)
+- `POST https://api.iamphuckhang.dev/v1/embeddings/text` with `source: "text"` (BGE)
 - `POST https://asr.iamphuckhang.dev/v1/transcripts/asr`
 - `GET /health`, `GET /ready`, and `GET /docs` on both hostnames
 
@@ -47,6 +50,11 @@ llm/launch_thunder_instance.sh --gpu l40 --token "$TNR_TOKEN" -- \
 # ASR only
 llm/launch_thunder_instance.sh --gpu l40 --token "$TNR_TOKEN" -- \
   --caption false --ocr false
+
+# SigLIP + BGE only on one A6000
+llm/launch_thunder_instance.sh --gpu a6000 --token "$TNR_TOKEN" -- \
+  --caption false --ocr false --asr false \
+  --visual-embedding true --caption-embedding true
 ```
 
 The launcher creates or reuses a Thunder instance, uploads
@@ -65,9 +73,21 @@ tnr connect 0
 sudo bash /home/ubuntu/deploy_cloudflared_private.sh
 ```
 
-The bootstrap is intentionally ignored because it contains the remotely
-managed tunnel token and may contain Cloudflare Access service credentials.
-Never commit that private copy.
+The bootstrap is intentionally ignored because it contains privileged tunnel
+and Cloudflare Access credentials. Never commit or paste that private copy;
+rotate the credentials if it is exposed.
+
+## Embedding batch configuration
+
+`llm/config.yaml` controls both the model's internal batch size and the maximum
+size accepted by its embedding endpoint. The A6000 starting values are 128 for
+both `visual_embedding` (SigLIP images) and `caption_embedding` (BGE texts).
+The local client must use matching encoder configuration; it chunks requests at
+that configured size and the server rejects a larger request clearly.
+
+Keep one Uvicorn worker for one GPU. Multiple workers duplicate the loaded
+models in VRAM; the service does not currently combine concurrent HTTP requests
+into a dynamic microbatch.
 
 ## Operations
 

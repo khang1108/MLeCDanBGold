@@ -23,7 +23,12 @@ from hcmai.common.config import (
     FusionConfig,
     RetrievalCacheConfig,
 )
-from hcmai.common.schemas import RetrievalSource
+from hcmai.common.schemas import (
+    InferenceCapabilities,
+    InferenceReadiness,
+    ModelStatus,
+    RetrievalSource,
+)
 from hcmai.data.stores.frame import FrameStore
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -60,6 +65,70 @@ class FakeEncoder:
             ],
             dtype=np.float32,
         )
+
+
+class FakeRemoteService:
+    """Expose a checked remote client without making HTTP requests in CLI tests."""
+
+    def __init__(self, readiness: InferenceReadiness, events: list[str]) -> None:
+        self.adapter = object()
+        self._readiness = readiness
+        self._events = events
+        self.closed = False
+
+    def readiness(self) -> InferenceReadiness:
+        """Return the fixed GPU-service capability snapshot."""
+
+        self._events.append("remote-ready")
+        return self._readiness
+
+    def close(self) -> None:
+        """Record client cleanup after the staged offline workflow finishes."""
+
+        self.closed = True
+        self._events.append("remote-close")
+
+
+def _remote_models() -> SimpleNamespace:
+    """Return pinned Visual and evidence configs used by remote CLI fixtures."""
+
+    revision = "b" * 40
+    return SimpleNamespace(
+        visual_embedding=EncoderConfig(
+            backend="siglip",
+            model_name="fake/siglip",
+            revision=revision,
+        ),
+        resolved_evidence_embedding=EncoderConfig(
+            backend="bge_m3",
+            model_name="fake/bge",
+            revision=revision,
+        ),
+    )
+
+
+def _remote_readiness(models: SimpleNamespace) -> InferenceReadiness:
+    """Advertise the exact pinned SigLIP and BGE models for a test worker."""
+
+    return InferenceReadiness(
+        ready=True,
+        models={
+            "visual_embedding": ModelStatus(
+                loaded=True,
+                checkpoint=models.visual_embedding.model_name,
+                revision=models.visual_embedding.revision,
+            ),
+            "caption_embedding": ModelStatus(
+                loaded=True,
+                checkpoint=models.resolved_evidence_embedding.model_name,
+                revision=models.resolved_evidence_embedding.revision,
+            ),
+        },
+        capabilities=InferenceCapabilities(
+            embedding=True,
+            image_embedding=True,
+        ),
+    )
 
 
 def _frame_mapping() -> pd.DataFrame:
@@ -365,6 +434,258 @@ def test_offline_index_cli_all_runs_strict_sequential_stages(
     workflow.run(workflow.parse_args(["--stage", "all"]))
 
     assert events == ["preflight", "visual", "context", "asr", "validate"]
+
+
+def test_offline_index_cli_all_uses_explicit_remote_embedding_adapters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Inject one checked remote SigLIP+BGE pair only when the CLI URL is set."""
+
+    from hcmai.common.config import InferenceConfig
+    from hcmai.llm.pipeline import LLMService
+    from hcmai.retrieval.embedding.pipeline import EmbeddingService
+    from scripts import build_retrieval_indexes as workflow
+
+    events: list[str] = []
+    projected_frames = tmp_path / "projected.parquet"
+    projected_frames.write_bytes(b"preflight-projection")
+    config = SimpleNamespace(projected_frames_path=projected_frames)
+    models = _remote_models()
+    service = FakeRemoteService(_remote_readiness(models), events)
+    remote_visual = object()
+    remote_text = object()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setenv("HCMAI_INFERENCE_BASE_URL", "https://must-not-be-used.test")
+    monkeypatch.setattr(workflow, "load_offline_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(workflow, "load_model_config", lambda *args, **kwargs: models)
+
+    def fake_remote(
+        cls: type[LLMService], base_url: str, inference: InferenceConfig
+    ) -> FakeRemoteService:
+        del cls
+        captured.update(base_url=base_url, inference=inference)
+        return service
+
+    monkeypatch.setattr(LLMService, "remote", classmethod(fake_remote))
+
+    def create_remote_visual_adapter(client, encoder_config):
+        captured.update(
+            visual_client=client,
+            visual_config=encoder_config,
+        )
+        return remote_visual
+
+    def create_remote_adapter(client, encoder_config, embedding_dim, source):
+        captured.update(
+            text_client=client,
+            text_config=encoder_config,
+            text_dim=embedding_dim,
+            text_source=source,
+        )
+        return remote_text
+
+    monkeypatch.setattr(
+        EmbeddingService,
+        "create_remote_visual_adapter",
+        create_remote_visual_adapter,
+    )
+    monkeypatch.setattr(
+        EmbeddingService,
+        "create_remote_adapter",
+        create_remote_adapter,
+    )
+    monkeypatch.setattr(
+        workflow,
+        "run_preflight",
+        lambda received: events.append("preflight") or projected_frames,
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_visual",
+        lambda received, received_models, frames, *, encoder=None: captured.update(
+            visual_encoder=encoder
+        )
+        or events.append("visual"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "release_gpu_memory",
+        lambda: events.append("release-gpu"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_context",
+        lambda received, received_models, frames, *, encoder=None: captured.update(
+            context_encoder=encoder
+        )
+        or events.append("context"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_asr",
+        lambda received, received_models, *, encoder=None: captured.update(
+            asr_encoder=encoder
+        )
+        or events.append("asr"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "run_validate",
+        lambda received, received_models: events.append("validate"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "create_text_encoder",
+        lambda received: pytest.fail("remote mode must not load local BGE"),
+    )
+
+    workflow.run(
+        workflow.parse_args(
+            ["--stage", "all", "--inference-url", " https://gpu.test/ "]
+        )
+    )
+
+    assert captured["base_url"] == "https://gpu.test/"
+    assert isinstance(captured["inference"], InferenceConfig)
+    assert captured["inference"].base_url == "https://gpu.test/"
+    assert captured["visual_client"] is service.adapter
+    assert captured["visual_config"] is models.visual_embedding
+    assert captured["text_client"] is service.adapter
+    assert captured["text_config"] is models.resolved_evidence_embedding
+    assert captured["text_dim"] == 0
+    assert captured["text_source"] == "text"
+    assert captured["visual_encoder"] is remote_visual
+    assert captured["context_encoder"] is remote_text
+    assert captured["asr_encoder"] is remote_text
+    assert events == [
+        "remote-ready",
+        "preflight",
+        "visual",
+        "release-gpu",
+        "context",
+        "asr",
+        "validate",
+        "remote-close",
+    ]
+    assert service.closed is True
+
+
+def test_offline_index_cli_does_not_read_remote_url_from_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep the no-flag workflow local even if another process set an endpoint."""
+
+    from hcmai.llm.pipeline import LLMService
+    from scripts import build_retrieval_indexes as workflow
+
+    events: list[str] = []
+    projected_frames = tmp_path / "projected.parquet"
+    projected_frames.write_bytes(b"preflight-projection")
+    config = SimpleNamespace(projected_frames_path=projected_frames)
+    local_text = object()
+
+    monkeypatch.setenv("HCMAI_INFERENCE_BASE_URL", "https://must-not-be-used.test")
+    monkeypatch.setattr(workflow, "load_offline_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(workflow, "load_model_config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        LLMService,
+        "remote",
+        classmethod(
+            lambda cls, *args: pytest.fail(
+                "local index workflow must not create a remote client"
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "run_preflight",
+        lambda received: events.append("preflight") or projected_frames,
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_visual",
+        lambda received, received_models, frames: events.append("visual"),
+    )
+    monkeypatch.setattr(workflow, "release_gpu_memory", lambda: None)
+    monkeypatch.setattr(
+        workflow,
+        "create_text_encoder",
+        lambda received: local_text,
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_context",
+        lambda received, received_models, frames, *, encoder=None: events.append(
+            "context"
+        )
+        if encoder is local_text
+        else pytest.fail("local BGE adapter was not injected"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_asr",
+        lambda received, received_models, *, encoder=None: events.append("asr")
+        if encoder is local_text
+        else pytest.fail("local BGE adapter was not reused"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "run_validate",
+        lambda received, received_models: events.append("validate"),
+    )
+
+    workflow.run(workflow.parse_args(["--stage", "all"]))
+
+    assert events == ["preflight", "visual", "context", "asr", "validate"]
+
+
+def test_remote_embedding_readiness_stops_before_preflight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail before corpus work when the endpoint lacks the required BGE model."""
+
+    from hcmai.llm.pipeline import LLMService
+    from scripts import build_retrieval_indexes as workflow
+
+    events: list[str] = []
+    config = SimpleNamespace(projected_frames_path=tmp_path / "projected.parquet")
+    models = _remote_models()
+    readiness = _remote_readiness(models).model_copy(
+        update={
+            "models": {
+                "visual_embedding": ModelStatus(
+                    loaded=True,
+                    checkpoint=models.visual_embedding.model_name,
+                    revision=models.visual_embedding.revision,
+                )
+            }
+        }
+    )
+    service = FakeRemoteService(readiness, events)
+
+    monkeypatch.setattr(workflow, "load_offline_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(workflow, "load_model_config", lambda *args, **kwargs: models)
+    monkeypatch.setattr(
+        LLMService,
+        "remote",
+        classmethod(lambda cls, *args: service),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "run_preflight",
+        lambda received: pytest.fail("preflight must follow remote readiness"),
+    )
+
+    with pytest.raises(RuntimeError, match="caption_embedding is not advertised"):
+        workflow.run(
+            workflow.parse_args(
+                ["--stage", "all", "--inference-url", "https://gpu.test"]
+            )
+        )
+
+    assert events == ["remote-ready", "remote-close"]
+    assert service.closed is True
 
 
 def test_offline_index_cli_context_does_not_build_other_modalities(

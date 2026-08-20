@@ -181,9 +181,13 @@ def _encode_texts(
     encoder: TextEmbeddingAdapter,
     source: RetrievalSource,
 ) -> np.ndarray:
-    """Encode one text channel with backend-neutral progress reporting."""
-    configured = int(getattr(encoder.config, "batch_size", 64))
-    batch_size = max(1, min(configured, 64))
+    """Encode one text channel in the configured batch size with progress.
+
+    Context and ASR share this helper, so neither source may silently use a
+    smaller legacy API limit than the configured encoder batch.
+    """
+
+    batch_size = encoder.config.batch_size
     batches: list[np.ndarray] = []
     with tqdm(
         total=len(texts),
