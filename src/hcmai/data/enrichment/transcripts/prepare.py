@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+from typing import cast
 
 import pandas as pd
 
@@ -44,6 +45,13 @@ TRANSCRIPT_DTYPES = {
     "text": "string",
     "language": "string",
     "speaker_id": "string",
+    "confidence": "Float64",
+    "status": "string",
+    "model_name": "string",
+    "model_revision": "string",
+    "artifact_version": "string",
+    "error_code": "string",
+    "error_message": "string",
 }
 logger = logging.getLogger(__name__)
 
@@ -65,7 +73,7 @@ def _table(records: list[TranscriptSegment]) -> pd.DataFrame:
 
     table = (
         pd.DataFrame(
-            [record.model_dump(mode="python") for record in records],
+            [record.model_dump(mode="json") for record in records],
             columns=list(TRANSCRIPT_DTYPES),
         )
         if records
@@ -195,7 +203,10 @@ def _prepare_video(
             decoded = read_audio(video, engine.config.audio_sample_rate)
             decode_seconds = perf_counter() - decode_started
             asr_started = perf_counter()
-            records = transcribe_audio_fn(decoded, video.stem)
+            records = cast(
+                list[TranscriptSegment],
+                transcribe_audio_fn(decoded, video.stem),
+            )
         else:
             decoded = None
             asr_started = perf_counter()

@@ -180,7 +180,7 @@ def test_remote_deployment_uses_noninteractive_ubuntu_ssh(tmp_path: Path) -> Non
         'INSTANCE_ID="0"; '
         'SSH_HOST="216.81.200.237"; SSH_PORT="32213"; '
         f'SSH_KEY_FILE="{key_file}"; '
-        'DEPLOY_ARGS=(--vqa true); start_remote_tmux'
+        'DEPLOY_ARGS=(--asr true); start_remote_tmux'
     )
     env = {
         **os.environ,
@@ -206,13 +206,13 @@ def test_remote_deployment_uses_noninteractive_ubuntu_ssh(tmp_path: Path) -> Non
     assert "ubuntu@216.81.200.237" in ssh_args
     assert not any(argument.startswith("root@") for argument in ssh_args)
     assert "tmux new-session" in ssh_args[-1]
-    assert "--vqa\\ true" in ssh_args[-1]
+    assert "--asr\\ true" in ssh_args[-1]
 
 
 def test_existing_instance_option_preserves_model_arguments() -> None:
     command = (
         f'source "{LAUNCHER}"; '
-        'parse_args --instance 0 -- --caption-embedding true --vqa true; '
+        'parse_args --instance 0 -- --ocr true --asr true; '
         'printf "%s\\n" "$INSTANCE_ID" "${DEPLOY_ARGS[@]}"'
     )
 
@@ -226,8 +226,8 @@ def test_existing_instance_option_preserves_model_arguments() -> None:
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
         "0",
-        "--caption-embedding",
+        "--ocr",
         "true",
-        "--vqa",
+        "--asr",
         "true",
     ]

@@ -1,2 +1,0 @@
-"""Kaggle worker deployment assets."""
-

@@ -24,7 +24,7 @@ class EndpointPoolConfig(Protocol):
 
 
 class InferenceClientPool:
-    """Quản lý một danh sách các kết nối (endpoints) tới các worker Kaggle chạy cùng một mô hình.
+    """Quản lý các endpoint của remote GPU worker chạy cùng một mô hình.
     Sử dụng thuật toán "Least-busy" (chọn worker đang rảnh nhất) và hỗ trợ tự động failover (chuyển
     sang worker khác nếu bị lỗi) nhằm tối ưu hóa throughput trong hệ thống phân tán.
     """

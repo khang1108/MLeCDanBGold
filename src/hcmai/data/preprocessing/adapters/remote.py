@@ -112,7 +112,7 @@ class RemoteDinoEncoder:
 
 class RemoteEfficientGEBDDetector:
     """Giữ nguyên logic lấy mẫu (sampling) và gom nhóm sliding window tại máy local,
-    nhưng gọi remote worker (Kaggle) để chấm điểm (scoring) EfficientGEBD cho từng window.
+    nhưng gọi remote GPU worker để chấm điểm (scoring) EfficientGEBD cho từng window.
     Giúp offload phần tính toán mạng neural nặng nề nhưng vẫn đảm bảo đúng thuật toán GEBD.
     """
 

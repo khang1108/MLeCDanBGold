@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -64,8 +64,10 @@ class PreparationStagesConfig(BaseModel):
     frame_store: bool = True
     caption: bool = True
     ocr: bool = True
+    objects: bool = False
     asr: bool = True
-    
+    frame_context: bool = False
+
     visual_index: bool = True
     caption_index: bool = True
     ocr_index: bool = True
@@ -76,10 +78,20 @@ class PreparationStagesConfig(BaseModel):
         values = self.model_dump()
         if not any(values.values()):
             raise ValueError("at least one preparation stage must be enabled")
-        if any(
-            enabled for name, enabled in values.items() if name != "frame_store"
-        ) and not self.frame_store:
-            raise ValueError("downstream stages require frame_store")
+        if not self.frame_store and any(
+            (
+                self.caption,
+                self.ocr,
+                self.objects,
+                self.asr,
+                self.frame_context,
+                self.visual_index,
+                self.caption_index,
+                self.ocr_index,
+                self.asr_index,
+            )
+        ):
+            raise ValueError("enabled preparation stages require frame_store")
         dependencies = {
             "caption_index": self.caption,
             "ocr_index": self.ocr,
@@ -144,7 +156,7 @@ class PreparationExecutionConfig(BaseModel):
 
 
 class RemoteEndpointPoolConfig(BaseModel):
-    """Cấu hình Pool kết nối cho một nhóm các worker remote trên Kaggle.
+    """Cấu hình pool kết nối cho một nhóm remote GPU worker.
     Quản lý danh sách URLs endpoint, timeout, retry và giới hạn kết nối đồng thời.
     Giúp phân tán tải (load balancing) cho các tính năng nặng về GPU.
     """
@@ -202,6 +214,9 @@ class S3CorpusPreparationConfig(BaseModel):
 
     corpus_revision: str = Field(min_length=3, max_length=128)
     work_root: Path
+    frame_store_source: Literal["btc_keyframes", "legacy_video_preprocessing"] = (
+        "legacy_video_preprocessing"
+    )
     stages: PreparationStagesConfig = Field(
         default_factory=PreparationStagesConfig
     )
@@ -251,6 +266,11 @@ class S3CorpusPreparationConfig(BaseModel):
         _reject_legacy_local(staging_root, "s3.staging_root")
         if not _inside(staging_root, self.work_root):
             raise ValueError("s3.staging_root must be inside work_root")
+        # Keep the normalized value on the nested config object. Runtime
+        # consumers use ``storage.staging_root`` directly when creating
+        # temporary directories, so leaving ``~`` here would produce a
+        # literal path such as ``repo/~/MLeCDanBGold/...``.
+        preprocessing.s3.staging_root = staging_root
 
         full = preprocessing.s3.artifacts_prefix
         smoke = preprocessing.s3.smoke_artifacts_prefix

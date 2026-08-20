@@ -67,7 +67,7 @@ def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
             "s3": {
                 "bucket": "hcmai-dataset",
                 "videos_prefix": "videos",
-                "artifacts_prefix": "artifacts",
+                "artifacts_prefix": "artifacts/full",
                 "smoke_artifacts_prefix": "artifacts/smoke",
                 "staging_root": work / "staging",
             },
@@ -98,19 +98,45 @@ def _setup_fixture(tmp_path: Path, paths: PreparationPaths) -> None:
             "frame_idx": order * 90,
             "timestamp_ms": order * 3000,
             "image_path": f"keyframes/L21_V001/{order:03d}.jpg",
+            "width": 8,
+            "height": 6,
         }
         for order in (1, 2)
     ]
     pd.DataFrame(rows).to_parquet(paths.frames_path, index=False)
     
-    # 2. Create mock enrichment for Caption, OCR, ASR
+    # 2. Create authoritative Caption/OCR evidence and the ASR compatibility view.
     for source in (RetrievalSource.CAPTION, RetrievalSource.OCR, RetrievalSource.ASR):
         enrichment_root = paths.enrichment_path(source).parent
         enrichment_root.mkdir(parents=True, exist_ok=True)
-        enrichment = [
-            {"frame_id": "frame-1", source.value: f"{source.value} text 1"},
-            {"frame_id": "frame-2", source.value: f"{source.value} text 2"},
-        ]
+        if source is RetrievalSource.ASR:
+            enrichment = [
+                {
+                    "frame_id": f"frame-{order}",
+                    "asr_text": f"asr text {order}",
+                    "enrichment_version": "asr-v1",
+                    "model_name": "fixture/asr",
+                }
+                for order in (1, 2)
+            ]
+        else:
+            text_field = (
+                "text"
+                if source is RetrievalSource.CAPTION
+                else "normalized_text"
+            )
+            enrichment = [
+                {
+                    "frame_id": f"frame-{order}",
+                    "video_id": "L21_V001",
+                    "frame_idx": order * 90,
+                    "timestamp_ms": order * 3000,
+                    text_field: f"{source.value} text {order}",
+                    "artifact_version": f"{source.value}-v1",
+                    "model_name": f"fixture/{source.value}",
+                }
+                for order in (1, 2)
+            ]
         pd.DataFrame(enrichment).to_parquet(paths.enrichment_path(source), index=False)
 
 
@@ -123,7 +149,8 @@ def test_four_aligned_indexes_exactly_match_canonical_frame_identities(
     _setup_fixture(tmp_path, paths)
     
     # Mock AppConfig and LLMServiceConfig to avoid FileNotFoundError reading non-existent YAMLs
-    from hcmai.common.config import AppConfig
+    from hcmai.common.config import AppConfig, TranscriptJobConfig
+    from hcmai.data.enrichment.caption.config import CaptionJobConfig
     from hcmai.llm.pipeline import LLMServiceConfig
     
     # Wait, instead of guessing AppConfig shape, let's just mock `AppConfig.from_yaml` to return a mocked object
@@ -141,10 +168,42 @@ def test_four_aligned_indexes_exactly_match_canonical_frame_identities(
     monkeypatch.setattr(AppConfig, "from_yaml", lambda *args, **kwargs: mock_app_config)
     
     mock_models_config = MagicMock()
-    mock_models_config.caption_embedding.model_name = "fixture/text"
+    mock_models_config.visual_embedding = EncoderConfig(
+        model_name="fixture/visual",
+        revision="a" * 40,
+    )
+    mock_models_config.caption_embedding = EncoderConfig(
+        model_name="fixture/text",
+        revision="a" * 40,
+    )
     monkeypatch.setattr(LLMServiceConfig, "from_yaml", lambda *args, **kwargs: mock_models_config)
 
-    ops = DefaultPreparationOperations(config, paths)
+    mock_caption_job = MagicMock()
+    mock_caption_job.caption.model_checkpoint = "fixture/caption"
+    mock_caption_job.caption.revision = "a" * 40
+    monkeypatch.setattr(
+        CaptionJobConfig,
+        "from_yaml",
+        lambda *args, **kwargs: mock_caption_job,
+    )
+
+    mock_transcript_job = MagicMock()
+    mock_transcript_job.asr.model_name = "fixture/asr"
+    mock_transcript_job.asr.revision = "a" * 40
+    mock_transcript_job.diarization.model_name = "fixture/diarization"
+    mock_transcript_job.diarization.revision = "a" * 40
+    monkeypatch.setattr(
+        TranscriptJobConfig,
+        "from_yaml",
+        lambda *args, **kwargs: mock_transcript_job,
+    )
+
+    ops = DefaultPreparationOperations(
+        config,
+        paths,
+        resume=True,
+        limit=None,
+    )
     
     # Mock the text encoder
     text_config = EncoderConfig(model_name="fixture/text")

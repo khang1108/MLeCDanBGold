@@ -1,10 +1,15 @@
 dataset:
   version: "hcmai2026_v1"
-  root: "artifacts/frame_store"
+  source: "btc_keyframes"
+  btc_root: "data"
+  data_root: "data"
+  frame_store_id: "btc-keyframes-v1"
   frames_path: "artifacts/frame_store/frames.parquet"
+  frame_store_output: "artifacts/frame_store"
+  objects_root: "data/objects"
 
 caption:
-  output_dir: "artifacts/enrichment/caption"
+  output_dir: "artifacts/enrichment/captions"
   model_checkpoint: "florence-community/Florence-2-base-ft"
   revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
   prompt: "<CAPTION>"
@@ -19,6 +24,27 @@ caption:
   batch_size: 64
   enrichment_version: "caption_v1"
   write_interval: 2000
+
+ocr:
+  output_dir: "artifacts/enrichment/ocr"
+  enabled: true
+  backend: "florence2"
+  checkpoint: "florence-community/Florence-2-base-ft"
+  revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
+  device: "cuda"
+  dtype: "bfloat16"
+  batch_size: 32
+  image_size: 768
+  enrichment_version: "florence2_ocr_v1"
+  artifact_version: "ocr-v1"
+  min_region_confidence: 0.0
+  min_context_quality: 0.5
+
+objects:
+  output_dir: "artifacts/enrichment/objects"
+  artifact_version: "object-v1"
+  summary_min_confidence: 0.25
+  max_summary_labels: 20
 
 transcript:
   output_dir: "artifacts/enrichment/transcripts"
@@ -40,3 +66,11 @@ transcript:
     revision: "3533c8cf8e369892e6b79ff1bf80f7b0286a54ee"
     device: "cuda"
     audio_sample_rate: 16000
+
+context:
+  output_dir: "artifacts/enrichment/context"
+  context_version: "frame-context-v1"
+  caption_token_budget: 80
+  ocr_token_budget: 80
+  object_token_budget: 40
+  min_ocr_quality: 0.5

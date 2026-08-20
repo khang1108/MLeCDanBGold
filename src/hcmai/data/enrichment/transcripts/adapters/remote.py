@@ -14,6 +14,8 @@ from hcmai.common.schemas import (
     TranscriptSegment,
 )
 
+ASR_SEGMENT_ARTIFACT_VERSION = "asr-segment-v1"
+
 
 class AudioReferenceProvider(Protocol):
     """Giao thức định nghĩa cách cấp quyền truy cập file audio cho worker remote (VD: qua S3 URL)."""
@@ -69,7 +71,11 @@ class RemoteASRAdapter:
         _validate_response(
             response, self.config.model_name, self.resolved_revision, video_id
         )
-        return response.segments
+        return _stamp_asr_lineage(
+            response.segments,
+            model_name=response.model,
+            model_revision=self.resolved_revision,
+        )
 
 
 class RemoteDiarizationAdapter:
@@ -135,7 +141,7 @@ class RemoteDiarizationAdapter:
             item.segment_id for item in segments
         ]:
             raise ValueError("remote diarization changed segment identity/order")
-        return response.segments
+        return _apply_speaker_labels(segments, response.segments)
 
     def assign_speakers(
         self,
@@ -170,3 +176,51 @@ def _validate_response(
     if response.video_id != video_id:
         raise ValueError("remote transcript changed video identity")
 
+
+def _stamp_asr_lineage(
+    segments: list[TranscriptSegment],
+    *,
+    model_name: str,
+    model_revision: str,
+) -> list[TranscriptSegment]:
+    """Fill missing ASR lineage and reject segment/envelope contradictions."""
+
+    stamped: list[TranscriptSegment] = []
+    for segment in segments:
+        if segment.model_name is not None and segment.model_name != model_name:
+            raise ValueError("remote segment model_name conflicts with envelope")
+        if (
+            segment.model_revision is not None
+            and segment.model_revision != model_revision
+        ):
+            raise ValueError(
+                "remote segment model_revision conflicts with envelope"
+            )
+        if segment.artifact_version != ASR_SEGMENT_ARTIFACT_VERSION:
+            raise ValueError(
+                "remote segment artifact_version conflicts with ASR contract"
+            )
+        stamped.append(segment.model_copy(update={
+            "model_name": model_name,
+            "model_revision": model_revision,
+            "artifact_version": ASR_SEGMENT_ARTIFACT_VERSION,
+        }))
+    return stamped
+
+
+def _apply_speaker_labels(
+    original: list[TranscriptSegment],
+    diarized: list[TranscriptSegment],
+) -> list[TranscriptSegment]:
+    """Accept only speaker labels while preserving canonical ASR segments."""
+
+    merged: list[TranscriptSegment] = []
+    for source, result in zip(original, diarized, strict=True):
+        source_fields = source.model_dump(exclude={"speaker_id"})
+        result_fields = result.model_dump(exclude={"speaker_id"})
+        if result_fields != source_fields:
+            raise ValueError("remote diarization changed canonical ASR segment")
+        merged.append(
+            source.model_copy(update={"speaker_id": result.speaker_id})
+        )
+    return merged

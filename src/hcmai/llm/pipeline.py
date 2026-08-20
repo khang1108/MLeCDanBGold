@@ -98,6 +98,11 @@ class LLMService:
     def caption(self, images: Any) -> Any:
         return self.adapter.caption(images)
 
+    def ocr(self, images: Any) -> Any:
+        """Run structured OCR through the configured inference adapter."""
+
+        return self.adapter.ocr(images)
+
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
 
@@ -109,3 +114,18 @@ class LLMService:
         if method is None:
             raise RuntimeError("multi-frame VQA is not supported by this provider")
         return method(*args, **kwargs)
+
+    def boundary_scores(self, frames: Any, *, source: str) -> Any:
+        return self.adapter.boundary_scores(frames, source=source)
+
+    def transcribe_reference(self, payload: Any) -> Any:
+        return self.adapter.transcribe_reference(payload)
+
+    def diarize_reference(self, payload: Any) -> Any:
+        return self.adapter.diarize_reference(payload)
+
+    def embed_dino(self, images: Any) -> Any:
+        method = getattr(self.adapter, "embed_images", None)
+        if method is not None:
+            return method(images, source="dino")
+        raise RuntimeError("dino embedding is not supported by this provider")

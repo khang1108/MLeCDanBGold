@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hcmai.common.schemas import FrameEnrichment, ProcessingStatus
+from hcmai.common.schemas import CaptionEvidence, ProcessingStatus
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
 from hcmai.data.enrichment.caption.config import CaptionConfig, ENRICHMENT_VERSION
 
@@ -36,13 +36,15 @@ def build_manifest(
     config: CaptionConfig,
     frames_path: Path,
     root: Path,
-    rows: dict[str, FrameEnrichment],
+    rows: dict[str, CaptionEvidence],
     captioner: CaptionAdapter,
     started: datetime,
     elapsed: float,
     latencies: list[float],
     skipped: int,
     retried: int,
+    *,
+    frame_store_id: str | None = None,
 ) -> dict[str, Any]:
     complete = sum(
         row.status == ProcessingStatus.COMPLETED for row in rows.values()
@@ -53,11 +55,15 @@ def build_manifest(
         return ordered[round((len(ordered) - 1) * part)] if ordered else 0.0
 
     return {
-        "artifact_version": "frame_enrichment.v1",
+        # Rows and manifest share one version so downstream validation can
+        # prove that the whole specialist bundle has matching lineage.
+        "artifact_version": config.enrichment_version,
+        "source_artifact": "captions.parquet",
         ENRICHMENT_VERSION: config.enrichment_version,
         "dataset_version": config.dataset_version,
         "input_parquet_path": str(frames_path),
         "dataset_root": str(root),
+        "frame_store_id": frame_store_id,
         "model_checkpoint": config.model_checkpoint,
         "resolved_model_revision": captioner.resolved_revision,
         "prompt": config.prompt,

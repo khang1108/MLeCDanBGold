@@ -106,9 +106,9 @@ def test_explicit_failures_retry_and_malformed_row(tmp_path):
         cfg, batch_fn=retry), dataset_root=tmp_path)
     assert second["skipped_count"] == 2 and second["retried_count"] == 3
     assert retry.calls == [2, 1] and second["completed_count"] == 5
-    table = pd.read_parquet(output / "frame_enrichment.parquet")
-    table.loc[table.frame_id == "f0", "caption"] = ""
-    table.to_parquet(output / "frame_enrichment.parquet", index=False)
+    table = pd.read_parquet(output / "captions.parquet")
+    table.loc[table.frame_id == "f0", "text"] = ""
+    table.to_parquet(output / "captions.parquet", index=False)
     malformed = Backend()
     third = generate_captions(frames, output, cfg, TransformersCaptionAdapter(
         cfg, batch_fn=malformed), dataset_root=tmp_path)
@@ -121,6 +121,6 @@ def test_explicit_failures_retry_and_malformed_row(tmp_path):
     with pytest.raises(OSError, match="disk full"):
         atomic_write(target, fail_write)
     assert target.read_bytes() == before and not (output / "manifest.json.tmp").exists()
-    (output / "frame_enrichment.parquet").write_bytes(b"corrupt")
+    (output / "captions.parquet").write_bytes(b"corrupt")
     with pytest.raises(RuntimeError, match="Cannot resume corrupted Parquet"):
         generate_captions(frames, output, cfg, dataset_root=tmp_path)

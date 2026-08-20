@@ -28,7 +28,9 @@ def _values(root: Path) -> dict[str, object]:
             "frame_store": True,
             "caption": True,
             "ocr": True,
+            "objects": True,
             "asr": True,
+            "frame_context": True,
             "visual_index": True,
             "caption_index": True,
             "ocr_index": True,
@@ -75,6 +77,28 @@ def test_production_config_accepts_only_isolated_s3_inputs(tmp_path: Path) -> No
     assert config.full_artifacts_prefix == "artifacts/production/corpus-v1"
     assert config.smoke_artifacts_prefix == "artifacts/smoke/corpus-v1"
     assert config.artifacts_root == config.work_root / "artifacts"
+
+
+def test_staging_root_is_expanded_before_runtime_use(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persist the expanded staging path instead of leaving a ``~`` literal."""
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    values = _values(tmp_path)
+    preprocessing = values["preprocessing"]
+    assert isinstance(preprocessing, dict)
+    storage = preprocessing["s3"]
+    assert isinstance(storage, dict)
+    storage["staging_root"] = Path("~/run/staging")
+
+    config = S3CorpusPreparationConfig.model_validate(values)
+
+    assert config.preprocessing.s3 is not None
+    assert config.preprocessing.s3.staging_root == (
+        tmp_path / "run/staging"
+    ).resolve()
 
 
 def test_thunder_cache_and_execution_policy_are_validated(tmp_path: Path) -> None:
@@ -155,7 +179,19 @@ def test_checked_in_production_config_is_s3_only_and_fully_pinned() -> None:
         for model in config.models.model_dump().values()
     )
     assert config.preprocessing.dino_revision == config.models.dino.revision
-    assert all(config.stages.model_dump().values())
+    assert config.frame_store_source == "btc_keyframes"
+    assert config.stages.model_dump() == {
+        "frame_store": True,
+        "caption": True,
+        "ocr": True,
+        "objects": True,
+        "asr": True,
+        "frame_context": True,
+        "visual_index": False,
+        "caption_index": False,
+        "ocr_index": False,
+        "asr_index": False,
+    }
 
     caption = CaptionJobConfig.from_yaml()
     transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
@@ -203,7 +239,9 @@ def test_stage_toggles_allow_a_dependency_complete_partial_run(
         "frame_store": True,
         "caption": False,
         "ocr": False,
+        "objects": False,
         "asr": False,
+        "frame_context": False,
         "visual_index": True,
         "caption_index": False,
         "ocr_index": False,

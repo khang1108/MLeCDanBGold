@@ -107,7 +107,8 @@ class VQASubmission(ContractModel):
     rank: int = Field(ge=1, le=100)
 
     video_id: NonEmptyString
-    frame_idx: int = Field(ge=0)
+    frame_idx: NonEmptyString
+
     fps: float = Field(default=25.0, gt=0)
     frame_ids: list[NonEmptyString] = Field(default_factory=list)
     
@@ -149,7 +150,8 @@ class VQARetrievalEvidence(ContractModel):
     rank: int = Field(ge=1, le=100)
     video_id: NonEmptyString
     frame_id: NonEmptyString
-    frame_idx: int = Field(ge=0)
+    frame_idx: NonEmptyString
+    
     fps: float = Field(default=25.0, gt=0)
     frame_ids: list[NonEmptyString] = Field(default_factory=list)
     timestamp_ms: int = Field(ge=0)

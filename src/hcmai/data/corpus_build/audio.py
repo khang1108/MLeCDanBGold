@@ -28,7 +28,7 @@ def extract_flac(video: Path, output: Path, sample_rate: int) -> None:
     partial = output.with_suffix(f"{output.suffix}.partial")
     partial.unlink(missing_ok=True)
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "ffmpeg",
                 "-nostdin",
@@ -44,11 +44,23 @@ def extract_flac(video: Path, output: Path, sample_rate: int) -> None:
                 str(sample_rate),
                 "-c:a",
                 "flac",
+                "-f",
+                "flac",
                 str(partial),
             ],
-            check=True,
+            check=False,
             capture_output=True,
         )
+        if result.returncode != 0:
+            diagnostic = (result.stderr or result.stdout).decode(
+                "utf-8", errors="replace"
+            ).strip()
+            if len(diagnostic) > 1_000:
+                diagnostic = f"{diagnostic[:997]}..."
+            raise RuntimeError(
+                f"ffmpeg failed for {video.name} (exit {result.returncode}): "
+                f"{diagnostic or 'no diagnostic output'}"
+            )
         if not partial.is_file() or partial.stat().st_size == 0:
             raise RuntimeError("ffmpeg did not produce an audio artifact")
         partial.replace(output)
@@ -64,7 +76,7 @@ class S3AudioReferenceProvider:
     2. Upload file FLAC này lên một thư mục tạm trên S3.
     3. Tạo Presigned URL giới hạn thời gian (mặc định 1 giờ) gửi cho worker.
     
-    Việc này giúp các Inference Worker (ví dụ Kaggle) lấy được âm thanh trực tiếp
+    Việc này giúp các remote inference worker lấy được âm thanh trực tiếp
     mà không cần tải lại toàn bộ file MP4 gốc cồng kềnh.
     """
 
@@ -152,4 +164,3 @@ class S3AudioReferenceProvider:
         for key, _ in sorted(set(self._objects.values())):
             self.client.delete_object(Bucket=self.bucket, Key=key)
         self._objects.clear()
-

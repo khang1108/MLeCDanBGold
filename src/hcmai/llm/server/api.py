@@ -30,6 +30,8 @@ from hcmai.common.schemas import (
     VQAInferenceEvidence,
     VQAInferenceResponse,
 )
+from hcmai.common.schemas.inference import OCRRegionItem
+from hcmai.data.enrichment.ocr.models.entities import json_safe_ocr_raw
 from hcmai.llm.pipeline import LLMService
 
 
@@ -240,7 +242,22 @@ async def ocr(
         model=status.checkpoint or "ocr",
         revision=status.revision,
         items=[
-            OCRItem(item_id=item_id, text=str(value))
+            OCRItem(
+                item_id=item_id,
+                text=value.text,
+                raw_output=json_safe_ocr_raw(value.raw_output),
+                regions=[
+                    OCRRegionItem(
+                        text=region.text,
+                        confidence=region.confidence,
+                        x_min=region.x_min,
+                        y_min=region.y_min,
+                        x_max=region.x_max,
+                        y_max=region.y_max,
+                    )
+                    for region in value.regions
+                ],
+            )
             for item_id, value in zip(identifiers, values)
         ],
         latency_ms=(perf_counter() - started) * 1_000,

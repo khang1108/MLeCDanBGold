@@ -23,6 +23,9 @@ from hcmai.llm.adapters.http import InferenceClient
 from hcmai.llm.config import LLMServiceConfig
 from hcmai.retrieval.embedding.adapters.remote import RemoteEmbeddingAdapter
 from hcmai.data.enrichment.caption.adapters.remote import RemoteCaptionAdapter
+from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
+from hcmai.data.enrichment.ocr.config import OCRConfig
+from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 from hcmai.llm.adapters.local import LocalAdapter
 from hcmai.llm.pipeline import LLMService
 from hcmai.llm.server.api import create_llm_app
@@ -69,7 +72,27 @@ class FakeRuntime:
         return [f"red {image.getpixel((0, 0))[0]}" for image in images]
 
     def ocr(self, images):
-        return [f"text {image.getpixel((0, 0))[0]}" for image in images]
+        return [
+            OCRResult(
+                text=f"text {image.getpixel((0, 0))[0]}",
+                raw_output=(
+                    object()
+                    if image.getpixel((0, 0))[0] < 100
+                    else np.asarray([1, 2], dtype=np.int64)
+                ),
+                regions=(
+                    OCRRegionResult(
+                        text=f"text {image.getpixel((0, 0))[0]}",
+                        confidence=None,
+                        x_min=0.0,
+                        y_min=0.0,
+                        x_max=1.0,
+                        y_max=1.0,
+                    ),
+                ),
+            )
+            for image in images
+        ]
 
     def embed_images(self, images, source="visual"):
         assert source in {"visual", "dino"}
@@ -356,6 +379,18 @@ def test_offline_inference_endpoints_preserve_identity_and_provenance():
     assert ocr.status_code == 200
     assert [item["item_id"] for item in ocr.json()["items"]] == ["a", "b"]
     assert ocr.json()["model"] == "ocr/model"
+    assert ocr.json()["items"][0]["regions"] == [
+        {
+            "text": "text 10",
+            "confidence": None,
+            "x_min": 0.0,
+            "y_min": 0.0,
+            "x_max": 1.0,
+            "y_max": 1.0,
+        }
+    ]
+    assert ocr.json()["items"][0]["raw_output"] is None
+    assert ocr.json()["items"][1]["raw_output"] == [1, 2]
 
     embedded = request(
         app,
@@ -479,3 +514,89 @@ def test_runtime_does_not_construct_or_require_disabled_models():
         runtime.embed_text(["query"])
     with pytest.raises(RuntimeError, match="caption model is disabled"):
         runtime.caption([Image.new("RGB", (1, 1))])
+    with pytest.raises(RuntimeError, match="ocr model is disabled"):
+        runtime.ocr([Image.new("RGB", (1, 1))])
+
+
+def test_asr_readiness_requires_the_enabled_model_to_be_loaded():
+    adapter = LocalAdapter(
+        LLMServiceConfig(),
+        enable_caption=False,
+        enable_visual_embedding=False,
+        enable_caption_embedding=False,
+        enable_reranker=False,
+        enable_vqa=False,
+        enable_asr=True,
+    )
+
+    assert adapter.readiness().ready is False
+    adapter.asr = object()
+    assert adapter.readiness().ready is True
+
+
+def test_asr_only_environment_does_not_construct_unrequested_models(
+    monkeypatch,
+):
+    capability_flags = (
+        "HCMAI_ENABLE_CAPTION",
+        "HCMAI_ENABLE_OCR",
+        "HCMAI_ENABLE_VISUAL_EMBEDDING",
+        "HCMAI_ENABLE_CAPTION_EMBEDDING",
+        "HCMAI_ENABLE_RERANKER",
+        "HCMAI_ENABLE_VQA",
+        "HCMAI_ENABLE_DIARIZATION",
+        "HCMAI_ENABLE_TRANSNET",
+        "HCMAI_ENABLE_GEBD",
+        "HCMAI_ENABLE_DINO",
+    )
+    for name in capability_flags:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HCMAI_ENABLE_ASR", "true")
+
+    adapter = LocalAdapter.from_environment()
+
+    assert adapter.enable_asr is True
+    assert adapter.captioner is None
+    assert adapter.ocr_adapter is None
+    assert adapter.visual_encoder is None
+    assert adapter.caption_encoder is None
+    assert adapter.reranker is None
+    assert adapter.vqa_model is None
+    assert adapter.enable_diarization is False
+
+
+def test_caption_and_ocr_share_one_identically_pinned_florence_backend():
+    config = LLMServiceConfig.from_yaml("llm/config.yaml")
+    model = object()
+    processor = object()
+    captioner = SimpleNamespace(
+        config=config.caption_generation,
+        model=model,
+        processor=processor,
+        resolved_revision=config.caption_generation.revision,
+        resolve_revision=lambda: config.caption_generation.revision,
+    )
+    ocr = FlorenceAdapter(
+        OCRConfig(
+            checkpoint=config.caption_generation.model_checkpoint,
+            revision=config.caption_generation.revision,
+            device=config.caption_generation.device,
+            dtype=config.caption_generation.dtype,
+        )
+    )
+    adapter = LocalAdapter(
+        config,
+        captioner=captioner,
+        ocr_adapter=ocr,
+        enable_caption=True,
+        enable_visual_embedding=False,
+        enable_caption_embedding=False,
+        enable_reranker=False,
+        enable_vqa=False,
+        enable_ocr=True,
+    )
+
+    adapter.load()
+
+    assert ocr.model is model
+    assert ocr.processor is processor

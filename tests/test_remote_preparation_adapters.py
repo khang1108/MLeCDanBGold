@@ -111,7 +111,11 @@ class FakeClient:
             video_id=payload.video_id,
             model="diarization",
             revision=SHA,
-            segments=[_segment("SPEAKER_00")],
+            segments=[
+                payload.segments[0].model_copy(
+                    update={"speaker_id": "SPEAKER_00"}
+                )
+            ],
             latency_ms=1,
         )
 
@@ -225,5 +229,83 @@ def test_remote_transcript_adapters_share_audio_reference_and_keep_segments() ->
     )
     video = Path("L21_V001.mp4")
     segments = asr.transcribe(video, "L21_V001")
-    assert segments == [_segment()]
-    assert diarization.assign_speakers(video, segments) == [_segment("SPEAKER_00")]
+    assert segments[0].model_name == "asr"
+    assert segments[0].model_revision == SHA
+    assert segments[0].artifact_version == "asr-segment-v1"
+
+    diarized = diarization.assign_speakers(video, segments)
+    assert diarized == [
+        segments[0].model_copy(update={"speaker_id": "SPEAKER_00"})
+    ]
+    assert diarized[0].speaker_id == "SPEAKER_00"
+    assert diarized[0].model_name == "asr"
+    assert diarized[0].model_revision == SHA
+    assert diarized[0].artifact_version == "asr-segment-v1"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("model_name", "other/asr"),
+        ("model_revision", "b" * 40),
+        ("artifact_version", "other-segment-v1"),
+    ],
+)
+def test_remote_asr_rejects_segment_lineage_conflicting_with_envelope(
+    field: str,
+    value: str,
+) -> None:
+    """Do not accept provider segments that contradict a trusted ASR envelope."""
+
+    client, references = FakeClient(), FakeReferences()
+    client.transcribe_audio_reference = lambda payload: TranscriptInferenceResponse(
+        request_id=payload.request_id,
+        video_id=payload.video_id,
+        model="asr",
+        revision=SHA,
+        segments=[_segment().model_copy(update={field: value})],
+        latency_ms=1,
+    )
+    adapter = RemoteASRAdapter(
+        client, ASRConfig(model_name="asr", revision=SHA), references
+    )
+
+    with pytest.raises(ValueError, match=f"segment {field} conflicts"):
+        adapter.transcribe(Path("L21_V001.mp4"), "L21_V001")
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"text": "mutated transcript"},
+        {"start_ms": 1},
+        {"end_ms": 999},
+        {"language": "en"},
+    ],
+)
+def test_remote_diarization_rejects_canonical_asr_mutation(
+    update: dict[str, object],
+) -> None:
+    """Accept only speaker labels from the remote diarization provider."""
+
+    client, references = FakeClient(), FakeReferences()
+    asr = RemoteASRAdapter(
+        client, ASRConfig(model_name="asr", revision=SHA), references
+    )
+    diarization = RemoteDiarizationAdapter(
+        client,
+        DiarizationConfig(model_name="diarization", revision=SHA),
+        references,
+    )
+    segments = asr.transcribe(Path("L21_V001.mp4"), "L21_V001")
+    client.diarize_audio_reference = lambda payload: TranscriptInferenceResponse(
+        request_id=payload.request_id,
+        video_id=payload.video_id,
+        model="diarization",
+        revision=SHA,
+        segments=[payload.segments[0].model_copy(update=update)],
+        latency_ms=1,
+    )
+
+    with pytest.raises(ValueError, match="changed canonical ASR segment"):
+        diarization.assign_speakers(Path("L21_V001.mp4"), segments)

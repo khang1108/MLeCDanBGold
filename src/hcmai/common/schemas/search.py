@@ -77,7 +77,7 @@ class SearchResult(ContractModel):
 
     # Use these filed to calculate the interval
     video_id: NonEmptyString
-    frame_idx: int = Field(ge=0)
+    frame_idx: NonEmptyString
     fps: float = Field(default=25.0, gt=0)
     frame_ids: list[NonEmptyString] = Field(default_factory=list)
     

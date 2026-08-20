@@ -1,5 +1,7 @@
 from .base import *
 from .enum import *
+from .evidence import *
+
 from .frame import FrameEnrichment, FrameRecord, validate_frame_enrichment
 from .inference import (
     AudioReferenceRequest,
@@ -130,4 +132,11 @@ __all__ = [
     "TaskRequest",
     "TaskResponse",
     "TranscriptSegment",
+    "CaptionEvidence",
+    "OCRRegion",
+    "OCREvidence",
+    "ObjectDetection",
+    "ObjectEvidence",
+    "FrameContext",
+    "usable_completed_text",
 ]

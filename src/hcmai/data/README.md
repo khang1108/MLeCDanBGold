@@ -1,110 +1,106 @@
-# HCMAI Data Pipeline & Corpus Build
+# HCMAI 2026 BTC-native data preparation
 
-`hcmai.data` là trái tim của hệ thống chuẩn bị dữ liệu (Corpus Build) cho toàn bộ hệ thống HCMAI. Package này chịu trách nhiệm kéo video từ S3, trích xuất khung hình (preprocessing), làm giàu đa phương thức (enrichment: OCR, ASR, Caption), và xây dựng các index phục vụ tìm kiếm.
+`hcmai.data` owns canonical frame ingestion, specialist evidence artifacts,
+derived frame context, and typed data access. The active competition profile
+uses organizer-provided BTC keyframes and objects; it does not decode videos to
+extract another frame set.
 
-Mục tiêu tối thượng của package là: **Đảm bảo tính toàn vẹn (Data Lineage), khả năng khôi phục (Resumability), và tạo ra ánh xạ chuẩn xác duy nhất (Canonical Mapping) cho hệ thống KIS, VQA và TRAKE.**
+## Competition flow
 
----
-
-## 1. Tổng quan Kiến trúc (Architecture Workflow)
-
-```mermaid
-flowchart TD
-    S3[("S3 Video Corpus\n(Immutable)")] --> ORCH["S3 Orchestrator\n(corpus_build/pipeline.py)"]
-    
-    ORCH --> PREP["Video Preprocessing\n(GEBD, DINO, Selection)"]
-    PREP --> FS[("Canonical FrameStore\n(frames.parquet)")]
-    
-    FS --> ENR["Enrichment Pipeline"]
-    
-    ENR --> CAP["Caption Generation\n(Transformers)"]
-    ENR --> OCR["OCR Extraction\n(Florence-2)"]
-    ENR --> ASR["ASR / Transcripts\n(Faster-Whisper + VAD)"]
-    
-    CAP --> VAL{"validate_frame_enrichment()"}
-    OCR --> VAL
-    ASR --> VAL
-    
-    VAL --> ART[("Enrichment Artifacts\n(frame_enrichment.parquet)")]
-    
-    ART --> IDX["Index Build\n(Visual / Text Dense Indexes)"]
+```text
+BTC keyframes ──> Caption ──────┐
+              └─> OCR ──────────┤
+BTC objects ────> Object Import ├─> FrameContext V1
+Videos ─────────> ASR segments  │   (ASR excluded)
+                                 └─> specialist artifacts
 ```
 
-Quy trình hoạt động dựa trên thiết kế **State Machine Marker**: 
-- Tại mỗi giai đoạn (stage), Orchestrator ghi nhận trạng thái thông qua các marker file (`stages/*.json`). 
-- Marker lưu trữ `run_id` (fingerprint của config + inventory) và kiểm tra `file_size` của các artifact để cho phép Resume chính xác nếu tiến trình bị sập.
+Caption, OCR, object import, and ASR produce independent specialist artifacts.
+FrameContext V1 is a deterministic derived view of Caption, usable normalized
+OCR, and the object summary, in that order. ASR remains timestamped timeline
+evidence and is intentionally absent from FrameContext dependency identity and
+text.
 
----
+`src/hcmai/data/preprocessing/**` remains available for non-BTC experiments.
+It is not used by the HCMAI 2026 competition preparation profile.
 
-## 2. Preprocessing & Thuật toán Chọn lọc Khung hình
+## Artifact ownership
 
-Quá trình giải mã và trích xuất khung hình từ video gốc tuân thủ nguyên tắc giữ nguyên cấu trúc sự kiện (Semantic Event Structure) thay vì chỉ chọn bừa các khung hình.
+The specialist outputs remain independently inspectable. A context or legacy
+projection never replaces them.
 
-### Sơ đồ Tiền xử lý
+| Artifact | Role |
+| --- | --- |
+| `captions.parquet` | Caption source of truth |
+| `ocr/frames.parquet` | Frame-level OCR source of truth |
+| `ocr/regions.parquet` | Raw OCR regions and boxes; source of truth |
+| `objects/frames.parquet` | Frame-level object counts/summary; source of truth |
+| `objects/detections.parquet` | Every valid BTC detection and box; source of truth |
+| `transcripts/*.parquet` | Timestamped ASR segment source of truth |
+| `context/frame_context_v1.parquet` | Derived Caption + OCR + Object view |
+| `frame_enrichment.parquet` | Temporary compatibility projection only |
 
-```mermaid
-stateDiagram-v2
-    [*] --> Decode: Giải mã Video (Absolute PTS)
-    Decode --> GEBD: Generic Event Boundary Detection
-    GEBD --> EventID: Đánh dấu event_id theo khoảng
-    EventID --> Burst: Mở rộng Context (Burst Expansion)
-    Burst --> DINO: Lọc trùng lặp (Deduplication)
-    DINO --> [*]: frames.parquet
+The compatibility projection exists for retrieval code that has not yet moved
+to the typed specialist stores. It must not be treated as an authoritative
+enrichment artifact.
+
+All frame-aligned evidence preserves `video_id`, `frame_id`, `frame_idx`,
+`timestamp_ms`, and `frame_store_id`. `frame_idx` is the competition-facing
+coordinate; keyframe order and array position must never replace it.
+
+The identity fields are required in specialist V1 Parquet. Existing Caption,
+OCR, Object, or FrameContext artifacts without `timestamp_ms` (or OCR region
+artifacts without `video_id`) must be regenerated or explicitly migrated before
+they can be loaded.
+
+## Run the V1 stages
+
+Run commands from the repository root. Paths and versions shared by the
+specialist stages are pinned in `configs/enrichment.yaml`.
+
+```bash
+# 1. Import organizer keyframes as the canonical frame store.
+PYTHONPATH=src aic/bin/python scripts/ingest_btc_keyframes.py \
+  --btc-root data \
+  --data-root data \
+  --output-root artifacts/frame_store \
+  --frame-store-id btc-keyframes-v1
+
+# 2. Generate captions.
+PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py \
+  --config configs/enrichment.yaml
+
+# 3. Generate structured OCR evidence.
+PYTHONPATH=src aic/bin/python scripts/generate_ocr_enrichment.py \
+  --config configs/enrichment.yaml
+
+# 4. Import organizer-provided object detections; do not re-detect objects.
+PYTHONPATH=src aic/bin/python scripts/generate_object_enrichment.py \
+  --config configs/enrichment.yaml
+
+# 5. Generate timestamped ASR segments from the source videos.
+PYTHONPATH=src aic/bin/python scripts/prepare_transcripts.py \
+  --config configs/enrichment.yaml \
+  --videos-root data/videos
+
+# 6. Build FrameContext only from the existing specialist artifacts.
+PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
+  --config configs/enrichment.yaml
 ```
 
-### Các Cơ chế & Thuật toán Lõi:
+If the videos live elsewhere, change only `--videos-root`. The V1 enrichment
+sequence ends at FrameContext; retrieval/index construction belongs to a
+separate plan.
 
-1. **Đồng bộ Tọa độ Thời gian (Absolute PTS)**: Toàn bộ hệ thống không reset origin timestamp về 0. PTS thực tế của video được giữ nguyên (`timestamp_ms = frame.pts * base`) để đảm bảo quá trình align với âm thanh (ASR) downstream hoàn toàn khớp.
-2. **GEBD & Event Structure**: Mô hình GEBD tìm ra các semantic boundaries. Khung hình được đánh số `event_id` theo dạng interval liên tục giữa 2 boundaries. Điều này đảm bảo khi hệ thống phân tích Scene (Temporal Grouping) ở downstream, nó có thể `groupby(["video_id", "event_id"])` để lấy trọn vẹn sự kiện.
-3. **Thuật toán Burst Expansion $O(\log N)$**: 
-   - Quá trình lấy thêm khung hình ngữ cảnh (context frames) xung quanh một đỉnh (peak) được tối ưu hóa bằng mảng `timestamps` và **Tìm kiếm Nhị phân (`bisect`)**.
-   - Complexity giảm từ $O(N \times P)$ xuống $O(P \log N)$, triệt tiêu nút thắt cổ chai khi xử lý video siêu dài.
-4. **DINO Deduplication & Text-Change Protection**:
-   - Để loại bỏ các khung hình thừa, hệ thống so sánh cosine similarity qua DINO embeddings.
-   - **Vấn đề**: DINO thường đánh giá 2 khung hình News có text/phụ đề chạy ở dưới là "giống hệt nhau" (cosine cao), dẫn đến việc mất sạch OCR text quan trọng.
-   - **Giải pháp**: Tích hợp module **Bottom-Third Pixel Diffing**. Thuật toán cắt 30% nửa dưới (Lower-third) của 2 ảnh và tính chênh lệch pixel (MSE). Nếu `MSE > Threshold`, thuật toán chặn DINO dedup (Text-Change Protection). Đây là thuật toán $O(1)$ memory, siêu tốc mà không cần load LLM.
+## Public boundaries
 
----
+- `src/hcmai/data/pipeline.py`: `DataService` imports the configured BTC frame
+  store and exposes typed frame/evidence stores.
+- `src/hcmai/data/enrichment/pipeline.py`: `EnrichmentService` runs Caption,
+  OCR, Object Import, and FrameContext through independent stage boundaries.
+- `src/hcmai/data/enrichment/transcripts/pipeline.py`: `TranscriptService`
+  owns video-level ASR and diarization.
+- `src/hcmai/data/stores/`: typed readers for specialist and derived artifacts.
 
-## 3. Enrichment (Làm giàu Đa phương thức)
-
-Data Pipeline không flatten evidence thành text tĩnh mà giữ nguyên cấu trúc quan hệ giữa Khung hình và Nguồn dữ liệu.
-
-```mermaid
-flowchart LR
-    FRAME["FrameRecord\n(Canonical Identity)"]
-    FRAME -->|1:1| CAP["Caption\n(TransformersCaptionAdapter)"]
-    FRAME -->|1:1| OCR["OCR Text\n(FlorenceAdapter)"]
-    FRAME -->|1:N| ASR["ASR Transcript\n(source_segment_ids)"]
-```
-
-### OCR & Captioning
-- Sử dụng mô hình qua `Adapter Pattern` (vd: `TransformersCaptionAdapter`, `FlorenceAdapter`).
-- **Resumability**: Dữ liệu đang sinh dở được lưu định kỳ. Nếu chạy lại, hàm `resume_rows` sẽ đối chiếu `frame_store_id` và `enrichment_version` để load các dòng đã xử lý, chỉ chạy tiếp các dòng `PENDING`.
-
-### ASR / Audio Transcripts
-- **VAD Offset Alignment**: Âm thanh được giải mã từ `first_audio_frame_pts` của Video. Segment từ Faster-Whisper được cộng thêm VAD offset.
-- **Materialization**: Hàm `materialize_asr_enrichment` ánh xạ các half-open interval của Transcript vào khung hình. Thay vì chỉ lưu text, hệ thống gom nhóm `segment.segment_id` thành mảng `source_segment_ids` lưu vào `FrameEnrichment`. Tính năng này cho phép hệ thống VQA downstream truy ngược từ frame về mốc thời gian Audio gốc.
-
----
-
-## 4. Data Lineage & Integrity (Tính Toàn Vẹn)
-
-Đóng vai trò như một bức tường lửa chống lại việc dữ liệu "râu ông nọ cắm cằm bà kia" (Ví dụ: OCR chạy từ bộ frame cũ nhưng ráp vào bộ frame mới).
-
-1. **`frame_store_id` (Pipeline Fingerprint)**:
-   - S3 Orchestrator băm (SHA256) toàn bộ file inventory (danh sách video S3) + config pipeline để tạo ra `run_id`.
-   - `run_id` này chính là `frame_store_id`. Nó được truyền xuyên suốt qua tất cả các Adapter.
-2. **Schema `FrameEnrichment`**:
-   - Yêu cầu bắt buộc phải có `frame_store_id`.
-3. **`validate_frame_enrichment()`**:
-   - Trước khi bất kỳ Artifact nào (Caption, OCR, ASR) được ghi ra file Parquet, nó phải đi qua chốt chặn này.
-   - Chốt chặn xác thực 3 điều: (1) Số lượng bằng chính xác số lượng canonical frames, (2) Thứ tự khớp 100%, (3) `frame_store_id` của từng row khớp với Run ID hiện hành.
-
----
-
-## 5. Các Thành Phần Code Chính
-
-- `src/hcmai/data/pipeline.py`: Chứa `DataService` - Facade duy nhất để toàn bộ hệ thống API và Frontend truy vấn `FrameRecord` và độ phân giải ảnh (`FrameAssetResolver`). Tuyệt đối cấm can thiệp file nội bộ.
-- `src/hcmai/data/corpus_build/pipeline.py`: Chứa S3 Orchestrator - Trái tim điều phối các tiến trình Offline Preparation.
-- `src/hcmai/common/schemas/frame.py`: Định nghĩa `FrameRecord` và `FrameEnrichment` chứa các hợp đồng schema cực kỳ nghiêm ngặt.
+Serving code reads prepared artifacts. It must not regenerate captions, OCR,
+objects, transcripts, context, or other corpus-scale outputs in a request.

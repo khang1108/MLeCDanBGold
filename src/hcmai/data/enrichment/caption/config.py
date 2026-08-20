@@ -54,12 +54,13 @@ class CaptionConfig:
 
 @dataclass(frozen=True)
 class CaptionJobConfig:
-    """Paths and model settings for one caption job."""
+    """Paths, lineage, and model settings for one caption job."""
 
     caption: CaptionConfig
     dataset_root: Path
     frames_path: Path
     output_dir: Path
+    frame_store_id: str | None = None
 
     @classmethod
     def from_yaml(
@@ -76,17 +77,22 @@ class CaptionJobConfig:
 
         values = dict(caption)
         output_dir = values.pop("output_dir", None)
-        missing = sorted({"version", "root", "frames_path"} - set(dataset))
+        dataset_root = dataset.get("data_root", dataset.get("root"))
+        missing = sorted({"version", "frames_path"} - set(dataset))
+        if not isinstance(dataset_root, (str, Path)):
+            missing.append("data_root")
         if missing or output_dir is None:
             fields = missing + ([] if output_dir is not None else ["caption.output_dir"])
             raise ValueError(f"Missing enrichment configuration: {', '.join(fields)}")
+        assert isinstance(dataset_root, (str, Path))
 
         values["dataset_version"] = dataset["version"]
         return cls(
             caption=CaptionConfig.from_dict(values),
-            dataset_root=_project_path(dataset["root"]),
+            dataset_root=_project_path(dataset_root),
             frames_path=_project_path(dataset["frames_path"]),
             output_dir=_project_path(output_dir),
+            frame_store_id=dataset.get("frame_store_id"),
         )
 
 

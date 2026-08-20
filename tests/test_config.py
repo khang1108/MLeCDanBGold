@@ -41,7 +41,7 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.vqa.default_profile is VQABaselineProfile.LOCALIZER
     assert set(config.vqa.profiles) == set(VQABaselineProfile)
     assert config.vqa.profiles[VQABaselineProfile.SINGLE_FRAME].max_vlm_calls == 1
-    assert config.inference.base_url == "https://api.iamphuckhang.dev"
+    assert config.inference.base_url == "http://127.0.0.1:8100"
 
 
 def test_llm_config_is_the_model_authority() -> None:
@@ -79,9 +79,10 @@ def test_enrichment_config_is_loaded_from_root_yaml() -> None:
     assert config.caption.revision == "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
     assert config.caption.decoding["num_beams"] == 3
     assert config.caption.dataset_version == "hcmai2026_v1"
-    assert config.dataset_root == project_root / "artifacts/frame_store"
+    assert config.dataset_root == project_root / "data"
     assert config.frames_path == project_root / "artifacts/frame_store/frames.parquet"
-    assert config.output_dir == project_root / "artifacts/enrichment/caption"
+    assert config.output_dir == project_root / "artifacts/enrichment/captions"
+    assert config.frame_store_id == "btc-keyframes-v1"
 
     transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
     assert transcript.asr.revision == "bcd2b5b7f32b480ab5790554cfa8347f246a14f3"
@@ -134,3 +135,15 @@ def test_relative_caption_paths_do_not_depend_on_process_working_directory(
     assert config.dataset_root == project_root / "fixture/data"
     assert config.frames_path == project_root / "fixture/data/frames.parquet"
     assert config.output_dir == project_root / "fixture/captions"
+
+
+def test_caption_job_rejects_non_path_dataset_root(tmp_path: Path) -> None:
+    """Reject malformed YAML paths before passing them to ``pathlib``."""
+
+    raw = yaml.safe_load(Path("configs/enrichment.yaml").read_text(encoding="utf-8"))
+    raw["dataset"]["data_root"] = 123
+    config_path = tmp_path / "enrichment.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="data_root"):
+        CaptionJobConfig.from_yaml(config_path)

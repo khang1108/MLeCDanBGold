@@ -55,6 +55,8 @@ class PreparationPaths:
     asr_root: Path
     caption_root: Path
     ocr_root: Path
+    object_root: Path
+    context_root: Path
     visual_index_root: Path
     caption_index_root: Path
     ocr_index_root: Path
@@ -96,6 +98,8 @@ class PreparationPaths:
             asr_root=artifacts / "enrichment/asr",
             caption_root=artifacts / "enrichment/caption",
             ocr_root=artifacts / "enrichment/ocr",
+            object_root=artifacts / "enrichment/objects",
+            context_root=artifacts / "enrichment/context",
             visual_index_root=artifacts / "indexes/visual",
             caption_index_root=artifacts / "indexes/caption",
             ocr_index_root=artifacts / "indexes/ocr",
@@ -118,10 +122,36 @@ class PreparationPaths:
             asr_root=artifacts / "enrichment/asr",
             caption_root=artifacts / "enrichment/caption",
             ocr_root=artifacts / "enrichment/ocr",
+            object_root=artifacts / "enrichment/objects",
+            context_root=artifacts / "enrichment/context",
             visual_index_root=artifacts / "embeddings/visual",
             caption_index_root=artifacts / "embeddings/caption",
             ocr_index_root=artifacts / "embeddings/ocr",
             asr_index_root=artifacts / "embeddings/asr",
+        )
+
+    @classmethod
+    def from_enrichment_job(
+        cls, config: S3CorpusPreparationConfig, job: Any
+    ) -> "PreparationPaths":
+        """Align BTC-native orchestration paths with the enrichment contract."""
+
+        artifacts = job.frame_store_output.parent
+        enrichment = artifacts / "enrichment"
+        return cls(
+            artifacts_root=artifacts,
+            state_root=config.work_root / ".preparation",
+            frame_store_root=job.frame_store_output,
+            transcripts_root=job.transcript_output_dir,
+            asr_root=enrichment / "asr",
+            caption_root=job.caption_output_dir,
+            ocr_root=job.ocr_output_dir,
+            object_root=job.object_output_dir,
+            context_root=job.context_output_dir,
+            visual_index_root=artifacts / "indexes/visual",
+            caption_index_root=artifacts / "indexes/caption",
+            ocr_index_root=artifacts / "indexes/ocr",
+            asr_index_root=artifacts / "indexes/asr",
         )
 
     @property
@@ -195,6 +225,8 @@ class PreparationOperations(Protocol):
 
     def prepare_frame(self, video: Path, source: S3VideoObject) -> Any: ...
 
+    def prepare_btc_frame_store(self) -> Path: ...
+
     def finalize_frames(
         self,
         prepared: Sequence[Any],
@@ -208,6 +240,10 @@ class PreparationOperations(Protocol):
     def generate_caption(self) -> Path: ...
 
     def generate_ocr(self) -> Path: ...
+
+    def import_objects(self) -> Path: ...
+
+    def build_frame_context(self) -> Path: ...
 
     def build_visual_index(self) -> Path: ...
 
@@ -237,6 +273,7 @@ class DefaultPreparationOperations:
     ) -> None:
         from hcmai.common.config import TranscriptJobConfig
         from hcmai.data.enrichment.caption.config import CaptionJobConfig
+        from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
         from hcmai.llm.config import LLMServiceConfig
 
         storage = config.preprocessing.s3
@@ -254,6 +291,7 @@ class DefaultPreparationOperations:
         self.model_config_path = Path(model_config)
         self.retrieval_config = Path(retrieval_config)
         self.s3_client = s3_client
+        self.enrichment_job = EnrichmentJobConfig.from_yaml(self.enrichment_config)
         self.caption_job = CaptionJobConfig.from_yaml(self.enrichment_config)
         self.transcript_job = TranscriptJobConfig.from_yaml(self.enrichment_config)
         self.model_config = LLMServiceConfig.from_yaml(self.model_config_path)
@@ -438,6 +476,18 @@ class DefaultPreparationOperations:
             source_version=source.source_version,
         )
 
+    def prepare_btc_frame_store(self) -> Path:
+        """Import organizer keyframes without constructing a video preprocessor."""
+
+        from hcmai.data.pipeline import DataService
+
+        frames_path = DataService.prepare(self.enrichment_config)
+        if frames_path != self.paths.frames_path:
+            raise ValueError(
+                "BTC frame store path differs from the active enrichment contract"
+            )
+        return frames_path
+
     def finalize_frames(
         self,
         prepared: Sequence[Any],
@@ -490,16 +540,150 @@ class DefaultPreparationOperations:
                 f"{self.transcript_job.asr.revision}:"
                 f"{self.transcript_job.pipeline_version}"
             ),
-            frame_store_id=getattr(self, "_current_run_id", None),
+            frame_store_id=self._specialist_frame_store_id(),
         )
+
+    def _specialist_frame_store_id(self) -> str | None:
+        """Keep BTC evidence tied to its canonical frame store, not an S3 run."""
+
+        source = getattr(
+            getattr(self, "config", None), "frame_store_source", "btc_keyframes"
+        )
+        if source == "btc_keyframes":
+            return self.enrichment_job.frame_store_id
+        return getattr(self, "_current_run_id", None)
+
+    def _runtime_caption_config(self) -> Any:
+        """Return Caption policy with only the active dataset version replaced."""
+
+        return replace(
+            self.caption_job.caption,
+            dataset_version=self.config.corpus_revision,
+        )
+
+    def _runtime_ocr_config(self) -> Any:
+        """Preserve configured OCR policy while applying runtime pins/placement."""
+
+        pin = self.config.models.ocr
+        return replace(
+            self.enrichment_job.ocr,
+            checkpoint=pin.model_name,
+            revision=pin.revision,
+            device=self.config.preprocessing.device,
+            dataset_version=self.config.corpus_revision,
+        )
+
+    def _runtime_object_config(self) -> Any:
+        """Return Object policy aligned to this run's isolated output root."""
+
+        return replace(
+            self.enrichment_job.objects,
+            output_dir=self.paths.object_root,
+        )
+
+    def stage_dependency_identity(self, stage: str) -> dict[str, Any]:
+        """Return policy dependencies plus expected stable manifest identity.
+
+        Context includes all three specialist policies because unchanged
+        artifact-version labels do not prove unchanged derived content.
+        """
+
+        lineage = self._specialist_frame_store_id()
+        caption = self._runtime_caption_config()
+        ocr = self._runtime_ocr_config()
+        objects = self._runtime_object_config()
+        context = self.enrichment_job.context
+        common = {
+            "frames_path": str(self.paths.frames_path),
+            "frame_store_id": lineage,
+        }
+        caption_config = _identity_value(asdict(caption))
+        ocr_config = _identity_value(asdict(ocr))
+        object_config = _identity_value(asdict(objects))
+        context_config = _identity_value(asdict(context))
+
+        if stage == "caption":
+            return {
+                "dependencies": {**common, "configuration": caption_config},
+                "manifest": {
+                    "artifact_version": caption.enrichment_version,
+                    "enrichment_version": caption.enrichment_version,
+                    "dataset_version": caption.dataset_version,
+                    "frame_store_id": lineage,
+                    "model_checkpoint": caption.model_checkpoint,
+                    "prompt": caption.prompt,
+                    "decoding": caption.decoding,
+                    "device": caption.device,
+                    "precision": caption.precision,
+                    "dtype": caption.dtype,
+                    "image_size": caption.image_size,
+                    "batch_size": caption.batch_size,
+                    "effective_configuration": caption_config,
+                },
+            }
+        if stage == "ocr":
+            return {
+                "dependencies": {**common, "configuration": ocr_config},
+                "manifest": {
+                    "artifact_version": ocr.artifact_version,
+                    "enrichment_version": ocr.enrichment_version,
+                    "dataset_version": ocr.dataset_version,
+                    "frame_store_id": lineage,
+                    "backend": ocr.backend,
+                    "checkpoint": ocr.checkpoint,
+                    "device": ocr.device,
+                    "dtype": ocr.dtype,
+                    "batch_size": ocr.batch_size,
+                    "runtime_settings": ocr_config,
+                },
+            }
+        if stage == "objects":
+            return {
+                "dependencies": {
+                    **common,
+                    "objects_root": str(self.enrichment_job.objects_root),
+                    "configuration": object_config,
+                },
+                "manifest": {
+                    "artifact_version": objects.artifact_version,
+                    "frame_store_id": lineage,
+                    "objects_root": str(
+                        self.enrichment_job.objects_root.resolve()
+                    ),
+                    "summary_min_confidence": objects.summary_min_confidence,
+                    "max_summary_labels": objects.max_summary_labels,
+                },
+            }
+        if stage == "frame_context":
+            serializer = {
+                "caption_token_budget": context.caption_token_budget,
+                "ocr_token_budget": context.ocr_token_budget,
+                "object_token_budget": context.object_token_budget,
+                "min_ocr_quality": context.min_ocr_quality,
+            }
+            return {
+                "dependencies": {
+                    **common,
+                    "configuration": context_config,
+                    "caption_configuration": caption_config,
+                    "ocr_configuration": ocr_config,
+                    "object_configuration": object_config,
+                },
+                "manifest": {
+                    "context_version": context.context_version,
+                    "caption_version": caption.enrichment_version,
+                    "ocr_version": ocr.artifact_version,
+                    "object_version": objects.artifact_version,
+                    "frame_store_id": lineage,
+                    "serializer_config": serializer,
+                },
+            }
+        return {}
 
     def generate_caption(self) -> Path:
         from hcmai.data.enrichment.pipeline import EnrichmentService
 
-        caption = replace(
-            self.caption_job.caption,
-            dataset_version=self.config.corpus_revision,
-        )
+        caption = self._runtime_caption_config()
         pool = self._remote_pool("caption")
         if pool is None:
             adapter = EnrichmentService.create_caption_adapter(caption)
@@ -516,23 +700,16 @@ class DefaultPreparationOperations:
                 caption,
                 adapter=adapter,
                 dataset_root=self.paths.frame_store_root,
-                frame_store_id=getattr(self, "_current_run_id", None),
+                frame_store_id=self._specialist_frame_store_id(),
             )
         finally:
             del adapter
         return self.paths.caption_root / "frame_enrichment.parquet"
 
     def generate_ocr(self) -> Path:
-        from hcmai.data.enrichment.ocr.config import OCRConfig
         from hcmai.data.enrichment.pipeline import EnrichmentService
 
-        pin = self.config.models.ocr
-        ocr = OCRConfig(
-            checkpoint=pin.model_name,
-            revision=pin.revision,
-            device=self.config.preprocessing.device,
-            dataset_version=self.config.corpus_revision,
-        )
+        ocr = self._runtime_ocr_config()
         pool = self._remote_pool("ocr")
         if pool is None:
             adapter = EnrichmentService.create_ocr_adapter(ocr)
@@ -547,11 +724,41 @@ class DefaultPreparationOperations:
                 ocr,
                 adapter=adapter,
                 dataset_root=self.paths.frame_store_root,
-                frame_store_id=getattr(self, "_current_run_id", None),
+                frame_store_id=self._specialist_frame_store_id(),
             )
         finally:
             del adapter
         return self.paths.ocr_root / "frame_enrichment.parquet"
+
+    def import_objects(self) -> Path:
+        """Import BTC object evidence through the public enrichment facade."""
+
+        from hcmai.data.enrichment.pipeline import EnrichmentService
+
+        config = self._runtime_object_config()
+        EnrichmentService.import_objects(
+            self.paths.frames_path,
+            self.enrichment_job.objects_root,
+            self.paths.object_root,
+            config,
+            frame_store_id=self._specialist_frame_store_id(),
+        )
+        return self.paths.object_root / "frames.parquet"
+
+    def build_frame_context(self) -> Path:
+        """Build derived context only from already materialized specialists."""
+
+        from hcmai.data.enrichment.pipeline import EnrichmentService
+
+        return EnrichmentService.build_frame_context(
+            self.paths.frames_path,
+            self.paths.caption_root / "captions.parquet",
+            self.paths.ocr_root / "frames.parquet",
+            self.paths.object_root / "frames.parquet",
+            self.paths.context_root,
+            self.enrichment_job.context,
+            frame_store_id=self._specialist_frame_store_id(),
+        )
 
     def build_visual_index(self) -> Path:
         import numpy as np
@@ -697,7 +904,16 @@ class S3CorpusPreparationService:
             raise ValueError("S3 corpus preparation requires S3 storage")
         self.config = config
         self.storage = storage
-        self.paths = paths or PreparationPaths.from_config(config, limit, offset)
+        if paths is not None:
+            self.paths = paths
+        elif config.frame_store_source == "btc_keyframes":
+            from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
+
+            self.paths = PreparationPaths.from_enrichment_job(
+                config, EnrichmentJobConfig.from_yaml(enrichment_config)
+            )
+        else:
+            self.paths = PreparationPaths.from_config(config, limit, offset)
         self.paths.state_root.mkdir(parents=True, exist_ok=True)
         self.client = client if client is not None else create_s3_client(storage)
         self.resume = resume
@@ -739,7 +955,7 @@ class S3CorpusPreparationService:
         # =====================================================================
         # Kiểm tra trạng thái hoàn thành của FrameStore (lưu khung hình) 
         # và ASR (trích xuất âm thanh gốc) từ file marker.json
-        frame_pending = self._pending(
+        frame_pending = self.config.stages.frame_store and self._pending(
             "frame_store",
             run_id,
             self._stage_outputs("frame_store"),
@@ -754,10 +970,20 @@ class S3CorpusPreparationService:
             record_skip=False,
         )
         
+        if frame_pending and self.config.frame_store_source == "btc_keyframes":
+            self.operations.prepare_btc_frame_store()
+            self._complete_stage("frame_store", run_id)
+            completed.append("frame_store")
+
         prepared: list[Any] = []
-        
-        # Nếu một trong hai công đoạn này chưa làm xong, cần duyệt video từ S3
-        if frame_pending or asr_pending:
+        legacy_frame_pending = (
+            frame_pending
+            and self.config.frame_store_source == "legacy_video_preprocessing"
+        )
+
+        # BTC frame import is independent of videos; videos are needed only for
+        # legacy preprocessing and timestamped ASR preparation.
+        if legacy_frame_pending or asr_pending:
             logger.info("Starting Video Frame & ASR Preparation Stage...")
             
             # Xử lý tuần tự từng video
@@ -775,7 +1001,7 @@ class S3CorpusPreparationService:
                 with self._source_video(source) as video:
                     
                     # Bước trích xuất Frame, chấm điểm bằng TransNetV2 & GEBD, dedup bằng DINO
-                    if frame_pending:
+                    if legacy_frame_pending:
                         prepared.append(
                             self.operations.prepare_frame(video, source)
                         )
@@ -785,7 +1011,7 @@ class S3CorpusPreparationService:
                         self.operations.prepare_transcript(video)
             
             # Sau khi xử lý hết các Video, lưu lại kết quả Frame Store chung ra file Parquet
-            if frame_pending:
+            if legacy_frame_pending:
                 self.operations.finalize_frames(prepared, sources)
                 self._complete_stage("frame_store", run_id)
                 completed.append("frame_store")
@@ -800,7 +1026,13 @@ class S3CorpusPreparationService:
         simple_stages = (
             ("caption", self.config.stages.caption, self.operations.generate_caption),
             ("ocr", self.config.stages.ocr, self.operations.generate_ocr),
+            ("objects", self.config.stages.objects, self.operations.import_objects),
             ("asr", self.config.stages.asr, self.operations.materialize_asr),
+            (
+                "frame_context",
+                self.config.stages.frame_context,
+                self.operations.build_frame_context,
+            ),
             (
                 "visual_index",
                 self.config.stages.visual_index,
@@ -1016,9 +1248,20 @@ class S3CorpusPreparationService:
         marker = self.paths.state_root / "stages" / f"{stage}.json"
         if marker.is_file():
             value = read_json(marker)
-            if value.get("run_id") == run_id:
+            expected_identity = self._stage_marker_identity(stage, run_id)
+            if (
+                value.get("run_id") == run_id
+                and value.get("dependency_fingerprint")
+                == expected_identity["dependency_fingerprint"]
+            ):
                 sizes = value.get("sizes", {})
-                if all(path.exists() and path.stat().st_size == sizes.get(str(path), -1) for path in outputs):
+                if all(
+                    path.exists()
+                    and path.stat().st_size == sizes.get(str(path), -1)
+                    for path in outputs
+                ) and self._stage_manifest_matches(
+                    stage, expected_identity["dependency_identity"]
+                ):
                     if record_skip:
                         skipped.append(stage)
                     return False
@@ -1031,18 +1274,97 @@ class S3CorpusPreparationService:
             raise FileNotFoundError(
                 f"{stage} did not produce required outputs: " + ", ".join(missing)
             )
+        identity = self._stage_marker_identity(stage, run_id)
+        if not self._stage_manifest_matches(
+            stage, identity["dependency_identity"]
+        ):
+            raise ValueError(
+                f"{stage} manifest does not match active stage identity"
+            )
         _atomic_json(
             self.paths.state_root / "stages" / f"{stage}.json",
             {
                 "run_id": run_id,
                 "stage": stage,
                 "completed_at": datetime.now(UTC).isoformat(),
+                **identity,
                 "outputs": [str(path) for path in outputs],
                 "sizes": {str(path): path.stat().st_size for path in outputs if path.exists()},
             },
         )
 
+    def _stage_marker_identity(
+        self, stage: str, run_id: str
+    ) -> dict[str, Any]:
+        """Build one deterministic marker identity for the active stage."""
+
+        provider = getattr(self.operations, "stage_dependency_identity", None)
+        raw = provider(stage) if callable(provider) else {}
+        if not isinstance(raw, dict):
+            raise TypeError("stage_dependency_identity must return a mapping")
+        dependency_identity = _identity_value(raw)
+        fingerprint = _fingerprint(
+            {
+                "run_id": run_id,
+                "stage": stage,
+                "dependency_identity": dependency_identity,
+            }
+        )
+        return {
+            "dependency_identity": dependency_identity,
+            "dependency_fingerprint": fingerprint,
+        }
+
+    def _stage_manifest_matches(
+        self, stage: str, dependency_identity: Any
+    ) -> bool:
+        """Compare stable manifest fields with the active policy identity."""
+
+        if not isinstance(dependency_identity, dict):
+            return False
+        expected = dependency_identity.get("manifest")
+        if not expected:
+            return True
+        if not isinstance(expected, dict):
+            return False
+        manifest_paths = [
+            path
+            for path in self._stage_outputs(stage)
+            if path.name == "manifest.json"
+        ]
+        if len(manifest_paths) != 1 or not manifest_paths[0].is_file():
+            return False
+        try:
+            actual = read_json(manifest_paths[0])
+        except Exception:
+            return False
+        return _identity_subset(actual, expected)
+
     def _stage_outputs(self, stage: str) -> tuple[Path, ...]:
+        if self.config.frame_store_source == "btc_keyframes":
+            caption_outputs = (
+                self.paths.caption_root / "captions.parquet",
+                self.paths.caption_root / "failures.json",
+                self.paths.caption_root / "frame_enrichment.parquet",
+                self.paths.caption_root / "manifest.json",
+            )
+            ocr_outputs = (
+                self.paths.ocr_root / "frames.parquet",
+                self.paths.ocr_root / "regions.parquet",
+                self.paths.ocr_root / "failures.json",
+                self.paths.ocr_root / "frame_enrichment.parquet",
+                self.paths.ocr_root / "ocr_report.json",
+                self.paths.ocr_root / "manifest.json",
+            )
+        else:
+            caption_outputs = (
+                self.paths.caption_root / "frame_enrichment.parquet",
+                self.paths.caption_root / "manifest.json",
+            )
+            ocr_outputs = (
+                self.paths.ocr_root / "frame_enrichment.parquet",
+                self.paths.ocr_root / "manifest.json",
+            )
         outputs = {
             "frame_store": (
                 self.paths.frames_path,
@@ -1052,13 +1374,16 @@ class S3CorpusPreparationService:
                 self.paths.transcripts_root,
                 self.paths.asr_enrichment_path,
             ),
-            "caption": (
-                self.paths.caption_root / "frame_enrichment.parquet",
-                self.paths.caption_root / "manifest.json",
+            "caption": caption_outputs,
+            "ocr": ocr_outputs,
+            "objects": (
+                self.paths.object_root / "frames.parquet",
+                self.paths.object_root / "detections.parquet",
+                self.paths.object_root / "manifest.json",
             ),
-            "ocr": (
-                self.paths.ocr_root / "frame_enrichment.parquet",
-                self.paths.ocr_root / "manifest.json",
+            "frame_context": (
+                self.paths.context_root / "frame_context_v1.parquet",
+                self.paths.context_root / "manifest.json",
             ),
             "visual_index": (
                 self.paths.visual_embeddings_path,
@@ -1080,3 +1405,48 @@ class S3CorpusPreparationService:
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, lambda staging: write_json(value, staging))
+
+
+def _identity_value(value: Any) -> Any:
+    """Normalize dataclass/config identity into deterministic JSON values."""
+
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            str(key): _identity_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_identity_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"unsupported stage identity value: {type(value).__name__}")
+
+
+def _fingerprint(value: dict[str, Any]) -> str:
+    """Hash one normalized stage identity with stable JSON encoding."""
+
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _identity_subset(actual: Any, expected: Any) -> bool:
+    """Return whether every expected manifest field matches recursively."""
+
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(
+            key in actual and _identity_subset(actual[key], value)
+            for key, value in expected.items()
+        )
+    if isinstance(expected, list):
+        return isinstance(actual, list) and len(actual) == len(expected) and all(
+            _identity_subset(item, wanted)
+            for item, wanted in zip(actual, expected, strict=True)
+        )
+    return type(actual) is type(expected) and actual == expected

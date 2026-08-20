@@ -49,6 +49,10 @@ output/
 /outputs/
 outputs/
 
+# This is Python source, not generated output.
+!/src/hcmai/pipelines/vqa/output/
+!/src/hcmai/pipelines/vqa/output/*.py
+
 # Large binary files, models, datasets, and archives
 *.ckpt
 *.pt
@@ -76,13 +80,6 @@ outputs/
 *.wav
 *.mp3
 *.flac
-
-# Local Kaggle subset tooling and generated packages
-/scripts/create_kaggle_subset.py
-/tests/test_kaggle_subset.py
-/create_kaggle_subset.py
-/kaggle_subset*
-/aic_subset*
 
 # Local deployment secrets; the checked-in LLM script reads these from env.
 /llm/.env
@@ -130,6 +127,3 @@ docs/template/
 .codex/
 .claude/
 .agents/
-
-# Kaggle Notebooks
-kaggle/notebook_template.ipynb

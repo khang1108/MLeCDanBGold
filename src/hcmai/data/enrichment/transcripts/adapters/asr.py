@@ -255,6 +255,10 @@ class ASRAdapter:
                     ),
                     text=text,
                     language=_language_label(language),
+                    confidence=None,
+                    model_name=self.config.model_name,
+                    model_revision=self.resolved_revision,
+                    artifact_version="asr-segment-v1",
                 ))
         _validate_segments(records)
         return records
