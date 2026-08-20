@@ -172,6 +172,54 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "from the environment."
         ),
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help=(
+            "Download required inputs from the configured S3 bucket, build "
+            "locally, and publish the validated bundle back to S3"
+        ),
+    )
+    parser.add_argument(
+        "--s3-config",
+        default="configs/preparation.s3.yaml",
+        help="YAML containing preprocessing.s3 credentials/region settings",
+    )
+    parser.add_argument("--s3-keyframes-prefix", default="data/keyframes")
+    parser.add_argument(
+        "--s3-map-keyframes-prefix",
+        default="data/features/map-keyframes",
+    )
+    parser.add_argument(
+        "--s3-frame-store-prefix",
+        default="data/artifacts/frame_store",
+    )
+    parser.add_argument(
+        "--s3-context-prefix",
+        default="data/artifacts/enrichment/context",
+    )
+    parser.add_argument(
+        "--s3-transcripts-prefix",
+        default="data/artifacts/enrichment/transcripts",
+    )
+    parser.add_argument("--s3-output-prefix", default="data/artifacts/indexes")
+    parser.add_argument(
+        "--s3-sync-workers",
+        type=int,
+        default=16,
+        help="Concurrent S3 input transfers (default: 16)",
+    )
+    parser.add_argument(
+        "--s3-upload-workers",
+        type=int,
+        default=8,
+        help="Concurrent validated-index uploads (default: 8)",
+    )
+    parser.add_argument(
+        "--s3-dry-run",
+        action="store_true",
+        help="List required S3 inputs without downloading or building",
+    )
     return parser.parse_args(argv)
 
 
@@ -250,6 +298,136 @@ def load_model_config(path: str | Path) -> Any:
                 f"{label}.revision must be a 40-character hexadecimal commit"
             )
     return config
+
+
+def _load_s3_transport(config_path: str | Path) -> tuple[Any, str]:
+    """Create an S3 client from the repository's standard credential config.
+
+    The repository's production preparation config wraps this section below a
+    top-level ``preparation`` key, so use its validated loader to normalize
+    environment overrides and nested S3 settings.  The retrieval builder does
+    not run the corpus-preparation stages themselves. Credentials continue to
+    come from boto3's standard chain or the existing ``HCMAI_S3_*`` overrides.
+    """
+
+    from hcmai.data.corpus_build.config import S3CorpusPreparationConfig
+    from hcmai.data.s3 import create_s3_client
+
+    preparation = S3CorpusPreparationConfig.from_yaml(config_path)
+    storage = preparation.preprocessing.s3
+    if storage is None:
+        raise ValueError(f"S3 settings are missing from {config_path}")
+    return create_s3_client(storage), storage.bucket
+
+
+def _s3_module() -> Any:
+    """Import the S3 transfer helper in both CLI and package-test contexts."""
+
+    try:
+        from scripts import retrieval_s3
+    except ModuleNotFoundError:
+        # When this file is executed directly, Python places ``scripts/`` on
+        # sys.path rather than the repository root.
+        import retrieval_s3
+
+        return retrieval_s3
+    return retrieval_s3
+
+
+def _download_s3_inputs(
+    client: Any,
+    bucket: str,
+    config: OfflineIndexConfig,
+    args: argparse.Namespace,
+) -> None:
+    """Stage only the inputs required by the fast-track index builder.
+
+    Raw videos and unrelated enrichment/index directories are intentionally
+    excluded.  Each prefix is resumable and writes atomically, which permits a
+    stopped ThunderCompute job to be restarted without deleting its cache.
+    """
+
+    transfer = _s3_module()
+    inputs = (
+        (
+            "BTC keyframes",
+            args.s3_keyframes_prefix,
+            config.dataset.keyframes_root,
+        ),
+        (
+            "BTC map_keyframes",
+            args.s3_map_keyframes_prefix,
+            config.dataset.map_keyframes_root,
+        ),
+        (
+            "canonical FrameStore",
+            args.s3_frame_store_prefix,
+            config.dataset.frames_path.parent,
+        ),
+        (
+            "FrameContext",
+            args.s3_context_prefix,
+            config.dataset.context_path.parent,
+        ),
+        (
+            "timestamped transcripts",
+            args.s3_transcripts_prefix,
+            config.dataset.transcripts_path,
+        ),
+    )
+    for label, prefix, destination in inputs:
+        stats = transfer.download_prefix(
+            client,
+            bucket,
+            prefix,
+            destination,
+            workers=args.s3_sync_workers,
+            dry_run=args.s3_dry_run,
+        )
+        LOGGER.info(
+            "S3 input ready label=%s prefix=%s destination=%s files=%d downloaded=%d skipped=%d",
+            label,
+            stats.prefix,
+            Path(destination).expanduser().resolve(),
+            stats.files,
+            stats.downloaded,
+            stats.skipped,
+        )
+
+
+def _publish_s3_bundle(
+    client: Any,
+    bucket: str,
+    config: OfflineIndexConfig,
+    args: argparse.Namespace,
+) -> None:
+    """Publish a passed local bundle and advance its S3 latest pointer."""
+
+    transfer = _s3_module()
+    publication = transfer.publish_retrieval_bundle(
+        client,
+        bucket,
+        config.output_root,
+        args.s3_output_prefix,
+        workers=args.s3_upload_workers,
+    )
+    LOGGER.info(
+        "S3 retrieval bundle ready: s3://%s/%s (latest=s3://%s/%s)",
+        publication.bucket,
+        publication.version_prefix,
+        publication.bucket,
+        publication.latest_key,
+    )
+
+
+def _close_s3_transport(client: Any | None) -> None:
+    """Close a boto3 client when the installed botocore version supports it."""
+
+    if client is None:
+        return
+    close = getattr(client, "close", None)
+    if callable(close):
+        close()
 
 
 def _remote_stage_requirements(stage: str) -> tuple[bool, bool]:
@@ -1043,20 +1221,33 @@ def run(args: argparse.Namespace) -> None:
         transcripts=args.transcripts,
         output_root=args.output_root,
     )
-    models = load_model_config(args.model_config)
-    require_visual, require_text = _remote_stage_requirements(args.stage)
-    remote = (
-        create_remote_embedding_adapters(
-            args.inference_url,
-            models,
-            require_visual=require_visual,
-            require_text=require_text,
-        )
-        if args.inference_url is not None and (require_visual or require_text)
-        else None
-    )
+    if args.s3 and args.inference_url is not None:
+        raise ValueError("--s3 uses local models and cannot be combined with --inference-url")
 
+    s3_client: Any | None = None
+    s3_bucket: str | None = None
+    remote: RemoteEmbeddingAdapters | None = None
     try:
+        if args.s3:
+            s3_client, s3_bucket = _load_s3_transport(args.s3_config)
+            _download_s3_inputs(s3_client, s3_bucket, config, args)
+            if args.s3_dry_run:
+                LOGGER.info("S3 dry-run complete; no local build was started")
+                return
+
+        models = load_model_config(args.model_config)
+        require_visual, require_text = _remote_stage_requirements(args.stage)
+        remote = (
+            create_remote_embedding_adapters(
+                args.inference_url,
+                models,
+                require_visual=require_visual,
+                require_text=require_text,
+            )
+            if args.inference_url is not None and (require_visual or require_text)
+            else None
+        )
+
         if args.stage == "preflight":
             run_preflight(config)
         elif args.stage == "visual":
@@ -1094,9 +1285,14 @@ def run(args: argparse.Namespace) -> None:
             build_context(config, models, projected_frames, encoder=text_encoder)
             build_asr(config, models, encoder=text_encoder)
             run_validate(config, models)
+        if args.s3 and args.stage in {"all", "validate"}:
+            assert s3_client is not None
+            assert s3_bucket is not None
+            _publish_s3_bundle(s3_client, s3_bucket, config, args)
     finally:
         if remote is not None:
             remote.service.close()
+        _close_s3_transport(s3_client)
 
 
 def main(argv: list[str] | None = None) -> int:

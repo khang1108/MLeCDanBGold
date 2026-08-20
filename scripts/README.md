@@ -163,6 +163,47 @@ For the environment-driven local-to-A6000 transfer commands and safe staged
 workflow, follow
 [`docs/runbooks/thundercompute-index-build.md`](../docs/runbooks/thundercompute-index-build.md).
 
+### Build directly from S3 on ThunderCompute
+
+When the canonical inputs and enrichment artifacts are already in S3, use the
+explicit S3 mode instead of copying the full repository over SSH. It downloads
+only the five required prefixes (including the BTC mapping), resumes files
+whose byte size already matches, runs the local SigLIP+BGE build, and uploads
+only a passed Visual + Context + segment-ASR bundle under an immutable version.
+The `latest.json` pointer is advanced last, so an interrupted build is never
+advertised as serving data:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --s3 \
+  --stage all \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --s3-config configs/preparation.s3.yaml \
+  --s3-sync-workers 16 \
+  --s3-upload-workers 8
+```
+
+The local model config starts both SigLIP and BGE at batch size `128`, which is
+the A6000 starting point. The command intentionally does not accept
+`--inference-url` in S3 mode: inference and FAISS/index publication happen on
+the ThunderCompute GPU, while S3 is used only for input/output transfer. Use
+`--s3-dry-run` first to list the remote inputs without downloading them.
+
+The default S3 mappings are:
+
+```text
+data/keyframes/                         -> data/keyframes/
+data/features/map-keyframes/             -> data/map_keyframes/
+data/artifacts/frame_store/              -> artifacts/frame_store/
+data/artifacts/enrichment/context/       -> artifacts/enrichment/context/
+data/artifacts/enrichment/transcripts/   -> artifacts/enrichment/transcripts/
+```
+
+Raw videos and unrelated enrichment/index prefixes are not downloaded. AWS
+credentials remain outside the repository and are resolved through boto3's
+standard credential chain.
+
 ## Separate retrieval utilities
 
 The commands below are retained for retrieval development and are not part of

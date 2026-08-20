@@ -57,6 +57,71 @@ bash scripts/sync_thundercompute_indexes.sh push-inputs
 The transfer script has no `--delete` operation and does not include the raw
 video corpus.
 
+## S3-first ThunderCompute workflow
+
+If these inputs have already been published to the configured S3 bucket, let
+ThunderCompute stage them on its local NVMe disk. This avoids a second
+repository-to-VM copy and keeps the build restartable. On the ThunderCompute
+host, configure the normal AWS credential chain (or attach an instance role)
+and verify bucket access without placing credentials in this repository or in
+shell history:
+
+```bash
+cd "$HCMAI_THUNDER_ROOT"
+aws s3 ls s3://mlecdanbgold-hcmai-hk/data/keyframes/ --max-items 1
+```
+
+The retrieval CLI downloads only the canonical FrameStore, BTC keyframes, BTC
+`map_keyframes`, FrameContext, and timestamped transcripts. It does not
+download raw videos. The mapping prefix is intentionally different from its
+local destination: the organizer archive is published below
+`data/features/map-keyframes/`, while `configs/indexing.yaml` expects
+`data/map_keyframes/`.
+
+Start with an inventory-only check, then run the complete local GPU build and
+S3 publication:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --s3 \
+  --s3-dry-run \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --s3-config configs/preparation.s3.yaml
+
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --s3 \
+  --stage all \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --s3-config configs/preparation.s3.yaml \
+  --s3-sync-workers 16 \
+  --s3-upload-workers 8
+```
+
+`configs/indexing.models.yaml` starts Visual/SigLIP and evidence/BGE at batch
+size `128`, suitable as the first RTX A6000 measurement point. S3 mode uses
+local model adapters; do not combine it with `--inference-url`. The download
+is resumable by byte size and tqdm/log counters report downloaded, skipped, and
+failed files. Visual embedding additionally keeps a checkpoint and writes
+unreadable-image failures to
+`artifacts/indexes/.visual-checkpoints/visual_embedding_failures.json`.
+
+On success, the three indexes and `build_report.json` are uploaded under
+`s3://<bucket>/data/artifacts/indexes/versions/<bundle-id>/`; `_SUCCESS.json`
+and then `latest.json` are written only after all checksummed artifacts have
+uploaded. A failed or interrupted run leaves the previous `latest.json`
+untouched. Record the printed version and latest keys for serving or for a
+later explicit `aws s3 sync` to another checkout:
+
+```bash
+aws s3 cp s3://mlecdanbgold-hcmai-hk/data/artifacts/indexes/latest.json -
+```
+
+The existing `sync_thundercompute_indexes.sh pull-indexes` route remains
+available for the SSH-based workflow below; it is not needed to publish a
+successful S3-first run.
+
 ## Install the remote build environment
 
 Connect using the configured host and change to the configured remote root.
