@@ -95,15 +95,13 @@ def _run(args: Any) -> None:
 
     model_config = LLMServiceConfig.from_yaml(args.model_config)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_dir = output_dir.with_name(
+        f".{output_dir.name}.visual-checkpoints"
+    )
     staging_dir = Path(
         mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent)
     )
     try:
-        previous_shards = output_dir / "embeddings" / "shards"
-        if args.resume and previous_shards.is_dir():
-            # Preserve completed checkpoints across publication generations;
-            # the builder still validates IDs and vector shape before reuse.
-            shutil.copytree(previous_shards, staging_dir / "embeddings" / "shards")
         builder = EmbeddingArtifactBuilder(
             frames_path=frames_path,
             dataset_root=dataset_root,
@@ -113,6 +111,9 @@ def _run(args: Any) -> None:
             strict=args.strict,
             resume=args.resume,
             shard_size=args.shard_size,
+            # Keep checkpoints outside the staged publication so a strict
+            # failure preserves completed canonical slices for repair/resume.
+            checkpoint_dir=checkpoint_dir,
         )
         metadata = builder.run()
         if args.strict and metadata.successful_frames != metadata.total_frames:

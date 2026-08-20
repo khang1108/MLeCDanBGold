@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -11,6 +13,11 @@ from PIL import Image
 
 from hcmai.common.config import EncoderConfig
 from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
+
+_SCRIPTS_DIR = Path(__file__).parents[2] / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+import build_embeddings
 
 
 class CountingEncoder:
@@ -122,3 +129,78 @@ def test_visual_build_regenerates_mismatched_shard(
     second.run()
 
     assert encoder.image_count == calls_after_first + 2
+
+
+def test_visual_build_regenerates_corrupt_shard(
+    tmp_path: Path, frame_table: Path
+) -> None:
+    """A malformed NPZ shard is rebuilt rather than aborting resume."""
+    encoder = CountingEncoder()
+    first = _builder(tmp_path, encoder, frame_table)
+    first.run()
+    calls_after_first = encoder.image_count
+    shard = sorted((first.embeddings_dir / "shards").glob("*.npz"))[0]
+    shard.write_bytes(b"truncated checkpoint")
+
+    second = _builder(tmp_path, encoder, frame_table)
+    second.run()
+
+    assert encoder.image_count == calls_after_first + 2
+
+
+def test_cli_failed_build_retains_checkpoints_for_repair_resume(
+    tmp_path: Path,
+    frame_table: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A repaired CLI build reuses shards completed before strict failure."""
+    output_dir = tmp_path / "published"
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "dataset:",
+                "  version: fixture-v1",
+                f"  frames_path: {frame_table}",
+                f"  root: {tmp_path / 'keyframes'}",
+                "index:",
+                f"  path: {output_dir / 'indexes' / 'visual'}",
+            ]
+        )
+    )
+    args = SimpleNamespace(
+        config=str(config_path),
+        frames=str(frame_table),
+        dataset_root=str(tmp_path / "keyframes"),
+        output=str(output_dir),
+        model_config="unused.yaml",
+        strict=True,
+        resume=True,
+        shard_size=2,
+    )
+    encoder = CountingEncoder()
+    monkeypatch.setattr(
+        build_embeddings.LLMServiceConfig,
+        "from_yaml",
+        lambda _path: SimpleNamespace(visual_embedding=EncoderConfig(batch_size=2)),
+    )
+    monkeypatch.setattr(
+        build_embeddings,
+        "EmbeddingArtifactBuilder",
+        lambda **kwargs: EmbeddingArtifactBuilder(encoder=encoder, **kwargs),
+    )
+    (tmp_path / "keyframes" / "L21_V001" / "003.jpg").unlink()
+
+    with pytest.raises(RuntimeError, match="complete visual coverage"):
+        build_embeddings._run(args)
+
+    checkpoint_dir = output_dir.with_name(".published.visual-checkpoints")
+    assert sorted(checkpoint_dir.glob("*.npz"))
+    assert encoder.image_count == 2
+    assert not output_dir.exists()
+    Image.new("RGB", (8, 6)).save(tmp_path / "keyframes" / "L21_V001" / "003.jpg")
+
+    build_embeddings._run(args)
+
+    assert encoder.image_count == 3
+    assert (output_dir / "indexes" / "visual" / "dense.index").is_file()

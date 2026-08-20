@@ -7,6 +7,7 @@ frames; the canonical ``frames.parquet`` table remains the identity authority.
 
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -56,12 +57,15 @@ class EmbeddingArtifactBuilder:
         strict: bool = True,
         resume: bool = True,
         shard_size: int = 2_048,
+        checkpoint_dir: Path | str | None = None,
     ) -> None:
         """Configure canonical inputs, checkpoints, and encoder.
 
         Strict mode refuses final artifacts unless every canonical frame is
         readable and represented exactly once. Resume reuses only valid
-        completed canonical-row shards.
+        completed canonical-row shards. ``checkpoint_dir`` may place those
+        shards outside output publication staging so failed runs remain
+        resumable.
         """
         if shard_size <= 0:
             raise ValueError("shard_size must be positive")
@@ -74,7 +78,11 @@ class EmbeddingArtifactBuilder:
         self.resume = resume
         self.shard_size = shard_size
         self.embeddings_dir = self.output_dir / "embeddings"
-        self.shards_dir = self.embeddings_dir / "shards"
+        self.shards_dir = (
+            Path(checkpoint_dir)
+            if checkpoint_dir is not None
+            else self.embeddings_dir / "shards"
+        )
         self.embeddings_file = self.embeddings_dir / "visual_embeddings.npy"
         self.mapping_file = self.embeddings_dir / "frame_mapping.parquet"
         self.metadata_file = self.embeddings_dir / "metadata.yaml"
@@ -135,7 +143,7 @@ class EmbeddingArtifactBuilder:
             with np.load(path, allow_pickle=False) as checkpoint:
                 frame_ids = checkpoint["frame_ids"].tolist()
                 vectors = checkpoint["vectors"]
-        except (OSError, ValueError, KeyError):
+        except (EOFError, OSError, ValueError, KeyError, zipfile.BadZipFile):
             return None
         expected_shape = (len(expected_ids), int(self.encoder.embedding_dim))
         if (
