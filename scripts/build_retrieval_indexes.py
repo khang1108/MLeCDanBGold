@@ -542,6 +542,31 @@ def create_text_encoder(models: Any) -> Any:
     return EmbeddingService.create_text_adapter(models.resolved_evidence_embedding)
 
 
+def _stamp_config_fingerprint(
+    index: Any,
+    output_dir: str | Path,
+    loader: Any,
+    config_fingerprint: str,
+) -> Any:
+    """Atomically add workflow provenance without dropping supplemental vectors.
+
+    Context and ASR low-level builders publish their supplemental embedding
+    files alongside the core index. Re-saving only the core index would discard
+    those files, so metadata is committed through its own atomic replacement
+    and immediately checksum-loaded again.
+    """
+
+    from hcmai.common.utils.io import atomic_write, write_json
+
+    index.metadata.config_fingerprint = config_fingerprint
+    metadata_path = Path(output_dir) / "metadata.json"
+    atomic_write(
+        metadata_path,
+        lambda staged: write_json(index.metadata.to_dict(), staged),
+    )
+    return loader.load(output_dir)
+
+
 def build_context(
     config: OfflineIndexConfig,
     models: Any,
@@ -553,11 +578,12 @@ def build_context(
 
     from hcmai.data.pipeline import DataService
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
+    from hcmai.retrieval.retriever.dense.index import DenseIndex
     from hcmai.retrieval.retriever.text.retriever import build_context_index
 
     selected = encoder or create_text_encoder(models)
     data = DataService.load(projected_frames, context_path=config.dataset.context_path)
-    return build_context_index(
+    index = build_context_index(
         data,
         selected,
         config.indexes.context,
@@ -570,6 +596,12 @@ def build_context(
                 config.dataset.context_path.with_name("manifest.json"),
             ]
         ),
+    )
+    return _stamp_config_fingerprint(
+        index,
+        config.indexes.context,
+        DenseIndex,
+        _config_fingerprint(config),
     )
 
 
@@ -587,12 +619,13 @@ def build_asr(
         build_asr_segment_index,
         transcript_lineage_files,
     )
+    from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
     selected = encoder or create_text_encoder(models)
     lineage_files = transcript_lineage_files(config.dataset.transcripts_path)
     if not lineage_files:
         raise ValueError("Transcript artifact contains no lineage files")
-    return build_asr_segment_index(
+    index = build_asr_segment_index(
         TranscriptStore(config.dataset.transcripts_path),
         selected,
         config.indexes.asr_segments,
@@ -600,6 +633,12 @@ def build_asr(
         dataset_version=config.dataset.version,
         index_type="flat_ip",
         source_fingerprint=fingerprint_files(lineage_files),
+    )
+    return _stamp_config_fingerprint(
+        index,
+        config.indexes.asr_segments,
+        SegmentDenseIndex,
+        _config_fingerprint(config),
     )
 
 
@@ -623,6 +662,7 @@ def _validate_index_metadata(
     retrieval_source: str,
     entity_kind: str,
     source_fingerprint: str,
+    config_fingerprint: str,
 ) -> None:
     """Check one loaded v2 bundle against its configured encoder contract."""
 
@@ -643,6 +683,8 @@ def _validate_index_metadata(
         raise ValueError(f"{label} retrieval source does not match its index contract")
     if metadata.source_fingerprint != source_fingerprint:
         raise ValueError(f"{label} source fingerprint does not match current inputs")
+    if metadata.config_fingerprint != config_fingerprint:
+        raise ValueError(f"{label} config fingerprint does not match current inputs")
 
 
 def _bundle_size(path: Path) -> int:
@@ -754,6 +796,7 @@ def run_validate(config: OfflineIndexConfig, models: Any) -> Path:
     _validate_frame_identity(visual.mapping, inputs.projected, "Visual")
     _validate_frame_identity(context.mapping, inputs.projected, "Context")
 
+    config_fingerprint = _config_fingerprint(config)
     _validate_index_metadata(
         visual,
         models.visual_embedding,
@@ -761,6 +804,7 @@ def run_validate(config: OfflineIndexConfig, models: Any) -> Path:
         retrieval_source="visual",
         entity_kind="frame",
         source_fingerprint=_visual_source_fingerprint(config),
+        config_fingerprint=config_fingerprint,
     )
     evidence_encoder = models.resolved_evidence_embedding
     _validate_index_metadata(
@@ -775,6 +819,7 @@ def run_validate(config: OfflineIndexConfig, models: Any) -> Path:
                 config.dataset.context_path.with_name("manifest.json"),
             ]
         ),
+        config_fingerprint=config_fingerprint,
     )
     _validate_index_metadata(
         asr,
@@ -785,6 +830,7 @@ def run_validate(config: OfflineIndexConfig, models: Any) -> Path:
         source_fingerprint=fingerprint_files(
             transcript_lineage_files(config.dataset.transcripts_path)
         ),
+        config_fingerprint=config_fingerprint,
     )
     if context.metadata.embedding_dim != asr.metadata.embedding_dim:
         raise ValueError("Context and ASR index dimensions must match")
@@ -808,6 +854,12 @@ def run_validate(config: OfflineIndexConfig, models: Any) -> Path:
                 "embedding_dim": index.metadata.embedding_dim,
                 "normalization": index.metadata.normalization,
                 "size_bytes": _bundle_size(path),
+                "schema_version": index.metadata.schema_version,
+                "entity_kind": index.metadata.entity_kind,
+                "retrieval_source": index.metadata.retrieval_source,
+                "source_fingerprint": index.metadata.source_fingerprint,
+                "config_fingerprint": index.metadata.config_fingerprint,
+                "checksums": dict(index.metadata.checksums or {}),
             }
             for name, (path, index) in bundles.items()
         },

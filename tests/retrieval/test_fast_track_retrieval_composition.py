@@ -488,13 +488,80 @@ def test_index_pull_validates_then_atomically_promotes_all_bundles(
     remote_indexes = remote_root / "artifacts/indexes"
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    (local_root / "src").parent.mkdir(parents=True)
+    (local_root / "src").symlink_to(repository / "src", target_is_directory=True)
 
     for name in ("visual", "context", "asr_segments"):
         (live_root / name).mkdir(parents=True)
         (live_root / name / "old.txt").write_text(f"old-{name}")
-        (remote_indexes / name).mkdir(parents=True)
-        (remote_indexes / name / "new.txt").write_text(f"new-{name}")
     (live_root / "build_report.json").write_text('{"status":"old"}')
+
+    revision = "a" * 40
+    dataset_version = "test-v1"
+    frame_mapping = pd.DataFrame(
+        [
+            {
+                "embedding_index": 0,
+                "frame_id": "f1",
+                "video_id": "v1",
+                "frame_idx": 10,
+                "timestamp_ms": 400,
+            }
+        ]
+    )
+    segment_mapping = pd.DataFrame(
+        [
+            {
+                "embedding_index": 0,
+                "segment_id": "s1",
+                "video_id": "v1",
+                "segment_index": 0,
+                "start_ms": 100,
+                "end_ms": 500,
+            }
+        ]
+    )
+    vectors = np.asarray([[1.0, 0.0]], dtype=np.float32)
+
+    def publish_remote_bundles(
+        *, source_fingerprint: str = "source-v1"
+    ) -> None:
+        visual = DenseIndex.build(
+            vectors,
+            frame_mapping,
+            dataset_version=dataset_version,
+            model_name="fake/visual",
+        )
+        visual.metadata.retrieval_source = "visual"
+        visual.metadata.model_revision = revision
+        visual.metadata.source_fingerprint = source_fingerprint
+        visual.metadata.config_fingerprint = "config-v1"
+        visual.save(remote_indexes / "visual")
+
+        context = DenseIndex.build(
+            vectors,
+            frame_mapping,
+            dataset_version=dataset_version,
+            model_name="fake/text",
+        )
+        context.metadata.retrieval_source = "context"
+        context.metadata.model_revision = revision
+        context.metadata.source_fingerprint = source_fingerprint
+        context.metadata.config_fingerprint = "config-v1"
+        context.save(remote_indexes / "context")
+
+        asr = SegmentDenseIndex.build(
+            vectors,
+            segment_mapping,
+            dataset_version=dataset_version,
+            model_name="fake/text",
+        )
+        asr.metadata.model_revision = revision
+        asr.metadata.source_fingerprint = source_fingerprint
+        asr.metadata.config_fingerprint = "config-v1"
+        asr.save(remote_indexes / "asr_segments")
+
+    publish_remote_bundles()
 
     fake_rsync = fake_bin / "rsync"
     fake_rsync.write_text(
@@ -532,15 +599,46 @@ else:
         "HCMAI_FAKE_REMOTE_ROOT": str(remote_root),
     }
 
+    def bundle_size(name: str) -> int:
+        return sum(
+            path.stat().st_size
+            for path in (remote_indexes / name).rglob("*")
+            if path.is_file()
+        )
+
+    def index_report(name: str, model_name: str) -> dict[str, object]:
+        index = (
+            SegmentDenseIndex.load(remote_indexes / name)
+            if name == "asr_segments"
+            else DenseIndex.load(remote_indexes / name)
+        )
+        metadata = index.metadata
+        return {
+            "path": f"/remote/only/{name}",
+            "vector_count": 1,
+            "model_name": model_name,
+            "model_revision": revision,
+            "embedding_dim": 2,
+            "normalization": "l2",
+            "size_bytes": bundle_size(name),
+            "schema_version": metadata.schema_version,
+            "entity_kind": metadata.entity_kind,
+            "retrieval_source": metadata.retrieval_source,
+            "source_fingerprint": metadata.source_fingerprint,
+            "config_fingerprint": metadata.config_fingerprint,
+            "checksums": metadata.checksums,
+        }
+
     def write_report(status: str) -> None:
         (remote_indexes / "build_report.json").write_text(
             json.dumps(
                 {
                     "status": status,
+                    "dataset_version": dataset_version,
                     "indexes": {
-                        "visual": {},
-                        "context": {},
-                        "asr_segments": {},
+                        "visual": index_report("visual", "fake/visual"),
+                        "context": index_report("context", "fake/text"),
+                        "asr_segments": index_report("asr_segments", "fake/text"),
                     },
                 }
             )
@@ -584,8 +682,41 @@ else:
     assert pull(HCMAI_FAKE_RSYNC_FAIL="context/").returncode != 0
     assert_live_is_old()
 
+    # A complete valid index from different source provenance is still stale
+    # relative to the fetched report and must not replace the live bundle.
+    visual_metadata = remote_indexes / "visual/metadata.json"
+    visual_metadata.write_text(
+        visual_metadata.read_text().replace("source-v1", "source-v2")
+    )
+    DenseIndex.load(remote_indexes / "visual")
+    assert pull().returncode != 0
+    assert_live_is_old()
+
+    publish_remote_bundles()
+    write_report("passed")
+    # A status=passed report from before the mutation must not authorize a
+    # mixed bundle whose checksum/byte-size contracts no longer match.
+    with (remote_indexes / "visual/vectors.npy").open("ab") as handle:
+        handle.write(b"tamper")
+    assert pull().returncode != 0
+    assert_live_is_old()
+
+    publish_remote_bundles()
+    write_report("passed")
+    metadata_path = remote_indexes / "visual/metadata.json"
+    legacy_metadata = json.loads(metadata_path.read_text())
+    legacy_metadata["schema_version"] = "dense-index-v1"
+    legacy_metadata["checksums"] = None
+    metadata_path.write_text(json.dumps(legacy_metadata))
+    assert pull().returncode != 0
+    assert_live_is_old()
+
+    publish_remote_bundles()
+    write_report("passed")
     assert pull().returncode == 0
+    DenseIndex.load(live_root / "visual")
+    DenseIndex.load(live_root / "context")
+    SegmentDenseIndex.load(live_root / "asr_segments")
     for name in ("visual", "context", "asr_segments"):
-        assert (live_root / name / "new.txt").read_text() == f"new-{name}"
         assert not (live_root / name / "old.txt").exists()
     assert json.loads((live_root / "build_report.json").read_text())["status"] == "passed"

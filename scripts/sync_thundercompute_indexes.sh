@@ -152,6 +152,87 @@ if missing:
 PY
 }
 
+validate_staged_bundles() {
+    local staging_root="$1"
+    local report_path="$2"
+    local local_pythonpath="${local_root}/src"
+    if [[ -n "${PYTHONPATH:-}" ]]; then
+        local_pythonpath="${local_pythonpath}:${PYTHONPATH}"
+    fi
+    PYTHONPATH="${local_pythonpath}" "${python_command}" - \
+        "${staging_root}" "${report_path}" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+from hcmai.retrieval.retriever.dense.index import DenseIndex
+from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+
+staging_root = Path(sys.argv[1])
+report = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+dataset_version = report.get("dataset_version")
+if not isinstance(dataset_version, str) or not dataset_version:
+    raise SystemExit("remote build report has an invalid dataset_version")
+reported_indexes = report["indexes"]
+contracts = {
+    "visual": (DenseIndex, "frame", "visual"),
+    "context": (DenseIndex, "frame", "context"),
+    "asr_segments": (SegmentDenseIndex, "segment", "asr"),
+}
+
+for name, (loader, entity_kind, retrieval_source) in contracts.items():
+    bundle = staging_root / name
+    # Loading is the authoritative v2 checksum/layout gate. Missing local
+    # FAISS/Parquet dependencies fail this command closed before promotion.
+    index = loader.load(bundle)
+    metadata = index.metadata
+    if metadata.schema_version != "dense-index-v2":
+        raise SystemExit(f"staged {name} is not a dense-index-v2 bundle")
+    if not isinstance(metadata.checksums, dict) or not metadata.checksums:
+        raise SystemExit(f"staged {name} has no checksum manifest")
+    for field in ("source_fingerprint", "config_fingerprint"):
+        value = getattr(metadata, field)
+        if not isinstance(value, str) or not value:
+            raise SystemExit(f"staged {name} has invalid {field}")
+    expected = reported_indexes[name]
+    actual_size = sum(
+        path.stat().st_size for path in bundle.rglob("*") if path.is_file()
+    )
+    comparisons = {
+        "size_bytes": actual_size,
+        "vector_count": metadata.vector_count,
+        "model_name": metadata.model_name,
+        "model_revision": metadata.model_revision,
+        "embedding_dim": metadata.embedding_dim,
+        "normalization": metadata.normalization,
+        "schema_version": metadata.schema_version,
+        "entity_kind": metadata.entity_kind,
+        "retrieval_source": metadata.retrieval_source,
+        "source_fingerprint": metadata.source_fingerprint,
+        "config_fingerprint": metadata.config_fingerprint,
+        "checksums": metadata.checksums,
+    }
+    missing = [field for field in comparisons if field not in expected]
+    if missing:
+        raise SystemExit(
+            f"remote build report {name} entry is missing: {', '.join(missing)}"
+        )
+    mismatched = [
+        field for field, actual in comparisons.items() if expected[field] != actual
+    ]
+    if mismatched:
+        raise SystemExit(
+            f"staged {name} bundle disagrees with report: {', '.join(mismatched)}"
+        )
+    if metadata.dataset_version != dataset_version:
+        raise SystemExit(f"staged {name} dataset_version disagrees with report")
+    if metadata.entity_kind != entity_kind:
+        raise SystemExit(f"staged {name} has unexpected entity_kind")
+    if metadata.retrieval_source != retrieval_source:
+        raise SystemExit(f"staged {name} has unexpected retrieval_source")
+PY
+}
+
 promote_staged_indexes() {
     local live_root="${local_root}/artifacts/indexes"
     local item
@@ -219,6 +300,9 @@ pull_indexes() {
         fi
     done
 
+    validate_staged_bundles \
+        "${transfer_staging}" \
+        "${transfer_staging}/build_report.json"
     promote_staged_indexes
 }
 
