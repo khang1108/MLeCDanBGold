@@ -116,6 +116,36 @@ frame_enrichment.parquet         temporary compatibility projection only
 This V1 sequence intentionally ends at FrameContext. It does not build a
 retrieval index.
 
+## Fast-track multimodal index build
+
+`build_retrieval_indexes.py` is the explicit offline entry point for the
+competition retrieval profile. It consumes the dedicated
+`configs/indexing.yaml` and `configs/indexing.models.yaml` files and publishes
+validated `Visual + FrameContext + segment-native ASR` bundles. The stages are
+independently runnable for diagnosis:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --stage preflight \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml
+
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --stage all \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml
+```
+
+Preflight requires the external BTC `map_keyframes` CSV directory and writes
+only an indexing-specific keyframe-path projection; it never rewrites the
+canonical frame store. Heavy stages run sequentially and validation writes
+`artifacts/indexes/build_report.json` only after all three checksummed bundles
+pass identity and encoder-contract checks.
+
+For the environment-driven local-to-A6000 transfer commands and safe staged
+workflow, follow
+[`docs/runbooks/thundercompute-index-build.md`](../docs/runbooks/thundercompute-index-build.md).
+
 ## Separate retrieval utilities
 
 The commands below are retained for retrieval development and are not part of

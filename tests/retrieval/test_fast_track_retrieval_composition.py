@@ -7,6 +7,7 @@ composition.  They do not build corpus artifacts or load production models.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal
 
 import numpy as np
@@ -305,3 +306,121 @@ def test_fast_track_visual_scoring_uses_visual_family(
     assert service.score_visual_videos(["red cable car"]) == []
     assert captured["index"] is visual_index
     assert visual_encoder.calls == [["red cable car"]]
+
+
+def test_offline_index_cli_all_runs_strict_sequential_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Build all corpora in GPU-safe order and validate only after publication."""
+
+    from scripts import build_retrieval_indexes as workflow
+
+    events: list[str] = []
+    projected_frames = tmp_path / "projected.parquet"
+    projected_frames.write_bytes(b"preflight-projection")
+    config = SimpleNamespace(projected_frames_path=projected_frames)
+    models = object()
+    text_encoder = object()
+
+    monkeypatch.setattr(workflow, "load_offline_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(workflow, "load_model_config", lambda *args, **kwargs: models)
+    monkeypatch.setattr(
+        workflow,
+        "run_preflight",
+        lambda received: events.append("preflight") or projected_frames,
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_visual",
+        lambda received, received_models, frames: events.append("visual"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "create_text_encoder",
+        lambda received_models: text_encoder,
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_context",
+        lambda received, received_models, frames, encoder=None: events.append(
+            "context"
+        ),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_asr",
+        lambda received, received_models, encoder=None: events.append("asr"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "run_validate",
+        lambda received, received_models: events.append("validate"),
+    )
+    monkeypatch.setattr(workflow, "release_gpu_memory", lambda: None)
+
+    workflow.run(workflow.parse_args(["--stage", "all"]))
+
+    assert events == ["preflight", "visual", "context", "asr", "validate"]
+
+
+def test_offline_index_cli_context_does_not_build_other_modalities(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Permit one text-index rebuild without loading Visual or ASR builders."""
+
+    from scripts import build_retrieval_indexes as workflow
+
+    events: list[str] = []
+    projected_frames = tmp_path / "projected.parquet"
+    projected_frames.write_bytes(b"preflight-projection")
+    config = SimpleNamespace(projected_frames_path=projected_frames)
+
+    monkeypatch.setattr(workflow, "load_offline_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(workflow, "load_model_config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(workflow, "build_visual", lambda *args, **kwargs: events.append("visual"))
+    monkeypatch.setattr(workflow, "build_context", lambda *args, **kwargs: events.append("context"))
+    monkeypatch.setattr(workflow, "build_asr", lambda *args, **kwargs: events.append("asr"))
+
+    workflow.run(workflow.parse_args(["--stage", "context"]))
+
+    assert events == ["context"]
+
+
+def test_offline_projection_resolves_relative_keyframe_root_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep a config-relative keyframe path directly readable by the builder."""
+
+    from scripts import build_retrieval_indexes as workflow
+    from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
+
+    monkeypatch.chdir(tmp_path)
+    keyframes_root = Path("data/keyframes")
+    video_root = keyframes_root / "v1"
+    video_root.mkdir(parents=True)
+    image = video_root / "000001.jpg"
+    image.write_bytes(b"fixture-image")
+    frames = pd.DataFrame(
+        [
+            {
+                "frame_id": "f1",
+                "video_id": "v1",
+                "frame_idx": 10,
+                "timestamp_ms": 400,
+                "keyframe_order": 1,
+                "image_path": "machine-specific/old.jpg",
+            }
+        ]
+    )
+
+    projected = workflow.project_staged_keyframes(frames, keyframes_root)
+    builder = EmbeddingArtifactBuilder(
+        frames_path=tmp_path / "unused.parquet",
+        dataset_root=keyframes_root,
+        output_dir=tmp_path / "output",
+        encoder_config=EncoderConfig(),
+        encoder=object(),  # type: ignore[arg-type]
+    )
+
+    assert Path(projected.iloc[0]["image_path"]).is_absolute()
+    assert builder._resolve_image(projected.iloc[0]["image_path"]) == image.resolve()
