@@ -59,17 +59,17 @@ class SegmentFrameProjector:
         """Project a mapping containing ``video_id``, ``start_ms``, and ``end_ms``."""
 
         return self.project(
-            str(row["video_id"]),
-            start_ms=row["start_ms"],  # type: ignore[arg-type]
-            end_ms=row["end_ms"],  # type: ignore[arg-type]
+            row["video_id"],
+            start_ms=row["start_ms"],
+            end_ms=row["end_ms"],
         )
 
     def project(
         self,
-        video_id: str,
+        video_id: object,
         *,
-        start_ms: int,
-        end_ms: int,
+        start_ms: object,
+        end_ms: object,
     ) -> SegmentFrameProjection | None:
         """Select the nearest valid canonical frame for a half-open segment.
 
@@ -80,11 +80,10 @@ class SegmentFrameProjector:
         """
 
         start, end = _validated_interval(start_ms, end_ms)
-        if not isinstance(video_id, str):
-            raise ValueError("video_id must be a string")
-        if not video_id.strip():
+        canonical_video_id = _validated_video_id(video_id)
+        if canonical_video_id is None:
             return None
-        frames = self.frame_store.get_by_video(video_id)
+        frames = self.frame_store.get_by_video(canonical_video_id)
         if not frames:
             return None
 
@@ -103,11 +102,20 @@ class SegmentFrameProjector:
         return _projection(chosen, midpoint, "nearest_midpoint")
 
 
-def _validated_interval(start_ms: int, end_ms: int) -> tuple[int, int]:
+def _validated_video_id(video_id: object) -> str | None:
+    """Validate raw segment identity without coercing it into a string."""
+
+    if not isinstance(video_id, str):
+        raise ValueError("video_id must be a string")
+    return video_id if video_id.strip() else None
+
+
+def _validated_interval(start_ms: object, end_ms: object) -> tuple[int, int]:
     """Return an integral non-negative interval with positive duration."""
 
-    values = (start_ms, end_ms)
-    if any(isinstance(value, bool) or not isinstance(value, Integral) for value in values):
+    if isinstance(start_ms, bool) or not isinstance(start_ms, Integral):
+        raise ValueError("segment interval coordinates must be integers")
+    if isinstance(end_ms, bool) or not isinstance(end_ms, Integral):
         raise ValueError("segment interval coordinates must be integers")
     start, end = int(start_ms), int(end_ms)
     if start < 0 or end <= start:

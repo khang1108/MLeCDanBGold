@@ -159,6 +159,20 @@ def test_project_row_and_unknown_video_are_safe(frame_store: FrameStore) -> None
     assert projection.frame_id == "f_inside"
 
 
+@pytest.mark.parametrize("video_id", [7, None])
+def test_project_row_rejects_non_string_video_identity(
+    frame_store: FrameStore, video_id: object
+) -> None:
+    """Never coerce malformed segment identity into a plausible video string."""
+
+    projector = SegmentFrameProjector(frame_store, max_projection_gap_ms=500)
+
+    with pytest.raises(ValueError, match="video_id must be a string"):
+        projector.project_row(
+            {"video_id": video_id, "start_ms": 1_000, "end_ms": 2_000}
+        )
+
+
 @pytest.mark.parametrize(
     ("start_ms", "end_ms"),
     [(-1, 1), (2, 2), (3, 2), (1.5, 2), (1, 2.5)],
