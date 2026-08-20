@@ -11,6 +11,7 @@ import json
 from collections.abc import Callable, Iterable, Iterator
 import math
 from numbers import Integral
+import os
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
@@ -35,7 +36,7 @@ from .serializer import serialize_frame_context
 
 
 _EvidenceT = TypeVar("_EvidenceT", CaptionEvidence, OCREvidence, ObjectEvidence)
-_BATCH_SIZE = 4_096
+_BATCH_SIZE = 512
 
 _CONTEXT_SCHEMA = pa.schema([
     pa.field("frame_id", pa.string(), nullable=False),
@@ -55,6 +56,29 @@ _CONTEXT_SCHEMA = pa.schema([
     pa.field("object_version", pa.string(), nullable=False),
     pa.field("frame_store_id", pa.string()),
 ])
+
+
+def _effective_batch_size(value: int | None = None) -> int:
+    """Resolve a positive batch size, optionally from the runtime environment.
+
+    The environment override is intentionally process-local so low-memory
+    workers can use a smaller batch without changing the artifact contract.
+    """
+
+    if value is None:
+        raw = os.getenv("HCMAI_CONTEXT_BATCH_SIZE")
+        if raw is None:
+            value = _BATCH_SIZE
+        else:
+            try:
+                value = int(raw)
+            except ValueError as error:
+                raise ValueError(
+                    "HCMAI_CONTEXT_BATCH_SIZE must be a positive integer"
+                ) from error
+    if isinstance(value, bool) or value <= 0:
+        raise ValueError("FrameContext batch size must be a positive integer")
+    return value
 
 
 def _optional(value: object) -> object | None:
@@ -137,7 +161,7 @@ def _iter_parquet_rows(
 
     if not path.is_file():
         raise FileNotFoundError(f"required {name} artifact not found: {path}")
-    effective_batch_size = batch_size or _BATCH_SIZE
+    effective_batch_size = _effective_batch_size(batch_size)
     try:
         parquet = pq.ParquetFile(path)
         for batch in parquet.iter_batches(
@@ -403,7 +427,7 @@ def _context_batches(
 ) -> Iterator[list[FrameContext]]:
     """Yield derived context rows in bounded batches for writing/validation."""
 
-    effective_batch_size = batch_size or _BATCH_SIZE
+    effective_batch_size = _effective_batch_size(batch_size)
     for start in range(0, len(frames), effective_batch_size):
         yield _build_context_rows(
             frames[start : start + effective_batch_size],
