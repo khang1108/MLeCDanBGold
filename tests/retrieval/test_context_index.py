@@ -124,3 +124,18 @@ def test_indexing_config_uses_portable_corpus_paths_and_expected_counts() -> Non
         "asr_segments": "artifacts/indexes/asr_segments",
     }
     assert config["projection"]["max_projection_gap_ms"] == 5_000
+
+
+def test_baseline_defers_context_profile_paths_until_profile_aware_startup() -> None:
+    """Legacy startup remains on its legacy index paths until Task 10 owns loading."""
+
+    baseline = read_yaml("configs/baseline.yaml")
+    index = baseline["index"]
+
+    assert "profile" not in index
+    assert "context_path" not in index
+    assert "asr_segment_path" not in index
+    assert "context_embedding_filename" not in index
+    assert "asr_segment_embedding_filename" not in index
+    assert "asr_projection_max_gap_ms" not in index
+    assert all("context" in weights for weights in baseline["search"]["fusion"]["task_weights"].values())

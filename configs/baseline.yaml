@@ -13,16 +13,9 @@ index:
   type: "flat_ip"
 
   path: "artifacts/indexes/visual"
-  profile: "context_asr_segment"
-  context_path: "artifacts/indexes/context"
-  asr_segment_path: "artifacts/indexes/asr_segments"
   caption_path: "artifacts/indexes/caption"
   ocr_path: "artifacts/indexes/ocr"
   asr_path: "artifacts/indexes/asr"
-
-  context_embedding_filename: "context_embeddings.npy"
-  asr_segment_embedding_filename: "asr_embeddings.npy"
-  asr_projection_max_gap_ms: 5000
 
   subset_search_threshold: 100000
 
