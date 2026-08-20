@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -94,6 +95,35 @@ def test_mapping_rejects_invalid_coordinate_series(
 
     root = tmp_path / "map_keyframes"
     _write_mapping(root, rows)
+
+    with pytest.raises(ValueError, match=message):
+        load_btc_keyframe_map(root)
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("n", 1.5, "finite integral"),
+        ("n", np.inf, "finite integral"),
+        ("n", np.nan, "finite integral"),
+        ("frame_idx", 1.5, "finite integral"),
+        ("frame_idx", np.inf, "finite integral"),
+        ("frame_idx", np.nan, "finite integral"),
+        ("pts_time", np.inf, "finite numeric"),
+        ("pts_time", np.nan, "finite numeric"),
+        ("fps", np.inf, "finite numeric"),
+        ("fps", np.nan, "finite numeric"),
+    ],
+)
+def test_mapping_rejects_fractional_or_non_finite_values(
+    tmp_path: Path, column: str, value: float, message: str
+) -> None:
+    """Reject malformed organizer values before any integer cast can alter them."""
+
+    root = tmp_path / "map_keyframes"
+    row = {"n": 1, "pts_time": 0.0, "fps": 25.0, "frame_idx": 0}
+    row[column] = value
+    _write_mapping(root, [row])
 
     with pytest.raises(ValueError, match=message):
         load_btc_keyframe_map(root)

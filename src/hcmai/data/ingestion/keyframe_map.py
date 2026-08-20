@@ -12,11 +12,50 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
+import numpy as np
 import pandas as pd
 
 
 _MAPPING_COLUMNS = ["n", "pts_time", "fps", "frame_idx"]
 _IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".webp"})
+
+
+def _finite_numeric_column(
+    table: pd.DataFrame,
+    column: str,
+    path: Path,
+    *,
+    description: str = "finite numeric",
+) -> pd.Series:
+    """Return one numeric mapping column after rejecting malformed values."""
+
+    raw_values = cast(pd.Series, table[column])
+    values = cast(pd.Series, pd.to_numeric(raw_values, errors="coerce")).astype(float)
+    numeric_values = np.asarray(values, dtype=float)
+    if bool(values.isna().any()) or not bool(np.isfinite(numeric_values).all()):
+        raise ValueError(
+            f"BTC mapping {column} must contain {description} values: {path}"
+        )
+    return values
+
+
+def _finite_integral_column(
+    table: pd.DataFrame, column: str, path: Path
+) -> pd.Series:
+    """Return a finite integral mapping column without truncating its values."""
+
+    values = _finite_numeric_column(
+        table,
+        column,
+        path,
+        description="finite integral",
+    )
+    numeric_values = np.asarray(values, dtype=float)
+    if not bool(np.equal(numeric_values, np.floor(numeric_values)).all()):
+        raise ValueError(
+            f"BTC mapping {column} must contain finite integral values: {path}"
+        )
+    return values.astype("int64")
 
 
 def load_btc_keyframe_map(mapping_root: Path) -> pd.DataFrame:
@@ -32,22 +71,31 @@ def load_btc_keyframe_map(mapping_root: Path) -> pd.DataFrame:
         if list(table.columns) != _MAPPING_COLUMNS:
             raise ValueError(f"Unexpected BTC mapping schema: {path}")
 
+        n_values = _finite_integral_column(table, "n", path)
+        frame_idx_values = _finite_integral_column(table, "frame_idx", path)
+        pts_time_values = _finite_numeric_column(table, "pts_time", path)
+        fps_values = _finite_numeric_column(table, "fps", path)
+
         expected = list(range(1, len(table) + 1))
-        if table["n"].astype(int).tolist() != expected:
+        if n_values.tolist() != expected:
             raise ValueError(f"BTC mapping n must be contiguous 1..N: {path}")
-        if (table["pts_time"] < 0).any() or (table["frame_idx"] < 0).any():
+        if bool((pts_time_values < 0).any()) or bool((frame_idx_values < 0).any()):
             raise ValueError(f"BTC mapping coordinates must be non-negative: {path}")
 
-        fps_values = table["fps"].astype(float).unique()
-        if len(fps_values) != 1 or float(fps_values[0]) <= 0:
+        distinct_fps_values = fps_values.unique()
+        if len(distinct_fps_values) != 1 or float(distinct_fps_values[0]) <= 0:
             raise ValueError(
                 f"BTC mapping fps must be one positive value per video: {path}"
             )
 
         rows.append(
             table.assign(
+                n=n_values,
+                pts_time=pts_time_values,
+                fps=fps_values,
+                frame_idx=frame_idx_values,
                 video_id=path.stem,
-                keyframe_order=table["n"].astype(int),
+                keyframe_order=n_values,
             )
         )
 
