@@ -14,6 +14,7 @@ from typing import Any
 from hcmai.common.utils.io import read_json, write_json
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
+from hcmai.retrieval.retriever.artifacts import sha256_file
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.retrieval.retriever.filtered import exact_subset_search
 from hcmai.retrieval.retriever.models.metadata import IndexMetadata
@@ -40,6 +41,12 @@ REQUIRED_INDEX_FILENAMES = (
     POSTING_OFFSETS_FILENAME,
     POSTING_POSITIONS_FILENAME,
     TIMESTAMPS_FILENAME,
+)
+
+# Metadata is committed last and describes the complete contents of these
+# frame-native artifacts. Its own checksum would be self-referential.
+CHECKSUM_FILENAMES = tuple(
+    filename for filename in REQUIRED_INDEX_FILENAMES if filename != METADATA_FILENAME
 )
 
 
@@ -170,6 +177,8 @@ class DenseIndex:
             build_time_sec=build_time_sec,
             index_size_bytes=0,  # Filled in by save() once the file exists.
             generated_at=pd.Timestamp.now().isoformat(),
+            schema_version="dense-index-v2",
+            entity_kind="frame",
         )
         logger.info(f"Index built in {build_time_sec:.3f}s")
         return cls(index, ordered, metadata, vectors=vectors)
@@ -195,6 +204,10 @@ class DenseIndex:
         # Record the on-disk index size now that the file exists so the
         # metadata reports the real artifact size.
         self.metadata.index_size_bytes = index_path.stat().st_size
+        self.metadata.checksums = {
+            filename: sha256_file(output_dir / filename)
+            for filename in CHECKSUM_FILENAMES
+        }
         write_json(self.metadata.to_dict(), output_dir / METADATA_FILENAME)
 
         logger.info(f"Saved index ({self.metadata.index_size_bytes} bytes), mapping, and metadata to {output_dir}")
@@ -294,6 +307,14 @@ class DenseIndex:
             or int(posting_positions.max()) >= metadata.vector_count
         ):
             raise IndexArtifactError("Persisted posting positions are out of bounds")
+
+        if metadata.checksums is not None:
+            for filename, expected in metadata.checksums.items():
+                actual = sha256_file(index_dir / filename)
+                if actual != expected:
+                    raise IndexArtifactError(
+                        f"Index artifact checksum mismatch for {filename}"
+                    )
 
         logger.info(
             f"Loaded index from {index_dir}: {index.ntotal} vectors, "

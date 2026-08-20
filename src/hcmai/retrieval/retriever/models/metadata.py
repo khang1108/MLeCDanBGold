@@ -7,7 +7,7 @@ stats (``stats.py``).
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import Any
 
 
@@ -25,6 +25,13 @@ class IndexMetadata:
     build_time_sec: float
     index_size_bytes: int
     generated_at: str
+    schema_version: str = "dense-index-v1"
+    entity_kind: str = "frame"
+    retrieval_source: str | None = None
+    model_revision: str | None = None
+    source_fingerprint: str | None = None
+    config_fingerprint: str | None = None
+    checksums: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to a plain dictionary for JSON serialization."""
@@ -32,5 +39,10 @@ class IndexMetadata:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> IndexMetadata:
-        """Create metadata from a dictionary loaded from JSON."""
-        return cls(**data)
+        """Create metadata from JSON, ignoring unknown future-version fields.
+
+        The defaulted v2 provenance fields deliberately keep v1 metadata
+        readable, which permits rollback to existing offline artifacts.
+        """
+        known_fields = {field.name for field in fields(cls)}
+        return cls(**{key: value for key, value in data.items() if key in known_fields})
