@@ -13,11 +13,14 @@ import math
 from numbers import Integral
 import os
 from pathlib import Path
+import sqlite3
+import tempfile
 from typing import Any, TypeVar, cast
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pandas as pd
+from tqdm.auto import tqdm
 
 from hcmai.common.schemas import (
     CaptionEvidence,
@@ -79,6 +82,95 @@ def _effective_batch_size(value: int | None = None) -> int:
     if isinstance(value, bool) or value <= 0:
         raise ValueError("FrameContext batch size must be a positive integer")
     return value
+
+
+class _EvidenceStore:
+    """Keep validated specialist rows on disk and load only one join batch.
+
+    Specialist evidence can contain nested object detections. Keeping every
+    validated Pydantic object in a Python dictionary defeats bounded batch
+    processing, so this temporary SQLite table is used as a disk-backed join
+    index. It is never published as a project artifact.
+    """
+
+    def __init__(self, path: Path, contract: type[_EvidenceT]) -> None:
+        self._path = path
+        self._connection = sqlite3.connect(path)
+        self._contract = contract
+        self._connection.execute(
+            "CREATE TABLE evidence ("
+            "frame_id TEXT PRIMARY KEY, payload TEXT NOT NULL"
+            ")"
+        )
+
+    def put(self, row: _EvidenceT) -> None:
+        """Persist one already-validated evidence row."""
+
+        fields: set[str] | None = None
+        if isinstance(row, ObjectEvidence):
+            # Context V1 only needs object status, summary, and multiplicity;
+            # the complete detections remain authoritative in the source
+            # artifact. Avoid copying nested detections into the temp index.
+            fields = {"detections"}
+        payload = json.dumps(
+            row.model_dump(mode="json", exclude=fields),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        self._connection.execute(
+            "INSERT INTO evidence(frame_id, payload) VALUES (?, ?)",
+            (row.frame_id, payload),
+        )
+
+    def commit(self) -> None:
+        """Commit the temporary index before readers query it."""
+
+        self._connection.commit()
+
+    def get_many(self, frame_ids: list[str]) -> dict[str, _EvidenceT]:
+        """Load and validate only the requested frame rows."""
+
+        found: dict[str, _EvidenceT] = {}
+        # SQLite limits bound parameters (commonly to 999); keep lookup chunks
+        # below that limit even when a caller selects a larger batch override.
+        for start in range(0, len(frame_ids), 900):
+            chunk = frame_ids[start : start + 900]
+            placeholders = ",".join("?" for _ in chunk)
+            cursor = self._connection.execute(
+                f"SELECT frame_id, payload FROM evidence "
+                f"WHERE frame_id IN ({placeholders})",
+                chunk,
+            )
+            for frame_id, payload in cursor:
+                values = json.loads(payload)
+                if self._contract is ObjectEvidence:
+                    count = int(values.get("detection_count", 0))
+                    counts = values.get("counts", {})
+                    labels = [
+                        label for label, total in counts.items() for _ in range(total)
+                    ]
+                    labels.extend("__unlisted__" for _ in range(count - len(labels)))
+                    values["detections"] = [
+                        {
+                            "label": label,
+                            "confidence": 0.0,
+                            "x_min": 0.0,
+                            "y_min": 0.0,
+                            "x_max": 0.0,
+                            "y_max": 0.0,
+                        }
+                        for label in labels
+                    ]
+                found[frame_id] = cast(
+                    _EvidenceT, self._contract.model_validate(values)
+                )
+        return found
+
+    def close(self) -> None:
+        """Close the temporary database connection."""
+
+        self._connection.close()
+        self._path.unlink(missing_ok=True)
 
 
 def _optional(value: object) -> object | None:
@@ -156,6 +248,7 @@ def _iter_parquet_rows(
     *,
     columns: list[str] | None = None,
     batch_size: int | None = None,
+    progress_desc: str | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Yield Parquet rows in bounded batches without materializing a table."""
 
@@ -164,12 +257,23 @@ def _iter_parquet_rows(
     effective_batch_size = _effective_batch_size(batch_size)
     try:
         parquet = pq.ParquetFile(path)
-        for batch in parquet.iter_batches(
-            batch_size=effective_batch_size,
-            columns=columns,
-            use_threads=True,
-        ):
-            yield from cast(Iterable[dict[str, Any]], batch.to_pylist())
+        progress = tqdm(
+            total=parquet.metadata.num_rows,
+            desc=progress_desc or name,
+            unit="row",
+            dynamic_ncols=True,
+        )
+        try:
+            for batch in parquet.iter_batches(
+                batch_size=effective_batch_size,
+                columns=columns,
+                use_threads=True,
+            ):
+                rows = batch.to_pylist()
+                progress.update(len(rows))
+                yield from cast(Iterable[dict[str, Any]], rows)
+        finally:
+            progress.close()
     except Exception as error:
         raise ValueError(f"malformed {name} artifact: {path}") from error
 
@@ -180,7 +284,12 @@ def _read_canonical_frames(path: Path) -> list[FrameRecord]:
     columns = list(FrameRecord.model_fields)
     frames: list[FrameRecord] = []
     seen: set[str] = set()
-    for raw in _iter_parquet_rows(path, "canonical frames", columns=columns):
+    for raw in _iter_parquet_rows(
+        path,
+        "canonical frames",
+        columns=columns,
+        progress_desc="Validate canonical frames",
+    ):
         values = {
             name: _optional(raw.get(name))
             for name in columns
@@ -258,62 +367,76 @@ def _validated_rows(
     version: str,
     canonical: dict[str, tuple[str, int, int]],
     lineage: str | None,
-) -> dict[str, _EvidenceT]:
+) -> _EvidenceStore:
     """Validate specialist rows, uniqueness, canonical identity, and lineage."""
 
-    rows: dict[str, _EvidenceT] = {}
-    for raw in raw_rows:
-        raw_frame_id = raw.get("frame_id")
-        raw_video_id = raw.get("video_id")
-        if "frame_id" not in raw:
-            raise ValueError(f"{name} artifact is missing frame_id")
-        raw_frame_idx = _strict_integer(raw.get("frame_idx"), "frame_idx")
-        raw_timestamp_ms = _strict_integer(
-            raw.get("timestamp_ms"), "timestamp_ms"
-        )
-        if (
-            not isinstance(raw_frame_id, str)
-            or not raw_frame_id
-            or raw_frame_id.strip() != raw_frame_id
-            or not isinstance(raw_video_id, str)
-            or not raw_video_id
-            or raw_video_id.strip() != raw_video_id
-        ):
-            raise ValueError(f"{name} row has non-canonical string identity")
-        if raw_frame_id in rows:
-            raise ValueError(f"{name} artifact contains duplicate frame_id values")
-        values = (
-            _object_values(raw)
-            if contract is ObjectEvidence
-            else {key: _optional(value) for key, value in raw.items()}
-        )
-        try:
-            row = contract.model_validate(values)
-        except Exception as error:
-            raise ValueError(f"malformed {name} evidence row") from error
-        if row.frame_id not in canonical:
-            raise ValueError(
-                f"{name} artifact contains foreign frame_id: {row.frame_id}"
+    file_descriptor, file_name = tempfile.mkstemp(
+        prefix=f"hcmai-{name}-", suffix=".sqlite"
+    )
+    os.close(file_descriptor)
+    store_path = Path(file_name)
+    store = _EvidenceStore(store_path, contract)
+    try:
+        for raw in raw_rows:
+            raw_frame_id = raw.get("frame_id")
+            raw_video_id = raw.get("video_id")
+            if "frame_id" not in raw:
+                raise ValueError(f"{name} artifact is missing frame_id")
+            raw_frame_idx = _strict_integer(raw.get("frame_idx"), "frame_idx")
+            raw_timestamp_ms = _strict_integer(
+                raw.get("timestamp_ms"), "timestamp_ms"
             )
-        video_id, frame_idx, timestamp_ms = canonical[row.frame_id]
-        if (
-            row.frame_id != raw_frame_id
-            or row.video_id != raw_video_id
-            or row.frame_idx != raw_frame_idx
-            or row.timestamp_ms != raw_timestamp_ms
-            or row.video_id != video_id
-            or row.frame_idx != frame_idx
-            or row.timestamp_ms != timestamp_ms
-        ):
-            raise ValueError(
-                f"{name} row does not match canonical identity: {row.frame_id}"
+            if (
+                not isinstance(raw_frame_id, str)
+                or not raw_frame_id
+                or raw_frame_id.strip() != raw_frame_id
+                or not isinstance(raw_video_id, str)
+                or not raw_video_id
+                or raw_video_id.strip() != raw_video_id
+            ):
+                raise ValueError(f"{name} row has non-canonical string identity")
+            values = (
+                _object_values(raw)
+                if contract is ObjectEvidence
+                else {key: _optional(value) for key, value in raw.items()}
             )
-        if row.artifact_version != version:
-            raise ValueError(f"{name} row artifact version does not match manifest")
-        if row.frame_store_id != lineage:
-            raise ValueError(f"{name} row lineage mismatch: {row.frame_id}")
-        rows[row.frame_id] = row
-    return rows
+            try:
+                row = contract.model_validate(values)
+            except Exception as error:
+                raise ValueError(f"malformed {name} evidence row") from error
+            if row.frame_id not in canonical:
+                raise ValueError(
+                    f"{name} artifact contains foreign frame_id: {row.frame_id}"
+                )
+            video_id, frame_idx, timestamp_ms = canonical[row.frame_id]
+            if (
+                row.frame_id != raw_frame_id
+                or row.video_id != raw_video_id
+                or row.frame_idx != raw_frame_idx
+                or row.timestamp_ms != raw_timestamp_ms
+                or row.video_id != video_id
+                or row.frame_idx != frame_idx
+                or row.timestamp_ms != timestamp_ms
+            ):
+                raise ValueError(
+                    f"{name} row does not match canonical identity: {row.frame_id}"
+                )
+            if row.artifact_version != version:
+                raise ValueError(f"{name} row artifact version does not match manifest")
+            if row.frame_store_id != lineage:
+                raise ValueError(f"{name} row lineage mismatch: {row.frame_id}")
+            try:
+                store.put(row)
+            except sqlite3.IntegrityError as error:
+                raise ValueError(
+                    f"{name} artifact contains duplicate frame_id values"
+                ) from error
+        store.commit()
+        return store
+    except Exception:
+        store.close()
+        store_path.unlink(missing_ok=True)
+        raise
 
 
 def _usable_caption(row: CaptionEvidence | None) -> str | None:
@@ -358,9 +481,9 @@ def _serializer_identity(config: FrameContextConfig) -> dict[str, int | float]:
 
 def _build_context_rows(
     frames: list[FrameRecord],
-    caption_rows: dict[str, CaptionEvidence],
-    ocr_rows: dict[str, OCREvidence],
-    object_rows: dict[str, ObjectEvidence],
+    caption_rows: _EvidenceStore,
+    ocr_rows: _EvidenceStore,
+    object_rows: _EvidenceStore,
     config: FrameContextConfig,
     *,
     caption_version: str,
@@ -374,11 +497,18 @@ def _build_context_rows(
     when quality/status rules omit OCR text or the Object summary.
     """
 
+    frame_ids = [frame.frame_id for frame in frames]
+    captions = caption_rows.get_many(frame_ids)
+    ocr_values = ocr_rows.get_many(frame_ids)
+    object_values = object_rows.get_many(frame_ids)
     contexts: list[FrameContext] = []
     for frame in frames:
-        caption = _usable_caption(caption_rows.get(frame.frame_id))
-        ocr = _usable_ocr(ocr_rows.get(frame.frame_id), config.min_ocr_quality)
-        objects = _usable_objects(object_rows.get(frame.frame_id))
+        caption_row = captions.get(frame.frame_id)
+        ocr_row = ocr_values.get(frame.frame_id)
+        object_row = object_values.get(frame.frame_id)
+        caption = _usable_caption(caption_row)
+        ocr = _usable_ocr(ocr_row, config.min_ocr_quality)
+        objects = _usable_objects(object_row)
         contexts.append(
             FrameContext(
                 frame_id=frame.frame_id,
@@ -393,13 +523,13 @@ def _build_context_rows(
                 ),
                 caption_available=caption is not None,
                 ocr_quality=(
-                    ocr_rows[frame.frame_id].quality_score
-                    if frame.frame_id in ocr_rows
+                    ocr_row.quality_score
+                    if ocr_row is not None
                     else 0.0
                 ),
                 object_count=(
-                    object_rows[frame.frame_id].detection_count
-                    if frame.frame_id in object_rows
+                    object_row.detection_count
+                    if object_row is not None
                     else 0
                 ),
                 context_version=config.context_version,
@@ -414,9 +544,9 @@ def _build_context_rows(
 
 def _context_batches(
     frames: list[FrameRecord],
-    caption_rows: dict[str, CaptionEvidence],
-    ocr_rows: dict[str, OCREvidence],
-    object_rows: dict[str, ObjectEvidence],
+    caption_rows: _EvidenceStore,
+    ocr_rows: _EvidenceStore,
+    object_rows: _EvidenceStore,
     config: FrameContextConfig,
     *,
     caption_version: str,
@@ -428,18 +558,29 @@ def _context_batches(
     """Yield derived context rows in bounded batches for writing/validation."""
 
     effective_batch_size = _effective_batch_size(batch_size)
-    for start in range(0, len(frames), effective_batch_size):
-        yield _build_context_rows(
-            frames[start : start + effective_batch_size],
-            caption_rows,
-            ocr_rows,
-            object_rows,
-            config,
-            caption_version=caption_version,
-            ocr_version=ocr_version,
-            object_version=object_version,
-            frame_store_id=frame_store_id,
-        )
+    progress = tqdm(
+        total=len(frames),
+        desc="Build FrameContext",
+        unit="frame",
+        dynamic_ncols=True,
+    )
+    try:
+        for start in range(0, len(frames), effective_batch_size):
+            batch = _build_context_rows(
+                frames[start : start + effective_batch_size],
+                caption_rows,
+                ocr_rows,
+                object_rows,
+                config,
+                caption_version=caption_version,
+                ocr_version=ocr_version,
+                object_version=object_version,
+                frame_store_id=frame_store_id,
+            )
+            progress.update(len(batch))
+            yield batch
+    finally:
+        progress.close()
 
 
 def _valid_existing_bundle(
@@ -462,7 +603,11 @@ def _valid_existing_bundle(
         return False
 
     try:
-        actual_rows = _iter_parquet_rows(context_path, "context")
+        actual_rows = _iter_parquet_rows(
+            context_path,
+            "context",
+            progress_desc="Validate FrameContext bundle",
+        )
         expected_rows = (
             row
             for batch in expected_batches
@@ -568,8 +713,8 @@ def build_frame_context(
 
     # Validate every prerequisite before creating or replacing context output.
     # The canonical reader uses bounded Arrow batches and keeps only the small
-    # identity list needed for specialist joins; it does not build FrameStore's
-    # runtime indexes for this offline materialization step.
+    # identity list needed for specialist joins; validated nested evidence is
+    # held in temporary SQLite indexes rather than Python object maps.
     frames = _read_canonical_frames(frames_file)
     if not frames:
         raise ValueError("canonical frame store must contain at least one frame")
@@ -593,58 +738,78 @@ def build_frame_context(
     ocr_version = cast(str, ocr_manifest["artifact_version"])
     object_version = cast(str, object_manifest["artifact_version"])
 
-    caption_rows = _validated_rows(
-        _iter_parquet_rows(caption_file, "caption"),
-        "caption",
-        CaptionEvidence,
-        caption_version,
-        canonical,
-        lineage,
-    )
-    ocr_rows = _validated_rows(
-        _iter_parquet_rows(ocr_file, "OCR"),
-        "OCR",
-        OCREvidence,
-        ocr_version,
-        canonical,
-        lineage,
-    )
-    object_rows = _validated_rows(
-        _iter_parquet_rows(object_file, "object"),
-        "object",
-        ObjectEvidence,
-        object_version,
-        canonical,
-        lineage,
-    )
+    stores: list[_EvidenceStore] = []
+    try:
+        caption_rows = _validated_rows(
+            _iter_parquet_rows(
+                caption_file,
+                "caption",
+                progress_desc="Validate caption evidence",
+            ),
+            "caption",
+            CaptionEvidence,
+            caption_version,
+            canonical,
+            lineage,
+        )
+        stores.append(caption_rows)
+        ocr_rows = _validated_rows(
+            _iter_parquet_rows(
+                ocr_file,
+                "OCR",
+                progress_desc="Validate OCR evidence",
+            ),
+            "OCR",
+            OCREvidence,
+            ocr_version,
+            canonical,
+            lineage,
+        )
+        stores.append(ocr_rows)
+        object_rows = _validated_rows(
+            _iter_parquet_rows(
+                object_file,
+                "object",
+                progress_desc="Validate object evidence",
+            ),
+            "object",
+            ObjectEvidence,
+            object_version,
+            canonical,
+            lineage,
+        )
+        stores.append(object_rows)
 
-    identity: dict[str, Any] = {
-        "context_version": config.context_version,
-        "caption_version": caption_version,
-        "ocr_version": ocr_version,
-        "object_version": object_version,
-        "frame_store_id": lineage,
-        "serializer_config": _serializer_identity(config),
-    }
-    batches_factory = lambda: _context_batches(
-        frames,
-        caption_rows,
-        ocr_rows,
-        object_rows,
-        config,
-        caption_version=caption_version,
-        ocr_version=ocr_version,
-        object_version=object_version,
-        frame_store_id=lineage,
-    )
-    output = Path(output_dir)
-    context_path = output / "frame_context_v1.parquet"
-    manifest_path = output / "manifest.json"
-    if _valid_existing_bundle(
-        context_path, manifest_path, identity, batches_factory()
-    ):
-        return context_path
-    return _write_bundle(output, batches_factory, identity)
+        identity: dict[str, Any] = {
+            "context_version": config.context_version,
+            "caption_version": caption_version,
+            "ocr_version": ocr_version,
+            "object_version": object_version,
+            "frame_store_id": lineage,
+            "serializer_config": _serializer_identity(config),
+        }
+        batches_factory = lambda: _context_batches(
+            frames,
+            caption_rows,
+            ocr_rows,
+            object_rows,
+            config,
+            caption_version=caption_version,
+            ocr_version=ocr_version,
+            object_version=object_version,
+            frame_store_id=lineage,
+        )
+        output = Path(output_dir)
+        context_path = output / "frame_context_v1.parquet"
+        manifest_path = output / "manifest.json"
+        if _valid_existing_bundle(
+            context_path, manifest_path, identity, batches_factory()
+        ):
+            return context_path
+        return _write_bundle(output, batches_factory, identity)
+    finally:
+        for store in stores:
+            store.close()
 
 
 __all__ = ["build_frame_context"]
