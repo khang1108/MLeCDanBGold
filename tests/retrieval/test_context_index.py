@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from hcmai.common.config import (
@@ -13,8 +15,267 @@ from hcmai.common.config import (
     IndexConfig,
 )
 from hcmai.common.schemas import RetrievalSource, TaskType
-from hcmai.common.utils.io import read_yaml
+from hcmai.common.schemas.search import SearchFilters
+from hcmai.common.utils.io import read_yaml, write_json, write_yaml
+from hcmai.data.pipeline import DataService
 from hcmai.llm.config import LLMServiceConfig
+from hcmai.retrieval.retriever.artifacts import fingerprint_files
+
+
+class FakeBGE:
+    """Provide deterministic CPU-only BGE-shaped vectors for context tests."""
+
+    config = EncoderConfig(
+        backend="bge_m3",
+        model_name="fake/bge-m3",
+        batch_size=2,
+    )
+    embedding_dim = 2
+
+    def encode_text(self, texts, stats=None) -> np.ndarray:
+        """Map fixture text to a small non-normalized embedding space."""
+
+        return np.asarray(
+            [
+                [2.0, 0.0]
+                if "cable car" in text.lower()
+                else [0.0, 3.0]
+                if "market" in text.lower()
+                else [1.0, 1.0]
+                for text in texts
+            ],
+            dtype=np.float32,
+        )
+
+
+def _context_data(
+    tmp_path: Path,
+    context_texts: list[tuple[str, str | None, str, int]],
+) -> DataService:
+    """Write a hand-checkable canonical frame and FrameContext fixture."""
+
+    pytest.importorskip("pyarrow")
+
+    frames = tmp_path / "frames.parquet"
+    context = tmp_path / "frame_context_v1.parquet"
+    pd.DataFrame(
+        [
+            {
+                "frame_id": frame_id,
+                "video_id": video_id,
+                "frame_idx": 10 + position,
+                "keyframe_order": position + 1,
+                "timestamp_ms": timestamp_ms,
+                "image_path": f"{frame_id}.jpg",
+                "width": 10,
+                "height": 10,
+            }
+            for position, (frame_id, _, video_id, timestamp_ms) in enumerate(
+                context_texts
+            )
+        ]
+    ).to_parquet(frames, index=False)
+    pd.DataFrame(
+        [
+            {
+                "frame_id": frame_id,
+                "video_id": video_id,
+                "frame_idx": 10 + position,
+                "timestamp_ms": timestamp_ms,
+                "caption_text": None,
+                "ocr_text": None,
+                "object_summary": None,
+                "context_text": context_text,
+                "caption_available": False,
+                "ocr_quality": 0.0,
+                "object_count": 0,
+                "context_version": "frame-context-v1",
+                "caption_version": "caption-v1",
+                "ocr_version": "ocr-v1",
+                "object_version": "objects-v1",
+                "frame_store_id": None,
+            }
+            for position, (frame_id, context_text, video_id, timestamp_ms) in enumerate(
+                context_texts
+            )
+        ]
+    ).to_parquet(context, index=False)
+    return DataService.load(frames, context_path=context)
+
+
+@pytest.fixture
+def data_service_with_context(tmp_path: Path) -> DataService:
+    """Return one usable and one empty FrameContext record."""
+
+    return _context_data(
+        tmp_path,
+        [
+            ("f1", "[CAPTION]\nA red cable car.", "v1", 1000),
+            ("f2", None, "v1", 2000),
+        ],
+    )
+
+
+@pytest.fixture
+def fake_bge() -> FakeBGE:
+    """Supply a fake BGE encoder so tests never need a GPU."""
+
+    return FakeBGE()
+
+
+def test_context_corpus_embeds_only_non_empty_context(
+    data_service_with_context: DataService,
+) -> None:
+    """Empty derived text is omitted rather than replaced with synthetic evidence."""
+
+    pytest.importorskip("faiss")
+    from hcmai.retrieval.retriever.text.retriever import _context_corpus
+
+    texts, mapping = _context_corpus(data_service_with_context)
+
+    assert texts == ["[CAPTION]\nA red cable car."]
+    assert mapping["frame_id"].tolist() == ["f1"]
+    assert mapping["timestamp_ms"].tolist() == [1000]
+
+
+def test_context_index_is_frame_native_and_keeps_supplemental_vectors(
+    fake_bge: FakeBGE,
+    data_service_with_context: DataService,
+    tmp_path: Path,
+) -> None:
+    """Context publication retains frame identity and outer-bundle embeddings."""
+
+    pytest.importorskip("faiss")
+    from hcmai.retrieval.retriever.dense.index import DenseIndex
+    from hcmai.retrieval.retriever.text.retriever import build_context_index
+
+    output = tmp_path / "context-index"
+    index = build_context_index(
+        data_service_with_context,
+        fake_bge,
+        output,
+        embeddings_filename="context_embeddings.npy",
+        dataset_version="test-v1",
+    )
+    loaded = DenseIndex.load(output)
+
+    assert index.mapping["frame_id"].tolist() == ["f1"]
+    assert loaded.mapping["video_id"].tolist() == ["v1"]
+    assert loaded.mapping["keyframe_order"].tolist() == [1]
+    assert loaded.metadata.entity_kind == "frame"
+    assert loaded.metadata.retrieval_source == "context"
+    assert (output / "context_embeddings.npy").is_file()
+    np.testing.assert_allclose(
+        np.load(output / "context_embeddings.npy"), loaded.vectors
+    )
+
+
+def test_context_filtered_search_round_trip_matches_allowed_brute_force(
+    fake_bge: FakeBGE,
+    tmp_path: Path,
+) -> None:
+    """Frame-native context filtering must equal dot products on allowed rows."""
+
+    pytest.importorskip("faiss")
+    from hcmai.retrieval.retriever.text.retriever import build_context_index
+
+    data = _context_data(
+        tmp_path,
+        [
+            ("f1", "[CAPTION]\nA red cable car.", "v1", 1000),
+            ("f2", "[CAPTION]\nA crowded market.", "v1", 2000),
+            ("f3", "[CAPTION]\nA red cable car.", "v2", 1000),
+            ("f4", "[CAPTION]\nA crowded market.", "v1", 3000),
+        ],
+    )
+    index = build_context_index(
+        data,
+        fake_bge,
+        tmp_path / "context-index",
+        embeddings_filename="context_embeddings.npy",
+        dataset_version="test-v1",
+    )
+    query = np.asarray([[1.0, 0.0]], dtype=np.float32)
+    filters = SearchFilters(
+        video_ids=["v1"], start_time_ms=900, end_time_ms=2500
+    )
+    allowed = index.filtered_positions(filters)
+    assert allowed is not None
+    brute_scores = query @ np.asarray(index.vectors)[allowed].T
+    expected = allowed[np.argsort(-brute_scores[0], kind="stable")]
+
+    scores, positions = index.search_filtered(query, 10, filters)
+
+    assert positions[0].tolist() == expected.tolist()
+    np.testing.assert_allclose(
+        scores[0], brute_scores[0][np.argsort(-brute_scores[0], kind="stable")]
+    )
+
+
+def test_context_artifact_builder_uses_evidence_encoder_and_manifest_lineage(
+    fake_bge: FakeBGE,
+    tmp_path: Path,
+) -> None:
+    """Configured Context builds fingerprint its source artifact and manifest."""
+
+    pytest.importorskip("faiss")
+    from hcmai.retrieval.retriever.dense.index import DenseIndex
+    from hcmai.retrieval.retriever.pipeline import RetrievalService
+
+    _context_data(
+        tmp_path,
+        [("f1", "[CAPTION]\nA red cable car.", "v1", 1000)],
+    )
+    frames = tmp_path / "frames.parquet"
+    context = tmp_path / "frame_context_v1.parquet"
+    manifest = tmp_path / "manifest.json"
+    write_json(
+        {
+            "context_version": "frame-context-v1",
+            "caption_version": "caption-v1",
+            "ocr_version": "ocr-v1",
+            "object_version": "objects-v1",
+        },
+        manifest,
+    )
+    pipeline_config = tmp_path / "baseline.yaml"
+    model_config = tmp_path / "models.yaml"
+    output = tmp_path / "context-index"
+    write_yaml(
+        {
+            "dataset": {
+                "version": "test-v1",
+                "frames_path": str(frames),
+                "enrichment": {"context_path": str(context)},
+            },
+            "index": {
+                "context_path": str(output),
+                "context_embedding_filename": "context_embeddings.npy",
+            },
+        },
+        pipeline_config,
+    )
+    write_yaml(
+        {
+            "caption_embedding": {
+                "backend": "bge_m3",
+                "name": "legacy/caption-bge",
+            },
+            "evidence_embedding": {
+                "backend": "bge_m3",
+                "name": "fake/bge-m3",
+            },
+        },
+        model_config,
+    )
+
+    index = RetrievalService.build_context_artifacts(
+        pipeline_config, model_config, encoder=fake_bge
+    )
+
+    assert index.metadata.model_name == "fake/bge-m3"
+    assert index.metadata.source_fingerprint == fingerprint_files([context, manifest])
+    assert DenseIndex.load(output).metadata.retrieval_source == "context"
 
 
 def test_evidence_embedding_falls_back_to_caption_embedding() -> None:

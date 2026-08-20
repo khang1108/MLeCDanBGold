@@ -309,6 +309,23 @@ class DataService:
         except KeyError:
             return None
 
+    def iter_frame_contexts(self) -> Iterator[FrameContext]:
+        """Iterate loaded deterministic frame-native contexts in artifact order."""
+
+        if self.context_store is None:
+            return iter(())
+        return self.context_store.iter_records()
+
+    def get_frame_context_text(self, frame_id: str) -> str | None:
+        """Return usable deterministic context text without fabricating evidence."""
+
+        if self.context_store is None:
+            return None
+        try:
+            return self.context_store.get_text(frame_id)
+        except KeyError:
+            return None
+
     def get_transcript_segments(
         self,
         video_id: str,

@@ -20,15 +20,20 @@ from hcmai.retrieval.retriever.fusion.rrf import RRFFusionRetriever
 from hcmai.retrieval.retriever.models.contracts import Retriever
 from hcmai.retrieval.retriever.models.metadata import IndexMetadata
 from hcmai.retrieval.retriever.query_batch import SourceFamily
-from hcmai.retrieval.retriever.text.artifacts import build_text_artifacts
+from hcmai.retrieval.retriever.text.artifacts import (
+    build_context_artifacts,
+    build_text_artifacts,
+)
 from hcmai.retrieval.retriever.text.retriever import (
     ASRRetriever,
     CaptionRetriever,
+    ContextRetriever,
     OCRRetriever,
 )
 from hcmai.retrieval.retriever.video_scores import VideoEventScores, score_videos
 
 _TEXT_RETRIEVERS = {
+    RetrievalSource.CONTEXT: ContextRetriever,
     RetrievalSource.CAPTION: CaptionRetriever,
     RetrievalSource.OCR: OCRRetriever,
     RetrievalSource.ASR: ASRRetriever,
@@ -226,6 +231,27 @@ class RetrievalService:
             model_config_path,
             source=source,
             enrichment_path=enrichment_path,
+            frames_path=frames_path,
+            output_dir=output_dir,
+            encoder=encoder,
+        )
+
+    @staticmethod
+    def build_context_artifacts(
+        config_path: str | Path = "configs/baseline.yaml",
+        model_config_path: str | Path = "llm/config.yaml",
+        *,
+        context_path: str | Path | None = None,
+        frames_path: str | Path | None = None,
+        output_dir: str | Path | None = None,
+        encoder: TextEmbeddingAdapter | None = None,
+    ) -> DenseIndex:
+        """Build the dedicated deterministic FrameContext dense artifact."""
+
+        return build_context_artifacts(
+            config_path,
+            model_config_path,
+            context_path=context_path,
             frames_path=frames_path,
             output_dir=output_dir,
             encoder=encoder,
