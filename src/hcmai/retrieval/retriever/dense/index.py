@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import shutil
+from tempfile import mkdtemp
+
 import numpy as np
 import faiss
 import pandas as pd
@@ -14,7 +17,7 @@ from typing import Any
 from hcmai.common.utils.io import read_json, write_json
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
-from hcmai.retrieval.retriever.artifacts import sha256_file
+from hcmai.retrieval.retriever.artifacts import publish_directory, sha256_file
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.retrieval.retriever.filtered import exact_subset_search
 from hcmai.retrieval.retriever.models.metadata import IndexMetadata
@@ -184,13 +187,43 @@ class DenseIndex:
         return cls(index, ordered, metadata, vectors=vectors)
 
     def save(self, output_dir: Path | str) -> Path:
-        """Serialize the index, mapping, and metadata to ``output_dir``.
+        """Stage and atomically publish the complete index bundle.
+
+        All artifact files are written to a private sibling directory first.
+        The destination only changes after metadata has recorded checksums for
+        every non-metadata file, preventing readers from seeing a mixed bundle.
 
         Returns:
-            The directory the artifacts were written to.
+            The directory where the complete bundle was published.
         """
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = Path(output_dir).resolve()
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        staging_dir = Path(
+            mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent)
+        )
+
+        try:
+            self._write_bundle(staging_dir)
+            publish_directory(staging_dir, output_dir)
+        except Exception:
+            # A write failure must leave the existing published directory
+            # untouched; publication owns rollback once its rename begins.
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir, ignore_errors=True)
+            raise
+
+        logger.info(
+            f"Saved index ({self.metadata.index_size_bytes} bytes), mapping, "
+            f"and metadata to {output_dir}"
+        )
+        return output_dir
+
+    def _write_bundle(self, output_dir: Path) -> None:
+        """Write one complete bundle into an unpublished staging directory.
+
+        Metadata is deliberately written last because it checksums all other
+        files. This helper does not publish or clean up its staging directory.
+        """
 
         index_path = output_dir / INDEX_FILENAME
         faiss.write_index(self.index, str(index_path))
@@ -209,9 +242,6 @@ class DenseIndex:
             for filename in CHECKSUM_FILENAMES
         }
         write_json(self.metadata.to_dict(), output_dir / METADATA_FILENAME)
-
-        logger.info(f"Saved index ({self.metadata.index_size_bytes} bytes), mapping, and metadata to {output_dir}")
-        return output_dir
 
     @classmethod
     def load(
@@ -309,7 +339,25 @@ class DenseIndex:
             raise IndexArtifactError("Persisted posting positions are out of bounds")
 
         if metadata.checksums is not None:
-            for filename, expected in metadata.checksums.items():
+            if not isinstance(metadata.checksums, dict):
+                raise IndexArtifactError(
+                    "Invalid checksum manifest: expected an object mapping filenames to digests"
+                )
+            required_checksums = set(CHECKSUM_FILENAMES)
+            received_checksums = set(metadata.checksums)
+            if received_checksums != required_checksums:
+                missing_checksums = sorted(required_checksums - received_checksums)
+                unexpected_checksums = sorted(received_checksums - required_checksums)
+                details = []
+                if missing_checksums:
+                    details.append(f"missing {', '.join(missing_checksums)}")
+                if unexpected_checksums:
+                    details.append(f"unexpected {', '.join(unexpected_checksums)}")
+                raise IndexArtifactError(
+                    "Invalid checksum manifest: " + "; ".join(details)
+                )
+            for filename in CHECKSUM_FILENAMES:
+                expected = metadata.checksums[filename]
                 actual = sha256_file(index_dir / filename)
                 if actual != expected:
                     raise IndexArtifactError(

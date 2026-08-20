@@ -17,7 +17,11 @@ from hcmai.retrieval.retriever.artifacts import (
     publish_directory,
     sha256_file,
 )
-from hcmai.retrieval.retriever.dense.index import DenseIndex, IndexArtifactError
+from hcmai.retrieval.retriever.dense.index import (
+    CHECKSUM_FILENAMES,
+    DenseIndex,
+    IndexArtifactError,
+)
 from hcmai.retrieval.retriever.models.metadata import IndexMetadata
 
 
@@ -127,6 +131,64 @@ def test_v2_dense_index_rejects_tampered_vectors(
 
     with pytest.raises(IndexArtifactError, match="checksum"):
         DenseIndex.load(output)
+
+
+def test_v2_dense_index_writes_a_complete_checksum_manifest(
+    tmp_path: Path, tiny_dense_index: DenseIndex
+) -> None:
+    """Every non-metadata artifact must have one v2 checksum entry."""
+    output = tiny_dense_index.save(tmp_path / "index")
+    metadata = json.loads((output / "metadata.json").read_text())
+
+    assert set(metadata["checksums"]) == set(CHECKSUM_FILENAMES)
+
+
+def test_v2_dense_index_rejects_an_incomplete_checksum_manifest(
+    tmp_path: Path, tiny_dense_index: DenseIndex
+) -> None:
+    """A checksum manifest with omitted files is invalid rather than partial."""
+    output = tiny_dense_index.save(tmp_path / "index")
+    metadata_path = output / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["checksums"].pop("vectors.npy")
+    metadata_path.write_text(json.dumps(metadata))
+
+    with pytest.raises(IndexArtifactError, match="checksum manifest"):
+        DenseIndex.load(output)
+
+
+def test_dense_index_save_keeps_previous_bundle_when_staging_write_fails(
+    tmp_path: Path,
+    tiny_dense_index: DenseIndex,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed replacement save must not leave a mixed live artifact bundle."""
+    destination = tiny_dense_index.save(tmp_path / "index")
+    original_frame_ids = tiny_dense_index.frame_ids.copy()
+    replacement_mapping = tiny_dense_index.mapping.copy()
+    replacement_mapping["frame_id"] = ["new-0", "new-1", "new-2"]
+    replacement = DenseIndex.build(
+        np.eye(3, dtype=np.float32),
+        replacement_mapping,
+        dataset_version="replacement",
+        model_name="replacement-model",
+    )
+    original_to_parquet = pd.DataFrame.to_parquet
+
+    def write_mapping_then_fail(frame: pd.DataFrame, path: Path, *args, **kwargs) -> None:
+        """Write a staged mapping then fail before the bundle can publish."""
+        original_to_parquet(frame, path, *args, **kwargs)
+        raise OSError("simulated staged bundle write failure")
+
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", write_mapping_then_fail)
+
+    with pytest.raises(OSError, match="simulated staged bundle write failure"):
+        replacement.save(destination)
+
+    loaded = DenseIndex.load(destination)
+    assert loaded.metadata.dataset_version == "test"
+    assert loaded.frame_ids.tolist() == original_frame_ids.tolist()
+    assert not list(tmp_path.glob(".index.staging-*"))
 
 
 def test_old_metadata_without_v2_fields_remains_readable(
