@@ -12,7 +12,13 @@ from typing import Any, cast
 
 import pytest
 
-from hcmai.common.config import AppConfig, EncoderConfig, FusionConfig, IndexConfig
+from hcmai.common.config import (
+    AppConfig,
+    EncoderConfig,
+    FusionConfig,
+    IndexConfig,
+    SearchConfig,
+)
 from hcmai.common.schemas import RetrievalSource
 from hcmai.llm.config import LLMServiceConfig
 from hcmai.orchestration import setup
@@ -91,11 +97,11 @@ def _modern_settings(
             context_path=context,
             asr_segment_path=asr,
         ),
-        search={
-            "fusion": FusionConfig(
+        search=SearchConfig(
+            fusion=FusionConfig(
                 required_sources=required_sources or {RetrievalSource.VISUAL}
-            )
-        },
+            ),
+        ),
     )
 
 
@@ -188,7 +194,7 @@ def test_modern_profile_loads_visual_context_and_segment_asr(
         None,
         messages,
         profile="context_asr_segment",
-        data=SimpleNamespace(frame_store=frame_store),
+        data=cast(Any, SimpleNamespace(frame_store=frame_store)),
     )
 
     assert cast(_LoadedService, service).active_sources == (
@@ -262,7 +268,7 @@ def test_modern_index_paths_allow_environment_overrides(
         None,
         [],
         profile="context_asr_segment",
-        data=SimpleNamespace(frame_store=object()),
+        data=cast(Any, SimpleNamespace(frame_store=object())),
     )
 
     assert loaded_paths == [settings.index.path, override_context, override_asr]
@@ -305,7 +311,7 @@ def test_optional_incompatible_context_is_skipped_with_clear_warning(
         None,
         messages,
         profile="context_asr_segment",
-        data=SimpleNamespace(frame_store=object()),
+        data=cast(Any, SimpleNamespace(frame_store=object())),
     )
 
     assert cast(_LoadedService, service).active_sources == (
@@ -337,7 +343,7 @@ def test_incompatible_asr_dimension_degrades_to_context(
         None,
         messages,
         profile="context_asr_segment",
-        data=SimpleNamespace(frame_store=object()),
+        data=cast(Any, SimpleNamespace(frame_store=object())),
     )
 
     assert cast(_LoadedService, service).active_sources == (
@@ -366,7 +372,7 @@ def test_missing_required_context_disables_retrieval(
         None,
         messages,
         profile="context_asr_segment",
-        data=SimpleNamespace(frame_store=object()),
+        data=cast(Any, SimpleNamespace(frame_store=object())),
     )
 
     assert service is None
@@ -484,3 +490,145 @@ def test_invalid_environment_profile_is_rejected_once(
 
     with pytest.raises(ValueError, match="context_asr_segment.*legacy_specialists"):
         setup.load_search_service([])
+
+
+@pytest.mark.parametrize("environment_profile", [None, "context_asr_segment"])
+def test_public_startup_selects_modern_profile_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    environment_profile: str | None,
+) -> None:
+    """Default and explicit modern startup reach the fast-track composer."""
+
+    settings = _modern_settings(tmp_path)
+    monkeypatch.setattr(setup, "_load_app_config", lambda: settings)
+    monkeypatch.setattr(setup, "_load_model_config", _models)
+    monkeypatch.setattr(setup, "_load_remote_llm", lambda *_: None)
+    if environment_profile is None:
+        monkeypatch.delenv("HCMAI_RETRIEVAL_PROFILE", raising=False)
+    else:
+        monkeypatch.setenv("HCMAI_RETRIEVAL_PROFILE", environment_profile)
+
+    profile_reads = 0
+    original_getenv = setup.os.getenv
+
+    def getenv(name: str, default: Any = None) -> Any:
+        nonlocal profile_reads
+        if name == "HCMAI_RETRIEVAL_PROFILE":
+            profile_reads += 1
+        return original_getenv(name, default)
+
+    monkeypatch.setattr(setup.os, "getenv", getenv)
+    data_profiles: list[str] = []
+    data = SimpleNamespace(frame_store=object())
+
+    def load_data(*args, profile, **kwargs):
+        data_profiles.append(profile)
+        return data
+
+    monkeypatch.setattr(setup, "_load_data", load_data)
+    visual = SimpleNamespace(metadata=_metadata(
+        model_name="visual/model",
+        model_revision="visual-revision",
+        dimension=768,
+        entity_kind="frame",
+        retrieval_source="visual",
+    ))
+    loaded_index_paths: list[Path] = []
+
+    def load_index(path, **_):
+        loaded_index_paths.append(path)
+        return visual
+
+    monkeypatch.setattr(setup.RetrievalService, "load_index", staticmethod(load_index))
+    monkeypatch.setattr(setup, "_query_encoder", lambda *args: object())
+    modern_profiles: list[str] = []
+
+    def modern(*args, **kwargs):
+        modern_profiles.append("context_asr_segment")
+        return _LoadedService((
+            RetrievalSource.VISUAL,
+            RetrievalSource.CONTEXT,
+            RetrievalSource.ASR,
+        ))
+
+    monkeypatch.setattr(setup, "_load_fast_track_retrieval", modern)
+    monkeypatch.setattr(
+        setup,
+        "_load_legacy_retrieval",
+        lambda *args, **kwargs: pytest.fail("legacy retrieval was selected"),
+    )
+
+    service = setup.load_search_service([])
+
+    assert cast(_LoadedService, service.retrieval).active_sources == (
+        RetrievalSource.VISUAL,
+        RetrievalSource.CONTEXT,
+        RetrievalSource.ASR,
+    )
+    assert profile_reads == 1
+    assert data_profiles == ["context_asr_segment"]
+    assert modern_profiles == ["context_asr_segment"]
+    assert loaded_index_paths == [settings.index.path]
+
+
+def test_public_startup_selects_legacy_specialists(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The rollback environment profile reaches the specialist composer."""
+
+    settings = _modern_settings(tmp_path)
+    monkeypatch.setattr(setup, "_load_app_config", lambda: settings)
+    monkeypatch.setattr(setup, "_load_model_config", _models)
+    monkeypatch.setattr(setup, "_load_remote_llm", lambda *_: None)
+    monkeypatch.setenv("HCMAI_RETRIEVAL_PROFILE", "legacy_specialists")
+
+    data_profiles: list[str] = []
+
+    def load_data(*args, profile, **kwargs):
+        data_profiles.append(profile)
+        return SimpleNamespace(frame_store=object())
+
+    monkeypatch.setattr(setup, "_load_data", load_data)
+    visual = SimpleNamespace(metadata=_metadata(
+        model_name="visual/model",
+        model_revision="visual-revision",
+        dimension=768,
+        entity_kind="frame",
+        retrieval_source="visual",
+    ))
+    monkeypatch.setattr(
+        setup.RetrievalService,
+        "load_index",
+        staticmethod(lambda path, **_: visual),
+    )
+    monkeypatch.setattr(setup, "_query_encoder", lambda *args: object())
+    legacy_calls: list[str] = []
+
+    def legacy(*args, **kwargs):
+        legacy_calls.append("legacy_specialists")
+        return _LoadedService((
+            RetrievalSource.VISUAL,
+            RetrievalSource.CAPTION,
+            RetrievalSource.OCR,
+            RetrievalSource.ASR,
+        ))
+
+    monkeypatch.setattr(setup, "_load_legacy_retrieval", legacy)
+    monkeypatch.setattr(
+        setup,
+        "_load_fast_track_retrieval",
+        lambda *args, **kwargs: pytest.fail("modern retrieval was selected"),
+    )
+
+    service = setup.load_search_service([])
+
+    assert cast(_LoadedService, service.retrieval).active_sources == (
+        RetrievalSource.VISUAL,
+        RetrievalSource.CAPTION,
+        RetrievalSource.OCR,
+        RetrievalSource.ASR,
+    )
+    assert data_profiles == ["legacy_specialists"]
+    assert legacy_calls == ["legacy_specialists"]
