@@ -7,7 +7,7 @@ So sánh:
 - Nếu có pipeline checkpoint: so sánh trực tiếp BTC vs pipeline trên cùng video
 """
 from __future__ import annotations
-
+k
 import glob
 from pathlib import Path
 
