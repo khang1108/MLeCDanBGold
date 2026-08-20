@@ -309,7 +309,12 @@ def _merge(
                 **existing.source_ranks,
                 **incoming.source_ranks,
             },
-            "metadata": existing.metadata or incoming.metadata,
+            # The first candidate owns canonical frame metadata. Preserve it
+            # while retaining distinct source provenance such as ASR segments.
+            "metadata": {
+                **incoming.metadata,
+                **existing.metadata,
+            },
         },
         deep=True,
     )

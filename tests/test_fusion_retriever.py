@@ -121,3 +121,54 @@ def test_rrf_uses_task_specific_weights_across_all_modalities() -> None:
     assert kis[0].frame_id == "text-shared"
     assert vqa[0].frame_id == "visual"
     assert vqa[0].fusion_score == 5 / 61
+
+
+def test_rrf_preserves_asr_segment_provenance_when_frame_already_exists() -> None:
+    """Merge source-specific metadata without replacing canonical frame data."""
+
+    visual_candidate = RetrievalCandidate(
+        frame_id="shared",
+        source_scores={RetrievalSource.VISUAL: 0.9},
+        source_ranks={RetrievalSource.VISUAL: 1},
+        metadata={
+            "frame": {
+                "frame_id": "shared",
+                "video_id": "v1",
+                "frame_idx": 42,
+                "timestamp_ms": 1_500,
+            },
+            "owner": "visual",
+        },
+    )
+    asr_candidate = RetrievalCandidate(
+        frame_id="shared",
+        source_scores={RetrievalSource.ASR: 0.8},
+        source_ranks={RetrievalSource.ASR: 1},
+        metadata={
+            "frame": {
+                "frame_id": "shared",
+                "video_id": "invented",
+                "frame_idx": 999,
+                "timestamp_ms": 9_999,
+            },
+            "asr_segment": {
+                "segment_id": "v1:7",
+                "start_ms": 1_000,
+                "end_ms": 2_000,
+                "projection_kind": "inside_segment",
+                "projection_distance_ms": 0,
+            },
+            "owner": "asr",
+        },
+    )
+    fused = RRFFusionRetriever(
+        [
+            FakeRetriever([visual_candidate], encode_ms=0, search_ms=0),
+            FakeRetriever([asr_candidate], encode_ms=0, search_ms=0),
+        ],
+        FusionConfig(),
+    ).search("query", top_k=1)
+
+    assert fused[0].metadata["frame"] == visual_candidate.metadata["frame"]
+    assert fused[0].metadata["owner"] == "visual"
+    assert fused[0].metadata["asr_segment"] == asr_candidate.metadata["asr_segment"]

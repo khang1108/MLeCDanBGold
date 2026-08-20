@@ -224,6 +224,17 @@ class FrameStore:
 
         return [self.get(frame_id) for frame_id in frame_ids]
 
+    def get_by_video(self, video_id: str) -> tuple[FrameRecord, ...]:
+        """Return a video's canonical frames in deterministic temporal order.
+
+        The returned tuple is the immutable object built at store startup and
+        sorted by ``(timestamp_ms, frame_idx, frame_id)``. Unknown videos return
+        an empty tuple, allowing timeline adapters to skip unavailable videos
+        without fabricating frame identity.
+        """
+
+        return self._records_by_video.get(video_id, ())
+
     def get_neighbors(
         self,
         frame_id: str,
