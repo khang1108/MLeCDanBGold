@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shutil
 from functools import cached_property
+from numbers import Integral, Real
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
@@ -243,7 +244,9 @@ class SegmentDenseIndex:
         mapping = pd.read_parquet(index_dir / MAPPING_FILENAME)
         _validate_loaded_mapping(mapping, metadata.vector_count)
         vectors = np.load(index_dir / VECTORS_FILENAME, mmap_mode="r")
-        posting_video_ids = list(read_json(index_dir / POSTING_VIDEO_IDS_FILENAME))
+        posting_video_ids = _validate_posting_video_ids(
+            read_json(index_dir / POSTING_VIDEO_IDS_FILENAME)
+        )
         posting_offsets = np.load(index_dir / POSTING_OFFSETS_FILENAME, mmap_mode="r")
         posting_positions = np.load(index_dir / POSTING_POSITIONS_FILENAME, mmap_mode="r")
         start_ms = np.load(index_dir / START_MS_FILENAME, mmap_mode="r")
@@ -252,6 +255,7 @@ class SegmentDenseIndex:
         _validate_loaded_arrays(
             index,
             metadata,
+            mapping.sort_values("embedding_index").reset_index(drop=True),
             vectors,
             posting_video_ids,
             posting_offsets,
@@ -411,6 +415,14 @@ def _validate_mapping(
         raise error_type(
             f"embedding count ({vector_count}) does not match mapping rows ({len(mapping)})"
         )
+    _validate_non_empty_strings(mapping, "segment_id", error_type)
+    _validate_non_empty_strings(mapping, "video_id", error_type)
+    for column in ("embedding_index", "segment_index", "start_ms", "end_ms"):
+        _validate_integral_column(mapping, column, error_type)
+    if (mapping["segment_index"] < 0).any():
+        raise error_type("segment_index values must be non-negative")
+    if (mapping["start_ms"] < 0).any() or (mapping["end_ms"] < 0).any():
+        raise error_type("segment interval values must be non-negative")
     positions = mapping["embedding_index"].to_numpy()
     if sorted(positions.tolist()) != list(range(vector_count)):
         raise error_type("mapping embedding_index must be a permutation of 0..N-1")
@@ -418,6 +430,35 @@ def _validate_mapping(
         raise error_type("mapping contains duplicate segment_id values")
     if (mapping["end_ms"] <= mapping["start_ms"]).any():
         raise error_type("segment mapping requires positive duration")
+
+
+def _validate_non_empty_strings(
+    mapping: pd.DataFrame, column: str, error_type: type[Exception]
+) -> None:
+    """Ensure identity fields cannot be null, blank, or coerced to strings."""
+
+    values = mapping[column].tolist()
+    if any(not isinstance(value, str) or not value.strip() for value in values):
+        raise error_type(f"segment mapping {column} values must be non-empty strings")
+
+
+def _validate_integral_column(
+    mapping: pd.DataFrame, column: str, error_type: type[Exception]
+) -> None:
+    """Reject non-integral values before any positional or interval cast occurs."""
+
+    minimum, maximum = np.iinfo(np.int64).min, np.iinfo(np.int64).max
+    for value in mapping[column].tolist():
+        if isinstance(value, bool) or not isinstance(value, (Integral, Real)):
+            raise error_type(f"segment mapping {column} values must be finite integers")
+        if isinstance(value, Integral):
+            integer_value = int(value)
+        elif not np.isfinite(float(value)) or not float(value).is_integer():
+            raise error_type(f"segment mapping {column} values must be finite integers")
+        else:
+            integer_value = int(float(value))
+        if integer_value < minimum or integer_value > maximum:
+            raise error_type(f"segment mapping {column} values must fit int64")
 
 
 def _validate_metadata(metadata: IndexMetadata) -> None:
@@ -459,6 +500,7 @@ def _validate_checksums(index_dir: Path, metadata: IndexMetadata) -> None:
 def _validate_loaded_arrays(
     index: Any,
     metadata: IndexMetadata,
+    mapping: pd.DataFrame,
     vectors: np.ndarray,
     posting_video_ids: list[str],
     posting_offsets: np.ndarray,
@@ -475,6 +517,8 @@ def _validate_loaded_arrays(
         )
     if index.d != metadata.embedding_dim:
         raise IndexArtifactError("Mismatched segment index dimensions")
+    if not isinstance(index, faiss.IndexFlatIP):
+        raise IndexArtifactError("Segment FAISS index must be concretely IndexFlatIP")
     if index.metric_type != faiss.METRIC_INNER_PRODUCT:
         raise IndexArtifactError("Segment FAISS index must use inner-product metric")
     if vectors.shape != (count, metadata.embedding_dim) or vectors.dtype != np.float32:
@@ -506,6 +550,31 @@ def _validate_loaded_arrays(
         raise IndexArtifactError("Persisted segment posting positions are out of bounds")
     if len(np.unique(posting_positions)) != count:
         raise IndexArtifactError("Persisted segment posting positions must cover each vector once")
+    expected_video_ids = sorted(mapping["video_id"].unique().tolist())
+    if sorted(posting_video_ids) != expected_video_ids:
+        raise IndexArtifactError("Persisted segment posting video IDs disagree with mapping")
+    for position, video_id in enumerate(posting_video_ids):
+        start = int(posting_offsets[position])
+        end = int(posting_offsets[position + 1])
+        posted_video_ids = mapping.iloc[posting_positions[start:end]]["video_id"]
+        if not posted_video_ids.eq(video_id).all():
+            raise IndexArtifactError(
+                "Persisted segment posting positions disagree with their posting video IDs"
+            )
+
+
+def _validate_posting_video_ids(raw_value: Any) -> list[str]:
+    """Return valid posting keys without accepting JSON values that coerce to IDs."""
+
+    if not isinstance(raw_value, list):
+        raise IndexArtifactError("Persisted segment posting video IDs must be a list")
+    if any(not isinstance(value, str) or not value.strip() for value in raw_value):
+        raise IndexArtifactError(
+            "Persisted segment posting video IDs must be non-empty strings"
+        )
+    if len(set(raw_value)) != len(raw_value):
+        raise IndexArtifactError("Persisted segment posting video IDs must be unique")
+    return raw_value
 
 
 def _postings(mapping: pd.DataFrame) -> tuple[list[str], np.ndarray, np.ndarray]:
