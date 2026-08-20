@@ -23,20 +23,83 @@ fi
 local_root="${HCMAI_LOCAL_ROOT%/}"
 remote_root="${HCMAI_THUNDER_ROOT%/}"
 remote_destination="${HCMAI_THUNDER_HOST}:${remote_root}/"
+python_command="${HCMAI_PYTHON:-python}"
+bundle_names=("visual" "context" "asr_segments")
+promotion_items=("visual" "context" "asr_segments" "build_report.json")
+transfer_staging=""
+promotion_backup=""
+promotion_complete=0
+declare -a backed_up_items=()
+declare -a promoted_items=()
+
+safe_remove_temp() {
+    local directory="$1"
+    if [[ -z "${directory}" || ! -e "${directory}" ]]; then
+        return 0
+    fi
+    case "${directory}" in
+        "${local_root}/artifacts/.indexes-transfer."*|"${local_root}/artifacts/.indexes-backup."*)
+            rm -rf -- "${directory}"
+            ;;
+        *)
+            echo "refusing to remove unexpected temporary path: ${directory}" >&2
+            return 1
+            ;;
+    esac
+}
+
+rollback_promotion() {
+    local item
+    local live_root="${local_root}/artifacts/indexes"
+    local index
+    local rollback_failed=0
+
+    for ((index=${#promoted_items[@]} - 1; index >= 0; index--)); do
+        item="${promoted_items[index]}"
+        if ! rm -rf -- "${live_root}/${item}"; then
+            rollback_failed=1
+        fi
+    done
+    for ((index=${#backed_up_items[@]} - 1; index >= 0; index--)); do
+        item="${backed_up_items[index]}"
+        if [[ -e "${promotion_backup}/${item}" ]]; then
+            if [[ -e "${live_root}/${item}" || -L "${live_root}/${item}" ]] || \
+                ! mv -- "${promotion_backup}/${item}" "${live_root}/${item}"; then
+                rollback_failed=1
+            fi
+        fi
+    done
+    if [[ "${rollback_failed}" -ne 0 ]]; then
+        echo "index promotion rollback needs manual recovery from ${promotion_backup}" >&2
+        return 1
+    fi
+    safe_remove_temp "${promotion_backup}"
+    promotion_backup=""
+    backed_up_items=()
+    promoted_items=()
+}
+
+cleanup_pull() {
+    local status="$?"
+    set +e
+    if [[ "${promotion_complete}" -eq 0 && -n "${promotion_backup}" ]]; then
+        rollback_promotion
+    fi
+    safe_remove_temp "${transfer_staging}"
+    if [[ "${promotion_complete}" -eq 1 && -n "${promotion_backup}" ]]; then
+        safe_remove_temp "${promotion_backup}"
+    fi
+    return "${status}"
+}
+
+trap cleanup_pull EXIT
+trap 'exit 130' HUP INT TERM
 
 push_relative() {
     local relative_path="$1"
     rsync -a --protect-args --relative -- \
         "${local_root}/./${relative_path}" \
         "${remote_destination}"
-}
-
-pull_bundle() {
-    local bundle_name="$1"
-    mkdir -p "${local_root}/artifacts/indexes/${bundle_name}"
-    rsync -a --protect-args -- \
-        "${HCMAI_THUNDER_HOST}:${remote_root}/artifacts/indexes/${bundle_name}/" \
-        "${local_root}/artifacts/indexes/${bundle_name}/"
 }
 
 push_inputs() {
@@ -61,14 +124,102 @@ push_inputs() {
     push_relative "pyproject.toml"
 }
 
+validate_staged_report() {
+    local report_path="$1"
+    if ! command -v "${python_command}" >/dev/null 2>&1; then
+        echo "HCMAI_PYTHON is not executable: ${python_command}" >&2
+        return 1
+    fi
+    "${python_command}" - "${report_path}" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+try:
+    report = json.loads(path.read_text(encoding="utf-8"))
+except Exception as error:
+    raise SystemExit(f"invalid remote build report {path}: {error}") from error
+if not isinstance(report, dict) or report.get("status") != "passed":
+    raise SystemExit("remote build report status is not 'passed'")
+indexes = report.get("indexes")
+if not isinstance(indexes, dict):
+    raise SystemExit("remote build report is missing indexes")
+required = ("visual", "context", "asr_segments")
+missing = [name for name in required if not isinstance(indexes.get(name), dict)]
+if missing:
+    raise SystemExit("remote build report is missing index entries: " + ", ".join(missing))
+PY
+}
+
+promote_staged_indexes() {
+    local live_root="${local_root}/artifacts/indexes"
+    local item
+
+    mkdir -p "${live_root}"
+    promotion_backup="$(mktemp -d "${local_root}/artifacts/.indexes-backup.XXXXXX")"
+    backed_up_items=()
+    promoted_items=()
+
+    for item in "${promotion_items[@]}"; do
+        if [[ -e "${live_root}/${item}" || -L "${live_root}/${item}" ]]; then
+            # Record intent before the atomic rename so an interrupt between
+            # the rename and the next shell command can still restore it.
+            backed_up_items+=("${item}")
+            if ! mv -- "${live_root}/${item}" "${promotion_backup}/${item}"; then
+                rollback_promotion
+                return 1
+            fi
+        fi
+    done
+
+    for item in "${promotion_items[@]}"; do
+        if [[ ! -e "${transfer_staging}/${item}" ]]; then
+            echo "staged index transfer is missing ${item}" >&2
+            rollback_promotion
+            return 1
+        fi
+        # Every previous live item is already in the rollback directory.
+        # Pre-record this target so signal-driven cleanup cannot miss a rename.
+        promoted_items+=("${item}")
+        if ! mv -- "${transfer_staging}/${item}" "${live_root}/${item}"; then
+            rollback_promotion
+            return 1
+        fi
+    done
+
+    promotion_complete=1
+    safe_remove_temp "${promotion_backup}"
+    promotion_backup=""
+    backed_up_items=()
+    promoted_items=()
+}
+
 pull_indexes() {
-    pull_bundle "visual"
-    pull_bundle "context"
-    pull_bundle "asr_segments"
-    mkdir -p "${local_root}/artifacts/indexes"
+    local bundle_name
+
+    mkdir -p "${local_root}/artifacts"
+    transfer_staging="$(mktemp -d "${local_root}/artifacts/.indexes-transfer.XXXXXX")"
+
+    # The report is the remote publication gate and must pass before any large
+    # bundle transfer starts. It is never written directly into the live root.
     rsync -a --protect-args -- \
         "${HCMAI_THUNDER_HOST}:${remote_root}/artifacts/indexes/build_report.json" \
-        "${local_root}/artifacts/indexes/build_report.json"
+        "${transfer_staging}/build_report.json"
+    validate_staged_report "${transfer_staging}/build_report.json"
+
+    for bundle_name in "${bundle_names[@]}"; do
+        mkdir -p "${transfer_staging}/${bundle_name}"
+        rsync -a --protect-args -- \
+            "${HCMAI_THUNDER_HOST}:${remote_root}/artifacts/indexes/${bundle_name}/" \
+            "${transfer_staging}/${bundle_name}/"
+        if [[ -z "$(find "${transfer_staging}/${bundle_name}" -mindepth 1 -print -quit)" ]]; then
+            echo "downloaded ${bundle_name} bundle is empty" >&2
+            return 1
+        fi
+    done
+
+    promote_staged_indexes
 }
 
 case "${1:-}" in

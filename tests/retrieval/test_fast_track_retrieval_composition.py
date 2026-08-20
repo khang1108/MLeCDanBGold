@@ -6,7 +6,11 @@ composition.  They do not build corpus artifacts or load production models.
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any, Literal
 
@@ -424,3 +428,164 @@ def test_offline_projection_resolves_relative_keyframe_root_once(
 
     assert Path(projected.iloc[0]["image_path"]).is_absolute()
     assert builder._resolve_image(projected.iloc[0]["image_path"]) == image.resolve()
+
+
+def test_offline_model_config_rejects_mutable_revisions(tmp_path: Path) -> None:
+    """Refuse branch aliases that cannot reproduce a published index."""
+
+    from scripts import build_retrieval_indexes as workflow
+
+    models = tmp_path / "models.yaml"
+    models.write_text(
+        """
+visual_embedding:
+  backend: siglip
+  model_name: fake/visual
+  revision: main
+evidence_embedding:
+  backend: bge_m3
+  model_name: fake/text
+  revision: 5617a9f61b028005a4858fdac845db406aefb181
+""".strip()
+    )
+
+    with pytest.raises(ValueError, match="40-character hexadecimal"):
+        workflow.load_model_config(models)
+
+
+def test_offline_preflight_rejects_evidence_with_no_usable_corpus() -> None:
+    """Stop before model loading when Context and transcript builders would fail."""
+
+    from scripts import build_retrieval_indexes as workflow
+    from hcmai.common.schemas import ProcessingStatus
+
+    context = SimpleNamespace(frame_id="f1")
+    data = SimpleNamespace(
+        iter_frame_contexts=lambda: iter((context,)),
+        get_frame_context_text=lambda frame_id: None,
+    )
+    with pytest.raises(ValueError, match="no usable context_text"):
+        workflow._require_usable_context_ids(data)
+
+    failed_segment = SimpleNamespace(
+        status=ProcessingStatus.FAILED,
+        text="recognizable words",
+    )
+    with pytest.raises(ValueError, match="no usable completed segments"):
+        workflow._require_usable_completed_segments((failed_segment,))
+
+
+def test_index_pull_validates_then_atomically_promotes_all_bundles(
+    tmp_path: Path,
+) -> None:
+    """Keep live indexes intact until report and all staged transfers succeed."""
+
+    repository = Path(__file__).resolve().parents[2]
+    script = repository / "scripts/sync_thundercompute_indexes.sh"
+    local_root = tmp_path / "local"
+    live_root = local_root / "artifacts/indexes"
+    remote_root = tmp_path / "remote"
+    remote_indexes = remote_root / "artifacts/indexes"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+
+    for name in ("visual", "context", "asr_segments"):
+        (live_root / name).mkdir(parents=True)
+        (live_root / name / "old.txt").write_text(f"old-{name}")
+        (remote_indexes / name).mkdir(parents=True)
+        (remote_indexes / name / "new.txt").write_text(f"new-{name}")
+    (live_root / "build_report.json").write_text('{"status":"old"}')
+
+    fake_rsync = fake_bin / "rsync"
+    fake_rsync.write_text(
+        """#!/usr/bin/env python3
+import os
+from pathlib import Path
+import shutil
+import sys
+
+source, destination = sys.argv[-2:]
+failure = os.environ.get("HCMAI_FAKE_RSYNC_FAIL")
+if failure and failure in source:
+    raise SystemExit(23)
+remote_path = Path(source.split(":", 1)[1])
+requested_root = Path(os.environ["HCMAI_THUNDER_ROOT"])
+actual = Path(os.environ["HCMAI_FAKE_REMOTE_ROOT"]) / remote_path.relative_to(requested_root)
+target = Path(destination)
+if actual.is_dir():
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(actual, target, dirs_exist_ok=True)
+else:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(actual, target)
+"""
+    )
+    fake_rsync.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "HCMAI_PYTHON": sys.executable,
+        "HCMAI_LOCAL_ROOT": str(local_root),
+        "HCMAI_THUNDER_HOST": "fake-host",
+        "HCMAI_THUNDER_ROOT": "/remote/hcmai",
+        "HCMAI_FAKE_REMOTE_ROOT": str(remote_root),
+    }
+
+    def write_report(status: str) -> None:
+        (remote_indexes / "build_report.json").write_text(
+            json.dumps(
+                {
+                    "status": status,
+                    "indexes": {
+                        "visual": {},
+                        "context": {},
+                        "asr_segments": {},
+                    },
+                }
+            )
+        )
+
+    def pull(**extra_env: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", str(script), "pull-indexes"],
+            env={**env, **extra_env},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def assert_live_is_old() -> None:
+        for name in ("visual", "context", "asr_segments"):
+            assert (live_root / name / "old.txt").read_text() == f"old-{name}"
+        assert json.loads((live_root / "build_report.json").read_text()) == {
+            "status": "old"
+        }
+
+    assert pull().returncode != 0
+    assert_live_is_old()
+
+    write_report("failed")
+    assert pull().returncode != 0
+    assert_live_is_old()
+
+    (remote_indexes / "build_report.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "indexes": {"visual": {}, "context": {}},
+            }
+        )
+    )
+    assert pull().returncode != 0
+    assert_live_is_old()
+
+    write_report("passed")
+    assert pull(HCMAI_FAKE_RSYNC_FAIL="context/").returncode != 0
+    assert_live_is_old()
+
+    assert pull().returncode == 0
+    for name in ("visual", "context", "asr_segments"):
+        assert (live_root / name / "new.txt").read_text() == f"new-{name}"
+        assert not (live_root / name / "old.txt").exists()
+    assert json.loads((live_root / "build_report.json").read_text())["status"] == "passed"

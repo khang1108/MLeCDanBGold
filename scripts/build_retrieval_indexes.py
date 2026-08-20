@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import gc
 import logging
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -220,8 +221,12 @@ def load_model_config(path: str | Path) -> Any:
         ("visual_embedding", config.visual_embedding),
         ("evidence_embedding", config.resolved_evidence_embedding),
     ):
-        if not encoder.revision:
-            raise ValueError(f"{label}.revision must pin an immutable model revision")
+        if not isinstance(encoder.revision, str) or re.fullmatch(
+            r"[0-9a-fA-F]{40}", encoder.revision
+        ) is None:
+            raise ValueError(
+                f"{label}.revision must be a 40-character hexadecimal commit"
+            )
     return config
 
 
@@ -261,6 +266,35 @@ def project_staged_keyframes(
         if not image.is_file() or not image.is_relative_to(root):
             raise ValueError(f"Projected keyframe is outside the staged root: {image}")
     return projected
+
+
+def _require_usable_context_ids(data: Any) -> set[str]:
+    """Return frame IDs whose deterministic Context text can be indexed."""
+
+    usable = {
+        context.frame_id
+        for context in data.iter_frame_contexts()
+        if data.get_frame_context_text(context.frame_id) is not None
+    }
+    if not usable:
+        raise ValueError("FrameContext artifact contains no usable context_text")
+    return usable
+
+
+def _require_usable_completed_segments(segments: tuple[Any, ...]) -> list[Any]:
+    """Return ASR segments accepted by the segment corpus builder."""
+
+    from hcmai.common.schemas import ProcessingStatus
+
+    usable = [
+        segment
+        for segment in segments
+        if segment.status is ProcessingStatus.COMPLETED
+        and bool(" ".join(segment.text.split()))
+    ]
+    if not usable:
+        raise ValueError("Transcript artifact contains no usable completed segments")
+    return usable
 
 
 def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
@@ -372,6 +406,7 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     }
     if not context_ids.issubset(canonical_ids):
         raise ValueError("FrameContext contains non-canonical frame_id values")
+    _require_usable_context_ids(data)
 
     transcripts = TranscriptStore(transcripts_path)
     segments = tuple(transcripts.iter_records())
@@ -382,6 +417,7 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     segment_ids = [segment.segment_id for segment in segments]
     if len(set(segment_ids)) != len(segment_ids):
         raise ValueError("Transcript segment_id values must be unique")
+    _require_usable_completed_segments(segments)
 
     duplicate_rows = int(
         frames.duplicated(["video_id", "frame_idx"], keep=False).sum()
