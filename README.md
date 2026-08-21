@@ -1,465 +1,362 @@
-# HCMAI 2026 Multimodal Video Retrieval
+# HCMAI 2026 — Multimodal Video Retrieval
 
-HCMAI is a competition-oriented multimodal video retrieval system for the Ho Chi Minh City AI Challenge 2026. The system accepts Vietnamese or English natural-language input and returns canonical video/frame identities for Textual Known Item Search (KIS) and grounded video question answering (Q&A/VQA).
+HCMAI là hệ thống tìm kiếm video đa phương thức cho HCMAI 2026. Người dùng
+nhập truy vấn tiếng Việt hoặc tiếng Anh; hệ thống tìm các keyframe phù hợp,
+giữ lại bằng chứng Caption/OCR/Object/ASR, định vị theo thời gian và trả về
+`video_id` cùng `frame_idx` hợp lệ cho bài thi.
 
-The current engineering priority is **not to replace the model stack**. It is to make the existing KIS and VQA pipelines more correct, query-aware, evidence-preserving, temporally grounded, measurable, and fast.
+README này mô tả profile đang dùng: BTC cung cấp keyframes, mapping và
+objects; HCMAI tạo enrichment, embedding và index. Không cần trích xuất lại
+keyframe từ video trong profile này.
 
-> The approved implementation roadmap is [`KIS_VQA_V2_PLAN.md`](KIS_VQA_V2_PLAN.md). Coding agents must treat that plan, the current repository/tests/configuration, and the latest user instruction as the active source of truth.
-
-## Scope
-
-This workstream owns:
-
-- shared multimodal retrieval used by KIS and VQA;
-- Textual KIS;
-- Competition Q&A / VQA;
-- reranking, evidence localization, temporal windows, grounded answering;
-- resilience, caching, observability, evaluation, and submission integration needed by KIS/VQA.
-
-### Explicit non-goals
-
-- **TRAKE is owned by another teammate.** Do not implement, refactor, benchmark, optimize, or review TRAKE internals from this workstream.
-- Do not remove or break existing TRAKE contracts, registrations, routers, or shared integration seams.
-- KISC / conversational KIS / VKIS are outside the active optimization scope unless explicitly restored.
-
-## Competition outputs
-
-### KIS
+## 1. Tổng quan hệ thống
 
 ```text
-<video_name>,<frame_idx>
+Browser (React :3000)
+        |
+        v
+Local FastAPI backend (:8000)
+  ├─ canonical FrameStore + keyframes + artifacts + FAISS indexes
+  ├─ retrieval / fusion / temporal localization
+  └─ HTTP requests for model inference only
+        |
+        v
+Remote GPU inference API (ThunderCompute + Cloudflare)
+  ├─ SigLIP2 visual embedding
+  ├─ BGE-M3 text embedding
+  ├─ Qwen3-VL reranker (optional)
+  └─ caption/OCR/VQA services (optional)
 ```
 
-### VQA
+Máy local giữ dữ liệu tìm kiếm và frontend/backend. GPU VM chỉ chạy model
+inference, vì vậy có thể tắt VM sau khi benchmark mà không mất corpus/index
+local.
+
+### Các identity bắt buộc
+
+- `frame_id`: identity nội bộ, dùng để join và truy xuất artifact.
+- `video_id`: video nguồn và identity dùng khi nộp bài.
+- `frame_idx`: tọa độ frame chính thức, là số nguyên lấy từ BTC mapping.
+- `timestamp_ms`: thời điểm của keyframe.
+
+Không được thay `frame_idx` bằng thứ tự keyframe, số thứ tự filename hoặc
+array index. Reranker và model provider cũng không được tự tạo lại identity.
+
+## 2. Hệ thống xử lý như thế nào?
+
+### 2.1. Chuẩn bị dữ liệu offline
 
 ```text
-<video_name>,<frame_idx>,<answer>
+BTC keyframes + map_keyframes + BTC objects
+                 |
+                 v
+        Canonical FrameStore
+        (frames.parquet + manifest)
+                 |
+       +---------+----------+----------------+
+       v                    v                v
+   Caption                 OCR          Object import
+       \                    |                /
+        +-------------------+---------------+
+                            v
+                    FrameContext V1
+
+Videos (nếu cần ASR) --> timestamped transcript segments
+
+FrameStore + FrameContext + transcripts
+                            |
+                            v
+              Visual / Context / ASR indexes
 ```
 
-`frame_idx` must always come from the canonical frame mapping. It must never be inferred from timestamp, FPS, filename, array position, or neighboring keyframes.
+Các bước chính:
 
-## Current baseline
+1. Import metadata BTC và mapping thành `artifacts/frame_store/frames.parquet`.
+2. Sinh Caption, OCR và import Object evidence. Các artifact chuyên biệt vẫn
+   được giữ riêng; `FrameContext` chỉ là view kết hợp có thể tái tạo.
+3. Nếu task cần lời thoại, chạy ASR trên video để tạo transcript có timestamp.
+4. Build embedding và FAISS index offline. Online serving không tự build lại
+   corpus hoặc index lớn.
 
-The repository already contains an executable shared retrieval stack and task-specific KIS/VQA logic.
+Lệnh enrichment chi tiết nằm trong [`scripts/README.md`](scripts/README.md).
 
-Implemented foundations include:
+### 2.2. Luồng KIS online
 
-- canonical `frame_id -> video_id -> frame_idx` mapping and `FrameStore`;
-- visual/caption/OCR/ASR evidence stores and dense indexes;
-- SigLIP2 visual retrieval;
-- BGE-M3 text retrieval for caption/OCR/ASR;
-- concurrent multimodal search and Reciprocal Rank Fusion (RRF);
-- KIS candidate reranking and result shaping;
-- VQA parsing, multi-branch retrieval, video aggregation, temporal-window construction, evidence collection, localization, answering, and joint ranking;
-- Qwen-based image reranking and VQA inference, including a multi-image VQA API capability;
-- request-scoped tracing, FastAPI integration, and the React UI;
-- remote GPU inference deployment support.
+```text
+query
+  -> query encoding
+  -> visual/context/ASR retrieval
+  -> RRF fusion, giữ provenance và canonical frame_id
+  -> temporal refinement / deduplication
+  -> optional bounded Qwen3-VL reranking trên representative candidates
+  -> SearchMaterializer
+  -> SearchResponse (Top-K frame results)
+```
 
-The current baseline works end-to-end, but code audit identified structural quality and latency issues that should be fixed before changing backbone models.
+KIS endpoint:
 
-## Current model stack
+```text
+POST /api/v1/search
+```
 
-The active model configuration is expected to come from project configuration rather than hard-coded module constants. The current stack is centered on:
+### 2.3. Luồng VQA online
 
-| Capability | Model family / role |
+```text
+event description + question
+  -> event/question retrieval
+  -> candidate video aggregation
+  -> bounded temporal windows
+  -> caption/OCR/ASR evidence collection
+  -> localization và chọn frame
+  -> VLM answer + grounding
+  -> ranked video/frame/answer submissions
+```
+
+VQA endpoint:
+
+```text
+POST /api/v1/vqa
+```
+
+### 2.4. Các endpoint thường dùng
+
+| Endpoint | Mục đích |
 | --- | --- |
-| Frame captioning | Florence-2 |
-| Visual text-image retrieval | SigLIP2 |
-| Caption/OCR/ASR text embeddings | BGE-M3 |
-| KIS visual reranking | Qwen3-VL reranker |
-| VQA | Qwen2.5-VL |
+| `GET /health` | Kiểm tra backend, FrameStore, index và inference |
+| `POST /api/v1/search` | KIS search |
+| `POST /api/v1/vqa` | VQA |
+| `GET /api/v1/frames/{frame_id}/image` | Lấy keyframe gốc |
+| `GET /api/v1/frames/{frame_id}/thumbnail` | Lấy thumbnail; nếu BTC không có thumbnail thì fallback về keyframe |
+| `GET /api/v1/frames/{frame_id}/neighbors` | Lấy frame lân cận theo thời gian |
+| `POST /api/v1/submit` | Tạo identity submission cho một frame |
 
-Model replacement is a **P2 research experiment**, not a P0 correctness fix.
-
-## Baseline online flows
-
-### KIS baseline
-
-```mermaid
-flowchart LR
-    Q["Natural-language query"] --> RET["RetrievalService"]
-    RET --> V["SigLIP visual"]
-    RET --> C["Caption / BGE"]
-    RET --> O["OCR / BGE"]
-    RET --> A["ASR / BGE"]
-    V --> RRF["RRF fusion"]
-    C --> RRF
-    O --> RRF
-    A --> RRF
-    RRF --> RR["bounded Qwen visual reranking"]
-    RR --> NMS["temporal dedup + diversity"]
-    NMS --> OUT["canonical Top-K / Top-100"]
-```
-
-Known baseline risks:
-
-- task-wide/static modality weighting does not express whether a query is visual, OCR-heavy, speech-heavy, or mixed;
-- the image-only reranker can overwrite evidence that originally came from OCR/ASR;
-- a fixed rerank depth spends GPU time even when retrieval is already confident;
-- fixed time-only deduplication can suppress visually distinct neighboring shots.
-
-### VQA baseline
-
-```mermaid
-flowchart LR
-    IN["event description + question"] --> PARSE["VQA parser"]
-    PARSE --> ER["event retrieval"]
-    PARSE --> QR["question retrieval"]
-    ER --> MERGE["candidate merge"]
-    QR --> MERGE
-    MERGE --> VA["video aggregation"]
-    VA --> WIN["temporal windows"]
-    WIN --> EVID["caption/OCR/ASR evidence"]
-    EVID --> LOC["localizer"]
-    LOC --> ANS["VLM answerer"]
-    ANS --> JR["grounded joint ranking"]
-    JR --> OUT["canonical VQA candidates"]
-```
-
-Important code-audit findings:
-
-- the required OCR/ASR modality boost is computed but does not currently become a first-class candidate-ranking feature;
-- video aggregation mixes heuristic coverage terms with retrieval scores on incompatible scales;
-- overlapping windows can merge transitively into oversized windows;
-- merged windows may keep the earliest frames rather than the most relevant/diverse evidence;
-- lexical localization is fragile for cross-lingual Vietnamese-query / English-caption cases;
-- frame/evidence temporal identity is partially flattened before answering;
-- a multi-frame VQA capability exists, while the current orchestration can still reduce a multi-frame window to one image;
-- event context, answerability, and confidence need stronger contracts for grounded VQA.
-
-## Target KIS/VQA V2 architecture
-
-The V2 design is **query-conditioned, evidence-preserving, coarse-to-fine, and measured**.
-
-```mermaid
-flowchart TB
-    Q["Natural-language input"] --> PLAN["QueryPlanner\nintent + modality + temporal need + subqueries"]
-
-    PLAN --> RET["Query-conditioned Retrieval Kernel"]
-    RET --> V["visual"]
-    RET --> C["caption"]
-    RET --> O["OCR"]
-    RET --> A["ASR"]
-    V --> FUSE["query-aware RRF + provenance"]
-    C --> FUSE
-    O --> FUSE
-    A --> FUSE
-
-    FUSE --> KIS["KISPipeline"]
-    FUSE --> VQA["VQAPipeline"]
-
-    KIS --> KR["evidence-preserving / gated reranking"]
-    KR --> KF["second-stage rank fusion"]
-    KF --> KN["shot-aware NMS + diversity"]
-    KN --> KO["ranked KIS results"]
-
-    VQA --> VV["video aggregation"]
-    VV --> VP["local temporal peaks"]
-    VP --> VW["bounded windows"]
-    VW --> VS["question-aware frame selection"]
-    VS --> VE["frame-bound evidence"]
-    VE --> VL["semantic localization"]
-    VL --> VM["adaptive single/multi-frame VLM"]
-    VM --> VJ["confidence-aware grounded joint ranking"]
-    VJ --> VO["ranked VQA results"]
-```
-
-### V2 design rules
-
-1. **Query-conditioned retrieval:** do not give every modality equal importance for every query.
-2. **Evidence preservation:** reranking must not erase why a frame was retrieved.
-3. **Coarse-to-fine inference:** prune the corpus with cheap retrieval before expensive VLM calls.
-4. **Bounded temporal context:** a configured 15-second window must not silently become an unbounded merged segment.
-5. **Question-guided frame selection:** selected images should maximize relevance and temporal coverage, not simply be the earliest frames.
-6. **Explicit temporal identity:** frame IDs/timestamps remain attached to evidence shown to the VLM.
-7. **Adaptive compute:** simple color/OCR questions should not pay the same multi-frame VLM cost as temporal/causal questions.
-8. **Measure before replacing models:** architecture and orchestration bugs are P0/P1; new encoders/VLMs are P2.
-
-## Active implementation program
-
-The roadmap is executed in this order:
-
-1. **Measurement foundation** — frozen KIS/VQA dev sets, stage metrics, reproducible run records.
-2. **Shared query planning** — intent/modality plan and runtime retrieval policy.
-3. **KIS P0 correctness** — query-aware retrieval and evidence-preserving reranking.
-4. **VQA P0 correctness** — modality scoring, video aggregation, bounded windows, semantic localization, frame-bound evidence, multi-frame answering.
-5. **P1 quality/latency** — shot-aware NMS, adaptive rerank depth, contextual clue retrieval, confidence-driven fallback, caches.
-6. **P2 research** — shot/window captions, learned frame selectors, ANN/GPU FAISS, alternative temporal/video encoders, model replacement.
-
-See [`KIS_VQA_V2_PLAN.md`](KIS_VQA_V2_PLAN.md) for task IDs, dependencies, acceptance criteria, ablations, and paper-to-architecture mapping.
-
-## Evaluation gates
-
-A change is not an improvement until it is measured on a frozen query set.
-
-### KIS
-
-Record at least:
-
-- official Mean Top-k R-Score where the official scorer is available;
-- Hit/Recall at `{1, 5, 20, 50, 100}`;
-- MRR;
-- accepted-frame accuracy;
-- per-query-category metrics: visual, OCR, speech, mixed, temporal, hard-negative;
-- warm P50/P95 latency;
-- reranker calls / images per query.
-
-### VQA
-
-Evaluate the pipeline by stage:
+## 3. Cấu trúc thư mục và artifact
 
 ```text
-correct-video recall
-    -> correct-window recall
-    -> selected-frame/evidence recall
-    -> answer accuracy conditioned on correct evidence
-    -> end-to-end joint video-frame-answer accuracy
+HCMAI_2026/
+├── src/hcmai/                 Python package và FastAPI backend
+├── frontend/                  React frontend
+├── configs/                   baseline, enrichment, indexing, S3 config
+├── scripts/                   CLI chuẩn bị dữ liệu, build index, benchmark
+├── data/
+│   ├── keyframes/             BTC keyframes: <video_id>/<order>.jpg
+│   ├── map_keyframes/         BTC mapping CSV
+│   ├── objects/               BTC object JSON (nếu đã sync)
+│   └── videos/                video nguồn; chỉ cần khi chạy ASR
+├── artifacts/
+│   ├── frame_store/           frames.parquet + manifest.json
+│   ├── enrichment/            captions, OCR, objects, context, transcripts
+│   └── indexes/               visual, context, asr_segments
+├── llm/                       model config và deployment scripts
+├── tests/                     backend tests
+└── README.md
 ```
 
-Also record:
+Các path quan trọng khi chạy backend:
 
-- raw and normalized answer match;
-- answerability / grounded accuracy;
-- VLM calls and images per call;
-- warm P50/P95 and per-stage latency.
+| Thành phần | Path mặc định |
+| --- | --- |
+| Canonical metadata | `artifacts/frame_store/frames.parquet` |
+| Keyframe asset root | `data` |
+| Visual index | `artifacts/indexes/visual` |
+| Context index | `artifacts/indexes/context` |
+| ASR segment index | `artifacts/indexes/asr_segments` |
+| Context artifact | `artifacts/enrichment/context/frame_context_v1.parquet` |
+| Transcript artifact | `artifacts/enrichment/transcripts/` |
 
-If video recall is high but window recall is low, fix localization rather than replacing SigLIP/BGE. If oracle-window VQA accuracy is low, focus on evidence construction, prompt/input design, and the VLM.
+Lưu ý: `HCMAI_DATASET_ROOT` là root để resolve ảnh. Với canonical
+`image_path` hiện tại trỏ tới `data/keyframes/...`, giá trị đúng là `data`,
+không phải `artifacts/frame_store`.
 
-## Repository structure
+## 4. Sync dữ liệu từ S3 về local
+
+### 4.1. Chuẩn bị AWS CLI
+
+Cài AWS CLI v2 và cấu hình credential bằng AWS profile hoặc IAM role. Không
+đặt access key vào Git, root `.env`, `frontend/.env` hoặc command frontend vì
+biến `REACT_APP_*` sẽ bị đóng gói vào browser bundle.
+
+Linux/macOS:
+
+```bash
+aws configure --profile hcmai
+export AWS_PROFILE=hcmai
+export AWS_REGION=ap-east-1
+aws sts get-caller-identity
+```
+
+Windows PowerShell:
+
+```powershell
+aws configure --profile hcmai
+$env:AWS_PROFILE = "hcmai"
+$env:AWS_REGION = "ap-east-1"
+aws sts get-caller-identity
+```
+
+Mặc định profile hiện tại dùng bucket và region trong
+`configs/preparation.s3.yaml`. Có thể override bằng biến môi trường:
 
 ```text
-frontend/                         React UI
-scripts/                          data/index/evaluation CLIs
-src/hcmai/
-├── app.py                        FastAPI lifecycle and router assembly
-├── api/routers/                  thin HTTP adapters
-├── orchestration/                SearchService, registry, task pipelines
-├── data/                         canonical frames, evidence stores, enrichment
-│   └── enrichment/               caption, OCR, ASR, and diarization
-├── retrieval/                    embedding, retrieval, and reranking capabilities
-├── pipelines/                    KIS, VQA, and externally owned TRAKE domains
-├── llm/                          local/remote inference service/adapters
-└── common/
-    ├── config.py
-    ├── schemas/                  authoritative cross-component contracts
-    └── utils/                    cross-cutting helpers only
-configs/                          search/experiment configuration
-data/                             local corpus + canonical metadata
-artifacts/                        generated enrichment/embeddings/indexes
-runs/                             reproducible experiment records
-tests/                            unit/integration/regression tests
-AGENTS.md                         coding-agent guardrails
-KIS_VQA_V2_PLAN.md               approved optimization roadmap
+HCMAI_S3_BUCKET
+HCMAI_S3_REGION
+HCMAI_S3_ENDPOINT_URL
 ```
 
-## Service boundaries
+### 4.2. Sync corpus/artifact S3 → local
 
-| Component | Public boundary | Responsibility |
-| --- | --- | --- |
-| Data | `hcmai.data.pipeline.DataService` | canonical frame/evidence access |
-| Embedding | `hcmai.retrieval.embedding.pipeline.EmbeddingService` | text/visual encoding and embedding artifacts |
-| Enrichment | `hcmai.data.enrichment.pipeline.EnrichmentService` | offline caption/OCR jobs |
-| Transcripts | `hcmai.data.enrichment.transcripts.pipeline.TranscriptService` | ASR/diarization jobs and transcript access |
-| Retrieval | `hcmai.retrieval.retriever.pipeline.RetrievalService` | index loading/search, multimodal retrieval, fusion |
-| Reranking | `hcmai.retrieval.reranking.pipeline.RerankingService` | bounded rescoring without identity mutation |
-| LLM | `hcmai.llm.pipeline.LLMService` | local/remote model-inference lifecycle |
-| Orchestration | `hcmai.orchestration.pipeline.SearchService` | task dispatch and canonical response materialization |
+`aws s3 sync` có thể chạy lại an toàn; file local đã có cùng kích thước sẽ
+được giữ lại. Chạy từ root repository.
 
-Production code outside a service component should call its public service facade or authoritative schemas under `common`. FastAPI routers stay thin.
-
-## Install
+Linux/macOS/WSL/Git Bash:
 
 ```bash
-aic/bin/python -m pip install -e ".[embedding,reranking,dev]"
+export S3_BUCKET="${HCMAI_S3_BUCKET:-mlecdanbgold-hcmai-hk}"
+export S3_REGION="${AWS_REGION:-ap-east-1}"
+
+# BTC keyframes
+aws s3 sync "s3://${S3_BUCKET}/data/keyframes/" \
+  data/keyframes/ --region "${S3_REGION}" --only-show-errors
+
+# BTC mapping. Prefix trên S3 là map-keyframes, local dùng map_keyframes.
+aws s3 sync "s3://${S3_BUCKET}/data/features/map-keyframes/" \
+  data/map_keyframes/ --region "${S3_REGION}" --only-show-errors
+
+# Canonical FrameStore
+aws s3 sync "s3://${S3_BUCKET}/data/artifacts/frame_store/" \
+  artifacts/frame_store/ --region "${S3_REGION}" --only-show-errors
+
+# Enrichment đã publish; chỉ sync những prefix cần dùng.
+aws s3 sync "s3://${S3_BUCKET}/data/artifacts/enrichment/" \
+  artifacts/enrichment/ --region "${S3_REGION}" --only-show-errors
+
+# Nếu cần lấy retrieval bundle đã publish, xem mục 4.3. Bundle có layout
+# versions/<bundle-id>/ nên không sync thẳng cả prefix vào index root.
 ```
 
-## Host the AI models on a temporary GPU VM
-
-The frontend, FastAPI search backend, dataset, FAISS index, and keyframes stay
-on the local machine. A temporary Thunder Compute VM hosts only bounded model
-inference: embedding, captioning, reranking, conversation/VQA, and optional GPU
-query suggestions.
-
-```text
-React UI (localhost:3000)
-        |
-        v
-Local FastAPI + artifacts (localhost:8000)
-        |
-        v
-Cloudflare Access + Tunnel (api.iamphuckhang.dev)
-        |
-        v
-Temporary GPU model API (localhost:8100 on the VM)
-```
-
-`configs/baseline.yaml` owns dataset, artifact, search, fusion, API, and
-inference-connection settings. `llm/config.yaml` is the single authority for
-visual embedding, caption embedding, reranking, and conversation checkpoints.
-
-This keeps the roughly 100 GB retrieval artifacts off the VM. Deleting the VM
-therefore loses only the installed environment and downloaded model cache, not
-the local search data.
-
-### 1. One-time local and Cloudflare setup
-
-Install and authenticate the
-[Thunder Compute CLI](https://www.thundercompute.com/docs/cli/quickstart):
+Nếu cần chạy lại BTC ingestion từ dữ liệu nguồn, sync thêm các prefix tương
+ứng với layout bucket của team, thường là:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Thunder-Compute/thunder-cli/main/scripts/install.sh | bash
-tnr login
+aws s3 sync "s3://${S3_BUCKET}/data/metadata/" \
+  data/metadata/ --region "${S3_REGION}" --only-show-errors
+aws s3 sync "s3://${S3_BUCKET}/data/objects/" \
+  data/objects/ --region "${S3_REGION}" --only-show-errors
 ```
 
-In Cloudflare, create one remotely managed Tunnel and configure:
+Video gốc không cần cho KIS search nếu keyframes và index đã có. Chỉ sync
+`data/videos/` khi chạy ASR hoặc một pipeline cần đọc video nguồn.
 
-- Published hostname: `api.iamphuckhang.dev`
-- Service URL: `http://localhost:8100`
-- Cloudflare Access policy: Service Auth
-
-The Tunnel, DNS record, and Access policy are persistent; do not recreate them
-for every VM. Keep the Tunnel token and Cloudflare Access credentials private.
-The file `llm/deploy_cloudflared_private.sh` is intentionally ignored by Git.
-Configure its repository, branch, Tunnel token, and any model overrides once
-on the local machine. Never commit or paste this private script into an issue
-or log.
-
-Before creating a VM, commit and push the code and configuration that the
-bootstrap must clone. An uncommitted local change is not available to the VM.
-
-### 2. Create a throwaway VM
-
-Run the interactive creator:
+Kiểm tra sau khi sync:
 
 ```bash
-tnr create
+test -s artifacts/frame_store/frames.parquet
+test -d data/keyframes
+test -d artifacts/indexes/visual
+find data/keyframes -type f | wc -l
 ```
 
-For the current BF16 model configuration, select:
+PowerShell tương đương:
 
-- Prototyping mode for short development sessions
-- One L40 or A6000 GPU with 48 GB VRAM
-- The base Ubuntu/PyTorch template
-- At least 80 GB of primary disk; 100 GB gives safer room for packages and
-  Hugging Face model caches
+```powershell
+$S3_BUCKET = if ($env:HCMAI_S3_BUCKET) { $env:HCMAI_S3_BUCKET } else { "mlecdanbgold-hcmai-hk" }
+$S3_REGION = if ($env:AWS_REGION) { $env:AWS_REGION } else { "ap-east-1" }
 
-Wait until the instance is `RUNNING`, then copy its numeric ID from:
+aws s3 sync "s3://$S3_BUCKET/data/keyframes/" "data/keyframes/" --region $S3_REGION --only-show-errors
+aws s3 sync "s3://$S3_BUCKET/data/features/map-keyframes/" "data/map_keyframes/" --region $S3_REGION --only-show-errors
+aws s3 sync "s3://$S3_BUCKET/data/artifacts/frame_store/" "artifacts/frame_store/" --region $S3_REGION --only-show-errors
+aws s3 sync "s3://$S3_BUCKET/data/artifacts/enrichment/" "artifacts/enrichment/" --region $S3_REGION --only-show-errors
+
+Test-Path artifacts/frame_store/frames.parquet
+Get-ChildItem data/keyframes -Recurse -File | Measure-Object | Select-Object -ExpandProperty Count
+```
+
+Nếu layout bucket khác, dùng `aws s3 ls s3://$S3_BUCKET/data/ --recursive`
+để tìm prefix trước khi sync. Không dùng `--delete` khi chưa chắc mapping
+local/remote; lệnh này có thể xóa file local không tồn tại trên S3.
+
+### 4.3. S3-first index build trên ThunderCompute
+
+Khi muốn để GPU VM tự download input, build index và publish bundle về S3,
+dùng entrypoint sau trên máy ThunderCompute. `--s3-dry-run` chỉ inventory,
+không download và không build:
 
 ```bash
-tnr status --no-wait
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --s3 --s3-dry-run \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --s3-config configs/preparation.s3.yaml
+
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --s3 --stage all \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --s3-config configs/preparation.s3.yaml \
+  --s3-sync-workers 16 \
+  --s3-upload-workers 8
 ```
 
-Use that ID in place of `<instance-id>` below. It is often `0`, but must not be
-assumed.
+S3 mode chỉ tải keyframes, map_keyframes, FrameStore, FrameContext và
+transcript; không tải raw video hoặc các artifact không cần cho index. Chỉ
+bundle có `build_report.json` với `status=passed` mới được publish và cập nhật
+`latest.json`.
 
-### 3. Upload and run the all-in-one bootstrap
-
-From the repository root on the local machine:
+Để lấy bundle mới nhất về local, tải pointer trước rồi sync đúng version được
+pointer trỏ tới:
 
 ```bash
-tnr scp llm/deploy_cloudflared_private.sh <instance-id>:/home/ubuntu/
-tnr connect <instance-id>
+aws s3 cp "s3://${S3_BUCKET}/data/artifacts/indexes/latest.json" \
+  artifacts/indexes/latest.json --region "${S3_REGION}"
+VERSION_PREFIX="$(aic/bin/python -c \
+  'import json; print(json.load(open("artifacts/indexes/latest.json"))["version_prefix"])')"
+
+for INDEX_NAME in visual context asr_segments; do
+  aws s3 sync "s3://${S3_BUCKET}/${VERSION_PREFIX}/${INDEX_NAME}/" \
+    "artifacts/indexes/${INDEX_NAME}/" \
+    --region "${S3_REGION}" --only-show-errors
+done
+aws s3 cp "s3://${S3_BUCKET}/${VERSION_PREFIX}/build_report.json" \
+  artifacts/indexes/build_report.json --region "${S3_REGION}"
 ```
 
-Then run the model set needed for the current session. For caption generation
-and CaptionStore indexing:
+PowerShell:
+
+```powershell
+aws s3 cp "s3://$S3_BUCKET/data/artifacts/indexes/latest.json" `
+  artifacts/indexes/latest.json --region $S3_REGION
+$latest = Get-Content artifacts/indexes/latest.json | ConvertFrom-Json
+$versionPrefix = $latest.version_prefix
+foreach ($indexName in @("visual", "context", "asr_segments")) {
+  aws s3 sync "s3://$S3_BUCKET/$versionPrefix/$indexName/" `
+    "artifacts/indexes/$indexName/" --region $S3_REGION --only-show-errors
+}
+aws s3 cp "s3://$S3_BUCKET/$versionPrefix/build_report.json" `
+  artifacts/indexes/build_report.json --region $S3_REGION
+```
+
+### 4.4. Pull index qua SSH/rsync
+
+Nếu index được build trên Thunder nhưng chưa publish S3, dùng script đồng bộ
+có kiểm tra checksum và promotion atomic:
 
 ```bash
-sudo bash /home/ubuntu/deploy_cloudflared_private.sh \
-  --caption true \
-  --caption-embedding true
+export HCMAI_THUNDER_HOST="user@thunder-host"
+export HCMAI_THUNDER_ROOT="/absolute/path/on/thunder/hcmai"
+export HCMAI_LOCAL_ROOT="$PWD"
+export HCMAI_PYTHON="$PWD/aic/bin/python"
+
+bash scripts/sync_thundercompute_indexes.sh pull-indexes
 ```
 
-The private bootstrap also accepts `--visual-embedding true`,
-`--reranker true`, and `--conversation true`. All five model flags default to
-`false`, and disabled models are not loaded into VRAM. Visual embedding uses
-SigLIP2; caption embedding uses BGE-M3.
+Không copy thủ công từng thư mục index nếu đã có script trên. Xem thêm
+[`docs/runbooks/thundercompute-index-build.md`](docs/runbooks/thundercompute-index-build.md).
 
-Query suggestions are a separate runtime capability controlled by
-`HCMAI_ENABLE_QUERY_SUGGESTIONS`; the current private bootstrap does not expose
-a dedicated CLI flag. If enabled with the same checkpoint as conversation, the
-runtime can reuse that model; otherwise account for a separate model instance.
+## 5. Setup backend
 
-The script clones the configured repository into `/opt/hcmai/repo`, installs
-the Python environment and a Python 3.12-compatible Supervisor, downloads the
-configured checkpoints, starts the model API, starts `cloudflared`, and checks
-both processes. Git runs only as the `hcmai` service user, so no Git login,
-global ownership exception, or author configuration is required for the public
-repository. Each bootstrap run fetches the configured branch and resets this
-deployment checkout to its newest commit. It does not download the HCMAI
-keyframes, embeddings, mappings, or FAISS index.
+### 5.1. Linux
 
-The first launch can take several minutes because it downloads the model
-checkpoints. The default conversation checkpoint comes from `llm/config.yaml`;
-leave `HCMAI_CONVERSATION_MODEL` empty in the private script unless an explicit
-override is required.
-
-### 5. Finish the session and stop GPU billing
-
-Thunder Compute has no native stopped-instance state. If the VM is disposable,
-exit its shell and delete it after finishing:
-
-```bash
-exit
-tnr delete <instance-id>
-```
-
-Deletion is permanent and stops GPU billing. A later VM can be created and
-bootstrapped with the same private script. To avoid downloading the model cache
-again, optionally create a snapshot first and wait until it is `READY`:
-
-```bash
-tnr snapshot create --instance-id <instance-id> --name hcmai-model-host
-tnr snapshot list
-```
-
-## Data preparation
-
-If the dataset arrived as zip archives under `data/`, extract them first:
-
-```bash
-aic/bin/python scripts/extract_zips.py --data-dir data
-```
-
-Build the single canonical metadata artifact from the official mapping and
-provided keyframe images:
-
-```bash
-PYTHONPATH=src aic/bin/python scripts/prepare_data.py \
-  --dataset-root data \
-  --output data/metadata/frames.parquet
-```
-
-## Transcript preparation
-
-Install the optional ASR dependencies, then smoke-test two videos:
-
-```bash
-pip install -e '.[transcripts]'
-export HF_TOKEN="hf_..."
-PYTHONPATH=src python scripts/prepare_transcripts.py \
-  --videos-root /path/to/videos \
-  --output artifacts/transcripts \
-  --limit 2
-```
-
-The command writes one speaker-labelled transcript Parquet per video. Pass
-`--no-resume` to reprocess existing outputs. See the
-[transcript pipeline guide](src/hcmai/data/enrichment/transcripts/README.md) for artifact
-schemas, diarization behavior, and configuration.
-
-## Initialize the local FastAPI backend
-
-The FastAPI backend runs on the local data machine, not on the temporary GPU
-VM. It loads `frames.parquet` and the FAISS indexes from local storage, serves
-frame images to the React UI, and sends only model inference requests to
-`api.iamphuckhang.dev`. The current application does not mount the research
-KISC router; conversation state remains frontend-owned until that integration
-is explicitly enabled.
-
-### 1. Create the Python environment
-
-Run these commands from the repository root. Python 3.11 or newer is required:
+Yêu cầu: Python 3.11+, Git, và nếu dùng S3 thì AWS CLI. Chạy từ root repo:
 
 ```bash
 python3 --version
@@ -468,80 +365,213 @@ aic/bin/python -m pip install --upgrade pip
 aic/bin/python -m pip install -e ".[embedding,reranking,dev]"
 ```
 
-The virtual environment is created only once. Rerun the final install command
-after pulling a commit that changes `pyproject.toml`.
-
-### 2. Configure the backend environment
-
-Create a private local environment file:
+Tạo environment riêng cho shell backend. Root `.env` không được FastAPI tự
+động load:
 
 ```bash
 cp .env.example .env
-nano .env
-```
-
-The application reads process environment variables; it does not automatically
-load the root `.env` file. Export it in every new backend terminal:
-
-```bash
 set -a
 source .env
 set +a
+
+# Asset root phải chứa data/keyframes.
+export HCMAI_DATASET_ROOT="$PWD/data"
+export HCMAI_METADATA_PATH="$PWD/artifacts/frame_store/frames.parquet"
+export HCMAI_INDEX_PATH="$PWD/artifacts/indexes/visual"
+
+# GPU inference remote; nếu API chạy trên cùng máy thì dùng http://127.0.0.1:8100.
+export HCMAI_INFERENCE_BASE_URL="https://api.iamphuckhang.dev"
+export HCMAI_CF_ACCESS_CLIENT_ID="<cloudflare-service-client-id>"
+export HCMAI_CF_ACCESS_CLIENT_SECRET="<cloudflare-service-client-secret>"
 ```
 
-The default artifact paths come from `configs/baseline.yaml`:
-
-```text
-data/metadata/frames.parquet
-artifacts/indexes/visual/
-├── dense.index
-├── frame_mapping.parquet
-└── metadata.json
-```
-
-### 3. Start FastAPI
-
-Keep the GPU VM and Cloudflare Tunnel running, then launch the local backend:
+Khởi động backend:
 
 ```bash
 PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000 --reload
 ```
 
-Alternatively, create and bootstrap the Thunder VM, follow its `llm.log`, and
-run the local backend together in one terminal:
+Kiểm tra:
 
 ```bash
-./run.sh --gpu l40 --token "$TNR_TOKEN" -- \
-  --caption true --caption-embedding true
+curl -sS http://127.0.0.1:8000/health
+curl -I http://127.0.0.1:8000/api/v1/frames/L28_V021_keyframe_000343/thumbnail
 ```
 
-Run `./run.sh --help` for all Thunder, model, local API, and logging options.
+Request thumbnail sẽ phục vụ trực tiếp keyframe nếu `thumbnail_path` trong
+FrameStore là `None`. Nếu health báo `remote inference` unavailable, kiểm tra
+GPU VM, Cloudflare Access header/credentials và endpoint `/ready` của inference
+service.
 
-### 4. Verify backend readiness
+### 5.2. Windows PowerShell
 
-From another local terminal:
+Yêu cầu: Python 3.11+, Node.js LTS, Git, AWS CLI nếu dùng S3. PowerShell
+không dùng cú pháp `aic/bin/python`; dùng `aic\Scripts\python.exe`.
+
+```powershell
+py --version
+py -3.11 -m venv aic
+& .\aic\Scripts\python.exe -m pip install --upgrade pip
+& .\aic\Scripts\python.exe -m pip install -e ".[embedding,reranking,dev]"
+```
+
+Thiết lập biến môi trường cho terminal hiện tại:
+
+```powershell
+$env:PYTHONPATH = (Join-Path (Get-Location) "src")
+$env:HCMAI_DATASET_ROOT = (Join-Path (Get-Location) "data")
+$env:HCMAI_METADATA_PATH = (Join-Path (Get-Location) "artifacts\frame_store\frames.parquet")
+$env:HCMAI_INDEX_PATH = (Join-Path (Get-Location) "artifacts\indexes\visual")
+$env:HCMAI_INFERENCE_BASE_URL = "https://api.iamphuckhang.dev"
+$env:HCMAI_CF_ACCESS_CLIENT_ID = "<cloudflare-service-client-id>"
+$env:HCMAI_CF_ACCESS_CLIENT_SECRET = "<cloudflare-service-client-secret>"
+```
+
+Khởi động và kiểm tra backend:
+
+```powershell
+& .\aic\Scripts\python.exe -m uvicorn hcmai.app:app `
+  --host 127.0.0.1 --port 8000 --reload
+```
+
+Mở PowerShell khác:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-WebRequest -Method Head `
+  http://127.0.0.1:8000/api/v1/frames/L28_V021_keyframe_000343/thumbnail
+```
+
+Các biến `$env:*` chỉ tồn tại trong terminal hiện tại. Nếu muốn lưu lâu dài,
+dùng `setx` hoặc cấu hình trong profile PowerShell; không lưu Cloudflare secret
+vào repository.
+
+### 5.3. Chạy backend bằng local inference
+
+Nếu model API chạy trên chính máy local:
+
+```text
+HCMAI_INFERENCE_BASE_URL=http://127.0.0.1:8100
+```
+
+Nếu dùng ThunderCompute, frontend/backend vẫn chạy local; chỉ inference URL
+trỏ tới hostname Cloudflare. Có thể bật reranker khi deploy GPU bằng:
 
 ```bash
-curl -sS http://127.0.0.1:8000/health | jq
+llm/launch_thunder_instance.sh --gpu l40 --token "$TNR_TOKEN" -- \
+  --visual-embedding true \
+  --caption-embedding true \
+  --reranker true
 ```
 
-A search-ready backend reports:
+Script deploy private nằm trong local workspace và bị `.gitignore`; không commit
+Tunnel token hoặc Cloudflare credential.
 
-```json
-{
-  "status": "ok",
-  "ready": true,
-  "frame_store_loaded": true,
-  "retriever_loaded": true
-}
-```
+## 6. Setup frontend
 
-The React app currently owns its conversation/session state. Configure a
-different backend in `frontend/.env` when needed:
+Frontend dùng Create React App và mặc định chạy ở `http://127.0.0.1:3000`.
+Backend mặc định chạy ở `http://127.0.0.1:8000`.
+
+### Linux/macOS/WSL
 
 ```bash
-cp frontend/.env.example frontend/.env
 cd frontend
+npm ci
+cp .env.example .env
+
+# Mở .env và đặt REACT_APP_API_BASE_URL=http://127.0.0.1:8000.
+# Giữ lại bucket/region nếu cần video preview từ S3.
 npm start
 ```
+
+### Windows PowerShell
+
+```powershell
+Set-Location frontend
+npm ci
+Copy-Item .env.example .env -Force
+(Get-Content .env) -replace '^REACT_APP_API_BASE_URL=.*$', 'REACT_APP_API_BASE_URL=http://127.0.0.1:8000' | Set-Content .env
+npm start
+```
+
+Mở `http://127.0.0.1:3000`. Nếu backend chạy trên host khác, đặt
+`REACT_APP_API_BASE_URL` thành URL đó và thêm origin frontend vào
+`HCMAI_CORS_ORIGINS` của backend.
+
+Không đặt `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` hoặc credential tương tự
+vào `REACT_APP_*`: React sẽ đưa chúng vào bundle public. Video preview nên dùng
+URL tạm thời do backend cấp; keyframe search hiện được phục vụ qua FastAPI.
+
+## 7. Kiểm tra và phát triển
+
+Backend tests:
+
+```bash
+aic/bin/python -m pytest -q
+```
+
+Frontend tests và production build:
+
+```bash
+npm --prefix frontend test -- --watchAll=false --runInBand
+npm --prefix frontend run build
+```
+
+Release gate đầy đủ:
+
+```bash
+bash scripts/validate_repository.sh
+```
+
+Các test đều dùng fixture cục bộ; release gate không gọi remote inference và
+không rebuild corpus thật.
+
+## 8. Xử lý lỗi thường gặp
+
+### `remote inference failed (connection)`
+
+Backend đang trỏ về `127.0.0.1:8100` nhưng GPU service chưa chạy trên cùng máy,
+hoặc endpoint Cloudflare/Access sai. Kiểm tra:
+
+```bash
+curl -i "$HCMAI_INFERENCE_BASE_URL/ready"
+```
+
+Sau khi sửa biến môi trường phải restart uvicorn.
+
+### `/api/v1/frames/.../thumbnail` trả `404`
+
+Kiểm tra `HCMAI_DATASET_ROOT`:
+
+```bash
+export HCMAI_DATASET_ROOT="$PWD/data"
+```
+
+Canonical image phải tồn tại dưới `data/keyframes`. Không cần tạo thumbnail
+riêng khi `thumbnail_path` là `None`; route sẽ fallback về ảnh keyframe.
+
+### `reranker.batch_size` vượt quá 16
+
+Giới hạn contract hiện tại của hosted reranker là 16. Đặt
+`reranker.batch_size: 16` hoặc thấp hơn trong `llm/config.yaml`, rồi restart
+backend.
+
+### Frontend báo không kết nối backend
+
+1. Backend đã listen port 8000 chưa?
+2. `REACT_APP_API_BASE_URL` có đúng không?
+3. Backend có cho phép origin `http://127.0.0.1:3000`/`http://localhost:3000`
+   trong `HCMAI_CORS_ORIGINS` không?
+4. Nếu vừa sửa frontend `.env`, stop và chạy lại `npm start`.
+
+## 9. Tài liệu liên quan
+
+- [`AGENTS.md`](AGENTS.md): nguyên tắc làm việc và invariant của repository.
+- [`scripts/README.md`](scripts/README.md): các CLI data/enrichment/index.
+- [`docs/runbooks/thundercompute-index-build.md`](docs/runbooks/thundercompute-index-build.md):
+  build index và đồng bộ ThunderCompute.
+- [`configs/baseline.yaml`](configs/baseline.yaml): cấu hình serving/search.
+- [`configs/enrichment.yaml`](configs/enrichment.yaml): enrichment BTC-native.
+- [`configs/indexing.yaml`](configs/indexing.yaml): offline index build.
+- [`llm/config.yaml`](llm/config.yaml): model checkpoint và reranker config.
