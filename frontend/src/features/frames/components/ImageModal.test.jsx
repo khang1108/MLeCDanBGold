@@ -34,6 +34,8 @@ test('loads the S3 video and seeks to the selected frame after metadata loads', 
   fireEvent.loadedMetadata(video);
   expect(video.currentTime).toBe(5);
   expect(screen.getByText('Time 5.000 s')).toBeTruthy();
+  expect(screen.getByText('FPS')).toBeTruthy();
+  expect(screen.getByText('25')).toBeTruthy();
 });
 
 test('prefers canonical timestamp over frame_idx/fps when they identify different moments', async () => {

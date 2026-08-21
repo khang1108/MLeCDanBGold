@@ -20,6 +20,10 @@ const FrameMetadata = ({ frame }) => (
       <span className="meta-lbl">Timestamp</span>
       <span className="meta-val">{frame.timestamp_ms} ms</span>
     </div>}
+    {Number.isFinite(frame.fps) && <div className="inspector-meta-item">
+      <span className="meta-lbl">FPS</span>
+      <span className="meta-val">{frame.fps}</span>
+    </div>}
     {Number.isFinite(frame.scores?.final) && <div className="inspector-meta-item">
       <span className="meta-lbl">Final Relevance</span>
       <span className="meta-val highlight">
