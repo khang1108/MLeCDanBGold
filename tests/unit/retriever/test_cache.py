@@ -9,13 +9,13 @@ from PIL import Image
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.image import thumbnail_jpeg_bytes
-from hcmai.retriever.cache import (
+from hcmai.retrieval.retriever.cache import (
     BoundedTTLCache,
     EmbeddingCache,
     ThumbnailCache,
     ThumbnailCacheKey,
 )
-from hcmai.retriever.query_batch import encode_query_batch
+from hcmai.retrieval.retriever.query_batch import encode_query_batch
 
 
 class FakeClock:

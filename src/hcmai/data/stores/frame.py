@@ -9,7 +9,7 @@ Typical usage::
 
     from hcmai.data.stores.frame import FrameStore
 
-    store = FrameStore("data/aic2025/metadata/frames.parquet")
+    store = FrameStore("artifacts/frame_store/frames.parquet")
 
     # Single lookup
     frame = store.get("L21_V001_keyframe_000001")
@@ -67,7 +67,8 @@ class FrameStore:
 
         Args:
             metadata_path: Path to the canonical ``frames.parquet`` file
-                produced by ``prepare_frames``. Accepts a string or any
+            produced by ``prepare_frames`` or ``prepare_frame_store``.
+            Accepts a string or any
                 path-like object.
 
         Raises:
@@ -222,6 +223,17 @@ class FrameStore:
         """
 
         return [self.get(frame_id) for frame_id in frame_ids]
+
+    def get_by_video(self, video_id: str) -> tuple[FrameRecord, ...]:
+        """Return a video's canonical frames in deterministic temporal order.
+
+        The returned tuple is the immutable object built at store startup and
+        sorted by ``(timestamp_ms, frame_idx, frame_id)``. Unknown videos return
+        an empty tuple, allowing timeline adapters to skip unavailable videos
+        without fabricating frame identity.
+        """
+
+        return self._records_by_video.get(video_id, ())
 
     def get_neighbors(
         self,

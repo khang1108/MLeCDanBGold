@@ -4,9 +4,9 @@ import * as client from './client';
 jest.mock('./client');
 
 describe('health API', () => {
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+afterEach(() => {
+  jest.clearAllMocks();
+});
 
   test('calls /health endpoint successfully', async () => {
     const mockHealth = {

@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from hcmai.trake import TrakePath, rank_paths, write_submission
-from hcmai.retriever.video_scores import VideoEventScores
+from hcmai.pipelines.trake import TrakePath, rank_paths, write_submission
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
 def _video(video_id: str, boost: float) -> VideoEventScores:

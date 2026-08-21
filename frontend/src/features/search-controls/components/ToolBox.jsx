@@ -1,5 +1,5 @@
 import React, { useId } from "react";
-import ManualSubmissionBox from "./ManualSubmissionBox";
+import SubmissionWorktree from "../../../features/submission/components/SubmissionWorktree";
 
 const TOP_K_MIN = 1;
 const TOP_K_MAX = 100;
@@ -80,7 +80,7 @@ const ToolBox = ({
         Reset Parameters
       </button>
 
-      <ManualSubmissionBox />
+      <SubmissionWorktree />
     </aside>
   );
 };

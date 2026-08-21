@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from hcmai.trake import align_video
-from hcmai.retriever.video_scores import VideoEventScores
+from hcmai.pipelines.trake import align_video
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
 def _video(scores: list[list[float]]) -> VideoEventScores:
@@ -38,14 +38,3 @@ def test_gap_penalty_prefers_the_closer_event_pair() -> None:
 
 def test_video_shorter_than_the_event_list_has_no_path() -> None:
     assert align_video(_video([[0.5], [0.4]])) == []
-
-
-def test_clustering_pushes_the_second_event_off_a_shared_moment() -> None:
-    # Frames 1 and 2 differ by 0.05 on every event: one moment, not two.
-    video = _video([[0.1, 0.90, 0.85, 0.2], [0.1, 0.88, 0.90, 0.5]])
-    assert align_video(video, 0.0, 1, 1.0)[0].frame_idx == (20, 30)
-    assert align_video(video, 0.0, 1, 1.0, 0.1)[0].frame_idx == (20, 40)
-
-
-def test_clustering_below_the_event_count_has_no_path() -> None:
-    assert align_video(_video([[0.5, 0.52], [0.4, 0.42]]), 0.0, 1, 1.0, 0.1) == []

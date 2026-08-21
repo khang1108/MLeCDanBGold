@@ -3,10 +3,9 @@ import { searchFrames } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "./GifLoaderOverlay";
-import MiniChallengePanel from "../../minichallenge/components/MiniChallengePanel";
-import { useMiniChallenge } from "../../minichallenge/hooks/useMiniChallenge";
 
-const QUERY_PREFIX = /^\/(kis|vkis)\b\s*/i;
+const QUERY_PREFIX = /^\/(kis)\b\s*/i;
+const SEARCH_ID_KEY = "hcmai.progressive.kis.search_id";
 
 // Standalone competition search workspace with frame results.
 const AdHocSearchWorkspace = ({
@@ -23,8 +22,10 @@ const AdHocSearchWorkspace = ({
   const [latencyMs, setLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchId, setSearchId] = useState(
+    () => window.sessionStorage.getItem(SEARCH_ID_KEY),
+  );
   const requestRef = useRef(null);
-  const challenge = useMiniChallenge();
 
   useEffect(() => () => requestRef.current?.abort(), []);
   const handleSubmit = useCallback(
@@ -36,7 +37,7 @@ const AdHocSearchWorkspace = ({
       const prefixMatch = trimmed.match(QUERY_PREFIX);
       if (!prefixMatch) {
         setError(
-          "Start your frame query with /kis or /vkis.",
+          "Start your frame query with /kis.",
         );
         return;
       }
@@ -59,13 +60,22 @@ const AdHocSearchWorkspace = ({
           query: searchQuery,
           topK,
           queryType,
+          searchId,
           signal: controller.signal,
         });
+        if (response.search_id) {
+          setSearchId(response.search_id);
+          window.sessionStorage.setItem(SEARCH_ID_KEY, response.search_id);
+        }
         setResults(response.results || []);
         setWarnings(response.warnings || []);
         setLatencyMs(response.latency_ms || null);
       } catch (requestError) {
         if (requestError?.name === "AbortError") return;
+        if (requestError?.status === 410) {
+          setSearchId(null);
+          window.sessionStorage.removeItem(SEARCH_ID_KEY);
+        }
         setError(requestError.message || "Failed to contact search API");
       } finally {
         if (requestRef.current === controller) {
@@ -74,21 +84,37 @@ const AdHocSearchWorkspace = ({
         }
       }
     },
-    [isSearching, query, topK],
+    [isSearching, query, searchId, topK],
   );
+
+  const handleNewQuestion = useCallback(() => {
+    setSearchId(null);
+    window.sessionStorage.removeItem(SEARCH_ID_KEY);
+    setQuery("");
+    setResults([]);
+    setWarnings([]);
+    setLatencyMs(null);
+    setError(null);
+  }, []);
 
   const handleResetOptions = useCallback(() => {
     setTopK(20);
   }, [setTopK]);
 
-  const handleChallengeSubmit = useCallback((frame) => {
-    const taskName = challenge.submissionTaskName;
-    if (!taskName) return;
-    const confirmed = window.confirm(
-      `Submit ${frame.video_id} to “${taskName}”?`,
-    );
-    if (confirmed) challenge.submitFrame(frame);
-  }, [challenge]);
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (
+        event.key.toLowerCase() === 'n' &&
+        event.target.tagName !== 'INPUT' &&
+        event.target.tagName !== 'TEXTAREA'
+      ) {
+        event.preventDefault();
+        handleNewQuestion();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNewQuestion]);
 
   return (
     <div className="adhoc-workspace">
@@ -112,7 +138,7 @@ const AdHocSearchWorkspace = ({
             ref={queryInputRef}
             type="text"
             className="input-text query-input-field"
-            placeholder="Start with /kis or /vkis"
+            placeholder="Start with /kis"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onFocus={onFocusQueryInput}
@@ -127,6 +153,9 @@ const AdHocSearchWorkspace = ({
         >
           {isSearching ? "Searching..." : "Search"}
         </button>
+        <button type="button" className="btn-secondary" onClick={handleNewQuestion} title="Shortcut: N">
+          New Question
+        </button>
       </form>
 
       <div className="adhoc-workspace-body">
@@ -137,7 +166,6 @@ const AdHocSearchWorkspace = ({
             setTopK={setTopK}
             onReset={handleResetOptions}
           />
-          <MiniChallengePanel challenge={challenge} />
         </aside>
 
         <section className="adhoc-results">
@@ -149,8 +177,6 @@ const AdHocSearchWorkspace = ({
             latencyMs={latencyMs}
             warnings={warnings}
             onFrameClick={onFrameClick}
-            onChallengeSubmit={challenge.currentTask ? handleChallengeSubmit : null}
-            submittingFrameId={challenge.submittingFrameId}
           />
         </section>
       </div>

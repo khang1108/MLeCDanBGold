@@ -1,132 +1,106 @@
-# Canonical frame data
+# HCMAI 2026 BTC-native data preparation
 
-`hcmai.data` owns canonical frame preparation and lookup. Other components use
-`DataService` from `pipeline.py`; store implementations remain internal.
+`hcmai.data` owns canonical frame ingestion, specialist evidence artifacts,
+derived frame context, and typed data access. The active competition profile
+uses organizer-provided BTC keyframes and objects; it does not decode videos to
+extract another frame set.
 
-```text
-data/
-├── pipeline.py              # DataService public facade
-├── prepare.py               # Canonical frames.parquet builder
-└── stores/
-    ├── frame.py             # FrameStore
-    └── evidence.py          # Caption/OCR/ASR evidence stores
-```
-
-## Purpose
-
-This package creates the shared metadata boundary between the raw BTC dataset
-and the retrieval system. AI pipelines use each record's stable `frame_id` and
-relative `image_path` to build embeddings and indexes. At runtime, the backend
-uses `FrameStore` to resolve a retrieved `frame_id` to the official
-`video_id,frame_idx` submission pair. Keeping that mapping in one canonical
-Parquet file prevents downstream components from inferring official
-identifiers from filenames, timestamps, FPS, or internal IDs.
-
-## Input layout
-
-The builder follows the repository's downloaded AIC dataset layout:
+## Competition flow
 
 ```text
-dataset-root/
-├── features/
-│   ├── map-keyframes/
-│   │   └── L21_V001.csv
-│   ├── media-info/
-│   └── objects/
-└── keyframes/
-    └── L21_V001/
-        └── 001.jpg
+BTC keyframes ──> Caption ──────┐
+              └─> OCR ──────────┤
+BTC objects ────> Object Import ├─> FrameContext V1
+Videos ─────────> ASR segments  │   (ASR excluded)
+                                 └─> specialist artifacts
 ```
 
-With the repository layout above, pass `data/` as `dataset-root`. Mapping CSVs
-must contain `n`, `pts_time`, and official `frame_idx`; the numeric image stem
-matches `n`. Older `map-keyframes/*.csv` and
-`map-keyframes-aic25-b1/map-keyframes/*.csv` layouts remain accepted.
+Caption, OCR, object import, and ASR produce independent specialist artifacts.
+FrameContext V1 is a deterministic derived view of Caption, usable normalized
+OCR, and the object summary, in that order. ASR remains timestamped timeline
+evidence and is intentionally absent from FrameContext dependency identity and
+text.
 
-Every mapping CSV must have a matching `keyframes/<video_id>/` directory, and
-every mapping row must resolve to its numbered image. The build fails instead
-of silently dropping mappings when the downloaded dataset is incomplete.
+`src/hcmai/data/preprocessing/**` remains available for non-BTC experiments.
+It is not used by the HCMAI 2026 competition preparation profile.
 
-## Build
+## Artifact ownership
 
-Run from the repository root:
+The specialist outputs remain independently inspectable. A context or legacy
+projection never replaces them.
+
+| Artifact | Role |
+| --- | --- |
+| `captions.parquet` | Caption source of truth |
+| `ocr/frames.parquet` | Frame-level OCR source of truth |
+| `ocr/regions.parquet` | Raw OCR regions and boxes; source of truth |
+| `objects/frames.parquet` | Frame-level object counts/summary; source of truth |
+| `objects/detections.parquet` | Every valid BTC detection and box; source of truth |
+| `transcripts/*.parquet` | Timestamped ASR segment source of truth |
+| `context/frame_context_v1.parquet` | Derived Caption + OCR + Object view |
+| `frame_enrichment.parquet` | Temporary compatibility projection only |
+
+The compatibility projection exists for retrieval code that has not yet moved
+to the typed specialist stores. It must not be treated as an authoritative
+enrichment artifact.
+
+All frame-aligned evidence preserves `video_id`, `frame_id`, `frame_idx`,
+`timestamp_ms`, and `frame_store_id`. `frame_idx` is the competition-facing
+coordinate; keyframe order and array position must never replace it.
+
+The identity fields are required in specialist V1 Parquet. Existing Caption,
+OCR, Object, or FrameContext artifacts without `timestamp_ms` (or OCR region
+artifacts without `video_id`) must be regenerated or explicitly migrated before
+they can be loaded.
+
+## Run the V1 stages
+
+Run commands from the repository root. Paths and versions shared by the
+specialist stages are pinned in `configs/enrichment.yaml`.
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/prepare_data.py \
-  --dataset-root data \
-  --output data/metadata/frames.parquet
+# 1. Import organizer keyframes as the canonical frame store.
+PYTHONPATH=src aic/bin/python scripts/ingest_btc_keyframes.py \
+  --btc-root data \
+  --data-root data \
+  --output-root artifacts/frame_store \
+  --frame-store-id btc-keyframes-v1
+
+# 2. Generate captions.
+PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py \
+  --config configs/enrichment.yaml
+
+# 3. Generate structured OCR evidence.
+PYTHONPATH=src aic/bin/python scripts/generate_ocr_enrichment.py \
+  --config configs/enrichment.yaml
+
+# 4. Import organizer-provided object detections; do not re-detect objects.
+PYTHONPATH=src aic/bin/python scripts/generate_object_enrichment.py \
+  --config configs/enrichment.yaml
+
+# 5. Generate timestamped ASR segments from the source videos.
+PYTHONPATH=src aic/bin/python scripts/prepare_transcripts.py \
+  --config configs/enrichment.yaml \
+  --videos-root data/videos
+
+# 6. Build FrameContext only from the existing specialist artifacts.
+PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
+  --config configs/enrichment.yaml
 ```
 
-Successful output is intentionally small:
+If the videos live elsewhere, change only `--videos-root`. The V1 enrichment
+sequence ends at FrameContext; retrieval/index construction belongs to a
+separate plan.
 
-```text
-Videos: 2
-Frames: 6
-Output: /absolute/path/data/metadata/frames.parquet
-Status: PASSED
-```
+## Public boundaries
 
-The command does not create reports, thumbnails, checksums, manifests, or
-shards. It validates a temporary Parquet file before atomically replacing the
-requested output.
+- `src/hcmai/data/pipeline.py`: `DataService` imports the configured BTC frame
+  store and exposes typed frame/evidence stores.
+- `src/hcmai/data/enrichment/pipeline.py`: `EnrichmentService` runs Caption,
+  OCR, Object Import, and FrameContext through independent stage boundaries.
+- `src/hcmai/data/enrichment/transcripts/pipeline.py`: `TranscriptService`
+  owns video-level ASR and diarization.
+- `src/hcmai/data/stores/`: typed readers for specialist and derived artifacts.
 
-The same implementation is available as a Python API:
-
-```python
-from pathlib import Path
-
-from hcmai.data.pipeline import DataService
-
-frames_path = DataService.prepare(
-    dataset_root=Path("data"),
-    output_path=Path("data/metadata/frames.parquet"),
-)
-```
-
-## Parquet schema
-
-| Column                | Meaning                                                     |
-| --------------------- | ----------------------------------------------------------- |
-| `frame_id`          | Stable internal key based on`video_id` and keyframe `n` |
-| `video_id`          | Official mapping filename stem                              |
-| `frame_idx`         | Official BTC submission index                               |
-| `keyframe_order`    | Official mapping field`n`                                 |
-| `timestamp_ms`      | `pts_time` converted to milliseconds for temporal search  |
-| `image_path`        | POSIX relative path from`dataset_root`                    |
-| `width`, `height` | Source dimensions required by`FrameRecord`                |
-
-Never derive `frame_idx` from `frame_id`, image names, timestamps, or FPS.
-Every submission must resolve through the canonical `FrameRecord`.
-Distinct keyframes that share one `(video_id, frame_idx)` pair remain distinct
-rows with separate `frame_id` values.
-
-## Consumers
-
-AI indexing can iterate records in deterministic Parquet order:
-
-```python
-from hcmai.data.pipeline import DataService
-
-data = DataService.load("data/metadata/frames.parquet")
-for frame in data.iter_frames():
-    image_path = dataset_root / frame.image_path
-    build_embedding(frame.frame_id, image_path)
-```
-
-Backend lookup preserves the official mapping:
-
-```python
-frame = data.get_frame(retrieved_frame_id)
-submission = (frame.video_id, frame.frame_idx)
-assert data.contains_submission(*submission)
-```
-
-Online composition also injects the configured dataset root into
-`DataService`. Call `data.resolve_frame_asset(frame)` rather than joining
-`image_path` independently; this enforces one path-containment policy for the
-frame API, reranking, and VQA. `data.frame_asset_status()` provides a bounded,
-deterministic availability sample for readiness checks.
-
-Production code outside this package must not import `stores/` or
-`prepare.py` directly. Focused unit tests may use those internals with tiny
-fixtures.
+Serving code reads prepared artifacts. It must not regenerate captions, OCR,
+objects, transcripts, context, or other corpus-scale outputs in a request.

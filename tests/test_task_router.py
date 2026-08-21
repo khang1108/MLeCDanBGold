@@ -19,9 +19,9 @@ from hcmai.orchestration.pipeline import (
     SearchService,
     UnsupportedSearchTaskError,
 )
-from hcmai.orchestration.pipelines.base import TaskPipelineRequestError
+from hcmai.orchestration.workflows.base import TaskPipelineRequestError
 from hcmai.orchestration.task_router import PipelineRegistry
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
 @dataclass(frozen=True)
@@ -127,7 +127,7 @@ def test_kis_pipeline_preserves_search_response_behavior(
     assert response.query_type is query_type
     assert response.top_k == 5
     assert response.total_results == 1
-    assert response.results[0].frame_id == "f1"
+    assert response.results[0].frame_ids == ["f1"]
     assert response.results[0].video_id == "official-video"
     assert response.results[0].frame_idx == 42
     assert retrieval.query_types == [query_type]

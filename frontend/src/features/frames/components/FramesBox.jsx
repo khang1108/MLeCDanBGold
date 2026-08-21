@@ -9,29 +9,31 @@ const FramesBox = ({
   latencyMs,
   warnings = [],
   onFrameClick,
-  onChallengeSubmit,
-  submittingFrameId,
+  onSubmit,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
+  const hasLatency = latencyMs !== null && latencyMs !== undefined;
+  const structuredLatency = typeof latencyMs === "object" && latencyMs !== null;
+  const totalLatencyMs = structuredLatency ? latencyMs.total : latencyMs;
   if (isLoading) return null;
   return (
     <section className="frames-container">
       {error && (
-        <div className="error-alert">
+        <div className="error-alert" role="alert">
           <div className="error-details">
             <h4 className="error-title">Search Connection Error</h4>
             <p className="error-message">{error}</p>
           </div>
         </div>
       )}
-      {!error && latencyMs && (
+      {!error && hasLatency && (
         <div className="latency-banner">
           <div className="latency-summary">
             Found <span className="latency-highlight">{results.length}</span>{" "}
             frames in{" "}
-            <span className="latency-highlight">{latencyMs.total}ms</span>
+            <span className="latency-highlight">{totalLatencyMs}ms</span>
           </div>
-          <div className="latency-stages">
+          {structuredLatency && <div className="latency-stages">
             <span className="latency-stage-item">
               Query: {latencyMs.query_processing + latencyMs.query_encoding}ms
             </span>
@@ -55,7 +57,7 @@ const FramesBox = ({
             <span className="latency-stage-item">
               Materialize: {latencyMs.materialization}ms
             </span>
-          </div>
+          </div>}
         </div>
       )}
       {!error && warnings.length > 0 && (
@@ -77,8 +79,7 @@ const FramesBox = ({
                   key={frame.frame_id}
                   frame={frame}
                   onClick={() => onFrameClick(frame)}
-                  onChallengeSubmit={onChallengeSubmit}
-                  isChallengeSubmitting={submittingFrameId === frame.frame_id}
+                  onSubmit={onSubmit}
                 />
               ))}
             </div>

@@ -6,6 +6,7 @@ import asyncio
 from typing import Any
 
 import httpx
+import pytest
 
 from hcmai.app import create_app
 from hcmai.common.schemas import (
@@ -14,6 +15,8 @@ from hcmai.common.schemas import (
     VQAResponse,
     VQASubmission,
 )
+
+pytestmark = pytest.mark.usefixtures("inline_router_threadpool")
 
 
 class FakeSearchService:
@@ -26,6 +29,7 @@ class FakeSearchService:
         self.request = request
         return VQAResponse(
             request_id="vqa-request-1",
+            search_id=request.search_id,
             event_description=request.event_description,
             question=request.question,
             top_k=request.top_k,
@@ -34,7 +38,7 @@ class FakeSearchService:
                 VQASubmission(
                     rank=1,
                     video_id="video-1",
-                    frame_id="frame-1",
+                    frame_ids=["frame-1"],
                     frame_idx=42,
                     answer="blue",
                     normalized_answer="blue",
@@ -56,7 +60,11 @@ def request(app: Any, payload: dict[str, Any]) -> httpx.Response:
         ) as client:
             return await client.post("/api/v1/vqa", json=payload)
 
-    return asyncio.run(send())
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(send())
+    finally:
+        loop.close()
 
 
 def test_vqa_route_validates_delegates_and_serializes_response() -> None:
@@ -69,6 +77,7 @@ def test_vqa_route_validates_delegates_and_serializes_response() -> None:
             "event_description": "A person holds a colored umbrella",
             "question": "What color is the umbrella?",
             "top_k": 100,
+            "search_id": "search-session-1",
         },
     )
 
@@ -76,9 +85,10 @@ def test_vqa_route_validates_delegates_and_serializes_response() -> None:
     assert isinstance(service.request, VQARequest)
     assert service.request.query_type is TaskType.VQA
     assert service.request.top_k == 100
+    assert response.json()["search_id"] == "search-session-1"
     submission = response.json()["submissions"][0]
     assert submission["video_id"] == "video-1"
-    assert submission["frame_id"] == "frame-1"
+    assert submission["frame_ids"] == ["frame-1"]
     assert submission["frame_idx"] == 42
     assert submission["answer"] == "blue"
 

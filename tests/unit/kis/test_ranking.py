@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from hcmai.common.schemas import RetrievalCandidate
-from hcmai.kis.ranking import KISRankingConfig, shape_kis_candidates
+from hcmai.pipelines.kis.ranking import KISRankingConfig, shape_kis_candidates
 
 
 class Data:

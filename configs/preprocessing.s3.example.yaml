@@ -1,0 +1,37 @@
+preprocessing:
+  s3:
+    bucket: mlecdanbgold-hcmai-us-east-2
+    videos_prefix: data
+    artifacts_prefix: artifacts/production/frame-store
+    region: us-east-2
+    # For MinIO or another S3-compatible service only:
+    # endpoint_url: http://localhost:9000
+    # Optional fast local disk for one-video staging:
+    # staging_root: /local-nvme/hcmai
+    connect_timeout_seconds: 10
+    read_timeout_seconds: 300
+    max_attempts: 4
+
+  # Retained after publication for audit and resumable per-video checkpoints.
+  output_root: artifacts/frame_store
+
+  transnet_repo: /models/TransNetV2
+  transnet_weights: /models/TransNetV2/inference/transnetv2-weights
+  efficientgebd_repo: /models/EfficientGEBD
+  efficientgebd_config: /models/EfficientGEBD/model_config.yaml
+  efficientgebd_checkpoint: /models/EfficientGEBD/model_best.pth
+
+  device: cuda
+  dino_model: facebook/dinov2-small
+  dino_revision: ed25f3a31f01632728cabb09d1542f84ab7b0056
+  dino_dtype: float16
+  dino_batch_size: 16
+
+  efficientgebd_sample_fps: 10
+  motion_threshold: 0.012
+  shot_threshold: 0.5
+  event_threshold: 0.5
+  minimum_gap_ms: 500
+  maximum_gap_ms: 2000
+  dedup_similarity: 0.985
+  image_quality: 92

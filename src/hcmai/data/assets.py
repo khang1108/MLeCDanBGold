@@ -1,4 +1,11 @@
-"""Canonical frame-asset resolution within one configured dataset root."""
+"""Quản lý đường dẫn Assets (Tài nguyên).
+
+Đảm nhiệm việc phân giải và cung cấp đường dẫn chính xác (canonical paths) đến file ảnh và video.
+
+Các tính năng chính:
+1. Phân giải đường dẫn: Tạo đường dẫn tuyệt đối cho một Frame ID hoặc Video ID cụ thể.
+2. Xác thực tồn tại (Validation): Kiểm tra xem ảnh/video đã được lưu trữ trên file system chưa.
+3. Cấu trúc thư mục: Đảm bảo tuân thủ cấu trúc thư mục quy chuẩn (VD: video/frame_id.jpg) của project."""
 
 from __future__ import annotations
 

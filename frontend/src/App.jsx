@@ -9,6 +9,7 @@ import TopKPromptModal from "./features/vim/components/TopKPromptModal";
 import VimHelpModal from "./features/vim/components/VimHelpModal";
 import "./styles/gif-loader.css";
 import "./styles/vim.css";
+import { SubmissionProvider } from "./features/submission/contexts/SubmissionContext";
 
 function App() {
   const [selectedFrame, setSelectedFrame] = useState(null);
@@ -21,7 +22,8 @@ function App() {
   });
 
   return (
-    <div className="app-wrapper">
+    <SubmissionProvider>
+      <div className="app-wrapper">
       <header className="app-header">
         <div className="app-title-group">
           <h1 className="app-title">HCMAI 2026 Frame Retrieval</h1>
@@ -69,6 +71,7 @@ function App() {
         onClose={() => vim.setIsHelpOpen(false)}
       />
     </div>
+    </SubmissionProvider>
   );
 }
 

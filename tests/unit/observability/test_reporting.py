@@ -4,8 +4,8 @@ import json
 import logging
 
 from hcmai.common.schemas import StageStatus, StageTrace
-from hcmai.observability import MetricsRegistry, REDACTED, safe_content
-from hcmai.observability.tracing import log_stage
+from hcmai.common.observability import MetricsRegistry, REDACTED, safe_content
+from hcmai.common.observability.tracing import log_stage
 
 
 def _trace(status: StageStatus = StageStatus.SUCCESS) -> StageTrace:

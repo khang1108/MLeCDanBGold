@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Self
-from uuid import UUID
 from pydantic import Field, field_validator, model_validator
 
 from hcmai.common.schemas.base import ContractModel, NonEmptyString
@@ -48,7 +47,7 @@ class SearchRequest(ContractModel):
     query_type: TaskType = TaskType.KIS
     top_k: int = Field(default=20, ge=1, le=100)
     filters: SearchFilters | None = None
-    search_id: UUID | None = None
+    search_id: NonEmptyString | None = None
 
 
 class SearchLatency(ContractModel):
@@ -56,13 +55,18 @@ class SearchLatency(ContractModel):
 
     query_processing: int = Field(default=0, ge=0)
     query_encoding: int = Field(default=0, ge=0)
+
     candidate_retrieval: int = Field(default=0, ge=0)
+
     fusion: int = Field(default=0, ge=0)
     reranking: int = Field(default=0, ge=0)
+
     temporal_refinement: int = Field(default=0, ge=0)
     materialization: int = Field(default=0, ge=0)
+
     time_to_first_candidate: int = Field(default=0, ge=0)
     time_to_first_submission: int = Field(default=0, ge=0)
+
     total: int = Field(ge=0)
 
 
@@ -70,31 +74,51 @@ class SearchResult(ContractModel):
     """One ranked frame returned by the public search API."""
 
     rank: int = Field(ge=1)
-    frame_id: NonEmptyString
+
+    # Use these filed to calculate the interval
     video_id: NonEmptyString
-    frame_idx: int = Field(ge=0)
+    frame_idx: NonEmptyString
+    fps: float = Field(default=25.0, gt=0)
+    frame_ids: list[NonEmptyString] = Field(default_factory=list)
+    
     timestamp_ms: int = Field(ge=0)
     thumbnail_url: NonEmptyString | None = None
     frame_url: NonEmptyString | None = None
+
     caption: NonEmptyString | None = None
+
     ocr_text: NonEmptyString | None = None
     asr_text: NonEmptyString | None = None
+
     scores: SearchScores
+
+    @model_validator(mode="after")
+    def populate_frame_ids(self) -> Self:
+        """Ensure frame_ids is populated if frame_id attribute is present."""
+        frame_id = getattr(self, "frame_id", None)
+        if not self.frame_ids and frame_id:
+            self.frame_ids = [frame_id]
+        return self
 
 
 class SearchResponse(ContractModel):
     """Public response returned by the frame search endpoint."""
 
     request_id: NonEmptyString
+    search_id: NonEmptyString | None = None
+
     query: NonEmptyString
     query_type: TaskType
+
     top_k: int = Field(ge=1, le=100)
     total_results: int = Field(ge=0)
+
     latency_ms: SearchLatency
+
     results: list[SearchResult] = Field(default_factory=list)
+
     warnings: list[NonEmptyString] = Field(default_factory=list)
     trace: PipelineTrace = Field(default_factory=PipelineTrace)
-    search_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_result_count(self) -> Self:

@@ -6,7 +6,7 @@ from PIL import Image
 
 from hcmai.common.schemas import (
     VQAInferenceEvidence,
-    VQAMultiFrameInferenceResponse,
+    VQAInferenceResponse,
 )
 from hcmai.llm.adapters.vqa import GroundedVQAModel
 from hcmai.llm.config import HostedVQAConfig
@@ -55,10 +55,11 @@ def test_multiframe_model_selects_only_from_ordered_supplied_frames():
     assert model.supports_multi_image is True
 
 
-def test_multiframe_response_rejects_invented_frame_identity():
+def test_unified_inference_response_rejects_invented_frame_identity():
     with pytest.raises(ValueError, match="selected_frame_id"):
-        VQAMultiFrameInferenceResponse(
+        VQAInferenceResponse(
             request_id="q1",
+            video_id="video-1",
             frame_ids=["f1", "f2"],
             selected_frame_id="invented",
             question="What color?",
@@ -66,3 +67,30 @@ def test_multiframe_response_rejects_invented_frame_identity():
             grounded=True,
             latency_ms=1,
         )
+
+
+def test_unified_inference_response_supports_one_or_many_frames():
+    one = VQAInferenceResponse(
+        request_id="q1",
+        video_id="video-1",
+        frame_ids=["f1"],
+        selected_frame_id="f1",
+        question="What color?",
+        answer="red",
+        grounded=True,
+        latency_ms=1,
+    )
+    many = VQAInferenceResponse(
+        request_id="q2",
+        video_id="video-1",
+        frame_ids=["f1", "f2"],
+        selected_frame_id="f2",
+        question="What color?",
+        answer="red",
+        grounded=True,
+        latency_ms=1,
+    )
+
+    assert one.selected_frame_id == "f1"
+    assert many.frame_ids == ["f1", "f2"]
+    assert many.selected_frame_id == "f2"

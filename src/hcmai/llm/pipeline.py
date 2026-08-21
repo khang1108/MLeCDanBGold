@@ -5,11 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from hcmai.common.config import InferenceConfig
-from hcmai.common.schemas import (
-    InferenceCapabilities,
-    InferenceReadiness,
-    VQAInferenceEvidence,
-)
 from hcmai.llm.config import (
     HostedVQAConfig,
     LLMServiceConfig,
@@ -27,7 +22,7 @@ class LLMService:
 
     def __init__(self, adapter: Any) -> None:
         self.adapter = adapter
-        self._last_readiness: InferenceReadiness | None = None
+        self._last_readiness: Any | None = None
 
     @classmethod
     def from_environment(cls) -> LLMService:
@@ -67,17 +62,26 @@ class LLMService:
         method = getattr(self.adapter, "close", None)
         if method is not None:
             method()
+            return
+        client = getattr(self.adapter, "client", None)
+        method = getattr(client, "close", None)
+        if method is not None:
+            method()
 
-    def readiness(self, deadline_at: float | None = None) -> InferenceReadiness:
-        self._last_readiness = self.adapter.readiness(deadline_at=deadline_at)
+    def readiness(self, *args: Any, **kwargs: Any) -> Any:
+        self._last_readiness = self.adapter.readiness(*args, **kwargs)
         return self._last_readiness
 
     def capability_health(self) -> dict[str, bool]:
         readiness = self._last_readiness
-        capabilities = (
-            InferenceCapabilities() if readiness is None else readiness.capabilities
-        )
-        return capabilities.model_dump()
+        if readiness is None:
+            return {
+                "embedding": False,
+                "reranking": False,
+                "multi_image_vqa": False,
+                "structured_parsing": False,
+            }
+        return readiness.capabilities.model_dump()
 
     def gateway_health(self) -> dict[str, Any]:
         method = getattr(self.adapter, "health", None)
@@ -94,42 +98,34 @@ class LLMService:
     def caption(self, images: Any) -> Any:
         return self.adapter.caption(images)
 
+    def ocr(self, images: Any) -> Any:
+        """Run structured OCR through the configured inference adapter."""
+
+        return self.adapter.ocr(images)
+
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
 
-    def answer_vqa(
-        self,
-        *,
-        request_id: str,
-        frame_id: str,
-        question: str,
-        image: Any,
-        evidence: VQAInferenceEvidence,
-    ) -> Any:
-        return self.adapter.answer_vqa(
-            request_id=request_id,
-            frame_id=frame_id,
-            question=question,
-            image=image,
-            evidence=evidence,
-        )
+    def answer_vqa(self, *args: Any, **kwargs: Any) -> Any:
+        return self.adapter.answer_vqa(*args, **kwargs)
 
-    def answer_vqa_multi(
-        self,
-        *,
-        request_id: str,
-        frame_ids: list[str],
-        question: str,
-        images: list[Any],
-        evidence: VQAInferenceEvidence,
-    ) -> Any:
+    def answer_vqa_multi(self, *args: Any, **kwargs: Any) -> Any:
         method = getattr(self.adapter, "answer_vqa_multi", None)
         if method is None:
             raise RuntimeError("multi-frame VQA is not supported by this provider")
-        return method(
-            request_id=request_id,
-            frame_ids=frame_ids,
-            question=question,
-            images=images,
-            evidence=evidence,
-        )
+        return method(*args, **kwargs)
+
+    def boundary_scores(self, frames: Any, *, source: str) -> Any:
+        return self.adapter.boundary_scores(frames, source=source)
+
+    def transcribe_reference(self, payload: Any) -> Any:
+        return self.adapter.transcribe_reference(payload)
+
+    def diarize_reference(self, payload: Any) -> Any:
+        return self.adapter.diarize_reference(payload)
+
+    def embed_dino(self, images: Any) -> Any:
+        method = getattr(self.adapter, "embed_images", None)
+        if method is not None:
+            return method(images, source="dino")
+        raise RuntimeError("dino embedding is not supported by this provider")

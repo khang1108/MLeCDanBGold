@@ -12,7 +12,7 @@ from hcmai.common.schemas import RetrievalSource
 from hcmai.llm.config import LLMServiceConfig
 from hcmai.orchestration import setup
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
 class LoadedService:
@@ -36,6 +36,7 @@ def _settings(tmp_path, available) -> tuple[AppConfig, dict[RetrievalSource, Any
             embedding_dim=8,
         ))
     settings = AppConfig(index=IndexConfig(
+        profile="legacy_specialists",
         path=paths[RetrievalSource.VISUAL],
         caption_path=paths[RetrievalSource.CAPTION],
         ocr_path=paths[RetrievalSource.OCR],
@@ -78,6 +79,8 @@ def _load(monkeypatch, tmp_path, available, *, asr_version="dataset-v1"):
         "HCMAI_CAPTION_INDEX_PATH",
         "HCMAI_OCR_INDEX_PATH",
         "HCMAI_ASR_INDEX_PATH",
+        "HCMAI_CONTEXT_INDEX_PATH",
+        "HCMAI_ASR_SEGMENT_INDEX_PATH",
     ):
         monkeypatch.delenv(name, raising=False)
     messages = []
@@ -87,14 +90,27 @@ def _load(monkeypatch, tmp_path, available, *, asr_version="dataset-v1"):
         settings.index.path,
         None,
         messages,
+        profile="legacy_specialists",
+        data=None,
     )
     assert service is not None
     return cast(LoadedService, service), messages
 
 
 def test_all_sources_load(monkeypatch, tmp_path) -> None:
-    service, messages = _load(monkeypatch, tmp_path, set(RetrievalSource))
-    assert service.active_sources == tuple(RetrievalSource)
+    legacy_sources = {
+        RetrievalSource.VISUAL,
+        RetrievalSource.CAPTION,
+        RetrievalSource.OCR,
+        RetrievalSource.ASR,
+    }
+    service, messages = _load(monkeypatch, tmp_path, legacy_sources)
+    assert service.active_sources == (
+        RetrievalSource.VISUAL,
+        RetrievalSource.CAPTION,
+        RetrievalSource.OCR,
+        RetrievalSource.ASR,
+    )
     assert messages == []
 
 
@@ -123,7 +139,12 @@ def test_mismatched_asr_is_skipped_independently(monkeypatch, tmp_path) -> None:
     service, messages = _load(
         monkeypatch,
         tmp_path,
-        set(RetrievalSource),
+        {
+            RetrievalSource.VISUAL,
+            RetrievalSource.CAPTION,
+            RetrievalSource.OCR,
+            RetrievalSource.ASR,
+        },
         asr_version="wrong-dataset",
     )
     assert service.active_sources == (
@@ -143,6 +164,8 @@ def test_missing_visual_disables_retrieval(monkeypatch, tmp_path) -> None:
         settings.index.path,
         None,
         messages,
+        profile="legacy_specialists",
+        data=None,
     )
     assert service is None
     assert any("Index directory not available" in message for message in messages)

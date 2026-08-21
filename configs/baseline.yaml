@@ -1,19 +1,31 @@
 dataset:
   version: "hcmai2026_v1"
-  root: "data"
-  frames_path: "data/metadata/frames.parquet"
+  root: "artifacts/frame_store"
+  frames_path: "artifacts/frame_store/frames.parquet"
   enrichment:
     caption_path: "artifacts/enrichment/caption/frame_enrichment.parquet"
     ocr_path: "artifacts/enrichment/ocr/frame_enrichment.parquet"
     asr_path: "artifacts/enrichment/asr/frame_enrichment.parquet"
+    context_path: "artifacts/enrichment/context/frame_context_v1.parquet"
+    transcripts_path: "artifacts/enrichment/transcripts"
 
 index:
+  profile: "context_asr_segment"
   type: "flat_ip"
+
   path: "artifacts/indexes/visual"
+  context_path: "artifacts/indexes/context"
+  asr_segment_path: "artifacts/indexes/asr_segments"
+
+  # Rollback-only specialist indexes.
   caption_path: "artifacts/indexes/caption"
   ocr_path: "artifacts/indexes/ocr"
   asr_path: "artifacts/indexes/asr"
+
+  asr_projection_max_gap_ms: 5000
+
   subset_search_threshold: 100000
+
   text_embedding_filenames:
     caption: "caption_embeddings.npy"
     ocr: "ocr_embeddings.npy"
@@ -23,18 +35,55 @@ search:
   candidate_count: 500
   rerank_count: 100
   temporal_window_ms: 3000
+
   reranker:
     required: false
+
   cache:
     enabled: true
+
     prompt_version: "query-v1"
+
     embedding_ttl_seconds: 3600
     embedding_max_entries: 4096
     embedding_max_bytes: 67108864
+
     thumbnail_ttl_seconds: 3600
     thumbnail_max_entries: 1024
     thumbnail_max_bytes: 134217728
+
     disk_enabled: false
+
+  progressive:
+    architecture: temporal
+
+    progressive_state_ttl_seconds: 1800
+    progressive_state_max_entries: 256
+    progressive_max_hints: 10
+
+    candidate_pool_size: 50
+
+    global_quota: 100
+    local_quota: 50
+
+    top_m_evidence: 5
+
+    backfill_max_videos: 10
+    backfill_max_units_per_video: 5
+
+    candidate_semantic_weight: 0.45
+    candidate_match_weight: 0.25
+    candidate_evaluation_weight: 0.30
+
+    scene_max_gap_ms: 5000
+    scene_max_span_ms: 30000
+    scene_coherence_ms: 15000
+    scene_top_b_per_video: 3
+    scene_top_p_global: 30
+    scene_semantic_weight: 0.45
+    scene_coverage_weight: 0.30
+    scene_temporal_weight: 0.15
+    scene_relation_weight: 0.10
 
   fusion:
     method: "rrf"
@@ -44,10 +93,10 @@ search:
     normalize_active_weights: true
     # Neutral starting point only. Tune per task on labeled validation queries.
     task_weights:
-      kis: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      vkis: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      vqa: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      trake: {visual: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+      kis: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+      vkis: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+      vqa: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+      trake: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
 
 vqa:
   default_profile: vqa_localizer
@@ -55,47 +104,50 @@ vqa:
     vqa_single_frame:
       candidate_videos: 1
       candidates_per_branch: 100
+
       window_ms: 8000
+
       max_windows: 1
       max_frames_per_window: 1
       max_evidence_items: 24
       max_vlm_calls: 1
+
       localizer_enabled: false
-      hierarchical_refinement: false
-      temporal_fallback_ms: 0
     vqa_vrag:
       candidate_videos: 10
       candidates_per_branch: 100
+
       window_ms: 15000
+
       max_windows: 20
       max_frames_per_window: 4
       max_evidence_items: 24
       max_vlm_calls: 10
+
       localizer_enabled: false
-      hierarchical_refinement: false
-      temporal_fallback_ms: 15000
     vqa_localizer:
       candidate_videos: 5
       candidates_per_branch: 100
+
       window_ms: 15000
+
       max_windows: 12
       max_frames_per_window: 4
       max_evidence_items: 24
       max_vlm_calls: 8
+
       localizer_enabled: true
-      hierarchical_refinement: false
-      temporal_fallback_ms: 15000
     vqa_hierarchical:
       candidate_videos: 8
       candidates_per_branch: 150
+
       window_ms: 30000
       max_windows: 16
       max_frames_per_window: 8
       max_evidence_items: 24
       max_vlm_calls: 12
+
       localizer_enabled: true
-      hierarchical_refinement: true
-      temporal_fallback_ms: 15000
 
 api:
   default_top_k: 20
@@ -103,17 +155,21 @@ api:
 
 inference:
   enabled: true
-  base_url: "https://api.iamphuckhang.dev"
+  base_url: "http://127.0.0.1:8100"
   timeout_seconds: 120
   connect_timeout_seconds: 5
   read_timeout_seconds: 120
   write_timeout_seconds: 30
   pool_timeout_seconds: 5
+
   max_attempts: 3
+
   backoff_initial_seconds: 0.1
   backoff_max_seconds: 2
   backoff_jitter_ratio: 0.2
+
   circuit_failure_threshold: 3
   circuit_cooldown_seconds: 30
+
   max_concurrency: 4
   minimum_retry_budget_seconds: 0.05

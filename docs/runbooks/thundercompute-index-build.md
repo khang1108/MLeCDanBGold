@@ -1,0 +1,316 @@
+# ThunderCompute Multimodal Index Build
+
+This runbook builds the competition retrieval indexes on one RTX A6000 and
+copies only validated bundles back to the local HCMAI checkout. The workflow
+uses BTC keyframes as-is; it does not upload raw videos, extract replacement
+frames, or regenerate indexes during serving.
+
+## Prepare the organizer mapping explicitly
+
+`configs/indexing.yaml` requires CSV files directly under
+`data/map_keyframes/`. The build command deliberately does not unpack or infer
+this organizer-owned mapping. Prepare it locally in one of these explicit ways
+before pushing inputs:
+
+```bash
+cd /absolute/path/to/local/hcmai
+mkdir -p data/map_keyframes
+
+# If the supplied archive is present:
+unzip -j data/features/map-keyframes.zip '*.csv' -d data/map_keyframes
+
+# Or, if the organizer maps are already extracted in this checkout:
+rsync -a data/features/map-keyframes/ data/map_keyframes/
+```
+
+Use only one source and inspect `data/map_keyframes/` before continuing. An
+alternative location may be passed explicitly with
+`--map-keyframes-root /absolute/path/to/map_keyframes`; never substitute an
+image filename, keyframe order, FPS estimate, or timestamp for the BTC map.
+
+## Configure both machines
+
+Set infrastructure values yourself; the repository does not guess SSH hosts
+or machine-specific paths.
+
+```bash
+export HCMAI_LOCAL_ROOT=/absolute/path/to/local/hcmai
+export HCMAI_THUNDER_HOST=<your-existing-ssh-alias-or-user-at-host>
+export HCMAI_THUNDER_ROOT=/absolute/path/on/thundercompute/hcmai
+export HCMAI_PYTHON="$HCMAI_LOCAL_ROOT/aic/bin/python"
+```
+
+`pull-indexes` uses `HCMAI_PYTHON` to checksum-load staged FAISS and Parquet
+bundles before promotion. Point it at the local project environment rather
+than relying on an unrelated system Python.
+
+The local root must already contain canonical `frames.parquet` and its
+manifest, BTC keyframes and mappings, FrameContext and its manifest,
+transcripts, and the two indexing configs. Push only those inputs and the
+builder source:
+
+```bash
+cd "$HCMAI_LOCAL_ROOT"
+bash scripts/sync_thundercompute_indexes.sh push-inputs
+```
+
+The transfer script has no `--delete` operation and does not include the raw
+video corpus.
+
+## S3-first ThunderCompute workflow
+
+If these inputs have already been published to the configured S3 bucket, let
+ThunderCompute stage them on its local NVMe disk. This avoids a second
+repository-to-VM copy and keeps the build restartable. On the ThunderCompute
+host, configure the normal AWS credential chain (or attach an instance role)
+and verify bucket access without placing credentials in this repository or in
+shell history:
+
+```bash
+cd "$HCMAI_THUNDER_ROOT"
+aws s3 ls s3://mlecdanbgold-hcmai-hk/data/keyframes/ --max-items 1
+```
+
+The retrieval CLI downloads only the canonical FrameStore, BTC keyframes, BTC
+`map_keyframes`, FrameContext, and timestamped transcripts. It does not
+download raw videos. The mapping prefix is intentionally different from its
+local destination: the organizer archive is published below
+`data/features/map-keyframes/`, while `configs/indexing.yaml` expects
+`data/map_keyframes/`.
+
+Start with an inventory-only check, then run the complete local GPU build and
+S3 publication:
+
+```bash
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --s3 \
+  --s3-dry-run \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --s3-config configs/preparation.s3.yaml
+
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --s3 \
+  --stage all \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --s3-config configs/preparation.s3.yaml \
+  --s3-sync-workers 16 \
+  --s3-upload-workers 8
+```
+
+`configs/indexing.models.yaml` starts Visual/SigLIP and evidence/BGE at batch
+size `128`, suitable as the first RTX A6000 measurement point. S3 mode uses
+local model adapters; do not combine it with `--inference-url`. The download
+is resumable by byte size and tqdm/log counters report downloaded, skipped, and
+failed files. Visual embedding additionally keeps a checkpoint and writes
+unreadable-image failures to
+`artifacts/indexes/.visual-checkpoints/visual_embedding_failures.json`.
+
+On success, the three indexes and `build_report.json` are uploaded under
+`s3://<bucket>/data/artifacts/indexes/versions/<bundle-id>/`; `_SUCCESS.json`
+and then `latest.json` are written only after all checksummed artifacts have
+uploaded. A failed or interrupted run leaves the previous `latest.json`
+untouched. Record the printed version and latest keys for serving or for a
+later explicit `aws s3 sync` to another checkout:
+
+```bash
+aws s3 cp s3://mlecdanbgold-hcmai-hk/data/artifacts/indexes/latest.json -
+```
+
+The existing `sync_thundercompute_indexes.sh pull-indexes` route remains
+available for the SSH-based workflow below; it is not needed to publish a
+successful S3-first run.
+
+## Install the remote build environment
+
+Connect using the configured host and change to the configured remote root.
+Export the root again in the remote shell because ordinary SSH sessions do not
+forward arbitrary environment variables by default.
+
+```bash
+ssh "$HCMAI_THUNDER_HOST"
+export HCMAI_THUNDER_ROOT=/absolute/path/on/thundercompute/hcmai
+cd "$HCMAI_THUNDER_ROOT"
+python -m venv aic
+aic/bin/python -m pip install -e '.[embedding]'
+source aic/bin/activate
+```
+
+If the environment already exists, activate it without reinstalling. Verify
+that the pinned model revisions in `configs/indexing.models.yaml` are available
+to the remote Hugging Face cache before starting an offline build.
+
+## Use a private embedding VM from the local build host
+
+When SigLIP and BGE are hosted separately through the private Cloudflare
+service, the fast-track builder can keep canonical data and index publication
+local while explicitly offloading only embedding inference. The remote service
+must advertise the exact pinned model names and revisions from
+`configs/indexing.models.yaml` on `/ready`.
+
+```bash
+export HCMAI_INFERENCE_BASE_URL="https://<private-api-hostname>"
+export HCMAI_CF_ACCESS_CLIENT_ID="<service-client-id>"
+export HCMAI_CF_ACCESS_CLIENT_SECRET="<service-client-secret>"
+
+PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+  --stage all \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml \
+  --inference-url "$HCMAI_INFERENCE_BASE_URL"
+```
+
+`--inference-url` is deliberate: the command never silently reads an endpoint
+from the environment. It verifies that requested Visual and BGE capabilities
+are loaded and pinned correctly before an embedding stage begins. It sends
+SigLIP images to the visual endpoint and both FrameContext and ASR text to the
+BGE `text` family. Leave off the option to build with local models instead.
+
+The A6000 starting batch is 128 in both `llm/config.yaml` and
+`configs/indexing.models.yaml`; adjust it only after observing actual VRAM and
+latency with the corpus's real image/text lengths. The builder has one active
+embedding batch at a time. Sending several simultaneous requests to one
+single-worker GPU service does not provide server-side microbatching and can
+increase memory pressure.
+
+## Run and inspect each stage once
+
+Preflight must pass before GPU work. It requires exactly 873 mapping videos and
+177,321 canonical/mapping rows, validates the complete organizer join,
+projects every staged keyframe path, checks typed FrameContext lineage, and
+loads positive-duration unique transcript segments. Duplicate
+`(video_id, frame_idx)` coordinates are reported and retained because
+`frame_id` is the internal identity.
+
+```bash
+python scripts/build_retrieval_indexes.py --stage preflight --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+nvidia-smi
+python scripts/build_retrieval_indexes.py --stage visual --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+python scripts/build_retrieval_indexes.py --stage context --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+python scripts/build_retrieval_indexes.py --stage asr --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+python scripts/build_retrieval_indexes.py --stage validate --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+```
+
+The stages publish to:
+
+```text
+artifacts/indexes/visual/
+artifacts/indexes/context/
+artifacts/indexes/asr_segments/
+artifacts/indexes/build_report.json
+```
+
+`validate` round-trips the v2 checksummed loaders, verifies canonical Visual
+coverage, Context subset identity, segment-native ASR identity, and configured
+model/revision/dimension/normalization relationships. It writes
+`build_report.json` only after every check passes. Inspect that report and
+confirm `"status": "passed"` before transfer.
+
+After the individual stages have passed once, the faster single-process option
+builds Visual first, releases its GPU model/cache, then reuses one BGE-M3
+adapter for Context and ASR:
+
+```bash
+python scripts/build_retrieval_indexes.py --stage all --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+```
+
+Visual embedding displays a canonical-frame progress bar. Context and ASR show
+their own text progress bars. If a strict Visual build finds unreadable images,
+the command writes an atomic failure report at
+`artifacts/indexes/.visual-checkpoints/visual_embedding_failures.json` beside
+its resumable checkpoints; a later clean repaired run removes that stale report.
+
+Exit the remote shell and pull only the validated retrieval bundles:
+
+```bash
+exit
+cd "$HCMAI_LOCAL_ROOT"
+bash scripts/sync_thundercompute_indexes.sh pull-indexes
+```
+
+`pull-indexes` first checks that the remote report has `"status": "passed"`,
+stages every bundle, loads the staged checksummed v2 artifacts, and compares
+their byte sizes, schema, dataset version, model/revision, dimension,
+normalization, entity kind, retrieval source, source/config fingerprints, and
+checksum manifests with the report before promotion to the local index
+destination. Do not bypass that command with a manual copy. Startup performs
+its own checksum/model-contract checks as a separate serving guard.
+
+## Promote a validated bundle safely
+
+Promotion is a serving configuration change, not an opportunity to rebuild or
+repair artifacts. `pull-indexes` verifies the passed remote report and the
+staged bundle contracts before promoting the staged download. Retain the
+promoted `build_report.json` with the exact bundles it describes. Where the
+serving checkout also has the full offline source inputs (especially the
+organizer mapping, FrameContext, and transcripts), independently run the
+source-dependent validator:
+
+```bash
+cd "$HCMAI_LOCAL_ROOT"
+aic/bin/python scripts/build_retrieval_indexes.py \
+  --stage validate \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml
+```
+
+When that local validator is applicable, accept a bundle only when it succeeds
+and its report has `"status": "passed"`. Confirm the Visual row count is the
+complete canonical corpus expected by the active indexing configuration;
+Context and ASR counts must match their own usable source rows. A
+bundle-only serving checkout cannot rerun this validator without those inputs;
+in that case preserve the verified remote report and let startup validate the
+checksums and model contracts. The validator and startup loaders check the v2
+artifact checksums plus dataset version, model name, immutable revision, vector
+dimension, and normalization contracts. A report or bundle from a different
+configuration/model revision is not an acceptable substitute.
+
+The standard profile is Visual + optional FrameContext + optional projected
+ASR. Point any non-default bundle locations at the three complete directories;
+do not point a profile at a partial staging directory:
+
+```bash
+export HCMAI_RETRIEVAL_PROFILE=context_asr_segment
+export HCMAI_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/visual"
+export HCMAI_CONTEXT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/context"
+export HCMAI_ASR_SEGMENT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/asr_segments"
+```
+
+Restart the service using the established deployment command. Startup must
+load the required Visual bundle and must not regenerate an index. Check the
+service's retrieval observability or a controlled query to confirm the active
+sources and canonical frame identities. If Context or ASR is intentionally
+absent, record that degraded state explicitly; it is not evidence that the
+full B1/B2 profile has been validated.
+
+## Emergency rollback
+
+The rollback route keeps the existing specialist-index factory and changes no
+artifacts:
+
+```bash
+export HCMAI_RETRIEVAL_PROFILE=legacy_specialists
+unset HCMAI_CONTEXT_INDEX_PATH HCMAI_ASR_SEGMENT_INDEX_PATH
+```
+
+Restart the service with the normal deployment command. It will use the
+configured Visual, Caption, OCR, and legacy frame-aligned ASR artifacts rather
+than the Context/segment-ASR factories. Ensure those rollback-only artifacts
+exist and pass their usual startup contracts before relying on this path. The
+environment switch alone cannot restore missing or invalid legacy bundles.
+
+To return to the fast-track profile, first resolve the failure offline,
+revalidate the complete bundle and report, then set
+`HCMAI_RETRIEVAL_PROFILE=context_asr_segment` and restart. Do not delete,
+overwrite, or regenerate bundles from an online request during either switch.
+
+## Unperformed external smoke evidence
+
+This repository checkout currently has no extracted
+`data/map_keyframes/` organizer mapping, no published complete index bundles,
+and no repository-held B0/B1/B2 manual query set. Consequently, the commands
+above document the release procedure but do not constitute a completed
+full-corpus validation or qualitative smoke result. Do not infer retrieval
+accuracy or production readiness from unit tests or a successful CLI help
+command.

@@ -8,9 +8,8 @@ internals themselves.
 orchestration/
 ├── pipeline.py              # SearchService public facade
 ├── task_router.py           # Task-pipeline registry
-├── pipelines/               # Executable task-specific adapters
+├── workflows/               # Executable task-specific orchestration
 ├── setup.py                 # Single application composition root
-├── ranking.py               # Bounded retrieval/reranking sequence
 └── materializer.py          # Canonical SearchResponse construction
 ```
 

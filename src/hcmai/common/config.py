@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 from hcmai.common.schemas.enum import RetrievalSource, TaskType
-from hcmai.vqa.config import VQAConfig, VQAProfileConfig
+from hcmai.common.schemas.vqa import VQABaselineProfile
 
 # Recall cut-offs frozen for baseline comparison
 RECALL_CUTOFFS: tuple[int, ...] = (1, 5, 20, 50, 100)
@@ -32,26 +32,36 @@ class EnrichmentArtifactsConfig(BaseModel):
     asr_path: Path | None = Path(
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
+    context_path: Path | None = Path(
+        "artifacts/enrichment/context/frame_context_v1.parquet"
+    )
+    transcripts_path: Path | None = Path("artifacts/enrichment/transcripts")
 
 
 class DatasetConfig(BaseModel):
     """Configuration for corpus metadata and enrichment paths."""
 
     version: str = "hcmai2026_v1"
-    root: Path = Path("data")
-    frames_path: Path = Path("data/metadata/frames.parquet")
+    root: Path = Path("artifacts/frame_store")
+    frames_path: Path = Path("artifacts/frame_store/frames.parquet")
     enrichment: EnrichmentArtifactsConfig = Field(
         default_factory=EnrichmentArtifactsConfig
     )
 
 
 class EncoderConfig(BaseModel):
-    """Configuration for the dense visual encoder."""
+    """Configuration for one dense visual or text encoder.
+
+    ``batch_size`` is the explicit inference and remote-request ceiling for
+    this encoder. It must remain positive so every caller can safely use it as
+    a range step without silently falling back to a different batch size.
+    """
 
     backend: Literal["siglip", "bge_m3"] = "siglip"
     model_name: str = "google/siglip2-base-patch16-224"
+    revision: str | None = None
     device: str = "cpu"
-    batch_size: int = 32
+    batch_size: int = Field(default=32, gt=0)
     image_size: int = 224
     max_length: int = 8192
     dtype: str = "float32"
@@ -67,6 +77,7 @@ class EncoderConfig(BaseModel):
         return cls(
             backend=data.get("backend", default_inst.backend),
             model_name=data.get("model_name", default_inst.model_name),
+            revision=data.get("revision", default_inst.revision),
             device=data.get("device", default_inst.device),
             batch_size=data.get("batch_size", default_inst.batch_size),
             image_size=data.get("image_size", default_inst.image_size),
@@ -80,15 +91,19 @@ class ASRConfig(BaseModel):
     """Configuration for offline video transcription."""
 
     model_name: str = "Qwen/Qwen3-ASR-1.7B-hf"
+    revision: str = Field(
+        default="bcd2b5b7f32b480ab5790554cfa8347f246a14f3",
+        pattern=r"^[0-9a-f]{40}$",
+    )
     device: str = "cuda"
     dtype: str = "bfloat16"
     language: str | None = None
     prompt: str | None = None
     max_new_tokens: int = 256
-    batch_size: int = Field(default=8, gt=0)
+    batch_size: int = Field(default=32, gt=0)
     attn_implementation: str | None = None
     compile_model: bool = False
-    audio_sample_rate: int = 16_000
+    audio_sample_rate: int = Field(default=16_000, gt=0)
     vad_threshold: float = Field(default=0.5, ge=0, le=1)
     min_speech_duration_ms: int = 250
     min_silence_duration_ms: int = 500
@@ -99,19 +114,76 @@ class ASRConfig(BaseModel):
 class DiarizationConfig(BaseModel):
     """Configuration for offline speaker diarization."""
 
+    enabled: bool = True
     model_name: str = "pyannote/speaker-diarization-community-1"
+    revision: str = Field(
+        default="3533c8cf8e369892e6b79ff1bf80f7b0286a54ee",
+        pattern=r"^[0-9a-f]{40}$",
+    )
     device: str = "cuda"
-    audio_sample_rate: int = 16_000
+    audio_sample_rate: int = Field(default=16_000, gt=0)
+
+
+class TranscriptJobConfig(BaseModel):
+    """Reproducible transcript preparation and frame-materialization settings."""
+
+    asr: ASRConfig = Field(default_factory=ASRConfig)
+    diarization: DiarizationConfig = Field(default_factory=DiarizationConfig)
+    pipeline_version: str = Field(default="transcript-pipeline-v1", min_length=1)
+    schema_version: str = Field(default="transcript-segment-v1", min_length=1)
+    enrichment_version: str = Field(default="asr-frame-v1", min_length=1)
+    frame_evidence_window_ms: int = Field(default=2_000, ge=0)
+    output_dir: Path = Path("artifacts/enrichment/transcripts")
+    frames_path: Path = Path("artifacts/frame_store/frames.parquet")
+    frame_enrichment_path: Path = Path(
+        "artifacts/enrichment/asr/frame_enrichment.parquet"
+    )
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> TranscriptJobConfig:
+        """Load the transcript section from the shared enrichment YAML."""
+
+        from hcmai.common.utils.io import read_yaml
+
+        config_path = Path(path).expanduser().resolve()
+        raw = read_yaml(config_path)
+        transcript = raw.get("transcript") if isinstance(raw, dict) else None
+        if not isinstance(transcript, dict):
+            raise ValueError("Enrichment YAML requires a transcript mapping")
+        config = cls.model_validate(transcript)
+        project_root = Path(__file__).resolve().parents[3]
+        return config.model_copy(update={
+            "output_dir": _project_path(config.output_dir, project_root),
+            "frames_path": _project_path(config.frames_path, project_root),
+            "frame_enrichment_path": _project_path(
+                config.frame_enrichment_path, project_root
+            ),
+        })
+
+
+def _project_path(path: Path, project_root: Path) -> Path:
+    """Resolve repository-owned configuration paths independently of cwd."""
+
+    expanded = path.expanduser()
+    return expanded if expanded.is_absolute() else project_root / expanded
 
 
 class IndexConfig(BaseModel):
     """Configuration for the self-contained FAISS artifact directory."""
 
+    profile: Literal["context_asr_segment", "legacy_specialists"] = (
+        "context_asr_segment"
+    )
     type: str = "flat_ip"
     path: Path = Path("artifacts/indexes/visual")
+    context_path: Path = Path("artifacts/indexes/context")
+    asr_segment_path: Path = Path("artifacts/indexes/asr_segments")
     caption_path: Path = Path("artifacts/indexes/caption")
     ocr_path: Path = Path("artifacts/indexes/ocr")
     asr_path: Path = Path("artifacts/indexes/asr")
+    context_embedding_filename: str = "context_embeddings.npy"
+    asr_segment_embedding_filename: str = "asr_embeddings.npy"
+    asr_projection_max_gap_ms: int = Field(default=5_000, ge=0)
     subset_search_threshold: int = Field(default=100_000, ge=1)
     text_embedding_filenames: dict[RetrievalSource, str] = Field(
         default_factory=lambda: {
@@ -127,6 +199,8 @@ class IndexConfig(BaseModel):
         cls,
         filenames: dict[RetrievalSource, str],
     ) -> dict[RetrievalSource, str]:
+        """Require one safe NumPy artifact filename per text modality."""
+
         if set(filenames) != set(TEXT_RETRIEVAL_SOURCES):
             raise ValueError(
                 "text_embedding_filenames must configure caption, ocr, and asr"
@@ -170,7 +244,7 @@ class FusionConfig(BaseModel):
             if set(weights) != expected:
                 raise ValueError(
                     f"fusion task_weights[{task.value!r}] must configure "
-                    "visual, caption, ocr, and asr"
+                    "visual, context, caption, ocr, and asr"
                 )
             if any(weight <= 0 for weight in weights.values()):
                 raise ValueError("fusion weights must be greater than zero")
@@ -197,22 +271,148 @@ class RetrievalCacheConfig(BaseModel):
     disk_enabled: Literal[False] = False
 
 
+class ProgressiveSearchConfig(BaseModel):
+    """Transactional state, retrieval, and scene budgets for KIS/VQA."""
+
+    architecture: Literal["temporal", "legacy"] = "temporal"
+
+    progressive_state_ttl_seconds: float = Field(default=1800, gt=0)
+    progressive_state_max_entries: int = Field(default=256, gt=0)
+    progressive_max_hints: int = Field(default=10, gt=0)
+
+    candidate_pool_size: int = Field(default=50, gt=0)
+
+    global_quota: int = Field(default=100, gt=0)
+    local_quota: int = Field(default=50, gt=0)
+
+    top_m_evidence: int = Field(default=5, gt=0)
+
+    backfill_max_videos: int = Field(default=10, gt=0)
+    backfill_max_units_per_video: int = Field(default=5, gt=0)
+
+    candidate_semantic_weight: float = Field(default=0.45, ge=0)
+    candidate_match_weight: float = Field(default=0.25, ge=0)
+    candidate_evaluation_weight: float = Field(default=0.30, ge=0)
+
+    scene_max_gap_ms: int = Field(default=5_000, gt=0)
+    scene_max_span_ms: int = Field(default=30_000, gt=0)
+    scene_coherence_ms: int = Field(default=15_000, gt=0)
+    scene_top_b_per_video: int = Field(default=3, gt=0)
+    scene_top_p_global: int = Field(default=30, gt=0)
+    scene_semantic_weight: float = Field(default=0.45, ge=0)
+    scene_coverage_weight: float = Field(default=0.30, ge=0)
+    scene_temporal_weight: float = Field(default=0.15, ge=0)
+    scene_relation_weight: float = Field(default=0.10, ge=0)
+
+    @model_validator(mode="after")
+    def validate_scene_weights(self) -> ProgressiveSearchConfig:
+        """Require nonnegative weights with at least one active component."""
+
+        weights = (
+            self.scene_semantic_weight,
+            self.scene_coverage_weight,
+            self.scene_temporal_weight,
+            self.scene_relation_weight,
+        )
+        if sum(weights) <= 0:
+            raise ValueError(
+                "at least one progressive scene weight must be positive"
+            )
+        if self.scene_max_gap_ms > self.scene_max_span_ms:
+            raise ValueError("scene_max_gap_ms must not exceed scene_max_span_ms")
+        candidate_weights = (
+            self.candidate_semantic_weight,
+            self.candidate_match_weight,
+            self.candidate_evaluation_weight,
+        )
+        if sum(candidate_weights) <= 0:
+            raise ValueError(
+                "at least one progressive candidate weight must be positive"
+            )
+        return self
+
+    def diagnostics(self) -> dict[str, int | float]:
+        """Return reproducible active budgets without state implementation details."""
+
+        return self.model_dump()
+
+
 class SearchConfig(BaseModel):
     """Single search configuration selected for the competition pipeline."""
 
     candidate_count: int = Field(default=500, ge=1)
     rerank_count: int = Field(default=100, ge=0)
     temporal_window_ms: int = Field(default=3000, ge=0)
-    progressive_scene_enabled: bool = False
-    progressive_state_ttl_seconds: float = Field(default=900.0, gt=0.0)
-    progressive_max_states: int = Field(default=1_000, ge=1)
-    scene_rerank_enabled: bool = False
-    scene_rerank_top_p: int = Field(default=5, ge=1)
-    scene_rerank_frames_per_scene: int = Field(default=2, ge=1)
-    scene_rerank_weight: float = Field(default=0.3, ge=0.0, le=1.0)
     fusion: FusionConfig = Field(default_factory=FusionConfig)
     reranker: RerankerPolicyConfig = Field(default_factory=RerankerPolicyConfig)
     cache: RetrievalCacheConfig = Field(default_factory=RetrievalCacheConfig)
+    progressive: ProgressiveSearchConfig = Field(
+        default_factory=lambda: ProgressiveSearchConfig()
+    )
+
+
+class VQAProfileConfig(BaseModel):
+    """Hard budgets for one reproducible competition VQA baseline."""
+
+    candidate_videos: int = Field(default=5, ge=1, le=100)
+    candidates_per_branch: int = Field(default=100, ge=1, le=1_000)
+    window_ms: int = Field(default=15_000, ge=1_000, le=120_000)
+    max_windows: int = Field(default=12, ge=1, le=100)
+    max_frames_per_window: int = Field(default=4, ge=1, le=32)
+    max_evidence_items: int = Field(default=24, ge=1, le=256)
+    max_vlm_calls: int = Field(default=8, ge=0, le=100)
+    localizer_enabled: bool = True
+
+
+def _default_vqa_profiles() -> dict[VQABaselineProfile, VQAProfileConfig]:
+    """Return reproducible defaults for every supported VQA baseline."""
+
+    return {
+        VQABaselineProfile.SINGLE_FRAME: VQAProfileConfig(
+            candidate_videos=1,
+            window_ms=8_000,
+            max_windows=1,
+            max_frames_per_window=1,
+            max_vlm_calls=1,
+            localizer_enabled=False,
+        ),
+        VQABaselineProfile.VRAG: VQAProfileConfig(
+            candidate_videos=10,
+            window_ms=15_000,
+            max_windows=20,
+            max_frames_per_window=4,
+            max_vlm_calls=10,
+            localizer_enabled=False,
+        ),
+        VQABaselineProfile.LOCALIZER: VQAProfileConfig(),
+        VQABaselineProfile.HIERARCHICAL: VQAProfileConfig(
+            candidate_videos=8,
+            candidates_per_branch=150,
+            window_ms=30_000,
+            max_windows=16,
+            max_frames_per_window=8,
+            max_vlm_calls=12,
+        ),
+    }
+
+
+class VQAConfig(BaseModel):
+    """Executable VQA profiles selected without hidden inference budgets."""
+
+    default_profile: VQABaselineProfile = VQABaselineProfile.LOCALIZER
+    profiles: dict[VQABaselineProfile, VQAProfileConfig] = Field(
+        default_factory=_default_vqa_profiles
+    )
+
+    @model_validator(mode="after")
+    def validate_profiles(self) -> VQAConfig:
+        """Require complete baseline coverage and a configured default."""
+
+        if set(self.profiles) != set(VQABaselineProfile):
+            raise ValueError("vqa profiles must configure every baseline profile")
+        if self.default_profile not in self.profiles:
+            raise ValueError("default VQA profile must be configured")
+        return self
 
 
 class ApiConfig(BaseModel):
@@ -243,6 +443,8 @@ class InferenceConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_resilience_ranges(self) -> InferenceConfig:
+        """Ensure retry backoff bounds form a valid increasing range."""
+
         if self.backoff_max_seconds < self.backoff_initial_seconds:
             raise ValueError("backoff_max_seconds must not be below initial backoff")
         return self

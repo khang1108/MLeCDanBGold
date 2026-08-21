@@ -25,9 +25,12 @@ class TRAKESubmission(ContractModel):
     """One same-video row containing one canonical frame per ordered event."""
 
     rank: int = Field(ge=1, le=100)
+
     video_id: NonEmptyString
     frame_ids: list[NonEmptyString] = Field(min_length=2)
     frame_idxs: list[NonNegativeFrameIndex] = Field(min_length=2)
+    fps: float = Field(default=25.0, gt=0)
+
     warnings: list[NonEmptyString] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -46,11 +49,15 @@ class TRAKEResponse(ContractModel):
     """Ranked TRAKE paths for one parsed ordered event sequence."""
 
     request_id: NonEmptyString
+
     query_type: Literal[TaskType.TRAKE] = TaskType.TRAKE
     query: NonEmptyString
+
     events: list[NonEmptyString] = Field(min_length=2)
+
     top_k: int = Field(ge=1, le=100)
     total_results: int = Field(ge=0, le=100)
+
     submissions: list[TRAKESubmission] = Field(default_factory=list)
     warnings: list[NonEmptyString] = Field(default_factory=list)
 
