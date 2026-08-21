@@ -150,6 +150,7 @@ def project_keyframe_paths(frames: pd.DataFrame, keyframes_root: Path) -> pd.Dat
     """
 
     projected = frames.copy()
+    image_paths = projected["image_path"].copy()
     for video_id, video_frames in projected.groupby("video_id", sort=False):
         image_directory = keyframes_root / str(video_id)
         images: list[Path] = []
@@ -167,8 +168,11 @@ def project_keyframe_paths(frames: pd.DataFrame, keyframes_root: Path) -> pd.Dat
                 "Staged keyframe count does not match canonical frame count "
                 f"for {video_id}: {len(images)} != {len(ordered_indices)}"
             )
-        for index, image_path in zip(ordered_indices, images, strict=True):
-            projected.at[index, "image_path"] = str(image_path)
+        # Assign one vector per video rather than mutating one pandas cell per
+        # frame.  The BTC corpus has 177k rows; scalar ``.at`` writes make
+        # preflight spend minutes in Python before any model work starts.
+        image_paths.loc[ordered_indices] = [str(path) for path in images]
+    projected["image_path"] = image_paths
     return projected
 
 
