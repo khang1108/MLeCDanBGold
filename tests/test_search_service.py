@@ -67,6 +67,7 @@ def test_materialization_uses_only_canonical_data() -> None:
     )
     result = response.results[0]
     assert response.search_id.startswith("search-")
+    assert result.frame_id == "f1"
     assert (result.video_id, result.frame_idx, result.timestamp_ms) == (
         "official-video",
         42,

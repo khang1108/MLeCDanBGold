@@ -82,11 +82,17 @@ def test_btc_import_does_not_require_preprocessing_fields(
     row = pd.read_parquet(output).iloc[0]
     assert row["frame_id"] == "L01_V001:0000"
     assert row["frame_idx"] == 120
+    assert row["image_path"] == "keyframes/L01_V001/0000.jpg"
     assert row["shot_id"] is None
     assert row["event_id"] is None
     assert row["pts"] is None
     assert row["time_base"] is None
     assert list(row["selection_reasons"]) == ["btc_keyframe"]
+
+    from hcmai.data.pipeline import DataService
+
+    data = DataService.load(output, dataset_root=source)
+    assert data.resolve_frame_asset(str(row["frame_id"])) == keyframe
 
     manifest = json.loads((output.parent / "manifest.json").read_text())
     assert manifest["pipeline_version"] == "btc-keyframe-ingestion-v1"

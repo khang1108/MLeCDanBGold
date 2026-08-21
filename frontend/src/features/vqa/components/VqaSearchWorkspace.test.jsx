@@ -1,7 +1,10 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { frameAssetUrl, searchFrames, searchTrake, searchVqa } from '../../../api/search';
-import VqaSearchWorkspace, { progressiveSearchIdKey } from './VqaSearchWorkspace';
+import VqaSearchWorkspace, {
+  parseTrakeEvents,
+  progressiveSearchIdKey,
+} from './VqaSearchWorkspace';
 
 jest.mock('../../../api/search');
 
@@ -13,7 +16,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
 });
 
-const EVENT_PLACEHOLDER = 'Event query (/kis, /trake)...';
+const EVENT_PLACEHOLDER = 'Event query (/kis, /trake E1: ... E2: ... on new lines)...';
 const QUESTION_PLACEHOLDER = 'Question (optional for VQA)...';
 
 const submit = (eventDescription, question = '') => {
@@ -27,6 +30,14 @@ const submit = (eventDescription, question = '') => {
   }
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 };
+
+test('parses sequentially labeled TRAKE events and rejects invalid numbering', () => {
+  expect(parseTrakeEvents(
+    '/trake\nE1: first event\nE2: second event\nE3: third event',
+  )).toEqual(['first event', 'second event', 'third event']);
+  expect(parseTrakeEvents('/trake\nE1: first event\nE3: third event')).toEqual([]);
+  expect(parseTrakeEvents('/trake first event | second event')).toEqual([]);
+});
 
 test('clicking Search sends both VQA intents and renders grounded answer', async () => {
   const onFrameClick = jest.fn();
@@ -115,6 +126,7 @@ test('TRAKE groups clickable event frame cards by video and orders them by frame
         video_id: 'L21_a_b.folder2.video-8',
         frame_ids: ['f40', 'f20'],
         frame_idxs: [40, 20],
+        timestamps_ms: [4000, 2000],
         fps: 29.97,
       },
       {
@@ -122,6 +134,7 @@ test('TRAKE groups clickable event frame cards by video and orders them by frame
         video_id: 'L21_a_b.folder2.video-7',
         frame_ids: ['f30', 'f10'],
         frame_idxs: [30, 10],
+        timestamps_ms: [3000, 1000],
         fps: 25,
       },
       {
@@ -129,6 +142,7 @@ test('TRAKE groups clickable event frame cards by video and orders them by frame
         video_id: 'L21_a_b.folder2.video-7',
         frame_ids: ['f25', 'f5'],
         frame_idxs: [25, 5],
+        timestamps_ms: [2500, 500],
         fps: 25,
       },
     ],
@@ -136,7 +150,7 @@ test('TRAKE groups clickable event frame cards by video and orders them by frame
     warnings: [],
   });
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
-  submit('/trake person enters | person leaves');
+  submit('/trake\nE1: person enters\nE2: person leaves');
 
   await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
     expect.objectContaining({ events: ['person enters', 'person leaves'], topK: 20 }),
@@ -154,13 +168,14 @@ test('TRAKE groups clickable event frame cards by video and orders them by frame
     frame_id: 'f20',
     video_id: 'L21_a_b.folder2.video-8',
     frame_idx: 20,
+    timestamp_ms: 2000,
     fps: 29.97,
   }));
 });
 
 test('TRAKE requires at least two events without making a request', () => {
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  submit('/trake only one event');
+  submit('/trake\nE1: only one event');
   expect(screen.getByRole('alert').textContent).toContain('at least two');
   expect(searchTrake).not.toHaveBeenCalled();
 });

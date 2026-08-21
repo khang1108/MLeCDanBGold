@@ -1,11 +1,11 @@
 import React from "react";
 import { displayVideoId } from "../videoSource";
 
-// Metadata list intentionally uses only official frame identifiers.
+// Keep internal asset identity separate from BTC submission coordinates.
 const FrameMetadata = ({ frame }) => (
   <div className="inspector-meta-list">
     <div className="inspector-meta-item">
-      <span className="meta-lbl">Frame ID</span>
+      <span className="meta-lbl">Internal frame ID</span>
       <span className="meta-val monospace">{frame.frame_id}</span>
     </div>
     <div className="inspector-meta-item">
@@ -13,7 +13,7 @@ const FrameMetadata = ({ frame }) => (
       <span className="meta-val monospace">{displayVideoId(frame.video_id)}</span>
     </div>
     <div className="inspector-meta-item">
-      <span className="meta-lbl">Frame index</span>
+      <span className="meta-lbl">BTC frame index</span>
       <span className="meta-val monospace">{frame.frame_idx}</span>
     </div>
     {Number.isFinite(frame.timestamp_ms) && <div className="inspector-meta-item">

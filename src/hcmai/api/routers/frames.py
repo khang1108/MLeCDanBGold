@@ -12,6 +12,10 @@ from hcmai.common.schemas import FrameRecord, SubmissionResult
 from hcmai.data.assets import FrameAssetError, FrameAssetResolver
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
+from hcmai.common.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def _search_service(container: dict[str, Any]) -> Any:
@@ -68,7 +72,16 @@ def create_frames_router(
                 if isinstance(data, DataService)
                 else fallback_resolver.resolve_frame(frame, thumbnail=thumbnail)
             )
-        except (FrameAssetError, RuntimeError):
+        except (FrameAssetError, RuntimeError) as error:
+            logger.warning(
+                "Frame asset unavailable frame_id=%s asset=%s thumbnail=%s "
+                "error_type=%s error=%s",
+                frame_id,
+                getattr(frame, "image_path", "<unknown>"),
+                thumbnail,
+                type(error).__name__,
+                error,
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Frame asset not available",

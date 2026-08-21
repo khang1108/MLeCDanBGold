@@ -71,13 +71,15 @@ class SearchLatency(ContractModel):
 
 
 class SearchResult(ContractModel):
-    """One ranked frame returned by the public search API."""
+    """One ranked frame with exact internal and official identities."""
 
     rank: int = Field(ge=1)
+    frame_id: NonEmptyString
 
-    # Use these filed to calculate the interval
+    # ``frame_idx`` is the exact organizer-provided coordinate used for BTC
+    # submission. Playback and temporal ranges must use ``timestamp_ms``.
     video_id: NonEmptyString
-    frame_idx: NonEmptyString
+    frame_idx: int = Field(ge=0)
     fps: float = Field(default=25.0, gt=0)
     frame_ids: list[NonEmptyString] = Field(default_factory=list)
     
@@ -94,10 +96,11 @@ class SearchResult(ContractModel):
 
     @model_validator(mode="after")
     def populate_frame_ids(self) -> Self:
-        """Ensure frame_ids is populated if frame_id attribute is present."""
-        frame_id = getattr(self, "frame_id", None)
-        if not self.frame_ids and frame_id:
-            self.frame_ids = [frame_id]
+        """Ensure the selected internal ID is retained in scene evidence."""
+        if not self.frame_ids:
+            self.frame_ids = [self.frame_id]
+        elif self.frame_id not in self.frame_ids:
+            raise ValueError("frame_id must be included in frame_ids")
         return self
 
 

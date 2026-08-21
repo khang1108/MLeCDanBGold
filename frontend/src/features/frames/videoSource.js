@@ -45,18 +45,9 @@ export const getS3VideoUrl = async (videoId, config = s3Config()) => {
   });
 };
 
-export const targetTimeSeconds = (frameIdx, fps) => {
-  const index = Number(frameIdx);
-  const rate = Number(fps);
-  return Number.isFinite(index) && index >= 0 && Number.isFinite(rate) && rate > 0
-    ? index / rate
-    : null;
-};
-
-export const frameIndexAt = (currentTime, fps) => {
-  const time = Number(currentTime);
-  const rate = Number(fps);
-  return Number.isFinite(time) && time >= 0 && Number.isFinite(rate) && rate > 0
-    ? Math.floor(time * rate)
+export const timestampSeconds = (timestampMs) => {
+  const timestamp = Number(timestampMs);
+  return Number.isFinite(timestamp) && timestamp >= 0
+    ? timestamp / 1000
     : null;
 };

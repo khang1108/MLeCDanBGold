@@ -162,6 +162,7 @@ def test_trake_request_reaches_the_pipeline_and_returns_a_submission(
             "video_id": "video_001",
             "frame_ids": ["frame_10", "frame_20"],
             "frame_idxs": [10, 20],
+            "timestamps_ms": [1000, 2000],
             "fps": 25.0,
             "warnings": [],
         }
@@ -174,7 +175,10 @@ def test_every_submission_has_one_frame_per_event(app: FastAPI) -> None:
 
     event_count = len(payload["events"])
     assert all(
-        len(row["frame_ids"]) == event_count == len(row["frame_idxs"])
+        len(row["frame_ids"])
+        == event_count
+        == len(row["frame_idxs"])
+        == len(row["timestamps_ms"])
         for row in payload["submissions"]
     )
 

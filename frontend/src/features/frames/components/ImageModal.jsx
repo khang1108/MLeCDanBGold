@@ -3,21 +3,22 @@ import FrameMetadata from "./FrameMetadata";
 import ScoreBreakdown from "./ScoreBreakdown";
 import {
   displayVideoId,
-  frameIndexAt,
   getS3VideoUrl,
-  targetTimeSeconds,
+  timestampSeconds,
 } from "../videoSource";
 
-// Inspector streams the source MP4 directly from S3 and seeks to the selected frame.
+// Inspector streams the source MP4 directly from S3 and seeks by canonical
+// timestamp. BTC frame_idx is reserved for the submission coordinate because
+// it is not guaranteed to be unique among internal keyframes.
 const ImageModal = ({ frame, onClose }) => {
   const [copied, setCopied] = useState(false);
-  const [currentFrameIdx, setCurrentFrameIdx] = useState(frame.frame_idx);
   const [videoUrl, setVideoUrl] = useState(null);
   const [videoError, setVideoError] = useState(null);
   const targetTime = useMemo(
-    () => targetTimeSeconds(frame.frame_idx, frame.fps),
-    [frame.frame_idx, frame.fps],
+    () => timestampSeconds(frame.timestamp_ms),
+    [frame.timestamp_ms],
   );
+  const [playbackTime, setPlaybackTime] = useState(targetTime);
   const videoLabel = displayVideoId(frame.video_id);
 
   useEffect(() => {
@@ -27,8 +28,8 @@ const ImageModal = ({ frame, onClose }) => {
   }, [onClose]);
 
   useEffect(() => {
-    setCurrentFrameIdx(frame.frame_idx);
-  }, [frame.frame_idx, frame.fps, videoUrl]);
+    setPlaybackTime(targetTime);
+  }, [targetTime, videoUrl]);
 
   useEffect(() => {
     let active = true;
@@ -38,7 +39,7 @@ const ImageModal = ({ frame, onClose }) => {
       .then((url) => {
         if (!active) return;
         if (url) setVideoUrl(url);
-        else setVideoError('Configure S3 bucket, region, and AWS credentials, and ensure the backend returns fps.');
+        else setVideoError('Configure S3 bucket, region, and AWS credentials.');
       })
       .catch(() => {
         if (active) setVideoError('Could not create a temporary S3 video URL. Check your local AWS configuration.');
@@ -48,10 +49,10 @@ const ImageModal = ({ frame, onClose }) => {
     };
   }, [frame.video_id]);
 
-  const updateCurrentFrame = useCallback((currentTime) => {
-    const nextFrameIdx = frameIndexAt(currentTime, frame.fps);
-    if (nextFrameIdx !== null) setCurrentFrameIdx(nextFrameIdx);
-  }, [frame.fps]);
+  const updatePlaybackTime = useCallback((currentTime) => {
+    const value = Number(currentTime);
+    if (Number.isFinite(value) && value >= 0) setPlaybackTime(value);
+  }, []);
 
   const seekToTarget = useCallback((event) => {
     if (targetTime === null) return;
@@ -61,8 +62,8 @@ const ImageModal = ({ frame, onClose }) => {
       ? Math.min(targetTime, Math.max(0, duration))
       : targetTime;
     video.currentTime = seekTime;
-    updateCurrentFrame(seekTime);
-  }, [targetTime, updateCurrentFrame]);
+    updatePlaybackTime(seekTime);
+  }, [targetTime, updatePlaybackTime]);
 
   const copy = () => {
     navigator.clipboard.writeText(`${frame.video_id},${frame.frame_idx}`);
@@ -86,15 +87,17 @@ const ImageModal = ({ frame, onClose }) => {
                 preload="metadata"
                 src={videoUrl}
                 onLoadedMetadata={seekToTarget}
-                onTimeUpdate={(event) => updateCurrentFrame(event.currentTarget.currentTime)}
+                onTimeUpdate={(event) => updatePlaybackTime(event.currentTarget.currentTime)}
               />
               <output className="modal-video-frame-badge" aria-live="off">
-                Frame {currentFrameIdx}
+                {Number.isFinite(playbackTime)
+                  ? `Time ${playbackTime.toFixed(3)} s`
+                  : 'Time unavailable'}
               </output>
             </div>
           ) : videoError || targetTime === null ? (
             <div className="frame-image-placeholder">
-              Video playback is unavailable. {videoError || 'Ensure the backend returns a valid fps value.'}
+              Video playback is unavailable. {videoError || 'The backend response is missing timestamp_ms.'}
             </div>
           ) : (
             <div className="frame-image-placeholder">Preparing secure video playback…</div>
@@ -103,7 +106,7 @@ const ImageModal = ({ frame, onClose }) => {
         <div className="modal-inspector-column">
           <div className="inspector-header">
             <span className="inspector-title">
-              {videoLabel} · frame {frame.frame_idx}
+              {videoLabel} · BTC frame {frame.frame_idx}
             </span>
             <div className="inspector-header-actions">
               <button

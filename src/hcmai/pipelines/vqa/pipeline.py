@@ -17,7 +17,7 @@ from hcmai.common.schemas import (
     VQAResponse,
 )
 from hcmai.common.utils.logging import get_logger
-from hcmai.common.utils.video import derive_fps, format_video_id
+from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
 from hcmai.data.pipeline import DataService
 from hcmai.llm.pipeline import LLMService
 from hcmai.common.observability.tracing import StageTimer, log_stage
@@ -291,7 +291,7 @@ def _retrieval_evidence(candidates, top_k: int) -> list[VQARetrievalEvidence]:
             ),
             frame_id=candidate.frame.frame_id,
             frame_ids=[candidate.frame.frame_id],
-            frame_idx=candidate.frame.frame_idx,
+            frame_idx=official_frame_idx(candidate.frame),
             fps=derive_fps(candidate.frame),
             timestamp_ms=candidate.frame.timestamp_ms,
             retrieval_score=candidate.score,
@@ -318,7 +318,7 @@ def _scene_retrieval_evidence(scenes, top_k: int) -> list[VQARetrievalEvidence]:
                 ),
                 frame_id=item.frame.frame_id,
                 frame_ids=[item.frame.frame_id],
-                frame_idx=item.frame.frame_idx,
+                frame_idx=official_frame_idx(item.frame),
                 fps=derive_fps(item.frame),
                 timestamp_ms=item.frame.timestamp_ms,
                 retrieval_score=scene.final_score,

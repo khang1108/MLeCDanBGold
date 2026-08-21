@@ -14,7 +14,7 @@ class SubmissionResult(ContractModel):
 
     frame_id: NonEmptyString
     video_id: NonEmptyString
-    frame_idx: NonEmptyString
+    frame_idx: int = Field(ge=0)
     
     submission_code: NonEmptyString
 

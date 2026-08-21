@@ -18,6 +18,37 @@ TEXT_RETRIEVAL_SOURCES: tuple[RetrievalSource, ...] = (
     RetrievalSource.OCR,
     RetrievalSource.ASR,
 )
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+LEGACY_DATASET_ROOT = (REPOSITORY_ROOT / "artifacts/frame_store").resolve()
+
+
+def resolve_repository_path(value: str | Path) -> Path:
+    """Resolve one runtime path from the repository instead of process CWD.
+
+    Backend processes may be launched by Uvicorn, Supervisor, or an IDE from
+    different working directories. Repository-owned ``data`` and ``artifacts``
+    paths must therefore have one stable meaning across every launcher.
+    """
+
+    path = Path(value).expanduser()
+    base = path if path.is_absolute() else REPOSITORY_ROOT / path
+    return base.resolve()
+
+
+def resolve_dataset_root(value: str | Path) -> Path:
+    """Resolve the visual-data root and migrate the retired frame-store root.
+
+    Older launchers set ``HCMAI_DATASET_ROOT=artifacts/frame_store`` because
+    metadata and images once shared a root. Metadata remains there, but BTC
+    keyframes now live exclusively under ``data/keyframes``. Treat only that
+    exact legacy value as a compatibility alias; other explicit roots retain
+    their configured meaning.
+    """
+
+    resolved = resolve_repository_path(value)
+    if resolved == LEGACY_DATASET_ROOT:
+        return (REPOSITORY_ROOT / "data").resolve()
+    return resolved
 
 
 class EnrichmentArtifactsConfig(BaseModel):
@@ -42,7 +73,7 @@ class DatasetConfig(BaseModel):
     """Configuration for corpus metadata and enrichment paths."""
 
     version: str = "hcmai2026_v1"
-    root: Path = Path("artifacts/frame_store")
+    root: Path = Path("data")
     frames_path: Path = Path("artifacts/frame_store/frames.parquet")
     enrichment: EnrichmentArtifactsConfig = Field(
         default_factory=EnrichmentArtifactsConfig
@@ -298,7 +329,9 @@ class ProgressiveSearchConfig(BaseModel):
     scene_max_span_ms: int = Field(default=30_000, gt=0)
     scene_coherence_ms: int = Field(default=15_000, gt=0)
     scene_top_b_per_video: int = Field(default=3, gt=0)
-    scene_top_p_global: int = Field(default=30, gt=0)
+    # Keep the temporal candidate pool at the public search ceiling so a
+    # request with top_k=100 is not silently capped before materialization.
+    scene_top_p_global: int = Field(default=100, gt=0)
     scene_semantic_weight: float = Field(default=0.45, ge=0)
     scene_coverage_weight: float = Field(default=0.30, ge=0)
     scene_temporal_weight: float = Field(default=0.15, ge=0)

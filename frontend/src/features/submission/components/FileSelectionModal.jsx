@@ -46,16 +46,18 @@ const FileSelectionModal = ({ isOpen, onClose }) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setFocusedIndex((prev) => (prev + 1) % files.length);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setFocusedIndex((prev) => (prev - 1 + files.length) % files.length);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        setEditContent(files[focusedIndex].content);
-        setIsEditing(true);
+      } else if (files.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setFocusedIndex((prev) => (prev + 1) % files.length);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setFocusedIndex((prev) => (prev - 1 + files.length) % files.length);
+        } else if (e.key === 'Enter' && files[focusedIndex]) {
+          e.preventDefault();
+          setEditContent(files[focusedIndex].content);
+          setIsEditing(true);
+        }
       }
     };
 
@@ -64,6 +66,36 @@ const FileSelectionModal = ({ isOpen, onClose }) => {
   }, [isOpen, files, focusedIndex, isEditing, editContent, setSelectedFileId, updateFileContent, onClose]);
 
   if (!isOpen) return null;
+
+  if (files.length === 0) {
+    return (
+      <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
+        <div 
+          className="vim-help-card" 
+          onClick={(e) => e.stopPropagation()}
+          style={{ width: '400px' }}
+        >
+          <div className="vim-help-header">
+            <div>
+              <span className="vim-prompt-tag">SELECT CSV FILE</span>
+              <h3 className="vim-help-title">No CSV Files Loaded</h3>
+            </div>
+            <button type="button" className="modal-close-btn" onClick={onClose} title="Close [Esc]">
+              ✕
+            </button>
+          </div>
+          <div className="vim-help-body" style={{ textAlign: 'center', padding: '24px 16px' }}>
+            <p style={{ color: 'var(--color-ink-muted)', marginBottom: '16px', fontSize: '13px' }}>
+              Please upload query files in the sidebar to generate submission targets.
+            </p>
+            <button type="button" className="btn-primary" onClick={onClose}>
+              Got It
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>

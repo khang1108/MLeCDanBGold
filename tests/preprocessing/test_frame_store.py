@@ -257,7 +257,7 @@ def test_runtime_paths_target_public_frame_store() -> None:
 
     root = Path(__file__).resolve().parents[2]
     settings = AppConfig.from_yaml(root / "configs/baseline.yaml")
-    assert settings.dataset.root == Path("artifacts/frame_store")
+    assert settings.dataset.root == Path("data")
     assert settings.dataset.frames_path == Path(
         "artifacts/frame_store/frames.parquet"
     )

@@ -7,6 +7,7 @@ import { useVimMode } from "./features/vim/hooks/useVimMode";
 import VimModeBadge from "./features/vim/components/VimModeBadge";
 import TopKPromptModal from "./features/vim/components/TopKPromptModal";
 import VimHelpModal from "./features/vim/components/VimHelpModal";
+import ApiDocsModal from "./features/docs/components/ApiDocsModal";
 import "./styles/gif-loader.css";
 import "./styles/vim.css";
 import { SubmissionProvider } from "./features/submission/contexts/SubmissionContext";
@@ -14,6 +15,7 @@ import { SubmissionProvider } from "./features/submission/contexts/SubmissionCon
 function App() {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [topK, setTopK] = useState(20);
+  const [isDocsOpen, setIsDocsOpen] = useState(false);
   const queryInputRef = useRef(null);
   const { isHealthy, healthData, isChecking } = useHealthCheck();
   const vim = useVimMode({
@@ -40,6 +42,15 @@ function App() {
                 : vim.enterNormalMode()
             }
           />
+          <button
+            type="button"
+            className="api-docs-badge-btn"
+            onClick={() => setIsDocsOpen(true)}
+            title="Interactive API Docs / FastAPI Specs"
+          >
+            <span className="api-docs-icon"></span>
+            <span>API Docs</span>
+          </button>
         </div>
       </header>
 
@@ -69,6 +80,10 @@ function App() {
       <VimHelpModal
         isOpen={vim.isHelpOpen}
         onClose={() => vim.setIsHelpOpen(false)}
+      />
+      <ApiDocsModal
+        isOpen={isDocsOpen}
+        onClose={() => setIsDocsOpen(false)}
       />
     </div>
     </SubmissionProvider>

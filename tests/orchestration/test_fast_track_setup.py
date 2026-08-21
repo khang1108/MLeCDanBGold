@@ -38,6 +38,11 @@ class _FakeData(SimpleNamespace):
     def __len__(self) -> int:
         return 1
 
+    def frame_asset_status(self) -> SimpleNamespace:
+        """Return the ready startup diagnostic exposed by DataService."""
+
+        return SimpleNamespace(ready=True, checked=1, missing=0)
+
 
 def _metadata(
     *,

@@ -96,8 +96,9 @@ matched evidence without exposing mutable search state as a public API schema.
   optional progressive `search_id`.
 - `SearchLatency`: non-negative latency measurements for each search stage and
   the total request, in milliseconds.
-- `SearchResult`: one ranked result with the canonical frame identifiers,
-  preview URLs, enrichment text, and scores.
+- `SearchResult`: one ranked result with required singular canonical
+  `frame_id`, bounded scene `frame_ids`, BTC `frame_idx`, preview URLs,
+  enrichment text, and scores.
 - `SearchResponse`: complete search response with request metadata, latency,
   results, warnings, and the optional echoed `search_id`. `total_results` must
   match the result list and cannot exceed `top_k`.
@@ -107,7 +108,9 @@ matched evidence without exposing mutable search state as a public API schema.
 - `VQARequest`: competition event description, question, Top-k, optional
   filters, language hint, execution profile, and progressive `search_id`.
 - `VQASubmission`: ranked canonical video/frame/answer row with retrieval,
-  grounding, answer, and joint scores.
+  grounding, answer, and joint scores. Its singular `frame_id` is the exact
+  selected internal frame used by the UI; `frame_idx` is the BTC submission
+  coordinate, while `frame_ids` retains bounded scene evidence.
 - `VQAResponse`: bounded ranked competition submissions with an optional
   echoed `search_id`.
 - `VQAInferenceRequest` and `VQAInferenceEvidence`: provider-scoped request and
@@ -122,6 +125,8 @@ matched evidence without exposing mutable search state as a public API schema.
 
 - `TRAKERequest`: raw query and optional caller-supplied ordered events.
 - `TRAKESubmission`: one same-video canonical frame mapping per ordered event.
+  Aligned `frame_ids`, BTC `frame_idxs`, and `timestamps_ms` preserve both
+  exact internal identity and competition coordinates for UI playback.
 - `TRAKEResponse`: bounded ranked temporal-alignment submissions.
 
 ### `task.py`

@@ -1,6 +1,7 @@
 dataset:
   version: "hcmai2026_v1"
-  root: "artifacts/frame_store"
+  # Runtime asset root. Canonical image_path values point to data/keyframes/.
+  root: "data"
   frames_path: "artifacts/frame_store/frames.parquet"
   enrichment:
     caption_path: "artifacts/enrichment/caption/frame_enrichment.parquet"
@@ -79,7 +80,7 @@ search:
     scene_max_span_ms: 30000
     scene_coherence_ms: 15000
     scene_top_b_per_video: 3
-    scene_top_p_global: 30
+    scene_top_p_global: 100
     scene_semantic_weight: 0.45
     scene_coverage_weight: 0.30
     scene_temporal_weight: 0.15

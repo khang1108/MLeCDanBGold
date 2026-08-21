@@ -6,6 +6,7 @@ from hcmai.common.schemas import (
     FrameEvidence,
     FrameRecord,
     RetrievalSource,
+    SceneCandidate,
     VQAInferenceResponse,
     VQARequest,
 )
@@ -187,6 +188,40 @@ def test_answer_normalize_rank_and_materialize_canonical_identity():
     rows = materialize_submissions(ranked, data, top_k=2)
     assert [row.rank for row in rows] == [1, 2]
     assert {(row.video_id, row.frame_idx) for row in rows} == {("v1", 7), ("v2", 8)}
+
+
+def test_vqa_submission_keeps_selected_frame_id_separate_from_btc_frame_idx():
+    neighbor = frame("f1", "v1", 11, 1_000)
+    selected = frame("f2", "v1", 17, 2_000)
+    data = FakeData([neighbor, selected])
+    scene = SceneCandidate(
+        scene_id="v1:1000-2000",
+        video_id="v1",
+        start_ms=1_000,
+        end_ms=2_000,
+        evidence=(
+            FrameEvidence(frame=neighbor, score=0.8),
+            FrameEvidence(frame=selected, score=0.9),
+        ),
+        final_score=0.9,
+    )
+    candidate = GroundedAnswerCandidate(
+        scene,
+        "f2",
+        "two",
+        "2",
+        0.9,
+        0.9,
+        0.9,
+        0.9,
+        0.9,
+    )
+
+    rows = materialize_submissions([candidate], data, top_k=1)
+
+    assert rows[0].frame_id == "f2"
+    assert rows[0].frame_idx == 17
+    assert rows[0].frame_ids == ["f1", "f2"]
 
 
 def test_invalid_grounding_cannot_win_and_normalization_is_conservative():

@@ -11,6 +11,7 @@ const FrameCard = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const frameId = frame.frame_id;
   const previewUrl = frame.thumbnail_url || frame.frame_url;
   const hasScore = Number.isFinite(frame.scores?.final);
   const hasTimestamp = Number.isFinite(frame.timestamp_ms);
@@ -69,7 +70,7 @@ const FrameCard = ({
         {previewUrl ? (
           <img
             src={previewUrl}
-            alt={`Frame ${frame.frame_id}`}
+            alt={`Frame ${frameId}`}
             className="frame-image"
             loading="lazy"
           />

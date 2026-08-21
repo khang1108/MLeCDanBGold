@@ -1,6 +1,6 @@
 from typing import cast
 
-from hcmai.common.config import SearchConfig
+from hcmai.common.config import ProgressiveSearchConfig, SearchConfig
 from hcmai.common.schemas import (
     FrameRecord,
     RetrievalCandidate,
@@ -90,3 +90,78 @@ def test_golden_kis_path_searches_original_query_and_preserves_identity():
     ]
     assert len(retrieval.calls) == 2
     assert retrieval.calls[0][0] == "red bus 7"
+
+
+class ManyFramesData:
+    """Canonical fixture with enough independent scenes to exercise top-k=100."""
+
+    def get_frame(self, frame_id):
+        index = int(frame_id.removeprefix("frame-"))
+        return FrameRecord(
+            frame_id=frame_id,
+            video_id=f"video-{index}",
+            frame_idx=index,
+            timestamp_ms=index * 10_000,
+            image_path=f"{frame_id}.jpg",
+            width=640,
+            height=360,
+        )
+
+    def get_evidence(self, frame_id, source):
+        del frame_id, source
+        return None
+
+
+class ManyFramesRetrieval:
+    """Return one relevant frame per video for the temporal fixture."""
+
+    def search(self, query, top_k, filters=None, query_type=None):
+        del query, filters, query_type
+        return RetrievalResult(
+            candidates=[
+                RetrievalCandidate(
+                    frame_id=f"frame-{index}",
+                    source_scores={RetrievalSource.VISUAL: 0.9},
+                    final_score=0.9,
+                )
+                for index in range(min(top_k, 100))
+            ]
+        )
+
+
+def test_kis_top_k_controls_materialized_result_count() -> None:
+    """The public top-k controls output size after temporal preparation."""
+
+    data = cast(DataService, ManyFramesData())
+    retrieval = cast(RetrievalService, ManyFramesRetrieval())
+    config = SearchConfig(
+        candidate_count=100,
+        rerank_count=0,
+        progressive=ProgressiveSearchConfig(
+            candidate_pool_size=100,
+            global_quota=100,
+            scene_top_b_per_video=1,
+        ),
+    )
+    temporal_core = TemporalEvidenceCore(data, retrieval, config)
+    pipeline = KISPipeline(
+        TaskType.KIS,
+        data,
+        retrieval,
+        config,
+        temporal_core,
+    )
+
+    response_20 = pipeline.execute(SearchRequest(query="many frames", top_k=20))
+    response_100 = pipeline.execute(SearchRequest(
+        query="many frames",
+        top_k=100,
+        search_id=response_20.search_id,
+    ))
+
+    assert response_20.top_k == 20
+    assert response_20.total_results == 20
+    assert len(response_20.results) == 20
+    assert response_100.top_k == 100
+    assert response_100.total_results == 100
+    assert len(response_100.results) == 100

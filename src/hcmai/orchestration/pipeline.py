@@ -28,6 +28,7 @@ from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.retrieval.reranking.pipeline import RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.common.observability import METRICS
+from hcmai.common.utils.video import official_frame_idx
 from hcmai.temporal import TemporalEvidenceCore
 from hcmai.pipelines.trake import TRAKESettings
 
@@ -103,11 +104,12 @@ class SearchService:
         """Build the official submission identity for one canonical frame."""
 
         frame = self.get_frame(frame_id)
+        frame_idx = official_frame_idx(frame)
         return SubmissionResult(
             frame_id=frame.frame_id,
             video_id=frame.video_id,
-            frame_idx=frame.frame_idx,
-            submission_code=f"{frame.video_id},{frame.frame_idx}",
+            frame_idx=frame_idx,
+            submission_code=f"{frame.video_id},{frame_idx}",
         )
 
     def health(self, startup_messages: Sequence[str] = ()) -> dict[str, Any]:
@@ -246,6 +248,7 @@ class SearchService:
                 self.retrieval,
                 self.config,
                 temporal_core,
+                reranking=self.reranking,
             )
             for task_type in task_types
         ]

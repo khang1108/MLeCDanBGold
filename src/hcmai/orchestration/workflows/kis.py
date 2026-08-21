@@ -14,6 +14,8 @@ from hcmai.common.schemas import (
     RetrievalTrace,
     SearchRequest,
     SearchResponse,
+    StageStatus,
+    StageTrace,
     TaskRequest,
     TaskType,
 )
@@ -25,6 +27,7 @@ from hcmai.orchestration.workflows.base import (
     TaskPipelineRequestError,
 )
 from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.reranking.pipeline import RerankingError, RerankingService
 from hcmai.temporal import TemporalEvidenceCore
 
 logger = get_logger(__name__)
@@ -50,6 +53,7 @@ class KISPipeline:
         retrieval: RetrievalService | None,
         config: SearchConfig,
         temporal_core: TemporalEvidenceCore | None = None,
+        reranking: RerankingService | None = None,
     ) -> None:
         """Initialize the KIS head and its shared localization dependency."""
 
@@ -60,6 +64,7 @@ class KISPipeline:
         self.retrieval = retrieval
         self.config = config
         self.temporal_core = temporal_core
+        self.reranking = reranking
         self.materializer = SearchMaterializer(data) if data is not None else None
 
     @property
@@ -130,6 +135,31 @@ class KISPipeline:
             warnings=list(progressive.warnings),
             trace=progressive.trace,
             time_to_first_candidate_ms=progressive.time_to_first_candidate_ms,
+        )
+
+        candidates, reranking_trace, reranking_warnings = self._rerank(
+            request.query,
+            candidates,
+            request_id_value,
+            request.query_type,
+        )
+        retrieval_result = retrieval_result.model_copy(
+            update={
+                "candidates": candidates,
+                "warnings": [
+                    *retrieval_result.warnings,
+                    *reranking_warnings,
+                ],
+                "trace": (
+                    retrieval_result.trace.merged(
+                        RetrievalTrace(
+                            stages={reranking_trace.stage: reranking_trace}
+                        )
+                    )
+                    if reranking_trace is not None
+                    else retrieval_result.trace
+                ),
+            }
         )
 
         materialization_started = perf_counter()
@@ -208,6 +238,109 @@ class KISPipeline:
         )
         return response
 
+    def _rerank(
+        self,
+        query: str,
+        candidates: list[RetrievalCandidate],
+        request_id_value: str,
+        task_type: TaskType,
+    ) -> tuple[list[RetrievalCandidate], StageTrace | None, list[str]]:
+        """Apply bounded visual reranking while preserving temporal fallback.
+
+        Temporal localization remains the source of the candidate pool. The
+        reranker may only score and reorder that bounded pool; it cannot create
+        or rewrite canonical frame identities. A configured optional reranker
+        failure therefore returns the original scene order with a warning.
+        """
+
+        if self.reranking is None:
+            logger.info(
+                "[%s] reranking skipped reason=not_configured",
+                request_id_value,
+            )
+            return candidates, None, []
+
+        if self.config.rerank_count <= 0:
+            skipped = StageTimer(PipelineStage.RERANK.value).finish(
+                status=StageStatus.SKIPPED,
+                attempt_count=0,
+                input_count=len(candidates),
+                output_count=len(candidates),
+                backend=_reranker_backend(self.reranking),
+            )
+            log_stage(
+                logger,
+                request_id=request_id_value,
+                task_type=task_type,
+                trace=skipped,
+            )
+            logger.info(
+                "[%s] reranking skipped reason=disabled",
+                request_id_value,
+            )
+            return candidates, skipped, []
+
+        depth = min(self.config.rerank_count, len(candidates))
+        reranking_timer = StageTimer(PipelineStage.RERANK.value)
+        logger.info(
+            "[%s] reranking started candidates=%d",
+            request_id_value,
+            depth,
+        )
+        try:
+            ranked = list(self.reranking.rerank(query, candidates[:depth]))
+        except RerankingError as error:
+            cause = error.__cause__
+            reranking_trace = reranking_timer.finish(
+                status=StageStatus.PARTIAL,
+                error_category=error.category,
+                input_count=depth,
+                output_count=len(candidates),
+                backend=_reranker_backend(self.reranking),
+                fallback_used=True,
+            )
+            log_stage(
+                logger,
+                request_id=request_id_value,
+                task_type=task_type,
+                trace=reranking_trace,
+            )
+            logger.warning(
+                "[%s] reranking fallback category=%s candidates=%d "
+                "cause_type=%s cause=%s",
+                request_id_value,
+                error.category,
+                depth,
+                type(cause).__name__ if cause is not None else "none",
+                cause or "none",
+            )
+            if self.reranking.config.required:
+                raise
+            return (
+                candidates,
+                reranking_trace,
+                [f"reranking fallback ({error.category})"],
+            )
+
+        ranked.extend(candidates[depth:])
+        reranking_trace = reranking_timer.finish(
+            input_count=depth,
+            output_count=len(ranked),
+            backend=_reranker_backend(self.reranking),
+        )
+        log_stage(
+            logger,
+            request_id=request_id_value,
+            task_type=task_type,
+            trace=reranking_trace,
+        )
+        logger.info(
+            "[%s] reranking completed candidates=%d",
+            request_id_value,
+            depth,
+        )
+        return ranked, reranking_trace, []
+
 
 def _representative_candidates(scenes) -> list[RetrievalCandidate]:
     """KIS-only head: select one canonical representative after scene ranking."""
@@ -254,3 +387,10 @@ def _representative_candidates(scenes) -> list[RetrievalCandidate]:
             },
         ))
     return selected
+
+
+def _reranker_backend(reranking: RerankingService) -> str:
+    """Return the concrete adapter name for request-scoped stage telemetry."""
+
+    adapter = getattr(reranking, "adapter", reranking)
+    return type(adapter).__name__

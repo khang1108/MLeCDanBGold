@@ -7,7 +7,11 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, Literal, cast
 
-from hcmai.common.config import AppConfig
+from hcmai.common.config import (
+    AppConfig,
+    resolve_dataset_root,
+    resolve_repository_path,
+)
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
@@ -39,13 +43,20 @@ def load_search_service(messages: list[str]) -> SearchService:
             f"got {profile_value!r}"
         )
     profile = cast(RetrievalProfile, profile_value)
-    metadata_path = Path(os.getenv(
-        "HCMAI_METADATA_PATH", str(settings.dataset.frames_path)
-    ))
-    dataset_root = Path(os.getenv(
+    metadata_path = _runtime_path(
+        "HCMAI_METADATA_PATH", settings.dataset.frames_path
+    )
+    configured_dataset_root = os.getenv(
         "HCMAI_DATASET_ROOT", str(settings.dataset.root)
-    ))
-    index_dir = Path(os.getenv("HCMAI_INDEX_PATH", str(settings.index.path)))
+    )
+    dataset_root = resolve_dataset_root(configured_dataset_root)
+    configured_dataset_path = resolve_repository_path(configured_dataset_root)
+    if dataset_root != configured_dataset_path:
+        messages.append(
+            "Migrated legacy HCMAI_DATASET_ROOT from "
+            f"{configured_dataset_path} to {dataset_root}"
+        )
+    index_dir = _runtime_path("HCMAI_INDEX_PATH", settings.index.path)
     data = _load_data(
         settings,
         metadata_path,
@@ -85,17 +96,27 @@ def load_search_service(messages: list[str]) -> SearchService:
 
 
 def _load_app_config() -> AppConfig:
-    path = Path(os.getenv("HCMAI_CONFIG_PATH", "configs/baseline.yaml"))
+    path = resolve_repository_path(
+        os.getenv("HCMAI_CONFIG_PATH", "configs/baseline.yaml")
+    )
     if not path.is_file():
         raise FileNotFoundError(f"Config not found at {path}")
     return AppConfig.from_yaml(path)
 
 
 def _load_model_config() -> LLMServiceConfig:
-    path = Path(os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml"))
+    path = resolve_repository_path(
+        os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml")
+    )
     if not path.is_file():
         raise FileNotFoundError(f"Model config not found at {path}")
     return LLMServiceConfig.from_yaml(path)
+
+
+def _runtime_path(environment_name: str, default: str | Path) -> Path:
+    """Resolve an environment override or config path from repository root."""
+
+    return resolve_repository_path(os.getenv(environment_name, str(default)))
 
 
 def _load_remote_llm(
@@ -149,7 +170,23 @@ def _load_data(
             dataset_root,
             messages,
         )
-    logger.info("DataService loaded path=%s frames=%d", metadata_path, len(data))
+    asset_status = data.frame_asset_status()
+    logger.info(
+        "DataService loaded path=%s dataset_root=%s frames=%d "
+        "frame_assets_ready=%s checked=%d missing=%d",
+        metadata_path,
+        dataset_root,
+        len(data),
+        asset_status.ready,
+        asset_status.checked,
+        asset_status.missing,
+    )
+    if not asset_status.ready:
+        messages.append(
+            "Frame assets unavailable under "
+            f"{dataset_root}: checked={asset_status.checked} "
+            f"missing={asset_status.missing}"
+        )
     return data
 
 
@@ -160,12 +197,17 @@ def _load_legacy_evidence(
 ) -> None:
     """Attach rollback specialist stores without changing legacy semantics."""
 
-    paths = {
+    configured_paths = {
         RetrievalSource.CAPTION: settings.dataset.enrichment.caption_path,
         RetrievalSource.OCR: settings.dataset.enrichment.ocr_path,
         RetrievalSource.ASR: settings.dataset.enrichment.asr_path,
     }
-    for source, path in paths.items():
+    for source, configured_path in configured_paths.items():
+        path = (
+            resolve_repository_path(configured_path)
+            if configured_path is not None
+            else None
+        )
         if path is None:
             continue
         if not path.is_file() or path.stat().st_size == 0:
@@ -194,7 +236,12 @@ def _load_fast_track_data(
     store from the other evidence family.
     """
 
-    context_path = settings.dataset.enrichment.context_path
+    configured_context_path = settings.dataset.enrichment.context_path
+    context_path = (
+        resolve_repository_path(configured_context_path)
+        if configured_context_path is not None
+        else None
+    )
     if not _typed_artifact_available(context_path, allow_directory=False):
         messages.append(f"CONTEXT artifact not available at {context_path}")
     else:
@@ -212,7 +259,12 @@ def _load_fast_track_data(
                 f"{type(error).__name__}: {error}"
             )
 
-    transcript_path = settings.dataset.enrichment.transcripts_path
+    configured_transcript_path = settings.dataset.enrichment.transcripts_path
+    transcript_path = (
+        resolve_repository_path(configured_transcript_path)
+        if configured_transcript_path is not None
+        else None
+    )
     if not _typed_artifact_available(transcript_path, allow_directory=True):
         messages.append(
             f"ASR transcript artifact not available at {transcript_path}"
@@ -373,12 +425,12 @@ def _load_fast_track_retrieval(
         )
         return None
 
-    context_path = Path(os.getenv(
-        "HCMAI_CONTEXT_INDEX_PATH", str(settings.index.context_path)
-    ))
-    asr_segment_path = Path(os.getenv(
-        "HCMAI_ASR_SEGMENT_INDEX_PATH", str(settings.index.asr_segment_path)
-    ))
+    context_path = _runtime_path(
+        "HCMAI_CONTEXT_INDEX_PATH", settings.index.context_path
+    )
+    asr_segment_path = _runtime_path(
+        "HCMAI_ASR_SEGMENT_INDEX_PATH", settings.index.asr_segment_path
+    )
     encoder_config = models.resolved_evidence_embedding
 
     context = _load_fast_track_index(
@@ -560,15 +612,15 @@ def _load_text_indexes(
 
 def _text_index_paths(settings: AppConfig) -> dict[RetrievalSource, Path]:
     return {
-        RetrievalSource.CAPTION: Path(os.getenv(
-            "HCMAI_CAPTION_INDEX_PATH", str(settings.index.caption_path)
-        )),
-        RetrievalSource.OCR: Path(os.getenv(
-            "HCMAI_OCR_INDEX_PATH", str(settings.index.ocr_path)
-        )),
-        RetrievalSource.ASR: Path(os.getenv(
-            "HCMAI_ASR_INDEX_PATH", str(settings.index.asr_path)
-        )),
+        RetrievalSource.CAPTION: _runtime_path(
+            "HCMAI_CAPTION_INDEX_PATH", settings.index.caption_path
+        ),
+        RetrievalSource.OCR: _runtime_path(
+            "HCMAI_OCR_INDEX_PATH", settings.index.ocr_path
+        ),
+        RetrievalSource.ASR: _runtime_path(
+            "HCMAI_ASR_INDEX_PATH", settings.index.asr_path
+        ),
     }
 
 

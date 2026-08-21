@@ -61,6 +61,8 @@ def _validate_source_columns(frames: pd.DataFrame, source_path: Path) -> None:
 
 
 def _resolve_image_path(data_root: Path, image_path: object) -> str:
+    """Return a portable path relative to the canonical ``data`` root."""
+
     if (
         image_path is None
         or image_path is pd.NA
@@ -73,7 +75,12 @@ def _resolve_image_path(data_root: Path, image_path: object) -> str:
     normalized = str(image_path).strip()
     if not normalized:
         raise ValueError("image_path must not be blank")
-    return str((data_root / normalized).resolve())
+    root = data_root.expanduser().resolve()
+    source = Path(normalized).expanduser()
+    resolved = source.resolve() if source.is_absolute() else (root / source).resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError("image_path must remain under data_root")
+    return resolved.relative_to(root).as_posix()
 
 
 def _validated_record(values: dict[str, object]) -> FrameRecord:
@@ -178,11 +185,14 @@ def _build_canonical_rows(
     )
 
 
-def _warn_about_missing_images(frames: pd.DataFrame) -> None:
+def _warn_about_missing_images(frames: pd.DataFrame, data_root: Path) -> None:
+    """Report missing images after resolving portable paths under data_root."""
+
+    root = data_root.expanduser().resolve()
     missing_paths = [
         image_path
         for image_path in frames["image_path"]
-        if not Path(str(image_path)).is_file()
+        if not (root / str(image_path)).is_file()
     ]
     if not missing_paths:
         logger.info("All BTC keyframe images exist")
@@ -269,7 +279,7 @@ def import_btc_frame_store(config: BTCIngestionConfig) -> Path:
         source_frames,
         data_root=config.data_root,
     )
-    _warn_about_missing_images(canonical)
+    _warn_about_missing_images(canonical, config.data_root)
 
     video_count = len(set(canonical["video_id"].astype(str).tolist()))
     mapping_video_count = len(set(mapping["video_id"].astype(str).tolist()))
