@@ -22,7 +22,9 @@ const FrameMetadata = ({ frame }) => (
     </div>}
     {Number.isFinite(frame.fps) && <div className="inspector-meta-item">
       <span className="meta-lbl">FPS</span>
-      <span className="meta-val">{frame.fps}</span>
+      <span className="meta-val">
+        {Math.abs(frame.fps - 25) <= Math.abs(frame.fps - 30) ? 25 : 30}
+      </span>
     </div>}
     {Number.isFinite(frame.scores?.final) && <div className="inspector-meta-item">
       <span className="meta-lbl">Final Relevance</span>
