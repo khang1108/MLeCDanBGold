@@ -752,15 +752,27 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
         raise ValueError("Canonical frames and BTC mapping keys do not join completely")
     mapped = _apply_btc_mapping_authority(frames, mapping)
     projected = project_staged_keyframes(mapped, keyframes_root)
+    LOGGER.info(
+        "BTC mapping projection ready rows=%d; validating FrameStore and FrameContext",
+        len(projected),
+    )
 
     data = DataService.load(frames_path, context_path=context_path)
     canonical_ids = set(frames["frame_id"].astype(str))
-    context_ids = {
-        context.frame_id for context in data.iter_frame_contexts()
-    }
+    context_ids: set[str] = set()
+    has_usable_context = False
+    for context in data.iter_frame_contexts():
+        context_ids.add(context.frame_id)
+        if context.context_text is not None and context.context_text.strip():
+            has_usable_context = True
     if not context_ids.issubset(canonical_ids):
         raise ValueError("FrameContext contains non-canonical frame_id values")
-    _require_usable_context_ids(data)
+    if not has_usable_context:
+        raise ValueError("FrameContext artifact contains no usable context_text")
+    LOGGER.info(
+        "FrameContext validation passed rows=%d; loading transcript segments",
+        len(context_ids),
+    )
 
     transcripts = TranscriptStore(transcripts_path)
     segments = tuple(transcripts.iter_records())
@@ -772,6 +784,10 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     if len(set(segment_ids)) != len(segment_ids):
         raise ValueError("Transcript segment_id values must be unique")
     _require_usable_completed_segments(segments)
+    LOGGER.info(
+        "Transcript validation passed segments=%d; preflight checks complete",
+        len(segments),
+    )
 
     duplicate_rows = int(
         frames.duplicated(["video_id", "frame_idx"], keep=False).sum()
