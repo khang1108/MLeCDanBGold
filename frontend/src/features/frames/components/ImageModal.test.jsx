@@ -2,6 +2,9 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import ImageModal from './ImageModal';
 import { getS3VideoUrl } from '../videoSource';
+import { fetchVideoKeyframes } from '../../../api/frames';
+
+jest.mock('../../../api/frames', () => ({ fetchVideoKeyframes: jest.fn() }));
 
 jest.mock('../videoSource', () => ({
   displayVideoId: (videoId) => videoId.split('.').at(-1),
@@ -21,7 +24,10 @@ const frame = {
   scores: { final: 0.9 },
 };
 
-beforeEach(() => getS3VideoUrl.mockResolvedValue('https://signed.example/video.mp4'));
+beforeEach(() => {
+  getS3VideoUrl.mockResolvedValue('https://signed.example/video.mp4');
+  fetchVideoKeyframes.mockResolvedValue([]);
+});
 
 test('loads the S3 video and seeks to the selected frame after metadata loads', async () => {
   render(<ImageModal frame={frame} onClose={jest.fn()} />);
@@ -61,6 +67,21 @@ test('updates playback time without inventing a BTC frame index', async () => {
 
   expect(screen.getByText('Time 12.480 s')).toBeTruthy();
   expect(screen.queryByText('Frame 312')).toBeNull();
+});
+
+test('reports the nearest stored keyframe while the user scrubs', async () => {
+  fetchVideoKeyframes.mockResolvedValue([
+    { frame_id: 'a', frame_idx: 100, timestamp_ms: 4_000 },
+    { frame_id: 'b', frame_idx: 320, timestamp_ms: 12_800 },
+    { frame_id: 'c', frame_idx: 500, timestamp_ms: 20_000 },
+  ]);
+  render(<ImageModal frame={frame} onClose={jest.fn()} />);
+  const video = await screen.findByLabelText('Video for L21_V001');
+
+  Object.defineProperty(video, 'currentTime', { configurable: true, value: 12.48 });
+  fireEvent.timeUpdate(video);
+
+  expect(await screen.findByText('Time 12.480 s · keyframe 320')).toBeTruthy();
 });
 
 test('shows a configuration message instead of requesting the full-size image when video playback is unavailable', async () => {

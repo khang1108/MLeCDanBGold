@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import FrameMetadata from "./FrameMetadata";
 import ScoreBreakdown from "./ScoreBreakdown";
+import { fetchVideoKeyframes } from "../../../api/frames";
 import {
   displayVideoId,
   getS3VideoUrl,
@@ -19,7 +20,18 @@ const ImageModal = ({ frame, onClose }) => {
     [frame.timestamp_ms],
   );
   const [playbackTime, setPlaybackTime] = useState(targetTime);
+  const [keyframes, setKeyframes] = useState([]);
   const videoLabel = displayVideoId(frame.video_id);
+
+  // Scrubbing resolves to a stored keyframe instead of a computed coordinate.
+  const nearestKeyframe = useMemo(() => {
+    if (!keyframes.length || !Number.isFinite(playbackTime)) return null;
+    const playbackMs = playbackTime * 1000;
+    return keyframes.reduce((best, item) => (
+      Math.abs(item.timestamp_ms - playbackMs)
+        < Math.abs(best.timestamp_ms - playbackMs) ? item : best
+    ));
+  }, [keyframes, playbackTime]);
 
   useEffect(() => {
     const closeOnEscape = (event) => event.key === "Escape" && onClose();
@@ -48,6 +60,19 @@ const ImageModal = ({ frame, onClose }) => {
       active = false;
     };
   }, [frame.video_id]);
+
+  useEffect(() => {
+    let active = true;
+    setKeyframes([]);
+    fetchVideoKeyframes(frame.frame_id)
+      .then((items) => {
+        if (active) setKeyframes(items);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [frame.frame_id]);
 
   const updatePlaybackTime = useCallback((currentTime) => {
     const value = Number(currentTime);
@@ -93,6 +118,8 @@ const ImageModal = ({ frame, onClose }) => {
                 {Number.isFinite(playbackTime)
                   ? `Time ${playbackTime.toFixed(3)} s`
                   : 'Time unavailable'}
+                {nearestKeyframe
+                  && ` · keyframe ${nearestKeyframe.frame_idx}`}
               </output>
             </div>
           ) : videoError || targetTime === null ? (

@@ -102,7 +102,7 @@ def create_frames_router(
     )
     async def get_frame_neighbors(
         frame_id: str,
-        window_ms: int = Query(default=5_000, ge=0, le=60_000),
+        window_ms: int = Query(default=5_000, ge=0, le=3_600_000),
     ) -> list[FrameRecord]:
         try:
             return _search_service(service_container).neighbors(
