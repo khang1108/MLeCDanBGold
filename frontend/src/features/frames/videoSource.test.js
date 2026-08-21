@@ -16,13 +16,13 @@ jest.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: jest.fn() }));
 beforeEach(() => getSignedUrl.mockResolvedValue('https://signed.example/video.mp4'));
 
 test('creates a presigned URL for the canonical path-bearing video ID', async () => {
-  await expect(getS3VideoUrl('folder_1.folder2.L21_V001', {
+  await expect(getS3VideoUrl('L21_V001', {
     bucket: 'hcmai-video-bucket',
     region: 'ap-southeast-2',
     accessKeyId: 'access',
     secretAccessKey: 'secret',
   })).resolves.toBe('https://signed.example/video.mp4');
-  expect(s3VideoObjectKey('folder_1.folder2.L21_V001')).toBe('data/folder_1/folder2/L21_V001.mp4');
+  expect(s3VideoObjectKey('L21_V001')).toBe('data/L21/L21_V001.mp4');
 });
 
 test('does not create an S3 URL without complete credentials', async () => {

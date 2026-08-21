@@ -12,7 +12,7 @@ jest.mock('../videoSource', () => ({
 
 const frame = {
   frame_id: 'f1',
-  video_id: 'folder_1.folder2.L21_V001',
+  video_id: 'L21_V001',
   frame_idx: 125,
   fps: 25,
   timestamp_ms: 5_000,

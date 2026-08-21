@@ -28,6 +28,8 @@ export const searchFrames = async ({
   searchId,
   signal,
 }) => {
+
+
   const body = {
     query: query.trim(),
     top_k: topK,
@@ -99,4 +101,11 @@ export const searchTrake = async ({ events, topK, signal }) => {
     throw new Error('TRAKE server returned an invalid response contract');
   }
   return payload;
+};
+
+export const submitCsvFiles = async (files) => {
+  return requestJson('/api/v1/submission', {
+    method: 'POST',
+    body: { files },
+  });
 };

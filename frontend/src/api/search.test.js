@@ -34,7 +34,7 @@ test('posts the canonical standalone search request', async () => {
       body: JSON.stringify({
         query: 'red boat',
         top_k: 20,
-        query_type: 'vkis',
+        query_type: 'kis',
       }),
     }),
   );

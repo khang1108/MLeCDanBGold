@@ -4,7 +4,7 @@ import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
 import GifLoaderOverlay from "./GifLoaderOverlay";
 
-const QUERY_PREFIX = /^\/(kis|vkis)\b\s*/i;
+const QUERY_PREFIX = /^\/(kis)\b\s*/i;
 const SEARCH_ID_KEY = "hcmai.progressive.kis.search_id";
 
 // Standalone competition search workspace with frame results.
@@ -37,7 +37,7 @@ const AdHocSearchWorkspace = ({
       const prefixMatch = trimmed.match(QUERY_PREFIX);
       if (!prefixMatch) {
         setError(
-          "Start your frame query with /kis or /vkis.",
+          "Start your frame query with /kis.",
         );
         return;
       }
@@ -101,6 +101,21 @@ const AdHocSearchWorkspace = ({
     setTopK(20);
   }, [setTopK]);
 
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (
+        event.key.toLowerCase() === 'n' &&
+        event.target.tagName !== 'INPUT' &&
+        event.target.tagName !== 'TEXTAREA'
+      ) {
+        event.preventDefault();
+        handleNewQuestion();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNewQuestion]);
+
   return (
     <div className="adhoc-workspace">
       <form className="adhoc-query-bar" onSubmit={handleSubmit}>
@@ -123,7 +138,7 @@ const AdHocSearchWorkspace = ({
             ref={queryInputRef}
             type="text"
             className="input-text query-input-field"
-            placeholder="Start with /kis or /vkis"
+            placeholder="Start with /kis"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onFocus={onFocusQueryInput}
@@ -138,7 +153,7 @@ const AdHocSearchWorkspace = ({
         >
           {isSearching ? "Searching..." : "Search"}
         </button>
-        <button type="button" className="btn-secondary" onClick={handleNewQuestion}>
+        <button type="button" className="btn-secondary" onClick={handleNewQuestion} title="Shortcut: N">
           New Question
         </button>
       </form>

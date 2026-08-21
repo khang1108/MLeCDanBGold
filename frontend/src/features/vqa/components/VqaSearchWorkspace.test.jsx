@@ -13,7 +13,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
 });
 
-const EVENT_PLACEHOLDER = 'Event query (/tkis, /vkis, /trake)...';
+const EVENT_PLACEHOLDER = 'Event query (/kis, /trake)...';
 const QUESTION_PLACEHOLDER = 'Question (optional for VQA)...';
 
 const submit = (eventDescription, question = '') => {
@@ -74,7 +74,7 @@ test('clicking Search sends both VQA intents and renders grounded answer', async
 test('a question always routes through VQA and strips prefixes', async () => {
   searchVqa.mockResolvedValueOnce({ submissions: [], warnings: [], latency_ms: 12 });
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  submit('/vkis a red vehicle passes', 'What color is it?');
+  submit('/kis a red vehicle passes', 'What color is it?');
 
   await waitFor(() => expect(searchVqa).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -87,8 +87,6 @@ test('a question always routes through VQA and strips prefixes', async () => {
 
 test.each([
   ['/kis a red vehicle passes', 'kis', 'a red vehicle passes'],
-  ['/tkis blue car', 'kis', 'blue car'],
-  ['/vkis green tree', 'vkis', 'green tree'],
 ])('without a question routes %s through frame search', async (
   description,
   queryType,
@@ -171,7 +169,7 @@ test('requires a task prefix when the question is empty', () => {
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
   submit('a red vehicle passes');
   expect(screen.getByRole('alert').textContent).toContain(
-    'must start with /tkis, /vkis, or /trake',
+    'Without a question, Event description must start with /kis or /trake',
   );
   expect(searchFrames).not.toHaveBeenCalled();
   expect(searchVqa).not.toHaveBeenCalled();
@@ -228,7 +226,7 @@ test('task-scoped search IDs never leak from KIS into VQA or TRAKE', async () =>
 });
 
 test('New Question clears every task-scoped progressive ID', () => {
-  const keys = ['kis', 'vkis', 'vqa'].map(progressiveSearchIdKey);
+  const keys = ['kis', 'vqa'].map(progressiveSearchIdKey);
   keys.forEach((key, index) => window.sessionStorage.setItem(key, `search-${index}`));
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: 'New Question' }));

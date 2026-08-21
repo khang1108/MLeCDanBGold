@@ -9,6 +9,7 @@ const FramesBox = ({
   latencyMs,
   warnings = [],
   onFrameClick,
+  onSubmit,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
   const hasLatency = latencyMs !== null && latencyMs !== undefined;
@@ -78,6 +79,7 @@ const FramesBox = ({
                   key={frame.frame_id}
                   frame={frame}
                   onClick={() => onFrameClick(frame)}
+                  onSubmit={onSubmit}
                 />
               ))}
             </div>
