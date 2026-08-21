@@ -633,12 +633,56 @@ def _require_usable_completed_segments(segments: tuple[Any, ...]) -> list[Any]:
     return usable
 
 
+def _apply_btc_mapping_authority(
+    frames: pd.DataFrame,
+    mapping: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return canonical rows with exact organizer coordinates for indexing.
+
+    Some previously published FrameStore bundles contain the right frame
+    identity and submission coordinates but a legacy snapped FPS.  Mapping
+    authority is applied to a copy for the offline projection, while the
+    downloaded source artifact remains untouched and the mismatch is logged.
+    """
+
+    from hcmai.data.ingestion.keyframe_map import join_btc_mapping
+
+    mapped = join_btc_mapping(frames, mapping)
+    comparison = frames[
+        ["frame_id", "frame_idx", "timestamp_ms", "fps"]
+    ].merge(
+        mapped[["frame_id", "frame_idx", "timestamp_ms", "fps"]],
+        on="frame_id",
+        suffixes=("_canonical", "_btc"),
+        validate="one_to_one",
+    )
+    mismatch_counts = {
+        name: int(
+            np.count_nonzero(
+                comparison[f"{name}_canonical"].to_numpy(dtype=dtype)
+                != comparison[f"{name}_btc"].to_numpy(dtype=dtype)
+            )
+        )
+        for name, dtype in (
+            ("frame_idx", np.int64),
+            ("timestamp_ms", np.int64),
+            ("fps", float),
+        )
+    }
+    if any(mismatch_counts.values()):
+        LOGGER.warning(
+            "Canonical FrameStore coordinates differ from BTC mapping; using "
+            "BTC values for indexing: %s",
+            mismatch_counts,
+        )
+    return mapped
+
+
 def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     """Validate canonical identity, mapping, Context lineage, and transcripts."""
 
     from hcmai.common.utils.io import read_json
     from hcmai.data.ingestion.keyframe_map import (
-        join_btc_mapping,
         load_btc_keyframe_map,
     )
     from hcmai.data.pipeline import DataService
@@ -706,34 +750,8 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     )
     if frame_keys != mapping_keys:
         raise ValueError("Canonical frames and BTC mapping keys do not join completely")
-    mapping_source = cast(
-        pd.DataFrame,
-        frames[["frame_id", "video_id", "keyframe_order"]],
-    )
-    mapped = join_btc_mapping(mapping_source, mapping)
-    comparison = frames[
-        ["frame_id", "frame_idx", "timestamp_ms", "fps"]
-    ].merge(
-        mapped[["frame_id", "frame_idx", "timestamp_ms", "fps"]],
-        on="frame_id",
-        suffixes=("_canonical", "_btc"),
-        validate="one_to_one",
-    )
-    coordinate_pairs = (
-        ("frame_idx", np.int64),
-        ("timestamp_ms", np.int64),
-        ("fps", float),
-    )
-    if any(
-        not np.array_equal(
-            comparison[f"{name}_canonical"].to_numpy(dtype=dtype),
-            comparison[f"{name}_btc"].to_numpy(dtype=dtype),
-        )
-        for name, dtype in coordinate_pairs
-    ):
-        raise ValueError("Canonical frame coordinates do not match BTC mapping")
-
-    projected = project_staged_keyframes(frames, keyframes_root)
+    mapped = _apply_btc_mapping_authority(frames, mapping)
+    projected = project_staged_keyframes(mapped, keyframes_root)
 
     data = DataService.load(frames_path, context_path=context_path)
     canonical_ids = set(frames["frame_id"].astype(str))

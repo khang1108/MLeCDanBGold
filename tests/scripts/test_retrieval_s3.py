@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from scripts.retrieval_s3 import download_prefix, publish_retrieval_bundle
@@ -257,3 +258,57 @@ def test_s3_cli_downloads_builds_validates_then_publishes(
         "publish",
         "close",
     ]
+
+
+def test_btc_mapping_authority_replaces_legacy_snapped_fps() -> None:
+    """Use exact BTC FPS in the portable projection without rewriting source data."""
+
+    from scripts import build_retrieval_indexes as workflow
+
+    frames = pd.DataFrame(
+        [
+            {
+                "frame_id": "f1",
+                "video_id": "v1",
+                "keyframe_order": 1,
+                "frame_idx": 10,
+                "timestamp_ms": 400,
+                "fps": 24.0,
+                "image_path": "old/f1.jpg",
+            },
+            {
+                "frame_id": "f2",
+                "video_id": "v1",
+                "keyframe_order": 2,
+                "frame_idx": 20,
+                "timestamp_ms": 800,
+                "fps": 24.0,
+                "image_path": "old/f2.jpg",
+            },
+        ]
+    )
+    mapping = pd.DataFrame(
+        [
+            {
+                "video_id": "v1",
+                "keyframe_order": 1,
+                "pts_time": 0.4,
+                "fps": 25.0,
+                "frame_idx": 10,
+            },
+            {
+                "video_id": "v1",
+                "keyframe_order": 2,
+                "pts_time": 0.8,
+                "fps": 25.0,
+                "frame_idx": 20,
+            },
+        ]
+    )
+
+    mapped = workflow._apply_btc_mapping_authority(frames, mapping)
+
+    assert mapped["fps"].tolist() == [25.0, 25.0]
+    assert mapped["frame_idx"].tolist() == [10, 20]
+    assert mapped["timestamp_ms"].tolist() == [400, 800]
+    assert frames["fps"].tolist() == [24.0, 24.0]
