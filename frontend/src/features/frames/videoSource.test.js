@@ -1,9 +1,8 @@
 import {
   displayVideoId,
-  frameIndexAt,
   getS3VideoUrl,
   s3VideoObjectKey,
-  targetTimeSeconds,
+  timestampSeconds,
 } from './videoSource';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -29,9 +28,9 @@ test('does not create an S3 URL without complete credentials', async () => {
   await expect(getS3VideoUrl('folder.video', { bucket: '', region: 'ap-southeast-2' })).resolves.toBeNull();
 });
 
-test('uses the backend FPS for seeking and current frame display', () => {
-  expect(targetTimeSeconds(125, 25)).toBe(5);
-  expect(frameIndexAt(12.48, 25)).toBe(312);
+test('uses only the canonical timestamp for exact source seeking', () => {
+  expect(timestampSeconds(5_000)).toBe(5);
+  expect(timestampSeconds(undefined)).toBeNull();
 });
 
 test('only displays the leaf video ID', () => {

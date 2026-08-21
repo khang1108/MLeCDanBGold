@@ -100,10 +100,19 @@ def api_app() -> FastAPI:
     return create_app(search_service=service)
 
 
-def request(app: FastAPI, method: str, path: str, **kwargs) -> httpx.Response:
+def request(
+    app: FastAPI,
+    method: str,
+    path: str,
+    *,
+    raise_app_exceptions: bool = True,
+    **kwargs,
+) -> httpx.Response:
     """Send one request through the ASGI boundary without a live server."""
     async def send() -> httpx.Response:
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(
+            app=app, raise_app_exceptions=raise_app_exceptions
+        )
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://testserver",
@@ -115,6 +124,50 @@ def request(app: FastAPI, method: str, path: str, **kwargs) -> httpx.Response:
         return loop.run_until_complete(send())
     finally:
         loop.close()
+
+
+def test_unexpected_errors_keep_cors_headers(api_app: FastAPI) -> None:
+    """Expose a JSON 500 instead of masking backend failures as CORS errors."""
+
+    async def fail_request() -> None:
+        raise RuntimeError("synthetic backend failure")
+
+    api_app.add_api_route("/test/unhandled-error", fail_request, methods=["GET"])
+    response = request(
+        api_app,
+        "GET",
+        "/test/unhandled-error",
+        headers={"Origin": "http://localhost:3000"},
+        raise_app_exceptions=False,
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "http://localhost:3000"
+    )
+
+
+def test_cors_preflight_allows_local_frontend(api_app: FastAPI) -> None:
+    """Allow the CRA development origin to preflight JSON search requests."""
+
+    response = request(
+        api_app,
+        "OPTIONS",
+        "/api/v1/search",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "http://localhost:3000"
+    )
 
 
 def test_health_check_endpoint(api_app: FastAPI) -> None:

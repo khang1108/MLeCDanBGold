@@ -68,10 +68,14 @@ Instance options:
   --tmux-session NAME     Remote tmux session (default: hcmai-deploy).
   --help                  Show this help.
 
-Bootstrap service options (place after --; all default to true):
+Bootstrap service options (place after --; reranker and VQA default to false):
   --caption true|false            Florence-2 frame captioning.
   --ocr true|false                OCR model service.
   --asr true|false                Qwen3-ASR service.
+  --visual-embedding true|false   SigLIP2 image embedding service.
+  --caption-embedding true|false  BGE-M3 text embedding service.
+  --reranker true|false           Qwen3-VL visual reranking (default: false).
+  --vqa true|false                Qwen2.5-VL grounded VQA (default: false).
 
 At least one bootstrap service must remain enabled. Everything after -- is
 forwarded unchanged to deploy_cloudflared_private.sh on the instance.
@@ -82,6 +86,11 @@ Examples:
 
   # Start only caption and OCR.
   llm/launch_thunder_instance.sh --gpu l40 --token "$TOKEN" -- --asr false
+
+  # Start SigLIP/BGE embeddings, Qwen reranking, and grounded VQA.
+  llm/launch_thunder_instance.sh --gpu l40 --token "$TOKEN" -- \
+    --caption false --ocr false --asr false --visual-embedding true \
+    --caption-embedding true --reranker true --vqa true
 EOF
 }
 

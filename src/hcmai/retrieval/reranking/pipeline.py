@@ -145,13 +145,28 @@ class RerankingService:
         prepared: list[tuple[int, Any]] = []
         try:
             for position, candidate in enumerate(copies):
-                frame = self.data.get_frame(candidate.frame_id)
-                if isinstance(self.data, DataService):
-                    image_path = self.data.resolve_frame_asset(frame)
-                else:
-                    path = Path(str(frame.image_path)).expanduser()
-                    image_path = path if path.is_absolute() else self.dataset_root / path
-                prepared.append((position, load_image(image_path, mode="RGB")))
+                asset_reference: object = "<unresolved>"
+                try:
+                    frame = self.data.get_frame(candidate.frame_id)
+                    asset_reference = getattr(frame, "image_path", asset_reference)
+                    if isinstance(self.data, DataService):
+                        image_path = self.data.resolve_frame_asset(frame)
+                    else:
+                        path = Path(str(frame.image_path)).expanduser()
+                        image_path = path if path.is_absolute() else self.dataset_root / path
+                    prepared.append((position, load_image(image_path, mode="RGB")))
+                except Exception as error:
+                    # Keep the public fallback category stable, but retain the
+                    # first failing candidate and root cause in server logs.
+                    logger.warning(
+                        "Reranker image preparation failed frame_id=%s asset=%s "
+                        "error_type=%s error=%s",
+                        candidate.frame_id,
+                        asset_reference,
+                        type(error).__name__,
+                        error,
+                    )
+                    raise
         except Exception:
             for _, image in prepared:
                 image.close()

@@ -42,6 +42,24 @@ def test_resolver_handles_relative_thumbnail_missing_and_escape(tmp_path: Path) 
         resolver.resolve_value("../outside.jpg", require_file=False)
 
 
+def test_resolver_rebases_legacy_absolute_keyframe_path(
+    tmp_path: Path,
+) -> None:
+    """Serve portable artifacts created under a different machine root."""
+
+    dataset_root = tmp_path / "data"
+    image = dataset_root / "keyframes" / "video-1" / "1.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"image")
+    legacy = Path("/old/worker/data/keyframes/video-1/1.jpg")
+
+    resolver = FrameAssetResolver(dataset_root)
+
+    assert resolver.resolve_value(legacy) == image
+    with pytest.raises(FrameAssetOutsideRootError):
+        resolver.resolve_value("/old/worker/other/1.jpg", require_file=False)
+
+
 def test_data_service_reports_real_sample_asset_availability(tmp_path: Path) -> None:
     image = tmp_path / "keyframes" / "video-1" / "1.jpg"
     image.parent.mkdir(parents=True)

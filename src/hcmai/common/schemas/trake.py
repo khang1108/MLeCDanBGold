@@ -22,21 +22,34 @@ class TRAKERequest(ContractModel):
 
 
 class TRAKESubmission(ContractModel):
-    """One same-video row containing one canonical frame per ordered event."""
+    """One same-video row with exact internal frames and BTC coordinates.
+
+    The three frame arrays are aligned by event position. ``frame_ids`` are
+    internal canonical identities; ``frame_idxs`` are the BTC coordinates for
+    submission; ``timestamps_ms`` are used by the UI to seek the exact source
+    moment without treating a non-unique ``frame_idx`` as an internal key.
+    """
 
     rank: int = Field(ge=1, le=100)
 
     video_id: NonEmptyString
     frame_ids: list[NonEmptyString] = Field(min_length=2)
     frame_idxs: list[NonNegativeFrameIndex] = Field(min_length=2)
+    timestamps_ms: list[NonNegativeFrameIndex] = Field(min_length=2)
     fps: float = Field(default=25.0, gt=0)
 
     warnings: list[NonEmptyString] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_frame_sequence(self) -> Self:
-        if len(self.frame_ids) != len(self.frame_idxs):
-            raise ValueError("frame_ids and frame_idxs must have equal lengths")
+        if not (
+            len(self.frame_ids)
+            == len(self.frame_idxs)
+            == len(self.timestamps_ms)
+        ):
+            raise ValueError(
+                "frame_ids, frame_idxs, and timestamps_ms must have equal lengths"
+            )
         if any(
             current < previous
             for previous, current in zip(self.frame_idxs, self.frame_idxs[1:])

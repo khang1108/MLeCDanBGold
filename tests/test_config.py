@@ -3,7 +3,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from hcmai.common.config import AppConfig, TranscriptJobConfig
+from hcmai.common.config import (
+    AppConfig,
+    LEGACY_DATASET_ROOT,
+    REPOSITORY_ROOT,
+    TranscriptJobConfig,
+    resolve_dataset_root,
+    resolve_repository_path,
+)
 from hcmai.common.schemas import RetrievalSource, TaskType, VQABaselineProfile
 from hcmai.data.enrichment.caption.config import CaptionJobConfig
 from hcmai.llm.config import LLMServiceConfig
@@ -12,7 +19,7 @@ from hcmai.llm.config import LLMServiceConfig
 def test_baseline_config_matches_runtime_contract() -> None:
     config = AppConfig.from_yaml("configs/baseline.yaml")
 
-    assert config.dataset.root == Path("artifacts/frame_store")
+    assert config.dataset.root == Path("data")
     assert config.dataset.frames_path == Path("artifacts/frame_store/frames.parquet")
     assert config.dataset.enrichment.caption_path == Path(
         "artifacts/enrichment/caption/frame_enrichment.parquet"
@@ -42,10 +49,33 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.search.candidate_count == 500
     assert config.search.rerank_count == 100
     assert config.search.temporal_window_ms == 3000
+    assert config.search.progressive.scene_top_p_global == 100
     assert config.vqa.default_profile is VQABaselineProfile.LOCALIZER
     assert set(config.vqa.profiles) == set(VQABaselineProfile)
     assert config.vqa.profiles[VQABaselineProfile.SINGLE_FRAME].max_vlm_calls == 1
     assert config.inference.base_url == "http://127.0.0.1:8100"
+
+
+def test_runtime_repository_paths_do_not_depend_on_process_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Give data/ and artifacts/ one meaning for every backend launcher."""
+
+    monkeypatch.chdir(tmp_path)
+
+    assert resolve_repository_path("data") == REPOSITORY_ROOT / "data"
+    assert resolve_repository_path("artifacts/frame_store/frames.parquet") == (
+        REPOSITORY_ROOT / "artifacts/frame_store/frames.parquet"
+    )
+
+
+def test_legacy_frame_store_root_migrates_to_canonical_data_root() -> None:
+    """Keep stale launch environments from looking for images in artifacts."""
+
+    assert resolve_dataset_root("artifacts/frame_store") == REPOSITORY_ROOT / "data"
+    assert resolve_dataset_root(LEGACY_DATASET_ROOT) == REPOSITORY_ROOT / "data"
+    assert resolve_dataset_root("data") == REPOSITORY_ROOT / "data"
 
 
 def test_llm_config_is_the_model_authority() -> None:

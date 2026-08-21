@@ -33,7 +33,8 @@ readiness are isolated.
 
 ## Launch a Thunder instance
 
-All three capabilities default to enabled:
+Caption/OCR/ASR and embedding services default to enabled; reranking and VQA
+are opt-in:
 
 ```bash
 llm/launch_thunder_instance.sh --gpu l40 --token "$TNR_TOKEN" --
@@ -55,7 +56,16 @@ llm/launch_thunder_instance.sh --gpu l40 --token "$TNR_TOKEN" -- \
 llm/launch_thunder_instance.sh --gpu a6000 --token "$TNR_TOKEN" -- \
   --caption false --ocr false --asr false \
   --visual-embedding true --caption-embedding true
+
+# SigLIP + BGE text embeddings + Qwen reranker + grounded VQA
+llm/launch_thunder_instance.sh --gpu l40 --token "$TNR_TOKEN" -- \
+  --caption false --ocr false --asr false --visual-embedding true \
+  --caption-embedding true --reranker true --vqa true
 ```
+
+Keep `visual-embedding` enabled for the online KIS/VKIS backend: its visual
+index is queried with text encoded by SigLIP, even though the HTTP route is
+`/v1/embeddings/text`.
 
 The launcher creates or reuses a Thunder instance, uploads
 `deploy_cloudflared_private.sh`, and starts it in a detached tmux session. The

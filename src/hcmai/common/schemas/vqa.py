@@ -102,12 +102,19 @@ class VQARequest(ContractModel):
 
 
 class VQASubmission(ContractModel):
-    """One ranked official VQA row with grounding and ranking provenance."""
+    """One ranked VQA row with separate internal and official identities.
+
+    ``frame_id`` identifies the exact canonical frame used for the answer and
+    for loading UI assets. ``frame_idx`` is the BTC-provided coordinate used
+    in the competition submission. ``frame_ids`` retains the bounded scene
+    evidence and may contain neighboring frames in addition to ``frame_id``.
+    """
 
     rank: int = Field(ge=1, le=100)
 
     video_id: NonEmptyString
-    frame_idx: NonEmptyString
+    frame_id: NonEmptyString
+    frame_idx: int = Field(ge=0)
 
     fps: float = Field(default=25.0, gt=0)
     frame_ids: list[NonEmptyString] = Field(default_factory=list)
@@ -138,9 +145,10 @@ class VQASubmission(ContractModel):
             and self.temporal_window[1] < self.temporal_window[0]
         ):
             raise ValueError("temporal_window end must not precede its start")
-        frame_id = getattr(self, "frame_id", None)
-        if not self.frame_ids and frame_id:
-            self.frame_ids = [frame_id]
+        if not self.frame_ids:
+            self.frame_ids = [self.frame_id]
+        elif self.frame_id not in self.frame_ids:
+            raise ValueError("frame_id must be included in frame_ids")
         return self
 
 
@@ -150,7 +158,7 @@ class VQARetrievalEvidence(ContractModel):
     rank: int = Field(ge=1, le=100)
     video_id: NonEmptyString
     frame_id: NonEmptyString
-    frame_idx: NonEmptyString
+    frame_idx: int = Field(ge=0)
     
     fps: float = Field(default=25.0, gt=0)
     frame_ids: list[NonEmptyString] = Field(default_factory=list)

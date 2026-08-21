@@ -14,7 +14,7 @@ from hcmai.common.schemas import (
     SearchResult,
     SearchScores,
 )
-from hcmai.common.utils.video import derive_fps, format_video_id
+from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
 from hcmai.data.pipeline import DataService
 
 
@@ -60,13 +60,10 @@ class SearchMaterializer:
             for source, field in fields.items()
         }
 
-        # Calculate frame index from timestamp
         fps = derive_fps(frame)
-        frame_idx = (
-            frame.frame_idx
-            if frame.frame_idx is not None
-            else round(frame.timestamp_ms * fps / 1000.0)
-        )
+        # Keep the BTC mapping separate from the internal frame_id. Never
+        # reconstruct the submission coordinate from timestamp/FPS.
+        frame_idx = official_frame_idx(frame)
 
         # Get frame_ids from metadata
         metadata = candidate.metadata or {}
@@ -82,6 +79,7 @@ class SearchMaterializer:
 
         return SearchResult(
             rank=rank,
+            frame_id=candidate.frame_id,
             frame_ids=frame_ids,
             video_id=format_video_id(
                 frame.video_id, fallback_path=getattr(frame, "image_path", None)

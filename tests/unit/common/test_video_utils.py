@@ -8,7 +8,7 @@ from hcmai.common.schemas import (
     VQARetrievalEvidence,
     VQASubmission,
 )
-from hcmai.common.utils.video import derive_fps, format_video_id
+from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
 
 
 def test_format_video_id_standard_paths() -> None:
@@ -72,9 +72,25 @@ def test_derive_fps() -> None:
     assert derive_fps(frame_with_fps) == 29.97
 
 
+def test_official_frame_idx_uses_btc_coordinate_without_recomputing_from_time() -> None:
+    frame = FrameRecord(
+        frame_id="f1",
+        video_id="v1",
+        frame_idx=7,
+        timestamp_ms=33,
+        image_path="1.jpg",
+        width=100,
+        height=100,
+        fps=30.0,
+    )
+
+    assert official_frame_idx(frame) == 7
+
+
 def test_search_result_streaming_fields() -> None:
     result = SearchResult(
         rank=1,
+        frame_id="L26_V196_001_keyframe_000001",
         frame_ids=["L26_V196_001_keyframe_000001"],
         video_id="L26_b.L26_V196.001",
         frame_idx=150,
@@ -94,6 +110,7 @@ def test_trake_submission_streaming_fields() -> None:
         video_id="L26_b.L26_V196.001",
         frame_ids=["f1", "f2"],
         frame_idxs=[10, 20],
+        timestamps_ms=[400, 800],
         fps=25.0,
     )
     assert submission.video_id == "L26_b.L26_V196.001"
@@ -106,6 +123,7 @@ def test_vqa_submission_streaming_fields() -> None:
     submission = VQASubmission(
         rank=1,
         video_id="L26_b.L26_V196.001",
+        frame_id="f1",
         frame_ids=["f1"],
         frame_idx=25,
         fps=25.0,

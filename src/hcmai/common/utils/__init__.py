@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from .video import derive_fps, format_video_id
+from .video import derive_fps, format_video_id, official_frame_idx
 
-__all__ = ["derive_fps", "format_video_id"]
+__all__ = ["derive_fps", "format_video_id", "official_frame_idx"]

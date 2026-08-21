@@ -47,19 +47,53 @@ class FrameAssetStatus:
 
 
 class FrameAssetResolver:
-    """Resolve relative canonical paths without allowing dataset-root escape."""
+    """Resolve canonical keyframes under one configured dataset root.
+
+    New frame stores keep paths relative to ``dataset_root``. Legacy frame
+    stores may contain an absolute path from the machine that created the
+    Parquet artifact; those paths are safely rebased from their ``keyframes``
+    suffix onto the current ``data/keyframes`` tree.
+    """
 
     def __init__(self, dataset_root: str | Path) -> None:
         self.dataset_root = Path(dataset_root).expanduser().resolve()
 
     def resolve_value(self, value: str | Path, *, require_file: bool = True) -> Path:
         path = Path(value).expanduser()
-        resolved = path.resolve() if path.is_absolute() else (self.dataset_root / path).resolve()
+        resolved = (
+            self._resolve_absolute(path)
+            if path.is_absolute()
+            else (self.dataset_root / path).resolve()
+        )
         if not resolved.is_relative_to(self.dataset_root):
-            raise FrameAssetOutsideRootError("frame asset escapes dataset root")
+            raise FrameAssetOutsideRootError(
+                "frame asset escapes dataset root: "
+                f"source={path} resolved={resolved} "
+                f"dataset_root={self.dataset_root}"
+            )
         if require_file and not resolved.is_file():
-            raise FrameAssetMissingError("frame asset is not available")
+            raise FrameAssetMissingError(
+                "frame asset is not available: "
+                f"source={path} resolved={resolved} "
+                f"dataset_root={self.dataset_root}"
+            )
         return resolved
+
+    def _resolve_absolute(self, path: Path) -> Path:
+        """Rebase a legacy absolute keyframe path without trusting its root."""
+
+        resolved = path.resolve()
+        if resolved.is_relative_to(self.dataset_root):
+            return resolved
+
+        parts = resolved.parts
+        try:
+            keyframes_index = parts.index("keyframes")
+        except ValueError:
+            return resolved
+
+        relative_keyframe = Path(*parts[keyframes_index:])
+        return (self.dataset_root / relative_keyframe).resolve()
 
     def resolve_frame(
         self,

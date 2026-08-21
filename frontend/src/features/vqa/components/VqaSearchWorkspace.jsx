@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { frameAssetUrl, searchFrames, searchTrake, searchVqa } from "../../../api/search";
+import { frameAssetUrl, searchFrames, searchTrake, searchVqa, suggestQueries } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import FrameCard from "../../frames/components/FrameCard";
 import ToolBox from "../../search-controls/components/ToolBox";
+import QuerySuggestionsPanel from "../../search-controls/components/QuerySuggestionsPanel";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 import { displayVideoId } from "../../frames/videoSource";
 import FileSelectionModal from "../../submission/components/FileSelectionModal";
@@ -11,6 +12,7 @@ import { useSubmission } from "../../submission/contexts/SubmissionContext";
 const RETRIEVAL_PREFIX = /^\/(kis)\b\s*/i;
 const ANY_PREFIX = /^\/(vqa|kis|trake)\b\s*/i;
 const TRAKE_PREFIX = /^\/trake\b\s*/i;
+const TRAKE_EVENT_LABEL = /^\s*E(\d+)\s*:\s*(.*)$/i;
 const SESSION_FINGERPRINT_KEY = "hcmai.session.fingerprint";
 const SEARCH_ID_PREFIX = "hcmai.progressive.search_id";
 const PROGRESSIVE_TASKS = ["kis", "vqa"];
@@ -26,11 +28,34 @@ export const parseRetrievalDescription = (description) => {
 
 export const parseTrakeEvents = (description) => {
   if (!TRAKE_PREFIX.test(description)) return null;
-  return description
-    .replace(TRAKE_PREFIX, "")
-    .split(/\s*\|\s*/)
-    .map((event) => event.trim())
-    .filter(Boolean);
+  const body = description.replace(TRAKE_PREFIX, "").trim();
+  if (!body) return [];
+
+  const events = [];
+  let currentEvent = null;
+  let expectedEventNumber = 1;
+
+  for (const line of body.split(/\r?\n/)) {
+    const label = line.match(TRAKE_EVENT_LABEL);
+    if (label) {
+      const eventNumber = Number(label[1]);
+      if (eventNumber !== expectedEventNumber) return [];
+      expectedEventNumber += 1;
+      currentEvent = [];
+      events.push(currentEvent);
+      if (label[2].trim()) currentEvent.push(label[2].trim());
+      continue;
+    }
+
+    if (!currentEvent) {
+      if (line.trim()) return [];
+      continue;
+    }
+    if (line.trim()) currentEvent.push(line.trim());
+  }
+
+  const normalizedEvents = events.map((parts) => parts.join(" ").trim());
+  return normalizedEvents.some((event) => !event) ? [] : normalizedEvents;
 };
 
 const sessionFingerprint = () => {
@@ -53,6 +78,7 @@ export const materializeTrakeFrames = (submission, events) => (
       frame_id: frameId,
       video_id: submission.video_id,
       frame_idx: submission.frame_idxs[eventIndex],
+      timestamp_ms: submission.timestamps_ms?.[eventIndex],
       fps: submission.fps,
       caption: events[eventIndex] || `TRAKE event ${eventIndex + 1}`,
       thumbnail_url: frameAssetUrl(frameId, 'thumbnail'),
@@ -73,7 +99,9 @@ export const groupTrakeFramesByVideo = (submissions, events) => {
     video_id: videoId,
     best_rank: Math.min(...frames.map((frame) => frame.submission_rank)),
     frames: frames.sort((left, right) => (
-      left.frame_idx - right.frame_idx
+      (left.timestamp_ms ?? Number.MAX_SAFE_INTEGER)
+        - (right.timestamp_ms ?? Number.MAX_SAFE_INTEGER)
+      || left.frame_idx - right.frame_idx
       || left.submission_rank - right.submission_rank
       || left.event_index - right.event_index
     )),
@@ -152,7 +180,33 @@ const VqaSearchWorkspace = ({
   const [vqaLatencyMs, setVqaLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState(null);
   const { appendLine } = useSubmission();
+
+  const handleSuggestQuery = useCallback(async () => {
+    if (isSuggesting) return;
+    setIsSuggesting(true);
+    setSuggestError(null);
+    try {
+      const list = await suggestQueries({ count: 5, query: eventDescription });
+      setSuggestions(list || []);
+    } catch (err) {
+      setSuggestError(err.message || 'Failed to fetch query suggestions');
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, [eventDescription, isSuggesting]);
+
+  const handleSelectSuggestion = useCallback((suggestionText) => {
+    const trimmed = (suggestionText || "").trim();
+    const formatted = trimmed.startsWith("/") ? trimmed : `/kis ${trimmed}`;
+    setEventDescription(formatted);
+    if (queryInputRef?.current) {
+      queryInputRef.current.focus();
+    }
+  }, [queryInputRef]);
 
   const handleFrameSubmit = (frame) => {
     const vid = displayVideoId(frame.video_id);
@@ -191,7 +245,7 @@ const VqaSearchWorkspace = ({
     } else if (isTrakeMode) {
       if (events.length < 2) {
         setResultType("trake");
-        setError("TRAKE requires at least two non-empty ordered events separated by -> or new lines.");
+        setError("TRAKE requires at least two ordered events labeled E1:, E2:, ... on separate lines.");
         return;
       }
     } else {
@@ -330,12 +384,13 @@ const VqaSearchWorkspace = ({
               rows={1}
               value={eventDescription}
               onChange={(event) => setEventDescription(event.target.value)}
-              placeholder="Event query (/kis, /trake)..."
+              placeholder="Event query (/kis, /trake E1: ... E2: ... on new lines)..."
               onFocus={onFocusQueryInput}
               onBlur={onBlurQueryInput}
               disabled={isSearching}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                const isTrakeInput = !question.trim() && TRAKE_PREFIX.test(eventDescription);
+                if (event.key === "Enter" && !event.shiftKey && !isTrakeInput) {
                   event.preventDefault();
                   submit(event);
                 }
@@ -365,6 +420,15 @@ const VqaSearchWorkspace = ({
           </button>
           <button type="button" className="btn-secondary" onClick={handleNewQuestion} title="Shortcut: N">
             New Question
+          </button>
+          <button
+            type="button"
+            className="btn-secondary query-suggest-btn"
+            onClick={handleSuggestQuery}
+            disabled={isSuggesting}
+            title="Suggest 5 Queries"
+          >
+            {isSuggesting ? "Suggesting..." : "Suggest Query"}
           </button>
         </div>
       </form>
@@ -411,6 +475,13 @@ const VqaSearchWorkspace = ({
             />
           )}
         </div>
+        <QuerySuggestionsPanel
+          suggestions={suggestions}
+          isLoading={isSuggesting}
+          error={suggestError}
+          onSelectSuggestion={handleSelectSuggestion}
+          onRefresh={handleSuggestQuery}
+        />
       </div>
       <FileSelectionModal isOpen={isFileModalOpen} onClose={() => setIsFileModalOpen(false)} />
     </div>

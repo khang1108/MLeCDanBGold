@@ -1,4 +1,9 @@
-import { frameAssetUrl, searchFrames, searchTrake, searchVqa } from './search';
+import {
+  frameAssetUrl,
+  searchFrames,
+  searchTrake,
+  searchVqa,
+} from './search';
 
 const response = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -69,6 +74,40 @@ test('resolves API-relative frame asset URLs', async () => {
     frame_idx: 125,
     fps: 25,
   }));
+});
+
+test('builds thumbnail identity from frame_id instead of frame_idx or server URL', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+    results: [{
+      frame_id: 'internal-frame-7',
+      video_id: 'L21_V001',
+      frame_idx: 900,
+      fps: 30,
+      timestamp_ms: 30_000,
+      thumbnail_url: '/api/v1/frames/900/thumbnail',
+      frame_url: '/api/v1/frames/900/image',
+    }],
+    latency_ms: { total: 1 },
+  }));
+
+  const payload = await searchFrames({ query: 'frame identity', topK: 1 });
+
+  expect(payload.results[0].thumbnail_url).toBe(
+    'http://127.0.0.1:8000/api/v1/frames/internal-frame-7/thumbnail',
+  );
+  expect(payload.results[0].frame_url).toBe(
+    'http://127.0.0.1:8000/api/v1/frames/internal-frame-7/image',
+  );
+});
+
+test('rejects a successful frame response without internal frame_id', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+    results: [{ video_id: 'L21_V001', frame_idx: 12 }],
+    latency_ms: { total: 1 },
+  }));
+
+  await expect(searchFrames({ query: 'missing identity', topK: 1 }))
+    .rejects.toThrow('missing canonical frame_id');
 });
 
 test('surfaces the backend error message', async () => {
@@ -164,6 +203,33 @@ test('adds canonical frame asset URLs to VQA submissions', async () => {
   }));
 });
 
+test('uses the selected VQA frame_id instead of the first scene evidence frame', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+    submissions: [{
+      frame_id: 'selected/frame',
+      frame_ids: ['neighbor/frame', 'selected/frame'],
+      video_id: 'L21_V001',
+      frame_idx: 17,
+      fps: 25,
+      timestamp_ms: 2_000,
+    }],
+    latency_ms: 4,
+  }));
+
+  const payload = await searchVqa({
+    eventDescription: 'event',
+    question: 'question',
+    topK: 1,
+  });
+
+  expect(payload.submissions[0].thumbnail_url).toBe(
+    'http://127.0.0.1:8000/api/v1/frames/selected%2Fframe/thumbnail',
+  );
+  expect(payload.submissions[0].frame_url).toBe(
+    'http://127.0.0.1:8000/api/v1/frames/selected%2Fframe/image',
+  );
+});
+
 test('posts explicit ordered events to the dedicated TRAKE route', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     events: ['person enters', 'person leaves'],
@@ -182,7 +248,7 @@ test('posts explicit ordered events to the dedicated TRAKE route', async () => {
       method: 'POST',
       body: JSON.stringify({
         query_type: 'trake',
-        query: 'person enters | person leaves',
+        query: 'E1: person enters\nE2: person leaves',
         events: ['person enters', 'person leaves'],
         top_k: 20,
       }),

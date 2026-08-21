@@ -212,7 +212,7 @@ def test_remote_deployment_uses_noninteractive_ubuntu_ssh(tmp_path: Path) -> Non
 def test_existing_instance_option_preserves_model_arguments() -> None:
     command = (
         f'source "{LAUNCHER}"; '
-        'parse_args --instance 0 -- --ocr true --asr true; '
+        'parse_args --instance 0 -- --ocr true --asr true --vqa true; '
         'printf "%s\\n" "$INSTANCE_ID" "${DEPLOY_ARGS[@]}"'
     )
 
@@ -229,5 +229,7 @@ def test_existing_instance_option_preserves_model_arguments() -> None:
         "--ocr",
         "true",
         "--asr",
+        "true",
+        "--vqa",
         "true",
     ]

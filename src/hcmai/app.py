@@ -10,12 +10,13 @@ from __future__ import annotations
 import os
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from hcmai.common.config import resolve_dataset_root
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.api.routers import (
@@ -52,9 +53,9 @@ def create_app(
         "service": search_service,
         "startup_messages": [],
     }
-    dataset_root = Path(os.getenv(
-        "HCMAI_DATASET_ROOT", "artifacts/frame_store"
-    )).resolve()
+    dataset_root = resolve_dataset_root(
+        os.getenv("HCMAI_DATASET_ROOT", "data")
+    )
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
@@ -89,6 +90,25 @@ def create_app(
     app = FastAPI(
         title="HCMAI 2026 Frame Retrieval API", version="0.1.0", lifespan=lifespan
     )
+
+    @app.middleware("http")
+    async def handle_unexpected_errors(
+        request: Request, call_next: Any
+    ) -> Response:
+        """Return a JSON 500 response so CORS can expose backend failures."""
+        try:
+            return await call_next(request)
+        except Exception:
+            logger.exception(
+                "Unhandled backend request error method=%s path=%s",
+                request.method,
+                request.url.path,
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error"},
+            )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[

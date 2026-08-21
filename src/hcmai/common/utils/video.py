@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from numbers import Integral
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -125,3 +126,18 @@ def derive_fps(frame: Any, default_fps: float = 25.0) -> float:
         return float(fps)
 
     return default_fps
+
+
+def official_frame_idx(frame: Any) -> int:
+    """Return the exact BTC submission coordinate for a canonical frame.
+
+    ``frame_idx`` is loaded from the organizer's BTC keyframe mapping. It is
+    deliberately not derived from ``timestamp_ms`` and FPS: multiple internal
+    frames may share one official coordinate, while ``frame_id`` and the
+    timestamp still identify the exact frame used for retrieval and display.
+    """
+
+    value = getattr(frame, "frame_idx", None)
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+        raise ValueError("canonical frame is missing a valid BTC frame_idx")
+    return int(value)

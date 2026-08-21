@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from hcmai.common.schemas import RetrievalSource, VQASubmission
-from hcmai.common.utils.video import derive_fps, format_video_id
+from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
 from ..domain.models import GroundedAnswerCandidate
 from ..domain.ports import SubmissionData
 
@@ -38,14 +38,13 @@ def materialize_submissions(
             else [frame.frame_id, *scene_frame_ids]
         )
         fps = derive_fps(frame)
-        frame_idx = (
-            frame.frame_idx
-            if frame.frame_idx is not None
-            else round(frame.timestamp_ms * fps / 1000.0)
-        )
+        # ``frame_id`` selects the exact internal answer frame. ``frame_idx``
+        # is copied from the BTC map for the official submission row.
+        frame_idx = official_frame_idx(frame)
         rows.append(VQASubmission(
             rank=len(rows) + 1,
             video_id=format_video_id(frame.video_id, fallback_path=frame.image_path),
+            frame_id=frame.frame_id,
             frame_ids=frame_ids,
             frame_idx=frame_idx,
             fps=fps,

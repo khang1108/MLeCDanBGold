@@ -84,20 +84,20 @@ video/frame/answer thay cho backend.
 
 ### Public object boundaries
 
-| Stage | Input | Output | Ý nghĩa |
-| --- | --- | --- | --- |
-| HTTP validation | JSON | `TaskRequest` | Request đã được validate theo task |
-| Retrieval | query text | `RetrievalResult` | Frame candidates, provenance, trace, warning |
-| Evidence adaptation | `RetrievalCandidate` | `FrameEvidence` | Gắn canonical frame và query-unit score |
-| Temporal localization | cumulative hints | `SceneCandidate[]` | Các scene cùng video, có time range rõ ràng |
-| KIS head | ranked scenes | `SearchResponse` | Một representative frame cho mỗi scene |
-| VQA reasoning | scene + question | `GroundedAnswerCandidate[]` | Answer được ground vào một frame đã cung cấp |
-| VQA output | ranked answers | `VQASubmission[]` | Canonical video/frame/answer rows |
-| Temporal planning | task hints/events | `TemporalQueryPlan` | Chọn explicit `progressive_scene` hoặc `ordered_path` |
-| TRAKE alignment | `VideoEventScores[]` | `OrderedPathCandidate[]` | Canonical path: một frame theo thứ tự cho mỗi event |
-| Response composition | task rows + request metadata | `SearchResponse` / `VQAResponse` / `TRAKEResponse` | Ghép public schema trong task pipeline/materializer |
-| HTTP response | validated response schema | endpoint JSON | FastAPI áp dụng đúng `response_model` và serialize |
-| Frontend adapter | endpoint JSON | task workspace data | Kiểm tra shape, resolve asset URL, không tạo competition result |
+| Stage                 | Input                        | Output                                                   | Ý nghĩa                                                          |
+| --------------------- | ---------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| HTTP validation       | JSON                         | `TaskRequest`                                          | Request đã được validate theo task                            |
+| Retrieval             | query text                   | `RetrievalResult`                                      | Frame candidates, provenance, trace, warning                       |
+| Evidence adaptation   | `RetrievalCandidate`       | `FrameEvidence`                                        | Gắn canonical frame và query-unit score                          |
+| Temporal localization | cumulative hints             | `SceneCandidate[]`                                     | Các scene cùng video, có time range rõ ràng                   |
+| KIS head              | ranked scenes                | `SearchResponse`                                       | Một representative frame cho mỗi scene                           |
+| VQA reasoning         | scene + question             | `GroundedAnswerCandidate[]`                            | Answer được ground vào một frame đã cung cấp               |
+| VQA output            | ranked answers               | `VQASubmission[]`                                      | Canonical video/frame/answer rows                                  |
+| Temporal planning     | task hints/events            | `TemporalQueryPlan`                                    | Chọn explicit`progressive_scene` hoặc `ordered_path`         |
+| TRAKE alignment       | `VideoEventScores[]`       | `OrderedPathCandidate[]`                               | Canonical path: một frame theo thứ tự cho mỗi event            |
+| Response composition  | task rows + request metadata | `SearchResponse` / `VQAResponse` / `TRAKEResponse` | Ghép public schema trong task pipeline/materializer               |
+| HTTP response         | validated response schema    | endpoint JSON                                            | FastAPI áp dụng đúng`response_model` và serialize           |
+| Frontend adapter      | endpoint JSON                | task workspace data                                      | Kiểm tra shape, resolve asset URL, không tạo competition result |
 
 ## 2. Canonical identity
 
@@ -495,7 +495,8 @@ flowchart TB
     CORE --> SCENES["ranked SceneCandidate[]"]
     SCENES --> SELECT["representative-frame selection"]
     SELECT --> CAND["RetrievalCandidate[]"]
-    CAND --> MATERIALIZE["SearchMaterializer + DataService"]
+    CAND --> RERANK["optional bounded Qwen3-VL reranking"]
+    RERANK --> MATERIALIZE["SearchMaterializer + DataService"]
     MATERIALIZE --> RESPONSE["SearchResponse"]
     RESPONSE --> ROW["video_id, frame_idx"]
 ```
@@ -508,9 +509,12 @@ evidence score cao nhất
 -> frame_idx nhỏ hơn để tie-break
 ```
 
-`final_score` của output candidate là scene score, còn source scores/ranks vẫn
-được giữ để giải thích provenance. Materializer resolve canonical metadata và
-chỉ trả tối đa `top_k` rows.
+Trước reranking, `final_score` của output candidate là scene score. Khi
+reranker được cấu hình và `search.rerank_count > 0`, reranker có thể ghi đè
+`final_score` để reorder bounded representative candidates; source scores/ranks
+và scene metadata vẫn được giữ để giải thích provenance. Reranker không được
+tạo hoặc thay đổi canonical `frame_id`. Materializer resolve canonical metadata
+và chỉ trả tối đa `top_k` rows.
 
 ### 5.2 Legacy architecture — explicit baseline
 
@@ -832,17 +836,17 @@ weight/budget cần ghi cùng experiment config.
 
 ## 11. Current versus developing
 
-| Area | CURRENT | DEVELOPING / cần benchmark |
-| --- | --- | --- |
-| Retrieval fusion | Task-weighted RRF, modality provenance | Query-conditioned modality routing |
-| Progressive state | Transactional, bounded, frozen task/filter/question | Distributed state nếu multi-instance serving cần |
-| Candidate ranking | Normalized multi-hint/evaluation coverage score | Calibration hoặc learned video scorer |
-| Scene assembly | Gap + total-span bounded clustering | Shot-aware clustering / learned boundary model |
-| Relation parser | Conservative explicit patterns | Atomic event and directional relation parsing |
-| KIS output | Scene representative frame | Learned representative-frame selection |
-| VQA evidence | Chronological bounded frames + caption/OCR/ASR | Question-aware visual frame selector |
-| VQA inference | Multi-frame preferred, deterministic single-frame fallback | Confidence calibration and adaptive compute policy |
-| TRAKE | Dense rescoring + exact monotonic DP | Chỉ thay đổi qua task/benchmark riêng |
+| Area              | CURRENT                                                    | DEVELOPING / cần benchmark                        |
+| ----------------- | ---------------------------------------------------------- | -------------------------------------------------- |
+| Retrieval fusion  | Task-weighted RRF, modality provenance                     | Query-conditioned modality routing                 |
+| Progressive state | Transactional, bounded, frozen task/filter/question        | Distributed state nếu multi-instance serving cần |
+| Candidate ranking | Normalized multi-hint/evaluation coverage score            | Calibration hoặc learned video scorer             |
+| Scene assembly    | Gap + total-span bounded clustering                        | Shot-aware clustering / learned boundary model     |
+| Relation parser   | Conservative explicit patterns                             | Atomic event and directional relation parsing      |
+| KIS output        | Scene representative frame                                 | Learned representative-frame selection             |
+| VQA evidence      | Chronological bounded frames + caption/OCR/ASR             | Question-aware visual frame selector               |
+| VQA inference     | Multi-frame preferred, deterministic single-frame fallback | Confidence calibration and adaptive compute policy |
+| TRAKE             | Dense rescoring + exact monotonic DP                       | Chỉ thay đổi qua task/benchmark riêng          |
 
 ## 12. Package map
 

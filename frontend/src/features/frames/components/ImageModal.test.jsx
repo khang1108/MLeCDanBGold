@@ -5,9 +5,10 @@ import { getS3VideoUrl } from '../videoSource';
 
 jest.mock('../videoSource', () => ({
   displayVideoId: (videoId) => videoId.split('.').at(-1),
-  frameIndexAt: (time, fps) => Math.floor(time * fps),
   getS3VideoUrl: jest.fn(),
-  targetTimeSeconds: (frameIdx, fps) => frameIdx / fps,
+  timestampSeconds: (timestampMs) => (
+    Number.isFinite(timestampMs) ? timestampMs / 1000 : null
+  ),
 }));
 
 const frame = {
@@ -32,17 +33,32 @@ test('loads the S3 video and seeks to the selected frame after metadata loads', 
 
   fireEvent.loadedMetadata(video);
   expect(video.currentTime).toBe(5);
-  expect(screen.getByText('Frame 125')).toBeTruthy();
+  expect(screen.getByText('Time 5.000 s')).toBeTruthy();
 });
 
-test('updates the displayed frame index while the video plays', async () => {
+test('prefers canonical timestamp over frame_idx/fps when they identify different moments', async () => {
+  render(<ImageModal frame={{
+    ...frame,
+    frame_idx: 125,
+    fps: 25,
+    timestamp_ms: 5_200,
+  }} onClose={jest.fn()} />);
+
+  const video = await screen.findByLabelText('Video for L21_V001');
+  fireEvent.loadedMetadata(video);
+
+  expect(video.currentTime).toBe(5.2);
+});
+
+test('updates playback time without inventing a BTC frame index', async () => {
   render(<ImageModal frame={frame} onClose={jest.fn()} />);
   const video = await screen.findByLabelText('Video for L21_V001');
 
   Object.defineProperty(video, 'currentTime', { configurable: true, value: 12.48 });
   fireEvent.timeUpdate(video);
 
-  expect(screen.getByText('Frame 312')).toBeTruthy();
+  expect(screen.getByText('Time 12.480 s')).toBeTruthy();
+  expect(screen.queryByText('Frame 312')).toBeNull();
 });
 
 test('shows a configuration message instead of requesting the full-size image when video playback is unavailable', async () => {
@@ -53,7 +69,7 @@ test('shows a configuration message instead of requesting the full-size image wh
   expect(screen.queryByRole('img')).toBeNull();
 });
 
-test('opens a scoreless TRAKE frame without rendering invented retrieval metadata', async () => {
+test('requires canonical timestamp instead of deriving seek time from frame_idx', async () => {
   render(<ImageModal frame={{
     ...frame,
     frame_id: 'trake-frame',
@@ -61,7 +77,8 @@ test('opens a scoreless TRAKE frame without rendering invented retrieval metadat
     timestamp_ms: undefined,
   }} onClose={jest.fn()} />);
 
-  expect(await screen.findByLabelText('Video for L21_V001')).toBeTruthy();
+  expect(await screen.findByText(/missing timestamp_ms/i)).toBeTruthy();
+  expect(screen.queryByLabelText('Video for L21_V001')).toBeNull();
   expect(screen.queryByText('Retrieval Stage Scores')).toBeNull();
   expect(screen.queryByText('Final Relevance')).toBeNull();
   expect(screen.queryByText('Timestamp')).toBeNull();
