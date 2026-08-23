@@ -57,7 +57,7 @@ class KISPipeline:
     ) -> None:
         """Initialize the KIS head and its shared localization dependency."""
 
-        if task_type not in {TaskType.KIS, TaskType.VKIS}:
+        if task_type is not TaskType.KIS:
             raise ValueError(f"KISPipeline cannot handle {task_type.value!r}")
         self._task_type = task_type
         self.data = data
@@ -69,7 +69,7 @@ class KISPipeline:
 
     @property
     def task_type(self) -> TaskType:
-        """Return the concrete KIS-family task handled by this pipeline."""
+        """Return the KIS task handled by this pipeline."""
 
         return self._task_type
 

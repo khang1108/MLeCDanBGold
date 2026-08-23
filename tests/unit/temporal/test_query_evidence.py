@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from hcmai.common.schemas import FrameEvidence, FrameRecord, SceneCandidate, VQARequest
-from hcmai.pipelines.vqa.query.parser import parse_vqa_query
+from hcmai.common.schemas import FrameEvidence, FrameRecord, SceneCandidate
 from hcmai.temporal.state.evidence import EvaluationState, ProgressiveEvidenceState
 from hcmai.temporal.query import SnapshotDiffMode, diff_snapshot
 
@@ -72,16 +71,6 @@ def test_orphaned_matched_evidence_fails_invariant():
     })
     with pytest.raises(ValueError, match="must be evaluated"):
         state.validate()
-
-
-def test_vqa_question_is_not_a_localization_clue():
-    parsed = parse_vqa_query(VQARequest(
-        event_description="Người đàn ông đứng cạnh xe đỏ",
-        question="Biển số xe là gì?",
-    ))
-    assert parsed.retrieval_query == "Người đàn ông đứng cạnh xe đỏ"
-    assert parsed.question == "Biển số xe là gì?"
-    assert parsed.clue_queries == ()
 
 
 def test_evidence_state_can_be_bounded_to_active_videos():

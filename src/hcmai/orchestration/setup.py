@@ -79,7 +79,6 @@ def load_search_service(messages: list[str]) -> SearchService:
         reranking=reranking,
         config=settings.search,
         llm=llm,
-        vqa_config=settings.vqa,
     )
 
 

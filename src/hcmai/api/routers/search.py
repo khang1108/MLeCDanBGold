@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
-from hcmai.common.schemas import SearchRequest, SearchResponse, TaskType
+from hcmai.common.schemas import SearchRequest, SearchResponse
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipeline import (
     SearchPipelineUnavailableError,
@@ -28,11 +28,6 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
     async def search_frames(request: SearchRequest) -> SearchResponse:
         """Validate and delegate one standalone KIS-family search request."""
 
-        if request.query_type is TaskType.VQA:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="query_type 'vqa' must use /api/v1/vqa",
-            )
         service = service_container.get("service")
         if service is None:
             raise HTTPException(

@@ -148,7 +148,7 @@ def test_progressive_hint_budget_is_enforced():
         core.localize("H1 vague H2 distinctive", search_id=first.search_id, filters=None)
 
 
-def test_identical_kis_vqa_hint_history_produces_identical_pre_answer_scenes():
+def test_identical_kis_hint_history_produces_identical_scenes():
     first_core = TemporalEvidenceCore(Data(), Retrieval(), _config())
     second_core = TemporalEvidenceCore(Data(), Retrieval(), _config())
     histories = ["H1 vague", "H1 vague H2 distinctive"]
@@ -166,9 +166,7 @@ def test_identical_kis_vqa_hint_history_produces_identical_pre_answer_scenes():
 def test_all_task_heads_receive_one_shared_temporal_facade():
     service = SearchService(DataService(), RetrievalService(Retrieval()), config=_config())
     kis = service.pipeline_registry.get(TaskType.KIS)
-    vqa = service.pipeline_registry.get(TaskType.VQA)
     trake = service.pipeline_registry.get(TaskType.TRAKE)
-    assert kis.temporal_core is vqa.temporal_core
     assert kis.temporal_core is not None
     assert kis.temporal_core is trake.temporal_core
 
@@ -200,30 +198,22 @@ def test_multi_video_top_k_absence_remains_unknown():
     assert state.evidence.evaluation_state("h1", "target") is EvaluationState.MATCHED
 
 
-def test_progressive_session_rejects_task_filter_and_question_changes():
+def test_progressive_session_rejects_filter_and_context_changes():
     core = TemporalEvidenceCore(Data(), Retrieval(), _config())
     filters = SearchFilters(video_ids=["target"])
     first = core.localize(
         "H1 vague",
         search_id=None,
         filters=filters,
-        task_type=TaskType.VQA,
+        task_type=TaskType.KIS,
         session_fingerprint="question-a",
     )
-    with pytest.raises(ProgressiveStateConflictError, match="belongs to vqa"):
-        core.localize(
-            "H1 vague H2 distinctive",
-            search_id=first.search_id,
-            filters=filters,
-            task_type=TaskType.KIS,
-            session_fingerprint="question-a",
-        )
     with pytest.raises(ProgressiveStateConflictError, match="filters cannot change"):
         core.localize(
             "H1 vague H2 distinctive",
             search_id=first.search_id,
             filters=None,
-            task_type=TaskType.VQA,
+            task_type=TaskType.KIS,
             session_fingerprint="question-a",
         )
     with pytest.raises(ProgressiveStateConflictError, match="context changed"):
@@ -231,7 +221,7 @@ def test_progressive_session_rejects_task_filter_and_question_changes():
             "H1 vague H2 distinctive",
             search_id=first.search_id,
             filters=filters,
-            task_type=TaskType.VQA,
+            task_type=TaskType.KIS,
             session_fingerprint="question-b",
         )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, cast
 
-from hcmai.common.config import SearchConfig, VQAConfig
+from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
     FrameRecord,
     RetrievalSource,
@@ -23,7 +23,6 @@ from hcmai.orchestration.workflows.base import (
 )
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
-from hcmai.pipelines.vqa.pipeline import VQAPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.retrieval.reranking.pipeline import RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -57,7 +56,6 @@ class SearchService:
         reranking: RerankingService | None = None,
         config: SearchConfig | None = None,
         llm: LLMService | None = None,
-        vqa_config: VQAConfig | None = None,
         pipeline_registry: PipelineRegistry | None = None,
     ) -> None:
         """Initialize task pipelines from configured capability services."""
@@ -67,7 +65,6 @@ class SearchService:
         self.reranking = reranking
         self.config = config or SearchConfig()
         self.llm = llm
-        self.vqa_config = vqa_config or VQAConfig()
         self.pipeline_registry = (
             pipeline_registry
             if pipeline_registry is not None
@@ -124,7 +121,7 @@ class SearchService:
             else set()
         )
         task_capabilities = self.pipeline_registry.capability_report(
-            (TaskType.KIS, TaskType.VKIS, TaskType.VQA, TaskType.TRAKE)
+            (TaskType.KIS, TaskType.TRAKE)
         )
         task_capabilities = {
             task_type: registered and data_ready and retrieval_ready
@@ -134,7 +131,6 @@ class SearchService:
         default_remote_capabilities = {
             "embedding": False,
             "reranking": False,
-            "multi_image_vqa": False,
             "structured_parsing": False,
         }
         capability_health = (
@@ -147,6 +143,7 @@ class SearchService:
             if capability_health is not None
             else default_remote_capabilities
         )
+        remote_capabilities.pop("multi_image_vqa", None)
         return {
             "status": "ok",
             "ready": data_ready and retrieval_ready,
@@ -180,7 +177,7 @@ class SearchService:
             "capabilities": {
                 "search": search_ready,
                 "kis": task_capabilities.get(TaskType.KIS.value, False),
-                "vqa": task_capabilities.get(TaskType.VQA.value, False),
+                "trake": task_capabilities.get(TaskType.TRAKE.value, False),
                 "shared_retrieval": retrieval_ready,
                 "remote_inference": remote_capabilities,
                 "frame_assets": asset_status["ready"],
@@ -234,29 +231,15 @@ class SearchService:
             if self.data is not None and self.retrieval is not None
             else None
         )
-        task_types = (TaskType.KIS, TaskType.VKIS)
         pipelines = [
             KISPipeline(
-                task_type,
+                TaskType.KIS,
                 self.data,
                 self.retrieval,
                 self.config,
                 temporal_core,
                 reranking=self.reranking,
             )
-            for task_type in task_types
         ]
-        pipelines.append(
-            cast(
-                Any,
-                VQAPipeline(
-                    self.data,
-                    self.retrieval,
-                    self.llm,
-                    self.vqa_config,
-                    temporal_core,
-                ),
-            )
-        )
         pipelines.append(cast(Any, TRAKEPipeline(temporal_core)))
         return PipelineRegistry(pipelines)

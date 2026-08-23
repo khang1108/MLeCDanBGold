@@ -32,7 +32,7 @@ class ProgressiveStateConflictError(RuntimeError):
 
 @dataclass
 class ProgressiveSearchState:
-    """Committed or proposed state for one progressive KIS/VQA search."""
+    """Committed or proposed state for one progressive KIS search."""
 
     search_id: str
     task_type: TaskType = TaskType.KIS

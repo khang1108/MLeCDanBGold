@@ -90,9 +90,9 @@ def test_register_and_get_pipeline() -> None:
     registry.register(pipeline)
 
     assert registry.get(TaskType.KIS) is pipeline
-    assert registry.capability_report((TaskType.KIS, TaskType.VQA)) == {
+    assert registry.capability_report((TaskType.KIS, TaskType.TRAKE)) == {
         "kis": True,
-        "vqa": False,
+        "trake": False,
     }
 
 
@@ -107,12 +107,10 @@ def test_get_unsupported_task_raises_key_error() -> None:
     registry = PipelineRegistry([StubPipeline(TaskType.KIS)])
 
     with pytest.raises(KeyError):
-        registry.get(TaskType.VQA)
+        registry.get(TaskType.TRAKE)
 
 
-@pytest.mark.parametrize("query_type", [TaskType.KIS, TaskType.VKIS])
 def test_kis_pipeline_preserves_search_response_behavior(
-    query_type: TaskType,
 ) -> None:
     retrieval = Retrieval()
     service = SearchService(
@@ -120,24 +118,24 @@ def test_kis_pipeline_preserves_search_response_behavior(
     )
 
     response = service.search(
-        SearchRequest(query="red bus", query_type=query_type, top_k=5)
+        SearchRequest(query="red bus", query_type=TaskType.KIS, top_k=5)
     )
 
     assert response.query == "red bus"
-    assert response.query_type is query_type
+    assert response.query_type is TaskType.KIS
     assert response.top_k == 5
     assert response.total_results == 1
     assert response.results[0].frame_ids == ["f1"]
     assert response.results[0].video_id == "official-video"
     assert response.results[0].frame_idx == 42
-    assert retrieval.query_types == [query_type]
+    assert retrieval.query_types == [TaskType.KIS]
 
 
 def test_missing_pipeline_maps_to_typed_service_error() -> None:
     service = SearchService(None, None, pipeline_registry=PipelineRegistry())
 
-    with pytest.raises(SearchPipelineUnavailableError, match="vqa"):
-        service.search(SearchRequest(query="question", query_type=TaskType.VQA))
+    with pytest.raises(SearchPipelineUnavailableError, match="kis"):
+        service.search(SearchRequest(query="question", query_type=TaskType.KIS))
 
 
 def test_pipeline_request_error_maps_to_unsupported_task() -> None:
@@ -166,7 +164,7 @@ def test_unexpected_pipeline_value_error_is_not_misclassified() -> None:
 
 
 def test_health_task_availability_is_derived_from_registry() -> None:
-    registry = PipelineRegistry([StubPipeline(TaskType.VQA)])
+    registry = PipelineRegistry([StubPipeline(TaskType.TRAKE)])
     service = SearchService(
         cast(DataService, Data()),
         cast(RetrievalService, Retrieval()),
@@ -175,9 +173,7 @@ def test_health_task_availability_is_derived_from_registry() -> None:
 
     assert service.health()["capabilities"]["query_types"] == {
         "kis": False,
-        "vkis": False,
-        "vqa": True,
-        "trake": False,
+        "trake": True,
     }
 
 
@@ -187,4 +183,11 @@ def test_trake_is_registered_by_default() -> None:
     )
 
     assert service.pipeline_registry.get(TaskType.TRAKE).task_type is TaskType.TRAKE
-    assert service.health()["capabilities"]["query_types"]["trake"] is True
+    assert service.pipeline_registry.capability_report() == {
+        "kis": True,
+        "trake": True,
+    }
+    assert service.health()["capabilities"]["query_types"] == {
+        "kis": True,
+        "trake": True,
+    }

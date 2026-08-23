@@ -1,4 +1,4 @@
-"""Bounded scene clustering and scoring for progressive KIS/VQA evidence."""
+"""Bounded scene clustering and scoring for progressive KIS evidence."""
 
 from __future__ import annotations
 

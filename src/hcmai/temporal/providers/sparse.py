@@ -3,7 +3,7 @@
 Module Overview:
 ----------------
 This module implements the sparse evidence acquisition pipeline used in progressive
-search tasks (KIS and VQA). As hints/clues are revealed sequentially over time
+KIS searches. As hints/clues are revealed sequentially over time
 (Hint 1 -> Hint 2 -> ... -> Hint N), this provider incrementally accumulates frame-level
 evidence across candidate videos.
 

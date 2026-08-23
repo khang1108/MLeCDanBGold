@@ -75,20 +75,24 @@ def test_app_exposes_only_standalone_search_contract() -> None:
     capabilities = health["capabilities"]
     assert capabilities["search"] is True
     assert capabilities["kis"] is True
-    assert capabilities["vqa"] is True
+    assert capabilities["trake"] is True
     assert capabilities["shared_retrieval"] is True
     assert "query_suggestions" not in capabilities
     assert capabilities["frame_assets"] is False
     assert capabilities["query_types"] == {
-        "kis": True, "vkis": True, "vqa": True, "trake": True,
+        "kis": True,
+        "trake": True,
     }
+    assert "vqa" not in capabilities
+    assert "vkis" not in capabilities
     assert capabilities["remote_inference"] == {
         "embedding": False,
         "reranking": False,
-        "multi_image_vqa": False,
         "structured_parsing": False,
     }
     search = request(app, "POST", "/api/v1/search", json={"query": "red car"})
     assert search.status_code == 200
     result = search.json()["results"][0]
     assert result["frame_url"] == f"/api/v1/frames/{FRAME_ID}/image"
+    paths = {getattr(route, "path", None) for route in app.routes}
+    assert "/api/v1/vqa" not in paths

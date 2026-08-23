@@ -78,7 +78,7 @@ class TemporalEvidenceCore:
         ordered_aligner: OrderedPathAligner | None = None,
         trake_settings: TRAKESettings | None = None,
     ) -> None:
-        """Initialize one facade shared by KIS, VQA, and TRAKE task heads."""
+        """Initialize one facade shared by KIS and TRAKE task heads."""
 
         self.data = data
         self.retrieval = retrieval

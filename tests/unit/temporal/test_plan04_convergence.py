@@ -62,7 +62,6 @@ def _ordered_plan() -> TemporalQueryPlan:
     ("task", "mode"),
     [
         (TaskType.KIS, TemporalAlignmentMode.ORDERED_PATH),
-        (TaskType.VQA, TemporalAlignmentMode.ORDERED_PATH),
         (TaskType.TRAKE, TemporalAlignmentMode.PROGRESSIVE_SCENE),
     ],
 )
@@ -291,7 +290,7 @@ class CapturingSceneAligner:
         return ()
 
 
-def test_vqa_question_is_not_present_in_shared_localization_plan() -> None:
+def test_kis_snapshot_is_preserved_in_shared_localization_plan() -> None:
     aligner = CapturingSceneAligner()
     core = TemporalEvidenceCore(
         cast(DataService, object()),
@@ -305,11 +304,9 @@ def test_vqa_question_is_not_present_in_shared_localization_plan() -> None:
         "person standing beside red car",
         search_id=None,
         filters=None,
-        task_type=TaskType.VQA,
-        session_fingerprint="fingerprint-of-license-plate-question",
+        task_type=TaskType.KIS,
     )
 
     assert [unit.text for unit in aligner.plans[0].units] == [
         "person standing beside red car"
     ]
-    assert all("license" not in unit.text for unit in aligner.plans[0].units)

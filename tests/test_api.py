@@ -181,10 +181,26 @@ def test_health_check_endpoint(api_app: FastAPI) -> None:
     assert data["total_frames"] == 1
     assert data["capabilities"]["query_types"] == {
         "kis": True,
-        "vkis": True,
-        "vqa": True,
         "trake": True,
     }
+
+
+def test_uninitialized_health_exposes_only_kis_and_trake() -> None:
+    app = create_app()
+
+    response = request(app, "GET", "/health")
+
+    assert response.status_code == 200
+    capabilities = response.json()["capabilities"]
+    assert capabilities["search"] is False
+    assert capabilities["kis"] is False
+    assert capabilities["trake"] is False
+    assert capabilities["query_types"] == {
+        "kis": False,
+        "trake": False,
+    }
+    assert "vqa" not in capabilities
+    assert "vkis" not in capabilities
 
 
 def test_search_materializes_configured_text_evidence() -> None:
@@ -216,40 +232,39 @@ def test_search_endpoint(api_app: FastAPI) -> None:
     """Test the POST /api/v1/search endpoint."""
     payload = {
         "query": "một người đang đi bộ",
-        "query_type": "vkis",
+        "query_type": "kis",
         "top_k": 5,
     }
     response = request(api_app, "POST", "/api/v1/search", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["query"] == "một người đang đi bộ"
-    assert data["query_type"] == "vkis"
+    assert data["query_type"] == "kis"
     assert data["total_results"] == 1
     assert data["results"][0]["frame_ids"] == ["L21_V001_00000090"]
     assert data["results"][0]["video_id"] == "L21_V001"
     assert data["results"][0]["scores"]["final"] >= 0.95
 
 
-@pytest.mark.parametrize(
-    ("query_type", "expected_status", "expected_detail"),
-    [
-        ("vqa", 422, "must use /api/v1/vqa"),
-    ],
-)
-def test_search_endpoint_routes_or_rejects_each_task_type(
-    api_app: FastAPI,
-    query_type: str,
-    expected_status: int,
-    expected_detail: str,
-) -> None:
+def test_vqa_payload_is_rejected_by_kis_search_schema(api_app: FastAPI) -> None:
     response = request(
         api_app,
         "POST",
         "/api/v1/search",
-        json={"query": "test", "query_type": query_type},
+        json={"query": "test", "query_type": "vqa"},
     )
-    assert response.status_code == expected_status
-    assert expected_detail in response.json()["detail"]
+    assert response.status_code == 422
+    assert "must use /api/v1/vqa" not in str(response.json())
+
+
+def test_vqa_route_is_not_registered(api_app: FastAPI) -> None:
+    response = request(
+        api_app,
+        "POST",
+        "/api/v1/vqa",
+        json={"query": "what is shown?"},
+    )
+    assert response.status_code == 404
 
 
 def test_degraded_service_preserves_unavailable_statuses() -> None:
@@ -259,16 +274,9 @@ def test_degraded_service_preserves_unavailable_statuses() -> None:
         app, "POST", "/api/v1/search", json={"query": "red bus"}
     )
     frame = request(app, "GET", "/api/v1/frames/frame-1")
-    vqa = request(
-        app,
-        "POST",
-        "/api/v1/search",
-        json={"query": "what is shown?", "query_type": "vqa"},
-    )
 
     assert search.status_code == 503
     assert frame.status_code == 503
-    assert vqa.status_code == 422
 
 
 def test_search_endpoint_logs_every_pipeline_stage(
