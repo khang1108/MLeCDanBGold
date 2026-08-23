@@ -57,32 +57,6 @@ export const searchFrames = async ({
   return withAssetUrls(payload);
 };
 
-export const searchVqa = async ({
-  eventDescription,
-  question,
-  topK,
-  searchId,
-  signal,
-}) => {
-  const payload = await requestJson('/api/v1/vqa', {
-    method: 'POST',
-    body: {
-      query_type: 'vqa',
-      event_description: eventDescription.trim(),
-      question: question.trim(),
-      top_k: topK,
-      ...(searchId ? { search_id: searchId } : {}),
-    },
-    signal,
-  });
-  if (!Array.isArray(payload?.submissions)
-      || typeof payload?.latency_ms !== 'number') {
-    throw new Error('VQA server returned an invalid response contract');
-  }
-  payload.submissions = payload.submissions.map(materializeFrameAssets);
-  return payload;
-};
-
 export const searchTrake = async ({ events, topK, signal }) => {
   const orderedEvents = events.map((event) => event.trim()).filter(Boolean);
   if (orderedEvents.length < 2) {

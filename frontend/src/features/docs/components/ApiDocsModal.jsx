@@ -28,15 +28,6 @@ const ENDPOINTS = [
       },
       {
         method: 'POST',
-        path: '/api/v1/vqa',
-        title: 'Video Question Answering',
-        desc: 'Performs multi-frame evidence localization and VLM grounded question answering for natural questions.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/vqa" \\
-  -H "Content-Type: application/json" \\
-  -d '{"event_description": "a person reads a city sign", "question": "Which city is shown?", "top_k": 20}'`,
-      },
-      {
-        method: 'POST',
         path: '/api/v1/trake',
         title: 'TRAKE Sequential Event Alignment',
         desc: 'Aligns an ordered sequence of semantic events across long video timelines.',

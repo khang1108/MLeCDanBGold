@@ -2,7 +2,6 @@ import {
   frameAssetUrl,
   searchFrames,
   searchTrake,
-  searchVqa,
 } from './search';
 
 const response = (payload, status = 200) => ({
@@ -29,7 +28,7 @@ test('posts the canonical standalone search request', async () => {
   await expect(searchFrames({
     query: ' red boat ',
     topK: 20,
-    queryType: 'vkis',
+    queryType: 'kis',
   })).resolves.toEqual(payload);
 
   expect(global.fetch).toHaveBeenCalledWith(
@@ -132,32 +131,6 @@ test('rejects a malformed successful search response', async () => {
   })).rejects.toThrow('invalid response contract');
 });
 
-test('posts the dedicated competition VQA request', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
-    submissions: [],
-    latency_ms: 0,
-  }));
-
-  await searchVqa({
-    eventDescription: ' a person reads a sign ',
-    question: ' what does it say? ',
-    topK: 100,
-  });
-
-  expect(global.fetch).toHaveBeenCalledWith(
-    'http://127.0.0.1:8000/api/v1/vqa',
-    expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({
-        query_type: 'vqa',
-        event_description: 'a person reads a sign',
-        question: 'what does it say?',
-        top_k: 100,
-      }),
-    }),
-  );
-});
-
 test('sends a progressive search ID when resuming', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     results: [], latency_ms: { total: 1 }, search_id: 'search-1',
@@ -172,61 +145,6 @@ test('sends a progressive search ID when resuming', async () => {
         query: 'H1 H2', top_k: 20, query_type: 'kis', search_id: 'search-1',
       }),
     }),
-  );
-});
-
-test('adds canonical frame asset URLs to VQA submissions', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
-    submissions: [{
-      frame_id: 'frame/1',
-      video_id: 'L21_a_b.folder2.L21_V001',
-      frame_idx: 125,
-      fps: 25,
-      caption: 'A person reads a city sign.',
-    }],
-    latency_ms: 4,
-  }));
-
-  const payload = await searchVqa({
-    eventDescription: 'a person reads a sign',
-    question: 'what does it say?',
-    topK: 1,
-  });
-
-  expect(payload.submissions[0]).toEqual(expect.objectContaining({
-    caption: 'A person reads a city sign.',
-    video_id: 'L21_a_b.folder2.L21_V001',
-    frame_idx: 125,
-    fps: 25,
-    thumbnail_url: 'http://127.0.0.1:8000/api/v1/frames/frame%2F1/thumbnail',
-    frame_url: 'http://127.0.0.1:8000/api/v1/frames/frame%2F1/image',
-  }));
-});
-
-test('uses the selected VQA frame_id instead of the first scene evidence frame', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
-    submissions: [{
-      frame_id: 'selected/frame',
-      frame_ids: ['neighbor/frame', 'selected/frame'],
-      video_id: 'L21_V001',
-      frame_idx: 17,
-      fps: 25,
-      timestamp_ms: 2_000,
-    }],
-    latency_ms: 4,
-  }));
-
-  const payload = await searchVqa({
-    eventDescription: 'event',
-    question: 'question',
-    topK: 1,
-  });
-
-  expect(payload.submissions[0].thumbnail_url).toBe(
-    'http://127.0.0.1:8000/api/v1/frames/selected%2Fframe/thumbnail',
-  );
-  expect(payload.submissions[0].frame_url).toBe(
-    'http://127.0.0.1:8000/api/v1/frames/selected%2Fframe/image',
   );
 });
 

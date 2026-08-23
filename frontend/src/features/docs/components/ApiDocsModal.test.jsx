@@ -24,7 +24,6 @@ describe('ApiDocsModal component', () => {
     expect(screen.getByText('/health')).toBeTruthy();
     expect(screen.getByText('Multimodal Frame Retrieval')).toBeTruthy();
     expect(screen.getByText('/api/v1/search')).toBeTruthy();
-    expect(screen.getByText('/api/v1/vqa')).toBeTruthy();
     expect(screen.getByText('/api/v1/trake')).toBeTruthy();
   });
 

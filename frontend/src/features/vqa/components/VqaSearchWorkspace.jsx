@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { frameAssetUrl, searchFrames, searchTrake, searchVqa, suggestQueries } from "../../../api/search";
+import { frameAssetUrl, searchFrames, searchTrake, suggestQueries } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import FrameCard from "../../frames/components/FrameCard";
 import ToolBox from "../../search-controls/components/ToolBox";
@@ -10,12 +10,11 @@ import FileSelectionModal from "../../submission/components/FileSelectionModal";
 import { useSubmission } from "../../submission/contexts/SubmissionContext";
 
 const RETRIEVAL_PREFIX = /^\/(kis)\b\s*/i;
-const ANY_PREFIX = /^\/(vqa|kis|trake)\b\s*/i;
 const TRAKE_PREFIX = /^\/trake\b\s*/i;
 const TRAKE_EVENT_LABEL = /^\s*E(\d+)\s*:\s*(.*)$/i;
 const SESSION_FINGERPRINT_KEY = "hcmai.session.fingerprint";
 const SEARCH_ID_PREFIX = "hcmai.progressive.search_id";
-const PROGRESSIVE_TASKS = ["kis", "vqa"];
+const PROGRESSIVE_TASKS = ["kis"];
 
 export const parseRetrievalDescription = (description) => {
   const match = description.match(RETRIEVAL_PREFIX);
@@ -234,15 +233,17 @@ const VqaSearchWorkspace = ({
     const questionText = question.trim();
     if (!rawEventText || isSearching) return;
 
-    const isVqaMode = Boolean(questionText);
-    const events = isVqaMode ? null : parseTrakeEvents(rawEventText);
+    if (questionText) {
+      setResultType("vqa");
+      setError("VQA search is no longer available. Remove the question and use /kis or /trake.");
+      return;
+    }
+
+    const events = parseTrakeEvents(rawEventText);
     const isTrakeMode = events !== null;
-    let eventTextForSubmit = rawEventText;
     let retrieval = null;
 
-    if (isVqaMode) {
-      eventTextForSubmit = rawEventText.replace(ANY_PREFIX, "").trim();
-    } else if (isTrakeMode) {
+    if (isTrakeMode) {
       if (events.length < 2) {
         setResultType("trake");
         setError("TRAKE requires at least two ordered events labeled E1:, E2:, ... on separate lines.");
@@ -257,7 +258,7 @@ const VqaSearchWorkspace = ({
       }
     }
 
-    const task = isVqaMode ? "vqa" : (isTrakeMode ? "trake" : retrieval.queryType);
+    const task = isTrakeMode ? "trake" : retrieval.queryType;
     const searchKey = task === "trake" ? null : progressiveSearchIdKey(task);
     const searchId = searchKey ? window.sessionStorage.getItem(searchKey) : null;
     requestRef.current?.abort();
@@ -274,15 +275,7 @@ const VqaSearchWorkspace = ({
 
     try {
       let response;
-      if (isVqaMode) {
-        response = await searchVqa({
-          eventDescription: eventTextForSubmit,
-          question: questionText,
-          topK,
-          searchId,
-          signal: controller.signal,
-        });
-      } else if (isTrakeMode) {
+      if (isTrakeMode) {
         response = await searchTrake({ events, topK, signal: controller.signal });
       } else {
         response = await searchFrames({
@@ -297,11 +290,7 @@ const VqaSearchWorkspace = ({
       if (searchKey && response.search_id) {
         window.sessionStorage.setItem(searchKey, response.search_id);
       }
-      if (isVqaMode) {
-        setResultType("vqa");
-        setSubmissions(response.submissions || []);
-        setVqaLatencyMs(response.latency_ms);
-      } else if (isTrakeMode) {
+      if (isTrakeMode) {
         setResultType("trake");
         setSubmissions(response.submissions || []);
         setTrakeEvents(response.events || events);
@@ -319,7 +308,7 @@ const VqaSearchWorkspace = ({
       const resetInstruction = requestError?.status === 409
         ? " Reset this task with New Question before continuing."
         : "";
-      setResultType(isVqaMode ? "vqa" : (isTrakeMode ? "trake" : "retrieval"));
+      setResultType(isTrakeMode ? "trake" : "retrieval");
       setError(`${requestError.message || "Failed to contact search API"}${resetInstruction}`);
     } finally {
       if (requestRef.current === controller) {

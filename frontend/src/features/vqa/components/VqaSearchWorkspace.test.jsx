@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { frameAssetUrl, searchFrames, searchTrake, searchVqa } from '../../../api/search';
+import { frameAssetUrl, searchFrames, searchTrake } from '../../../api/search';
 import VqaSearchWorkspace, {
   parseTrakeEvents,
   progressiveSearchIdKey,
@@ -11,7 +11,6 @@ jest.mock('../../../api/search');
 beforeEach(() => {
   searchFrames.mockReset();
   searchTrake.mockReset();
-  searchVqa.mockReset();
   frameAssetUrl.mockImplementation((frameId, asset) => `http://example.test/${frameId}/${asset}`);
   window.sessionStorage.clear();
 });
@@ -39,61 +38,13 @@ test('parses sequentially labeled TRAKE events and rejects invalid numbering', (
   expect(parseTrakeEvents('/trake first event | second event')).toEqual([]);
 });
 
-test('clicking Search sends both VQA intents and renders grounded answer', async () => {
-  const onFrameClick = jest.fn();
-  searchVqa.mockResolvedValueOnce({
-    submissions: [{
-      rank: 1,
-      video_id: 'L21_a_b.folder2.L21_V001',
-      frame_id: 'frame-2',
-      frame_idx: 81,
-      fps: 25,
-      answer: 'Hồ Chí Minh',
-      normalized_answer: 'hồ chí minh',
-      joint_score: 0.86,
-      timestamp_ms: 3240,
-      caption: 'A person reads a city sign.',
-      thumbnail_url: 'http://example.test/frame-2.jpg',
-    }],
-    warnings: [],
-    latency_ms: 25,
-  });
-
-  render(<VqaSearchWorkspace topK={100} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
-  submit('A person reads a city sign', 'Which city is shown?');
-
-  await waitFor(() => expect(searchVqa).toHaveBeenCalledWith(
-    expect.objectContaining({
-      eventDescription: 'A person reads a city sign',
-      question: 'Which city is shown?',
-      topK: 100,
-    }),
-  ));
-  expect(await screen.findByText('Hồ Chí Minh')).toBeTruthy();
-  const frameImage = screen.getByAltText('Frame frame-2');
-  expect(frameImage.getAttribute('src')).toBe(
-    'http://example.test/frame-2.jpg',
-  );
-  fireEvent.click(frameImage);
-  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
-    video_id: 'L21_a_b.folder2.L21_V001',
-    frame_idx: 81,
-    fps: 25,
-  }));
-});
-
-test('a question always routes through VQA and strips prefixes', async () => {
-  searchVqa.mockResolvedValueOnce({ submissions: [], warnings: [], latency_ms: 12 });
+test('a question stops locally because VQA search is unavailable', () => {
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
   submit('/kis a red vehicle passes', 'What color is it?');
 
-  await waitFor(() => expect(searchVqa).toHaveBeenCalledWith(
-    expect.objectContaining({
-      eventDescription: 'a red vehicle passes',
-      question: 'What color is it?',
-    }),
-  ));
+  expect(screen.getByRole('alert').textContent).toContain('VQA search is no longer available');
   expect(searchFrames).not.toHaveBeenCalled();
+  expect(searchTrake).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -112,7 +63,6 @@ test.each([
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
     expect.objectContaining({ query, queryType, topK: 20 }),
   ));
-  expect(searchVqa).not.toHaveBeenCalled();
   expect(searchTrake).not.toHaveBeenCalled();
 });
 
@@ -156,9 +106,9 @@ test('TRAKE groups clickable event frame cards by video and orders them by frame
     expect.objectContaining({ events: ['person enters', 'person leaves'], topK: 20 }),
   ));
   expect(searchFrames).not.toHaveBeenCalled();
-  expect(await screen.findByRole('heading', { name: 'video-7' })).toBeTruthy();
-  expect(screen.getByRole('heading', { name: 'video-8' })).toBeTruthy();
-  expect(screen.getAllByRole('heading', { level: 3 }).slice(1).map((heading) => heading.textContent))
+  expect(await screen.findByRole('heading', { name: /video-7/ })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: /video-8/ })).toBeTruthy();
+  expect(Array.from(document.querySelectorAll('.trake-video-group h3')).map((heading) => heading.textContent.replace('⬆', '')))
     .toEqual(['video-7', 'video-8']);
   expect(screen.getAllByAltText(/Frame f5|Frame f10|Frame f25|Frame f30/).map((item) => item.alt)).toEqual([
     'Frame f5', 'Frame f10', 'Frame f25', 'Frame f30',
@@ -187,7 +137,6 @@ test('requires a task prefix when the question is empty', () => {
     'Without a question, Event description must start with /kis or /trake',
   );
   expect(searchFrames).not.toHaveBeenCalled();
-  expect(searchVqa).not.toHaveBeenCalled();
 });
 
 test('active KIS results preserve backend fps when the user opens a frame', async () => {
@@ -220,52 +169,10 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   }));
 });
 
-test('task-scoped search IDs never leak from KIS into VQA or TRAKE', async () => {
-  const kisKey = progressiveSearchIdKey('kis');
-  const vqaKey = progressiveSearchIdKey('vqa');
-  window.sessionStorage.setItem(kisKey, 'kis-search-42');
-  window.sessionStorage.setItem(vqaKey, 'vqa-search-9');
-  searchVqa.mockResolvedValueOnce({
-    search_id: 'vqa-search-9', submissions: [], warnings: [], latency_ms: 3,
-  });
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  submit('H1 cumulative clue', 'What is shown?');
-
-  await waitFor(() => expect(searchVqa).toHaveBeenCalledWith(
-    expect.objectContaining({ searchId: 'vqa-search-9' }),
-  ));
-  expect(searchVqa).not.toHaveBeenCalledWith(
-    expect.objectContaining({ searchId: 'kis-search-42' }),
-  );
-  expect(searchTrake).not.toHaveBeenCalled();
-});
-
-test('New Question clears every task-scoped progressive ID', () => {
-  const keys = ['kis', 'vqa'].map(progressiveSearchIdKey);
+test('New Question clears the KIS progressive ID', () => {
+  const keys = ['kis'].map(progressiveSearchIdKey);
   keys.forEach((key, index) => window.sessionStorage.setItem(key, `search-${index}`));
   render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: 'New Question' }));
   keys.forEach((key) => expect(window.sessionStorage.getItem(key)).toBeNull());
-});
-
-test('410 clears only the active task ID and 409 explains how to reset', async () => {
-  const vqaKey = progressiveSearchIdKey('vqa');
-  const kisKey = progressiveSearchIdKey('kis');
-  window.sessionStorage.setItem(vqaKey, 'expired-vqa');
-  window.sessionStorage.setItem(kisKey, 'active-kis');
-  const conflict = new Error('Progressive state conflict');
-  conflict.status = 409;
-  searchVqa.mockRejectedValueOnce(conflict);
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  submit('H1', 'What?');
-  expect((await screen.findByRole('alert')).textContent).toContain('New Question');
-  expect(window.sessionStorage.getItem(vqaKey)).toBe('expired-vqa');
-  expect(window.sessionStorage.getItem(kisKey)).toBe('active-kis');
-
-  const expired = new Error('Progressive state expired');
-  expired.status = 410;
-  searchVqa.mockRejectedValueOnce(expired);
-  submit('H1', 'What?');
-  await waitFor(() => expect(window.sessionStorage.getItem(vqaKey)).toBeNull());
-  expect(window.sessionStorage.getItem(kisKey)).toBe('active-kis');
 });
