@@ -117,6 +117,7 @@ class FakeReferences:
 
 def test_remote_enrichment_and_embedding_adapters_validate_pins() -> None:
     client = FakeClient()
+    assert not hasattr(client.readiness().capabilities, "multi_image_vqa")
     ocr = RemoteOCRAdapter(
         client, OCRConfig(backend="remote", checkpoint="ocr", revision=SHA)
     )

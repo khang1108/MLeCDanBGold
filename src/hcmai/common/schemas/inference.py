@@ -208,7 +208,6 @@ class InferenceCapabilities(ContractModel):
 
     embedding: bool = False
     reranking: bool = False
-    multi_image_vqa: bool = False
     structured_parsing: bool = False
     shot_detection: bool = False
     event_detection: bool = False

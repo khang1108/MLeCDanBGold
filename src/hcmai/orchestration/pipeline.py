@@ -143,7 +143,6 @@ class SearchService:
             if capability_health is not None
             else default_remote_capabilities
         )
-        remote_capabilities.pop("multi_image_vqa", None)
         return {
             "status": "ok",
             "ready": data_ready and retrieval_ready,

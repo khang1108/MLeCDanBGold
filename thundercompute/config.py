@@ -41,14 +41,6 @@ class HostedRerankerConfig(BaseModel):
     max_pixels: int = Field(default=262144, ge=4096)
 
 
-class HostedVQAConfig(BaseModel):
-    checkpoint: str | None = None
-    revision: str | None = None
-    device: str = "cuda"
-    dtype: str = "bfloat16"
-    max_new_tokens: int = Field(default=512, ge=32, le=2048)
-
-
 class LLMServiceConfig(BaseModel):
     """Hosted inference settings plus pinned dense encoder configurations."""
 
@@ -60,9 +52,6 @@ class LLMServiceConfig(BaseModel):
     caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     evidence_embedding: EncoderConfig | None = None
     reranker: HostedRerankerConfig = Field(default_factory=HostedRerankerConfig)
-    vqa_model: HostedVQAConfig = Field(
-        default_factory=HostedVQAConfig
-    )
 
     @property
     def resolved_evidence_embedding(self) -> EncoderConfig:

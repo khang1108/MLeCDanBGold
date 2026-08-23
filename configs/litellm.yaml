@@ -95,20 +95,6 @@ general_settings:
       methods: ["POST"]
       timeout: 300
 
-    - path: "/v1/vqa"
-      target: os.environ/LITELLM_UPSTREAM_VQA_URL
-      auth: false
-      forward_headers: true
-      methods: ["POST"]
-      timeout: 300
-
-    - path: "/v1/vqa/multi"
-      target: os.environ/LITELLM_UPSTREAM_VQA_MULTI_URL
-      auth: false
-      forward_headers: true
-      methods: ["POST"]
-      timeout: 300
-
     -path: "/v1/query-suggestion"
       target: os.environ/LITELLM_UPSTREAM_QUERY_SUGGESTION_URL
       auth: false

@@ -89,7 +89,7 @@ def test_deterministic_client_error_and_non_idempotent_call_do_not_retry() -> No
     gateway, clock = _gateway(handler)
 
     with pytest.raises(InferenceGatewayError) as caught:
-        gateway.request("POST", "/v1/vqa", idempotent=True)
+        gateway.request("POST", "/v1/captions", idempotent=True)
 
     assert caught.value.category is FailureCategory.CLIENT_ERROR
     assert caught.value.retryable is False
@@ -226,7 +226,6 @@ def test_capability_discovery_contract_is_preserved() -> None:
             "capabilities": {
                 "embedding": True,
                 "reranking": True,
-                "multi_image_vqa": False,
                 "structured_parsing": True,
             },
         })
@@ -238,7 +237,7 @@ def test_capability_discovery_contract_is_preserved() -> None:
 
     assert readiness.capabilities.embedding is True
     assert readiness.capabilities.reranking is True
-    assert readiness.capabilities.multi_image_vqa is False
+    assert not hasattr(readiness.capabilities, "multi_image_vqa")
     assert client.health()["circuit_state"] == "closed"
 
     system_health = SearchService(None, None, llm=LLMService(client)).health()

@@ -37,6 +37,7 @@ def test_pool_fails_over_to_another_semantically_compatible_client() -> None:
     assert pool.caption([]) is healthy.value
     assert failed.calls == 1
     assert healthy.calls == 1
+    assert not hasattr(pool, "answer_vqa")
 
 
 def test_pool_reports_no_ready_endpoint_without_leaking_provider_detail() -> None:
@@ -46,4 +47,3 @@ def test_pool_reports_no_ready_endpoint_without_leaking_provider_detail() -> Non
     ])
     with pytest.raises(RuntimeError, match="no inference endpoint is ready"):
         pool.readiness()
-

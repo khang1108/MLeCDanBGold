@@ -38,13 +38,6 @@ reranking = [
     "torchvision>=0.23, <1.0",
     "transformers>=4.57.1, <5.0",
 ]
-vqa = [
-    "accelerate>=1.12, <2.0",
-    "qwen-vl-utils>=0.0.14, <0.1",
-    "torch>=2.8, <3.0",
-    "torchvision>=0.23, <1.0",
-    "transformers>=4.57.1, <5.0",
-]
 transcripts = [
     "av>=14, <19",
     "silero-vad>=6.2, <7.0",

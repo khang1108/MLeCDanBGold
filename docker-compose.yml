@@ -18,8 +18,6 @@ services:
       LITELLM_UPSTREAM_ASR_URL: ${LITELLM_UPSTREAM_ASR_URL:-https://api.iamphuckhang.dev/v1/transcripts/asr}
       LITELLM_UPSTREAM_DIARIZATION_URL: ${LITELLM_UPSTREAM_DIARIZATION_URL:-https://api.iamphuckhang.dev/v1/transcripts/diarization}
       LITELLM_UPSTREAM_RERANK_URL: ${LITELLM_UPSTREAM_RERANK_URL:-https://api.iamphuckhang.dev/v1/rerank}
-      LITELLM_UPSTREAM_VQA_URL: ${LITELLM_UPSTREAM_VQA_URL:-https://api.iamphuckhang.dev/v1/vqa}
-      LITELLM_UPSTREAM_VQA_MULTI_URL: ${LITELLM_UPSTREAM_VQA_MULTI_URL:-https://api.iamphuckhang.dev/v1/vqa/multi}
     volumes:
       - ./configs/litellm.yaml:/app/config.yaml:ro
     networks:

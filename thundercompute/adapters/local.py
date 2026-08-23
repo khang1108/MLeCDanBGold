@@ -13,7 +13,6 @@ from hcmai.common.schemas import (
     InferenceCapabilities,
     InferenceReadiness,
     ModelStatus,
-    VQAInferenceEvidence,
 )
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
@@ -21,14 +20,13 @@ from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.models.entities import OCRResult
 from hcmai.data.enrichment.pipeline import EnrichmentService
 from hcmai.common.config import TranscriptJobConfig
-from thundercompute.adapters.vqa import GroundedVQAModel
 from thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.reranking.pipeline import QwenRerankerConfig, RerankingService
 
 
 class LocalAdapter:
     """Tải và quản lý vòng đời của các mô hình Machine Learning chạy trên máy cục bộ (local).
-    Cung cấp các API chuẩn hóa để Inference Service có thể gọi (Embedding, VQA, OCR, Captioning).
+    Cung cấp các API chuẩn hóa để Inference Service có thể gọi (Embedding, OCR, Captioning).
     """
 
     def __init__(
@@ -38,14 +36,12 @@ class LocalAdapter:
         caption_encoder: Any | None = None,
         captioner: Any | None = None,
         reranker: Any | None = None,
-        vqa_model: Any | None = None,
         ocr_adapter: Any | None = None,
         *,
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
         enable_caption_embedding: bool = True,
         enable_reranker: bool = True,
-        enable_vqa: bool = True,
         enable_ocr: bool = False,
         enable_asr: bool = False,
         enable_diarization: bool = False,
@@ -57,7 +53,6 @@ class LocalAdapter:
         self.enable_visual_embedding = enable_visual_embedding
         self.enable_caption_embedding = enable_caption_embedding
         self.enable_reranker = enable_reranker
-        self.enable_vqa = enable_vqa
         self.enable_ocr = enable_ocr
         self.enable_asr = enable_asr
         self.enable_diarization = enable_diarization
@@ -87,11 +82,6 @@ class LocalAdapter:
             if enable_reranker
             else None
         )
-        self.vqa_model = vqa_model or (
-            GroundedVQAModel(config.vqa_model)
-            if enable_vqa
-            else None
-        )
         self.ocr_adapter: Any = ocr_adapter or (
             FlorenceAdapter(OCRConfig(
                 checkpoint=config.caption_generation.model_checkpoint,
@@ -111,12 +101,6 @@ class LocalAdapter:
         enrichment_path = Path(os.getenv("HCMAI_ENRICHMENT_CONFIG", "configs/enrichment.yaml"))
         transcript_config = TranscriptJobConfig.from_yaml(enrichment_path) if enrichment_path.exists() else None
 
-        checkpoint = os.getenv("HCMAI_VQA_MODEL")
-        if checkpoint:
-            vqa_model = config.vqa_model.model_copy(
-                update={"checkpoint": checkpoint}
-            )
-            config = config.model_copy(update={"vqa_model": vqa_model})
         return cls(
             config,
             enable_caption=_env_bool("HCMAI_ENABLE_CAPTION"),
@@ -127,7 +111,6 @@ class LocalAdapter:
                 "HCMAI_ENABLE_CAPTION_EMBEDDING"
             ),
             enable_reranker=_env_bool("HCMAI_ENABLE_RERANKER"),
-            enable_vqa=_env_bool("HCMAI_ENABLE_VQA"),
             enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
             enable_asr=_env_bool("HCMAI_ENABLE_ASR", default=False),
             enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", default=False),
@@ -151,8 +134,6 @@ class LocalAdapter:
             self.caption_encoder._load_model()
         if self.reranker is not None:
             self.reranker._ensure_loaded()
-        if self.vqa_model is not None:
-            self.vqa_model.load()
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
 
@@ -216,33 +197,6 @@ class LocalAdapter:
             raise RuntimeError("reranker model is disabled")
         return list(self.reranker.score_batch(query, images))
 
-    def answer_vqa(
-        self,
-        question: str,
-        image: Image.Image,
-        evidence: VQAInferenceEvidence,
-        scene_context: str = "",
-    ) -> str:
-        if self.vqa_model is None:
-            raise RuntimeError("vision-language model is disabled")
-        return self.vqa_model.answer_vqa(
-            question, image, evidence, scene_context=scene_context
-        )
-
-    def answer_vqa_multi(
-        self,
-        question: str,
-        images: list[Image.Image],
-        frame_ids: list[str],
-        evidence: VQAInferenceEvidence,
-        scene_context: str = "",
-    ) -> dict[str, Any]:
-        if self.vqa_model is None:
-            raise RuntimeError("vision-language model is disabled")
-        return self.vqa_model.answer_vqa_multi(
-            question, images, frame_ids, evidence, scene_context=scene_context
-        )
-
     def readiness(self) -> InferenceReadiness:
         generator_loaded = (
             self.captioner is not None and self.captioner.model is not None
@@ -256,9 +210,6 @@ class LocalAdapter:
         reranker_loaded = (
             self.reranker is not None and self.reranker._base_model is not None
         )
-        vqa_loaded = (
-            self.vqa_model is not None and self.vqa_model.model is not None
-        )
         ocr_loaded = (
             self.ocr_adapter is not None and self.ocr_adapter.model is not None
         )
@@ -270,7 +221,6 @@ class LocalAdapter:
             and (not self.enable_visual_embedding or visual_loaded)
             and (not self.enable_caption_embedding or caption_loaded)
             and (not self.enable_reranker or reranker_loaded)
-            and (not self.enable_vqa or vqa_loaded)
             and (not self.enable_ocr or ocr_loaded)
             and (not self.enable_asr or asr_loaded)
             and (not self.enable_diarization or diarization_loaded),
@@ -307,16 +257,6 @@ class LocalAdapter:
                         else None
                     ),
                 ),
-                "vqa": ModelStatus(
-                    enabled=self.enable_vqa,
-                    loaded=vqa_loaded,
-                    checkpoint=self.config.vqa_model.checkpoint,
-                    revision=(
-                        self.vqa_model.revision
-                        if self.vqa_model is not None
-                        else None
-                    ),
-                ),
                 "ocr": ModelStatus(
                     enabled=self.enable_ocr,
                     loaded=ocr_loaded,
@@ -347,10 +287,6 @@ class LocalAdapter:
             capabilities=InferenceCapabilities(
                 embedding=visual_loaded or caption_loaded,
                 reranking=reranker_loaded,
-                multi_image_vqa=(
-                    vqa_loaded
-                    and bool(getattr(self.vqa_model, "supports_multi_image", False))
-                ),
                 structured_parsing=False,
                 image_embedding=visual_loaded,
                 caption=generator_loaded,
@@ -412,7 +348,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
     A service must opt into every model it owns. This prevents a narrowly
     configured ASR or Caption/OCR process from loading unrelated embedding,
-    reranking, or VQA checkpoints during application startup.
+    reranking checkpoints during application startup.
     """
     value = os.getenv(name, str(default)).strip().lower()
     if value not in {"true", "false"}:

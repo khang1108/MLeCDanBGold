@@ -5,13 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from hcmai.common.config import InferenceConfig
-from thundercompute.config import (
-    HostedVQAConfig,
-    LLMServiceConfig,
-)
+from thundercompute.config import LLMServiceConfig
 
 __all__ = [
-    "HostedVQAConfig",
     "LLMService",
     "LLMServiceConfig",
 ]
@@ -78,7 +74,6 @@ class LLMService:
             return {
                 "embedding": False,
                 "reranking": False,
-                "multi_image_vqa": False,
                 "structured_parsing": False,
             }
         return readiness.capabilities.model_dump()
@@ -105,15 +100,6 @@ class LLMService:
 
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
-
-    def answer_vqa(self, *args: Any, **kwargs: Any) -> Any:
-        return self.adapter.answer_vqa(*args, **kwargs)
-
-    def answer_vqa_multi(self, *args: Any, **kwargs: Any) -> Any:
-        method = getattr(self.adapter, "answer_vqa_multi", None)
-        if method is None:
-            raise RuntimeError("multi-frame VQA is not supported by this provider")
-        return method(*args, **kwargs)
 
     def boundary_scores(self, frames: Any, *, source: str) -> Any:
         return self.adapter.boundary_scores(frames, source=source)

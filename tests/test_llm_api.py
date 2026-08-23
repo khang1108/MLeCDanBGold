@@ -17,7 +17,6 @@ from hcmai.common.schemas import (
     InferenceReadiness,
     ModelStatus,
     TranscriptSegment,
-    VQAInferenceResponse,
 )
 from thundercompute.adapters.http import InferenceClient
 from thundercompute.config import LLMServiceConfig
@@ -112,25 +111,7 @@ class FakeRuntime:
         assert query == "red car"
         return [image.getpixel((0, 0))[0] / 255 for image in images]
 
-    def answer_vqa(self, question, image, evidence, *, scene_context=""):
-        assert question == "What color?"
-        assert evidence.caption == "A red square."
-        assert scene_context == "red square scene"
-        return "red"
 
-    def answer_vqa_multi(
-        self, question, images, frame_ids, evidence, *, scene_context=""
-    ):
-        assert question == "What color?"
-        assert frame_ids == ["f1", "f2"]
-        assert len(images) == 2
-        assert scene_context == "red square scene"
-        return {
-            "answer": "red",
-            "selected_frame_id": "f2",
-            "answerable": True,
-            "confidence": 0.9,
-        }
 def _jpeg(red):
     output = io.BytesIO()
     Image.new("RGB", (2, 2), (red, 0, 0)).save(output, "JPEG")
@@ -169,6 +150,18 @@ def request(app, method, path, **kwargs):
 
 def test_inference_endpoints_preserve_order_and_contracts():
     app = create_llm_app(cast(LLMService, FakeRuntime()))
+    readiness = request(app, "GET", "/ready")
+    assert readiness.status_code == 200
+    assert set(readiness.json()["models"]) == {
+        "visual_embedding",
+        "dino",
+        "ocr",
+        "transnet",
+        "efficientgebd",
+        "asr",
+        "diarization",
+    }
+    assert "multi_image_vqa" not in readiness.json()["capabilities"]
     embedding = request(
         app,
         "POST",
@@ -201,47 +194,8 @@ def test_inference_endpoints_preserve_order_and_contracts():
     assert [item["item_id"] for item in rerank.json()["items"]] == ["a", "b"]
 
     assert request(app, "POST", "/v1/query-suggestions", json={}).status_code == 404
-
-    answered = request(
-        app,
-        "POST",
-        "/v1/vqa",
-        data={
-            "request_id": "q1",
-            "frame_id": "f1",
-            "video_id": "video-1",
-            "scene_context": "red square scene",
-            "question": "What color?",
-            "evidence": json.dumps({"caption": "A red square."}),
-        },
-        files=[("image", ("f1.jpg", _jpeg(200), "image/jpeg"))],
-    )
-    assert answered.status_code == 200
-    assert answered.json()["answer"] == "red"
-    assert answered.json()["frame_ids"] == ["f1"]
-    assert answered.json()["selected_frame_id"] == "f1"
-    assert answered.json()["video_id"] == "video-1"
-
-    multi = request(
-        app,
-        "POST",
-        "/v1/vqa/multi",
-        data={
-            "request_id": "q2",
-            "video_id": "video-1",
-            "frame_ids": json.dumps(["f1", "f2"]),
-            "scene_context": "red square scene",
-            "question": "What color?",
-        },
-        files=[
-            ("images", ("f1.jpg", _jpeg(10), "image/jpeg")),
-            ("images", ("f2.jpg", _jpeg(200), "image/jpeg")),
-        ],
-    )
-    assert multi.status_code == 200
-    assert multi.json()["video_id"] == "video-1"
-    assert multi.json()["frame_ids"] == ["f1", "f2"]
-    assert multi.json()["selected_frame_id"] == "f2"
+    assert request(app, "POST", "/v1/vqa", json={}).status_code == 404
+    assert request(app, "POST", "/v1/vqa/multi", json={}).status_code == 404
 
 
 def test_embedding_endpoints_use_configured_batch_ceilings():
@@ -311,47 +265,6 @@ def test_embedding_endpoints_use_configured_batch_ceilings():
     )
     assert images_over_limit.status_code == 400
     assert "1..128" in images_over_limit.json()["detail"]
-
-
-def test_remote_vqa_endpoints_share_one_inference_response_contract():
-    def handler(request):
-        is_multi = request.url.path.endswith("/multi")
-        return httpx.Response(200, json={
-            "request_id": "q2" if is_multi else "q1",
-            "video_id": "video-1",
-            "frame_ids": ["f1", "f2"] if is_multi else ["f1"],
-            "selected_frame_id": "f2" if is_multi else "f1",
-            "question": "What color?",
-            "answer": "red",
-            "answerable": True,
-            "grounded": True,
-            "confidence": 0.9,
-            "latency_ms": 1,
-        })
-
-    http = httpx.Client(
-        transport=httpx.MockTransport(handler), base_url="https://model.test"
-    )
-    client = InferenceClient("https://model.test", client=http)
-    one = client.answer_vqa(
-        "q1",
-        "f1",
-        "video-1",
-        "What color?",
-        Image.new("RGB", (2, 2), "red"),
-    )
-    many = client.answer_vqa_multi(
-        "q2",
-        "video-1",
-        ["f1", "f2"],
-        "What color?",
-        [Image.new("RGB", (2, 2), "blue"), Image.new("RGB", (2, 2), "red")],
-    )
-
-    assert isinstance(one, VQAInferenceResponse)
-    assert isinstance(many, VQAInferenceResponse)
-    assert one.frame_ids == ["f1"]
-    assert many.selected_frame_id == "f2"
 
 
 def test_remote_encoder_validates_model_and_dimension():
@@ -570,7 +483,6 @@ def test_runtime_does_not_construct_or_require_disabled_models():
         enable_visual_embedding=False,
         enable_caption_embedding=False,
         enable_reranker=False,
-        enable_vqa=False,
     ))
 
     runtime.load()
@@ -579,6 +491,7 @@ def test_runtime_does_not_construct_or_require_disabled_models():
     assert readiness.ready is True
     assert all(not status.enabled for status in readiness.models.values())
     assert all(not status.loaded for status in readiness.models.values())
+    assert not hasattr(runtime.adapter, "vqa_model")
     with pytest.raises(RuntimeError, match="embedding model is disabled"):
         runtime.embed_text(["query"])
     with pytest.raises(RuntimeError, match="caption model is disabled"):
@@ -594,7 +507,6 @@ def test_asr_readiness_requires_the_enabled_model_to_be_loaded():
         enable_visual_embedding=False,
         enable_caption_embedding=False,
         enable_reranker=False,
-        enable_vqa=False,
         enable_asr=True,
     )
 
@@ -612,7 +524,6 @@ def test_asr_only_environment_does_not_construct_unrequested_models(
         "HCMAI_ENABLE_VISUAL_EMBEDDING",
         "HCMAI_ENABLE_CAPTION_EMBEDDING",
         "HCMAI_ENABLE_RERANKER",
-        "HCMAI_ENABLE_VQA",
         "HCMAI_ENABLE_DIARIZATION",
     )
     for name in capability_flags:
@@ -627,8 +538,9 @@ def test_asr_only_environment_does_not_construct_unrequested_models(
     assert adapter.visual_encoder is None
     assert adapter.caption_encoder is None
     assert adapter.reranker is None
-    assert adapter.vqa_model is None
+    assert not hasattr(adapter, "vqa_model")
     assert adapter.enable_diarization is False
+    assert not hasattr(LLMServiceConfig.from_yaml("thundercompute/config.yaml"), "vqa_model")
 
 
 def test_caption_and_ocr_share_one_identically_pinned_florence_backend():
@@ -658,7 +570,6 @@ def test_caption_and_ocr_share_one_identically_pinned_florence_backend():
         enable_visual_embedding=False,
         enable_caption_embedding=False,
         enable_reranker=False,
-        enable_vqa=False,
         enable_ocr=True,
     )
 
