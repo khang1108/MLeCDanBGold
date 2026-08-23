@@ -25,7 +25,7 @@ Remote GPU inference API (ThunderCompute + Cloudflare)
   ├─ SigLIP2 visual embedding
   ├─ BGE-M3 text embedding
   ├─ Qwen3-VL reranker (optional)
-  └─ caption/OCR/VQA services (optional)
+  └─ caption/OCR/ASR/diarization services (optional)
 ```
 
 Máy local giữ dữ liệu tìm kiếm và frontend/backend. GPU VM chỉ chạy model
@@ -99,23 +99,21 @@ KIS endpoint:
 POST /api/v1/search
 ```
 
-### 2.3. Luồng VQA online
+### 2.3. Luồng TRAKE online
 
 ```text
-event description + question
-  -> event/question retrieval
-  -> candidate video aggregation
-  -> bounded temporal windows
-  -> caption/OCR/ASR evidence collection
-  -> localization và chọn frame
-  -> VLM answer + grounding
-  -> ranked video/frame/answer submissions
+ordered events
+  -> retrieval cho từng event
+  -> shortlist video cùng nguồn
+  -> dense event x frame rescoring
+  -> monotonic temporal alignment
+  -> ranked ordered frame-path submissions
 ```
 
-VQA endpoint:
+TRAKE endpoint:
 
 ```text
-POST /api/v1/vqa
+POST /api/v1/trake
 ```
 
 ### 2.4. Các endpoint thường dùng
@@ -124,7 +122,7 @@ POST /api/v1/vqa
 | --- | --- |
 | `GET /health` | Kiểm tra backend, FrameStore, index và inference |
 | `POST /api/v1/search` | KIS search |
-| `POST /api/v1/vqa` | VQA |
+| `POST /api/v1/trake` | TRAKE ordered-event alignment |
 | `GET /api/v1/frames/{frame_id}/image` | Lấy keyframe gốc |
 | `GET /api/v1/frames/{frame_id}/thumbnail` | Lấy thumbnail; nếu BTC không có thumbnail thì fallback về keyframe |
 | `GET /api/v1/frames/{frame_id}/neighbors` | Lấy frame lân cận theo thời gian |
@@ -147,7 +145,7 @@ HCMAI_2026/
 │   ├── frame_store/           frames.parquet + manifest.json
 │   ├── enrichment/            captions, OCR, objects, context, transcripts
 │   └── indexes/               visual, context, asr_segments
-├── thundercompute/            inference service and GPU lifecycle controller
+├── thundercompute/            shared inference service and config
 ├── tests/                     backend tests
 └── README.md
 ```
@@ -456,28 +454,35 @@ HCMAI_INFERENCE_BASE_URL=http://127.0.0.1:8100
 ```
 
 Nếu dùng ThunderCompute, frontend/backend vẫn chạy local; chỉ inference URL
-trỏ tới hostname Cloudflare. Có thể bật reranker khi deploy GPU bằng:
+trỏ tới hostname Cloudflare. Quy trình GPU là manual: tạo VM, copy source/config
+inference đã chọn, kết nối vào VM và chạy service. Repository không còn cung
+cấp launcher, cleanup script, hoặc bootstrap template.
 
 ```bash
-TNR_API_TOKEN_FILE=.secrets/tnr_api_token \
-HCMAI_THUNDER_DEPLOY_SCRIPT=./thundercompute/deploy_cloudflared_private.sh \
-bash thundercompute/launch.sh --gpu l40 -- \
-  --visual-embedding true \
-  --caption-embedding true \
-  --reranker true
+# Tạo instance bằng tnr, chờ trạng thái RUNNING, rồi lấy INSTANCE_ID.
+tnr create --gpu l40 --num-gpus 1 --vcpus 8 --template base --disk 200 --yes
+INSTANCE_ID=<instance-id>
+tnr status --no-wait --json
+
+# Upload source/config inference cho revision sẽ deploy, rồi kết nối vào VM.
+# Dùng recursive-copy option của tnr CLI nếu source được đóng gói dưới dạng thư mục.
+tnr scp <local-inference-package> "${INSTANCE_ID}:/home/ubuntu/hcmai/" --yes
+tnr connect "${INSTANCE_ID}"
+
+# Trên VM: cài pinned dependencies của package và chạy shared inference API.
+cd /home/ubuntu/hcmai
+HCMAI_LLM_CONFIG=thundercompute/config.yaml \
+PYTHONPATH=.:src python -m uvicorn thundercompute.server.api:app \
+  --host 127.0.0.1 --port 8100 --workers 1
+
+# Khi xong, xóa instance để tránh phát sinh chi phí.
+tnr delete --yes "${INSTANCE_ID}"
 ```
 
-Hoặc chạy controller bằng Docker profile:
-
-```bash
-docker compose --profile thundercompute up --build thundercompute
-```
-
-`docker compose stop thundercompute` sẽ gọi `tnr delete` qua cleanup trap.
-`docker kill` dùng `SIGKILL` nên không thể đảm bảo trap chạy; khi đó dùng
-[`thundercompute/delete.sh`](thundercompute/delete.sh) với
-instance ID đã lưu. Bootstrap private nằm trong local workspace và bị
-`.gitignore`; không commit Tunnel token hoặc Cloudflare credential.
+Giữ Thunder/Cloudflare credential trong CLI profile hoặc secret store riêng
+của operator/VM; không commit hoặc truyền token qua command line. Private
+operator scripts và `.secrets/` vẫn bị Git ignore, nhưng không có helper
+tracked nào để tạo hoặc chạy chúng.
 
 ## 6. Setup frontend
 
@@ -629,7 +634,7 @@ backend.
 - [`docs/runbooks/thundercompute-index-build.md`](docs/runbooks/thundercompute-index-build.md):
   build index và đồng bộ ThunderCompute.
 - [`thundercompute/README.md`](thundercompute/README.md):
-  lifecycle create/scp/SSH/delete và Docker profile.
+  flow triển khai thủ công create/scp/SSH/delete và inference contracts.
 - [`configs/baseline.yaml`](configs/baseline.yaml): cấu hình serving/search.
 - [`configs/enrichment.yaml`](configs/enrichment.yaml): enrichment BTC-native.
 - [`configs/indexing.yaml`](configs/indexing.yaml): offline index build.

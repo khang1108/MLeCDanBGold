@@ -1,14 +1,13 @@
-# ThunderCompute inference module
+# ThunderCompute shared inference module
 
-`thundercompute` is the boundary between the local HCMAI search
-application and the models hosted on a temporary GPU VM. It serves only model
-inference. The
-keyframes, metadata, embeddings, FAISS indexes, FastAPI
-search backend, and React UI remain on the local machine.
+`thundercompute` is the boundary between the local HCMAI application and models
+hosted on a temporary GPU VM. It serves shared model inference only. Canonical
+keyframes, metadata, enrichment artifacts, FAISS indexes, search backend and
+React UI remain local.
 
-For VM provisioning, Supervisor, and Cloudflare Tunnel setup, see the
-[lifecycle controller section](#lifecycle-controller). This document describes the Python
-module and its contracts.
+The public/runtime task surface is KIS and TRAKE. This module does not own task
+pipelines or submission materialization; it supplies bounded model operations
+that those workflows can share.
 
 ## Architecture
 
@@ -16,11 +15,10 @@ module and its contracts.
 React UI
    │ localhost:8000
    ▼
-Local FastAPI ── retrieval / VQA / frame materialization
-   │
-   │ Docker: LLMService + HTTP adapter
+Local FastAPI ── KIS/TRAKE retrieval, temporal alignment, materialization
+   │ HTTP adapter
    ▼
-LiteLLM private pass-through ── Cloudflare Access ── api.iamphuckhang.dev
+LiteLLM private pass-through ── Cloudflare Access ── hosted inference URL
                                       │
                                       ▼
                          Cloudflare Tunnel ── localhost:8100 on GPU VM
@@ -29,120 +27,97 @@ LiteLLM private pass-through ── Cloudflare Access ── api.iamphuckhang.de
                                   FastAPI API → LLMService
                                                 ├─ SigLIP2/BGE encoders
                                                 ├─ Florence captioner
-                                                ├─ Qwen VL reranker
-                                                └─ grounded VQA model
+                                                ├─ OCR/ASR/diarization services
+                                                └─ Qwen VL reranker
 ```
 
 The browser never calls the GPU service directly. This keeps Cloudflare
-credentials out of the frontend and avoids moving the roughly 100 GB retrieval
-corpus to a disposable VM.
+credentials out of the frontend and avoids moving the retrieval corpus to a
+disposable VM.
 
-## Files
+## Files and lifecycle
 
 | File | Responsibility |
 | --- | --- |
 | `pipeline.py` | Public `LLMService` lifecycle and inference facade |
-| `server/api.py` | Private FastAPI endpoints, request limits, error translation |
+| `server/api.py` | Private FastAPI endpoints, request limits and error translation |
 | `adapters/local.py` | Single-process ownership and lifecycle of hosted models |
 | `adapters/http.py` | Bounded synchronous client for remote inference |
-| `adapters/vqa.py` | Grounded single/multi-frame VQA model |
 | `config.py` | Typed model and service configuration loaded from YAML |
-| `common/schemas/inference.py` | Shared inference request/response contracts |
+| `config.yaml` | Pinned enabled-model configuration |
 
-The authoritative request and response models are in
+The authoritative request/response contracts live in
 [`src/hcmai/common/schemas/inference.py`](../src/hcmai/common/schemas/inference.py).
 
-## Model lifecycle
+Importing `thundercompute` does not load weights. In production,
+`LLMService.from_environment()` reads `thundercompute/config.yaml`, the FastAPI
+lifespan loads enabled model groups once, and every request reuses them. Run one
+Uvicorn worker: additional workers duplicate model weights in GPU memory.
 
-Importing this package does not load model weights. In production:
+`GET /health` proves that the process responds. `GET /ready` verifies that all
+enabled model groups are loaded and returns checkpoint provenance.
 
-1. `LLMService.from_environment()` reads `thundercompute/config.yaml` through its local
-   adapter.
-2. The FastAPI lifespan calls `service.load()` once.
-3. Only enabled model groups stay in memory.
-4. Every request reuses those instances.
+## Configuration and compatibility
 
-Run exactly one Uvicorn worker. Additional workers duplicate all model weights
-in GPU memory.
-
-`GET /health` only proves that the HTTP process responds. `GET /ready` verifies
-that every enabled model is loaded and returns checkpoint provenance.
-VQA inference is optional when `HCMAI_ENABLE_VQA=false`.
-
-## Configuration
-
-The checked-in [`config.yaml`](./config.yaml) configures:
-
-- `google/siglip2-base-patch16-224` for visual-query embeddings;
-- `BAAI/bge-m3` for multilingual caption/query dense embeddings;
-- Florence for caption generation;
-- `Qwen/Qwen3-VL-Reranker-2B` for image-query reranking;
-- `zai-org/GLM-4.1V-9B-Thinking` only for grounded VQA.
-
-Relevant environment variables are:
+The checked-in configuration pins the visual encoder, multilingual text
+encoder, caption model and image-query reranker. Environment variables control
+which shared capabilities load:
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `HCMAI_LLM_CONFIG` | GPU service | YAML path; defaults to `thundercompute/config.yaml` |
-| `HCMAI_VQA_MODEL` | GPU service | Non-empty VQA checkpoint override |
-| `HCMAI_ENABLE_CAPTION` | GPU service | Load caption generation model |
-| `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load SigLIP2 visual/query encoder |
-| `HCMAI_ENABLE_CAPTION_EMBEDDING` | GPU service | Load BGE-M3 caption/query encoder |
+| `HCMAI_ENABLE_CAPTION` | GPU service | Load caption generation |
+| `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load visual/query encoder |
+| `HCMAI_ENABLE_CAPTION_EMBEDDING` | GPU service | Load text encoder |
 | `HCMAI_ENABLE_RERANKER` | GPU service | Load image-query reranker |
-| `HCMAI_ENABLE_VQA` | GPU service | Load grounded VQA model |
-| `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted API base URL; Docker Compose overrides it with `http://litellm:4000` |
+| `HCMAI_ENABLE_OCR` | GPU service | Load OCR capability |
+| `HCMAI_ENABLE_ASR` | GPU service | Load ASR capability |
+| `HCMAI_ENABLE_DIARIZATION` | GPU service | Load diarization capability |
+| `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted inference API base URL |
 | `HCMAI_CF_ACCESS_CLIENT_ID` | Local backend | Cloudflare service credential |
 | `HCMAI_CF_ACCESS_CLIENT_SECRET` | Local backend | Cloudflare service credential |
 
-An empty `HCMAI_VQA_MODEL` leaves the YAML checkpoint unchanged. Set
-`HCMAI_ENABLE_VQA=false` to disable VQA model loading.
+Every remote encoder checkpoint, vector dimension, normalization and dtype must
+remain compatible with its local FAISS artifact. A different embedding contract
+must not query an index built in another vector space.
 
-Each remote embedding checkpoint, vector dimension, normalization, and dtype
-must remain compatible with its visual or caption FAISS artifact. A different text
-encoder cannot safely query an index created in another embedding space.
-
-## API
+## Private inference API
 
 | Method and path | Input | Output |
 | --- | --- | --- |
 | `GET /health` | None | Process liveness |
-| `GET /ready` | None | Per-model readiness and provenance |
+| `GET /ready` | None | Enabled-model readiness and provenance |
 | `POST /v1/captions` | Multipart IDs and images | Caption for each input ID |
-| `POST /v1/embeddings/text` | JSON with 1–64 texts | Normalized text vectors |
-| `POST /v1/rerank` | Multipart query, IDs, and images | Score for each input ID |
-| `POST /v1/vqa` | Question, canonical frame, and evidence | Grounded answer bound to the frame |
+| `POST /v1/enrichment/ocr` | Multipart IDs and images | OCR evidence for each input ID |
+| `POST /v1/embeddings/text` | JSON text batch | Normalized text vectors |
+| `POST /v1/embeddings/images` | Multipart IDs and images | Visual vectors |
+| `POST /v1/embeddings/dino` | Multipart IDs and images | DINO visual vectors |
+| `POST /v1/preprocessing/shot-scores` | Ordered images | Shot-boundary scores |
+| `POST /v1/preprocessing/event-scores` | Ordered images | Event-boundary scores |
+| `POST /v1/preprocessing/event-window-scores` | Ordered images | Event-window scores |
+| `POST /v1/transcripts/asr` | Audio reference | Timestamped transcript segments |
+| `POST /v1/transcripts/diarization` | Audio reference | Timestamped diarized segments |
+| `POST /v1/rerank` | Query, IDs and images | Score for each supplied ID |
 
-Check a running service:
+For example:
 
 ```bash
 curl -sS http://127.0.0.1:8100/health
 curl -sS http://127.0.0.1:8100/ready
-```
 
-Request text embeddings:
-
-```bash
 curl -sS http://127.0.0.1:8100/v1/embeddings/text \
   -H 'Content-Type: application/json' \
   -d '{"texts":["a 60-second timer","a red bus on a city street"]}'
 ```
 
-Reranking accepts 1–100 unique item IDs and the same number of image parts.
-Each uploaded image is limited to 5 MB. The client thumbnails candidates to at
-most 768 × 768 and encodes them as JPEG:
-
-```bash
-curl -sS http://127.0.0.1:8100/v1/rerank \
-  -F 'query=a person holding a red umbrella' \
-  -F 'item_ids=["frame-a","frame-b"]' \
-  -F 'images=@frame-a.jpg' \
-  -F 'images=@frame-b.jpg'
-```
+Reranking accepts the bounded candidate set supplied by local retrieval. It may
+reorder candidates but cannot recover a frame that retrieval did not include;
+canonical frame/video/submission identity remains local.
 
 ## Run locally
 
-Install the supported dependencies through the repository environment, then
-start the service from the repository root:
+Install the supported dependencies and start the private service from the
+repository root:
 
 ```bash
 aic/bin/python -m pip install -e ".[embedding,dev]"
@@ -152,148 +127,68 @@ PYTHONPATH=.:src aic/bin/python -m uvicorn thundercompute.server.api:app \
   --host 127.0.0.1 --port 8100 --workers 1
 ```
 
-The first production start downloads the configured checkpoints. Unit tests
-inject fake runtimes and model backends, so they never download checkpoints or
-load the real corpus.
+The first production start downloads configured checkpoints. Unit tests inject
+fake runtimes/model backends and do not load checkpoints or corpus artifacts.
 
-Code outside `thundercompute` imports only `LLMService` and configuration
-contracts from `thundercompute.pipeline`. It must not import `server/` or
-`adapters/` directly. The private server is the intentional exception because it
-is the transport entry point owned by this component.
+Code outside this package imports only `LLMService` and configuration contracts
+from `thundercompute.pipeline`; it must not import `server/` or `adapters/`
+directly. The private server is the intentional transport-entry exception.
 
-## Pipeline behavior
+## Manual GPU VM deployment
 
-- The remote SigLIP2 encoder converts each search query into the same vector space as
-  the local image index.
-- Dense retrieval selects candidates from local FAISS artifacts.
-- The remote Qwen model only reorders those candidates. It cannot recover a
-  relevant frame that dense retrieval did not include.
-- Frame loading, exact `frame_id`/`video_id`/`frame_idx` mapping, and final
-  response materialization stay local.
-- `/v1/vqa` answers one question about one supplied canonical frame and accepts
-  optional caption, OCR, ASR, and object evidence. It reuses the configured
-  GLM vision model and preserves request/frame identity.
+VM lifecycle is intentionally operator-run. There is no tracked launcher,
+delete script, deployment-script template or Docker lifecycle controller. Use
+your authenticated `tnr` CLI profile, upload the source/config bundle selected
+for the deployment, connect to the VM, and run the service there.
 
-The configured competition path categorizes embedding, image loading, invalid
-reranker scores, and remote inference failures and applies the task's bounded
-fallback policy.
+```bash
+# Create the disposable VM and wait until its status is RUNNING.
+tnr create --gpu l40 --num-gpus 1 --vcpus 8 --template base --disk 200 --yes
+INSTANCE_ID=<instance-id>
+tnr status --no-wait --json
 
-## Troubleshooting
+# Copy the reviewed inference source/config package for this deployment.
+# Use the CLI's recursive-copy option when the package is a directory.
+tnr scp <local-inference-package> "${INSTANCE_ID}:/home/ubuntu/hcmai/" --yes
+tnr connect "${INSTANCE_ID}"
+
+# On the VM, install the package's pinned dependencies and start one worker.
+cd /home/ubuntu/hcmai
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e ".[embedding]"
+HCMAI_LLM_CONFIG=thundercompute/config.yaml \
+PYTHONPATH=.:src python -m uvicorn thundercompute.server.api:app \
+  --host 127.0.0.1 --port 8100 --workers 1
+
+# From the local machine after the service is no longer needed.
+tnr delete --yes "${INSTANCE_ID}"
+```
+
+The operator configures the Cloudflare tunnel and its credential through the
+VM's private environment or secret store, then verifies `/health` and `/ready`
+through the protected hosted URL. Do not put Thunder tokens, Cloudflare tokens
+or private deployment code in tracked source or command history. `.secrets/`
+and private operator-script paths remain Git ignored.
+
+## Troubleshooting and verification
 
 | Symptom | Likely cause and action |
 | --- | --- |
-| `conversation checkpoint is not configured` | The deployed YAML has a null checkpoint or the VM is on an old commit. Inspect `/ready` and redeploy the current `main`. |
-| `string indices must be integers, not 'str'` | An old GLM request format sent plain strings instead of content blocks. Deploy the current conversation implementation. |
-| Cloudflare returns `502 Bad Gateway` | The tunnel origin is unavailable or uses the wrong scheme. Route it to `http://localhost:8100`, then check Supervisor logs. |
-| `/health` succeeds but `/ready` returns 503 | HTTP is alive but at least one required model failed to load. Inspect GPU memory and the model-service log. |
-| Embedding checkpoint/dimension mismatch | Hosted encoder and local index provenance differ. Restore the matching config; do not ignore the validation. |
-| Queries return unrelated frames | Verify the standalone query and embedding compatibility before tuning reranking. Reranking cannot repair a poor candidate set. |
-| Conversation request approaches the client timeout | Thinking models may generate long reasoning. Reduce `max_new_tokens`, increase the configured timeout, or later adopt a smaller resolver model. |
+| Cloudflare returns `502 Bad Gateway` | Tunnel origin is unavailable or uses the wrong scheme; route it to `http://localhost:8100` and inspect operator-managed service logs. |
+| `/health` succeeds but `/ready` returns `503` | HTTP is alive but an enabled model failed to load; inspect GPU memory and service logs. |
+| Embedding checkpoint/dimension mismatch | Hosted encoder and local index provenance differ; deploy the matching configuration. |
+| Queries return unrelated frames | Verify query/index compatibility before tuning reranking; reranking cannot repair a poor candidate set. |
 
-Inference errors are returned as bounded HTTP 503 details. Do not put
-Cloudflare tokens or service credentials in YAML, source control, browser code,
-or issue reports.
-
-## Verification
-
-Run the focused tests without loading real models:
+Run focused checks without loading real models:
 
 ```bash
 PYTHONPATH=.:src aic/bin/pytest -q \
   tests/test_llm_api.py \
-  tests/unit/llm/test_inference_gateway.py \
-  tests/unit/llm/test_multiframe_vqa.py
+  tests/unit/llm/test_inference_gateway.py
 
 python -m compileall -q thundercompute
 ```
 
-The local backend startup and UI workflow are documented in the
+The local backend and UI workflow are documented in the
 [root README](../README.md).
-
-## Lifecycle controller
-
-The same root directory also owns the laptop-side controller for the
-disposable Thunder GPU VM. It does not contain the Cloudflare token or the
-private bootstrap implementation in version control.
-
-```text
-Docker Compose profile
-  -> tnr create
-  -> wait for RUNNING
-  -> tnr scp deploy_cloudflared_private.sh 0:/home/ubuntu/
-  -> SSH command starts the private bootstrap in tmux
-  -> graceful controller stop
-  -> tnr delete
-```
-
-Thunder's documented CLI exposes `create`, `scp`, `connect`, and `delete`, but
-not a non-interactive `tnr exec` command. `launch.sh` therefore uses the SSH
-host, port, UUID, and key material made available by `tnr status --json` after
-the upload. The remote command is still executed without an interactive
-terminal.
-
-### Private bootstrap
-
-The private `deploy_cloudflared_private.sh` is ignored by Git. To create a
-safe local copy from the checked-in template:
-
-```bash
-cp thundercompute/deploy_cloudflared_private.sh.example \
-  thundercompute/deploy_cloudflared_private.sh
-chmod 700 thundercompute/deploy_cloudflared_private.sh
-```
-
-The bootstrap is uploaded to `/home/ubuntu/deploy_cloudflared_private.sh` and
-must configure the current `thundercompute.server.api` service, start the
-Cloudflare tunnel for `api.iamphuckhang.dev`, and verify `/health` and `/ready`.
-The launcher never receives the Cloudflare token as a command-line argument.
-
-### Docker lifecycle
-
-The default Compose stack starts backend, LiteLLM, and frontend. The
-ThunderCompute controller is an opt-in `thundercompute` profile:
-
-```bash
-mkdir -p .secrets .thundercompute
-printf '%s\n' 'your-thunder-api-token' > .secrets/tnr_api_token
-
-export TNR_API_TOKEN_FILE=.secrets/tnr_api_token
-export HCMAI_THUNDER_DEPLOY_SCRIPT=./thundercompute/deploy_cloudflared_private.sh
-
-docker compose --profile thundercompute build thundercompute
-docker compose --profile thundercompute up thundercompute
-```
-
-Run the normal application stack in another terminal when needed:
-
-```bash
-docker compose up -d
-```
-
-Use `docker compose stop thundercompute` or `docker compose down` to send a
-graceful signal. The controller trap then calls `tnr delete` and clears
-`.thundercompute/instance-id`. `docker kill` defaults to `SIGKILL`, which no
-process can catch; after a forced kill run:
-
-```bash
-TNR_API_TOKEN_FILE=.secrets/tnr_api_token \
-  bash thundercompute/delete.sh
-```
-
-Do not set `restart: always` for this controller: restarting it after a clean
-exit would create another billable VM.
-
-### Host-side operation
-
-The same controller can run without Docker when `tnr`, Python 3, and OpenSSH
-are installed on the laptop:
-
-```bash
-TNR_API_TOKEN_FILE=.secrets/tnr_api_token \
-  HCMAI_THUNDER_DEPLOY_SCRIPT=./thundercompute/deploy_cloudflared_private.sh \
-  bash thundercompute/launch.sh --gpu l40 --
-```
-
-Press Ctrl-C for cleanup. Use `--keep` only when the instance is intentionally
-managed separately, and use `--instance ID --delete-reused` only when the
-controller owns that existing instance.

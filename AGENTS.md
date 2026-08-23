@@ -22,10 +22,9 @@ The system searches long videos from natural-language queries using evidence suc
 - temporal relationships;
 - VLM / LLM reasoning when necessary.
 
-The repository targets three major competition task families:
+The active public/runtime surface targets two competition task families:
 
 - **KIS** — find the described video/event and return a valid competition frame;
-- **VQA / Q&A** — localize the relevant event and answer a grounded question;
 - **TRAKE** — retrieve a video and align an ordered sequence of semantic events.
 
 The important reasoning unit is not always one isolated frame. Evidence may be distributed across several nearby keyframes or moments in the same temporal event.
@@ -103,7 +102,6 @@ src/hcmai/
 ├── orchestration/   # application workflow composition
 ├── pipelines/
 │   ├── kis/         # KIS-specific logic
-│   ├── vqa/         # VQA-specific logic
 │   └── trake/       # TRAKE-specific logic
 ├── retrieval/       # embeddings, indexes, retrieval, fusion, reranking
 └── ...
@@ -127,7 +125,7 @@ KNOWLEDGE.md          # persistent research knowledge
 - artifact lineage/versioning;
 - data stores and lookup.
 
-Do not put KIS/VQA/TRAKE reasoning here.
+Do not put KIS/TRAKE reasoning here.
 
 **`retrieval/`**
 - embeddings and indexes;
@@ -495,7 +493,7 @@ Research is especially expected for:
 - temporal retrieval/alignment;
 - reranking;
 - query decomposition/planning;
-- VQA evidence selection;
+- evidence selection for retrieval/localization;
 - model selection;
 - scoring functions;
 - learned weighting;
@@ -666,7 +664,7 @@ Measure the metric that matches the failure mode.
 
 - retrieval problem -> retrieval recall/ranking;
 - localization problem -> scene/window/evidence recall;
-- VQA reasoning problem -> oracle-localization/evidence tests when possible;
+- task-specific reasoning/localization problem -> isolate oracle evidence tests when possible;
 - latency problem -> per-stage latency.
 
 No recorded metric means no verified improvement.
@@ -721,9 +719,6 @@ Test changes at the layer they affect.
 
 **Temporal logic**
 - use synthetic examples whose correct result can be reasoned about manually.
-
-**VQA**
-- separate localization failure from reasoning failure when possible.
 
 **TRAKE**
 - do not casually break a working alignment path while modifying shared code.

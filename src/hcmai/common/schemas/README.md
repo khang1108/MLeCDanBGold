@@ -28,7 +28,7 @@ that feature package. In particular, caption/OCR types belong under
   `caption`, `ocr`, or `asr`.
 - `QueryLanguage`: query language: Vietnamese (`vi`), English (`en`), or
   mixed (`mixed`).
-- `TaskType`: frontend query type: `kis`, `vkis`, `vqa`, or `trake`.
+- `TaskType`: public task type: `kis` or `trake`.
 - `QueryDifficulty`: evaluation difficulty: `easy`, `medium`, or `hard`.
 
 ### `frame.py`
@@ -64,7 +64,7 @@ that feature package. In particular, caption/OCR types belong under
   source scores/ranks, overall score, and provenance.
 - `SceneCandidate`: bounded video interval containing frame evidence and
   explicit semantic, coverage, temporal, relation, and final scene scores.
-  VQA image sampling remains outside this shared contract.
+  Task-specific frame selection remains outside this shared contract.
 - `TemporalAlignmentMode`: explicit `progressive_scene` or `ordered_path`
   behavior selected by the task adapter.
 - `TemporalQueryPlan`: task, ordered query units, constraints, filters, and
@@ -101,24 +101,6 @@ matched evidence without exposing mutable search state as a public API schema.
   results, warnings, and the optional echoed `search_id`. `total_results` must
   match the result list and cannot exceed `top_k`.
 
-### `vqa.py`
-
-- `VQARequest`: competition event description, question, Top-k, optional
-  filters, language hint, baseline profile, and progressive `search_id`.
-- `VQASubmission`: ranked canonical video/frame/answer row with retrieval,
-  grounding, answer, and joint scores. Its singular `frame_id` is the exact
-  selected internal frame used by the UI; `frame_idx` is the BTC submission
-  coordinate, while `frame_ids` retains bounded scene evidence.
-- `VQAResponse`: bounded ranked competition submissions with an optional
-  echoed `search_id`.
-- `VQAInferenceEvidence`: provider-scoped evidence contract. Evidence retains
-  bounded structured source text with its canonical frame ID, time interval,
-  confidence, and provenance; aggregated caption/OCR/ASR fields remain for
-  provider compatibility.
-- `VQAInferenceResponse`: the single provider response for one-frame and
-  multi-frame inference; it preserves ordered supplied frame IDs, the selected
-  canonical frame, and canonical video identity.
-
 ### `trake.py`
 
 - `TRAKERequest`: raw query and optional caller-supplied ordered events.
@@ -129,8 +111,8 @@ matched evidence without exposing mutable search state as a public API schema.
 
 ### `task.py`
 
-- `TaskRequest` and `TaskResponse`: discriminated KIS/VKIS, VQA, and TRAKE
-  unions for internal task routing and typed API adapters.
+- `TaskRequest` and `TaskResponse`: discriminated KIS and TRAKE unions for
+  internal task routing and typed API adapters.
 
 ### `evaluation.py`
 

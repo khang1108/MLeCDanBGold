@@ -14,10 +14,9 @@ not an end-to-end `EvaluationService`.
 supports explicitly disabled diarization, and materializes frame-aligned ASR
 through the canonical `FrameEnrichment`/`ASRStore` contract.
 
-The root `thundercompute/` directory is the exception to the data CLI pattern:
-it owns the laptop-side GPU lifecycle controller. See
-[`thundercompute/README.md`](../thundercompute/README.md) for the
-`tnr create -> scp -> SSH deploy -> delete` flow and secret boundary.
+The root `thundercompute/` directory is the shared hosted-inference component.
+See [`thundercompute/README.md`](../thundercompute/README.md) for its endpoint
+contracts and the manual `tnr create -> scp -> connect -> run -> delete` flow.
 
 ## Validate the repository
 
@@ -27,7 +26,7 @@ Run the complete deterministic release gate from the repository root:
 scripts/validate_repository.sh
 ```
 
-The command runs focused temporal/VQA/TRAKE tests, the complete backend suite,
+The command runs focused temporal/KIS/TRAKE tests, the complete backend suite,
 frontend tests, the frontend production build, and whitespace validation in
 that order. It uses `aic/bin/python` when available; set `HCMAI_PYTHON` to an
 alternative interpreter when validating another supported environment.
@@ -37,8 +36,6 @@ them:
 
 - `tests/test_minichallenge.py` covered removed KISC/MiniChallenge behavior;
 - `tests/test_removed_conversation.py` asserted deleted conversation APIs;
-- `tests/unit/evaluation/test_vqa_metrics.py` targeted an orphan evaluator with
-  no runtime consumer; evaluator construction remains deferred.
 
 All other active tests are tracked and collected. Tests use local fixtures and
 deterministic fakes; this validation command must not invoke remote inference or
@@ -52,7 +49,7 @@ the optional preprocessing extra supplies PyAV.
 The current deterministic baseline after the BTC-native preparation migration
 is 367 passing backend tests with the same two optional PyAV skips,
 plus 27 passing frontend tests and a successful production build. The focused
-temporal/VQA/TRAKE/data-reliability gate contains 120 passing tests.
+temporal/KIS/TRAKE/data-reliability gate contains 120 passing tests.
 
 ## HCMAI 2026 BTC-native enrichment V1
 

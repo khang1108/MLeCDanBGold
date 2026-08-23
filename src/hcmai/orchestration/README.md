@@ -24,9 +24,8 @@ FastAPI
 ```
 
 `SearchService` resolves each request through `PipelineRegistry`. The current
-registry exposes KIS, the initial VKIS path, and the grounded VQA pipeline.
-TRAKE remains an externally owned integration seam and raises
-`SearchPipelineUnavailableError` until its pipeline is registered.
+registry exposes KIS and TRAKE. KIS uses progressive scene localization;
+TRAKE uses ordered temporal alignment.
 
 `setup.py` loads configuration and artifacts once, constructs the selected
 services, and injects them into `SearchService`. Cross-component imports in
