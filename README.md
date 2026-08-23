@@ -147,7 +147,8 @@ HCMAI_2026/
 │   ├── frame_store/           frames.parquet + manifest.json
 │   ├── enrichment/            captions, OCR, objects, context, transcripts
 │   └── indexes/               visual, context, asr_segments
-├── llm/                       model config và deployment scripts
+├── llm/                       model configuration
+├── scripts/thundercompute/    GPU lifecycle controller và private bootstrap contract
 ├── tests/                     backend tests
 └── README.md
 ```
@@ -459,14 +460,25 @@ Nếu dùng ThunderCompute, frontend/backend vẫn chạy local; chỉ inference
 trỏ tới hostname Cloudflare. Có thể bật reranker khi deploy GPU bằng:
 
 ```bash
-llm/launch_thunder_instance.sh --gpu l40 --token "$TNR_TOKEN" -- \
+TNR_API_TOKEN_FILE=.secrets/tnr_api_token \
+HCMAI_THUNDER_DEPLOY_SCRIPT=./scripts/thundercompute/deploy_cloudflared_private.sh \
+bash scripts/thundercompute/launch.sh --gpu l40 -- \
   --visual-embedding true \
   --caption-embedding true \
   --reranker true
 ```
 
-Script deploy private nằm trong local workspace và bị `.gitignore`; không commit
-Tunnel token hoặc Cloudflare credential.
+Hoặc chạy controller bằng Docker profile:
+
+```bash
+docker compose --profile thundercompute up --build thundercompute
+```
+
+`docker compose stop thundercompute` sẽ gọi `tnr delete` qua cleanup trap.
+`docker kill` dùng `SIGKILL` nên không thể đảm bảo trap chạy; khi đó dùng
+[`scripts/thundercompute/delete.sh`](scripts/thundercompute/delete.sh) với
+instance ID đã lưu. Bootstrap private nằm trong local workspace và bị
+`.gitignore`; không commit Tunnel token hoặc Cloudflare credential.
 
 ## 6. Setup frontend
 
@@ -503,7 +515,53 @@ Không đặt `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` hoặc credential tư
 vào `REACT_APP_*`: React sẽ đưa chúng vào bundle public. Video preview nên dùng
 URL tạm thời do backend cấp; keyframe search hiện được phục vụ qua FastAPI.
 
-## 7. Kiểm tra và phát triển
+## 7. Chạy backend + frontend bằng Docker Compose
+
+Docker Compose khởi chạy ba service:
+
+- `backend`: FastAPI ở `http://localhost:8000`;
+- `litellm`: gateway pass-through nội bộ trên `litellm:4000`;
+- `frontend`: React production build qua Nginx ở `http://localhost:3000`.
+
+Luồng inference là:
+
+```text
+browser -> backend:8000 -> litellm:4000 -> https://api.iamphuckhang.dev
+```
+
+LiteLLM chỉ map các route inference custom mà backend đang sử dụng. Nó không
+dịch sang OpenAI schema và không publish port ra host. Cloudflare Access
+credentials chỉ được cấp cho backend; backend chuyển tiếp chúng qua gateway
+đến upstream, frontend không bao giờ nhận được các biến này.
+
+Backend đọc `data/` và `artifacts/` từ host ở chế độ read-only. Ba runtime
+index được resolve rõ ràng trong container:
+
+- `/app/artifacts/indexes/visual`;
+- `/app/artifacts/indexes/context`;
+- `/app/artifacts/indexes/asr_segments`.
+
+Tạo root `.env` từ `.env.example` nếu chưa có, sau đó chạy:
+
+```bash
+[ -f .env ] || cp .env.example .env
+docker compose up --build -d
+docker compose ps
+curl -sS http://localhost:8000/health
+```
+
+Mở `http://localhost:3000`. `REACT_APP_API_BASE_URL` được đóng gói lúc build
+frontend; trong môi trường Docker local phải để browser truy cập được backend
+qua `http://localhost:8000`, không dùng hostname nội bộ `backend`.
+
+Dừng và xem log:
+
+```bash
+docker compose logs -f backend
+docker compose down
+```
+
+## 8. Kiểm tra và phát triển
 
 Backend tests:
 
@@ -527,7 +585,7 @@ bash scripts/validate_repository.sh
 Các test đều dùng fixture cục bộ; release gate không gọi remote inference và
 không rebuild corpus thật.
 
-## 8. Xử lý lỗi thường gặp
+## 9. Xử lý lỗi thường gặp
 
 ### `remote inference failed (connection)`
 
@@ -565,12 +623,14 @@ backend.
    trong `HCMAI_CORS_ORIGINS` không?
 4. Nếu vừa sửa frontend `.env`, stop và chạy lại `npm start`.
 
-## 9. Tài liệu liên quan
+## 10. Tài liệu liên quan
 
 - [`AGENTS.md`](AGENTS.md): nguyên tắc làm việc và invariant của repository.
 - [`scripts/README.md`](scripts/README.md): các CLI data/enrichment/index.
 - [`docs/runbooks/thundercompute-index-build.md`](docs/runbooks/thundercompute-index-build.md):
   build index và đồng bộ ThunderCompute.
+- [`scripts/thundercompute/README.md`](scripts/thundercompute/README.md):
+  lifecycle create/scp/SSH/delete và Docker profile.
 - [`configs/baseline.yaml`](configs/baseline.yaml): cấu hình serving/search.
 - [`configs/enrichment.yaml`](configs/enrichment.yaml): enrichment BTC-native.
 - [`configs/indexing.yaml`](configs/indexing.yaml): offline index build.
