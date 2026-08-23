@@ -8,7 +8,6 @@ from pydantic import ConfigDict, BaseModel, Field, field_validator, model_valida
 from pydantic_settings import BaseSettings
 
 from hcmai.common.schemas.enum import RetrievalSource, TaskType
-from hcmai.common.schemas.vqa import VQABaselineProfile
 
 # Recall cut-offs frozen for baseline comparison
 RECALL_CUTOFFS: tuple[int, ...] = (1, 5, 20, 50, 100)
@@ -302,7 +301,7 @@ class RetrievalCacheConfig(BaseModel):
 
 
 class ProgressiveSearchConfig(BaseModel):
-    """Transactional state, retrieval, and scene budgets for KIS/VQA."""
+    """Transactional state, retrieval, and scene budgets for KIS."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -383,59 +382,6 @@ class SearchConfig(BaseModel):
     )
 
 
-class VQAProfileConfig(BaseModel):
-    """Hard budgets for one reproducible competition VQA baseline."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    max_windows: int = Field(default=12, ge=1, le=100)
-    max_frames_per_window: int = Field(default=4, ge=1, le=32)
-    max_evidence_items: int = Field(default=24, ge=1, le=256)
-    max_vlm_calls: int = Field(default=8, ge=0, le=100)
-
-
-def _default_vqa_profiles() -> dict[VQABaselineProfile, VQAProfileConfig]:
-    """Return reproducible defaults for every supported VQA baseline."""
-
-    return {
-        VQABaselineProfile.SINGLE_FRAME: VQAProfileConfig(
-            max_windows=1,
-            max_frames_per_window=1,
-            max_vlm_calls=1,
-        ),
-        VQABaselineProfile.VRAG: VQAProfileConfig(
-            max_windows=20,
-            max_frames_per_window=4,
-            max_vlm_calls=10,
-        ),
-        VQABaselineProfile.LOCALIZER: VQAProfileConfig(),
-        VQABaselineProfile.HIERARCHICAL: VQAProfileConfig(
-            max_windows=16,
-            max_frames_per_window=8,
-            max_vlm_calls=12,
-        ),
-    }
-
-
-class VQAConfig(BaseModel):
-    """Executable VQA profiles selected without hidden inference budgets."""
-
-    default_profile: VQABaselineProfile = VQABaselineProfile.LOCALIZER
-    profiles: dict[VQABaselineProfile, VQAProfileConfig] = Field(
-        default_factory=_default_vqa_profiles
-    )
-
-    @model_validator(mode="after")
-    def validate_profiles(self) -> VQAConfig:
-        """Require complete baseline coverage and a configured default."""
-
-        if set(self.profiles) != set(VQABaselineProfile):
-            raise ValueError("vqa profiles must configure every baseline profile")
-        if self.default_profile not in self.profiles:
-            raise ValueError("default VQA profile must be configured")
-        return self
-
-
 class ApiConfig(BaseModel):
     """Configuration for API parameters."""
 
@@ -489,7 +435,6 @@ class AppConfig(BaseSettings):
     dataset: DatasetConfig = Field(default_factory=DatasetConfig)
     index: IndexConfig = Field(default_factory=IndexConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
-    vqa: VQAConfig = Field(default_factory=VQAConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     inference: InferenceConfig = Field(default_factory=InferenceConfig)
 

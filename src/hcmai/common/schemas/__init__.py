@@ -48,16 +48,6 @@ from .trake import (
     TRAKESubmission,
 )
 from .transcript import TranscriptSegment
-from .vqa import (
-    VQABaselineProfile,
-    VQARetrievalEvidence,
-    VQAInferenceEvidence,
-    VQAInferenceEvidenceItem,
-    VQAInferenceResponse,
-    VQARequest,
-    VQAResponse,
-    VQASubmission,
-)
 
 __all__ = [
     "NonEmptyString",
@@ -107,14 +97,6 @@ __all__ = [
     "TextEmbeddingRequest",
     "TextEmbeddingResponse",
     "TranscriptInferenceResponse",
-    "VQAInferenceEvidence",
-    "VQAInferenceEvidenceItem",
-    "VQABaselineProfile",
-    "VQARetrievalEvidence",
-    "VQAInferenceResponse",
-    "VQARequest",
-    "VQAResponse",
-    "VQASubmission",
     "TRAKERequest",
     "TRAKEResponse",
     "TRAKESubmission",

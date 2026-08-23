@@ -92,33 +92,7 @@ search:
     # Neutral starting point only. Tune per task on labeled validation queries.
     task_weights:
       kis: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      vkis: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      vqa: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
       trake: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-
-vqa:
-  default_profile: vqa_localizer
-  profiles:
-    vqa_single_frame:
-      max_windows: 1
-      max_frames_per_window: 1
-      max_evidence_items: 24
-      max_vlm_calls: 1
-    vqa_vrag:
-      max_windows: 20
-      max_frames_per_window: 4
-      max_evidence_items: 24
-      max_vlm_calls: 10
-    vqa_localizer:
-      max_windows: 12
-      max_frames_per_window: 4
-      max_evidence_items: 24
-      max_vlm_calls: 8
-    vqa_hierarchical:
-      max_windows: 16
-      max_frames_per_window: 8
-      max_evidence_items: 24
-      max_vlm_calls: 12
 
 api:
   default_top_k: 20

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Self
+from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 
 from hcmai.common.schemas.base import ContractModel, NonEmptyString
@@ -44,7 +44,7 @@ class SearchRequest(ContractModel):
     """Public request accepted by the frame search endpoint."""
 
     query: NonEmptyString = Field(max_length=1_000)
-    query_type: TaskType = TaskType.KIS
+    query_type: Literal[TaskType.KIS] = TaskType.KIS
     top_k: int = Field(default=20, ge=1, le=100)
     filters: SearchFilters | None = None
     search_id: NonEmptyString | None = None

@@ -39,8 +39,6 @@ class TaskType(str, Enum):
     """Task type of each query."""
 
     KIS = "kis"
-    VKIS = "vkis"
-    VQA = "vqa"
     TRAKE = "trake"
 
 

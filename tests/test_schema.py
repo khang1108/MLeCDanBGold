@@ -34,16 +34,11 @@ def test_retired_search_mode_is_rejected() -> None:
 
 def test_query_type_is_typed_and_defaults_to_kis() -> None:
     assert SearchRequest(query="test").query_type is TaskType.KIS
-    assert (
-        SearchRequest.model_validate(
-            {"query": "test", "query_type": "vkis"}
-        ).query_type
-        is TaskType.VKIS
-    )
-    with pytest.raises(ValidationError):
-        SearchRequest.model_validate(
-            {"query": "test", "query_type": "unknown"}
-        )
+    for query_type in ("vkis", "vqa", "trake", "unknown"):
+        with pytest.raises(ValidationError):
+            SearchRequest.model_validate(
+                {"query": "test", "query_type": query_type}
+            )
 
 def test_submission_contract_preserves_competition_identity() -> None:
     valid = SubmissionResult(

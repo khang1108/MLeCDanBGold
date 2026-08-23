@@ -5,13 +5,14 @@ import yaml
 
 from hcmai.common.config import (
     AppConfig,
+    FusionConfig,
     LEGACY_DATASET_ROOT,
     REPOSITORY_ROOT,
     TranscriptJobConfig,
     resolve_dataset_root,
     resolve_repository_path,
 )
-from hcmai.common.schemas import RetrievalSource, TaskType, VQABaselineProfile
+from hcmai.common.schemas import RetrievalSource, TaskType
 from hcmai.data.enrichment.caption.config import CaptionJobConfig
 from thundercompute.config import LLMServiceConfig
 
@@ -49,10 +50,22 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.search.rerank_count == 100
     assert config.search.temporal_window_ms == 3000
     assert config.search.progressive.scene_top_p_global == 100
-    assert config.vqa.default_profile is VQABaselineProfile.LOCALIZER
-    assert set(config.vqa.profiles) == set(VQABaselineProfile)
-    assert config.vqa.profiles[VQABaselineProfile.SINGLE_FRAME].max_vlm_calls == 1
+    assert set(config.search.fusion.task_weights) == {
+        TaskType.KIS,
+        TaskType.TRAKE,
+    }
     assert config.inference.base_url == "http://127.0.0.1:8100"
+
+
+def test_fusion_weights_require_every_remaining_task_type() -> None:
+    """Do not allow one active task to inherit another task's fusion policy."""
+
+    with pytest.raises(ValueError, match="every TaskType"):
+        FusionConfig(
+            task_weights={
+                TaskType.KIS: {source: 1.0 for source in RetrievalSource},
+            }
+        )
 
 
 def test_runtime_repository_paths_do_not_depend_on_process_cwd(

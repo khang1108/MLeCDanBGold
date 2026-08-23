@@ -11,7 +11,6 @@ import pytest
         "hcmai.retrieval.embedding.pipeline",
         "hcmai.retrieval.retriever.pipeline",
         "hcmai.retrieval.reranking.pipeline",
-        "hcmai.pipelines.vqa",
         "hcmai.pipelines.trake",
         "hcmai.data.enrichment.pipeline",
         "hcmai.data.enrichment.transcripts.pipeline",
