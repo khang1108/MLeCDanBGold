@@ -18,7 +18,7 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
 from hcmai.data.pipeline import DataService
-from hcmai.thundercompute.pipeline import LLMService
+from thundercompute.pipeline import LLMService
 from hcmai.common.observability.tracing import StageTimer, log_stage
 from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,

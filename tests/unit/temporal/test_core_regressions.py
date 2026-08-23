@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from hcmai.common.schemas import FrameEvidence, FrameRecord
 from hcmai.temporal.aligners.scene import cluster_video_evidence
-from hcmai.temporal.evidence import ProgressiveEvidenceState
+from hcmai.temporal.state.evidence import ProgressiveEvidenceState
 from hcmai.temporal.providers.sparse import candidate_video_scores, retain_top_evidence
 
 

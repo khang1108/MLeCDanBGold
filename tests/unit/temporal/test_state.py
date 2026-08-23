@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from hcmai.temporal.state import (
+from hcmai.temporal.state.state import (
     ProgressiveSearchState,
     ProgressiveStateConflictError,
     ProgressiveStateStore,

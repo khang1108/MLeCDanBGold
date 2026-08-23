@@ -32,7 +32,7 @@ from hcmai.data.enrichment.caption.resume import guard_resume, resume_rows
 from hcmai.data.enrichment.caption.runner import run_batches
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
 from hcmai.data.stores.frame import FrameStore
-from hcmai.thundercompute.pipeline import LLMService, LLMServiceConfig
+from thundercompute.pipeline import LLMService, LLMServiceConfig
 
 
 def generate_captions(
@@ -132,7 +132,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=DEFAULT_ENRICHMENT_CONFIG)
     parser.add_argument("--app-config", default="configs/baseline.yaml")
-    parser.add_argument("--model-config", default="llm/config.yaml")
+    parser.add_argument("--model-config", default="thundercompute/config.yaml")
     parser.add_argument("--frames")
     parser.add_argument("--dataset-root")
     parser.add_argument("--output")

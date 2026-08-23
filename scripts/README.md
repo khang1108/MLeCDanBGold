@@ -14,9 +14,9 @@ not an end-to-end `EvaluationService`.
 supports explicitly disabled diarization, and materializes frame-aligned ASR
 through the canonical `FrameEnrichment`/`ASRStore` contract.
 
-The `thundercompute/` subdirectory is the exception to the data CLI pattern:
+The root `thundercompute/` directory is the exception to the data CLI pattern:
 it owns the laptop-side GPU lifecycle controller. See
-[`thundercompute/README.md`](thundercompute/README.md) for the
+[`thundercompute/README.md`](../thundercompute/README.md) for the
 `tnr create -> scp -> SSH deploy -> delete` flow and secret boundary.
 
 ## Validate the repository
@@ -71,29 +71,29 @@ Run these commands from the repository root:
 
 ```bash
 # BTC frame-store ingest
-PYTHONPATH=src aic/bin/python scripts/ingest_btc_keyframes.py \
+PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
   --btc-root data --data-root data \
   --output-root artifacts/frame_store \
   --frame-store-id btc-keyframes-v1
 
 # Caption
-PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
   --config configs/enrichment.yaml
 
 # OCR
-PYTHONPATH=src aic/bin/python scripts/generate_ocr_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
   --config configs/enrichment.yaml
 
 # BTC Object Import
-PYTHONPATH=src aic/bin/python scripts/generate_object_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_object_enrichment.py \
   --config configs/enrichment.yaml
 
 # Timestamped ASR segments; change data/videos if the source lives elsewhere.
-PYTHONPATH=src aic/bin/python scripts/prepare_transcripts.py \
+PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
   --config configs/enrichment.yaml --videos-root data/videos
 
 # Deterministic Caption + OCR + Object context; ASR is excluded.
-PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
   --config configs/enrichment.yaml
 ```
 
@@ -122,12 +122,12 @@ validated `Visual + FrameContext + segment-native ASR` bundles. The stages are
 independently runnable for diagnosis:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage preflight \
   --config configs/indexing.yaml \
   --model-config configs/indexing.models.yaml
 
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage all \
   --config configs/indexing.yaml \
   --model-config configs/indexing.models.yaml
@@ -146,7 +146,7 @@ pinned model/revisions before it starts an embedding stage, while local file
 I/O, FAISS publication, and validation remain local:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage all \
   --config configs/indexing.yaml \
   --model-config configs/indexing.models.yaml \
@@ -171,7 +171,7 @@ The `latest.json` pointer is advanced last, so an interrupted build is never
 advertised as serving data:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 \
   --stage all \
   --config configs/indexing.yaml \
@@ -209,9 +209,9 @@ the BTC-native Enrichment V1 preparation sequence.
 ## Rebuild only the index
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_index.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_index.py \
   --config configs/baseline.yaml \
-  --model-config llm/config.yaml \
+  --model-config thundercompute/config.yaml \
   --embeddings artifacts/embeddings/visual_embeddings.npy \
   --mapping artifacts/embeddings/frame_mapping.parquet \
   --output artifacts/indexes/visual
@@ -223,10 +223,10 @@ PYTHONPATH=src aic/bin/python scripts/build_index.py \
 competition evaluator. It still expects `models.embedding` inside the YAML
 passed as `--config`; the current `configs/baseline.yaml` no longer owns that
 checkpoint. Do not treat the command below as runnable with the current
-baseline config until the script is migrated to `llm/config.yaml`.
+baseline config until the script is migrated to `thundercompute/config.yaml`.
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_benchmark.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_benchmark.py \
   --config path/to/legacy-benchmark-config.yaml \
   --index artifacts/indexes/visual \
   --queries data/eval/queries.jsonl \

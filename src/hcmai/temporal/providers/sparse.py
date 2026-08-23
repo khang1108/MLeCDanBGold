@@ -45,14 +45,14 @@ from hcmai.common.schemas import (
 )
 from hcmai.data.pipeline import DataService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
-from hcmai.temporal.evidence import (
+from hcmai.temporal.state.evidence import (
     ProgressiveEvidenceState,
     deduplicate_evidence,
     retrieval_to_evidence,
 )
 from hcmai.temporal.ports import ProgressiveAcquisition
-from hcmai.temporal.scoring import normalize_score, unit_score_bounds
-from hcmai.temporal.state import ProgressiveSearchState
+from hcmai.temporal.utils.scoring import normalize_score, unit_score_bounds
+from hcmai.temporal.state.state import ProgressiveSearchState
 
 
 class ProgressiveEvidenceProvider:

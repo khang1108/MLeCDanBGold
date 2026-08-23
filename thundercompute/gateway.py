@@ -10,7 +10,7 @@ import httpx
 
 from hcmai.common.config import InferenceConfig
 from hcmai.common.utils.logging import get_logger
-from hcmai.thundercompute.resilience import (
+from thundercompute.resilience import (
     Bulkhead,
     CircuitBreaker,
     FailureCategory,

@@ -847,7 +847,11 @@ src/hcmai/
 │   ├── vqa/                       VQA query/reasoning/output modules
 │   └── trake/                     stable TRAKE DP compatibility algorithm
 ├── orchestration/                 composition, registry and KIS/TRAKE workflows
-└── llm/                           local/remote inference gateways
+```
+
+Repository root:
+```text
+└── thundercompute/                 local/remote inference gateways and config
 ```
 
 ## 13. Evaluation methodology
@@ -884,7 +888,7 @@ artifact version, git commit, predictions, metrics và per-stage latency.
 ## 14. Running the package
 
 ```bash
-PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
+PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000
 ```
 

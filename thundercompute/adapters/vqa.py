@@ -9,7 +9,7 @@ from typing import Any
 from PIL import Image
 
 from hcmai.common.schemas import VQAInferenceEvidence
-from hcmai.thundercompute.config import HostedVQAConfig
+from thundercompute.config import HostedVQAConfig
 
 BackendLoader = Callable[[HostedVQAConfig], tuple[Any, Any]]
 

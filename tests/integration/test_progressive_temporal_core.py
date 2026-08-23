@@ -17,7 +17,7 @@ from hcmai.temporal import (
     ProgressiveStateConflictError,
     TemporalEvidenceCore,
 )
-from hcmai.temporal.evidence import EvaluationState
+from hcmai.temporal.state.evidence import EvaluationState
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService

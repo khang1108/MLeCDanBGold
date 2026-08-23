@@ -6,8 +6,8 @@ import numpy as np
 from PIL import Image
 
 from hcmai.common.schemas import VQAInferenceEvidence, VQAInferenceEvidenceItem
-from hcmai.thundercompute.config import HostedVQAConfig, LLMServiceConfig
-from hcmai.thundercompute.adapters.vqa import GroundedVQAModel, _load_backend
+from thundercompute.config import HostedVQAConfig, LLMServiceConfig
+from thundercompute.adapters.vqa import GroundedVQAModel, _load_backend
 
 
 class FakeInputs(dict):
@@ -138,7 +138,7 @@ def test_glm_backend_uses_official_multimodal_classes(monkeypatch):
 
 
 def test_checked_in_vqa_config_matches_the_active_backend():
-    config = LLMServiceConfig.from_yaml("llm/config.yaml")
+    config = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
     assert config.vqa_model.checkpoint == "Qwen/Qwen2.5-VL-3B-Instruct"
     assert config.vqa_model.revision is None
     assert config.vqa_model.max_new_tokens == 256

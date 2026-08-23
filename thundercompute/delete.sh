@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+readonly REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly DEFAULT_STATE_FILE="${REPO_ROOT}/.thundercompute/instance-id"
 
 INSTANCE_ID="${HCMAI_THUNDER_INSTANCE_ID:-}"
@@ -29,7 +29,7 @@ load_token_from_file() {
 usage() {
     cat <<'EOF'
 Usage:
-  scripts/thundercompute/delete.sh [--instance ID]
+  thundercompute/delete.sh [--instance ID]
 
 The instance ID is read from --instance, HCMAI_THUNDER_INSTANCE_ID, or
 .thundercompute/instance-id.  TNR_API_TOKEN or TNR_API_TOKEN_FILE is required

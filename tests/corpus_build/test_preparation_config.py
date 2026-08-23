@@ -13,7 +13,7 @@ from hcmai.common.config import TranscriptJobConfig
 from hcmai.data.enrichment.caption.config import CaptionJobConfig
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.corpus_build import S3CorpusPreparationConfig
-from hcmai.thundercompute.config import LLMServiceConfig
+from thundercompute.config import LLMServiceConfig
 
 
 SHA = "a" * 40
@@ -184,7 +184,7 @@ def test_checked_in_production_config_is_s3_only_and_fully_pinned() -> None:
 
     caption = CaptionJobConfig.from_yaml()
     transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
-    inference = LLMServiceConfig.from_yaml("llm/config.yaml")
+    inference = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
     assert (caption.caption.model_checkpoint, caption.caption.revision) == (
         config.models.caption.model_name,
         config.models.caption.revision,

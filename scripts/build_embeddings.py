@@ -14,7 +14,7 @@ from hcmai.common.utils.io import read_parquet, read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
 from hcmai.retrieval.embedding.models.metadata import EmbeddingMetadata
-from hcmai.thundercompute.pipeline import LLMServiceConfig
+from thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.artifacts import publish_directory
 from hcmai.retrieval.retriever.dense.index import DenseIndex

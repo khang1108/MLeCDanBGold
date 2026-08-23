@@ -9,7 +9,7 @@ from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
-from hcmai.thundercompute.pipeline import LLMServiceConfig
+from thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.text.retriever import (
@@ -45,7 +45,7 @@ def _text_encoder(
     selected = encoder
     if selected is None and settings.inference.enabled:
         import os
-        from hcmai.thundercompute.pipeline import LLMService
+        from thundercompute.pipeline import LLMService
 
         base_url = os.getenv(
             "HCMAI_INFERENCE_BASE_URL", settings.inference.base_url
@@ -61,7 +61,7 @@ def _text_encoder(
         selected = EmbeddingService.create_text_adapter(models.caption_embedding)
     if selected.config.model_name != models.caption_embedding.model_name:
         raise ValueError(
-            "Text encoder does not match llm/config.yaml: "
+            "Text encoder does not match thundercompute/config.yaml: "
             f"{selected.config.model_name!r} != "
             f"{models.caption_embedding.model_name!r}"
         )
@@ -107,7 +107,7 @@ def _context_artifact_paths(
 
 def build_text_artifacts(
     config_path: str | Path = "configs/baseline.yaml",
-    model_config_path: str | Path = "llm/config.yaml",
+    model_config_path: str | Path = "thundercompute/config.yaml",
     *,
     source: RetrievalSource = RetrievalSource.CAPTION,
     enrichment_path: str | Path | None = None,
@@ -150,7 +150,7 @@ def build_text_artifacts(
 
 def build_context_artifacts(
     config_path: str | Path = "configs/baseline.yaml",
-    model_config_path: str | Path = "llm/config.yaml",
+    model_config_path: str | Path = "thundercompute/config.yaml",
     *,
     context_path: str | Path | None = None,
     frames_path: str | Path | None = None,
@@ -203,7 +203,7 @@ def _context_encoder(
     selected = encoder
     if selected is None and settings.inference.enabled:
         import os
-        from hcmai.thundercompute.pipeline import LLMService
+        from thundercompute.pipeline import LLMService
 
         base_url = os.getenv(
             "HCMAI_INFERENCE_BASE_URL", settings.inference.base_url

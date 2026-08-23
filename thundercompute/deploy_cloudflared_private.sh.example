@@ -14,7 +14,7 @@ umask 077
 
 # The private copy should, in order:
 #   1. install/update the HCMAI inference checkout and pinned dependencies;
-#   2. configure the enabled hcmai.thundercompute server on localhost:8100;
+#   2. configure the enabled thundercompute server on localhost:8100;
 #   3. install/start cloudflared with the private tunnel token;
 #   4. verify /health and /ready before returning.
 #

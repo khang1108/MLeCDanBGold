@@ -427,7 +427,7 @@ Implementation tasks:
 - [ ] Preserve the existing `RetrievalCandidate` contract.
 - [ ] Keep unknown public API fields rejected.
 - [ ] Record gate latency separately from retrieval and fusion latency.
-- [ ] Store the selected checkpoint and revision in `llm/config.yaml`.
+- [ ] Store the selected checkpoint and revision in `thundercompute/config.yaml`.
 - [ ] Keep candidate counts in `configs/baseline.yaml`.
 
 Acceptance gate: fake-model smoke tests cover prediction, fallback, identity

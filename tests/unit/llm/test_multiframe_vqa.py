@@ -8,8 +8,8 @@ from hcmai.common.schemas import (
     VQAInferenceEvidence,
     VQAInferenceResponse,
 )
-from hcmai.thundercompute.adapters.vqa import GroundedVQAModel
-from hcmai.thundercompute.config import HostedVQAConfig
+from thundercompute.adapters.vqa import GroundedVQAModel
+from thundercompute.config import HostedVQAConfig
 
 
 class Inputs(dict):

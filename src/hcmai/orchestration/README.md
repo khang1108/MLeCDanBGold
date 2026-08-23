@@ -46,6 +46,6 @@ Completed stages also emit a JSON record containing `request_id`, `task_type`,
 ## Verification
 
 ```bash
-PYTHONPATH=src aic/bin/pytest tests/test_search_service.py
+PYTHONPATH=.:src aic/bin/pytest tests/test_search_service.py
 pyright src/hcmai/orchestration
 ```

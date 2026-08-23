@@ -19,7 +19,7 @@ from hcmai.common.config import AppConfig
 from hcmai.common.schemas import ProcessingStatus, RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.enrichment.transcripts.store import TranscriptStore
-from hcmai.thundercompute.config import LLMServiceConfig
+from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
 from hcmai.retrieval.retriever.artifacts import fingerprint_files, publish_directory
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
@@ -128,7 +128,7 @@ def build_asr_segment_index(
 
 def build_asr_segment_artifacts(
     config_path: str | Path = "configs/baseline.yaml",
-    model_config_path: str | Path = "llm/config.yaml",
+    model_config_path: str | Path = "thundercompute/config.yaml",
     *,
     transcripts_path: str | Path | None = None,
     output_dir: str | Path | None = None,
@@ -199,7 +199,7 @@ def _segment_encoder(
     encoder_config = models.resolved_evidence_embedding
     selected = encoder
     if selected is None and settings.inference.enabled:
-        from hcmai.thundercompute.pipeline import LLMService
+        from thundercompute.pipeline import LLMService
 
         base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
         service = LLMService.remote(base_url, settings.inference)

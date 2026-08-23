@@ -40,7 +40,7 @@ weights.
 ## Verification
 
 ```bash
-PYTHONPATH=src aic/bin/pytest tests/test_reranker.py tests/test_qwen_reranker.py
+PYTHONPATH=.:src aic/bin/pytest tests/test_reranker.py tests/test_qwen_reranker.py
 pyright src/hcmai/retrieval/reranking
 ```
 

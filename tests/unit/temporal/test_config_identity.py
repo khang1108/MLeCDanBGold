@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from hcmai.common.config import AppConfig, ProgressiveSearchConfig
 from hcmai.common.schemas import FrameRecord, RetrievalCandidate
-from hcmai.temporal.evidence import retrieval_to_evidence
+from hcmai.temporal.state.evidence import retrieval_to_evidence
 
 
 class Data:

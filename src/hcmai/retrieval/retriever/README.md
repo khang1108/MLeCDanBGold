@@ -137,7 +137,7 @@ R-Score at `{1,5,20,50,100}`, and P50/P95 latency under `runs/`.
 ## Verification
 
 ```bash
-PYTHONPATH=src aic/bin/pytest \
+PYTHONPATH=.:src aic/bin/pytest \
   tests/test_dense_retriever.py \
   tests/test_faiss_index.py \
   tests/test_caption_retriever.py \

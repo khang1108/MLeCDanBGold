@@ -16,7 +16,7 @@ from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
-from hcmai.thundercompute.pipeline import LLMService, LLMServiceConfig
+from thundercompute.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.reranking.pipeline import RerankerConfig, RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -94,7 +94,7 @@ def _load_app_config() -> AppConfig:
 
 def _load_model_config() -> LLMServiceConfig:
     path = resolve_repository_path(
-        os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml")
+        os.getenv("HCMAI_LLM_CONFIG", "thundercompute/config.yaml")
     )
     if not path.is_file():
         raise FileNotFoundError(f"Model config not found at {path}")

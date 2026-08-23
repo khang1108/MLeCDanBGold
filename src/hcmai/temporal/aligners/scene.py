@@ -10,8 +10,8 @@ from hcmai.common.schemas import (
     TemporalQueryPlan,
 )
 
-from ..evidence import ProgressiveEvidenceState
-from ..scoring import rank_scenes, score_scene, unit_score_bounds
+from ..state.evidence import ProgressiveEvidenceState
+from ..utils.scoring import rank_scenes, score_scene, unit_score_bounds
 
 
 class ProgressiveSceneAligner:

@@ -8,7 +8,7 @@ import numpy as np
 
 from hcmai.common.utils.io import read_parquet, read_yaml
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.thundercompute.pipeline import LLMServiceConfig
+from thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from script_args import parse_arguments
 

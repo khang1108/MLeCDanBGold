@@ -55,24 +55,24 @@ Parquet created before this identity contract must be regenerated or migrated.
 Run the complete V1 preparation sequence from the repository root:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/ingest_btc_keyframes.py \
+PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
   --btc-root data --data-root data \
   --output-root artifacts/frame_store \
   --frame-store-id btc-keyframes-v1
 
-PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
   --config configs/enrichment.yaml
 
-PYTHONPATH=src aic/bin/python scripts/generate_ocr_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
   --config configs/enrichment.yaml
 
-PYTHONPATH=src aic/bin/python scripts/generate_object_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_object_enrichment.py \
   --config configs/enrichment.yaml
 
-PYTHONPATH=src aic/bin/python scripts/prepare_transcripts.py \
+PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
   --config configs/enrichment.yaml --videos-root data/videos
 
-PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
   --config configs/enrichment.yaml
 ```
 
@@ -99,7 +99,7 @@ inference. Index building is outside Enrichment V1.
 ```bash
 pyright src/hcmai/common/schemas src/hcmai/data/enrichment \
   src/hcmai/data/stores src/hcmai/data/pipeline.py
-PYTHONPATH=src aic/bin/python -m pytest tests/data tests/data/enrichment -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data tests/data/enrichment -q
 ```
 
 Real-corpus artifacts are local experiment evidence and must not be committed.

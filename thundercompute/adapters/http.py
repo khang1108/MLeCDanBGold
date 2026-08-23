@@ -27,8 +27,8 @@ from hcmai.common.schemas import (
     VQAInferenceResponse,
 )
 from hcmai.common.utils.logging import get_logger
-from hcmai.thundercompute.gateway import InferenceGateway, InferenceGatewayError
-from hcmai.thundercompute.resilience import FailureCategory
+from thundercompute.gateway import InferenceGateway, InferenceGatewayError
+from thundercompute.resilience import FailureCategory
 
 logger = get_logger(__name__)
 

@@ -147,8 +147,7 @@ HCMAI_2026/
 │   ├── frame_store/           frames.parquet + manifest.json
 │   ├── enrichment/            captions, OCR, objects, context, transcripts
 │   └── indexes/               visual, context, asr_segments
-├── llm/                       model configuration
-├── scripts/thundercompute/    GPU lifecycle controller và private bootstrap contract
+├── thundercompute/            inference service and GPU lifecycle controller
 ├── tests/                     backend tests
 └── README.md
 ```
@@ -283,13 +282,13 @@ dùng entrypoint sau trên máy ThunderCompute. `--s3-dry-run` chỉ inventory,
 không download và không build:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 --s3-dry-run \
   --config configs/indexing.yaml \
   --model-config configs/indexing.models.yaml \
   --s3-config configs/preparation.s3.yaml
 
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 --stage all \
   --config configs/indexing.yaml \
   --model-config configs/indexing.models.yaml \
@@ -389,7 +388,7 @@ export HCMAI_CF_ACCESS_CLIENT_SECRET="<cloudflare-service-client-secret>"
 Khởi động backend:
 
 ```bash
-PYTHONPATH=src aic/bin/python -m uvicorn hcmai.app:app \
+PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000 --reload
 ```
 
@@ -461,8 +460,8 @@ trỏ tới hostname Cloudflare. Có thể bật reranker khi deploy GPU bằng:
 
 ```bash
 TNR_API_TOKEN_FILE=.secrets/tnr_api_token \
-HCMAI_THUNDER_DEPLOY_SCRIPT=./scripts/thundercompute/deploy_cloudflared_private.sh \
-bash scripts/thundercompute/launch.sh --gpu l40 -- \
+HCMAI_THUNDER_DEPLOY_SCRIPT=./thundercompute/deploy_cloudflared_private.sh \
+bash thundercompute/launch.sh --gpu l40 -- \
   --visual-embedding true \
   --caption-embedding true \
   --reranker true
@@ -476,7 +475,7 @@ docker compose --profile thundercompute up --build thundercompute
 
 `docker compose stop thundercompute` sẽ gọi `tnr delete` qua cleanup trap.
 `docker kill` dùng `SIGKILL` nên không thể đảm bảo trap chạy; khi đó dùng
-[`scripts/thundercompute/delete.sh`](scripts/thundercompute/delete.sh) với
+[`thundercompute/delete.sh`](thundercompute/delete.sh) với
 instance ID đã lưu. Bootstrap private nằm trong local workspace và bị
 `.gitignore`; không commit Tunnel token hoặc Cloudflare credential.
 
@@ -612,7 +611,7 @@ riêng khi `thumbnail_path` là `None`; route sẽ fallback về ảnh keyframe.
 ### `reranker.batch_size` vượt quá 16
 
 Giới hạn contract hiện tại của hosted reranker là 16. Đặt
-`reranker.batch_size: 16` hoặc thấp hơn trong `llm/config.yaml`, rồi restart
+`reranker.batch_size: 16` hoặc thấp hơn trong `thundercompute/config.yaml`, rồi restart
 backend.
 
 ### Frontend báo không kết nối backend
@@ -629,9 +628,9 @@ backend.
 - [`scripts/README.md`](scripts/README.md): các CLI data/enrichment/index.
 - [`docs/runbooks/thundercompute-index-build.md`](docs/runbooks/thundercompute-index-build.md):
   build index và đồng bộ ThunderCompute.
-- [`scripts/thundercompute/README.md`](scripts/thundercompute/README.md):
+- [`thundercompute/README.md`](thundercompute/README.md):
   lifecycle create/scp/SSH/delete và Docker profile.
 - [`configs/baseline.yaml`](configs/baseline.yaml): cấu hình serving/search.
 - [`configs/enrichment.yaml`](configs/enrichment.yaml): enrichment BTC-native.
 - [`configs/indexing.yaml`](configs/indexing.yaml): offline index build.
-- [`llm/config.yaml`](llm/config.yaml): model checkpoint và reranker config.
+- [`thundercompute/config.yaml`](thundercompute/config.yaml): model checkpoint và reranker config.

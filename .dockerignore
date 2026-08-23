@@ -4,7 +4,6 @@
 !.env.example
 .secrets/
 .thundercompute/
-scripts/thundercompute/deploy_cloudflared_private.sh
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -14,8 +13,9 @@ frontend/.env
 frontend/.env.*
 data/
 artifacts/
-llm/.env
-llm/.env.*
+thundercompute/.env
+thundercompute/.env.*
+thundercompute/deploy_cloudflared_private.sh
 docs/
 tests/
 aic/

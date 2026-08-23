@@ -13,7 +13,7 @@ from hcmai.common.config import (
 )
 from hcmai.common.schemas import RetrievalSource, TaskType, VQABaselineProfile
 from hcmai.data.enrichment.caption.config import CaptionJobConfig
-from hcmai.thundercompute.config import LLMServiceConfig
+from thundercompute.config import LLMServiceConfig
 
 
 def test_baseline_config_matches_runtime_contract() -> None:
@@ -78,7 +78,7 @@ def test_legacy_frame_store_root_migrates_to_canonical_data_root() -> None:
 
 
 def test_llm_config_is_the_model_authority() -> None:
-    config = LLMServiceConfig.from_yaml("llm/config.yaml")
+    config = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
 
     assert (
         config.visual_embedding.model_name

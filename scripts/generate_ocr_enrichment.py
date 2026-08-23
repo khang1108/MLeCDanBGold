@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
         if settings.inference.enabled or base_url:
             from hcmai.data.enrichment.ocr.adapters.remote import RemoteOCRAdapter
-            from hcmai.thundercompute.pipeline import LLMService
+            from thundercompute.pipeline import LLMService
 
             client = LLMService.remote(base_url, settings.inference.timeout_seconds)
             engine = RemoteOCRAdapter(client.adapter, config)

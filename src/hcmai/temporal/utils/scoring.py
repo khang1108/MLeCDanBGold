@@ -7,7 +7,7 @@ from collections import defaultdict
 from hcmai.common.config import ProgressiveSearchConfig
 from hcmai.common.schemas import QueryUnit, SceneCandidate, TemporalConstraint
 
-from .evidence import ProgressiveEvidenceState
+from ..state.evidence import ProgressiveEvidenceState
 from .relations import relation_satisfaction
 
 

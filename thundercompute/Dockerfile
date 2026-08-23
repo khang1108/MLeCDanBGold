@@ -32,8 +32,8 @@ RUN curl -fsSL https://raw.githubusercontent.com/Thunder-Compute/thunder-cli/mai
 
 WORKDIR /opt/hcmai
 
-COPY --chown=thunder:thunder scripts/thundercompute/launch.sh /usr/local/bin/hcmai-thundercompute
-COPY --chown=thunder:thunder scripts/thundercompute/delete.sh /usr/local/bin/hcmai-thunder-delete
+COPY --chown=thunder:thunder thundercompute/launch.sh /usr/local/bin/hcmai-thundercompute
+COPY --chown=thunder:thunder thundercompute/delete.sh /usr/local/bin/hcmai-thunder-delete
 
 RUN chmod 0755 /usr/local/bin/hcmai-thundercompute /usr/local/bin/hcmai-thunder-delete
 

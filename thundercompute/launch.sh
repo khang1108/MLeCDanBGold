@@ -7,7 +7,7 @@ umask 077
 # is never copied into this image or committed to the repository.
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+readonly REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly DEFAULT_STATE_FILE="${REPO_ROOT}/.thundercompute/instance-id"
 readonly DEFAULT_DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy_cloudflared_private.sh"
 readonly REMOTE_SCRIPT="${HCMAI_THUNDER_REMOTE_SCRIPT:-/home/ubuntu/deploy_cloudflared_private.sh}"
@@ -89,7 +89,7 @@ trap 'on_signal INT' INT
 usage() {
     cat <<'EOF'
 Usage:
-  scripts/thundercompute/launch.sh (--gpu GPU | --instance ID) [options] \
+  thundercompute/launch.sh (--gpu GPU | --instance ID) [options] \
       -- [deploy_cloudflared_private.sh options]
 
 Instance selection:
@@ -117,7 +117,7 @@ bootstrap in a detached remote tmux session.
 
 The controller stays attached after deployment.  Use SIGTERM, Ctrl-C, or
 `docker compose stop thundercompute` for cleanup.  SIGKILL cannot be trapped;
-use scripts/thundercompute/delete.sh with the saved instance ID after a force
+use thundercompute/delete.sh with the saved instance ID after a force
 kill.
 EOF
 }

@@ -4,11 +4,11 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app:/app/src
 
 COPY pyproject.toml README.md ./
 COPY configs/ ./configs/
-COPY llm/config.yaml ./llm/config.yaml
+COPY thundercompute/ ./thundercompute/
 COPY src/ ./src/
 
 RUN python -m pip install --no-cache-dir .

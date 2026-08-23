@@ -274,7 +274,7 @@ compatible with online frame-aligned ASR retrieval.
 
 - `src/hcmai/common/config.py`
 - `configs/enrichment.yaml` when transcript settings belong there
-- `llm/config.yaml` for immutable model revisions
+- `thundercompute/config.yaml` for immutable model revisions
 - `src/hcmai/data/enrichment/transcripts/adapters/asr.py`
 - `src/hcmai/data/enrichment/transcripts/pipeline.py`
 - `src/hcmai/data/enrichment/transcripts/prepare.py`

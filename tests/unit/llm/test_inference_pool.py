@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from hcmai.common.schemas import InferenceReadiness
-from hcmai.thundercompute.adapters.pool import InferenceClientPool
+from thundercompute.adapters.pool import InferenceClientPool
 
 
 class FakeClient:

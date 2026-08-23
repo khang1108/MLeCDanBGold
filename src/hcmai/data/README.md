@@ -60,31 +60,31 @@ specialist stages are pinned in `configs/enrichment.yaml`.
 
 ```bash
 # 1. Import organizer keyframes as the canonical frame store.
-PYTHONPATH=src aic/bin/python scripts/ingest_btc_keyframes.py \
+PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
   --btc-root data \
   --data-root data \
   --output-root artifacts/frame_store \
   --frame-store-id btc-keyframes-v1
 
 # 2. Generate captions.
-PYTHONPATH=src aic/bin/python scripts/generate_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
   --config configs/enrichment.yaml
 
 # 3. Generate structured OCR evidence.
-PYTHONPATH=src aic/bin/python scripts/generate_ocr_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
   --config configs/enrichment.yaml
 
 # 4. Import organizer-provided object detections; do not re-detect objects.
-PYTHONPATH=src aic/bin/python scripts/generate_object_enrichment.py \
+PYTHONPATH=.:src aic/bin/python scripts/generate_object_enrichment.py \
   --config configs/enrichment.yaml
 
 # 5. Generate timestamped ASR segments from the source videos.
-PYTHONPATH=src aic/bin/python scripts/prepare_transcripts.py \
+PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
   --config configs/enrichment.yaml \
   --videos-root data/videos
 
 # 6. Build FrameContext only from the existing specialist artifacts.
-PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
   --config configs/enrichment.yaml
 ```
 

@@ -71,7 +71,8 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["hcmai*", "thundercompute*"]
 
 [dependency-groups]
 dev = [

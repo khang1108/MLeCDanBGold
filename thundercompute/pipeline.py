@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from hcmai.common.config import InferenceConfig
-from hcmai.thundercompute.config import (
+from thundercompute.config import (
     HostedVQAConfig,
     LLMServiceConfig,
 )
@@ -26,7 +26,7 @@ class LLMService:
 
     @classmethod
     def from_environment(cls) -> LLMService:
-        from hcmai.thundercompute.adapters.local import LocalAdapter
+        from thundercompute.adapters.local import LocalAdapter
 
         return cls(LocalAdapter.from_environment())
 
@@ -37,7 +37,7 @@ class LLMService:
         timeout_seconds: float | InferenceConfig = 10,
         client: Any | None = None,
     ) -> LLMService:
-        from hcmai.thundercompute.adapters.http import InferenceClient
+        from thundercompute.adapters.http import InferenceClient
 
         return cls(InferenceClient(base_url, timeout_seconds, client))
 

@@ -143,7 +143,7 @@ def test_four_aligned_indexes_exactly_match_canonical_frame_identities(
     # Mock AppConfig and LLMServiceConfig to avoid FileNotFoundError reading non-existent YAMLs
     from hcmai.common.config import AppConfig, TranscriptJobConfig
     from hcmai.data.enrichment.caption.config import CaptionJobConfig
-    from hcmai.thundercompute.pipeline import LLMServiceConfig
+    from thundercompute.pipeline import LLMServiceConfig
     
     # Wait, instead of guessing AppConfig shape, let's just mock `AppConfig.from_yaml` to return a mocked object
     # using unittest.mock.MagicMock.

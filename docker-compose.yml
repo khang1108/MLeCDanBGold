@@ -44,7 +44,7 @@ services:
       HCMAI_CORS_ORIGINS: ${HCMAI_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       # These paths are inside the image/container, not host-relative paths.
       HCMAI_CONFIG_PATH: /app/configs/baseline.yaml
-      HCMAI_LLM_CONFIG: /app/llm/config.yaml
+      HCMAI_LLM_CONFIG: /app/thundercompute/config.yaml
       HCMAI_ENRICHMENT_CONFIG: /app/configs/enrichment.yaml
       HCMAI_DATASET_ROOT: /app/data
       HCMAI_METADATA_PATH: /app/artifacts/frame_store/frames.parquet
@@ -121,7 +121,7 @@ services:
     profiles: ["thundercompute"]
     build:
       context: .
-      dockerfile: scripts/thundercompute/Dockerfile
+      dockerfile: thundercompute/Dockerfile
       args:
         TNR_VERSION: ${TNR_VERSION:-2.0.71}
     environment:
@@ -154,4 +154,4 @@ secrets:
   tnr_api_token:
     file: ${TNR_API_TOKEN_FILE:-./.secrets/tnr_api_token.example}
   deploy_cloudflared_private:
-    file: ${HCMAI_THUNDER_DEPLOY_SCRIPT:-./scripts/thundercompute/deploy_cloudflared_private.sh.example}
+    file: ${HCMAI_THUNDER_DEPLOY_SCRIPT:-./thundercompute/deploy_cloudflared_private.sh.example}

@@ -75,7 +75,7 @@ the remaining rows.
 ## Verification
 
 ```bash
-PYTHONPATH=src aic/bin/pytest \
+PYTHONPATH=.:src aic/bin/pytest \
   tests/test_embedding_pipeline.py \
   tests/test_encoder.py \
   tests/test_bge_encoder.py

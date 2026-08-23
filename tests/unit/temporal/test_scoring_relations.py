@@ -9,9 +9,9 @@ from hcmai.common.schemas import (
     TemporalConstraint,
     TemporalRelation,
 )
-from hcmai.temporal.evidence import ProgressiveEvidenceState
-from hcmai.temporal.relations import parse_temporal_constraints
-from hcmai.temporal.scoring import rank_scenes, score_scene
+from hcmai.temporal.state.evidence import ProgressiveEvidenceState
+from hcmai.temporal.utils.relations import parse_temporal_constraints
+from hcmai.temporal.utils.scoring import rank_scenes, score_scene
 
 
 def _item(frame_id: str, unit_id: str, timestamp: int, score: float):
@@ -98,7 +98,7 @@ def test_relation_uses_any_valid_evidence_pair_and_unknown_stays_unknown():
         _item("h1-5", "h1", 5_000, 0.8),
         _item("h1-50", "h1", 50_000, 0.8),
     )
-    from hcmai.temporal.relations import relation_satisfaction
+    from hcmai.temporal.utils.relations import relation_satisfaction
 
     score, _ = relation_satisfaction([constraint], evidence, near_ms=1_000)
     assert score == 1.0

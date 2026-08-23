@@ -118,7 +118,7 @@ def test_submission_frame_idx_uses_explicit_rule() -> None:
 Run:
 
 ```bash
-PYTHONPATH=src python -m pytest tests/preprocessing/test_submission_mapping.py -v
+PYTHONPATH=.:src python -m pytest tests/preprocessing/test_submission_mapping.py -v
 ```
 
 Expected: import failure for `hcmai.data.preprocessing.submission`.
@@ -216,7 +216,7 @@ The output directory contains `summary.json` plus `<rule>-mismatches.csv` for no
 - [ ] **Step 6: Run mapper tests**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/preprocessing/test_submission_mapping.py \
   tests/data/test_btc_keyframe_map.py -v
 ```
@@ -320,7 +320,7 @@ Also keep the existing atomic publication/resume/failure-recovery tests that rem
 - [ ] **Step 2: Run the rewritten preprocessing tests and verify failures against old adaptive semantics**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/preprocessing/test_frame_store.py -v
+PYTHONPATH=.:src python -m pytest tests/preprocessing/test_frame_store.py -v
 ```
 
 Expected: FAIL where `select_candidates`/DINO behavior is still active and where the current producer decodes twice.
@@ -446,7 +446,7 @@ Update all repository callers. Do not keep `prepare_adaptive` as a permanent com
 - [ ] **Step 8: Run local and S3 preprocessing tests**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/preprocessing/test_frame_store.py \
   tests/preprocessing/test_s3_frame_store.py -v
 ```
@@ -510,7 +510,7 @@ def test_merge_frame_metadata_rejects_duplicate_frame_id(tmp_path):
 - [ ] **Step 2: Run the tests and confirm the helper is missing**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/data/test_frame_store_merge.py -v
+PYTHONPATH=.:src python -m pytest tests/data/test_frame_store_merge.py -v
 ```
 
 Expected: FAIL import/name resolution.
@@ -534,7 +534,7 @@ For a custom frame store rooted under `data/custom_1fps`, call with prefix `cust
 - [ ] **Step 4: Add a thin CLI**
 
 ```bash
-PYTHONPATH=src python scripts/build_combined_frame_store.py \
+PYTHONPATH=.:src python scripts/build_combined_frame_store.py \
   --btc-frames artifacts/frame_store/btc/frames.parquet \
   --custom-frames data/custom_1fps/frames.parquet \
   --custom-prefix custom_1fps \
@@ -546,7 +546,7 @@ The CLI delegates all validation to `merge_frame_metadata`; do not duplicate mer
 - [ ] **Step 5: Run merge and existing FrameStore tests**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/data/test_frame_store_merge.py \
   tests/test_frame_assets.py \
   tests/test_frame_api.py -v
@@ -617,7 +617,7 @@ def test_visual_builder_accepts_nullable_keyframe_order(tmp_path):
 - [ ] **Step 2: Run the focused test and verify the current `int(None)`/required-identity failure**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/retrieval/test_visual_embedding_resume.py::test_visual_builder_accepts_nullable_keyframe_order -v
 ```
 
@@ -680,7 +680,7 @@ Do not run BTC mapping checks when the configured frames artifact is custom/comb
 - [ ] **Step 5: Run visual/index regression tests**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/retrieval/test_visual_embedding_resume.py \
   tests/unit/retriever/test_index_artifact_integrity.py \
   tests/test_embedding_pipeline.py \
@@ -750,7 +750,7 @@ Also test exact `frame_id` dedup when the same ID appears accidentally in both i
 - [ ] **Step 2: Run tests and confirm class is missing**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_visual_corpus_retriever.py -v
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_visual_corpus_retriever.py -v
 ```
 
 Expected: FAIL import error.
@@ -817,7 +817,7 @@ If the mapping has one index, use `DenseRetriever`; if it has two, use `VisualCo
 - [ ] **Step 5: Run visual-corpus plus fusion regressions**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/retrieval/test_visual_corpus_retriever.py \
   tests/retrieval/test_fast_track_retrieval_composition.py \
   tests/unit/retriever/test_dense_index_score_subset.py -v
@@ -886,7 +886,7 @@ def test_visual_change_uses_normalized_cosine_distance():
 - [ ] **Step 2: Run the tests and confirm the module is missing**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/preprocessing/test_boundary_priors.py -v
+PYTHONPATH=.:src python -m pytest tests/preprocessing/test_boundary_priors.py -v
 ```
 
 - [ ] **Step 3: Implement signal composition and vector-change projection**
@@ -909,7 +909,7 @@ Use existing TransNetV2/EfficientGEBD model adapters to score raw-video sequence
 - [ ] **Step 5: Add an atomic/resumable boundary CLI**
 
 ```bash
-PYTHONPATH=src python scripts/build_boundary_priors.py \
+PYTHONPATH=.:src python scripts/build_boundary_priors.py \
   --frames data/custom_1fps/frames.parquet \
   --visual-index artifacts/indexes/custom_visual \
   --videos-root data/videos \
@@ -921,7 +921,7 @@ The script must support a bounded `--limit` smoke run and must not overwrite a c
 - [ ] **Step 6: Run boundary unit tests**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/preprocessing/test_boundary_priors.py -v
+PYTHONPATH=.:src python -m pytest tests/preprocessing/test_boundary_priors.py -v
 ```
 
 Expected: PASS.
@@ -1017,7 +1017,7 @@ def test_adjacent_scenes_are_offered_as_combined_candidate():
 - [ ] **Step 3: Run the tests and verify current gap/span-only clustering fails**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/unit/temporal/test_boundary_scene_alignment.py -v
+PYTHONPATH=.:src python -m pytest tests/unit/temporal/test_boundary_scene_alignment.py -v
 ```
 
 - [ ] **Step 4: Implement `BoundaryPriorIndex`**
@@ -1061,7 +1061,7 @@ Deduplicate by `(video_id, start_ms, end_ms, frame_ids)` before scoring. The uni
 - [ ] **Step 8: Run temporal regression suite**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/unit/temporal/test_boundary_scene_alignment.py \
   tests/unit/temporal/test_query_evidence.py \
   tests/unit/temporal/test_scoring_relations.py \
@@ -1121,7 +1121,7 @@ Implement stable log-mean-exp, not plain log-sum-exp, so adding duplicate frames
 - [ ] **Step 2: Run the focused tests and confirm helper is missing**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/unit/temporal/test_scoring_relations.py -v
+PYTHONPATH=.:src python -m pytest tests/unit/temporal/test_scoring_relations.py -v
 ```
 
 - [ ] **Step 3: Replace hard `max(values)` semantic aggregation with configurable pooling**
@@ -1188,7 +1188,7 @@ Do not add these as Pydantic schema fields; they remain bounded `RetrievalCandid
 - [ ] **Step 6: Run scoring/KIS tests**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/unit/temporal/test_scoring_relations.py \
   tests/unit/orchestration/test_kis_reranking.py \
   tests/integration/test_kis_golden_path.py -v
@@ -1307,7 +1307,7 @@ All other model/fusion/reranker settings are copied from the same baseline confi
 - [ ] **Step 7: Run setup/config tests**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/orchestration/test_fast_track_setup.py \
   tests/orchestration/test_batch2_ablation_config.py \
   tests/integration/test_progressive_temporal_core.py -v
@@ -1384,7 +1384,7 @@ Gold timestamps are resolved from each `EvaluationQuery.gold_frame_ids` through 
 - [ ] **Step 2: Run test and confirm current benchmark lacks these fields**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_batch2_benchmark.py -v
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_batch2_benchmark.py -v
 ```
 
 - [ ] **Step 3: Remove the single-index metadata assumption**
@@ -1443,7 +1443,7 @@ search/reranker config dump
 - [ ] **Step 7: Run benchmark and observability tests**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/retrieval/test_batch2_benchmark.py \
   tests/orchestration/test_fast_track_setup.py \
   tests/unit/temporal/test_core_regressions.py -v
@@ -1481,7 +1481,7 @@ git commit -m "feat: add batch2 paper-ready evaluation harness"
 - [ ] **Step 1: Run the complete targeted Batch-2 test set before documentation edits**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/preprocessing \
   tests/data/test_btc_keyframe_map.py \
   tests/data/test_frame_store_merge.py \
@@ -1503,7 +1503,7 @@ Expected: all PASS.
 Use the validated submission rule from Task 1:
 
 ```bash
-PYTHONPATH=src python scripts/preprocess_videos.py \
+PYTHONPATH=.:src python scripts/preprocess_videos.py \
   --config configs/preparation.s3.yaml \
   --limit 3
 ```
@@ -1552,7 +1552,7 @@ Do not delete source modules unrelated to Batch 2 in this task.
 - [ ] **Step 5: Run the full repository test suite if dependencies are available**
 
 ```bash
-PYTHONPATH=src python -m pytest -q
+PYTHONPATH=.:src python -m pytest -q
 ```
 
 Expected: PASS. If optional model/runtime dependencies cause environment-only skips, record them explicitly in the Batch-2 release notes; genuine regressions are blockers.

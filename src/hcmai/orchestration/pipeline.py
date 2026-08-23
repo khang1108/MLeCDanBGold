@@ -16,7 +16,7 @@ from hcmai.common.schemas import (
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
-from hcmai.thundercompute.pipeline import LLMService
+from thundercompute.pipeline import LLMService
 from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,

@@ -21,8 +21,8 @@ from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.models.entities import OCRResult
 from hcmai.data.enrichment.pipeline import EnrichmentService
 from hcmai.common.config import TranscriptJobConfig
-from hcmai.thundercompute.adapters.vqa import GroundedVQAModel
-from hcmai.thundercompute.pipeline import LLMServiceConfig
+from thundercompute.adapters.vqa import GroundedVQAModel
+from thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.reranking.pipeline import QwenRerankerConfig, RerankingService
 
 
@@ -105,7 +105,7 @@ class LocalAdapter:
 
     @classmethod
     def from_environment(cls) -> LocalAdapter:
-        path = Path(os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml"))
+        path = Path(os.getenv("HCMAI_LLM_CONFIG", "thundercompute/config.yaml"))
         config = LLMServiceConfig.from_yaml(path)
         
         enrichment_path = Path(os.getenv("HCMAI_ENRICHMENT_CONFIG", "configs/enrichment.yaml"))

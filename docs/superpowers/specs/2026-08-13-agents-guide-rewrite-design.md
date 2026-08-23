@@ -177,7 +177,7 @@ commits are authorized.
 List repository commands using the active `aic` environment:
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest -q
+PYTHONPATH=.:src aic/bin/python -m pytest -q
 CI=true npm test -- --runInBand
 npm run build
 git diff --check

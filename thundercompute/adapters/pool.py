@@ -7,7 +7,7 @@ from typing import Any, Callable, Protocol, Sequence
 
 from hcmai.common.config import InferenceConfig
 from hcmai.common.schemas import InferenceReadiness
-from hcmai.thundercompute.adapters.http import InferenceClient
+from thundercompute.adapters.http import InferenceClient
 
 
 class EndpointPoolConfig(Protocol):

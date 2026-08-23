@@ -99,7 +99,7 @@ src/hcmai/
 ├── api/             # HTTP transport
 ├── common/          # shared schemas/config/cross-cutting utilities
 ├── data/            # ingestion, enrichment, stores, canonical metadata
-├── llm/             # model gateways and inference adapters
+├── thundercompute/  # model gateways, inference adapters, and model config
 ├── orchestration/   # application workflow composition
 ├── pipelines/
 │   ├── kis/         # KIS-specific logic

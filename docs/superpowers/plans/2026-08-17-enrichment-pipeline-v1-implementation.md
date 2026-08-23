@@ -172,7 +172,7 @@ def test_frame_context_records_upstream_versions():
 Run:
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/test_evidence_contracts.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/test_evidence_contracts.py -q
 ```
 
 Expected: collection/import failure for the new evidence classes.
@@ -289,7 +289,7 @@ Add explicit imports and names to `__all__` so downstream code never imports enr
 Run:
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/test_evidence_contracts.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/test_evidence_contracts.py -q
 pyright src/hcmai/common/schemas
 ```
 
@@ -360,7 +360,7 @@ Monkeypatch `hcmai.data.preprocessing` imports to raise if touched, and assert t
 Run:
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/test_btc_ingestion.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/test_btc_ingestion.py -q
 ```
 
 Expected: import failure for `hcmai.data.ingestion.btc`.
@@ -434,7 +434,7 @@ Change CLI args to `--config` and optional `--dataset-root`; remove the currentl
 Run:
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/test_btc_ingestion.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/test_btc_ingestion.py -q
 ```
 
 Expected: PASS and no preprocessing import.
@@ -484,7 +484,7 @@ Add a rerun assertion that the completed frame is skipped while the failed frame
 Run:
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_caption_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_caption_evidence.py -q
 ```
 
 Expected: FAIL because `captions.parquet` and typed fields do not exist.
@@ -558,7 +558,7 @@ Keep prior latency, model revision, skipped/retried counts.
 - [X] **Step 7: Run focused tests**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_caption_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_caption_evidence.py -q
 pyright src/hcmai/data/enrichment/caption
 ```
 
@@ -621,7 +621,7 @@ Also test exact row/region ordering after Parquet round-trip and retry of failed
 - [X] **Step 2: Run the OCR test and verify it fails because the adapter only returns one string**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_ocr_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_ocr_evidence.py -q
 ```
 
 Expected: FAIL.
@@ -730,7 +730,7 @@ Do not call text coverage “accuracy”.
 - [X] **Step 10: Run tests and type checking**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_ocr_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_ocr_evidence.py -q
 pyright src/hcmai/data/enrichment/ocr src/hcmai/common/schemas/inference.py src/hcmai/llm
 ```
 
@@ -787,7 +787,7 @@ The adapter is intentionally strict about the expected BTC/TensorFlow-array shap
 - [X] **Step 2: Run the test and verify the object module does not exist**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_object_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_object_evidence.py -q
 ```
 
 Expected: import failure.
@@ -867,7 +867,7 @@ The root script only parses arguments/config and calls this method.
 - [X] **Step 8: Run tests**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_object_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_object_evidence.py -q
 pyright src/hcmai/data/enrichment/objects
 ```
 
@@ -921,7 +921,7 @@ def test_transcript_segment_carries_asr_lineage():
 - [X] **Step 2: Run the test and verify the current schema lacks those fields**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_asr_segment_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_asr_segment_evidence.py -q
 ```
 
 Expected: FAIL.
@@ -961,7 +961,7 @@ No FrameContext code may import `materialize_asr_enrichment` or `ASRStore`.
 - [X] **Step 6: Run transcript tests**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_asr_segment_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_asr_segment_evidence.py -q
 pyright src/hcmai/common/schemas/transcript.py src/hcmai/data/enrichment/transcripts
 ```
 
@@ -1025,7 +1025,7 @@ Also test caption-only, OCR-only, object-only, all-missing, and exact 80/80/40 w
 - [X] **Step 2: Run the test and verify context module is missing**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_frame_context.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_frame_context.py -q
 ```
 
 Expected: import failure.
@@ -1122,7 +1122,7 @@ def build_frame_context(
 - [X] **Step 8: Run serializer/builder tests and type checking**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_frame_context.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_frame_context.py -q
 pyright src/hcmai/data/enrichment/context
 ```
 
@@ -1174,7 +1174,7 @@ Do not add `OBJECT`/`CONTEXT` to `RetrievalSource` in this plan; that belongs to
 - [X] **Step 2: Run the test and verify object/context stores are absent**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/test_data_service_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/test_data_service_evidence.py -q
 ```
 
 Expected: FAIL.
@@ -1227,7 +1227,7 @@ Do not fuse modalities inside `DataService`.
 - [X] **Step 6: Run store/service tests**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/test_data_service_evidence.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/test_data_service_evidence.py -q
 pyright src/hcmai/data/stores src/hcmai/data/pipeline.py
 ```
 
@@ -1288,7 +1288,7 @@ Then change only `FrameContextConfig.object_token_budget` and assert Caption/OCR
 - [X] **Step 2: Run the integration test and verify the stage wiring is incomplete**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/data/enrichment/test_enrichment_v1_integration.py -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data/enrichment/test_enrichment_v1_integration.py -q
 ```
 
 Expected: FAIL until all paths/config are wired.
@@ -1377,7 +1377,7 @@ frame context
 - [X] **Step 6: Run the integration test and focused enrichment suite**
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest \
+PYTHONPATH=.:src aic/bin/python -m pytest \
   tests/data/test_evidence_contracts.py \
   tests/data/test_btc_ingestion.py \
   tests/data/enrichment/test_caption_evidence.py \
@@ -1454,7 +1454,7 @@ Include runnable commands for BTC ingest, Caption, OCR, Object import, ASR, and 
 ```bash
 git diff --check
 pyright src/hcmai/common/schemas src/hcmai/data/enrichment src/hcmai/data/stores src/hcmai/data/pipeline.py
-PYTHONPATH=src aic/bin/python -m pytest tests/data tests/data/enrichment -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/data tests/data/enrichment -q
 ```
 
 Expected: no type errors in touched modules and all new data tests pass.

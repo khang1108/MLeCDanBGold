@@ -32,7 +32,7 @@ from hcmai.common.schemas import (
 )
 from hcmai.common.schemas.inference import OCRRegionItem
 from hcmai.data.enrichment.ocr.models.entities import json_safe_ocr_raw
-from hcmai.thundercompute.pipeline import LLMService
+from thundercompute.pipeline import LLMService
 
 
 def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
@@ -567,7 +567,7 @@ def _unavailable(prefix: str, error: Exception) -> HTTPException:
 
 
 # Lazy default app — only constructed when this attribute is accessed
-# (e.g. `uvicorn hcmai.thundercompute.server.api:app`), NOT at import time.
+# (e.g. `uvicorn thundercompute.server.api:app`), NOT at import time.
 # Importing only `create_llm_app` from this module will NOT trigger LLMService
 # construction, avoiding the BGE → sentence_transformers → torchcodec chain
 # on environments where those libraries are unavailable.

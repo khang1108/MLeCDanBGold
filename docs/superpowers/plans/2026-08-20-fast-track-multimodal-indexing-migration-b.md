@@ -159,7 +159,7 @@ Also add focused tests rejecting non-contiguous `n`, changing FPS inside one CSV
 Run:
 
 ```bash
-PYTHONPATH=src python -m pytest tests/data/test_btc_keyframe_map.py -q
+PYTHONPATH=.:src python -m pytest tests/data/test_btc_keyframe_map.py -q
 ```
 
 Expected: import failure for `hcmai.data.ingestion.keyframe_map`.
@@ -230,7 +230,7 @@ Delete `_compute_fps_per_video()`. Before `_build_canonical_rows`, call `join_bt
 Run:
 
 ```bash
-PYTHONPATH=src python -m pytest tests/data/test_btc_keyframe_map.py -q
+PYTHONPATH=.:src python -m pytest tests/data/test_btc_keyframe_map.py -q
 pyright src/hcmai/data/ingestion
 ```
 
@@ -277,7 +277,7 @@ def test_old_metadata_without_v2_fields_remains_readable(old_style_index_dir):
 - [ ] **Step 2: Run and verify failure**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_index_artifact_integrity.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_index_artifact_integrity.py -q
 ```
 
 Expected: v2 metadata/checksum behavior is missing.
@@ -364,7 +364,7 @@ Set `schema_version="dense-index-v2"` for newly built indexes. `DenseIndex.load(
 - [ ] **Step 6: Run tests and type checking**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_index_artifact_integrity.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_index_artifact_integrity.py -q
 pyright src/hcmai/retrieval/retriever/models/metadata.py src/hcmai/retrieval/retriever/dense/index.py src/hcmai/retrieval/retriever/artifacts.py
 ```
 
@@ -421,7 +421,7 @@ Also test a shard with mismatched frame IDs is ignored and regenerated rather th
 - [ ] **Step 2: Run tests and verify failure**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_visual_embedding_resume.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_visual_embedding_resume.py -q
 ```
 
 - [ ] **Step 3: Extend `EmbeddingMetadata` with revision and source fingerprint defaults**
@@ -481,7 +481,7 @@ Add CLI flags through `script_args.py` if that is where shared arguments live:
 - [ ] **Step 7: Run tests and type checking**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_visual_embedding_resume.py tests/retrieval/test_index_artifact_integrity.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_visual_embedding_resume.py tests/retrieval/test_index_artifact_integrity.py -q
 pyright src/hcmai/retrieval/embedding scripts/build_embeddings.py
 ```
 
@@ -529,7 +529,7 @@ Also parse a YAML with explicit `evidence_embedding` and assert it wins over `ca
 - [ ] **Step 2: Run and verify failure**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_context_index.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_context_index.py -q
 ```
 
 - [ ] **Step 3: Add the new retrieval source without removing legacy values**
@@ -652,7 +652,7 @@ Paths may be overridden by CLI on ThunderCompute; do not rewrite this file with 
 - [ ] **Step 8: Run tests/type check and commit**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_context_index.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_context_index.py -q
 pyright src/hcmai/common/config.py src/hcmai/common/schemas src/hcmai/llm/config.py
 
 git add src/hcmai/common src/hcmai/llm/config.py configs/indexing.yaml configs/indexing.models.yaml tests/retrieval/test_context_index.py
@@ -699,7 +699,7 @@ def test_context_index_is_frame_native(fake_bge, data_service_with_context, tmp_
 - [ ] **Step 2: Run and verify failure**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_context_index.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_context_index.py -q
 ```
 
 - [ ] **Step 3: Expose FrameContext iteration through `DataService`**
@@ -791,7 +791,7 @@ Add a test comparing `DenseIndex.search_filtered()` for one video/time window ag
 - [ ] **Step 8: Run and commit**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_context_index.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_context_index.py -q
 pyright src/hcmai/data/pipeline.py src/hcmai/retrieval/retriever/text src/hcmai/retrieval/retriever/pipeline.py
 
 git add src/hcmai/data/pipeline.py src/hcmai/retrieval/retriever/text src/hcmai/retrieval/retriever/pipeline.py scripts/build_caption_index.py tests/retrieval/test_context_index.py
@@ -835,7 +835,7 @@ Fixture boundaries should include `[0,1000)`, `[1000,2000)`, and `[2000,3000)` s
 - [ ] **Step 2: Run and verify failure**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_segment_dense_index.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_segment_dense_index.py -q
 ```
 
 - [ ] **Step 3: Implement build-time mapping validation**
@@ -888,7 +888,7 @@ Compare restricted results to brute-force matrix multiplication over the selecte
 - [ ] **Step 7: Run and commit**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_segment_dense_index.py tests/retrieval/test_index_artifact_integrity.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_segment_dense_index.py tests/retrieval/test_index_artifact_integrity.py -q
 pyright src/hcmai/retrieval/retriever/segment
 
 git add src/hcmai/retrieval/retriever/segment tests/retrieval/test_segment_dense_index.py
@@ -925,7 +925,7 @@ Include one `FAILED` segment fixture and assert it is excluded from embedding.
 - [ ] **Step 2: Run and verify failure**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_asr_segment_retriever.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_asr_segment_retriever.py -q
 ```
 
 - [ ] **Step 3: Implement the segment corpus builder**
@@ -967,7 +967,7 @@ Use the existing normalized text encoding helper or move that pure helper into a
 - [ ] **Step 6: Run and commit**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_asr_segment_retriever.py tests/retrieval/test_segment_dense_index.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_asr_segment_retriever.py tests/retrieval/test_segment_dense_index.py -q
 pyright src/hcmai/retrieval/retriever/segment/artifacts.py src/hcmai/retrieval/retriever/pipeline.py
 
 git add src/hcmai/retrieval/retriever/segment src/hcmai/retrieval/retriever/pipeline.py tests/retrieval/test_asr_segment_retriever.py
@@ -1078,7 +1078,7 @@ Build a Context `DenseRetriever` and `ASRSegmentRetriever` with the same fake BG
 - [ ] **Step 6: Run and commit**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_segment_frame_projector.py tests/retrieval/test_asr_segment_retriever.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_segment_frame_projector.py tests/retrieval/test_asr_segment_retriever.py -q
 pyright src/hcmai/data/stores/frame.py src/hcmai/retrieval/retriever/segment
 
 git add src/hcmai/data/stores/frame.py src/hcmai/retrieval/retriever/segment tests/retrieval/test_segment_frame_projector.py tests/retrieval/test_asr_segment_retriever.py
@@ -1129,7 +1129,7 @@ def test_fast_track_service_returns_frame_native_fused_candidates(
 - [ ] **Step 2: Run and verify failure**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_fast_track_retrieval_composition.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_fast_track_retrieval_composition.py -q
 ```
 
 - [ ] **Step 3: Add a specific fast-track factory; preserve `from_indexes()` for rollback**
@@ -1173,7 +1173,7 @@ This protects TRAKE's current candidate-local visual path without importing/modi
 - [ ] **Step 6: Run and commit**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_fast_track_retrieval_composition.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_fast_track_retrieval_composition.py -q
 pyright src/hcmai/retrieval/retriever/pipeline.py
 
 git add src/hcmai/retrieval/retriever/pipeline.py tests/retrieval/test_fast_track_retrieval_composition.py
@@ -1281,7 +1281,7 @@ Weights remain neutral until measured. Inactive legacy sources do not contribute
 - [ ] **Step 7: Run startup tests and type checking**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/orchestration/test_fast_track_setup.py tests/retrieval/test_fast_track_retrieval_composition.py -q
+PYTHONPATH=.:src python -m pytest tests/orchestration/test_fast_track_setup.py tests/retrieval/test_fast_track_retrieval_composition.py -q
 pyright src/hcmai/orchestration/setup.py src/hcmai/common/config.py
 ```
 
@@ -1452,7 +1452,7 @@ python scripts/build_retrieval_indexes.py --stage all --config configs/indexing.
 - [ ] **Step 7: Run CLI tests/shell syntax check and commit**
 
 ```bash
-PYTHONPATH=src python -m pytest tests/retrieval/test_fast_track_retrieval_composition.py -q
+PYTHONPATH=.:src python -m pytest tests/retrieval/test_fast_track_retrieval_composition.py -q
 bash -n scripts/sync_thundercompute_indexes.sh
 python scripts/build_retrieval_indexes.py --help
 
@@ -1476,7 +1476,7 @@ git commit -m "feat(ops): add thundercompute multimodal index workflow"
 - [ ] **Step 1: Run the complete focused unit/integration suite**
 
 ```bash
-PYTHONPATH=src python -m pytest \
+PYTHONPATH=.:src python -m pytest \
   tests/data/test_btc_keyframe_map.py \
   tests/retrieval/test_index_artifact_integrity.py \
   tests/retrieval/test_visual_embedding_resume.py \

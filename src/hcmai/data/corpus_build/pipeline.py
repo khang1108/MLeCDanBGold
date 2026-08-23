@@ -257,14 +257,14 @@ class DefaultPreparationOperations:
         resume: bool,
         limit: int | None,
         enrichment_config: str | Path = "configs/enrichment.yaml",
-        model_config: str | Path = "llm/config.yaml",
+        model_config: str | Path = "thundercompute/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
         s3_client: Any | None = None,
     ) -> None:
         from hcmai.common.config import TranscriptJobConfig
         from hcmai.data.enrichment.caption.config import CaptionJobConfig
         from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
-        from hcmai.thundercompute.config import LLMServiceConfig
+        from thundercompute.config import LLMServiceConfig
 
         storage = config.preprocessing.s3
         if storage is None:
@@ -297,7 +297,7 @@ class DefaultPreparationOperations:
         if pool_config is None:
             return None
         if capability not in self._remote_pools:
-            from hcmai.thundercompute.adapters.pool import InferenceClientPool
+            from thundercompute.adapters.pool import InferenceClientPool
 
             self._remote_pools[capability] = InferenceClientPool.from_config(
                 pool_config
@@ -789,7 +789,7 @@ class S3CorpusPreparationService:
         limit: int | None = None,
         offset: int | None = None,
         enrichment_config: str | Path = "configs/enrichment.yaml",
-        model_config: str | Path = "llm/config.yaml",
+        model_config: str | Path = "thundercompute/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
         paths: PreparationPaths | None = None,
     ) -> None:

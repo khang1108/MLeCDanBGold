@@ -16,7 +16,7 @@ def _arguments() -> argparse.Namespace:
         description="Build one frame-text source and an exact FAISS index"
     )
     parser.add_argument("--config", default="configs/baseline.yaml")
-    parser.add_argument("--model-config", default="llm/config.yaml")
+    parser.add_argument("--model-config", default="thundercompute/config.yaml")
     parser.add_argument(
         "--source",
         default=RetrievalSource.CAPTION.value,

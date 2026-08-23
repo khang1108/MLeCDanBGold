@@ -82,14 +82,14 @@ Start with an inventory-only check, then run the complete local GPU build and
 S3 publication:
 
 ```bash
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 \
   --s3-dry-run \
   --config configs/indexing.yaml \
   --model-config configs/indexing.models.yaml \
   --s3-config configs/preparation.s3.yaml
 
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 \
   --stage all \
   --config configs/indexing.yaml \
@@ -154,7 +154,7 @@ export HCMAI_INFERENCE_BASE_URL="https://<private-api-hostname>"
 export HCMAI_CF_ACCESS_CLIENT_ID="<service-client-id>"
 export HCMAI_CF_ACCESS_CLIENT_SECRET="<service-client-secret>"
 
-PYTHONPATH=src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage all \
   --config configs/indexing.yaml \
   --model-config configs/indexing.models.yaml \
@@ -167,7 +167,7 @@ are loaded and pinned correctly before an embedding stage begins. It sends
 SigLIP images to the visual endpoint and both FrameContext and ASR text to the
 BGE `text` family. Leave off the option to build with local models instead.
 
-The A6000 starting batch is 128 in both `llm/config.yaml` and
+The A6000 starting batch is 128 in both `thundercompute/config.yaml` and
 `configs/indexing.models.yaml`; adjust it only after observing actual VRAM and
 latency with the corpus's real image/text lengths. The builder has one active
 embedding batch at a time. Sending several simultaneous requests to one

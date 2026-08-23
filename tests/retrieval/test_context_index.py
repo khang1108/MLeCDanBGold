@@ -20,7 +20,7 @@ from hcmai.common.schemas import RetrievalSource, TaskType
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.io import read_yaml, write_json, write_yaml
 from hcmai.data.pipeline import DataService
-from hcmai.thundercompute.config import LLMServiceConfig
+from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 
 
@@ -352,7 +352,7 @@ def test_remote_context_encoder_uses_text_source_family(
 ) -> None:
     """Hosted Context embeddings use the BGE text endpoint, not ``context``."""
 
-    from hcmai.thundercompute.pipeline import LLMService
+    from thundercompute.pipeline import LLMService
     from hcmai.retrieval.retriever.text import artifacts
 
     captured: dict[str, object] = {}

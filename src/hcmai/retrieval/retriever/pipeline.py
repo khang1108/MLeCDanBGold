@@ -234,7 +234,7 @@ class RetrievalService:
     @staticmethod
     def build_text_artifacts(
         config_path: str | Path = "configs/baseline.yaml",
-        model_config_path: str | Path = "llm/config.yaml",
+        model_config_path: str | Path = "thundercompute/config.yaml",
         *,
         source: RetrievalSource = RetrievalSource.CAPTION,
         enrichment_path: str | Path | None = None,
@@ -255,7 +255,7 @@ class RetrievalService:
     @staticmethod
     def build_context_artifacts(
         config_path: str | Path = "configs/baseline.yaml",
-        model_config_path: str | Path = "llm/config.yaml",
+        model_config_path: str | Path = "thundercompute/config.yaml",
         *,
         context_path: str | Path | None = None,
         frames_path: str | Path | None = None,
@@ -276,7 +276,7 @@ class RetrievalService:
     @staticmethod
     def build_asr_segment_artifacts(
         config_path: str | Path = "configs/baseline.yaml",
-        model_config_path: str | Path = "llm/config.yaml",
+        model_config_path: str | Path = "thundercompute/config.yaml",
         *,
         transcripts_path: str | Path | None = None,
         output_dir: str | Path | None = None,

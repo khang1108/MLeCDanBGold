@@ -4,7 +4,7 @@ import pytest
 
 from hcmai.common.schemas import FrameEvidence, FrameRecord, SceneCandidate, VQARequest
 from hcmai.pipelines.vqa.query.parser import parse_vqa_query
-from hcmai.temporal.evidence import EvaluationState, ProgressiveEvidenceState
+from hcmai.temporal.state.evidence import EvaluationState, ProgressiveEvidenceState
 from hcmai.temporal.query import SnapshotDiffMode, diff_snapshot
 
 
