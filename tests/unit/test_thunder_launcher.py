@@ -7,7 +7,7 @@ import subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LAUNCHER = REPO_ROOT / "llm" / "launch_thunder_instance.sh"
+LAUNCHER = REPO_ROOT / "scripts" / "thundercompute" / "launch.sh"
 
 
 def make_auth_tnr(tmp_path: Path) -> Path:
@@ -232,4 +232,76 @@ def test_existing_instance_option_preserves_model_arguments() -> None:
         "true",
         "--vqa",
         "true",
+    ]
+
+
+def test_cleanup_deletes_created_instance_and_clears_state(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "tnr-calls"
+    fake_tnr = fake_bin / "tnr"
+    fake_tnr.write_text(
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" >> "$TNR_CALLS"\n'
+    )
+    fake_tnr.chmod(0o700)
+    state_file = tmp_path / "instance-id"
+    state_file.write_text("7\n")
+    command = (
+        f'source "{LAUNCHER}"; '
+        'INSTANCE_ID="7"; INSTANCE_CREATED=true; DELETE_ON_EXIT=true; '
+        f'INSTANCE_ID_FILE="{state_file}"; exit 0'
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "TNR_CALLS": str(calls),
+    }
+
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-c", command],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert calls.read_text().splitlines() == ["delete --yes 7"]
+    assert state_file.read_text() == ""
+
+
+def test_upload_target_keeps_absolute_home_path(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "tnr-calls"
+    fake_tnr = fake_bin / "tnr"
+    fake_tnr.write_text(
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" >> "$TNR_CALLS"\n'
+    )
+    fake_tnr.chmod(0o700)
+    bootstrap = tmp_path / "deploy_cloudflared_private.sh"
+    bootstrap.write_text("#!/usr/bin/env bash\n")
+    command = (
+        f'source "{LAUNCHER}"; '
+        f'DEPLOY_SCRIPT="{bootstrap}"; INSTANCE_ID="0"; upload_bootstrap'
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "TNR_CALLS": str(calls),
+    }
+
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-c", command],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert calls.read_text().splitlines() == [
+        f"scp {bootstrap} 0:/home/ubuntu/ --yes"
     ]

@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+/build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -81,9 +82,13 @@ outputs/
 *.mp3
 *.flac
 
-# Local deployment secrets; the checked-in LLM script reads these from env.
+# Local deployment secrets; the checked-in lifecycle launcher reads these from env.
 /llm/.env
 llm/deploy_cloudflared_private.sh
+/scripts/thundercompute/deploy_cloudflared_private.sh
+/.thundercompute/
+/.secrets/*
+!/.secrets/tnr_api_token.example
 
 # Local ASR evaluation and benchmark code
 /src/hcmai/transcripts/evaluate.py

@@ -2,20 +2,33 @@
 set -Eeuo pipefail
 umask 077
 
-readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy_cloudflared_private.sh"
-readonly REMOTE_SCRIPT="/tmp/deploy_cloudflared_private.sh"
-readonly REMOTE_LOG="/tmp/hcmai-deploy.log"
+# Provision one disposable GPU VM and keep this process attached to its
+# lifecycle.  The private bootstrap is deliberately supplied at runtime; it
+# is never copied into this image or committed to the repository.
 
-GPU=""
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+readonly DEFAULT_STATE_FILE="${REPO_ROOT}/.thundercompute/instance-id"
+readonly DEFAULT_DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy_cloudflared_private.sh"
+readonly REMOTE_SCRIPT="${HCMAI_THUNDER_REMOTE_SCRIPT:-/home/ubuntu/deploy_cloudflared_private.sh}"
+readonly REMOTE_LOG="${HCMAI_THUNDER_REMOTE_LOG:-/tmp/hcmai-deploy.log}"
+
+GPU="${HCMAI_THUNDER_GPU:-l40}"
+GPU_FROM_ARG=false
+TEMPLATE="${HCMAI_THUNDER_TEMPLATE:-base}"
+VCPUS="${HCMAI_THUNDER_VCPUS:-8}"
+PRIMARY_DISK_GB="${HCMAI_THUNDER_DISK_GB:-${HCMAI_THUNDER_PRIMARY_DISK_GB:-200}}"
 TOKEN=""
-VCPUS=8
-DISK_GB=100
-WAIT_TIMEOUT_SECONDS=900
-POLL_INTERVAL_SECONDS=10
-TMUX_SESSION="hcmai-deploy"
-INSTANCE_ID=""
+WAIT_TIMEOUT_SECONDS="${HCMAI_THUNDER_WAIT_TIMEOUT_SECONDS:-900}"
+POLL_INTERVAL_SECONDS="${HCMAI_THUNDER_POLL_INTERVAL_SECONDS:-10}"
+TMUX_SESSION="${HCMAI_THUNDER_TMUX_SESSION:-hcmai-deploy}"
+DEPLOY_SCRIPT="${HCMAI_THUNDER_DEPLOY_SCRIPT:-${DEFAULT_DEPLOY_SCRIPT}}"
+INSTANCE_ID="${HCMAI_THUNDER_INSTANCE_ID:-}"
+INSTANCE_ID_FILE="${HCMAI_THUNDER_INSTANCE_ID_FILE:-${DEFAULT_STATE_FILE}}"
+DELETE_ON_EXIT="${HCMAI_THUNDER_DELETE_ON_EXIT:-true}"
+DELETE_REUSED="${HCMAI_THUNDER_DELETE_REUSED:-false}"
 DEPLOY_ARGS=()
+INSTANCE_CREATED=false
 SSH_HOST=""
 SSH_PORT=""
 SSH_KEY_FILE=""
@@ -26,10 +39,6 @@ log() {
 
 die() {
     printf 'ERROR: %s\n' "$*" >&2
-    if [[ -n "${INSTANCE_ID}" ]]; then
-        printf 'ERROR: Thunder instance %s may still be billable.\n' \
-            "${INSTANCE_ID}" >&2
-    fi
     exit 1
 }
 
@@ -38,59 +47,78 @@ on_error() {
     trap - ERR
     printf 'ERROR: command failed at line %s (exit %s).\n' \
         "${BASH_LINENO[0]}" "${exit_code}" >&2
-    if [[ -n "${INSTANCE_ID}" ]]; then
-        printf 'ERROR: Thunder instance %s may still be billable.\n' \
-            "${INSTANCE_ID}" >&2
-    fi
     exit "${exit_code}"
 }
 trap on_error ERR
 
+cleanup() {
+    local exit_code=$?
+    local should_delete=false
+    trap - ERR EXIT INT TERM
+
+    if [[ "${DELETE_ON_EXIT}" == "true" && -n "${INSTANCE_ID}" ]]; then
+        if [[ "${INSTANCE_CREATED}" == "true" || "${DELETE_REUSED}" == "true" ]]; then
+            should_delete=true
+        fi
+    fi
+
+    if [[ "${should_delete}" == "true" ]]; then
+        log "Deleting Thunder instance ${INSTANCE_ID}."
+        if tnr delete --yes "${INSTANCE_ID}" </dev/null; then
+            clear_instance_state
+            log "Thunder instance ${INSTANCE_ID} deleted."
+        else
+            printf 'ERROR: unable to delete Thunder instance %s; it may remain billable.\n' \
+                "${INSTANCE_ID}" >&2
+            (( exit_code == 0 )) && exit_code=1
+        fi
+    fi
+
+    return "${exit_code}"
+}
+trap cleanup EXIT
+
+on_signal() {
+    local signal=$1
+    log "Received ${signal}; stopping the local controller."
+    exit 143
+}
+trap 'on_signal TERM' TERM
+trap 'on_signal INT' INT
+
 usage() {
     cat <<'EOF'
 Usage:
-  llm/launch_thunder_instance.sh (--gpu a6000|l40 | --instance ID) [options] \
+  scripts/thundercompute/launch.sh (--gpu GPU | --instance ID) [options] \
       -- [deploy_cloudflared_private.sh options]
 
-Instance selection (choose one):
-  --gpu GPU               GPU type: a6000 or l40.
-  --instance ID           Reuse an existing Thunder instance by positional ID.
-
-Authentication:
-  --token TOKEN           Thunder API token used only when the current tnr
-                          login is invalid. TNR_API_TOKEN is also accepted.
+Instance selection:
+  --gpu GPU                 Create a new instance, for example l40 or a6000.
+  --instance ID             Reuse an existing Thunder instance.
 
 Instance options:
-  --vcpus COUNT           Virtual CPUs (default: 8).
-  --disk GB               Primary disk size in GB (default: 100).
-  --wait-timeout SECONDS  Maximum wait for RUNNING (default: 900).
-  --poll-interval SECONDS Status polling interval (default: 10).
-  --tmux-session NAME     Remote tmux session (default: hcmai-deploy).
-  --help                  Show this help.
+  --template NAME           Thunder template (default: base).
+  --vcpus COUNT             vCPU count (default: 8).
+  --disk GB                 Primary disk size (passed to the installed tnr CLI).
+  --wait-timeout SECONDS    Maximum time waiting for RUNNING (default: 900).
+  --poll-interval SECONDS   Status polling interval (default: 10).
+  --tmux-session NAME       Remote deployment session (default: hcmai-deploy).
+  --token TOKEN             TNR API token; TNR_API_TOKEN is also supported.
+  --keep                    Do not delete the instance when this process exits.
+  --delete-reused           Also delete an instance passed with --instance.
+  --help                    Show this help.
 
-Bootstrap service options (place after --; reranker and VQA default to false):
-  --caption true|false            Florence-2 frame captioning.
-  --ocr true|false                OCR model service.
-  --asr true|false                Qwen3-ASR service.
-  --visual-embedding true|false   SigLIP2 image embedding service.
-  --caption-embedding true|false  BGE-M3 text embedding service.
-  --reranker true|false           Qwen3-VL visual reranking (default: false).
-  --vqa true|false                Qwen2.5-VL grounded VQA (default: false).
+The private bootstrap is uploaded with:
+  tnr scp SCRIPT ID:/home/ubuntu/
 
-At least one bootstrap service must remain enabled. Everything after -- is
-forwarded unchanged to deploy_cloudflared_private.sh on the instance.
+There is no documented non-interactive `tnr exec` command.  After SCP, this
+launcher uses the SSH metadata returned by `tnr status --json` and starts the
+bootstrap in a detached remote tmux session.
 
-Examples:
-  # Start caption, OCR, and ASR using their defaults.
-  llm/launch_thunder_instance.sh --gpu l40 --token "$TOKEN" --
-
-  # Start only caption and OCR.
-  llm/launch_thunder_instance.sh --gpu l40 --token "$TOKEN" -- --asr false
-
-  # Start SigLIP/BGE embeddings, Qwen reranking, and grounded VQA.
-  llm/launch_thunder_instance.sh --gpu l40 --token "$TOKEN" -- \
-    --caption false --ocr false --asr false --visual-embedding true \
-    --caption-embedding true --reranker true --vqa true
+The controller stays attached after deployment.  Use SIGTERM, Ctrl-C, or
+`docker compose stop thundercompute` for cleanup.  SIGKILL cannot be trapped;
+use scripts/thundercompute/delete.sh with the saved instance ID after a force
+kill.
 EOF
 }
 
@@ -110,6 +138,7 @@ parse_args() {
             --gpu)
                 require_value "$1" "$#"
                 GPU="${2,,}"
+                GPU_FROM_ARG=true
                 shift 2
                 ;;
             --instance)
@@ -117,9 +146,9 @@ parse_args() {
                 INSTANCE_ID=$2
                 shift 2
                 ;;
-            --token)
+            --template)
                 require_value "$1" "$#"
-                TOKEN=$2
+                TEMPLATE=$2
                 shift 2
                 ;;
             --vcpus)
@@ -127,9 +156,9 @@ parse_args() {
                 VCPUS=$2
                 shift 2
                 ;;
-            --disk)
+            --primary-disk|--disk)
                 require_value "$1" "$#"
-                DISK_GB=$2
+                PRIMARY_DISK_GB=$2
                 shift 2
                 ;;
             --wait-timeout)
@@ -147,6 +176,19 @@ parse_args() {
                 TMUX_SESSION=$2
                 shift 2
                 ;;
+            --token)
+                require_value "$1" "$#"
+                TOKEN=$2
+                shift 2
+                ;;
+            --keep)
+                DELETE_ON_EXIT=false
+                shift
+                ;;
+            --delete-reused)
+                DELETE_REUSED=true
+                shift
+                ;;
             --help|-h)
                 usage
                 exit 0
@@ -163,17 +205,30 @@ parse_args() {
     done
 }
 
+load_token_from_file() {
+    local token_file=${TNR_API_TOKEN_FILE:-}
+    local line
+
+    [[ -n "${token_file}" && -r "${token_file}" ]] || return 0
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        [[ -z "${line}" || "${line}" == \#* ]] && continue
+        export TNR_API_TOKEN="${line}"
+        return 0
+    done < "${token_file}"
+}
+
 validate() {
     if [[ -n "${INSTANCE_ID}" ]]; then
         [[ "${INSTANCE_ID}" =~ ^[0-9]+$ ]] \
             || die "--instance must be a non-negative integer."
-        [[ -z "${GPU}" ]] || die "Use either --gpu or --instance, not both."
+        [[ "${GPU_FROM_ARG}" == "false" ]] \
+            || die "Use either --gpu or --instance, not both."
     else
-        [[ "${GPU}" == "a6000" || "${GPU}" == "l40" ]] \
-            || die "--gpu must be either a6000 or l40 when --instance is omitted."
+        [[ -n "${GPU}" ]] || die "--gpu is required when --instance is omitted."
     fi
     is_positive_integer "${VCPUS}" || die "--vcpus must be a positive integer."
-    is_positive_integer "${DISK_GB}" || die "--disk must be a positive integer."
+    is_positive_integer "${PRIMARY_DISK_GB}" \
+        || die "--disk must be a positive integer."
     is_positive_integer "${WAIT_TIMEOUT_SECONDS}" \
         || die "--wait-timeout must be a positive integer."
     is_positive_integer "${POLL_INTERVAL_SECONDS}" \
@@ -188,9 +243,15 @@ validate() {
         command -v "${command_name}" >/dev/null 2>&1 \
             || die "Required command not found: ${command_name}"
     done
+
+    mkdir -p "$(dirname -- "${INSTANCE_ID_FILE}")"
+    [[ ! -L "${INSTANCE_ID_FILE}" ]] \
+        || die "Instance-ID state path must not be a symbolic link."
 }
 
 check_authentication() {
+    load_token_from_file
+
     if tnr status --no-wait --json >/dev/null 2>&1; then
         log "Thunder CLI is already authenticated."
         return
@@ -200,7 +261,7 @@ check_authentication() {
         TOKEN="${TNR_API_TOKEN:-}"
     fi
     [[ -n "${TOKEN}" ]] \
-        || die "Thunder CLI is not logged in; provide --token TOKEN or set TNR_API_TOKEN."
+        || die "Thunder CLI is not logged in; provide --token TOKEN or set TNR_API_TOKEN/TNR_API_TOKEN_FILE."
 
     log "Current Thunder login is unavailable; validating the supplied API token."
     export TNR_API_TOKEN="${TOKEN}"
@@ -320,30 +381,34 @@ raise SystemExit("status response did not contain SSH connection metadata for th
 ' "${expected_id}"
 }
 
+write_instance_state() {
+    printf '%s\n' "${INSTANCE_ID}" > "${INSTANCE_ID_FILE}"
+}
+
+clear_instance_state() {
+    [[ -e "${INSTANCE_ID_FILE}" ]] || return 0
+    [[ ! -L "${INSTANCE_ID_FILE}" ]] \
+        || die "Instance-ID state path became a symbolic link."
+    : > "${INSTANCE_ID_FILE}"
+}
+
 create_instance() {
     local create_response
-    log "Creating Thunder instance: gpu=${GPU}, vcpus=${VCPUS}, disk=${DISK_GB}GB."
+    log "Creating Thunder instance: gpu=${GPU}, vcpus=${VCPUS}, disk=${PRIMARY_DISK_GB}GB."
     create_response="$(tnr create \
         --gpu "${GPU}" \
         --num-gpus 1 \
         --vcpus "${VCPUS}" \
-        --template base \
-        --disk "${DISK_GB}" \
-        --json)"
+        --template "${TEMPLATE}" \
+        --disk "${PRIMARY_DISK_GB}" \
+        --json \
+        --yes)"
     INSTANCE_ID="$(json_instance_id <<<"${create_response}")"
     [[ "${INSTANCE_ID}" =~ ^[0-9]+$ ]] \
         || die "Thunder returned an invalid instance ID: ${INSTANCE_ID}"
+    INSTANCE_CREATED=true
+    write_instance_state
     log "Created Thunder instance ${INSTANCE_ID}."
-}
-
-publish_instance_id() {
-    if [[ -n "${HCMAI_THUNDER_INSTANCE_ID_FILE:-}" ]]; then
-        [[ -f "${HCMAI_THUNDER_INSTANCE_ID_FILE}" \
-            && ! -L "${HCMAI_THUNDER_INSTANCE_ID_FILE}" ]] \
-            || die "Instance-ID destination must be an existing regular file."
-        printf '%s\n' "${INSTANCE_ID}" \
-            > "${HCMAI_THUNDER_INSTANCE_ID_FILE}"
-    fi
 }
 
 wait_until_running() {
@@ -375,8 +440,8 @@ wait_until_running() {
 }
 
 upload_bootstrap() {
-    log "Uploading the private bootstrap with tnr scp."
-    tnr scp "${DEPLOY_SCRIPT}" "${INSTANCE_ID}:${REMOTE_SCRIPT}"
+    log "Uploading the private bootstrap with tnr scp to /home/ubuntu/."
+    tnr scp "${DEPLOY_SCRIPT}" "${INSTANCE_ID}:/home/ubuntu/" --yes
 }
 
 resolve_ssh_connection() {
@@ -400,11 +465,13 @@ resolve_ssh_connection() {
         || die "Thunder returned an invalid SSH port."
     (( SSH_PORT <= 65535 )) || die "Thunder returned an invalid SSH port."
 
-    if [[ -n "${TNR_HOME:-}" ]]; then
+    if [[ -n "${HCMAI_THUNDER_SSH_KEY_FILE:-}" ]]; then
+        key_candidates+=("${HCMAI_THUNDER_SSH_KEY_FILE}")
+    elif [[ -n "${TNR_HOME:-}" ]]; then
         key_candidates+=("${TNR_HOME}/keys/${instance_uuid}")
     else
-        [[ -n "${HOME:-}" ]] \
-            && key_candidates+=("${HOME}/.thunder/keys/${instance_uuid}")
+        [[ -n "${HOME:-}" ]] && key_candidates+=("${HOME}/.thunder/keys/${instance_uuid}")
+        [[ -n "${HOME:-}" ]] && key_candidates+=("${HOME}/.tnr/keys/${instance_uuid}")
         if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
             key_candidates+=("${XDG_CACHE_HOME}/thunder/keys/${instance_uuid}")
         elif [[ -n "${HOME:-}" ]]; then
@@ -421,12 +488,12 @@ resolve_ssh_connection() {
         fi
     done
     [[ -n "${SSH_KEY_FILE}" ]] \
-        || die "Thunder SSH key was not cached by tnr scp for instance ${INSTANCE_ID}."
+        || die "Thunder SSH key was not cached by tnr scp for instance ${INSTANCE_ID}. Set HCMAI_THUNDER_SSH_KEY_FILE if needed."
 
     if [[ -n "${HCMAI_THUNDER_CONNECTION_FILE:-}" ]]; then
-        [[ -f "${HCMAI_THUNDER_CONNECTION_FILE}" \
-            && ! -L "${HCMAI_THUNDER_CONNECTION_FILE}" ]] \
-            || die "Connection-info destination must be an existing regular file."
+        [[ ! -L "${HCMAI_THUNDER_CONNECTION_FILE}" ]] \
+            || die "Connection-info destination must not be a symbolic link."
+        mkdir -p "$(dirname -- "${HCMAI_THUNDER_CONNECTION_FILE}")"
         printf '%s\n%s\n%s\n' "${SSH_HOST}" "${SSH_PORT}" "${SSH_KEY_FILE}" \
             > "${HCMAI_THUNDER_CONNECTION_FILE}"
     fi
@@ -456,14 +523,22 @@ start_remote_tmux() {
     deploy_command="${deploy_command% } >${REMOTE_LOG} 2>&1"
     printf -v deploy_command '%q' "${deploy_command}"
     printf -v remote_command \
-        'set -Eeuo pipefail; if ! command -v tmux >/dev/null 2>&1; then sudo env DEBIAN_FRONTEND=noninteractive apt-get update; sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y tmux; fi; chmod 700 %q; tmux has-session -t %q 2>/dev/null && { echo "tmux session already exists: %s" >&2; exit 1; }; tmux new-session -d -s %q bash -lc %s' \
+        'set -Eeuo pipefail; chmod 700 %q; if ! command -v tmux >/dev/null 2>&1; then sudo env DEBIAN_FRONTEND=noninteractive apt-get update; sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y tmux; fi; tmux has-session -t %q 2>/dev/null && { echo "tmux session already exists: %s" >&2; exit 1; }; tmux new-session -d -s %q bash -lc %s' \
         "${REMOTE_SCRIPT}" "${TMUX_SESSION}" "${TMUX_SESSION}" \
         "${TMUX_SESSION}" "${deploy_command}"
 
-    log "Starting deployment in tmux session ${TMUX_SESSION}."
+    log "Starting deployment in remote tmux session ${TMUX_SESSION}."
     ssh_command "${remote_command}"
     log "Deployment started for instance ${INSTANCE_ID}."
-    log "Use run.sh log streaming and tnr status to inspect the deployment."
+    log "Remote log: ${REMOTE_LOG}; local stop will delete the instance."
+}
+
+wait_for_controller_stop() {
+    log "Controller is attached to instance ${INSTANCE_ID}."
+    log "Send SIGTERM/Ctrl-C to delete it; use delete.sh after SIGKILL."
+    while :; do
+        sleep 3600
+    done
 }
 
 main() {
@@ -474,12 +549,13 @@ main() {
         create_instance
     else
         log "Reusing Thunder instance ${INSTANCE_ID}."
+        write_instance_state
     fi
-    publish_instance_id
     wait_until_running
     upload_bootstrap
     resolve_ssh_connection
     start_remote_tmux
+    wait_for_controller_stop
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

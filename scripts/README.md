@@ -14,12 +14,10 @@ not an end-to-end `EvaluationService`.
 supports explicitly disabled diarization, and materializes frame-aligned ASR
 through the canonical `FrameEnrichment`/`ASRStore` contract.
 
-`preprocess_videos.py` accepts either a local `videos_root` or an S3 source in
-its YAML. For S3 it stages one object at a time, validates the complete local
-FrameStore, publishes an immutable artifact version, writes `_SUCCESS.json`,
-and advances `latest.json` last. See
-`src/hcmai/data/preprocessing/README.md` and
-`configs/preprocessing.s3.example.yaml`.
+The `thundercompute/` subdirectory is the exception to the data CLI pattern:
+it owns the laptop-side GPU lifecycle controller. See
+[`thundercompute/README.md`](thundercompute/README.md) for the
+`tnr create -> scp -> SSH deploy -> delete` flow and secret boundary.
 
 ## Validate the repository
 
@@ -51,16 +49,15 @@ two deterministic skips, plus 21 passing frontend tests and a successful
 production build. Both backend skips generate tiny video fixtures and run when
 the optional preprocessing extra supplies PyAV.
 
-The current deterministic baseline after Plans 03–04 and the S3 preprocessing
-transport is 367 passing backend tests with the same two optional PyAV skips,
+The current deterministic baseline after the BTC-native preparation migration
+is 367 passing backend tests with the same two optional PyAV skips,
 plus 27 passing frontend tests and a successful production build. The focused
 temporal/VQA/TRAKE/data-reliability gate contains 120 passing tests.
 
 ## HCMAI 2026 BTC-native enrichment V1
 
 The active competition preparation path starts from BTC keyframes and BTC
-objects. Video preprocessing remains available for non-BTC experiments, but it
-is not part of this profile.
+objects. Custom video frame extraction is not part of this profile.
 
 ```text
 BTC keyframes ──> Caption ──────┐
