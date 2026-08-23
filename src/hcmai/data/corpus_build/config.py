@@ -17,8 +17,6 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from hcmai.data.preprocessing.config import PreprocessingConfig
-
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 LEGACY_LOCAL_ROOTS = (
     (PROJECT_ROOT / "data").resolve(),
@@ -26,6 +24,67 @@ LEGACY_LOCAL_ROOTS = (
 )
 _MOVING_REVISIONS = {"current", "head", "latest", "main", "master", "newest"}
 _COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _s3_prefix(value: str) -> str:
+    """Normalize one bucket-relative S3 prefix."""
+
+    normalized = value.strip().strip("/")
+    if not normalized or value.strip().startswith("s3://"):
+        raise ValueError("S3 prefixes must be non-empty bucket-relative keys")
+    if "\\" in normalized or any(
+        part in {"", ".", ".."} for part in normalized.split("/")
+    ):
+        raise ValueError("S3 prefixes must not contain path traversal")
+    return normalized
+
+
+class S3PreparationConfig(BaseModel):
+    """S3 transport settings shared by BTC-native preparation stages."""
+
+    bucket: str = Field(min_length=3)
+    videos_prefix: str = "videos"
+    artifacts_prefix: str = "artifacts"
+    smoke_artifacts_prefix: str = "artifacts/smoke"
+    region: str | None = None
+    endpoint_url: str | None = None
+    staging_root: Path | None = None
+    cache_root: Path | None = None
+    connect_timeout_seconds: float = Field(default=10.0, gt=0)
+    read_timeout_seconds: float = Field(default=300.0, gt=0)
+    max_attempts: int = Field(default=4, ge=1, le=10)
+
+    @field_validator("bucket")
+    @classmethod
+    def normalize_bucket(cls, value: str) -> str:
+        """Keep bucket names plain and independent from URI syntax."""
+
+        bucket = value.strip()
+        if len(bucket) < 3 or bucket.startswith("s3://") or "/" in bucket:
+            raise ValueError("bucket must be a plain S3 bucket name")
+        return bucket
+
+    @field_validator(
+        "videos_prefix", "artifacts_prefix", "smoke_artifacts_prefix"
+    )
+    @classmethod
+    def normalize_prefix(cls, value: str) -> str:
+        """Reject absolute and traversal-like S3 keys."""
+
+        return _s3_prefix(value)
+
+    def artifacts_prefix_for_run(self, limit: int | None) -> str:
+        """Keep smoke-test publication pointers outside the full corpus."""
+
+        if limit is None:
+            return self.artifacts_prefix
+        return f"{self.smoke_artifacts_prefix}/limit-{limit}"
+
+
+class PreparationStorageConfig(BaseModel):
+    """Storage section retained after removing custom video preprocessing."""
+
+    s3: S3PreparationConfig | None = None
 
 
 def _resolved_absolute(path: Path, label: str) -> Path:
@@ -138,7 +197,6 @@ class PinnedModelConfig(BaseModel):
 class PreparationModelPins(BaseModel):
     """Immutable model identities required by every preparation stage."""
 
-    dino: PinnedModelConfig
     caption: PinnedModelConfig
     ocr: PinnedModelConfig
     asr: PinnedModelConfig
@@ -194,15 +252,11 @@ class RemoteInferencePoolsConfig(BaseModel):
     Nếu trường nào bị bỏ trống (None), pipeline sẽ chạy mô hình đó tại máy local.
     """
 
-    preprocessing: RemoteEndpointPoolConfig | None = None
-    dino: RemoteEndpointPoolConfig | None = None
     caption: RemoteEndpointPoolConfig | None = None
     ocr: RemoteEndpointPoolConfig | None = None
     visual_embedding: RemoteEndpointPoolConfig | None = None
     text_embedding: RemoteEndpointPoolConfig | None = None
     transcript: RemoteEndpointPoolConfig | None = None
-    transnet_model: PinnedModelConfig | None = None
-    efficientgebd_model: PinnedModelConfig | None = None
 
     @property
     def enabled(self) -> bool:
@@ -214,14 +268,12 @@ class S3CorpusPreparationConfig(BaseModel):
 
     corpus_revision: str = Field(min_length=3, max_length=128)
     work_root: Path
-    frame_store_source: Literal["btc_keyframes", "legacy_video_preprocessing"] = (
-        "legacy_video_preprocessing"
-    )
+    frame_store_source: Literal["btc_keyframes"] = "btc_keyframes"
     stages: PreparationStagesConfig = Field(
         default_factory=PreparationStagesConfig
     )
     models: PreparationModelPins
-    preprocessing: PreprocessingConfig
+    preprocessing: PreparationStorageConfig
     execution: PreparationExecutionConfig = Field(
         default_factory=PreparationExecutionConfig
     )
@@ -251,15 +303,11 @@ class S3CorpusPreparationConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_production_boundaries(self) -> S3CorpusPreparationConfig:
-        preprocessing = self.preprocessing
-        if preprocessing.s3 is None or preprocessing.videos_root is not None:
-            raise ValueError(
-                "production corpus preparation is S3-only and cannot use "
-                "videos_root"
-            )
+        storage = self.preprocessing.s3
+        if storage is None:
+            raise ValueError("production corpus preparation requires S3 storage")
 
-
-        staging = preprocessing.s3.staging_root
+        staging = storage.staging_root
         if staging is None:
             raise ValueError("production S3 preparation requires staging_root")
         staging_root = _resolved_absolute(staging, "s3.staging_root")
@@ -270,10 +318,10 @@ class S3CorpusPreparationConfig(BaseModel):
         # consumers use ``storage.staging_root`` directly when creating
         # temporary directories, so leaving ``~`` here would produce a
         # literal path such as ``repo/~/MLeCDanBGold/...``.
-        preprocessing.s3.staging_root = staging_root
+        storage.staging_root = staging_root
 
-        full = preprocessing.s3.artifacts_prefix
-        smoke = preprocessing.s3.smoke_artifacts_prefix
+        full = storage.artifacts_prefix
+        smoke = storage.smoke_artifacts_prefix
         if (
             full == smoke
             or full.startswith(f"{smoke}/")
@@ -283,30 +331,13 @@ class S3CorpusPreparationConfig(BaseModel):
                 "smoke and full artifact prefixes must be separate namespaces"
             )
 
-        dino = self.models.dino
-        if preprocessing.dino_revision is None:
-            raise ValueError("production preprocessing requires a DINO revision")
-        if (
-            preprocessing.dino_model != dino.model_name
-            or preprocessing.dino_revision != dino.revision
-        ):
-            raise ValueError(
-                "preprocessing DINO model pin must match preparation.models.dino"
-            )
-        if self.remote_inference.preprocessing is not None and (
-            self.remote_inference.transnet_model is None
-            or self.remote_inference.efficientgebd_model is None
-        ):
-            raise ValueError(
-                "remote preprocessing requires transnet and efficientgebd model pins"
-            )
-        cache_root = preprocessing.s3.cache_root
+        cache_root = storage.cache_root
         if cache_root is not None:
             resolved_cache = _resolved_absolute(cache_root, "s3.cache_root")
             _reject_legacy_local(resolved_cache, "s3.cache_root")
             if not _inside(resolved_cache, self.work_root):
                 raise ValueError("s3.cache_root must be inside work_root")
-            preprocessing.s3.cache_root = resolved_cache
+            storage.cache_root = resolved_cache
         if self.execution.overlap_frame_asr and cache_root is None:
             raise ValueError("overlap_frame_asr requires a persistent source cache")
         return self

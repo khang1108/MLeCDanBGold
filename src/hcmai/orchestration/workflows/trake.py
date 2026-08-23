@@ -38,6 +38,7 @@ class TRAKEPipeline:
             raise TaskPipelineRequestError(
                 "TRAKEPipeline requires a TRAKE request"
             )
+
         if self.temporal_core is None:
             raise TaskPipelineDependencyError("Retriever not loaded")
 
@@ -46,13 +47,17 @@ class TRAKEPipeline:
             raise TaskPipelineRequestError(
                 "TRAKE needs 'events' with at least two ordered events"
             )
+
         digest = sha1(f"trake\0{request.query}\0{request.top_k}".encode())
+
         request_id = f"trake-{digest.hexdigest()[:12]}"
+
         plan = self.temporal_core.ordered_plan(events)
         aligned = self.temporal_core.align_ordered(
             plan,
             max_paths=request.top_k,
         )
+
         rows = aligned.paths
         logger.info(
             "[%s] trake completed events=%d videos=%d rows=%d",
@@ -61,6 +66,7 @@ class TRAKEPipeline:
             len({row.video_id for row in rows}),
             len(rows),
         )
+
         return TRAKEResponse(
             request_id=request_id,
             query=request.query,

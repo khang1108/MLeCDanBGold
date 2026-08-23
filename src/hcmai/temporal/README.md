@@ -44,6 +44,6 @@ Important invariants:
 - task type, base filters, and VQA question fingerprint are frozen per
   progressive session.
 
-`progressive.architecture` explicitly selects `temporal` or `legacy` at
-application composition time for KIS/VQA. The temporal path is the configured
-default. Dense provider failure never falls back to unordered scene alignment.
+KIS and VQA are composed with this temporal facade as their sole scene
+localization path. Dense provider failure is reported as a dependency failure;
+the application does not fall back to unordered scene alignment.

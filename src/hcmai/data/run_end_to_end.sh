@@ -19,10 +19,7 @@ log() {
     printf '\n[Data Pipeline %s] %s\n' "$(date '+%H:%M:%S')" "$*"
 }
 
-log "Step 0: Setup TransNetV2 & EfficientGEBD models"
-bash src/hcmai/data/setup_models.sh
-
-log "Step 1: Starting Video Preprocessing (Extracting frames, GEBD, DINO dedup)"
+log "Starting BTC-native S3 corpus preparation"
 "${PYTHON_BIN}" scripts/prepare_s3_corpus.py --config configs/preparation.s3.yaml "$@"
 
 log "Pipeline completed successfully! All artifacts and indexes are ready."

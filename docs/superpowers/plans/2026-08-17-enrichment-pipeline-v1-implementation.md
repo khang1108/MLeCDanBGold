@@ -24,7 +24,8 @@
 - V1 context defaults: Caption <= 80 whitespace tokens; OCR <= 80; Objects <= 40; the independent section budgets cap context at 200 whitespace tokens.
 - Individual frame/segment failures must not fail the whole corpus; completed rows are resumable and failed/incomplete rows are retryable.
 - Changing one specialist artifact invalidates only its dependent views; changing ASR never invalidates `frame_context-v1`.
-- Existing preprocessing code stays in the repository for non-BTC workflows, but the HCMAI 2026 competition preparation path must no longer call it.
+- The active HCMAI 2026 path is BTC-native; legacy custom-video preprocessing
+  is removed, while the low-level `video.py` timing utility remains available.
 
 ---
 
@@ -90,7 +91,8 @@
 
 ### Do Not Modify in This Plan
 
-- `src/hcmai/data/preprocessing/**`
+- `src/hcmai/data/preprocessing/video.py` — retained low-level video utility;
+  legacy preprocessing modules are removed.
 - `src/hcmai/retrieval/**`
 - `src/hcmai/temporal/**`
 - `src/hcmai/pipelines/kis/**`
@@ -414,7 +416,7 @@ dataset:
   frame_store_output: "artifacts/frame_store"
 ```
 
-`DataService.prepare(config_path, ...)` must reject any `dataset.source` other than `btc_keyframes` in this competition configuration and call `import_btc_frame_store`. Keep `scripts/preprocess_videos.py` as the explicit entry point for legacy/custom-video experiments.
+`DataService.prepare(config_path, ...)` must reject any `dataset.source` other than `btc_keyframes` in this competition configuration and call `import_btc_frame_store`. The legacy custom-video entry point is removed.
 
 - [X] **Step 6: Fix `scripts/prepare_data.py` to call the actual `DataService.prepare(config_path)` signature**
 
@@ -1338,7 +1340,8 @@ context:
 
 - [X] **Step 4: Remove preprocessing from the competition preparation stage graph**
 
-In `configs/preparation.s3.yaml`, remove/ignore TransNet/EfficientGEBD/DINO settings from the active HCMAI 2026 competition preparation path. Keep the file parseable for historical consumers if needed, but active stages become:
+In `configs/preparation.s3.yaml`, remove TransNet/EfficientGEBD/DINO settings
+from the active HCMAI 2026 competition preparation path; active stages become:
 
 ```yaml
 stages:
@@ -1423,7 +1426,9 @@ Videos ─────────> ASR segments  │   (ASR excluded)
                                  └─> specialist artifacts
 ```
 
-Keep a separate note that `src/hcmai/data/preprocessing/**` exists for non-BTC experiments but is not used in the competition preparation profile.
+Keep a separate note that only `src/hcmai/data/preprocessing/video.py` remains
+as a low-level utility; custom frame extraction is not part of the competition
+profile.
 
 - [X] **Step 2: Document the source-of-truth artifacts and legacy projections**
 

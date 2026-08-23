@@ -48,11 +48,11 @@ directly. The application composition root constructs the service once and
 reuses its encoders and indexes.
 
 `from_index` creates a single-index service for the frozen dense baseline.
-`from_indexes` wires the selected competition path: one visual index plus
-caption, OCR, and ASR indexes followed by RRF fusion. All configured indexes
-must have compatible model, dimension, and dataset provenance; an invalid or
-missing required artifact leaves online search unavailable rather than
-silently changing the selected path.
+`from_fast_track_indexes` wires the current competition path: one visual index,
+an optional frame-native Context index, and optional segment-native ASR followed
+by RRF fusion. All configured indexes must have compatible model, dimension,
+and dataset provenance; an invalid or missing required artifact leaves online
+search unavailable rather than silently selecting a rollback architecture.
 
 ## Index artifacts
 
@@ -66,9 +66,10 @@ building validates that embeddings and mappings describe the same corpus:
 
 Every deployable dense-index directory is a complete bundle containing
 `dense.index`, `frame_mapping.parquet`, `metadata.json`, `vectors.npy`, and the
-persisted video-posting/timestamp arrays. Caption, OCR, and ASR artifacts use
-filenames selected by `index.text_embedding_filenames` in
-`configs/baseline.yaml`; the component does not hard-code alternate names.
+persisted video-posting/timestamp arrays. Offline text-enrichment builders may
+use filenames selected by `index.text_embedding_filenames` in
+`configs/baseline.yaml`; those artifacts are not loaded by the online
+composition root.
 
 ### Offline generation and local serving
 

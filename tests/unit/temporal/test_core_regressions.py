@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from hcmai.common.schemas import FrameEvidence, FrameRecord
-from hcmai.temporal.core import (
-    _candidate_video_scores,
-    _cluster_video_evidence,
-    _retain_top_evidence,
-)
+from hcmai.temporal.aligners.scene import cluster_video_evidence
 from hcmai.temporal.evidence import ProgressiveEvidenceState
+from hcmai.temporal.providers.sparse import candidate_video_scores, retain_top_evidence
 
 
 def _item(frame_id: str, timestamp_ms: int, score: float) -> FrameEvidence:
@@ -27,7 +24,7 @@ def _item(frame_id: str, timestamp_ms: int, score: float) -> FrameEvidence:
 
 def test_top_m_deduplicates_before_truncating():
     first = _item("f1", 100, 0.99)
-    retained = _retain_top_evidence(
+    retained = retain_top_evidence(
         [first, first, _item("f2", 200, 0.90), _item("f3", 300, 0.89)],
         3,
     )
@@ -36,7 +33,7 @@ def test_top_m_deduplicates_before_truncating():
 
 def test_scene_clustering_caps_total_span_despite_chaining():
     evidence = [_item(f"f{index}", index * 2_500, 0.8) for index in range(8)]
-    scenes = _cluster_video_evidence(
+    scenes = cluster_video_evidence(
         "v1",
         evidence,
         max_gap_ms=3_000,
@@ -63,7 +60,7 @@ def test_candidate_score_prefers_multi_hint_coverage_and_tracks_unknown():
             }
         )
         state.mark_evaluated(f"h{index}", "b", (item,))
-    scores = _candidate_video_scores(
+    scores = candidate_video_scores(
         state,
         unit_ids=["h0", "h1", "h2", "h3"],
         allowed_video_ids={"a", "b"},
@@ -84,7 +81,7 @@ def test_candidate_score_prefers_multi_hint_coverage_and_tracks_unknown():
         }
     )
     state.mark_evaluated("h3", "rescued", (rescued,))
-    scores = _candidate_video_scores(
+    scores = candidate_video_scores(
         state,
         unit_ids=["h0", "h1", "h2", "h3"],
         allowed_video_ids={"b", "rescued"},

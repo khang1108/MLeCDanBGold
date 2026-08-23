@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Protocol
 
 from hcmai.common.schemas import FrameRecord, RetrievalResult, RetrievalSource, TaskType

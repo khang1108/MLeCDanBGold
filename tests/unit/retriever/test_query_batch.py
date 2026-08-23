@@ -11,11 +11,10 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from hcmai.common.config import EncoderConfig, FusionConfig
+from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import RetrievalSource
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
-from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.query_batch import encode_query_batch
 
 
@@ -56,26 +55,6 @@ def _index(model_name: str) -> DenseIndex:
     )
 
 
-def _service(
-    visual_encoder: CountingEncoder,
-    text_encoder: CountingEncoder,
-) -> RetrievalService:
-    return RetrievalService.from_indexes(
-        _index(visual_encoder.config.model_name),
-        visual_encoder,
-        {
-            source: _index(text_encoder.config.model_name)
-            for source in (
-                RetrievalSource.CAPTION,
-                RetrievalSource.OCR,
-                RetrievalSource.ASR,
-            )
-        },
-        text_encoder,
-        FusionConfig(),
-    )
-
-
 def test_query_batch_deduplicates_normalized_text_and_restores_order() -> None:
     encoder = CountingEncoder("fixture/text")
 
@@ -91,32 +70,6 @@ def test_query_batch_deduplicates_normalized_text_and_restores_order() -> None:
     assert batch.revision == "fixture-r1"
     assert batch.model_name == "fixture/text"
     assert batch.source_family == "text"
-
-
-def test_three_text_modalities_share_one_encoder_call() -> None:
-    visual = CountingEncoder("fixture/visual")
-    text = CountingEncoder("fixture/text")
-    service = _service(visual, text)
-
-    result = service.search("a bilingual event", top_k=3)
-
-    assert result.candidates
-    assert visual.calls == [["a bilingual event"]]
-    assert text.calls == [["a bilingual event"]]
-    assert set(result.candidates[0].source_ranks).issubset(set(RetrievalSource))
-
-
-def test_event_queries_are_encoded_in_one_batch_and_keep_order() -> None:
-    visual = CountingEncoder("fixture/visual")
-    text = CountingEncoder("fixture/text")
-    service = _service(visual, text)
-
-    results = service.search_batch(["E1", "E2", "E3"], top_k=2)
-
-    assert len(results) == 3
-    assert visual.calls == [["E1", "E2", "E3"]]
-    assert text.calls == [["E1", "E2", "E3"]]
-    assert all(len(result.candidates) == 2 for result in results)
 
 
 def test_search_vectors_rejects_incompatible_batch_provenance() -> None:
@@ -168,7 +121,7 @@ def test_batch_reuse_reduces_encoder_wait_on_small_fixture() -> None:
     started = perf_counter()
     for retriever in retrievers:
         retriever.search("event", top_k=1)
-    legacy_elapsed = perf_counter() - started
+    independent_elapsed = perf_counter() - started
 
     encoder.calls.clear()
     batch = retrievers[0].encode(["event"])
@@ -178,4 +131,4 @@ def test_batch_reuse_reduces_encoder_wait_on_small_fixture() -> None:
     reused_elapsed = perf_counter() - started + encoder.delay_seconds
 
     assert encoder.calls == [["event"]]
-    assert reused_elapsed < legacy_elapsed
+    assert reused_elapsed < independent_elapsed

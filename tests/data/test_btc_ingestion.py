@@ -53,11 +53,7 @@ def _write_btc_metadata(
         ).to_csv(mapping / f"{video_id}.csv", index=False)
 
 
-def test_btc_import_does_not_require_preprocessing_fields(
-    tmp_path, monkeypatch
-):
-    # Importing BTC-provided metadata must remain independent of preprocessing.
-    monkeypatch.setitem(sys.modules, "hcmai.data.preprocessing", None)
+def test_btc_import_does_not_require_preprocessing_fields(tmp_path):
     from hcmai.data.ingestion.btc import (
         BTCIngestionConfig,
         import_btc_frame_store,
@@ -144,8 +140,7 @@ def test_ingestion_cli_delegates_to_reusable_importer(
     assert capsys.readouterr().out.strip() == str(expected_output)
 
 
-def test_data_service_prepare_uses_btc_dataset_config(tmp_path, monkeypatch):
-    monkeypatch.setitem(sys.modules, "hcmai.data.preprocessing", None)
+def test_data_service_prepare_uses_btc_dataset_config(tmp_path):
     from hcmai.data.pipeline import DataService
 
     source = tmp_path / "btc"
@@ -250,43 +245,6 @@ def test_data_service_prepare_rejects_non_btc_source(tmp_path):
 
     with pytest.raises(ValueError, match="expected 'btc_keyframes'"):
         DataService.prepare(config_path)
-
-
-def test_data_service_prepare_adaptive_keeps_legacy_local_entry(
-    tmp_path, monkeypatch
-):
-    from hcmai.data.pipeline import DataService
-
-    config_path = tmp_path / "preprocessing.yaml"
-    write_yaml(
-        {
-            "preprocessing": {
-                "videos_root": str(tmp_path / "videos"),
-                "output_root": str(tmp_path / "frame_store"),
-            }
-        },
-        config_path,
-    )
-    expected = tmp_path / "legacy-frames.parquet"
-    calls = []
-
-    def fake_prepare(config, *, resume, limit):
-        calls.append((config, resume, limit))
-        return expected
-
-    monkeypatch.setattr(
-        "hcmai.data.preprocessing.prepare_frame_store", fake_prepare
-    )
-
-    output = DataService.prepare_adaptive(config_path, resume=False, limit=2)
-
-    assert output == expected
-    assert len(calls) == 1
-    config, resume, limit = calls[0]
-    assert config.videos_root == tmp_path / "videos"
-    assert config.s3 is None
-    assert resume is False
-    assert limit == 2
 
 
 def test_prepare_data_cli_uses_btc_enrichment_config(tmp_path):

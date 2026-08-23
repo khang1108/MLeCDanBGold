@@ -2,17 +2,24 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from PIL import Image
+import pytest
 
-from hcmai.common.config import VQAConfig
+from hcmai.common.config import ProgressiveSearchConfig, VQAConfig
 from hcmai.common.schemas import (
+    FrameEvidence,
     FrameRecord,
     RetrievalCandidate,
     RetrievalResult,
     RetrievalSource,
+    RetrievalTrace,
+    SceneCandidate,
     VQAInferenceResponse,
     VQARequest,
 )
-from hcmai.orchestration.workflows.vqa import VQAPipeline
+from hcmai.pipelines.vqa.pipeline import VQAPipeline
+from hcmai.orchestration.workflows.base import TaskPipelineDependencyError
+from hcmai.temporal import ProgressiveLocalizationResult
+from hcmai.temporal.query import diff_snapshot
 
 
 class Data:
@@ -65,6 +72,41 @@ class Retrieval:
         ]
 
 
+class TemporalCore:
+    """Small shared-core stand-in for the pipeline contract test."""
+
+    def __init__(self, data: Data) -> None:
+        self.data = data
+
+    def localize(self, event_description, *, search_id, **_):
+        frame = self.data.get_frame("f1")
+        evidence = FrameEvidence(
+            frame=frame,
+            unit_scores={"h0": 0.9},
+            source_scores={RetrievalSource.VISUAL: 0.9},
+            source_ranks={RetrievalSource.VISUAL: 1},
+            score=0.9,
+            provenance=("h0",),
+        )
+        scene = SceneCandidate(
+            scene_id="video-1:1000-1000",
+            video_id="video-1",
+            start_ms=1_000,
+            end_ms=1_000,
+            evidence=(evidence,),
+            final_score=0.9,
+        )
+        return ProgressiveLocalizationResult(
+            search_id=search_id or "search-session-1",
+            version=1,
+            scenes=(scene,),
+            diff=diff_snapshot(None, event_description),
+            warnings=(),
+            diagnostics=ProgressiveSearchConfig().diagnostics(),
+            trace=RetrievalTrace(),
+        )
+
+
 class LLM:
     adapter = SimpleNamespace()
 
@@ -92,7 +134,14 @@ def _data(tmp_path: Path) -> Data:
 
 
 def test_vqa_pipeline_runs_retrieval_to_grounded_submission(tmp_path: Path):
-    pipeline = VQAPipeline(_data(tmp_path), Retrieval(), LLM(), VQAConfig())
+    data = _data(tmp_path)
+    pipeline = VQAPipeline(
+        data,
+        Retrieval(),
+        LLM(),
+        VQAConfig(),
+        temporal_core=TemporalCore(data),
+    )
 
     response = pipeline.execute(VQARequest(
         event_description="A bus passes on the road",
@@ -116,7 +165,14 @@ def test_vqa_pipeline_runs_retrieval_to_grounded_submission(tmp_path: Path):
 
 
 def test_vqa_pipeline_degrades_to_canonical_retrieval_evidence(tmp_path: Path):
-    pipeline = VQAPipeline(_data(tmp_path), Retrieval(), None, VQAConfig())
+    data = _data(tmp_path)
+    pipeline = VQAPipeline(
+        data,
+        Retrieval(),
+        None,
+        VQAConfig(),
+        temporal_core=TemporalCore(data),
+    )
 
     response = pipeline.execute(VQARequest(
         event_description="A bus passes on the road",
@@ -128,3 +184,13 @@ def test_vqa_pipeline_degrades_to_canonical_retrieval_evidence(tmp_path: Path):
     assert response.evidence_candidates[0].frame_idx == 12
     assert "returning retrieval evidence" in response.warnings[0]
     assert response.trace.stages["answer"].fallback_used is True
+
+
+def test_vqa_pipeline_requires_shared_temporal_core(tmp_path: Path):
+    pipeline = VQAPipeline(_data(tmp_path), Retrieval(), None, VQAConfig())
+
+    with pytest.raises(TaskPipelineDependencyError, match="Temporal evidence core"):
+        pipeline.execute(VQARequest(
+            event_description="A bus passes on the road",
+            question="What color is the bus?",
+        ))

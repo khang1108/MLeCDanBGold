@@ -45,13 +45,6 @@ vqa = [
     "torchvision>=0.23, <1.0",
     "transformers>=4.57.1, <5.0",
 ]
-s3 = [
-    "boto3>=1.35, <2.0",
-]
-s3-streaming-ui = [
-    "boto3>=1.35, <2.0",
-    "streamlit>=1.40, <2.0",
-]
 transcripts = [
     "av>=14, <19",
     "silero-vad>=6.2, <7.0",

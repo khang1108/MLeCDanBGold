@@ -53,18 +53,11 @@ from .vqa import (
     VQARetrievalEvidence,
     VQAInferenceEvidence,
     VQAInferenceEvidenceItem,
-    VQAInferenceRequest,
     VQAInferenceResponse,
     VQARequest,
     VQAResponse,
     VQASubmission,
 )
-
-# Backward-compatible names used by the earlier frontend/backend contract.
-# They intentionally point at the canonical search models instead of creating
-# a second request/response shape.
-MessageRequest = SearchRequest
-MessageResponse = SearchResponse
 
 __all__ = [
     "NonEmptyString",
@@ -73,7 +66,6 @@ __all__ = [
     "RetrievalSource",
     "QueryLanguage",
     "TaskType",
-    "ExecutionProfile",
     "QueryDifficulty",
     "SearchScores",
     "RetrievalCandidate",
@@ -84,11 +76,9 @@ __all__ = [
     "RetrievalTrace",
     "SearchFilters",
     "SearchRequest",
-    "MessageRequest",
     "SearchLatency",
     "SearchResult",
     "SearchResponse",
-    "MessageResponse",
     "SubmissionResult",
     "FrameRecord",
     "FrameEnrichment",
@@ -121,7 +111,6 @@ __all__ = [
     "VQAInferenceEvidenceItem",
     "VQABaselineProfile",
     "VQARetrievalEvidence",
-    "VQAInferenceRequest",
     "VQAInferenceResponse",
     "VQARequest",
     "VQAResponse",

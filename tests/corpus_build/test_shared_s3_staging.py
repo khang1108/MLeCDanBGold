@@ -12,7 +12,7 @@ from hcmai.common.config import ASRConfig
 from hcmai.common.schemas import FrameRecord, TranscriptSegment
 from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
 from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
-from hcmai.data.preprocessing import S3PreprocessingConfig
+from hcmai.data.corpus_build.config import S3PreparationConfig
 from hcmai.data.s3 import list_video_objects, staged_video
 
 
@@ -79,7 +79,7 @@ def test_one_download_serves_frames_and_transcript_before_cleanup(
     tmp_path: Path,
 ) -> None:
     client = _FakeS3()
-    storage = S3PreprocessingConfig(
+    storage = S3PreparationConfig(
         bucket=client.bucket,
         videos_prefix="videos",
         staging_root=tmp_path / "staging",

@@ -17,9 +17,9 @@ from ..domain.models import (
     QuestionType,
 )
 from ..domain.ports import AnswerData
-from ..legacy_localization.windows import expand_neighbor_window
 from ..query.normalization import normalize_answer
 from .evidence import build_evidence_bundle
+from .windows import expand_neighbor_window
 
 
 class VQAService(Protocol):

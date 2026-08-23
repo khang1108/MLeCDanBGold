@@ -21,6 +21,7 @@ from hcmai.retrieval.retriever.concurrent import (
     ModalitySearchExecutor,
     ModalitySearchJob,
 )
+from hcmai.retrieval.retriever.models.contracts import VectorRetriever
 
 
 class RRFFusionRetriever:
@@ -28,7 +29,7 @@ class RRFFusionRetriever:
 
     def __init__(
         self,
-        retrievers: Sequence[Any],
+        retrievers: Sequence[VectorRetriever],
         config: FusionConfig,
         executor: ModalitySearchExecutor | None = None,
     ) -> None:
@@ -36,7 +37,7 @@ class RRFFusionRetriever:
             raise ValueError("RRF fusion requires at least two retrievers")
         if config.method != "rrf":
             raise ValueError(f"Unsupported fusion method {config.method!r}")
-        self.retrievers = tuple(retrievers)
+        self.retrievers: tuple[VectorRetriever, ...] = tuple(retrievers)
         self.config = config
         configured_sources = {
             source
@@ -49,6 +50,17 @@ class RRFFusionRetriever:
                 sorted(source.value for source in missing_required)
             )
             raise ValueError(f"Required retrieval sources are not configured: {names}")
+        if any(
+            not all(
+                hasattr(retriever, attribute)
+                for attribute in ("encode", "search_vectors", "source_family")
+            )
+            for retriever in self.retrievers
+        ):
+            raise TypeError(
+                "RRFFusionRetriever requires vector retrievers with encode, "
+                "search_vectors, and source_family"
+            )
         self._executor = executor or ModalitySearchExecutor(
             config.modality_max_workers
         )
@@ -76,24 +88,6 @@ class RRFFusionRetriever:
         if not queries:
             return []
         started = perf_counter()
-        if not all(
-            hasattr(retriever, "encode")
-            and hasattr(retriever, "search_vectors")
-            and hasattr(retriever, "source_family")
-            for retriever in self.retrievers
-        ):
-            results = [
-                self._search_legacy(query, top_k, filters, query_type)
-                for query in queries
-            ]
-            first_candidate_ms = (perf_counter() - started) * 1_000
-            return [
-                result.model_copy(
-                    update={"time_to_first_candidate_ms": first_candidate_ms}
-                )
-                for result in results
-            ]
-
         batches: dict[str, Any] = {}
         encoding_trace = RetrievalTrace()
         jobs: list[ModalitySearchJob] = []
@@ -168,33 +162,6 @@ class RRFFusionRetriever:
             )
             for result in results
         ]
-
-    def _search_legacy(
-        self,
-        query: str,
-        top_k: int,
-        filters: SearchFilters | None,
-        query_type: TaskType,
-    ) -> RetrievalResult:
-        """Support existing retriever adapters without a batch interface."""
-
-        child_results: list[tuple[Any, RetrievalResult]] = []
-        trace = RetrievalTrace()
-        for index, retriever in enumerate(self.retrievers):
-            raw_result = retriever.search(query, top_k, filters, query_type)
-            result = (
-                raw_result
-                if isinstance(raw_result, RetrievalResult)
-                else RetrievalResult(candidates=raw_result)
-            )
-            child_results.append((retriever, result))
-            source = getattr(getattr(retriever, "source", None), "value", None)
-            trace = trace.merged(
-                result.trace,
-                prefix=source or f"retriever_{index}",
-            )
-
-        return self._fuse(child_results, top_k, query_type, trace)
 
     def _fuse(
         self,

@@ -21,10 +21,14 @@ class Data:
 
 def test_yaml_exposes_the_same_progressive_budget_contract():
     config = AppConfig.from_yaml("configs/baseline.yaml")
-    assert config.search.progressive.architecture == "temporal"
     assert config.search.progressive.top_m_evidence == 5
     overridden = config.search.progressive.model_copy(update={"top_m_evidence": 2})
     assert overridden.top_m_evidence == 2
+
+
+def test_removed_progressive_architecture_switch_is_rejected():
+    with pytest.raises(ValidationError, match="architecture"):
+        ProgressiveSearchConfig.model_validate({"architecture": "legacy"})
 
 
 def test_progressive_budgets_and_weights_are_validated():

@@ -20,7 +20,7 @@ from hcmai.common.schemas import RetrievalSource, TaskType
 from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.io import read_yaml, write_json, write_yaml
 from hcmai.data.pipeline import DataService
-from hcmai.llm.config import LLMServiceConfig
+from hcmai.thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 
 
@@ -352,7 +352,7 @@ def test_remote_context_encoder_uses_text_source_family(
 ) -> None:
     """Hosted Context embeddings use the BGE text endpoint, not ``context``."""
 
-    from hcmai.llm.pipeline import LLMService
+    from hcmai.thundercompute.pipeline import LLMService
     from hcmai.retrieval.retriever.text import artifacts
 
     captured: dict[str, object] = {}
@@ -428,8 +428,8 @@ def test_fusion_accepts_context_as_a_source() -> None:
     assert set(config.task_weights[TaskType.KIS]) == set(RetrievalSource)
 
 
-def test_context_and_segment_paths_are_dedicated_to_the_new_profile() -> None:
-    """Context and transcript indexes do not overload legacy text-index fields."""
+def test_context_and_segment_paths_are_dedicated_to_the_runtime() -> None:
+    """Context and transcript indexes do not overload text-index fields."""
 
     enrichment = EnrichmentArtifactsConfig()
     index = IndexConfig()
@@ -438,7 +438,6 @@ def test_context_and_segment_paths_are_dedicated_to_the_new_profile() -> None:
         "artifacts/enrichment/context/frame_context_v1.parquet"
     )
     assert enrichment.transcripts_path == Path("artifacts/enrichment/transcripts")
-    assert index.profile == "context_asr_segment"
     assert index.context_path == Path("artifacts/indexes/context")
     assert index.asr_segment_path == Path("artifacts/indexes/asr_segments")
     assert index.context_embedding_filename == "context_embeddings.npy"
@@ -446,8 +445,8 @@ def test_context_and_segment_paths_are_dedicated_to_the_new_profile() -> None:
     assert index.asr_projection_max_gap_ms == 5_000
 
 
-def test_legacy_text_embedding_filenames_do_not_absorb_context() -> None:
-    """Context uses its own index artifact instead of changing legacy validation."""
+def test_text_embedding_filenames_do_not_absorb_context() -> None:
+    """Context uses its own index artifact and filename contract."""
 
     with pytest.raises(ValueError, match="caption, ocr, and asr"):
         IndexConfig(
@@ -490,13 +489,12 @@ def test_indexing_config_uses_portable_corpus_paths_and_expected_counts() -> Non
     assert config["projection"]["max_projection_gap_ms"] == 5_000
 
 
-def test_baseline_enables_profile_aware_context_and_segment_startup() -> None:
-    """Baseline explicitly selects the modern profile and rollback paths."""
+def test_baseline_enables_context_and_segment_startup() -> None:
+    """Baseline explicitly configures the current context/segment path."""
 
     baseline = read_yaml("configs/baseline.yaml")
     index = baseline["index"]
 
-    assert index["profile"] == "context_asr_segment"
     assert index["context_path"] == "artifacts/indexes/context"
     assert index["asr_segment_path"] == "artifacts/indexes/asr_segments"
     assert index["asr_projection_max_gap_ms"] == 5_000

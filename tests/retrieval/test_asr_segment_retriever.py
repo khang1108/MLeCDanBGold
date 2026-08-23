@@ -16,7 +16,7 @@ from hcmai.common.config import AppConfig, EncoderConfig, InferenceConfig
 from hcmai.common.schemas import ProcessingStatus
 from hcmai.common.utils.io import write_json, write_yaml
 from hcmai.data.enrichment.transcripts.store import TranscriptStore
-from hcmai.llm.config import LLMServiceConfig
+from hcmai.thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 
 
@@ -284,7 +284,7 @@ def test_remote_asr_segment_encoder_uses_text_source_family(
 ) -> None:
     """Hosted segment embeddings select the generic BGE text endpoint."""
 
-    from hcmai.llm.pipeline import LLMService
+    from hcmai.thundercompute.pipeline import LLMService
     from hcmai.retrieval.retriever.segment import artifacts
 
     captured: dict[str, object] = {}

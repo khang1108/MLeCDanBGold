@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 import pytest
 from PIL import Image
 
 from hcmai.common.config import ASRConfig, DiarizationConfig, EncoderConfig
 from hcmai.common.schemas import (
     AudioReferenceRequest,
-    BoundaryScoreResponse,
     EmbeddingResponse,
     InferenceReadiness,
     ModelStatus,
@@ -24,12 +22,6 @@ from hcmai.data.enrichment.transcripts.adapters.remote import (
     RemoteASRAdapter,
     RemoteDiarizationAdapter,
 )
-from hcmai.data.preprocessing.adapters.remote import (
-    RemoteDinoEncoder,
-    RemoteEfficientGEBDDetector,
-    RemoteTransNetDetector,
-)
-from hcmai.data.preprocessing.video import FrameMeta
 from hcmai.retrieval.embedding.adapters.remote import (
     RemoteEmbeddingAdapter,
     RemoteImageEmbeddingAdapter,
@@ -52,16 +44,6 @@ def _segment(speaker_id: str | None = None) -> TranscriptSegment:
 
 
 class FakeClient:
-    def boundary_scores(self, frames, *, request_id, source):
-        model = "transnet" if source == "shot" else "gebd"
-        return BoundaryScoreResponse(
-            request_id=request_id,
-            model=model,
-            revision=SHA,
-            scores=np.linspace(0, 1, len(frames)).tolist(),
-            latency_ms=1,
-        )
-
     def embed_images(self, images, *, source="visual", item_ids=None):
         model = "dino" if source == "dino" else "visual"
         return EmbeddingResponse(
@@ -120,11 +102,6 @@ class FakeClient:
         )
 
 
-class FakeSource:
-    def to_image(self):
-        return Image.new("RGB", (8, 8), "red")
-
-
 class FakeReferences:
     def reference(self, video_path: Path, video_id: str, sample_rate: int):
         assert video_path.name == "L21_V001.mp4"
@@ -136,42 +113,6 @@ class FakeReferences:
             audio_sha256="b" * 64,
             sample_rate=sample_rate,
         )
-
-
-def test_remote_preprocessing_adapters_preserve_order_and_alignment() -> None:
-    client = FakeClient()
-    frames = np.zeros((3, 27, 48, 3), dtype=np.uint8)
-    transnet = RemoteTransNetDetector(
-        client, model_name="transnet", revision=SHA
-    )
-    assert transnet.score(Path("video.mp4"), frames).shape == (3,)
-
-    dino = RemoteDinoEncoder(client, model_name="dino", revision=SHA)
-    assert dino.encode([Image.new("RGB", (2, 2))] * 2).shape == (2, 2)
-
-    gebd = RemoteEfficientGEBDDetector(
-        client,
-        model_name="gebd",
-        revision=SHA,
-        sequence_length=2,
-        overlap=1,
-        resolution=8,
-    )
-    for index in range(3):
-        gebd.update(
-            FrameMeta(
-                video_id="L21_V001",
-                decode_index=index,
-                frame_idx=index,
-                pts=index,
-                time_base="1/10",
-                timestamp_ms=index * 100,
-                width=8,
-                height=8,
-            ),
-            FakeSource(),
-        )
-    assert gebd.scores(3).shape == (3,)
 
 
 def test_remote_enrichment_and_embedding_adapters_validate_pins() -> None:

@@ -10,24 +10,24 @@ evidence across candidate videos.
 Key Algorithms & Strategies:
 ----------------------------
 1. Dual-Branch Retrieval (Global + Local):
-   - Global Search: Explores the entire video corpus with the newest hint to discover
-     potential new candidate videos.
-   - Local Search: Focuses retrieval of the newest hint specifically on video candidates
-     identified in earlier rounds to verify continuity and deepen evidence.
+    - Global Search: Explores the entire video corpus with the newest hint to discover
+        potential new candidate videos.
+    - Local Search: Focuses retrieval of the newest hint specifically on video candidates
+        identified in earlier rounds to verify continuity and deepen evidence.
 
 2. Rescued Video Backfill:
-   - When a video suddenly emerges with high relevance at a later hint (a "rescued" video),
-     it lacks evaluation records for earlier hints (UNKNOWN state).
-   - The `_backfill` routine automatically queries missing past hints targeted only at
-     that video, preventing "missing evidence" from being penalized as "negative evidence".
+    - When a video suddenly emerges with high relevance at a later hint (a "rescued" video),
+        it lacks evaluation records for earlier hints (UNKNOWN state).
+    - The `_backfill` routine automatically queries missing past hints targeted only at
+        that video, preventing "missing evidence" from being penalized as "negative evidence".
 
 3. Multi-Criteria Candidate Video Scoring:
-   - Evaluates video quality based on normalized semantic match scores, match coverage
-     across evaluated hints, and overall evaluation completeness.
+    - Evaluates video quality based on normalized semantic match scores, match coverage
+        across evaluated hints, and overall evaluation completeness.
 
 4. Bounded Top-M Evidence Retention:
-   - Retains a bounded set of top-M frames per hint per video (avoiding global best-1 traps
-     and unbounded memory growth) for subsequent temporal scene alignment.
+    - Retains a bounded set of top-M frames per hint per video (avoiding global best-1 traps
+        and unbounded memory growth) for subsequent temporal scene alignment.
 """
 
 from __future__ import annotations
@@ -322,8 +322,8 @@ def candidate_video_scores(
         - evaluation_coverage: Fraction of total units evaluated for this video.
 
         Score(V) = (w_sem * semantic + w_match * match_cov * eval_cov + w_eval * eval_cov)
-                   ------------------------------------------------------------------------
-                                       (w_sem + w_match + w_eval)
+                ------------------------------------------------------------------------
+                                    (w_sem + w_match + w_eval)
 
     This balances raw retrieval similarity against consistency across multiple hints,
     while rewarding videos that have completed full backfill evaluation.

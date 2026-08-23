@@ -271,7 +271,6 @@ ASR. Point any non-default bundle locations at the three complete directories;
 do not point a profile at a partial staging directory:
 
 ```bash
-export HCMAI_RETRIEVAL_PROFILE=context_asr_segment
 export HCMAI_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/visual"
 export HCMAI_CONTEXT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/context"
 export HCMAI_ASR_SEGMENT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/asr_segments"
@@ -284,26 +283,10 @@ sources and canonical frame identities. If Context or ASR is intentionally
 absent, record that degraded state explicitly; it is not evidence that the
 full B1/B2 profile has been validated.
 
-## Emergency rollback
-
-The rollback route keeps the existing specialist-index factory and changes no
-artifacts:
-
-```bash
-export HCMAI_RETRIEVAL_PROFILE=legacy_specialists
-unset HCMAI_CONTEXT_INDEX_PATH HCMAI_ASR_SEGMENT_INDEX_PATH
-```
-
-Restart the service with the normal deployment command. It will use the
-configured Visual, Caption, OCR, and legacy frame-aligned ASR artifacts rather
-than the Context/segment-ASR factories. Ensure those rollback-only artifacts
-exist and pass their usual startup contracts before relying on this path. The
-environment switch alone cannot restore missing or invalid legacy bundles.
-
-To return to the fast-track profile, first resolve the failure offline,
-revalidate the complete bundle and report, then set
-`HCMAI_RETRIEVAL_PROFILE=context_asr_segment` and restart. Do not delete,
-overwrite, or regenerate bundles from an online request during either switch.
+There is no online specialist-index rollback profile. If a Context or
+segment-ASR bundle is missing, startup reports that degraded state and keeps
+the canonical Visual path; rebuild or resynchronize the immutable bundle
+offline before enabling that modality.
 
 ## Unperformed external smoke evidence
 

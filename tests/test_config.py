@@ -13,7 +13,7 @@ from hcmai.common.config import (
 )
 from hcmai.common.schemas import RetrievalSource, TaskType, VQABaselineProfile
 from hcmai.data.enrichment.caption.config import CaptionJobConfig
-from hcmai.llm.config import LLMServiceConfig
+from hcmai.thundercompute.config import LLMServiceConfig
 
 
 def test_baseline_config_matches_runtime_contract() -> None:
@@ -31,7 +31,6 @@ def test_baseline_config_matches_runtime_contract() -> None:
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
     assert config.index.path.as_posix() == "artifacts/indexes/visual"
-    assert config.index.profile == "context_asr_segment"
     assert config.index.context_path.as_posix() == "artifacts/indexes/context"
     assert config.index.asr_segment_path.as_posix() == "artifacts/indexes/asr_segments"
     assert config.index.asr_projection_max_gap_ms == 5_000

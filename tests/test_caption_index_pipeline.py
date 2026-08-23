@@ -25,7 +25,7 @@ class FakeCaptionEncoder:
         )
 
 
-def test_build_caption_artifacts_from_two_configs(tmp_path: Path) -> None:
+def test_build_text_artifacts_from_two_configs(tmp_path: Path) -> None:
     frames = tmp_path / "frames.parquet"
     captions = tmp_path / "captions.parquet"
     output = tmp_path / "caption-index"

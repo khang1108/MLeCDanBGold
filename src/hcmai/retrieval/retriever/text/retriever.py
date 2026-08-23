@@ -1,7 +1,9 @@
-"""Build frame-native Context and legacy frame-text indexes for retrieval.
+"""Build frame-native Context indexes for retrieval.
 
 This module owns deterministic corpus-to-dense-index construction and dense
 retriever bindings. It does not create FrameContext or align ASR segments.
+Standalone Caption/OCR/frame-ASR retrievers are intentionally not part of the
+online runtime; their evidence stores remain available to offline builders.
 """
 
 from __future__ import annotations
@@ -28,58 +30,6 @@ _TEXT_SOURCES = {
     RetrievalSource.OCR,
     RetrievalSource.ASR,
 }
-
-
-class TextEvidenceRetriever(DenseRetriever):
-    """Lớp cơ sở (Base class) cho các Retriever văn bản (như Caption, OCR, ASR).
-    Sử dụng FAISS (qua DenseRetriever) để tìm kiếm các đoạn text liên quan nhất đến câu truy vấn,
-    sau đó trả về kết quả kèm theo thông tin frame (video_id, frame_idx).
-    """
-
-    def __init__(
-        self,
-        encoder: TextEmbeddingAdapter,
-        index: DenseIndex,
-        source: RetrievalSource,
-        embedding_cache: EmbeddingCache | None = None,
-        prompt_version: str = "query-v1",
-    ) -> None:
-        if source not in _TEXT_SOURCES:
-            raise ValueError(f"{source.value!r} is not a text evidence source")
-        super().__init__(
-            encoder,
-            index,
-            source=source,
-            embedding_cache=embedding_cache,
-            prompt_version=prompt_version,
-        )
-
-
-class CaptionRetriever(TextEvidenceRetriever):
-    def __init__(
-        self, encoder: TextEmbeddingAdapter, index: DenseIndex,
-        embedding_cache: EmbeddingCache | None = None,
-        prompt_version: str = "query-v1",
-    ) -> None:
-        super().__init__(encoder, index, RetrievalSource.CAPTION, embedding_cache, prompt_version)
-
-
-class OCRRetriever(TextEvidenceRetriever):
-    def __init__(
-        self, encoder: TextEmbeddingAdapter, index: DenseIndex,
-        embedding_cache: EmbeddingCache | None = None,
-        prompt_version: str = "query-v1",
-    ) -> None:
-        super().__init__(encoder, index, RetrievalSource.OCR, embedding_cache, prompt_version)
-
-
-class ASRRetriever(TextEvidenceRetriever):
-    def __init__(
-        self, encoder: TextEmbeddingAdapter, index: DenseIndex,
-        embedding_cache: EmbeddingCache | None = None,
-        prompt_version: str = "query-v1",
-    ) -> None:
-        super().__init__(encoder, index, RetrievalSource.ASR, embedding_cache, prompt_version)
 
 
 class ContextRetriever(DenseRetriever):
@@ -360,25 +310,3 @@ def build_text_embedding_artifacts(
         vectors_partial.unlink(missing_ok=True)
         mapping_partial.unlink(missing_ok=True)
     return vectors_path, mapping_path
-
-
-def build_caption_index(
-    data: DataService,
-    encoder: TextEmbeddingAdapter,
-    output_dir: str | Path,
-    *,
-    embeddings_filename: str,
-    dataset_version: str,
-    index_type: str = "flat_ip",
-) -> DenseIndex:
-    """Backward-compatible caption-specific index builder."""
-
-    return build_text_index(
-        data,
-        encoder,
-        RetrievalSource.CAPTION,
-        output_dir,
-        embeddings_filename=embeddings_filename,
-        dataset_version=dataset_version,
-        index_type=index_type,
-    )

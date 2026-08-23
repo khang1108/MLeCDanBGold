@@ -221,16 +221,9 @@ flowchart LR
     MONO --> PATHS["OrderedPathCandidate[]<br/>TRAKE"]
 ```
 
-KIS và VQA bật progressive scene route khi:
-
-```yaml
-search:
-  progressive:
-    architecture: temporal
-```
-
-`legacy` là lựa chọn explicit để chạy baseline KIS/VQA cũ; không có fallback
-ngầm giữa hai architecture. TRAKE dùng stateless `ordered_path` plan từ danh
+KIS và VQA luôn dùng progressive scene route của facade này. Nếu temporal core
+không được khởi tạo, task trả dependency error thay vì chuyển sang một đường
+localization không có thứ tự. TRAKE dùng stateless `ordered_path` plan từ danh
 sách event explicit và không dùng progressive `search_id`.
 
 ### 4.1 Progressive snapshots
@@ -516,22 +509,6 @@ và scene metadata vẫn được giữ để giải thích provenance. Reranker
 tạo hoặc thay đổi canonical `frame_id`. Materializer resolve canonical metadata
 và chỉ trả tối đa `top_k` rows.
 
-### 5.2 Legacy architecture — explicit baseline
-
-Khi `progressive.architecture: legacy`, KIS chạy:
-
-```mermaid
-flowchart LR
-    Q["query"] --> RET["multimodal retrieval"]
-    RET --> RERANK["optional bounded reranking"]
-    RERANK --> SHAPE["temporal dedup + result shaping"]
-    SHAPE --> MAT["canonical materialization"]
-    MAT --> OUT["SearchResponse"]
-```
-
-Legacy path được giữ để benchmark/ablation, không phải một fallback tự động khi
-temporal path lỗi.
-
 ## 6. VQA workflow
 
 VQA tách rõ hai trách nhiệm:
@@ -664,7 +641,6 @@ pipelines/vqa/
 ├── query/                      parser and answer normalization
 ├── reasoning/                  evidence construction and VLM answering
 ├── output/                     ranking and submission materialization
-└── legacy_localization/        explicit legacy baseline
 ```
 
 ## 7. TRAKE workflow

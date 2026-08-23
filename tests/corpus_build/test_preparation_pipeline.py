@@ -71,18 +71,9 @@ class _Operations:
     def __init__(self, paths: PreparationPaths) -> None:
         self.paths = paths
         self.events: list[str] = []
-        self.staged_paths: list[Path] = []
 
-    def prepare_frame(self, video: Path, source: Any) -> str:
-        assert video.is_file()
-        assert video.read_bytes().startswith(b"newest-s3-")
-        self.staged_paths.append(video)
-        self.events.append(f"frame:{source.video_id}")
-        return source.video_id
-
-    def finalize_frames(self, prepared, sources) -> Path:
-        assert list(prepared) == [source.video_id for source in sources]
-        self.events.append("finalize_frames")
+    def prepare_btc_frame_store(self) -> Path:
+        self.events.append("btc_frame_store")
         self.paths.frame_store_root.mkdir(parents=True, exist_ok=True)
         self.paths.frames_path.write_bytes(b"frames")
         (self.paths.frame_store_root / "manifest.json").write_text(
@@ -107,19 +98,46 @@ class _Operations:
 
     def generate_caption(self) -> Path:
         self.events.append("caption")
-        return self._enrichment(self.paths.caption_root)
+        root = self.paths.caption_root
+        root.mkdir(parents=True, exist_ok=True)
+        output = root / "captions.parquet"
+        output.write_bytes(b"caption")
+        (root / "failures.json").write_text("[]", encoding="utf-8")
+        (root / "frame_enrichment.parquet").write_bytes(b"caption-projection")
+        (root / "manifest.json").write_text("{}", encoding="utf-8")
+        return output
 
     def generate_ocr(self) -> Path:
         self.events.append("ocr")
-        return self._enrichment(self.paths.ocr_root)
+        root = self.paths.ocr_root
+        root.mkdir(parents=True, exist_ok=True)
+        output = root / "frames.parquet"
+        output.write_bytes(b"ocr")
+        (root / "regions.parquet").write_bytes(b"regions")
+        (root / "failures.json").write_text("[]", encoding="utf-8")
+        (root / "frame_enrichment.parquet").write_bytes(b"ocr-projection")
+        (root / "ocr_report.json").write_text("{}", encoding="utf-8")
+        (root / "manifest.json").write_text("{}", encoding="utf-8")
+        return output
 
     def import_objects(self) -> Path:
         self.events.append("objects")
-        return self._enrichment(self.paths.object_root)
+        root = self.paths.object_root
+        root.mkdir(parents=True, exist_ok=True)
+        output = root / "frames.parquet"
+        output.write_bytes(b"objects")
+        (root / "detections.parquet").write_bytes(b"detections")
+        (root / "manifest.json").write_text("{}", encoding="utf-8")
+        return output
 
     def build_frame_context(self) -> Path:
         self.events.append("frame_context")
-        return self._enrichment(self.paths.context_root)
+        root = self.paths.context_root
+        root.mkdir(parents=True, exist_ok=True)
+        output = root / "frame_context_v1.parquet"
+        output.write_bytes(b"context")
+        (root / "manifest.json").write_text("{}", encoding="utf-8")
+        return output
 
     def build_visual_index(self) -> Path:
         self.events.append("visual_index")
@@ -137,14 +155,6 @@ class _Operations:
         return self._index(root)
 
     @staticmethod
-    def _enrichment(root: Path) -> Path:
-        root.mkdir(parents=True, exist_ok=True)
-        output = root / "frame_enrichment.parquet"
-        output.write_bytes(b"enrichment")
-        (root / "manifest.json").write_text("{}", encoding="utf-8")
-        return output
-
-    @staticmethod
     def _index(root: Path) -> Path:
         root.mkdir(parents=True, exist_ok=True)
         output = root / "dense.index"
@@ -157,7 +167,6 @@ def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
     model_names = {
         name: f"fixture/{name}"
         for name in (
-            "dino",
             "caption",
             "ocr",
             "asr",
@@ -183,14 +192,6 @@ def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
                 "staging_root": work / "staging",
                 "cache_root": work / "source-cache",
             },
-            "output_root": work / "artifacts/frame_store",
-            "transnet_repo": work / "models/transnet",
-            "transnet_weights": work / "models/transnet-weights",
-            "efficientgebd_repo": work / "models/gebd",
-            "efficientgebd_config": work / "models/gebd.yaml",
-            "efficientgebd_checkpoint": work / "models/gebd.pth",
-            "dino_model": model_names["dino"],
-            "dino_revision": SHA,
         },
     })
 
@@ -223,18 +224,6 @@ def test_btc_competition_run_uses_import_then_context_without_preprocessing(
     paths = PreparationPaths.from_config(config, None)
 
     class _CompetitionOperations(_Operations):
-        def prepare_frame(self, video: Path, source: Any) -> str:
-            raise AssertionError("BTC profile must not touch preprocessing")
-
-        def prepare_btc_frame_store(self) -> Path:
-            self.events.append("btc_frame_store")
-            self.paths.frame_store_root.mkdir(parents=True, exist_ok=True)
-            self.paths.frames_path.write_bytes(b"btc-frames")
-            (self.paths.frame_store_root / "manifest.json").write_text(
-                '{"frame_store_id":"btc-fixture-v1"}', encoding="utf-8"
-            )
-            return self.paths.frames_path
-
         def generate_caption(self) -> Path:
             self.events.append("caption")
             self.paths.caption_root.mkdir(parents=True, exist_ok=True)
@@ -313,31 +302,6 @@ def test_btc_competition_run_uses_import_then_context_without_preprocessing(
     assert not any(event.endswith("index") for event in operations.events)
 
 
-def test_btc_frame_import_never_opens_the_legacy_preprocessing_session(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Protect BTC import from accidental TransNet/GEBD/DINO session routing."""
-
-    from hcmai.data.pipeline import DataService
-
-    expected = tmp_path / "frame_store/frames.parquet"
-    operations = object.__new__(DefaultPreparationOperations)
-    operations.enrichment_config = tmp_path / "enrichment.yaml"
-    operations.paths = SimpleNamespace(frames_path=expected)
-
-    def fail_if_preprocessing_is_opened() -> None:
-        raise AssertionError("BTC import must not create FramePreparationSession")
-
-    monkeypatch.setattr(operations, "_frame_session", fail_if_preprocessing_is_opened)
-    monkeypatch.setattr(
-        DataService,
-        "prepare",
-        lambda config_path: expected,
-    )
-
-    assert operations.prepare_btc_frame_store() == expected
-
-
 def test_default_operations_use_public_object_and_context_services_in_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -411,7 +375,6 @@ def test_default_operations_preserve_configured_ocr_policy(
         configured,
         checkpoint="pinned/model",
         revision=SHA,
-        device="cpu",
         dataset_version="corpus-v2",
     )
     operations = object.__new__(DefaultPreparationOperations)
@@ -419,7 +382,6 @@ def test_default_operations_preserve_configured_ocr_policy(
         models=SimpleNamespace(
             ocr=SimpleNamespace(model_name="pinned/model", revision=SHA)
         ),
-        preprocessing=SimpleNamespace(device="cpu"),
         corpus_revision="corpus-v2",
         frame_store_source="btc_keyframes",
     )
@@ -482,7 +444,6 @@ def test_default_context_stage_identity_depends_on_ocr_policy(
         models=SimpleNamespace(
             ocr=SimpleNamespace(model_name="pinned/model", revision=SHA)
         ),
-        preprocessing=SimpleNamespace(device="cpu"),
         corpus_revision="corpus-v2",
         frame_store_source="btc_keyframes",
     )
@@ -698,23 +659,21 @@ def test_two_video_run_resumes_every_stage_without_legacy_local_reads(
         config,
         client=client,
         operations=operations,
+        paths=paths,
     )
 
     first = service.run()
     events_after_first = tuple(operations.events)
     second = service.run()
 
-    assert config.preprocessing.videos_root is None
     assert sorted(client.downloads) == [
         "videos/L21_V001.mp4",
         "videos/L21_V002.mp4",
     ]
     assert events_after_first == (
-        "frame:L21_V001",
+        "btc_frame_store",
         "transcript:L21_V001",
-        "frame:L21_V002",
         "transcript:L21_V002",
-        "finalize_frames",
         "caption",
         "ocr",
         "asr",
@@ -724,7 +683,6 @@ def test_two_video_run_resumes_every_stage_without_legacy_local_reads(
         "asr_index",
     )
     assert tuple(operations.events) == events_after_first
-    assert all(path.exists() for path in operations.staged_paths)
     assert first.completed_stages == (
         "frame_store",
         "caption",
@@ -799,11 +757,13 @@ def test_cache_only_records_inventory_without_model_work(tmp_path: Path) -> None
     config = _config(tmp_path)
     config.execution.minimum_free_gib_after_cache = 0
     client = _FakeS3()
-    operations = _Operations(PreparationPaths.from_config(config, None))
+    paths = PreparationPaths.from_config(config, None)
+    operations = _Operations(paths)
     result = S3CorpusPreparationService(
         config,
         client=client,
         operations=operations,
+        paths=paths,
     ).cache_sources()
 
     assert result.source_count == 2
@@ -825,16 +785,14 @@ def test_cached_run_can_overlap_frame_and_asr_lanes(tmp_path: Path) -> None:
         config,
         client=client,
         operations=operations,
+        paths=paths,
     ).run()
 
-    assert operations.events[:2] == [
-        "frame:L21_V001",
+    assert operations.events[:3] == [
+        "btc_frame_store",
         "transcript:L21_V001",
-    ]
-    assert {
-        "frame:L21_V002",
         "transcript:L21_V002",
-    }.issubset(operations.events)
+    ]
     assert result.source_count == 2
     assert paths.frames_path.is_file()
     assert paths.asr_enrichment_path.is_file()
@@ -891,11 +849,13 @@ def test_changed_s3_inventory_cannot_reuse_an_existing_run(
 ) -> None:
     config = _config(tmp_path)
     client = _FakeS3()
-    operations = _Operations(PreparationPaths.from_config(config, None))
+    paths = PreparationPaths.from_config(config, None)
+    operations = _Operations(paths)
     service = S3CorpusPreparationService(
         config,
         client=client,
         operations=operations,
+        paths=paths,
     )
     service.run()
     client.objects["videos/L21_V003.mp4"] = b"newest-s3-three"

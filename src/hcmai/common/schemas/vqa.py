@@ -8,7 +8,7 @@ from typing import Any, Literal, Self
 from pydantic import Field, model_validator
 
 from .base import ContractModel, NonEmptyString
-from .enum import ExecutionProfile, QueryLanguage, TaskType
+from .enum import QueryLanguage, TaskType
 from .search import SearchFilters
 from .telemetry import PipelineTrace
 
@@ -20,14 +20,6 @@ class VQABaselineProfile(str, Enum):
     VRAG = "vqa_vrag"
     LOCALIZER = "vqa_localizer"
     HIERARCHICAL = "vqa_hierarchical"
-
-
-class VQAInferenceRequest(ContractModel):
-    """Ask an inference provider one question about one canonical frame."""
-
-    frame_id: NonEmptyString
-    video_id: NonEmptyString
-    question: NonEmptyString = Field(max_length=1_000)
 
 
 class VQAInferenceEvidenceItem(ContractModel):
@@ -96,7 +88,6 @@ class VQARequest(ContractModel):
     top_k: int = Field(default=20, ge=1, le=100)
     filters: SearchFilters | None = None
     language_hint: QueryLanguage | None = None
-    execution_profile: ExecutionProfile | None = None
     baseline_profile: VQABaselineProfile = VQABaselineProfile.LOCALIZER
     search_id: NonEmptyString | None = None
 

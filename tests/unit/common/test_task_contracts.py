@@ -5,7 +5,6 @@ from pydantic import TypeAdapter, ValidationError
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import (
-    ExecutionProfile,
     FrameEvidence,
     FrameRecord,
     QueryLanguage,
@@ -20,9 +19,6 @@ from hcmai.common.schemas import (
     TaskRequest,
     TaskResponse,
     TaskType,
-    VQAInferenceEvidence,
-    VQAInferenceRequest,
-    VQAInferenceResponse,
     VQARequest,
     VQAResponse,
     VQASubmission,
@@ -137,7 +133,6 @@ def test_vqa_contracts_round_trip_without_losing_submission_text() -> None:
         question="What is added?",
         top_k=100,
         language_hint=QueryLanguage.ENGLISH,
-        execution_profile=ExecutionProfile.BALANCED,
         search_id="search-session-1",
     )
     response = VQAResponse(
@@ -163,27 +158,6 @@ def test_search_and_vqa_requests_remain_compatible_without_search_id() -> None:
         "event_description": "a bus stops",
         "question": "What color is it?",
     }).search_id is None
-
-
-def test_one_frame_vqa_contract_is_explicitly_provider_scoped() -> None:
-    request = VQAInferenceRequest(
-        frame_id="frame-1", video_id="video-1", question="Màu gì?"
-    )
-    response = VQAInferenceResponse(
-        request_id="inference-1",
-        video_id=request.video_id,
-        frame_ids=[request.frame_id],
-        selected_frame_id=request.frame_id,
-        question=request.question,
-        answer="đỏ",
-        grounded=True,
-        latency_ms=2,
-        evidence=VQAInferenceEvidence(caption="Một ô vuông đỏ."),
-    )
-
-    assert response.evidence.caption == "Một ô vuông đỏ."
-    assert response.frame_ids == [request.frame_id]
-    assert response.selected_frame_id == request.frame_id
 
 
 def test_text_embedding_contract_uses_shared_text_source_name() -> None:

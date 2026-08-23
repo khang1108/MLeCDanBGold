@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from hashlib import sha1
 from time import perf_counter
 from uuid import uuid4
@@ -19,7 +18,7 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
 from hcmai.data.pipeline import DataService
-from hcmai.llm.pipeline import LLMService
+from hcmai.thundercompute.pipeline import LLMService
 from hcmai.common.observability.tracing import StageTimer, log_stage
 from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
@@ -27,10 +26,6 @@ from hcmai.orchestration.workflows.base import (
 )
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.pipelines.vqa.domain.models import EvidenceBundle
-from hcmai.pipelines.vqa.legacy_localization.candidates import retrieve_candidates
-from hcmai.pipelines.vqa.legacy_localization.localizer import SimilarityLocalizer
-from hcmai.pipelines.vqa.legacy_localization.video_aggregation import aggregate_videos
-from hcmai.pipelines.vqa.legacy_localization.windows import build_windows
 from hcmai.pipelines.vqa.output.ranking import rank_grounded_answers
 from hcmai.pipelines.vqa.output.submission import materialize_submissions
 from hcmai.pipelines.vqa.query.parser import parse_vqa_query
@@ -79,6 +74,8 @@ class VQAPipeline:
             raise TaskPipelineDependencyError("Frame store not loaded")
         if self.retrieval is None:
             raise TaskPipelineDependencyError("Retriever not loaded")
+        if self.temporal_core is None:
+            raise TaskPipelineDependencyError("Temporal evidence core not loaded")
 
         started = perf_counter()
         request_id = _request_id(request)
@@ -90,47 +87,28 @@ class VQAPipeline:
         traces.append(timer.finish(input_count=1, output_count=1, backend="rules"))
 
         timer = StageTimer("search")
-        progressive = None
-        if self.temporal_core is not None:
-            progressive = self.temporal_core.localize(
-                request.event_description,
-                search_id=request.search_id,
-                filters=request.filters,
-                task_type=TaskType.VQA,
-                session_fingerprint=_question_fingerprint(request.question),
-            )
-            scenes = list(progressive.scenes[: profile.max_windows])
-            candidates = [item for scene in scenes for item in scene.evidence]
-            warnings = list(progressive.warnings)
-            evidence_candidates = _scene_retrieval_evidence(scenes, request.top_k)
-            windows = [
-                _scene_bundle(scene, self.data, profile.max_frames_per_window)
-                for scene in scenes
-            ]
-            budgets = progressive.diagnostics
-            search_backend = (
-                f"TemporalEvidenceCore:{progressive.diff.mode.value};"
-                f"candidate_pool_size={budgets['candidate_pool_size']};"
-                f"top_m_evidence={budgets['top_m_evidence']};"
-                f"scene_top_p_global={budgets['scene_top_p_global']}"
-            )
-        else:
-            candidates, warnings = retrieve_candidates(
-                self.retrieval,
-                self.data,
-                parsed,
-                top_k=profile.candidates_per_branch,
-                filters=request.filters,
-            )
-            evidence_candidates = _retrieval_evidence(candidates, request.top_k)
-            videos = aggregate_videos(candidates, top_videos=profile.candidate_videos)
-            windows = build_windows(
-                videos,
-                self.data,
-                duration_ms=profile.window_ms,
-                max_frames=profile.max_frames_per_window,
-            )[: profile.max_windows]
-            search_backend = type(self.retrieval).__name__
+        progressive = self.temporal_core.localize(
+            request.event_description,
+            search_id=request.search_id,
+            filters=request.filters,
+            task_type=TaskType.VQA,
+            session_fingerprint=_question_fingerprint(request.question),
+        )
+        scenes = list(progressive.scenes[: profile.max_windows])
+        candidates = [item for scene in scenes for item in scene.evidence]
+        warnings = list(progressive.warnings)
+        evidence_candidates = _scene_retrieval_evidence(scenes, request.top_k)
+        windows = [
+            _scene_bundle(scene, self.data, profile.max_frames_per_window)
+            for scene in scenes
+        ]
+        budgets = progressive.diagnostics
+        search_backend = (
+            f"TemporalEvidenceCore:{progressive.diff.mode.value};"
+            f"candidate_pool_size={budgets['candidate_pool_size']};"
+            f"top_m_evidence={budgets['top_m_evidence']};"
+            f"scene_top_p_global={budgets['scene_top_p_global']}"
+        )
         traces.append(timer.finish(
             input_count=1,
             output_count=len(candidates),
@@ -140,14 +118,14 @@ class VQAPipeline:
         timer = StageTimer("video_aggregation")
         traces.append(timer.finish(
             input_count=len(candidates),
-            output_count=len(scenes) if progressive is not None else len(videos),
-            backend="shared_scenes" if progressive is not None else "coverage",
+            output_count=len(scenes),
+            backend="shared_scenes",
         ))
 
         timer = StageTimer("window_construction")
         traces.append(timer.finish(
             input_count=len(candidates), output_count=len(windows),
-            backend="shared_scenes" if progressive is not None else "neighbors",
+            backend="shared_scenes",
         ))
 
         timer = StageTimer("evidence_construction")
@@ -170,28 +148,10 @@ class VQAPipeline:
         ))
 
         timer = StageTimer("localization")
-        if progressive is not None:
-            localized = bundles
-        elif profile.localizer_enabled:
-            localized = SimilarityLocalizer().localize(
-                parsed, bundles, limit=profile.max_windows
-            )
-        else:
-            localized = [
-                replace(
-                    bundle,
-                    scene=bundle.scene.model_copy(update={
-                        "reason_labels": ("retrieval_order",),
-                    }),
-                )
-                for bundle in bundles
-            ]
+        localized = bundles
         traces.append(timer.finish(
             input_count=len(bundles), output_count=len(localized),
-            backend=(
-                "shared_temporal_core" if progressive is not None
-                else "similarity" if profile.localizer_enabled else "retrieval"
-            ),
+            backend="shared_temporal_core",
         ))
 
         timer = StageTimer("answer")
@@ -238,8 +198,7 @@ class VQAPipeline:
         ))
 
         trace = PipelineTrace(stages={item.stage: item for item in traces})
-        if progressive is not None:
-            trace = trace.merged(progressive.trace, prefix="temporal_retrieval")
+        trace = trace.merged(progressive.trace, prefix="temporal_retrieval")
         for item in traces:
             log_stage(
                 logger,
@@ -249,11 +208,7 @@ class VQAPipeline:
             )
         return VQAResponse(
             request_id=request_id,
-            search_id=(
-                progressive.search_id
-                if progressive is not None
-                else request.search_id
-            ),
+            search_id=progressive.search_id,
             event_description=request.event_description,
             question=request.question,
             top_k=request.top_k,
@@ -277,27 +232,6 @@ def _question_fingerprint(question: str) -> str:
 
     normalized = " ".join(question.split()).casefold().encode()
     return sha1(normalized).hexdigest()
-
-
-def _retrieval_evidence(candidates, top_k: int) -> list[VQARetrievalEvidence]:
-    """Materialize canonical fallback evidence from legacy frame candidates."""
-
-    return [
-        VQARetrievalEvidence(
-            rank=rank,
-            video_id=format_video_id(
-                candidate.frame.video_id,
-                fallback_path=getattr(candidate.frame, "image_path", None),
-            ),
-            frame_id=candidate.frame.frame_id,
-            frame_ids=[candidate.frame.frame_id],
-            frame_idx=official_frame_idx(candidate.frame),
-            fps=derive_fps(candidate.frame),
-            timestamp_ms=candidate.frame.timestamp_ms,
-            retrieval_score=candidate.score,
-        )
-        for rank, candidate in enumerate(candidates[:top_k], start=1)
-    ]
 
 
 def _scene_retrieval_evidence(scenes, top_k: int) -> list[VQARetrievalEvidence]:

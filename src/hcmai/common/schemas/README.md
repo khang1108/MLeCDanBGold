@@ -29,8 +29,6 @@ that feature package. In particular, caption/OCR types belong under
 - `QueryLanguage`: query language: Vietnamese (`vi`), English (`en`), or
   mixed (`mixed`).
 - `TaskType`: frontend query type: `kis`, `vkis`, `vqa`, or `trake`.
-- `ExecutionProfile`: bounded task profile: `fast`, `balanced`, `accurate`, or
-  `competition_anytime`.
 - `QueryDifficulty`: evaluation difficulty: `easy`, `medium`, or `hard`.
 
 ### `frame.py`
@@ -106,17 +104,17 @@ matched evidence without exposing mutable search state as a public API schema.
 ### `vqa.py`
 
 - `VQARequest`: competition event description, question, Top-k, optional
-  filters, language hint, execution profile, and progressive `search_id`.
+  filters, language hint, baseline profile, and progressive `search_id`.
 - `VQASubmission`: ranked canonical video/frame/answer row with retrieval,
   grounding, answer, and joint scores. Its singular `frame_id` is the exact
   selected internal frame used by the UI; `frame_idx` is the BTC submission
   coordinate, while `frame_ids` retains bounded scene evidence.
 - `VQAResponse`: bounded ranked competition submissions with an optional
   echoed `search_id`.
-- `VQAInferenceRequest` and `VQAInferenceEvidence`: provider-scoped request and
-  evidence contracts. Evidence retains bounded structured source text with its
-  canonical frame ID, time interval, confidence, and provenance; aggregated
-  caption/OCR/ASR fields remain for one-frame provider compatibility.
+- `VQAInferenceEvidence`: provider-scoped evidence contract. Evidence retains
+  bounded structured source text with its canonical frame ID, time interval,
+  confidence, and provenance; aggregated caption/OCR/ASR fields remain for
+  provider compatibility.
 - `VQAInferenceResponse`: the single provider response for one-frame and
   multi-frame inference; it preserves ordered supplied frame IDs, the selected
   canonical frame, and canonical video identity.

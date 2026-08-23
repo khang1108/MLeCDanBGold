@@ -1,11 +1,9 @@
-"""Smoke test for TRAKE ranking, diversification, and CSV export."""
+"""Smoke test for TRAKE ranking and diversification."""
 
 from __future__ import annotations
 
 import numpy as np
-import pytest
-
-from hcmai.pipelines.trake import TrakePath, rank_paths, write_submission
+from hcmai.pipelines.trake import rank_paths
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
@@ -54,20 +52,3 @@ def test_a_single_strong_event_stops_carrying_a_video_below_unit_power() -> None
         "even",
         "spike",
     ]
-
-
-def test_rows_are_written_without_a_header_or_extension(tmp_path) -> None:
-    output = write_submission(
-        [TrakePath("L10_V001.mp4", 1.0, (1200, 1850, 2100), ("f1", "f2", "f3"))],
-        tmp_path / "submission" / "query-1-trake.csv",
-    )
-    assert output.read_text(encoding="utf-8") == "L10_V001,1200,1850,2100\n"
-
-
-def test_mixed_event_counts_are_rejected(tmp_path) -> None:
-    rows = [
-        TrakePath("a", 1.0, (1, 2), ("f1", "f2")),
-        TrakePath("b", 0.5, (1, 2, 3), ("f1", "f2", "f3")),
-    ]
-    with pytest.raises(ValueError, match="mix event counts"):
-        write_submission(rows, tmp_path / "bad.csv")

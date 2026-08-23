@@ -23,12 +23,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from hcmai.data.preprocessing.s3 import S3Publication
-
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.io import atomic_write, read_json, write_json
 from hcmai.data.corpus_build.config import S3CorpusPreparationConfig
-from hcmai.data.preprocessing import FramePreparationSession
+from hcmai.data.corpus_build.publish import S3Publication
 from hcmai.data.s3 import (
     S3VideoObject,
     create_s3_client,
@@ -223,15 +221,7 @@ class PreparationCacheRun:
 class PreparationOperations(Protocol):
     """Existing stage services adapted to the shared S3 source lifecycle."""
 
-    def prepare_frame(self, video: Path, source: S3VideoObject) -> Any: ...
-
     def prepare_btc_frame_store(self) -> Path: ...
-
-    def finalize_frames(
-        self,
-        prepared: Sequence[Any],
-        sources: Sequence[S3VideoObject],
-    ) -> Path: ...
 
     def prepare_transcript(self, video: Path) -> Path: ...
 
@@ -274,7 +264,7 @@ class DefaultPreparationOperations:
         from hcmai.common.config import TranscriptJobConfig
         from hcmai.data.enrichment.caption.config import CaptionJobConfig
         from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
-        from hcmai.llm.config import LLMServiceConfig
+        from hcmai.thundercompute.config import LLMServiceConfig
 
         storage = config.preprocessing.s3
         if storage is None:
@@ -297,7 +287,6 @@ class DefaultPreparationOperations:
         self.model_config = LLMServiceConfig.from_yaml(self.model_config_path)
         
         self._validate_model_pins()
-        self._frames: FramePreparationSession | None = None
         self._transcripts: Any | None = None
         self._text_encoder: Any | None = None
         self._remote_pools: dict[str, Any] = {}
@@ -308,7 +297,7 @@ class DefaultPreparationOperations:
         if pool_config is None:
             return None
         if capability not in self._remote_pools:
-            from hcmai.llm.adapters.pool import InferenceClientPool
+            from hcmai.thundercompute.adapters.pool import InferenceClientPool
 
             self._remote_pools[capability] = InferenceClientPool.from_config(
                 pool_config
@@ -369,62 +358,6 @@ class DefaultPreparationOperations:
                 + ", ".join(mismatched)
             )
 
-    def _frame_session(self) -> FramePreparationSession:
-        """Khởi tạo FramePreparationSession (Xử lý video) nếu chưa có."""
-        if self._frames is None:
-            # Copy cấu hình để tránh ảnh hưởng đến config gốc
-            preprocessing = self.config.preprocessing.model_copy()
-            # Set output về thư mục FrameStore
-            preprocessing.output_root = self.paths.frame_store_root
-            shot_detector = event_detector = encoder = None
-            preprocessing_pool = self._remote_pool("preprocessing")
-            
-            if preprocessing_pool is not None:
-                from hcmai.data.preprocessing.adapters.remote import (
-                    RemoteEfficientGEBDDetector,
-                    RemoteTransNetDetector,
-                )
-
-                transnet = self.config.remote_inference.transnet_model
-                gebd = self.config.remote_inference.efficientgebd_model
-                
-                assert transnet is not None and gebd is not None
-                
-                shot_detector = RemoteTransNetDetector(
-                    preprocessing_pool,
-                    model_name=transnet.model_name,
-                    revision=transnet.revision,
-                )
-                event_detector = RemoteEfficientGEBDDetector(
-                    preprocessing_pool,
-                    model_name=gebd.model_name,
-                    revision=gebd.revision,
-                    sample_fps=preprocessing.efficientgebd_sample_fps,
-                    resolution=preprocessing.efficientgebd_resolution,
-                    sequence_length=preprocessing.efficientgebd_sequence_length,
-                    overlap=preprocessing.efficientgebd_overlap,
-                )
-            
-            dino_pool = self._remote_pool("dino")
-            if dino_pool is not None:
-                from hcmai.data.preprocessing.adapters.remote import RemoteDinoEncoder
-
-                pin = self.config.models.dino
-                encoder = RemoteDinoEncoder(
-                    dino_pool,
-                    model_name=pin.model_name,
-                    revision=pin.revision,
-                    dtype=preprocessing.dino_dtype,
-                )
-            self._frames = FramePreparationSession(
-                preprocessing,
-                shot_detector=shot_detector,
-                event_detector=event_detector,
-                encoder=encoder,
-                resume=self.resume,
-            )
-        return self._frames
-
     def _transcript_service(self) -> Any:
         """Khởi tạo TranscriptService (Xử lý phụ đề/phân đoạn) nếu chưa có."""
         if self._transcripts is None:
@@ -469,13 +402,6 @@ class DefaultPreparationOperations:
                 self._transcripts = TranscriptService(asr, diarization)
         return self._transcripts
 
-    def prepare_frame(self, video: Path, source: S3VideoObject) -> Any:
-        """Chuẩn bị dữ liệu video (tạo frame, embedding)."""
-        return self._frame_session().prepare_video(
-            video,
-            source_version=source.source_version,
-        )
-
     def prepare_btc_frame_store(self) -> Path:
         """Import organizer keyframes without constructing a video preprocessor."""
 
@@ -487,32 +413,6 @@ class DefaultPreparationOperations:
                 "BTC frame store path differs from the active enrichment contract"
             )
         return frames_path
-
-    def finalize_frames(
-        self,
-        prepared: Sequence[Any],
-        sources: Sequence[S3VideoObject],
-    ) -> Path:
-        inventory = self.paths.frame_store_root / "source-manifest.json"
-        _atomic_json(
-            inventory,
-            {
-                "bucket": self.storage.bucket,
-                "videos_prefix": self.storage.videos_prefix,
-                "objects": [asdict(source) for source in sources],
-            },
-        )
-        return self._frame_session().finalize(
-            list(prepared),
-            limited_run=self.limit is not None,
-            source={
-                "type": "s3",
-                "bucket": self.storage.bucket,
-                "videos_prefix": self.storage.videos_prefix,
-                "object_count": len(sources),
-                "inventory": "source-manifest.json",
-            },
-        )
 
     def prepare_transcript(self, video: Path) -> Path:
         output, _ = self._transcript_service().prepare_video(
@@ -546,12 +446,7 @@ class DefaultPreparationOperations:
     def _specialist_frame_store_id(self) -> str | None:
         """Keep BTC evidence tied to its canonical frame store, not an S3 run."""
 
-        source = getattr(
-            getattr(self, "config", None), "frame_store_source", "btc_keyframes"
-        )
-        if source == "btc_keyframes":
-            return self.enrichment_job.frame_store_id
-        return getattr(self, "_current_run_id", None)
+        return self.enrichment_job.frame_store_id
 
     def _runtime_caption_config(self) -> Any:
         """Return Caption policy with only the active dataset version replaced."""
@@ -569,7 +464,6 @@ class DefaultPreparationOperations:
             self.enrichment_job.ocr,
             checkpoint=pin.model_name,
             revision=pin.revision,
-            device=self.config.preprocessing.device,
             dataset_version=self.config.corpus_revision,
         )
 
@@ -906,14 +800,12 @@ class S3CorpusPreparationService:
         self.storage = storage
         if paths is not None:
             self.paths = paths
-        elif config.frame_store_source == "btc_keyframes":
+        else:
             from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
 
             self.paths = PreparationPaths.from_enrichment_job(
                 config, EnrichmentJobConfig.from_yaml(enrichment_config)
             )
-        else:
-            self.paths = PreparationPaths.from_config(config, limit, offset)
         self.paths.state_root.mkdir(parents=True, exist_ok=True)
         self.client = client if client is not None else create_s3_client(storage)
         self.resume = resume
@@ -936,7 +828,7 @@ class S3CorpusPreparationService:
         1. Kéo danh sách S3 Video (Inventory).
         2. Tính toán Fingerprint (run_id) của lượt chạy.
         3. Resume/Skip những stage đã hoàn thành (nhờ marker .json).
-        4. Chạy Preprocessing & ASR Extraction.
+        4. Import BTC frames and run ASR extraction when enabled.
         5. Lần lượt chạy các Enrichment (Caption, OCR, Indexing).
         """
         # =====================================================================
@@ -951,10 +843,9 @@ class S3CorpusPreparationService:
         skipped: list[str] = []
 
         # =====================================================================
-        # 2. STAGE 1: VIDEO PREPROCESSING & ASR EXTRACTION
+        # 2. STAGE 1: BTC FRAME IMPORT & ASR EXTRACTION
         # =====================================================================
-        # Kiểm tra trạng thái hoàn thành của FrameStore (lưu khung hình) 
-        # và ASR (trích xuất âm thanh gốc) từ file marker.json
+        # Check FrameStore and ASR markers before doing any work.
         frame_pending = self.config.stages.frame_store and self._pending(
             "frame_store",
             run_id,
@@ -970,21 +861,15 @@ class S3CorpusPreparationService:
             record_skip=False,
         )
         
-        if frame_pending and self.config.frame_store_source == "btc_keyframes":
+        if frame_pending:
             self.operations.prepare_btc_frame_store()
             self._complete_stage("frame_store", run_id)
             completed.append("frame_store")
 
-        prepared: list[Any] = []
-        legacy_frame_pending = (
-            frame_pending
-            and self.config.frame_store_source == "legacy_video_preprocessing"
-        )
-
-        # BTC frame import is independent of videos; videos are needed only for
-        # legacy preprocessing and timestamped ASR preparation.
-        if legacy_frame_pending or asr_pending:
-            logger.info("Starting Video Frame & ASR Preparation Stage...")
+        # BTC frame import is independent of videos; source videos are needed
+        # only for timestamped ASR preparation.
+        if asr_pending:
+            logger.info("Starting ASR preparation stage...")
             
             # Xử lý tuần tự từng video
             for i, source in enumerate(
@@ -1000,21 +885,9 @@ class S3CorpusPreparationService:
                 # Quản lý vòng đời video: Tải tạm thời -> Decode -> Xoá file sau khi xong
                 with self._source_video(source) as video:
                     
-                    # Bước trích xuất Frame, chấm điểm bằng TransNetV2 & GEBD, dedup bằng DINO
-                    if legacy_frame_pending:
-                        prepared.append(
-                            self.operations.prepare_frame(video, source)
-                        )
-                    
                     # Bước lấy Audio track từ Video phục vụ cho ASR
                     if asr_pending:
                         self.operations.prepare_transcript(video)
-            
-            # Sau khi xử lý hết các Video, lưu lại kết quả Frame Store chung ra file Parquet
-            if legacy_frame_pending:
-                self.operations.finalize_frames(prepared, sources)
-                self._complete_stage("frame_store", run_id)
-                completed.append("frame_store")
                 
             logger.info("Completed Video Frame & ASR Preparation Stage.")
 
@@ -1341,30 +1214,20 @@ class S3CorpusPreparationService:
         return _identity_subset(actual, expected)
 
     def _stage_outputs(self, stage: str) -> tuple[Path, ...]:
-        if self.config.frame_store_source == "btc_keyframes":
-            caption_outputs = (
-                self.paths.caption_root / "captions.parquet",
-                self.paths.caption_root / "failures.json",
-                self.paths.caption_root / "frame_enrichment.parquet",
-                self.paths.caption_root / "manifest.json",
-            )
-            ocr_outputs = (
-                self.paths.ocr_root / "frames.parquet",
-                self.paths.ocr_root / "regions.parquet",
-                self.paths.ocr_root / "failures.json",
-                self.paths.ocr_root / "frame_enrichment.parquet",
-                self.paths.ocr_root / "ocr_report.json",
-                self.paths.ocr_root / "manifest.json",
-            )
-        else:
-            caption_outputs = (
-                self.paths.caption_root / "frame_enrichment.parquet",
-                self.paths.caption_root / "manifest.json",
-            )
-            ocr_outputs = (
-                self.paths.ocr_root / "frame_enrichment.parquet",
-                self.paths.ocr_root / "manifest.json",
-            )
+        caption_outputs = (
+            self.paths.caption_root / "captions.parquet",
+            self.paths.caption_root / "failures.json",
+            self.paths.caption_root / "frame_enrichment.parquet",
+            self.paths.caption_root / "manifest.json",
+        )
+        ocr_outputs = (
+            self.paths.ocr_root / "frames.parquet",
+            self.paths.ocr_root / "regions.parquet",
+            self.paths.ocr_root / "failures.json",
+            self.paths.ocr_root / "frame_enrichment.parquet",
+            self.paths.ocr_root / "ocr_report.json",
+            self.paths.ocr_root / "manifest.json",
+        )
         outputs = {
             "frame_store": (
                 self.paths.frames_path,

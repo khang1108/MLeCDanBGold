@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -15,10 +15,10 @@ from hcmai.common.schemas.search import SearchFilters
 from hcmai.data.stores.frame import FrameStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME, DenseIndex
-from hcmai.retrieval.retriever.cache import CacheMetricsSnapshot, EmbeddingCache
+from hcmai.retrieval.retriever.cache import EmbeddingCache
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
 from hcmai.retrieval.retriever.fusion.rrf import RRFFusionRetriever
-from hcmai.retrieval.retriever.models.contracts import Retriever
+from hcmai.retrieval.retriever.models.contracts import Retriever, VectorRetriever
 from hcmai.retrieval.retriever.models.metadata import IndexMetadata
 from hcmai.retrieval.retriever.query_batch import SourceFamily
 from hcmai.retrieval.retriever.segment.artifacts import (
@@ -30,21 +30,8 @@ from hcmai.retrieval.retriever.text.artifacts import (
     build_context_artifacts,
     build_text_artifacts,
 )
-from hcmai.retrieval.retriever.text.retriever import (
-    ASRRetriever,
-    CaptionRetriever,
-    ContextRetriever,
-    OCRRetriever,
-)
+from hcmai.retrieval.retriever.text.retriever import ContextRetriever
 from hcmai.retrieval.retriever.video_scores import VideoEventScores, score_videos
-
-_TEXT_RETRIEVERS = {
-    RetrievalSource.CONTEXT: ContextRetriever,
-    RetrievalSource.CAPTION: CaptionRetriever,
-    RetrievalSource.OCR: OCRRetriever,
-    RetrievalSource.ASR: ASRRetriever,
-}
-
 
 class RetrievalService:
     """Quản lý các module tìm kiếm (retriever) cho hình ảnh và văn bản.
@@ -80,41 +67,6 @@ class RetrievalService:
         )
 
     @classmethod
-    def from_indexes(
-        cls,
-        visual_index: DenseIndex,
-        visual_encoder: TextEmbeddingAdapter,
-        text_indexes: Mapping[RetrievalSource, DenseIndex],
-        text_encoder: TextEmbeddingAdapter,
-        fusion: FusionConfig,
-        cache_config: RetrievalCacheConfig | None = None,
-    ) -> "RetrievalService":
-        cache = _embedding_cache(cache_config)
-        prompt_version = (
-            cache_config.prompt_version if cache_config is not None else "query-v1"
-        )
-        retrievers: list[Retriever] = [
-            DenseRetriever(
-                visual_encoder,
-                visual_index,
-                embedding_cache=cache,
-                prompt_version=prompt_version,
-            )
-        ]
-        retrievers.extend(
-            _TEXT_RETRIEVERS[source](
-                text_encoder,
-                index,
-                cache,
-                prompt_version,
-            )
-            for source, index in text_indexes.items()
-        )
-        if len(retrievers) == 1:
-            return cls(retrievers[0])
-        return cls(RRFFusionRetriever(retrievers, fusion))
-
-    @classmethod
     def from_fast_track_indexes(
         cls,
         *,
@@ -146,7 +98,7 @@ class RetrievalService:
         prompt_version = (
             cache_config.prompt_version if cache_config is not None else "query-v1"
         )
-        retrievers: list[Retriever] = [
+        retrievers: list[VectorRetriever] = [
             DenseRetriever(
                 visual_encoder,
                 visual_index,
@@ -248,16 +200,6 @@ class RetrievalService:
         raise RuntimeError(
             f"No {source_family!r} retriever is configured for retrieval"
         )
-
-    def cache_metrics(self) -> CacheMetricsSnapshot:
-        """Return metrics for the shared embedding cache, if configured."""
-
-        retrievers = getattr(self._retriever, "retrievers", (self._retriever,))
-        for retriever in retrievers:
-            cache = getattr(retriever, "embedding_cache", None)
-            if cache is not None:
-                return cache.metrics()
-        return CacheMetricsSnapshot(0, 0, 0, 0, 0)
 
     @staticmethod
     def load_index(

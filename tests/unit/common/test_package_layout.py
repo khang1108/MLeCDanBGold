@@ -11,13 +11,11 @@ import pytest
         "hcmai.retrieval.embedding.pipeline",
         "hcmai.retrieval.retriever.pipeline",
         "hcmai.retrieval.reranking.pipeline",
-        "hcmai.pipelines.kis",
         "hcmai.pipelines.vqa",
         "hcmai.pipelines.trake",
         "hcmai.data.enrichment.pipeline",
         "hcmai.data.enrichment.transcripts.pipeline",
         "hcmai.orchestration.workflows.kis",
-        "hcmai.orchestration.workflows.vqa",
         "hcmai.orchestration.workflows.trake",
     ],
 )

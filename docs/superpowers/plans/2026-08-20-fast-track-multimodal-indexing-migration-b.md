@@ -2,9 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status (2026-08-23):** This document records the original migration plan.
+> The later P2 cleanup removed the runtime rollback profile and
+> `RetrievalService.from_indexes()`; remaining references to that rollback path
+> are historical plan context, not supported startup behavior.
+
 **Goal:** Rebuild the deleted Visual index, build FrameContext and segment-native ASR indexes from the artifacts that exist today, and make `Visual + FrameContext + projected ASR` the default online localization stack without rewriting the existing RRF, temporal core, or TRAKE alignment.
 
-**Architecture:** Keep `DenseIndex` frame-native for Visual and FrameContext. Introduce a separate `SegmentDenseIndex` for ASR, then adapt ASR segment hits to canonical frames in `ASRSegmentRetriever` before they reach the existing frame-ID RRF. Run all heavy embedding work offline on the ThunderCompute RTX A6000, publish only complete validated bundles, sync those bundles back to the local machine, and retain the legacy Caption/OCR/frame-ASR composition behind an explicit rollback profile.
+**Architecture:** Keep `DenseIndex` frame-native for Visual and FrameContext. Introduce a separate `SegmentDenseIndex` for ASR, then adapt ASR segment hits to canonical frames in `ASRSegmentRetriever` before they reach the existing frame-ID RRF. Run all heavy embedding work offline on the ThunderCompute RTX A6000 and publish only complete validated bundles. The online composition uses the fast-track path; legacy text-index builders are not a runtime rollback profile.
 
 **Tech Stack:** Python 3.12+, Pydantic v2, pandas/Parquet, NumPy, FAISS `IndexFlatIP`, Hugging Face Transformers SigLIP2, SentenceTransformers BGE-M3, pytest, pyright, rsync/SSH for local↔ThunderCompute transfer.
 
@@ -21,7 +26,7 @@
 - For the inspected BTC mapping bundle, strict production Visual coverage is exactly 177,321 frames across 873 videos.
 - `FrameContext` remains deterministic Caption + normalized OCR + Object summary; do not add ASR to it.
 - ASR source-of-truth remains `TranscriptSegment`; the persisted ASR index identity is `segment_id`, never a fabricated `frame_id`.
-- Default online sources after promotion are `VISUAL + CONTEXT + ASR`; Caption/OCR/frame-aligned-ASR remain rollback-only.
+- Default online sources after promotion are `VISUAL + CONTEXT + ASR`; Caption/OCR/frame-aligned-ASR are not online runtime sources.
 - Do not modify `src/hcmai/temporal/**` or `src/hcmai/pipelines/trake/**` for this migration.
 - Do not replace `RetrievalCandidate.frame_id` with a generic temporal identity.
 - Do not introduce IVF/PQ or learned fusion; keep exact `IndexFlatIP` + existing RRF.
@@ -1643,7 +1648,7 @@ If P2 cannot be completed safely before the competition deadline, run `Visual + 
 
 ### Spec coverage
 
-Every fast-track scope item maps to a task: BTC mapping (1), Visual rebuild (3), generic text configuration (4), Context index (5), SegmentDenseIndex (6), ASR corpus (7), segment projection (8), online composition (9–10), immutable integrity/publication (2), ThunderCompute workflow (11), and minimal rollout gate/rollback (12). No task changes temporal core, reranker, or TRAKE.
+Every fast-track scope item maps to a task: BTC mapping (1), Visual rebuild (3), generic text configuration (4), Context index (5), SegmentDenseIndex (6), ASR corpus (7), segment projection (8), online composition (9–10), immutable integrity/publication (2), ThunderCompute workflow (11), and minimal rollout gate (12). No task changes temporal core, reranker, or TRAKE.
 
 ### Placeholder scan
 
@@ -1655,5 +1660,5 @@ The plan contains no unresolved implementation placeholders or unspecified behav
 - Segment-native ASR uses `SegmentDenseIndex` and `segment_id` until `ASRSegmentRetriever` projects to frame candidates.
 - Context and ASR use one `TextEmbeddingAdapter`/BGE-M3 query family.
 - `RetrievalSource.CONTEXT` is additive; legacy sources remain valid for rollback.
-- Existing `RetrievalService.from_indexes()` remains the legacy factory; `from_fast_track_indexes()` is the modern factory.
+- `RetrievalService.from_fast_track_indexes()` is the supported online factory; the former `from_indexes()` rollback factory was removed by the P2 cleanup.
 - No new method relies on a segment identity inside `RetrievalCandidate` or RRF.

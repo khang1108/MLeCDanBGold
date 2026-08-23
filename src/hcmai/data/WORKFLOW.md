@@ -1,51 +1,37 @@
-# Data Preprocessing and Enrichment Workflows
+# Data Ingestion and Enrichment Workflows
 
-This document outlines the architecture, algorithms, and workflows for preparing raw videos into the canonical FrameStore and its multimodal enrichments (Caption, OCR, and ASR) in the `hcmai` system.
+This document outlines the BTC-native workflow for producing the canonical
+FrameStore and its multimodal enrichments in the `hcmai` system. Custom video
+frame extraction is not part of the active competition path.
 
-## 1. Frame Preprocessing (FrameStore)
+## 1. Canonical FrameStore Ingestion
 
-The frame preparation pipeline transforms raw video files into a stable, canonical dataset (`frames.parquet`). This relies on several stages: shot/event detection, keyframe selection, deduplication, visual embedding, and atomic dataset publication.
+`import_btc_frame_store` validates BTC metadata, joins the organizer's
+keyframe mapping, preserves `video_id`, `frame_id`, `frame_idx`, and
+`timestamp_ms`, and atomically publishes `frames.parquet` plus its manifest.
+The resulting FrameStore is the source of truth for Caption, OCR, Object, and
+retrieval stages.
 
-### Preprocessing Algorithm & Strategy
+### Ingestion Strategy
 
-1. **Shot and Event Detection**:
-   - Uses `TransNetDetector` to slice the video into continuous visual shots.
-   - Uses `EfficientGEBDDetector` (Generic Event Boundary Detection) to identify semantic events.
-2. **Candidate Selection**:
-   - Frames are decoded, and candidates are selected based on shot boundaries, event boundaries, and significant visual changes.
-3. **Encoding & Deduplication**:
-   - Candidate frames are encoded into dense vectors using an encoder (e.g., `DinoEncoder`).
-   - Highly similar consecutive frames are deduplicated by thresholding the cosine distance between their vectors, keeping only representative frames to bound storage and computation costs.
-   - Max gap restoration guarantees that no visual period exceeds a maximum time without representation.
-4. **Canonical Publication**:
-   - All preserved frame images are written to a final image directory, and metadata (with coordinates, timestamps, and model provenance) is saved. The output is merged into `frames.parquet`.
+1. **BTC metadata validation**: verify required canonical identity fields and
+   the keyframe-to-submission mapping.
+2. **Canonical publication**: write the validated frame table and manifest
+   atomically without redetecting or selecting replacement frames.
+3. **Timeline evidence**: read source videos only for timestamped ASR; ASR is
+   kept separate from frame-native evidence.
 
-### Preprocessing Workflow Diagram
+### BTC-Native Workflow Diagram
 
 ```mermaid
-flowchart TD
-    RawVideo["Raw Video (mp4/avi)"]
-    Decode["Decode Video (PyAV)"]
-    TransNet["TransNet Shot Detection"]
-    GEBD["EfficientGEBD Event Detection"]
-    Candidates["Select Candidate Frames"]
-    DINO["DINO / Image Encoding"]
-    Deduplicate["Semantic Deduplication & Max-Gap Restoration"]
-    Images["Save Final Images (JPEG)"]
-    Parquet["Append to frames.parquet"]
-
-    RawVideo --> Decode
-    RawVideo --> TransNet
-    RawVideo --> GEBD
-    
-    Decode --> Candidates
-    TransNet --> Candidates
-    GEBD --> Candidates
-    
-    Candidates --> DINO
-    DINO --> Deduplicate
-    Deduplicate --> Images
-    Deduplicate --> Parquet
+flowchart LR
+    BTCFrames["BTC keyframes + mapping"] --> FrameStore["Canonical frames.parquet"]
+    BTCObjects["BTC object JSON"] --> Objects["Object evidence"]
+    FrameStore --> Caption["Caption"]
+    FrameStore --> OCR["OCR"]
+    FrameStore --> Context["FrameContext V1"]
+    Objects --> Context
+    SourceVideos["Source videos"] --> ASR["Timestamped ASR"]
 ```
 
 ---

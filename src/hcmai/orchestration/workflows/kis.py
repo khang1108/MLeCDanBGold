@@ -80,15 +80,19 @@ class KISPipeline:
             raise TaskPipelineRequestError(
                 f"pipeline for {self.task_type.value!r} requires a search request"
             )
+
         if request.query_type is not self.task_type:
             raise TaskPipelineRequestError(
                 f"pipeline for {self.task_type.value!r} cannot execute "
                 f"request for {request.query_type.value!r}"
             )
+
         if self.data is None or self.materializer is None:
             raise TaskPipelineDependencyError("Frame store not loaded")
+
         if self.retrieval is None:
             raise TaskPipelineDependencyError("Retriever not loaded")
+
         if self.temporal_core is None:
             raise TaskPipelineDependencyError("Temporal core not loaded")
 
@@ -118,6 +122,7 @@ class KISPipeline:
             filters=request.filters,
             task_type=request.query_type,
         )
+
         budgets = progressive.diagnostics
         progressive_trace = progressive_timer.finish(
             input_count=1,
@@ -129,6 +134,7 @@ class KISPipeline:
                 f"scene_top_p_global={budgets['scene_top_p_global']}"
             ),
         )
+
         candidates = _representative_candidates(progressive.scenes)
         retrieval_result = RetrievalResult(
             candidates=candidates,

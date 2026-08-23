@@ -16,7 +16,7 @@ from hcmai.common.schemas import (
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
-from hcmai.llm.pipeline import LLMService
+from hcmai.thundercompute.pipeline import LLMService
 from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,
@@ -213,6 +213,7 @@ class SearchService:
                 f"pipeline for query_type {request.query_type.value!r} "
                 "is not available"
             ) from error
+
         try:
             return cast(Any, pipeline).execute(request)
         except TaskPipelineDependencyError as error:
@@ -231,13 +232,6 @@ class SearchService:
                 trake_settings=TRAKESettings(),
             )
             if self.data is not None and self.retrieval is not None
-            else None
-        )
-        progressive_core = (
-            temporal_core
-            if self.config.progressive.architecture == "temporal"
-            and isinstance(self.data, DataService)
-            and isinstance(self.retrieval, RetrievalService)
             else None
         )
         task_types = (TaskType.KIS, TaskType.VKIS)
@@ -260,7 +254,7 @@ class SearchService:
                     self.retrieval,
                     self.llm,
                     self.vqa_config,
-                    progressive_core,
+                    temporal_core,
                 ),
             )
         )

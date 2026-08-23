@@ -48,7 +48,6 @@ class FakeTextEncoder:
 def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
     work = (tmp_path / "run").resolve()
     model_names = {
-        "dino": "fixture/dino",
         "caption": "fixture/caption",
         "ocr": "fixture/ocr",
         "asr": "fixture/asr",
@@ -71,14 +70,6 @@ def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
                 "smoke_artifacts_prefix": "artifacts/smoke",
                 "staging_root": work / "staging",
             },
-            "output_root": work / "artifacts/frame_store",
-            "transnet_repo": work / "models/transnet",
-            "transnet_weights": work / "models/transnet-weights",
-            "efficientgebd_repo": work / "models/gebd",
-            "efficientgebd_config": work / "models/gebd.yaml",
-            "efficientgebd_checkpoint": work / "models/gebd.pth",
-            "dino_model": model_names["dino"],
-            "dino_revision": "a" * 40,
         },
     })
 
@@ -152,7 +143,7 @@ def test_four_aligned_indexes_exactly_match_canonical_frame_identities(
     # Mock AppConfig and LLMServiceConfig to avoid FileNotFoundError reading non-existent YAMLs
     from hcmai.common.config import AppConfig, TranscriptJobConfig
     from hcmai.data.enrichment.caption.config import CaptionJobConfig
-    from hcmai.llm.pipeline import LLMServiceConfig
+    from hcmai.thundercompute.pipeline import LLMServiceConfig
     
     # Wait, instead of guessing AppConfig shape, let's just mock `AppConfig.from_yaml` to return a mocked object
     # using unittest.mock.MagicMock.

@@ -13,7 +13,7 @@ from hcmai.common.config import TranscriptJobConfig
 from hcmai.data.enrichment.caption.config import CaptionJobConfig
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.corpus_build import S3CorpusPreparationConfig
-from hcmai.llm.config import LLMServiceConfig
+from hcmai.thundercompute.config import LLMServiceConfig
 
 
 SHA = "a" * 40
@@ -39,7 +39,6 @@ def _values(root: Path) -> dict[str, object]:
         "models": {
             role: {"model_name": f"fixture/{role}", "revision": SHA}
             for role in (
-                "dino",
                 "caption",
                 "ocr",
                 "asr",
@@ -56,14 +55,6 @@ def _values(root: Path) -> dict[str, object]:
                 "smoke_artifacts_prefix": "/artifacts/smoke/corpus-v1/",
                 "staging_root": work_root / "staging",
             },
-            "output_root": work_root / "artifacts/frame_store",
-            "transnet_repo": "/models/TransNetV2",
-            "transnet_weights": "/models/TransNetV2/weights",
-            "efficientgebd_repo": "/models/EfficientGEBD",
-            "efficientgebd_config": "/models/EfficientGEBD/model.yaml",
-            "efficientgebd_checkpoint": "/models/EfficientGEBD/model.pth",
-            "dino_model": "fixture/dino",
-            "dino_revision": SHA,
         },
     }
 
@@ -71,7 +62,6 @@ def _values(root: Path) -> dict[str, object]:
 def test_production_config_accepts_only_isolated_s3_inputs(tmp_path: Path) -> None:
     config = S3CorpusPreparationConfig.model_validate(_values(tmp_path))
 
-    assert config.preprocessing.videos_root is None
     assert config.preprocessing.s3 is not None
     assert config.preprocessing.s3.videos_prefix == "videos"
     assert config.full_artifacts_prefix == "artifacts/production/corpus-v1"
@@ -178,7 +168,6 @@ def test_checked_in_production_config_is_s3_only_and_fully_pinned() -> None:
         len(model["revision"]) == 40
         for model in config.models.model_dump().values()
     )
-    assert config.preprocessing.dino_revision == config.models.dino.revision
     assert config.frame_store_source == "btc_keyframes"
     assert config.stages.model_dump() == {
         "frame_store": True,
@@ -266,19 +255,11 @@ def test_stage_toggles_reject_missing_frame_store_dependency(
         S3CorpusPreparationConfig.model_validate(values)
 
 
-@pytest.mark.parametrize("source", ["local", "mixed"])
-def test_production_config_rejects_local_or_mixed_video_sources(
-    tmp_path: Path,
-    source: str,
-) -> None:
+def test_production_config_requires_s3_storage(tmp_path: Path) -> None:
     values = _values(tmp_path)
-    preprocessing = values["preprocessing"]
-    assert isinstance(preprocessing, dict)
-    preprocessing["videos_root"] = "data/videos"
-    if source == "local":
-        preprocessing.pop("s3")
+    values["preprocessing"] = {}
 
-    with pytest.raises(ValidationError, match="S3-only|exactly one"):
+    with pytest.raises(ValidationError, match="requires S3 storage"):
         S3CorpusPreparationConfig.model_validate(values)
 
 
@@ -287,8 +268,6 @@ def test_production_config_rejects_local_or_mixed_video_sources(
     [
         ("floating_corpus", "immutable corpus revision"),
         ("floating_model", "40-character"),
-        ("missing_dino", "DINO revision"),
-        ("mismatched_dino", "DINO model pin"),
     ],
 )
 def test_production_config_rejects_unpinned_inputs(
@@ -306,10 +285,8 @@ def test_production_config_rejects_unpinned_inputs(
         model = models["caption"]
         assert isinstance(model, dict)
         model["revision"] = "main"
-    elif mutation == "missing_dino":
-        preprocessing["dino_revision"] = None
     else:
-        model = models["dino"]
+        model = models["caption"]
         assert isinstance(model, dict)
         model["revision"] = "b" * 40
 

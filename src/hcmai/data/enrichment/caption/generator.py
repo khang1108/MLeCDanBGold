@@ -32,7 +32,7 @@ from hcmai.data.enrichment.caption.resume import guard_resume, resume_rows
 from hcmai.data.enrichment.caption.runner import run_batches
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
 from hcmai.data.stores.frame import FrameStore
-from hcmai.llm.pipeline import LLMService, LLMServiceConfig
+from hcmai.thundercompute.pipeline import LLMService, LLMServiceConfig
 
 
 def generate_captions(

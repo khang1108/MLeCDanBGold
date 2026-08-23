@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from time import monotonic
-from typing import Any, Literal, cast
+from typing import Any
 
 from hcmai.common.config import (
     AppConfig,
@@ -16,7 +16,7 @@ from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
-from hcmai.llm.pipeline import LLMService, LLMServiceConfig
+from hcmai.thundercompute.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.reranking.pipeline import RerankerConfig, RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -24,25 +24,15 @@ from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
 logger = get_logger(__name__)
 
-RetrievalProfile = Literal["context_asr_segment", "legacy_specialists"]
-_RETRIEVAL_PROFILES: tuple[RetrievalProfile, ...] = (
-    "context_asr_segment",
-    "legacy_specialists",
-)
-
-
 def load_search_service(messages: list[str]) -> SearchService:
     """Build the single configured pipeline, preserving degraded startup."""
     settings = _load_app_config()
     models = _load_model_config()
-    profile_value = os.getenv("HCMAI_RETRIEVAL_PROFILE", settings.index.profile)
-    if profile_value not in _RETRIEVAL_PROFILES:
+    if os.getenv("HCMAI_RETRIEVAL_PROFILE") is not None:
         raise ValueError(
-            "HCMAI_RETRIEVAL_PROFILE must be one of "
-            "context_asr_segment or legacy_specialists; "
-            f"got {profile_value!r}"
+            "HCMAI_RETRIEVAL_PROFILE is no longer supported; "
+            "use the context/asr-segment runtime artifacts"
         )
-    profile = cast(RetrievalProfile, profile_value)
     metadata_path = _runtime_path(
         "HCMAI_METADATA_PATH", settings.dataset.frames_path
     )
@@ -62,7 +52,6 @@ def load_search_service(messages: list[str]) -> SearchService:
         metadata_path,
         dataset_root,
         messages,
-        profile=profile,
     )
     llm = _load_remote_llm(settings, messages)
     retrieval = _load_retrieval(
@@ -71,7 +60,6 @@ def load_search_service(messages: list[str]) -> SearchService:
         index_dir,
         llm,
         messages,
-        profile=profile,
         data=data,
     )
     reranking = None
@@ -143,8 +131,6 @@ def _load_data(
     metadata_path: Path,
     dataset_root: Path,
     messages: list[str],
-    *,
-    profile: RetrievalProfile,
 ) -> DataService | None:
     if not metadata_path.is_file() or metadata_path.stat().st_size == 0:
         messages.append(f"Metadata not available at {metadata_path}")
@@ -160,16 +146,13 @@ def _load_data(
             f"{type(error).__name__}: {error}"
         )
         return None
-    if profile == "legacy_specialists":
-        _load_legacy_evidence(data, settings, messages)
-    else:
-        _load_fast_track_data(
-            data,
-            settings,
-            metadata_path,
-            dataset_root,
-            messages,
-        )
+    _load_fast_track_data(
+        data,
+        settings,
+        metadata_path,
+        dataset_root,
+        messages,
+    )
     asset_status = data.frame_asset_status()
     logger.info(
         "DataService loaded path=%s dataset_root=%s frames=%d "
@@ -188,38 +171,6 @@ def _load_data(
             f"missing={asset_status.missing}"
         )
     return data
-
-
-def _load_legacy_evidence(
-    data: DataService,
-    settings: AppConfig,
-    messages: list[str],
-) -> None:
-    """Attach rollback specialist stores without changing legacy semantics."""
-
-    configured_paths = {
-        RetrievalSource.CAPTION: settings.dataset.enrichment.caption_path,
-        RetrievalSource.OCR: settings.dataset.enrichment.ocr_path,
-        RetrievalSource.ASR: settings.dataset.enrichment.asr_path,
-    }
-    for source, configured_path in configured_paths.items():
-        path = (
-            resolve_repository_path(configured_path)
-            if configured_path is not None
-            else None
-        )
-        if path is None:
-            continue
-        if not path.is_file() or path.stat().st_size == 0:
-            messages.append(f"{source.value.upper()} artifact not available at {path}")
-            continue
-        try:
-            data.load_evidence(source, path)
-        except Exception as error:
-            messages.append(
-                f"Could not load {source.value} artifact {path}: "
-                f"{type(error).__name__}: {error}"
-            )
 
 
 def _load_fast_track_data(
@@ -309,8 +260,6 @@ def _load_retrieval(
     index_dir: Path,
     llm: LLMService | None,
     messages: list[str],
-    *,
-    profile: RetrievalProfile,
     data: DataService | None,
 ) -> RetrievalService | None:
     if not index_dir.is_dir():
@@ -330,82 +279,15 @@ def _load_retrieval(
             f"{type(error).__name__}: {error}"
         )
         return None
-    if profile == "context_asr_segment":
-        return _load_fast_track_retrieval(
-            settings,
-            models,
-            visual,
-            visual_encoder,
-            llm,
-            data,
-            messages,
-        )
-    return _load_legacy_retrieval(
+    return _load_fast_track_retrieval(
         settings,
         models,
         visual,
         visual_encoder,
         llm,
+        data,
         messages,
     )
-
-
-def _load_legacy_retrieval(
-    settings: AppConfig,
-    models: LLMServiceConfig,
-    visual: Any,
-    visual_encoder: Any,
-    llm: LLMService | None,
-    messages: list[str],
-) -> RetrievalService | None:
-    """Compose the rollback specialist indexes through their existing path."""
-
-    text_indexes = _load_text_indexes(
-        settings,
-        visual,
-        models.caption_embedding.model_name,
-        messages,
-    )
-    if text_indexes is None:
-        return None
-    if not text_indexes:
-        return RetrievalService.from_index(
-            visual,
-            visual_encoder,
-            cache_config=settings.search.cache,
-        )
-    sample = next(iter(text_indexes.values()))
-    try:
-        text_encoder = _query_encoder(
-            models.caption_embedding,
-            sample,
-            llm,
-            "text",
-        )
-        return RetrievalService.from_indexes(
-            visual,
-            visual_encoder,
-            text_indexes,
-            text_encoder,
-            settings.search.fusion,
-            settings.search.cache,
-        )
-    except Exception as error:
-        if set(text_indexes).intersection(settings.search.fusion.required_sources):
-            messages.append(
-                "Could not configure required text retrieval: "
-                f"{type(error).__name__}: {error}"
-            )
-            return None
-        messages.append(
-            "Text retrieval unavailable; continuing visual-only: "
-            f"{type(error).__name__}: {error}"
-        )
-        return RetrievalService.from_index(
-            visual,
-            visual_encoder,
-            cache_config=settings.search.cache,
-        )
 
 
 def _load_fast_track_retrieval(
@@ -569,59 +451,6 @@ def _load_fast_track_index(
             f"{type(error).__name__}: {error}"
         )
         return None
-
-
-def _load_text_indexes(
-    settings: AppConfig,
-    visual: Any,
-    expected_model_name: str,
-    messages: list[str],
-) -> dict[RetrievalSource, Any] | None:
-    loaded: dict[RetrievalSource, Any] = {}
-    expected_dimension: int | None = None
-    for source, path in _text_index_paths(settings).items():
-        required = source in settings.search.fusion.required_sources
-        if not path.is_dir():
-            messages.append(f"{source.value.upper()} index not available at {path}")
-            if required:
-                return None
-            continue
-        try:
-            index = RetrievalService.load_index(
-                path,
-                subset_search_threshold=settings.index.subset_search_threshold,
-            )
-            if index.metadata.dataset_version != visual.metadata.dataset_version:
-                raise ValueError("dataset version differs from visual index")
-            if index.metadata.model_name != expected_model_name:
-                raise ValueError("model differs from configured text encoder")
-            if expected_dimension is None:
-                expected_dimension = index.metadata.embedding_dim
-            elif index.metadata.embedding_dim != expected_dimension:
-                raise ValueError("embedding dimension differs from text indexes")
-            loaded[source] = index
-        except Exception as error:
-            messages.append(
-                f"Could not load {source.value} index {path}: "
-                f"{type(error).__name__}: {error}"
-            )
-            if required:
-                return None
-    return loaded
-
-
-def _text_index_paths(settings: AppConfig) -> dict[RetrievalSource, Path]:
-    return {
-        RetrievalSource.CAPTION: _runtime_path(
-            "HCMAI_CAPTION_INDEX_PATH", settings.index.caption_path
-        ),
-        RetrievalSource.OCR: _runtime_path(
-            "HCMAI_OCR_INDEX_PATH", settings.index.ocr_path
-        ),
-        RetrievalSource.ASR: _runtime_path(
-            "HCMAI_ASR_INDEX_PATH", settings.index.asr_path
-        ),
-    }
 
 
 def _query_encoder(

@@ -37,15 +37,6 @@ from .state import (
     ProgressiveStateStore,
 )
 
-# Transitional private aliases keep focused regression imports stable while
-# ownership moves to the provider/aligner modules.
-from .aligners.scene import cluster_video_evidence as _cluster_video_evidence
-from .providers.sparse import (
-    candidate_video_scores as _candidate_video_scores,
-    retain_top_evidence as _retain_top_evidence,
-)
-
-
 @dataclass(frozen=True)
 class ProgressiveLocalizationResult:
     """Expose committed state identity and ranked scenes to task-specific heads."""
@@ -139,12 +130,14 @@ class TemporalEvidenceCore:
                     filters=filters,
                     session_fingerprint=session_fingerprint,
                 )
+
             diff = diff_snapshot(current.last_snapshot, snapshot)
             if diff.mode is SnapshotDiffMode.REPLACEMENT:
                 raise ProgressiveStateConflictError(
                     "current snapshot is not a safe cumulative extension of "
                     "the committed snapshot"
                 )
+
             if not diff.changed:
                 return self._progressive_result(
                     current,
@@ -152,6 +145,7 @@ class TemporalEvidenceCore:
                     ("progressive_snapshot_no_change",),
                     RetrievalTrace(),
                 )
+
             if len(current.query_units) >= self.config.progressive.progressive_max_hints:
                 raise ProgressiveStateConflictError("progressive hint limit exceeded")
 
@@ -161,9 +155,12 @@ class TemporalEvidenceCore:
                 text=diff.delta_text or "",
                 order=len(proposed.query_units),
             )
+
             proposed.query_units.append(unit)
+
             proposed.last_snapshot = diff.normalized_current
             proposed.constraints = parse_temporal_constraints(proposed.query_units)
+
             plan = TemporalQueryPlan(
                 task_type=proposed.task_type,
                 units=tuple(proposed.query_units),
@@ -174,16 +171,19 @@ class TemporalEvidenceCore:
             acquisition = self.progressive_provider.acquire(
                 proposed, unit, proposed.base_filters
             )
+
             proposed.evidence = acquisition.evidence
             proposed.candidate_video_ids = list(acquisition.candidate_video_ids)
             proposed.ranked_scenes = list(
                 self.scene_aligner.align(plan, proposed.evidence)
             )
+
             committed = (
                 self.store.create(proposed)
                 if search_id is None
                 else self.store.commit(proposed, expected_version=current.version)
             )
+
             return self._progressive_result(
                 committed,
                 diff,

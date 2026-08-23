@@ -26,14 +26,6 @@ class EmbeddingCacheKey:
 
 
 @dataclass(frozen=True, slots=True)
-class ThumbnailCacheKey:
-    dataset_version: str
-    frame_id: str
-    maximum_size: tuple[int, int]
-    quality: int
-
-
-@dataclass(frozen=True, slots=True)
 class CacheMetricsSnapshot:
     hits: int
     misses: int
@@ -166,8 +158,3 @@ class EmbeddingCache(BoundedTTLCache[EmbeddingCacheKey, np.ndarray]):
         stored = np.array(value, dtype=np.float32, copy=True)
         stored.setflags(write=False)
         super().set(key, stored)
-
-
-class ThumbnailCache(BoundedTTLCache[ThumbnailCacheKey, bytes]):
-    def __init__(self, **kwargs) -> None:
-        super().__init__(size_of=len, **kwargs)

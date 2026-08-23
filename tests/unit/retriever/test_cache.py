@@ -1,19 +1,14 @@
-"""Embedding and thumbnail cache correctness tests."""
+"""Embedding and bounded cache correctness tests."""
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from PIL import Image
-
 from hcmai.common.config import EncoderConfig
-from hcmai.common.utils.image import thumbnail_jpeg_bytes
 from hcmai.retrieval.retriever.cache import (
     BoundedTTLCache,
     EmbeddingCache,
-    ThumbnailCache,
-    ThumbnailCacheKey,
 )
 from hcmai.retrieval.retriever.query_batch import encode_query_batch
 
@@ -115,34 +110,3 @@ def test_cache_operations_are_thread_safe() -> None:
     metrics = cache.metrics()
     assert metrics.entries <= 16
     assert metrics.bytes_used <= 1024
-
-
-def test_thumbnail_cache_uses_compressed_bytes_and_canonical_key(tmp_path) -> None:
-    path = tmp_path / "frame.png"
-    Image.new("RGB", (64, 32), (255, 0, 0)).save(path)
-    cache = ThumbnailCache(
-        max_entries=4,
-        max_bytes=1024 * 1024,
-        ttl_seconds=60,
-    )
-    key = ThumbnailCacheKey("dataset-v1", "frame-1", (16, 16), 80)
-
-    first = thumbnail_jpeg_bytes(
-        path,
-        key=key,
-        cache=cache,
-        maximum_size=key.maximum_size,
-        quality=key.quality,
-    )
-    path.unlink()
-    second = thumbnail_jpeg_bytes(
-        path,
-        key=key,
-        cache=cache,
-        maximum_size=key.maximum_size,
-        quality=key.quality,
-    )
-
-    assert first == second
-    assert first.startswith(b"\xff\xd8")
-    assert cache.metrics().hits == 1

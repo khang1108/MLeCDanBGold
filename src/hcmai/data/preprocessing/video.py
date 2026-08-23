@@ -1,28 +1,35 @@
-"""Xử lý Video và phân tích tuần tự.
+"""Decode source videos and preserve canonical timing metadata.
 
-Đảm nhiệm việc quét các file video gốc và trích xuất thông tin thời gian chuẩn (canonical timing).
-
-Các tính năng chính:
-1. Quét file (Discovery): Tìm kiếm đệ quy tự động tất cả các file video hợp lệ trong thư mục gốc.
-2. Đồng bộ thời gian: Đọc PTS, time base và tính toán timestamp (ms) chính xác tuyệt đối cho mỗi frame.
-3. Phân tích chuyển động: Tính toán độ lớn chuyển động (Optical Flow) để đánh giá độ động của cảnh.
-4. Giải mã tuần tự: Đọc liên tục các khung hình của video một cách tối ưu, đẩy sang các queue phân tích."""
+This module owns lightweight video discovery, frame decoding, and motion
+analysis helpers. It intentionally does not own frame selection, model
+loading, artifact publication, or preprocessing configuration.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Protocol
 
 import numpy as np
 from PIL import Image
 
-from hcmai.data.preprocessing.config import PreprocessingConfig
 from hcmai.data.s3 import VIDEO_EXTENSIONS
 
 ANALYSIS_SIZE = (320, 180)
 TRANSNET_SIZE = (48, 27)
+
+
+class VideoProcessingConfig(Protocol):
+    """Configuration fields required by the retained video helpers."""
+
+    videos_root: Path | None
+    motion_threshold: float
+    minimum_gap_ms: int
+    maximum_gap_ms: int
+
+
 @dataclass(slots=True)
 class FrameMeta:
     """Small per-frame record kept after the analysis image is released."""
@@ -48,7 +55,7 @@ class VideoAnalysis:
 
 
 def discover_videos(
-    config: PreprocessingConfig, limit: int | None = None,
+    config: VideoProcessingConfig, limit: int | None = None,
 ) -> list[Path]:
     """Find supported videos recursively in deterministic order."""
 
@@ -87,7 +94,7 @@ def add_dynamic_coverage(
     frames: list[FrameMeta],
     reasons: list[set[str]],
     protected: set[int],
-    config: PreprocessingConfig,
+    config: VideoProcessingConfig,
 ) -> None:
     """Add protected anchors before a motion-dependent gap is exceeded."""
 
@@ -220,7 +227,7 @@ def _motion_score(
 
 
 def analyze_video(
-    path: Path, config: PreprocessingConfig, event_detector: Any,
+    path: Path, config: VideoProcessingConfig, event_detector: Any,
 ) -> VideoAnalysis:
     """Decode once for motion, TransNet, and streamed event detection."""
 

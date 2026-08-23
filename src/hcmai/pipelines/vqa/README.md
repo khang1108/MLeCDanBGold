@@ -16,13 +16,13 @@ question    -> question-conditioned evidence selection -> VLM answer
 - `query/`: deterministic interpretation of the event/question pair and
   conservative answer normalization.
 - `reasoning/`: chronological OCR/caption/ASR evidence construction and
-  bounded multi-frame VQA inference.
+  bounded multi-frame VQA inference, including temporal neighbor expansion
+  for a bounded retry.
 - `output/`: grounded-answer ranking and canonical submission materialization.
-- `legacy_localization/`: the fallback frame-to-video-to-window localization
-  path. Application startup selects it only when
-  `search.progressive.architecture: legacy`; do not add new localization
-  behavior here.
 
-The orchestration package owns dispatch and dependency wiring only. Its former
-`workflows.vqa` module remains a compatibility import; new code imports
+Scene localization is always provided by the shared `TemporalEvidenceCore`.
+The VQA head does not silently fall back to unordered frame-to-video-window
+localization when that dependency is unavailable.
+
+The orchestration package owns dispatch and dependency wiring only. Import
 `VQAPipeline` from `hcmai.pipelines.vqa.pipeline`.

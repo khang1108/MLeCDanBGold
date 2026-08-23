@@ -6,8 +6,8 @@ import numpy as np
 from PIL import Image
 
 from hcmai.common.schemas import VQAInferenceEvidence, VQAInferenceEvidenceItem
-from hcmai.llm.config import HostedVQAConfig, LLMServiceConfig
-from hcmai.llm.adapters.vqa import GroundedVQAModel, _load_backend
+from hcmai.thundercompute.config import HostedVQAConfig, LLMServiceConfig
+from hcmai.thundercompute.adapters.vqa import GroundedVQAModel, _load_backend
 
 
 class FakeInputs(dict):

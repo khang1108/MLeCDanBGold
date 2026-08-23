@@ -9,7 +9,7 @@ from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
-from hcmai.llm.pipeline import LLMServiceConfig
+from hcmai.thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.text.retriever import (
@@ -45,7 +45,7 @@ def _text_encoder(
     selected = encoder
     if selected is None and settings.inference.enabled:
         import os
-        from hcmai.llm.pipeline import LLMService
+        from hcmai.thundercompute.pipeline import LLMService
 
         base_url = os.getenv(
             "HCMAI_INFERENCE_BASE_URL", settings.inference.base_url
@@ -148,28 +148,6 @@ def build_text_artifacts(
     return index
 
 
-def build_caption_artifacts(
-    config_path: str | Path = "configs/baseline.yaml",
-    model_config_path: str | Path = "llm/config.yaml",
-    *,
-    captions_path: str | Path | None = None,
-    frames_path: str | Path | None = None,
-    output_dir: str | Path | None = None,
-    encoder: TextEmbeddingAdapter | None = None,
-) -> DenseIndex:
-    """Build caption text artifacts through the shared implementation."""
-
-    return build_text_artifacts(
-        config_path,
-        model_config_path,
-        source=RetrievalSource.CAPTION,
-        enrichment_path=captions_path,
-        frames_path=frames_path,
-        output_dir=output_dir,
-        encoder=encoder,
-    )
-
-
 def build_context_artifacts(
     config_path: str | Path = "configs/baseline.yaml",
     model_config_path: str | Path = "llm/config.yaml",
@@ -225,7 +203,7 @@ def _context_encoder(
     selected = encoder
     if selected is None and settings.inference.enabled:
         import os
-        from hcmai.llm.pipeline import LLMService
+        from hcmai.thundercompute.pipeline import LLMService
 
         base_url = os.getenv(
             "HCMAI_INFERENCE_BASE_URL", settings.inference.base_url

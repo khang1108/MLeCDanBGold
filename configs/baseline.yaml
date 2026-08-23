@@ -11,14 +11,13 @@ dataset:
     transcripts_path: "artifacts/enrichment/transcripts"
 
 index:
-  profile: "context_asr_segment"
   type: "flat_ip"
 
   path: "artifacts/indexes/visual"
   context_path: "artifacts/indexes/context"
   asr_segment_path: "artifacts/indexes/asr_segments"
 
-  # Rollback-only specialist indexes.
+  # Offline text-index destinations retained for artifact-generation jobs.
   caption_path: "artifacts/indexes/caption"
   ocr_path: "artifacts/indexes/ocr"
   asr_path: "artifacts/indexes/asr"
@@ -56,8 +55,6 @@ search:
     disk_enabled: false
 
   progressive:
-    architecture: temporal
-
     progressive_state_ttl_seconds: 1800
     progressive_state_max_entries: 256
     progressive_max_hints: 10
@@ -103,52 +100,25 @@ vqa:
   default_profile: vqa_localizer
   profiles:
     vqa_single_frame:
-      candidate_videos: 1
-      candidates_per_branch: 100
-
-      window_ms: 8000
-
       max_windows: 1
       max_frames_per_window: 1
       max_evidence_items: 24
       max_vlm_calls: 1
-
-      localizer_enabled: false
     vqa_vrag:
-      candidate_videos: 10
-      candidates_per_branch: 100
-
-      window_ms: 15000
-
       max_windows: 20
       max_frames_per_window: 4
       max_evidence_items: 24
       max_vlm_calls: 10
-
-      localizer_enabled: false
     vqa_localizer:
-      candidate_videos: 5
-      candidates_per_branch: 100
-
-      window_ms: 15000
-
       max_windows: 12
       max_frames_per_window: 4
       max_evidence_items: 24
       max_vlm_calls: 8
-
-      localizer_enabled: true
     vqa_hierarchical:
-      candidate_videos: 8
-      candidates_per_branch: 150
-
-      window_ms: 30000
       max_windows: 16
       max_frames_per_window: 8
       max_evidence_items: 24
       max_vlm_calls: 12
-
-      localizer_enabled: true
 
 api:
   default_top_k: 20

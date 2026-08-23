@@ -11,11 +11,9 @@ from hcmai.common.schemas import (
     VQARequest,
 )
 from hcmai.pipelines.vqa.domain.models import (
+    EvidenceBundle,
     GroundedAnswerCandidate,
-    VideoEvidenceCandidate,
 )
-from hcmai.pipelines.vqa.legacy_localization.localizer import SimilarityLocalizer
-from hcmai.pipelines.vqa.legacy_localization.windows import build_windows
 from hcmai.pipelines.vqa.output.ranking import rank_grounded_answers
 from hcmai.pipelines.vqa.output.submission import materialize_submissions
 from hcmai.pipelines.vqa.query.normalization import normalize_answer
@@ -96,10 +94,25 @@ def setup_localized():
             provenance=("event",),
         ),
     ]
-    videos = [VideoEvidenceCandidate(item.frame.video_id, (item,), item.score, 1, None, 1, 1, 0.0) for item in candidates]
-    bundles = [build_evidence_bundle(window, data) for window in build_windows(videos, data, duration_ms=2_000)]
+    bundles = [
+        build_evidence_bundle(
+            EvidenceBundle(
+                scene=SceneCandidate(
+                    scene_id=f"{item.frame.video_id}:{item.frame.timestamp_ms}",
+                    video_id=item.frame.video_id,
+                    start_ms=item.frame.timestamp_ms,
+                    end_ms=item.frame.timestamp_ms,
+                    evidence=(item,),
+                    final_score=item.score,
+                ),
+                image_frames=(item.frame,),
+            ),
+            data,
+        )
+        for item in candidates
+    ]
     parsed = parse_vqa_query(VQARequest(event_description="two people", question="How many people?"))
-    return data, parsed, SimilarityLocalizer().localize(parsed, bundles, limit=2)
+    return data, parsed, bundles
 
 
 def test_multi_candidate_partial_failure_wrong_identity_and_deterministic_fallback():

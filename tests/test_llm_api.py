@@ -19,16 +19,16 @@ from hcmai.common.schemas import (
     TranscriptSegment,
     VQAInferenceResponse,
 )
-from hcmai.llm.adapters.http import InferenceClient
-from hcmai.llm.config import LLMServiceConfig
+from hcmai.thundercompute.adapters.http import InferenceClient
+from hcmai.thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.embedding.adapters.remote import RemoteEmbeddingAdapter
 from hcmai.data.enrichment.caption.adapters.remote import RemoteCaptionAdapter
 from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
-from hcmai.llm.adapters.local import LocalAdapter
-from hcmai.llm.pipeline import LLMService
-from hcmai.llm.server.api import create_llm_app
+from hcmai.thundercompute.adapters.local import LocalAdapter
+from hcmai.thundercompute.pipeline import LLMService
+from hcmai.thundercompute.server.api import create_llm_app
 class FakeRuntime:
     config = LLMServiceConfig.from_yaml("llm/config.yaml")
     reranker = SimpleNamespace(resolved_revision="test")
@@ -614,9 +614,6 @@ def test_asr_only_environment_does_not_construct_unrequested_models(
         "HCMAI_ENABLE_RERANKER",
         "HCMAI_ENABLE_VQA",
         "HCMAI_ENABLE_DIARIZATION",
-        "HCMAI_ENABLE_TRANSNET",
-        "HCMAI_ENABLE_GEBD",
-        "HCMAI_ENABLE_DINO",
     )
     for name in capability_flags:
         monkeypatch.delenv(name, raising=False)

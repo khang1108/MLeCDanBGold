@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
 import numpy as np
 from PIL import Image
@@ -22,14 +22,6 @@ class TextEmbeddingAdapter(Protocol):
         texts: list[str],
         stats: EncodingStats | None = None,
     ) -> np.ndarray: ...
-
-
-class HostedTextEmbeddingAdapter(TextEmbeddingAdapter, Protocol):
-    """Text adapter that supports explicit model warm-up."""
-
-    model: Any | None
-
-    def _load_model(self) -> None: ...
 
 
 class ImageEmbeddingAdapter(Protocol):

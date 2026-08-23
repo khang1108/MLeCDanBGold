@@ -146,13 +146,6 @@ class ProgressiveStateStore:
             self._states.move_to_end(committed.search_id)
             return committed.clone()
 
-    def delete(self, search_id: str) -> None:
-        """Delete one state and its lock when explicit cleanup is requested."""
-
-        with self._guard:
-            self._states.pop(search_id, None)
-            self._locks.pop(search_id, None)
-
     def cleanup(self) -> int:
         """Remove all expired states and return the number removed."""
 

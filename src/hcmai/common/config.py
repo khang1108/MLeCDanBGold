@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Literal
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 from hcmai.common.schemas.enum import RetrievalSource, TaskType
@@ -202,9 +202,8 @@ def _project_path(path: Path, project_root: Path) -> Path:
 class IndexConfig(BaseModel):
     """Configuration for the self-contained FAISS artifact directory."""
 
-    profile: Literal["context_asr_segment", "legacy_specialists"] = (
-        "context_asr_segment"
-    )
+    model_config = ConfigDict(extra="forbid")
+
     type: str = "flat_ip"
     path: Path = Path("artifacts/indexes/visual")
     context_path: Path = Path("artifacts/indexes/context")
@@ -305,7 +304,7 @@ class RetrievalCacheConfig(BaseModel):
 class ProgressiveSearchConfig(BaseModel):
     """Transactional state, retrieval, and scene budgets for KIS/VQA."""
 
-    architecture: Literal["temporal", "legacy"] = "temporal"
+    model_config = ConfigDict(extra="forbid")
 
     progressive_state_ttl_seconds: float = Field(default=1800, gt=0)
     progressive_state_max_entries: int = Field(default=256, gt=0)
@@ -387,14 +386,12 @@ class SearchConfig(BaseModel):
 class VQAProfileConfig(BaseModel):
     """Hard budgets for one reproducible competition VQA baseline."""
 
-    candidate_videos: int = Field(default=5, ge=1, le=100)
-    candidates_per_branch: int = Field(default=100, ge=1, le=1_000)
-    window_ms: int = Field(default=15_000, ge=1_000, le=120_000)
+    model_config = ConfigDict(extra="forbid")
+
     max_windows: int = Field(default=12, ge=1, le=100)
     max_frames_per_window: int = Field(default=4, ge=1, le=32)
     max_evidence_items: int = Field(default=24, ge=1, le=256)
     max_vlm_calls: int = Field(default=8, ge=0, le=100)
-    localizer_enabled: bool = True
 
 
 def _default_vqa_profiles() -> dict[VQABaselineProfile, VQAProfileConfig]:
@@ -402,26 +399,17 @@ def _default_vqa_profiles() -> dict[VQABaselineProfile, VQAProfileConfig]:
 
     return {
         VQABaselineProfile.SINGLE_FRAME: VQAProfileConfig(
-            candidate_videos=1,
-            window_ms=8_000,
             max_windows=1,
             max_frames_per_window=1,
             max_vlm_calls=1,
-            localizer_enabled=False,
         ),
         VQABaselineProfile.VRAG: VQAProfileConfig(
-            candidate_videos=10,
-            window_ms=15_000,
             max_windows=20,
             max_frames_per_window=4,
             max_vlm_calls=10,
-            localizer_enabled=False,
         ),
         VQABaselineProfile.LOCALIZER: VQAProfileConfig(),
         VQABaselineProfile.HIERARCHICAL: VQAProfileConfig(
-            candidate_videos=8,
-            candidates_per_branch=150,
-            window_ms=30_000,
             max_windows=16,
             max_frames_per_window=8,
             max_vlm_calls=12,

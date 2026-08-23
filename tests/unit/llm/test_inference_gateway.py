@@ -6,10 +6,10 @@ import httpx
 import pytest
 
 from hcmai.common.config import InferenceConfig
-from hcmai.llm.adapters.http import InferenceClient, InferenceClientError
-from hcmai.llm.gateway import InferenceGateway, InferenceGatewayError
-from hcmai.llm.pipeline import LLMService
-from hcmai.llm.resilience import CircuitState, FailureCategory
+from hcmai.thundercompute.adapters.http import InferenceClient, InferenceClientError
+from hcmai.thundercompute.gateway import InferenceGateway, InferenceGatewayError
+from hcmai.thundercompute.pipeline import LLMService
+from hcmai.thundercompute.resilience import CircuitState, FailureCategory
 from hcmai.orchestration.pipeline import SearchService
 
 

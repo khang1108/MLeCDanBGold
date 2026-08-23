@@ -11,13 +11,41 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hcmai.data.corpus_build.config import S3CorpusPreparationConfig
-from hcmai.data.corpus_build.pipeline import PreparationPaths
-from hcmai.data.preprocessing.s3 import ArtifactFile, S3Publication, _json_bytes
+
+if TYPE_CHECKING:
+    from hcmai.data.corpus_build.pipeline import PreparationPaths
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactFile:
+    """Content identity of one file in a completed corpus bundle."""
+
+    path: str
+    size: int
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class S3Publication:
+    """Location and size of one immutable published artifact version."""
+
+    bucket: str
+    version_prefix: str
+    latest_key: str
+    bundle_id: str
+    file_count: int
+    total_bytes: int
+
+
+def _json_bytes(value: dict[str, object]) -> bytes:
+    """Serialize a publication marker deterministically."""
+
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
 
 
 def _sha256(path: Path) -> str:
@@ -53,89 +81,6 @@ def inventory_artifacts(artifacts_root: Path) -> list[ArtifactFile]:
         )
         for path in files
     ]
-
-
-def publish_run_artifacts(
-    client: Any,
-    paths: PreparationPaths,
-    config: S3CorpusPreparationConfig,
-    limit: int | None,
-) -> S3Publication:
-    """Upload complete artifacts to S3 and atomically advance latest.json."""
-    storage = config.preprocessing.s3
-    if storage is None:
-        raise ValueError("Cannot publish run artifacts without S3 config")
-
-    artifacts_root = paths.artifacts_root.resolve()
-    files = inventory_artifacts(artifacts_root)
-    inventory = [asdict(item) for item in files]
-    
-    # Bundle ID is a stable hash of the entire inventory contents
-    bundle_id = hashlib.sha256(
-        json.dumps(inventory, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()[:24]
-
-    # Smoke runs use an isolated prefix
-    base_prefix = config.smoke_artifacts_prefix if limit is not None else config.full_artifacts_prefix
-    version_prefix = f"{base_prefix}/versions/{bundle_id}"
-    
-    for item in files:
-        key = f"{version_prefix}/{item.path}"
-        client.upload_file(str(artifacts_root / item.path), storage.bucket, key)
-        _verify_remote_size(client, storage.bucket, key, item.size)
-
-    # Publish _SUCCESS.json
-    completion = _json_bytes({
-        "bundle_id": bundle_id,
-        "files": inventory,
-        "file_count": len(files),
-        "total_bytes": sum(item.size for item in files),
-    })
-    completion_key = f"{version_prefix}/_SUCCESS.json"
-    client.put_object(
-        Bucket=storage.bucket,
-        Key=completion_key,
-        Body=completion,
-        ContentType="application/json",
-    )
-    _verify_remote_size(client, storage.bucket, completion_key, len(completion))
-
-    # Identify primary entrypoints
-    def _find_path(suffix: str) -> str | None:
-        for item in inventory:
-            if item["path"].endswith(suffix):
-                return f"{version_prefix}/{item['path']}"
-        return None
-
-    # Advance latest.json
-    latest_key = f"{base_prefix}/latest.json"
-    latest = _json_bytes({
-        "bucket": storage.bucket,
-        "bundle_id": bundle_id,
-        "completion_key": completion_key,
-        "version_prefix": version_prefix,
-        "frames_key": _find_path("frame_store/frames.parquet"),
-        "visual_index_key": _find_path("indexes/visual/dense.index"),
-        "caption_index_key": _find_path("indexes/caption/dense.index"),
-        "ocr_index_key": _find_path("indexes/ocr/dense.index"),
-        "asr_index_key": _find_path("indexes/asr/dense.index"),
-    })
-    client.put_object(
-        Bucket=storage.bucket,
-        Key=latest_key,
-        Body=latest,
-        ContentType="application/json",
-    )
-    _verify_remote_size(client, storage.bucket, latest_key, len(latest))
-
-    return S3Publication(
-        bucket=storage.bucket,
-        version_prefix=version_prefix,
-        latest_key=latest_key,
-        bundle_id=bundle_id,
-        file_count=len(files),
-        total_bytes=sum(item.size for item in files),
-    )
 
 
 def publish_group_artifacts(

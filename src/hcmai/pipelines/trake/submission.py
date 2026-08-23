@@ -1,19 +1,13 @@
-"""Ranking, video diversification, and TRAKE submission CSV export."""
+"""Ranking and video diversification for TRAKE candidate paths."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from pathlib import Path
-
-import csv
 import math
 
-from hcmai.common.utils.logging import get_logger
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 from .align import TrakePath, align_video
-
-logger = get_logger(__name__)
 
 
 def rank_paths(
@@ -43,23 +37,3 @@ def rank_paths(
         if len(rows) >= max_rows:
             break
     return rows[:max_rows]
-
-
-def write_submission(rows: Sequence[TrakePath], output_path: str | Path) -> Path:
-    """Write headerless ``<video_name>,<frame_1>,...,<frame_N>`` rows as one CSV."""
-    counts = {len(row.frame_idx) for row in rows}
-    if len(counts) > 1:
-        raise ValueError(f"rows mix event counts: {sorted(counts)}")
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        csv.writer(handle, lineterminator="\n").writerows(
-            [row.video_id.removesuffix(".mp4"), *row.frame_idx] for row in rows
-        )
-    if len(rows) < 100:
-        logger.warning(
-            "TRAKE submission %s has %d rows, under the 100-row budget",
-            path,
-            len(rows),
-        )
-    return path
