@@ -1,10 +1,11 @@
-"""Smoke test for TRAKE ranking and diversification."""
+"""Smoke tests for TRAKE path ranking and diversification."""
 
 from __future__ import annotations
 
 import numpy as np
-from hcmai.pipelines.trake import rank_paths
+
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+from hcmai.temporal.aligners.monotonic_dp import rank_paths
 
 
 def _video(video_id: str, boost: float) -> VideoEventScores:
@@ -34,6 +35,7 @@ def test_best_paths_of_every_video_outrank_any_second_best() -> None:
 
 def _diagonal(video_id: str, *event_peaks: float) -> VideoEventScores:
     """Only one monotonic path exists, scoring ``event_peaks`` one per event."""
+
     scores = np.diag(np.array(event_peaks, dtype=np.float32))
     return VideoEventScores(
         video_id=video_id,

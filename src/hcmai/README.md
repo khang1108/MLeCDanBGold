@@ -264,12 +264,10 @@ src/hcmai/
 ├── api/                         thin HTTP routers
 ├── common/                      shared contracts, config and observability
 ├── data/                        canonical frame/evidence stores
-├── orchestration/               SearchService and task composition
-├── pipelines/
-│   ├── kis/                     KIS-specific helpers
-│   └── trake/                   TRAKE settings and compatibility algorithm
+├── orchestration/               SearchService and task workflows
 ├── retrieval/                   embedding, indexes, fusion and reranking
-└── temporal/                    shared plans, evidence and aligners
+├── temporal/                    shared plans, evidence and aligners
+└── thundercompute/              model gateways and inference adapters
 ```
 
 Run the local backend after the required artifacts and configuration are

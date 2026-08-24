@@ -29,7 +29,7 @@ from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.common.observability import METRICS
 from hcmai.common.utils.video import official_frame_idx
 from hcmai.temporal import TemporalEvidenceCore
-from hcmai.pipelines.trake import TRAKESettings
+from hcmai.temporal.settings import TRAKESettings
 
 logger = get_logger(__name__)
 

@@ -11,8 +11,9 @@ from hcmai.common.schemas import (
     TemporalQueryPlan,
 )
 from hcmai.data.pipeline import DataService
-from hcmai.pipelines.trake import rank_paths
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+
+from .monotonic_dp import rank_paths
 
 
 class MonotonicOrderedPathAligner:

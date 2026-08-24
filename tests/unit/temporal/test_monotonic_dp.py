@@ -1,12 +1,12 @@
-"""Smoke test for exact monotonic DP alignment of TRAKE events."""
+"""Smoke tests for exact monotonic DP alignment of TRAKE events."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from hcmai.pipelines.trake import align_video
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+from hcmai.temporal.aligners.monotonic_dp import align_video
 
 
 def _video(scores: list[list[float]]) -> VideoEventScores:

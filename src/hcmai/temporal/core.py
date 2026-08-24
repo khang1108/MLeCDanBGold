@@ -18,7 +18,6 @@ from hcmai.common.schemas import (
     TemporalRelation,
 )
 from hcmai.data.pipeline import DataService
-from hcmai.pipelines.trake import TRAKESettings
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 from .aligners import MonotonicOrderedPathAligner, ProgressiveSceneAligner
@@ -30,6 +29,7 @@ from .ports import (
 )
 from .providers import DenseOrderedEvidenceProvider, ProgressiveEvidenceProvider
 from .query import SnapshotDiffMode, SnapshotDiffResult, diff_snapshot
+from .settings import TRAKESettings
 from .utils.relations import parse_temporal_constraints
 from .state.state import (
     ProgressiveSearchState,

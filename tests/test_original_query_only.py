@@ -6,7 +6,6 @@ import hcmai.common.schemas as schemas
 
 
 def test_retired_query_expansion_modules_are_absent() -> None:
-    assert importlib.util.find_spec("hcmai.pipelines.kis") is None
     assert importlib.util.find_spec("hcmai.common.schemas.query_suggestion") is None
 
 

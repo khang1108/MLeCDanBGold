@@ -99,10 +99,8 @@ src/hcmai/
 ├── common/          # shared schemas/config/cross-cutting utilities
 ├── data/            # ingestion, enrichment, stores, canonical metadata
 ├── thundercompute/  # model gateways, inference adapters, and model config
-├── orchestration/   # application workflow composition
-├── pipelines/
-│   ├── kis/         # KIS-specific logic
-│   └── trake/       # TRAKE-specific logic
+├── orchestration/   # application workflow composition and task heads
+├── temporal/        # shared temporal plans, evidence, and aligners
 ├── retrieval/       # embeddings, indexes, retrieval, fusion, reranking
 └── ...
 
@@ -135,10 +133,15 @@ Do not put KIS/TRAKE reasoning here.
 
 Preserve modality provenance and canonical identity.
 
-**`pipelines/`**
-- task-specific semantics after shared retrieval/data capabilities.
+**`orchestration/workflows/`**
+- task request validation and response composition after shared retrieval/data/
+  temporal capabilities;
+- keep workflows thin and do not place reusable temporal algorithms here.
 
-Do not duplicate generic retrieval/index code here.
+**`temporal/`**
+- temporal query plans, evidence state, scene localization, and ordered-path
+  alignment;
+- preserve canonical identity while materializing temporal candidates.
 
 **`orchestration/`**
 - compose services and task workflows;

@@ -1,8 +1,15 @@
-"""Exact monotonic DP alignment of TRAKE events over one video's keyframes."""
+"""Pure monotonic TRAKE path alignment and ranking.
+
+This module owns the dynamic-programming algorithm and path diversification.
+It does not resolve canonical frame records or format HTTP/submission
+responses; the temporal monotonic adapter owns canonical materialization.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+import math
 
 import numpy as np
 
@@ -21,6 +28,7 @@ class TrakePath:
 
 def cluster_starts(scores: np.ndarray, delta: float) -> np.ndarray:
     """Map every frame to the first frame of its cluster, radius ``delta``."""
+
     columns = np.ascontiguousarray(scores.T)
     starts = np.zeros(len(columns), dtype=np.int64)
     anchor = 0
@@ -38,7 +46,8 @@ def align_video(
     event_power: float = 1.0,
     cluster_delta: float = 0.0,
 ) -> list[TrakePath]:
-    """Return the ``paths`` best chronological event paths, one cluster each."""
+    """Return the ``paths`` best chronological event paths for one video."""
+
     scores = np.asarray(video.scores, dtype=np.float64)
     n_events, n_frames = scores.shape
     if n_frames < n_events:
@@ -85,3 +94,33 @@ def align_video(
             )
         )
     return results
+
+
+def rank_paths(
+    videos: Sequence[VideoEventScores],
+    lambda_gap: float = 1e-5,
+    max_rows: int = 100,
+    event_power: float = 1.0,
+    cluster_delta: float = 0.0,
+) -> list[TrakePath]:
+    """Rank at most ``max_rows`` paths, preferring video diversity before repeats."""
+
+    if not videos:
+        return []
+    depth = math.ceil(max_rows / len(videos))
+    per_video = [
+        align_video(video, lambda_gap, depth, event_power, cluster_delta)
+        for video in videos
+    ]
+    rows: list[TrakePath] = []
+    for level in range(depth):
+        rows.extend(
+            sorted(
+                (paths[level] for paths in per_video if len(paths) > level),
+                key=lambda path: path.score,
+                reverse=True,
+            )
+        )
+        if len(rows) >= max_rows:
+            break
+    return rows[:max_rows]

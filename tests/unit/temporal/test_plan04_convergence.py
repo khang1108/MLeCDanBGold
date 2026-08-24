@@ -21,12 +21,13 @@ from hcmai.common.schemas import (
     TemporalRelation,
 )
 from hcmai.data.pipeline import DataService
-from hcmai.pipelines.trake import TRAKESettings, rank_paths
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal import TemporalEvidenceCore
 from hcmai.temporal.aligners.monotonic import MonotonicOrderedPathAligner
+from hcmai.temporal.aligners.monotonic_dp import rank_paths
 from hcmai.temporal.ports import ProgressiveAcquisition
+from hcmai.temporal.settings import TRAKESettings
 
 
 def _frame(

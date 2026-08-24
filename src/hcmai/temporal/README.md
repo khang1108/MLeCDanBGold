@@ -47,7 +47,8 @@ Các module chính:
 | [providers/sparse.py](./providers/sparse.py) | Global/local retrieval, backfill và candidate-video scoring cho KIS. |
 | [providers/dense.py](./providers/dense.py) | Lấy dense event/frame score matrix cho TRAKE. |
 | [aligners/scene.py](./aligners/scene.py) | Cluster frame thành scene và score scene. |
-| [aligners/monotonic.py](./aligners/monotonic.py) | Adapter gọi monotonic DP ổn định của TRAKE và materialize frame canonical. |
+| [aligners/monotonic.py](./aligners/monotonic.py) | Adapter gọi monotonic DP và materialize frame canonical. |
+| [aligners/monotonic_dp.py](./aligners/monotonic_dp.py) | Pure TRAKE DP, path ranking và path diversification; không resolve DataService. |
 | [relations.py](./relations.py) | Parse temporal relation rõ ràng và chấm relation trên timestamp. |
 | [scoring.py](./scoring.py) | Normalize score, tính scene-score component và deterministic ranking. |
 
