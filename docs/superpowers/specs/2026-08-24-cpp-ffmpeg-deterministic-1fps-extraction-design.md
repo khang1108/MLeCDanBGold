@@ -356,9 +356,20 @@ image directory.
 ## Build and test strategy
 
 The native component will be an isolated CMake project under
-`native/keyframe_extractor/` and will use `pkg-config` to locate FFmpeg's
-`libavformat`, `libavcodec`, `libavutil`, and `libswscale`. It will not add an
-Arrow C++ dependency.
+`src/hcmai/data/cpp/keyframes_extraction/`. It is source-owned by the data
+layer, but it is not imported as a Python module at runtime. It will use
+`pkg-config` to locate FFmpeg's `libavformat`, `libavcodec`, `libavutil`, and
+`libswscale`. It will not add an Arrow C++ dependency.
+
+The proposed native package layout is:
+
+```text
+src/hcmai/data/cpp/keyframes_extraction/
+├── CMakeLists.txt
+├── include/hcmai/keyframes_extraction/
+├── src/
+└── tests/
+```
 
 Tests will include:
 
