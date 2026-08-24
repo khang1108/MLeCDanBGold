@@ -75,8 +75,8 @@ composition root.
 
 Embedding generation and index persistence are offline batch operations run
 on a remote GPU VM. That job must validate, version, and synchronize a complete
-immutable bundle to the local serving machine. The local KIS, TRAKE, and VQA
-runtime only validates and memory-maps those artifacts. It must never generate,
+immutable bundle to the local serving machine. The local KIS and TRAKE runtime
+only validates and memory-maps those artifacts. It must never generate,
 reconstruct, migrate, or save embeddings during application startup or a
 request. An incomplete bundle leaves retrieval unavailable with an actionable
 startup diagnostic and must be rebuilt or resynchronized from the offline job.

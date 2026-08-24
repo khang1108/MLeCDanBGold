@@ -1,16 +1,16 @@
 # Temporal evidence và temporal alignment
 
 hcmai.temporal là lớp dùng chung để xử lý **bằng chứng có thông tin thời gian**
-trong ba task KIS, VQA và TRAKE. Folder này không tạo caption/OCR/ASR, không
-build embedding/index và không tự trả lời câu hỏi VQA. Nó nhận kết quả retrieval
-đã có, bảo toàn canonical frame identity, sau đó localization hoặc alignment
-theo semantics của từng task.
+trong hai task KIS và TRAKE. Folder này không tạo caption/OCR/ASR, không build
+embedding/index và không thực hiện task-specific answer generation. Nó nhận kết
+quả retrieval đã có, bảo toàn canonical frame identity, sau đó localization hoặc
+alignment theo semantics của từng task.
 
 Hai bài toán được giữ tách biệt:
 
 ~~~text
-KIS/VQA: sparse evidence -> bounded temporal scenes
-TRAKE:   dense event/frame scores -> ordered monotonic paths
+KIS:   sparse evidence -> bounded temporal scenes
+TRAKE: dense event/frame scores -> ordered monotonic paths
 ~~~
 
 ## 1. Kiến trúc tổng quát
@@ -27,7 +27,7 @@ TemporalQueryPlan
        |      |
        |      +--> ProgressiveEvidenceProvider
        |      +--> ProgressiveSceneAligner
-       |      +--> SceneCandidate[]       (KIS/VQA)
+       |      +--> SceneCandidate[]       (KIS)
        |
        +-- ordered_path
               |
@@ -44,7 +44,7 @@ Các module chính:
 | [state.py](./state.py) | Lưu progressive state, TTL, lock và compare-and-swap commit. |
 | [query.py](./query.py) | Normalize cumulative snapshot và lấy delta hint an toàn. |
 | [evidence.py](./evidence.py) | Đổi retrieval candidate thành canonical FrameEvidence; quản lý ba trạng thái đánh giá. |
-| [providers/sparse.py](./providers/sparse.py) | Global/local retrieval, backfill và candidate-video scoring cho KIS/VQA. |
+| [providers/sparse.py](./providers/sparse.py) | Global/local retrieval, backfill và candidate-video scoring cho KIS. |
 | [providers/dense.py](./providers/dense.py) | Lấy dense event/frame score matrix cho TRAKE. |
 | [aligners/scene.py](./aligners/scene.py) | Cluster frame thành scene và score scene. |
 | [aligners/monotonic.py](./aligners/monotonic.py) | Adapter gọi monotonic DP ổn định của TRAKE và materialize frame canonical. |
@@ -54,8 +54,8 @@ Các module chính:
 TemporalQueryPlan kiểm tra alignment mode theo task:
 
 ~~~text
-KIS/VQA -> progressive_scene
-TRAKE   -> ordered_path
+KIS   -> progressive_scene
+TRAKE -> ordered_path
 ~~~
 
 ## 2. Các contract cốt lõi
@@ -65,7 +65,7 @@ TRAKE   -> ordered_path
 Một query được biểu diễn thành các semantic unit có ID và thứ tự ổn định:
 
 ~~~text
-Progressive KIS/VQA:
+Progressive KIS:
   h0 = "một người đứng cạnh xe"
   h1 = "sau đó người này bước vào xe"
 
@@ -106,7 +106,7 @@ candidate.final_score
 
 ### 2.3 Output contract
 
-SceneCandidate là một đoạn thời gian có nhiều frame evidence, dùng cho KIS/VQA.
+SceneCandidate là một đoạn thời gian có nhiều frame evidence, dùng cho KIS.
 OrderedPathCandidate là một path cùng video, có đúng một frame cho mỗi
 QueryUnit, dùng cho TRAKE.
 
@@ -124,7 +124,7 @@ OrderedPathCandidate
   score
 ~~~
 
-## 3. Progressive workflow cho KIS/VQA
+## 3. Progressive workflow cho KIS
 
 Luồng đầy đủ:
 
@@ -178,7 +178,6 @@ Mỗi session cố định:
 
 - task_type;
 - base_filters;
-- VQA question fingerprint;
 - search_id và version.
 
 State store có per-search lock, compare-and-swap version, TTL và giới hạn số
@@ -471,35 +470,7 @@ evidence score cao nhất
 Reranker chỉ được reorder bounded candidate pool. Nó không được tạo frame mới,
 đổi frame_id hoặc viết lại canonical frame metadata.
 
-## 6. VQA workflow
-
-VQA tách hai trách nhiệm:
-
-~~~text
-event_description -> WHERE to look
-question          -> WHAT to answer
-~~~
-
-Temporal chỉ dùng event_description cho first-stage localization:
-
-~~~text
-event_description
-  -> TemporalEvidenceCore.localize()
-  -> ranked scenes
-  -> bounded chronological frames
-  -> EvidenceBundle
-  -> question-conditioned evidence selection
-  -> VLM/LLM answer
-~~~
-
-Question fingerprint vẫn được lưu trong progressive session để không cho một
-search_id của câu hỏi này được dùng nhầm cho câu hỏi khác.
-
-Sau khi temporal trả scene, VQA có thể lấy thêm các frame lân cận nằm trong
-scene range, sort theo timestamp và giới hạn số frame theo profile. Việc chọn
-evidence phù hợp câu hỏi và sinh câu trả lời nằm ngoài folder temporal.
-
-## 7. TRAKE workflow
+## 6. TRAKE workflow
 
 TRAKE không dùng progressive snapshot và không dùng search_id.
 
@@ -678,7 +649,7 @@ Temporal ưu tiên fail rõ ràng thay vì silently fallback:
 
 - snapshot rewrite bị reject;
 - state hết hạn hoặc sai search_id bị reject;
-- task/filter/question context đổi giữa session bị reject;
+- task/filter context đổi giữa session bị reject;
 - canonical metadata conflict bị reject;
 - dense provider failure của TRAKE được báo như dependency failure;
 - TRAKE không tự fallback sang unordered scene alignment;
@@ -689,7 +660,7 @@ Temporal ưu tiên fail rõ ràng thay vì silently fallback:
 ## 11. Tóm tắt thuật toán
 
 ~~~text
-KIS/VQA
+KIS
   cumulative snapshot
     -> delta QueryUnit
     -> global + local retrieval
