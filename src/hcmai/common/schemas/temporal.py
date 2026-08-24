@@ -22,7 +22,7 @@ class QueryUnit(ContractModel):
 
 
 class TemporalRelation(str, Enum):
-    """Small normalized relation set consumed by KIS/VQA scene scoring."""
+    """Small normalized relation set consumed by temporal alignment scoring."""
 
     BEFORE = "before"
     AFTER = "after"

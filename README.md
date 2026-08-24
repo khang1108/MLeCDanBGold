@@ -333,21 +333,24 @@ aws s3 cp "s3://$S3_BUCKET/$versionPrefix/build_report.json" `
   artifacts/indexes/build_report.json --region $S3_REGION
 ```
 
-### 4.4. Pull index qua SSH/rsync
+### 4.4. Kiểm tra bundle đã tải từ S3
 
-Nếu index được build trên Thunder nhưng chưa publish S3, dùng script đồng bộ
-có kiểm tra checksum và promotion atomic:
+S3 là đường truyền artifact được hỗ trợ cho workflow ThunderCompute. Giữ
+`build_report.json` cùng đúng ba bundle mà pointer `latest.json` chỉ tới; không
+trộn các thư mục từ nhiều version. Nếu checkout local có đầy đủ FrameStore,
+map keyframe, FrameContext và transcript nguồn, chạy validator trước khi bật
+bundle:
 
 ```bash
-export HCMAI_THUNDER_HOST="user@thunder-host"
-export HCMAI_THUNDER_ROOT="/absolute/path/on/thunder/hcmai"
-export HCMAI_LOCAL_ROOT="$PWD"
-export HCMAI_PYTHON="$PWD/aic/bin/python"
-
-bash scripts/sync_thundercompute_indexes.sh pull-indexes
+PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+  --stage validate \
+  --config configs/indexing.yaml \
+  --model-config configs/indexing.models.yaml
 ```
 
-Không copy thủ công từng thư mục index nếu đã có script trên. Xem thêm
+Checkout chỉ phục vụ bundle không thể chạy lại source-dependent validator;
+trong trường hợp đó phải giữ report đã publish và để startup loader kiểm tra
+checksum cùng model contract. Xem quy trình đầy đủ tại
 [`docs/runbooks/thundercompute-index-build.md`](docs/runbooks/thundercompute-index-build.md).
 
 ## 5. Setup backend
@@ -580,13 +583,19 @@ npm --prefix frontend test -- --watchAll=false --runInBand
 npm --prefix frontend run build
 ```
 
-Release gate đầy đủ:
+Repository hiện không có release-wrapper script. Chạy trực tiếp các gate được
+duy trì và xử lý mọi exit code khác `0` trước khi phát hành:
 
 ```bash
-bash scripts/validate_repository.sh
+PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai thundercompute
+PYTHONPATH=.:src aic/bin/python -m pytest -q
+docker compose config --quiet
+CI=true npm --prefix frontend test -- --watchAll=false --runInBand
+npm --prefix frontend run build
+git diff --check
 ```
 
-Các test đều dùng fixture cục bộ; release gate không gọi remote inference và
+Các test dùng fixture cục bộ; những lệnh trên không gọi remote inference và
 không rebuild corpus thật.
 
 ## 9. Xử lý lỗi thường gặp

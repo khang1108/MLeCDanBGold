@@ -5,8 +5,6 @@ from hcmai.common.schemas import (
     SearchResult,
     SearchScores,
     TRAKESubmission,
-    VQARetrievalEvidence,
-    VQASubmission,
 )
 from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
 
@@ -117,40 +115,3 @@ def test_trake_submission_streaming_fields() -> None:
     assert submission.fps == 25.0
     assert submission.frame_idxs == [10, 20]
     assert submission.frame_ids == ["f1", "f2"]
-
-
-def test_vqa_submission_streaming_fields() -> None:
-    submission = VQASubmission(
-        rank=1,
-        video_id="L26_b.L26_V196.001",
-        frame_id="f1",
-        frame_ids=["f1"],
-        frame_idx=25,
-        fps=25.0,
-        answer="apple",
-        retrieval_score=0.9,
-        grounding_score=0.9,
-        answer_score=0.9,
-        joint_score=0.9,
-    )
-    assert submission.video_id == "L26_b.L26_V196.001"
-    assert submission.fps == 25.0
-    assert submission.frame_idx == 25
-    assert submission.frame_ids == ["f1"]
-
-
-def test_vqa_retrieval_evidence_streaming_fields() -> None:
-    evidence = VQARetrievalEvidence(
-        rank=1,
-        video_id="L26_b.L26_V196.001",
-        frame_id="f1",
-        frame_idx=25,
-        fps=25.0,
-        timestamp_ms=1000,
-        retrieval_score=0.9,
-    )
-    assert evidence.video_id == "L26_b.L26_V196.001"
-    assert evidence.fps == 25.0
-    assert evidence.frame_idx == 25
-    assert evidence.frame_id == "f1"
-    assert evidence.frame_ids == ["f1"]

@@ -1,6 +1,7 @@
 """Canonical grouped-package import regression tests."""
 
 from importlib import import_module
+from importlib.util import find_spec
 
 import pytest
 
@@ -22,3 +23,19 @@ def test_canonical_grouped_import_paths_are_available(module_name: str) -> None:
     """Require production and tests to use the grouped package layout."""
 
     assert import_module(module_name) is not None
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "hcmai.common.schemas.vqa",
+        "hcmai.pipelines.vqa",
+        "thundercompute.adapters.vqa",
+    ],
+)
+def test_retired_vqa_package_paths_are_unavailable(module_name: str) -> None:
+    """Keep retired VQA modules outside the discoverable package boundary."""
+
+    assert find_spec(module_name) is None
+    with pytest.raises(ModuleNotFoundError):
+        import_module(module_name)

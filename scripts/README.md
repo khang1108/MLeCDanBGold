@@ -20,36 +20,24 @@ contracts and the manual `tnr create -> scp -> connect -> run -> delete` flow.
 
 ## Validate the repository
 
-Run the complete deterministic release gate from the repository root:
+There is currently no maintained release-wrapper script. Run the maintained
+checks explicitly from the repository root and investigate or record every
+non-zero result:
 
 ```bash
-scripts/validate_repository.sh
+PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai thundercompute
+PYTHONPATH=.:src aic/bin/python -m pytest -q
+docker compose config --quiet
+CI=true npm --prefix frontend test -- --watchAll=false --runInBand
+npm --prefix frontend run build
+git diff --check
 ```
 
-The command runs focused temporal/KIS/TRAKE tests, the complete backend suite,
-frontend tests, the frontend production build, and whitespace validation in
-that order. It uses `aic/bin/python` when available; set `HCMAI_PYTHON` to an
-alternative interpreter when validating another supported environment.
-
-Plan 01 deliberately retires three historical suites instead of skipping
-them:
-
-- `tests/test_minichallenge.py` covered removed KISC/MiniChallenge behavior;
-- `tests/test_removed_conversation.py` asserted deleted conversation APIs;
-
-All other active tests are tracked and collected. Tests use local fixtures and
-deterministic fakes; this validation command must not invoke remote inference or
-rebuild corpus artifacts.
-
-The Plan 01 baseline recorded on 2026-08-13 is 324 passing backend tests with
-two deterministic skips, plus 21 passing frontend tests and a successful
-production build. Both backend skips generate tiny video fixtures and run when
-the optional preprocessing extra supplies PyAV.
-
-The current deterministic baseline after the BTC-native preparation migration
-is 367 passing backend tests with the same two optional PyAV skips,
-plus 27 passing frontend tests and a successful production build. The focused
-temporal/KIS/TRAKE/data-reliability gate contains 120 passing tests.
+These checks cover Python imports, the complete backend suite, Compose
+rendering, the complete frontend suite, the frontend production build, and
+whitespace validation. Tests use local fixtures and deterministic fakes; the
+verification commands must not invoke remote inference or rebuild corpus
+artifacts.
 
 ## HCMAI 2026 BTC-native enrichment V1
 

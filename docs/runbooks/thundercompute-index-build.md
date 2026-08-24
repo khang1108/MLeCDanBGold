@@ -1,16 +1,16 @@
 # ThunderCompute Multimodal Index Build
 
 This runbook builds the competition retrieval indexes on one RTX A6000 and
-copies only validated bundles back to the local HCMAI checkout. The workflow
-uses BTC keyframes as-is; it does not upload raw videos, extract replacement
-frames, or regenerate indexes during serving.
+publishes only validated bundles through S3. The workflow uses BTC keyframes
+as-is; it does not upload raw videos, extract replacement frames, or regenerate
+indexes during serving.
 
 ## Prepare the organizer mapping explicitly
 
 `configs/indexing.yaml` requires CSV files directly under
 `data/map_keyframes/`. The build command deliberately does not unpack or infer
 this organizer-owned mapping. Prepare it locally in one of these explicit ways
-before pushing inputs:
+before publishing the canonical inputs:
 
 ```bash
 cd /absolute/path/to/local/hcmai
@@ -28,46 +28,24 @@ alternative location may be passed explicitly with
 `--map-keyframes-root /absolute/path/to/map_keyframes`; never substitute an
 image filename, keyframe order, FPS estimate, or timestamp for the BTC map.
 
-## Configure both machines
+## Publish canonical inputs to S3
 
-Set infrastructure values yourself; the repository does not guess SSH hosts
-or machine-specific paths.
-
-```bash
-export HCMAI_LOCAL_ROOT=/absolute/path/to/local/hcmai
-export HCMAI_THUNDER_HOST=<your-existing-ssh-alias-or-user-at-host>
-export HCMAI_THUNDER_ROOT=/absolute/path/on/thundercompute/hcmai
-export HCMAI_PYTHON="$HCMAI_LOCAL_ROOT/aic/bin/python"
-```
-
-`pull-indexes` uses `HCMAI_PYTHON` to checksum-load staged FAISS and Parquet
-bundles before promotion. Point it at the local project environment rather
-than relying on an unrelated system Python.
-
-The local root must already contain canonical `frames.parquet` and its
-manifest, BTC keyframes and mappings, FrameContext and its manifest,
-transcripts, and the two indexing configs. Push only those inputs and the
-builder source:
-
-```bash
-cd "$HCMAI_LOCAL_ROOT"
-bash scripts/sync_thundercompute_indexes.sh push-inputs
-```
-
-The transfer script has no `--delete` operation and does not include the raw
-video corpus.
+The source checkout must contain canonical `frames.parquet` and its manifest,
+BTC keyframes and mappings, FrameContext and its manifest, transcripts, and the
+two indexing configs. Publish those artifacts under the prefixes configured in
+`configs/preparation.s3.yaml`; the repository README documents the corresponding
+AWS CLI upload layout. S3 is the supported input and output transfer boundary
+for this workflow, and raw videos are not part of the index build transfer.
 
 ## S3-first ThunderCompute workflow
 
-If these inputs have already been published to the configured S3 bucket, let
-ThunderCompute stage them on its local NVMe disk. This avoids a second
-repository-to-VM copy and keeps the build restartable. On the ThunderCompute
-host, configure the normal AWS credential chain (or attach an instance role)
-and verify bucket access without placing credentials in this repository or in
-shell history:
+Let ThunderCompute stage the published inputs on its local NVMe disk. This
+keeps the build restartable. On the ThunderCompute host, configure the normal
+AWS credential chain (or attach an instance role) and verify bucket access
+without placing credentials in this repository or in shell history:
 
 ```bash
-cd "$HCMAI_THUNDER_ROOT"
+cd /absolute/path/on/thundercompute/hcmai
 aws s3 ls s3://mlecdanbgold-hcmai-hk/data/keyframes/ --max-items 1
 ```
 
@@ -118,20 +96,14 @@ later explicit `aws s3 sync` to another checkout:
 aws s3 cp s3://mlecdanbgold-hcmai-hk/data/artifacts/indexes/latest.json -
 ```
 
-The existing `sync_thundercompute_indexes.sh pull-indexes` route remains
-available for the SSH-based workflow below; it is not needed to publish a
-successful S3-first run.
-
 ## Install the remote build environment
 
-Connect using the configured host and change to the configured remote root.
-Export the root again in the remote shell because ordinary SSH sessions do not
-forward arbitrary environment variables by default.
+Connect using the manual provider workflow documented in
+[`thundercompute/README.md`](../../thundercompute/README.md), then install the
+build environment in the remote checkout.
 
 ```bash
-ssh "$HCMAI_THUNDER_HOST"
-export HCMAI_THUNDER_ROOT=/absolute/path/on/thundercompute/hcmai
-cd "$HCMAI_THUNDER_ROOT"
+cd /absolute/path/on/thundercompute/hcmai
 python -m venv aic
 aic/bin/python -m pip install -e '.[embedding]'
 source aic/bin/activate
@@ -221,28 +193,38 @@ the command writes an atomic failure report at
 `artifacts/indexes/.visual-checkpoints/visual_embedding_failures.json` beside
 its resumable checkpoints; a later clean repaired run removes that stale report.
 
-Exit the remote shell and pull only the validated retrieval bundles:
+After the successful S3 publication, download exactly the immutable version
+named by `latest.json` into the serving checkout:
 
 ```bash
-exit
-cd "$HCMAI_LOCAL_ROOT"
-bash scripts/sync_thundercompute_indexes.sh pull-indexes
+export S3_BUCKET=mlecdanbgold-hcmai-hk
+export S3_REGION="${HCMAI_S3_REGION:-ap-east-1}"
+cd /absolute/path/to/serving/hcmai
+export HCMAI_LOCAL_ROOT="$PWD"
+
+aws s3 cp "s3://${S3_BUCKET}/data/artifacts/indexes/latest.json" \
+  artifacts/indexes/latest.json --region "${S3_REGION}"
+VERSION_PREFIX="$(aic/bin/python -c \
+  'import json; print(json.load(open("artifacts/indexes/latest.json"))["version_prefix"])')"
+
+for INDEX_NAME in visual context asr_segments; do
+  aws s3 sync "s3://${S3_BUCKET}/${VERSION_PREFIX}/${INDEX_NAME}/" \
+    "artifacts/indexes/${INDEX_NAME}/" \
+    --region "${S3_REGION}" --only-show-errors
+done
+aws s3 cp "s3://${S3_BUCKET}/${VERSION_PREFIX}/build_report.json" \
+  artifacts/indexes/build_report.json --region "${S3_REGION}"
 ```
 
-`pull-indexes` first checks that the remote report has `"status": "passed"`,
-stages every bundle, loads the staged checksummed v2 artifacts, and compares
-their byte sizes, schema, dataset version, model/revision, dimension,
-normalization, entity kind, retrieval source, source/config fingerprints, and
-checksum manifests with the report before promotion to the local index
-destination. Do not bypass that command with a manual copy. Startup performs
-its own checksum/model-contract checks as a separate serving guard.
+Do not mix directories from different version prefixes. Keep the published
+`build_report.json` beside the exact bundles it describes. Startup performs
+checksum and model-contract checks as a separate serving guard.
 
 ## Promote a validated bundle safely
 
 Promotion is a serving configuration change, not an opportunity to rebuild or
-repair artifacts. `pull-indexes` verifies the passed remote report and the
-staged bundle contracts before promoting the staged download. Retain the
-promoted `build_report.json` with the exact bundles it describes. Where the
+repair artifacts. Confirm the S3 download came from one immutable version and
+retain `build_report.json` with the exact bundles it describes. Where the
 serving checkout also has the full offline source inputs (especially the
 organizer mapping, FrameContext, and transcripts), independently run the
 source-dependent validator:

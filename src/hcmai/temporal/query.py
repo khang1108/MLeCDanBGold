@@ -29,7 +29,7 @@ class SnapshotDiffResult:
 
 
 def normalize_snapshot(value: str) -> str:
-    """Apply one conservative normalization shared by KIS and VQA."""
+    """Apply conservative normalization to a progressive KIS query snapshot."""
 
     normalized = unicodedata.normalize("NFC", value)
     normalized = re.sub(r"\s+", " ", normalized).strip()
