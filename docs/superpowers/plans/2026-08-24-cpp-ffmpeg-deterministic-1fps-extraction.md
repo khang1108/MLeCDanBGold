@@ -115,7 +115,7 @@ modified unless a focused compatibility test proves a required change.
 - Consumes: installed Linux C++17 compiler, CMake, FFmpeg development packages, and json-c development package.
 - Produces: keyframe_extractor executable, keyframes_core static library target, and CTest registration for native tests.
 
-- [ ] **Step 1: Write the build smoke test first**
+- [x] **Step 1: Write the build smoke test first**
 
 Create a minimal test helper and register a CTest entry that expects the
 executable’s version command to return the pinned version string.
@@ -150,7 +150,7 @@ Extend this helper in the same task with make_temp_directory, write_text,
 require_throws, file_size, exists, is_regular_file, and read_jpeg_dimensions so
 later native tests use one deterministic temporary-fixture implementation.
 
-- [ ] **Step 2: Run the build to verify the scaffold is absent**
+- [x] **Step 2: Run the build to verify the scaffold is absent**
 
 Run:
 
@@ -162,7 +162,7 @@ cmake --build build/keyframes_extraction
 Expected: FAIL because the package CMake project and native sources do not
 exist.
 
-- [ ] **Step 3: Implement the minimal CMake project and version command**
+- [x] **Step 3: Implement the minimal CMake project and version command**
 
 Use imported pkg-config targets and keep all native linkage inside the native
 target.
@@ -222,7 +222,7 @@ if (argc == 2 && std::string_view(argv[1]) == "--version") {
 }
 ~~~
 
-- [ ] **Step 4: Build and run the smoke test**
+- [x] **Step 4: Build and run the smoke test**
 
 ~~~bash
 cmake --build build/keyframes_extraction --parallel
@@ -231,7 +231,7 @@ ctest --test-dir build/keyframes_extraction --output-on-failure
 
 Expected: the version and initial process test pass.
 
-- [ ] **Step 5: Commit the native scaffold**
+- [x] **Step 5: Commit the native scaffold**
 
 ~~~bash
 git add src/hcmai/data/cpp/keyframes_extraction
@@ -253,7 +253,7 @@ git commit -m "build: scaffold native keyframe extractor"
 - Consumes: JSONL rows containing video_id, watch_url, and metadata_length_s; JSON configuration produced by Python.
 - Produces: validated VideoInput, ExtractionConfig, NativeFrameRow, and NativeVideoManifest values used by later native tasks.
 
-- [ ] **Step 1: Write failing parser tests**
+- [x] **Step 1: Write failing parser tests**
 
 Use a temporary directory and test the accepted row shape, deterministic order,
 duplicate rejection, missing URL rejection, and configuration range
@@ -279,7 +279,7 @@ int main() {
 }
 ~~~
 
-- [ ] **Step 2: Run the parser test before implementing the contracts**
+- [x] **Step 2: Run the parser test before implementing the contracts**
 
 ~~~bash
 cmake --build build/keyframes_extraction --target test_jsonl
@@ -288,7 +288,7 @@ ctest --test-dir build/keyframes_extraction -R jsonl_unit --output-on-failure
 
 Expected: FAIL because the contract headers and parser do not exist.
 
-- [ ] **Step 3: Implement the exact native value types and JSON parser**
+- [x] **Step 3: Implement the exact native value types and JSON parser**
 
 Define shared row values without exposing FFmpeg-owned pointers.
 
@@ -353,7 +353,7 @@ lengths, blank IDs, duplicate IDs, and malformed JSON. The writer must emit one
 compact JSON object per native frame row and escape paths/URLs through json-c,
 never string concatenation.
 
-- [ ] **Step 4: Build and run parser tests**
+- [x] **Step 4: Build and run parser tests**
 
 ~~~bash
 cmake --build build/keyframes_extraction --parallel
@@ -362,7 +362,7 @@ ctest --test-dir build/keyframes_extraction -R jsonl_unit --output-on-failure
 
 Expected: PASS for accepted rows and malformed-input cases.
 
-- [ ] **Step 5: Commit the native contracts**
+- [x] **Step 5: Commit the native contracts**
 
 ~~~bash
 git add src/hcmai/data/cpp/keyframes_extraction

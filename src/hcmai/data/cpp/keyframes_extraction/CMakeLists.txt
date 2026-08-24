@@ -36,7 +36,12 @@ add_executable(test_process tests/test_process.cpp)
 target_link_libraries(test_process PRIVATE keyframes_core)
 target_compile_options(test_process PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
+add_executable(test_jsonl tests/test_jsonl.cpp)
+target_link_libraries(test_jsonl PRIVATE keyframes_core)
+target_compile_options(test_jsonl PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
 add_test(NAME process_unit COMMAND test_process)
+add_test(NAME jsonl_unit COMMAND test_jsonl)
 add_test(NAME keyframe_extractor_version COMMAND keyframe_extractor --version)
 set_tests_properties(
     keyframe_extractor_version
