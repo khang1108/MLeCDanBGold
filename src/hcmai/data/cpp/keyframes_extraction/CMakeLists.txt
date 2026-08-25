@@ -40,6 +40,10 @@ add_executable(test_process tests/test_process.cpp)
 target_link_libraries(test_process PRIVATE keyframes_core)
 target_compile_options(test_process PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
+add_executable(test_state tests/test_state.cpp)
+target_link_libraries(test_state PRIVATE keyframes_core)
+target_compile_options(test_state PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
 add_executable(test_jsonl tests/test_jsonl.cpp)
 target_link_libraries(test_jsonl PRIVATE keyframes_core)
 target_compile_options(test_jsonl PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -57,6 +61,7 @@ target_link_libraries(test_ffmpeg PRIVATE keyframes_core)
 target_compile_options(test_ffmpeg PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 add_test(NAME process_unit COMMAND test_process)
+add_test(NAME state_unit COMMAND test_state)
 add_test(NAME jsonl_unit COMMAND test_jsonl)
 add_test(NAME frame_index_unit COMMAND test_frame_index)
 add_test(NAME timestamp_sampler_unit COMMAND test_timestamp_sampler)
