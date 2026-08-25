@@ -384,7 +384,7 @@ git commit -m "feat: add native extraction contracts"
 - Consumes: positive average FPS, non-negative timestamps, and monotonic decoded timestamps represented by TimedFrame { ordinal, timestamp_ms }.
 - Produces: submission_frame_idx, make_frame_id, and SelectedTarget values.
 
-- [ ] **Step 1: Write failing identity tests**
+- [x] **Step 1: Write failing identity tests**
 
 ~~~cpp
 int main() {
@@ -400,7 +400,7 @@ int main() {
 }
 ~~~
 
-- [ ] **Step 2: Write failing sampler tests**
+- [x] **Step 2: Write failing sampler tests**
 
 ~~~cpp
 int main() {
@@ -431,7 +431,7 @@ int main() {
 }
 ~~~
 
-- [ ] **Step 3: Run both tests before implementation**
+- [x] **Step 3: Run both tests before implementation**
 
 ~~~bash
 cmake --build build/keyframes_extraction --target test_frame_index test_timestamp_sampler
@@ -440,7 +440,7 @@ ctest --test-dir build/keyframes_extraction -R 'frame_index_unit|timestamp_sampl
 
 Expected: FAIL because the helper functions and sampler do not exist.
 
-- [ ] **Step 4: Implement overflow-checked identity and nearest-frame selection**
+- [x] **Step 4: Implement overflow-checked identity and nearest-frame selection**
 
 Use long double for the formula intermediate and reject a result outside the
 non-negative signed 64-bit range.
@@ -501,7 +501,7 @@ std::vector<SelectedTarget> TimestampSampler::push(const TimedFrame& current) {
 Reject non-positive sample periods and timestamp overflow while advancing the
 next target.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 ~~~bash
 cmake --build build/keyframes_extraction --parallel
@@ -525,7 +525,7 @@ selection, exact ties, large gaps, and no duplicate target indexes.
 - Consumes: one local video path, FFmpeg stream metadata, and ImageVariant { max_long_edge, quality }.
 - Produces: RAII-owned decoded frames with actual millisecond timestamps, VideoInfo, and encoded JPEG files with byte counts.
 
-- [ ] **Step 1: Write the synthetic decode/encode test**
+- [x] **Step 1: Write the synthetic decode/encode test**
 
 The test creates a local video through an argv-based FFmpeg invocation and never
 contacts YouTube.
@@ -552,7 +552,7 @@ require_true(encoded.bytes > 0, "JPEG must contain bytes");
 require_true(read_jpeg_dimensions(output_path) == Dimensions{32, 16}, "long edge must be bounded");
 ~~~
 
-- [ ] **Step 2: Run the FFmpeg test before implementation**
+- [x] **Step 2: Run the FFmpeg test before implementation**
 
 ~~~bash
 cmake --build build/keyframes_extraction --target test_ffmpeg
@@ -561,7 +561,7 @@ ctest --test-dir build/keyframes_extraction -R ffmpeg_unit --output-on-failure
 
 Expected: FAIL because the decoder and encoder wrappers do not exist.
 
-- [ ] **Step 3: Implement RAII FFmpeg lifecycle and timestamp authority**
+- [x] **Step 3: Implement RAII FFmpeg lifecycle and timestamp authority**
 
 VideoDecoder must open the format, find stream information, select the first
 video stream, copy AVStream::avg_frame_rate, reject invalid FPS, open the codec,
@@ -579,7 +579,7 @@ return the final file byte count. Invalid quality values, zero dimensions,
 missing output parents, decoder errors, and encoder errors must throw typed
 exceptions containing the video path.
 
-- [ ] **Step 4: Run codec tests and inspect image metadata**
+- [x] **Step 4: Run codec tests and inspect image metadata**
 
 ~~~bash
 cmake --build build/keyframes_extraction --parallel
@@ -589,7 +589,7 @@ file /tmp/hcmai-keyframes-test/durable.jpg
 
 Expected: PASS; the synthetic JPEG is readable and its long edge is 32 pixels.
 
-- [ ] **Step 5: Commit the FFmpeg layer**
+- [x] **Step 5: Commit the FFmpeg layer**
 
 ~~~bash
 git add src/hcmai/data/cpp/keyframes_extraction
@@ -611,7 +611,7 @@ git commit -m "feat: add ffmpeg decode and jpeg encoding"
 - Consumes: std::vector<std::string> subprocess argv and a run-root state path.
 - Produces: captured exit status/stderr, VideoState, atomic state writes, and validated lifecycle transitions.
 
-- [ ] **Step 1: Write failing process and state tests**
+- [x] **Step 1: Write failing process and state tests**
 
 The process test must prove shell metacharacters remain one literal argument.
 
@@ -642,7 +642,7 @@ require_true(
 );
 ~~~
 
-- [ ] **Step 2: Run process/state tests before implementation**
+- [x] **Step 2: Run process/state tests before implementation**
 
 ~~~bash
 cmake --build build/keyframes_extraction --target test_process test_state
@@ -651,7 +651,7 @@ ctest --test-dir build/keyframes_extraction -R 'process_unit|state_unit' --outpu
 
 Expected: FAIL because no process or state implementation exists.
 
-- [ ] **Step 3: Implement POSIX argv execution without shell interpolation**
+- [x] **Step 3: Implement POSIX argv execution without shell interpolation**
 
 Use fork, dup2, execvp, and waitpid. Build the child argv array directly from
 the vector; never call system, popen, or a shell. Capture stderr into a bounded
@@ -680,7 +680,7 @@ yt-dlp --no-playlist --no-progress --newline
 
 The URL is one argv element and is never concatenated into a command string.
 
-- [ ] **Step 4: Implement JSON state and allowed transitions**
+- [x] **Step 4: Implement JSON state and allowed transitions**
 
 Represent these statuses exactly:
 
@@ -705,7 +705,7 @@ extractor version, and config hash before changing status. Failed state stores
 the bounded process/decoder error and keeps staging for diagnosis; a later
 extraction run cleans that video’s staging directory before retrying.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 ~~~bash
 cmake --build build/keyframes_extraction --parallel
