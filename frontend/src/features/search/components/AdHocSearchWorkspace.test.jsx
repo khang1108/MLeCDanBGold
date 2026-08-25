@@ -51,9 +51,9 @@ test('clicking Search sends KIS request and renders retrieved frame', async () =
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
     expect.objectContaining({ query: 'red boat', topK: 100, queryType: 'kis' }),
   ));
-  expect(await screen.findByText(/L21_V001 · frame 42/)).toBeTruthy();
+  expect(await screen.findByText(/L21_V001, 42/)).toBeTruthy();
   expect(screen.getAllByText('A red boat')).toHaveLength(2);
-  fireEvent.click(screen.getByText(/L21_V001 · frame 42/));
+  fireEvent.click(screen.getByText(/L21_V001, 42/));
   expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
     video_id: 'L21_a_b.folder2.L21_V001',
     frame_idx: 42,

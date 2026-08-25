@@ -1,4 +1,5 @@
 import { API_BASE_URL, requestJson } from "./client";
+import { mockBackendEnabled, mockSearchFrames } from './mockSearch';
 
 export const resolveApiUrl = (value) => {
   if (!value || /^(?:https?:|data:)/i.test(value)) return value;
@@ -37,6 +38,9 @@ export const searchFrames = async ({
   searchId,
   signal,
 }) => {
+  if (mockBackendEnabled() && queryType?.toLowerCase() === 'kis') {
+    return mockSearchFrames({ query, topK });
+  }
 
 
   const body = {

@@ -1,16 +1,30 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import ImageModal from './ImageModal';
-import { getS3VideoUrl } from '../videoSource';
-import { fetchVideoKeyframes } from '../../../api/frames';
-
-jest.mock('../../../api/frames', () => ({ fetchVideoKeyframes: jest.fn() }));
+import { getYouTubeEmbedUrl, getYouTubeWatchUrl } from '../videoSource';
 
 jest.mock('../videoSource', () => ({
   displayVideoId: (videoId) => videoId.split('.').at(-1),
-  getS3VideoUrl: jest.fn(),
+  getYouTubeEmbedUrl: jest.fn(),
+  getYouTubeWatchUrl: jest.fn(),
   timestampSeconds: (timestampMs) => (
     Number.isFinite(timestampMs) ? timestampMs / 1000 : null
+  ),
+}));
+
+jest.mock('./YouTubePlayer', () => ({
+  __esModule: true,
+  default: ({ embedUrl, title, targetTime, onTimeUpdate }) => (
+    <>
+      <iframe
+        title={title}
+        src={embedUrl}
+        data-target-time={targetTime}
+        tabIndex="0"
+        onLoad={() => onTimeUpdate?.(targetTime)}
+      />
+      <button type="button" onClick={() => onTimeUpdate?.(5.2)}>Report player time</button>
+    </>
   ),
 }));
 
@@ -25,67 +39,57 @@ const frame = {
 };
 
 beforeEach(() => {
-  getS3VideoUrl.mockResolvedValue('https://signed.example/video.mp4');
-  fetchVideoKeyframes.mockResolvedValue([]);
+  jest.clearAllMocks();
+  getYouTubeEmbedUrl.mockReturnValue(
+    'https://www.youtube.com/embed/Rzpw5WR7nAY?enablejsapi=1',
+  );
+  getYouTubeWatchUrl.mockReturnValue('https://www.youtube.com/watch?v=Rzpw5WR7nAY');
 });
 
-test('loads the S3 video and seeks to the selected frame after metadata loads', async () => {
+test('embeds the mapped YouTube video and passes the selected timestamp', async () => {
   render(<ImageModal frame={frame} onClose={jest.fn()} />);
 
-  const video = await screen.findByLabelText('Video for L21_V001');
-  expect(video.getAttribute('src')).toBe(
-    'https://signed.example/video.mp4',
-  );
-
-  fireEvent.loadedMetadata(video);
-  expect(video.currentTime).toBe(5);
-  expect(screen.getByText('Time 5.000 s')).toBeTruthy();
+  const video = await screen.findByTitle('Video for L21_V001');
+  expect(video.getAttribute('src')).toContain('/embed/Rzpw5WR7nAY');
+  expect(video.getAttribute('data-target-time')).toBe('5');
+  expect(screen.getByText('125')).toBeTruthy();
+  expect(screen.getByText('5000 ms')).toBeTruthy();
   expect(screen.getByText('FPS')).toBeTruthy();
   expect(screen.getByText('25')).toBeTruthy();
 });
 
 test('prefers canonical timestamp over frame_idx/fps when they identify different moments', async () => {
-  render(<ImageModal frame={{
-    ...frame,
-    frame_idx: 125,
-    fps: 25,
-    timestamp_ms: 5_200,
-  }} onClose={jest.fn()} />);
+  render(<ImageModal frame={{ ...frame, timestamp_ms: 5_200 }} onClose={jest.fn()} />);
 
-  const video = await screen.findByLabelText('Video for L21_V001');
-  fireEvent.loadedMetadata(video);
-
-  expect(video.currentTime).toBe(5.2);
+  const video = await screen.findByTitle('Video for L21_V001');
+  expect(video.getAttribute('data-target-time')).toBe('5.2');
 });
 
-test('updates playback time without inventing a BTC frame index', async () => {
+test('does not render a frame index overlay on the video', async () => {
   render(<ImageModal frame={frame} onClose={jest.fn()} />);
-  const video = await screen.findByLabelText('Video for L21_V001');
 
-  Object.defineProperty(video, 'currentTime', { configurable: true, value: 12.48 });
-  fireEvent.timeUpdate(video);
-
-  expect(screen.getByText('Time 12.480 s')).toBeTruthy();
-  expect(screen.queryByText('Frame 312')).toBeNull();
+  expect(await screen.findByTitle('Video for L21_V001')).toBeTruthy();
+  expect(screen.queryByText(/keyframe/i)).toBeNull();
 });
 
-test('reports the nearest stored keyframe while the user scrubs', async () => {
-  fetchVideoKeyframes.mockResolvedValue([
-    { frame_id: 'a', frame_idx: 100, timestamp_ms: 4_000 },
-    { frame_id: 'b', frame_idx: 320, timestamp_ms: 12_800 },
-    { frame_id: 'c', frame_idx: 500, timestamp_ms: 20_000 },
-  ]);
+test('keeps the direct iframe focusable for native YouTube keyboard controls', async () => {
   render(<ImageModal frame={frame} onClose={jest.fn()} />);
-  const video = await screen.findByLabelText('Video for L21_V001');
 
-  Object.defineProperty(video, 'currentTime', { configurable: true, value: 12.48 });
-  fireEvent.timeUpdate(video);
-
-  expect(await screen.findByText('Time 12.480 s · keyframe 320')).toBeTruthy();
+  const video = await screen.findByTitle('Video for L21_V001');
+  expect(video.getAttribute('tabindex')).toBe('0');
 });
 
-test('shows a configuration message instead of requesting the full-size image when video playback is unavailable', async () => {
-  getS3VideoUrl.mockResolvedValueOnce(null);
+test('uses the real player time to update the displayed frame index', async () => {
+  render(<ImageModal frame={{ ...frame, fps: 30 }} onClose={jest.fn()} />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Report player time' }));
+
+  expect(screen.getByText('156')).toBeTruthy();
+  expect(screen.getByText('5200 ms')).toBeTruthy();
+});
+
+test('shows an unavailable message when no YouTube metadata is mapped', async () => {
+  getYouTubeEmbedUrl.mockReturnValueOnce(null);
   render(<ImageModal frame={frame} onClose={jest.fn()} />);
 
   expect(await screen.findByText(/Video playback is unavailable/i)).toBeTruthy();
@@ -93,16 +97,19 @@ test('shows a configuration message instead of requesting the full-size image wh
 });
 
 test('requires canonical timestamp instead of deriving seek time from frame_idx', async () => {
-  render(<ImageModal frame={{
-    ...frame,
-    frame_id: 'trake-frame',
-    scores: undefined,
-    timestamp_ms: undefined,
-  }} onClose={jest.fn()} />);
+  render(<ImageModal frame={{ ...frame, scores: undefined, timestamp_ms: undefined }} onClose={jest.fn()} />);
 
   expect(await screen.findByText(/missing timestamp_ms/i)).toBeTruthy();
-  expect(screen.queryByLabelText('Video for L21_V001')).toBeNull();
-  expect(screen.queryByText('Retrieval Stage Scores')).toBeNull();
-  expect(screen.queryByText('Final Relevance')).toBeNull();
+  expect(screen.queryByTitle('Video for L21_V001')).toBeNull();
   expect(screen.queryByText('Timestamp')).toBeNull();
+});
+
+test('closes the inspector when Escape is pressed', () => {
+  const onClose = jest.fn();
+  const { unmount } = render(<ImageModal frame={frame} onClose={onClose} />);
+
+  fireEvent.keyDown(window, { key: 'Escape' });
+
+  expect(onClose).toHaveBeenCalledTimes(1);
+  unmount();
 });

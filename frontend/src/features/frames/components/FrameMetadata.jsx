@@ -2,7 +2,15 @@ import React from "react";
 import { displayVideoId } from "../videoSource";
 
 // Keep internal asset identity separate from BTC submission coordinates.
-const FrameMetadata = ({ frame }) => (
+const FrameMetadata = ({ frame, playbackTime }) => {
+  const liveFrameIdx = Number.isFinite(playbackTime) && Number.isFinite(frame.fps)
+    ? Math.round(playbackTime * frame.fps)
+    : frame.frame_idx;
+  const liveTimestampMs = Number.isFinite(playbackTime)
+    ? Math.round(playbackTime * 1000)
+    : frame.timestamp_ms;
+
+  return (
   <div className="inspector-meta-list">
     <div className="inspector-meta-item">
       <span className="meta-lbl">Internal frame ID</span>
@@ -14,11 +22,11 @@ const FrameMetadata = ({ frame }) => (
     </div>
     <div className="inspector-meta-item">
       <span className="meta-lbl">BTC frame index</span>
-      <span className="meta-val monospace">{frame.frame_idx}</span>
+      <span className="meta-val monospace">{liveFrameIdx}</span>
     </div>
-    {Number.isFinite(frame.timestamp_ms) && <div className="inspector-meta-item">
+    {Number.isFinite(liveTimestampMs) && <div className="inspector-meta-item">
       <span className="meta-lbl">Timestamp</span>
-      <span className="meta-val">{frame.timestamp_ms} ms</span>
+      <span className="meta-val">{liveTimestampMs} ms</span>
     </div>}
     {Number.isFinite(frame.fps) && <div className="inspector-meta-item">
       <span className="meta-lbl">FPS</span>
@@ -34,6 +42,7 @@ const FrameMetadata = ({ frame }) => (
       </span>
     </div>}
   </div>
-);
+  );
+};
 
 export default FrameMetadata;
