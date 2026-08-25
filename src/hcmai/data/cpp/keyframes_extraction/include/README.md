@@ -9,9 +9,10 @@ test code include headers by their stable project path:
 ```
 
 Headers define value contracts and small, testable APIs. Their implementations
-belong in the sibling [`src/`](../src/README.md) directory. Do not put command
-line orchestration, yt-dlp invocation, staging cleanup, or Parquet conversion
-in this public API layer.
+belong in the sibling [`src/`](../src/README.md) directory. The focused
+`extractor.hpp` orchestration contract is the one exception that exposes a
+bounded run request for the CLI and smoke tests; it still does not expose
+command-line parsing or downstream Parquet conversion.
 
 ## Current contracts
 
@@ -25,6 +26,7 @@ in this public API layer.
 | `ffmpeg.hpp` | FFmpeg video decoding metadata and JPEG encoding contracts | Source download, target sampling, and publication |
 | `process.hpp` | Shell-free POSIX argv execution and bounded child output | Download argument selection, retries, and state mutation |
 | `state.hpp` | Atomic per-video JSON checkpoints and guarded lifecycle transitions | Media operations, bundle validation, and cleanup |
+| `extractor.hpp` | Bounded manifest extraction request and outcome summary | CLI parsing, enrichment, publication, and Parquet materialization |
 
 `ffmpeg.hpp` forward-declares `AVFrame` so callers can use decoded images
 without exposing FFmpeg implementation headers through every contract.

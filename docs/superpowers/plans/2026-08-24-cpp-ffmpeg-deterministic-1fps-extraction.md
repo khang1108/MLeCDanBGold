@@ -729,7 +729,7 @@ Expected: PASS, with no temporary state file left after successful writes.
 - Consumes: VideoInput, ExtractionConfig, run_root, and an optional local source_root used only by offline tests/smoke runs.
 - Produces: staging/{video_id}/frames.jsonl, durable/enrichment images, per-video manifest, enrichment_pending state, and ExtractionSummary.
 
-- [ ] **Step 1: Write the end-to-end synthetic-video test**
+- [x] **Step 1: Write the end-to-end synthetic-video test**
 
 The test must create a 3-second, 2-FPS source, use source_root to bypass network
 download, and invoke the same extraction library used by the CLI.
@@ -763,7 +763,7 @@ require_true(
 );
 ~~~
 
-- [ ] **Step 2: Run the smoke test before implementing orchestration**
+- [x] **Step 2: Run the smoke test before implementing orchestration**
 
 ~~~bash
 cmake --build build/keyframes_extraction --target test_extractor_smoke
@@ -773,7 +773,7 @@ ctest --test-dir build/keyframes_extraction -R extractor_smoke --output-on-failu
 Expected: FAIL because extract_manifest and the native output layout do not
 exist.
 
-- [ ] **Step 3: Implement per-video source preparation and state progression**
+- [x] **Step 3: Implement per-video source preparation and state progression**
 
 For each selected manifest row:
 
@@ -799,7 +799,7 @@ enrichment_image_path:  enrichment_images/000000000.jpg
 The final Python materializer will prefix published/{video_id}/ when it creates
 portable FrameRecord.image_path values.
 
-- [ ] **Step 4: Add CLI parsing for the extraction command**
+- [x] **Step 4: Add CLI parsing for the extraction command**
 
 Support this command surface:
 
@@ -818,7 +818,7 @@ videos fail but processing continued, and 1 for invalid CLI/config input. Print
 a JSON summary containing completed, failed, skipped, pending, and emitted-frame
 counts.
 
-- [ ] **Step 5: Run native extraction tests and commit**
+- [x] **Step 5: Run native extraction tests and commit**
 
 ~~~bash
 cmake --build build/keyframes_extraction --parallel
