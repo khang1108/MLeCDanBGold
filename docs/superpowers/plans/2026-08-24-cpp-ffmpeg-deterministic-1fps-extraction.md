@@ -1277,7 +1277,7 @@ custom frame_id, actual timestamp, and competition frame_idx values.
 - Consumes: a validated staging bundle and existing Caption/OCR/Object/ASR artifact paths.
 - Produces: temporary durable/high-resolution frames.parquet inputs and a compact handoff manifest suitable for native mark-enriched.
 
-- [ ] **Step 1: Write failing image-variant and handoff tests**
+- [x] **Step 1: Write failing image-variant and handoff tests**
 
 ~~~python
 def test_enrichment_variants_preserve_identity_but_switch_image_path(tmp_path: Path) -> None:
@@ -1311,7 +1311,7 @@ def test_handoff_rejects_artifact_frame_identity_mismatch(tmp_path: Path) -> Non
         )
 ~~~
 
-- [ ] **Step 2: Run enrichment-boundary tests before implementation**
+- [x] **Step 2: Run enrichment-boundary tests before implementation**
 
 ~~~bash
 pytest -q tests/data/test_custom_enrichment.py
@@ -1320,7 +1320,7 @@ pytest -q tests/data/test_custom_enrichment.py
 Expected: FAIL because the per-video materializer and handoff validator do not
 exist.
 
-- [ ] **Step 3: Implement per-video durable and OCR tables**
+- [x] **Step 3: Implement per-video durable and OCR tables**
 
 Expose materialize_video_enrichment_frames(bundle_root, output_path,
 image_variant) returning the generated Parquet path. Use the native rows and
@@ -1332,7 +1332,7 @@ identical frame_id, video_id, frame_idx, timestamp_ms, dimensions, FPS, PTS,
 and time-base fields. The high-resolution table is temporary and is never
 passed to the final corpus materializer.
 
-- [ ] **Step 4: Implement the artifact handoff validator**
+- [x] **Step 4: Implement the artifact handoff validator**
 
 Expose write_enrichment_handoff(bundle_root, artifact_paths, output_path,
 frame_store_id) returning the generated JSON path.
@@ -1348,7 +1348,7 @@ containing each artifact path and validation status.
 Use atomic_write and preserve raw specialist artifacts separately from the
 handoff summary.
 
-- [ ] **Step 5: Run tests and commit the enrichment boundary**
+- [x] **Step 5: Run tests and commit the enrichment boundary**
 
 ~~~bash
 pytest -q tests/data/test_custom_enrichment.py tests/data/test_custom_frames.py
