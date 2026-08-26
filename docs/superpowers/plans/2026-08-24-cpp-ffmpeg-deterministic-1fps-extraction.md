@@ -372,13 +372,13 @@ git commit -m "feat: add native extraction contracts"
 ### Task 3: Implement the exact competition coordinate, internal identity, and timestamp sampler
 
 **Files:**
-- Create: src/hcmai/data/cpp/keyframes_extraction/include/hcmai/keyframes_extraction/frame_index.hpp
-- Create: src/hcmai/data/cpp/keyframes_extraction/src/frame_index.cpp
-- Create: src/hcmai/data/cpp/keyframes_extraction/include/hcmai/keyframes_extraction/timestamp_sampler.hpp
-- Create: src/hcmai/data/cpp/keyframes_extraction/src/timestamp_sampler.cpp
-- Create: src/hcmai/data/cpp/keyframes_extraction/tests/test_frame_index.cpp
-- Create: src/hcmai/data/cpp/keyframes_extraction/tests/test_timestamp_sampler.cpp
-- Modify: src/hcmai/data/cpp/keyframes_extraction/CMakeLists.txt
+- Create: `src/hcmai/data/cpp/keyframes_extraction/include/hcmai/keyframes_extraction/frame_index.hpp`
+- Create: `src/hcmai/data/cpp/keyframes_extraction/src/frame_index.cpp`
+- Create: `src/hcmai/data/cpp/keyframes_extraction/include/hcmai/keyframes_extraction/timestamp_sampler.hpp`
+- Create: `src/hcmai/data/cpp/keyframes_extraction/src/timestamp_sampler.cpp`
+- Create: `src/hcmai/data/cpp/keyframes_extraction/tests/test_frame_index.cpp`
+- Create: `src/hcmai/data/cpp/keyframes_extraction/tests/test_timestamp_sampler.cpp`
+- Modify: `src/hcmai/data/cpp/keyframes_extraction/CMakeLists.txt`
 
 **Interfaces:**
 - Consumes: positive average FPS, non-negative timestamps, and monotonic decoded timestamps represented by TimedFrame { ordinal, timestamp_ms }.
