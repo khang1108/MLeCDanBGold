@@ -18,6 +18,50 @@ The root `thundercompute/` directory is the shared hosted-inference component.
 See [`thundercompute/README.md`](../thundercompute/README.md) for its endpoint
 contracts and the manual `tnr create -> scp -> connect -> run -> delete` flow.
 
+## Metadata-only pipeline cost estimate
+
+`estimate_pipeline_cost.py` reads every `watch_url` under the AIC media-info
+directory. It never downloads video or image bytes. By default it queries
+YouTube metadata through `yt-dlp --skip-download`, caches each result, and
+falls back to the JSON `length` field when a URL cannot be probed.
+
+Run a deterministic local estimate without network access:
+
+```bash
+PYTHONPATH=.:src aic/bin/python scripts/estimate_pipeline_cost.py \
+  --no-probe \
+  --output-dir /tmp/hcmai-cost-estimate-aic25-b1
+```
+
+To query URL metadata, omit `--no-probe`. The output directory contains a
+resumable `probe_cache.json`, per-video `video_estimates.csv` and
+`video_estimates.json`, and an aggregate `summary.json`.
+
+Stage time and cost are emitted only for rates supplied in a profile. Replace
+these illustrative values with measured ThunderCompute pilot throughput:
+
+```json
+{
+  "hourly_rate_usd": 0.38,
+  "billed_vm_count": 1,
+  "overhead_fraction": 0.15,
+  "stages": {
+    "caption": {"units_per_second": 2.0, "workers": 1},
+    "ocr": {"units_per_second": 4.0, "workers": 1},
+    "objects": {"units_per_second": 4.0, "workers": 1},
+    "asr": {"units_per_second": 5.0, "workers": 1},
+    "visual_embedding": {"units_per_second": 20.0, "workers": 1},
+    "context_embedding": {"units_per_second": 50.0, "workers": 1},
+    "index": {"units_per_second": 1000.0, "workers": 1}
+  }
+}
+```
+
+Caption, OCR, Object, and embedding rates use frames per second. ASR,
+download, and decode rates use source-video seconds per wall-clock second.
+The first estimator models stages sequentially and keeps billed VM count
+separate from process-level workers.
+
 ## Validate the repository
 
 There is currently no maintained release-wrapper script. Run the maintained
