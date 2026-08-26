@@ -1868,7 +1868,8 @@ void mark_video_published(
  *
  * @param run_root Root containing the selected video's native lifecycle data.
  * @param video_id Canonical source-video identifier selected by the caller.
- * @return None; deletes only known source/staging temporary paths then checkpoints.
+ * @return None; deletes only known source/staging and published OCR scratch
+ *         paths, then checkpoints without removing durable published evidence.
  * @throws std::invalid_argument If state predecessor or published provenance is invalid.
  * @throws std::runtime_error If required state/manifest files cannot be read.
  * @throws std::system_error If scoped temporary cleanup fails.
@@ -1913,6 +1914,14 @@ void cleanup_video(
     remove_exact_tree_if_present(
         root / "staging" / video_id,
         "remove selected staging bundle"
+    );
+    // Publication transfers the complete staging bundle. Remove the selected
+    // high-resolution OCR scratch directory only after the validated handoff
+    // and publication marker exist, while preserving durable images and all
+    // specialist artifacts for the published video.
+    remove_exact_tree_if_present(
+        root / "published" / video_id / "enrichment_images",
+        "remove selected published OCR scratch images"
     );
 
     transition_state_with_update(

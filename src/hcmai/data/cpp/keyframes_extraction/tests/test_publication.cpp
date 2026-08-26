@@ -241,6 +241,12 @@ int run_publication_lifecycle() {
         "published manifest must be the final commit marker"
     );
     require_true(
+        test_support::is_regular_file(
+            published_bundle / "enrichment_images" / "000000000.jpg"
+        ),
+        "publication must retain OCR scratch images until cleanup"
+    );
+    require_true(
         !test_support::exists(staging_bundle),
         "successful publication must move the staging bundle"
     );
@@ -289,6 +295,10 @@ int run_publication_lifecycle() {
     require_true(
         !test_support::exists(staging_bundle / "enrichment_images"),
         "temporary OCR images must be removed with the staging bundle"
+    );
+    require_true(
+        !test_support::exists(published_bundle / "enrichment_images"),
+        "cleanup must remove selected published OCR scratch images"
     );
     require_true(
         test_support::is_regular_file(
