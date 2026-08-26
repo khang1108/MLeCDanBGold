@@ -71,6 +71,10 @@ preprocessing = [
     "transformers>=4.56, <6.0",
     "yacs>=0.1.8, <1.0",
 ]
+objects = [
+    "opencv-python-headless>=4.10, <5.0",
+    "ultralytics>=8.4, <9.0",
+]
 dev = [
     "httpx>=0.28.1",
     "pytest>=7.0",
