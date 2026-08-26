@@ -68,6 +68,14 @@ target_compile_definitions(test_extractor_smoke PRIVATE
     KEYFRAME_EXTRACTOR_PATH="$<TARGET_FILE:keyframe_extractor>"
 )
 
+add_executable(test_publication tests/test_publication.cpp)
+target_link_libraries(test_publication PRIVATE keyframes_core)
+target_compile_options(test_publication PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_dependencies(test_publication keyframe_extractor)
+target_compile_definitions(test_publication PRIVATE
+    KEYFRAME_EXTRACTOR_PATH="$<TARGET_FILE:keyframe_extractor>"
+)
+
 add_test(NAME process_unit COMMAND test_process)
 add_test(NAME state_unit COMMAND test_state)
 add_test(NAME jsonl_unit COMMAND test_jsonl)
@@ -75,6 +83,7 @@ add_test(NAME frame_index_unit COMMAND test_frame_index)
 add_test(NAME timestamp_sampler_unit COMMAND test_timestamp_sampler)
 add_test(NAME ffmpeg_unit COMMAND test_ffmpeg)
 add_test(NAME extractor_smoke COMMAND test_extractor_smoke)
+add_test(NAME publication_unit COMMAND test_publication)
 add_test(NAME keyframe_extractor_version COMMAND keyframe_extractor --version)
 set_tests_properties(
     keyframe_extractor_version

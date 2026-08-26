@@ -2,12 +2,14 @@
  * @file main.cpp
  * @brief Provides the native keyframe extractor command-line entry point.
  *
- * This module owns only command-line parsing, exit-code selection, and JSON
- * summary formatting. Source preparation and FFmpeg extraction remain in the
- * extractor library so local smoke tests use the same implementation path.
+ * This module owns only command-line parsing, exit-code selection, extraction
+ * summary formatting, and dispatch to guarded state commands. Source
+ * preparation, FFmpeg extraction, and lifecycle mutations remain in library
+ * modules so local smoke tests use the same implementation paths.
  */
 
 #include "hcmai/keyframes_extraction/extractor.hpp"
+#include "hcmai/keyframes_extraction/state.hpp"
 
 #include <filesystem>
 #include <iostream>
@@ -29,7 +31,13 @@ void print_usage() {
         << "  keyframe_extractor --version\n"
         << "  keyframe_extractor extract --manifest <path> --run-root <path> "
            "--config <path> [--video-id <video_id>] "
-           "[--source-root <directory>] [--fail-fast]\n";
+           "[--source-root <directory>] [--fail-fast]\n"
+        << "  keyframe_extractor state mark-enriched --run-root <path> "
+           "--video-id <video_id> --artifacts <handoff.json>\n"
+        << "  keyframe_extractor state mark-published --run-root <path> "
+           "--video-id <video_id> --manifest <manifest.json>\n"
+        << "  keyframe_extractor state cleanup --run-root <path> "
+           "--video-id <video_id>\n";
 }
 
 /**
@@ -203,6 +211,181 @@ int run_extract_command(int argc, char* argv[]) {
     }
 }
 
+/**
+ * @brief Enumerates the native lifecycle actions exposed by the CLI.
+ */
+enum class StateCommandAction {
+    /** @brief Accept a validated specialist-enrichment handoff. */
+    MarkEnriched,
+    /** @brief Move an enriched staging bundle into durable publication. */
+    MarkPublished,
+    /** @brief Remove temporary source and staging artifacts after publication. */
+    Cleanup,
+};
+
+/**
+ * @brief Stores fully parsed command-line inputs for one state action.
+ */
+struct StateCommandRequest {
+    /** @brief Native state mutation selected by the caller. */
+    StateCommandAction action;
+    /** @brief Root directory owning state, staging, source, and published data. */
+    std::filesystem::path run_root;
+    /** @brief Canonical video identifier whose lifecycle is being advanced. */
+    std::string video_id;
+    /** @brief Optional handoff or native manifest path required by the action. */
+    std::optional<std::filesystem::path> artifact_path;
+};
+
+/**
+ * @brief Parses a state action token into its stable CLI enum value.
+ *
+ * @param action Literal subcommand following the `state` command.
+ * @return Matching StateCommandAction value.
+ * @throws std::invalid_argument If action is unsupported.
+ */
+StateCommandAction parse_state_action(std::string_view action) {
+    if (action == "mark-enriched") {
+        return StateCommandAction::MarkEnriched;
+    }
+    if (action == "mark-published") {
+        return StateCommandAction::MarkPublished;
+    }
+    if (action == "cleanup") {
+        return StateCommandAction::Cleanup;
+    }
+    throw std::invalid_argument("unknown state action: " + std::string(action));
+}
+
+/**
+ * @brief Parses one native state subcommand and its action-specific options.
+ *
+ * @param argc Total number of process command-line arguments.
+ * @param argv Process command-line argument array.
+ * @return Complete StateCommandRequest with only valid action-specific inputs.
+ * @throws std::invalid_argument If an option is unknown, duplicated, or missing.
+ */
+StateCommandRequest parse_state_request(int argc, char* argv[]) {
+    if (argc < 3) {
+        throw std::invalid_argument("state requires an action");
+    }
+
+    const StateCommandAction action = parse_state_action(argv[2]);
+    std::optional<std::string> run_root;
+    std::optional<std::string> video_id;
+    std::optional<std::string> artifacts;
+    std::optional<std::string> manifest;
+
+    for (int index = 3; index < argc; ++index) {
+        const std::string_view option = argv[index];
+        if (option == "--run-root") {
+            assign_option(
+                run_root,
+                option,
+                next_option_value(argc, argv, index, option)
+            );
+        } else if (option == "--video-id") {
+            assign_option(
+                video_id,
+                option,
+                next_option_value(argc, argv, index, option)
+            );
+        } else if (option == "--artifacts") {
+            assign_option(
+                artifacts,
+                option,
+                next_option_value(argc, argv, index, option)
+            );
+        } else if (option == "--manifest") {
+            assign_option(
+                manifest,
+                option,
+                next_option_value(argc, argv, index, option)
+            );
+        } else {
+            throw std::invalid_argument("unknown CLI option: " + std::string(option));
+        }
+    }
+
+    if (!run_root.has_value() || !video_id.has_value()) {
+        throw std::invalid_argument(
+            "state actions require --run-root and --video-id"
+        );
+    }
+
+    if (action == StateCommandAction::MarkEnriched) {
+        if (!artifacts.has_value() || manifest.has_value()) {
+            throw std::invalid_argument(
+                "state mark-enriched requires --artifacts and rejects --manifest"
+            );
+        }
+        return StateCommandRequest{
+            action,
+            std::filesystem::path(run_root.value()),
+            video_id.value(),
+            std::filesystem::path(artifacts.value()),
+        };
+    }
+    if (action == StateCommandAction::MarkPublished) {
+        if (!manifest.has_value() || artifacts.has_value()) {
+            throw std::invalid_argument(
+                "state mark-published requires --manifest and rejects --artifacts"
+            );
+        }
+        return StateCommandRequest{
+            action,
+            std::filesystem::path(run_root.value()),
+            video_id.value(),
+            std::filesystem::path(manifest.value()),
+        };
+    }
+    if (artifacts.has_value() || manifest.has_value()) {
+        throw std::invalid_argument("state cleanup does not accept artifact options");
+    }
+    return StateCommandRequest{
+        action,
+        std::filesystem::path(run_root.value()),
+        video_id.value(),
+        std::nullopt,
+    };
+}
+
+/**
+ * @brief Executes one parsed native lifecycle state command.
+ *
+ * @param argc Total number of process command-line arguments.
+ * @param argv Process command-line argument array.
+ * @return Zero on a successful or exact idempotent command; one on validation or
+ *         filesystem failure.
+ */
+int run_state_command(int argc, char* argv[]) {
+    try {
+        const StateCommandRequest request = parse_state_request(argc, argv);
+        if (request.action == StateCommandAction::MarkEnriched) {
+            hcmai::keyframes_extraction::mark_video_enriched(
+                request.run_root,
+                request.video_id,
+                request.artifact_path.value()
+            );
+        } else if (request.action == StateCommandAction::MarkPublished) {
+            hcmai::keyframes_extraction::mark_video_published(
+                request.run_root,
+                request.video_id,
+                request.artifact_path.value()
+            );
+        } else {
+            hcmai::keyframes_extraction::cleanup_video(
+                request.run_root,
+                request.video_id
+            );
+        }
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << "keyframe_extractor: " << error.what() << '\n';
+        return 1;
+    }
+}
+
 }  // namespace
 
 /**
@@ -220,6 +403,9 @@ int main(int argc, char* argv[]) {
     }
     if (argc >= 2 && std::string_view(argv[1]) == "extract") {
         return run_extract_command(argc, argv);
+    }
+    if (argc >= 2 && std::string_view(argv[1]) == "state") {
+        return run_state_command(argc, argv);
     }
 
     print_usage();

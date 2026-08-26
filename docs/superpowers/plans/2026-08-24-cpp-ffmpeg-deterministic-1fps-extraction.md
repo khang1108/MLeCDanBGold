@@ -843,7 +843,7 @@ enrichment_pending state, and no network dependency.
 - Consumes: validated compact enrichment/publication handoff JSON and an enrichment_pending native bundle.
 - Produces: idempotent mark-enriched, mark-published, and cleanup commands with guarded transitions.
 
-- [ ] **Step 1: Write failing lifecycle tests**
+- [x] **Step 1: Write failing lifecycle tests**
 
 ~~~cpp
 run_state_command({
@@ -891,7 +891,7 @@ require_true(
 );
 ~~~
 
-- [ ] **Step 2: Run lifecycle tests before implementation**
+- [x] **Step 2: Run lifecycle tests before implementation**
 
 ~~~bash
 cmake --build build/keyframes_extraction --target test_publication
@@ -901,7 +901,7 @@ ctest --test-dir build/keyframes_extraction -R publication_unit --output-on-fail
 Expected: FAIL because state command handlers and publication moves do not
 exist.
 
-- [ ] **Step 3: Implement mark-enriched validation**
+- [x] **Step 3: Implement mark-enriched validation**
 
 Require the handoff JSON to contain video_id, frame_count,
 native_manifest_path, frame_id_digest, frame_store_id, config_hash, and an
@@ -911,7 +911,7 @@ the native manifest, store the handoff path in state, and atomically move to
 enriched. Repeating the command with the same handoff is a no-op; a different
 handoff or invalid predecessor is an error.
 
-- [ ] **Step 4: Implement mark-published and cleanup**
+- [x] **Step 4: Implement mark-published and cleanup**
 
 mark-published must require enriched, verify native and enrichment manifests,
 move the complete staging bundle into published/{video_id}/, write
@@ -924,7 +924,7 @@ source/{video_id}.part, staging directory, and temporary download remnants,
 then set state to cleaned. It must never remove published durable images, the
 native manifest, or another video’s directory.
 
-- [ ] **Step 5: Run lifecycle tests and commit**
+- [x] **Step 5: Run lifecycle tests and commit**
 
 ~~~bash
 cmake --build build/keyframes_extraction --parallel

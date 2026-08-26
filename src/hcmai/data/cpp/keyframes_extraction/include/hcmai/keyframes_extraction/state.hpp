@@ -2,9 +2,9 @@
  * @file state.hpp
  * @brief Declares atomic per-video checkpoint state and lifecycle guards.
  *
- * This contract persists native extraction progress as JSON and validates
- * allowed status transitions. It does not download media, inspect images, or
- * publish bundles; those operations use this state boundary in later tasks.
+ * This contract persists native extraction progress as JSON, validates allowed
+ * status transitions, and exposes guarded enrichment/publication cleanup
+ * commands. It does not download media or run enrichment models.
  */
 
 #pragma once
@@ -169,6 +169,72 @@ VideoState transition_state(
     VideoStatus expected_status,
     VideoStatus next_status,
     std::string error = {}
+);
+
+/**
+ * @brief Accepts one validated enrichment handoff for an extracted video.
+ *
+ * The handoff must describe the same native staging manifest, video,
+ * configuration hash, and emitted frame count as the current
+ * ``enrichment_pending`` state. Repeating the command with the same handoff
+ * is a no-op; a different handoff never overwrites accepted provenance.
+ *
+ * @param run_root Root directory containing the native state and staging bundle.
+ * @param video_id Canonical video identifier whose state is advanced.
+ * @param handoff_path Compact JSON handoff produced after specialist enrichment.
+ * @return None; persists the enriched state or throws without partial state.
+ * @throws std::invalid_argument If paths, handoff contents, or predecessor state
+ *         violate the native lifecycle contract.
+ * @throws std::runtime_error If required state or manifest files cannot be read.
+ * @throws std::system_error If the updated checkpoint cannot be published.
+ */
+void mark_video_enriched(
+    const std::filesystem::path& run_root,
+    const std::string& video_id,
+    const std::filesystem::path& handoff_path
+);
+
+/**
+ * @brief Publishes a fully enriched staging bundle through a final manifest marker.
+ *
+ * Durable images, frame JSONL, and accepted enrichment provenance move together
+ * from ``staging/{video_id}`` to ``published/{video_id}``. The published native
+ * manifest is written last, so readers never treat a partial directory as a
+ * complete bundle. A pre-existing complete published bundle is restored if the
+ * replacement path fails before the state transition succeeds.
+ *
+ * @param run_root Root directory containing native state, staging, and published data.
+ * @param video_id Canonical video identifier whose bundle is published.
+ * @param manifest_path Native staging manifest supplied as an explicit guard.
+ * @return None; persists the published state after the final manifest is visible.
+ * @throws std::invalid_argument If provenance, paths, manifests, or lifecycle
+ *         predecessor requirements do not match.
+ * @throws std::runtime_error If required bundle artifacts cannot be read or moved.
+ * @throws std::system_error If filesystem publication or rollback operations fail.
+ */
+void mark_video_published(
+    const std::filesystem::path& run_root,
+    const std::string& video_id,
+    const std::filesystem::path& manifest_path
+);
+
+/**
+ * @brief Removes only temporary source and staging artifacts after publication.
+ *
+ * The command intentionally retains ``published/{video_id}``, including durable
+ * JPEGs and its final native manifest. It is idempotent after a state reaches
+ * ``cleaned`` and never traverses another video's paths.
+ *
+ * @param run_root Root directory containing the native lifecycle directories.
+ * @param video_id Canonical video identifier whose temporary files are removed.
+ * @return None; persists the cleaned state after scoped cleanup succeeds.
+ * @throws std::invalid_argument If video identity or predecessor state is invalid.
+ * @throws std::runtime_error If the published manifest no longer validates.
+ * @throws std::system_error If an exact temporary artifact cannot be removed.
+ */
+void cleanup_video(
+    const std::filesystem::path& run_root,
+    const std::string& video_id
 );
 
 }  // namespace hcmai::keyframes_extraction
