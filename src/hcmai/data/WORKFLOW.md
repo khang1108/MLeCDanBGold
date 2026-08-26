@@ -44,7 +44,7 @@ Enrichments add searchable text layers (Caption, OCR, ASR) that are rigidly alig
 
 Caption and OCR share a very similar pipeline architecture (`EnrichmentService`).
 
-- **Captioning**: Feeds canonical images to Vision-Language Models (VLMs) via `TransformersCaptionAdapter` to generate descriptive natural language.
+- **Captioning**: Feeds canonical images to Qwen VL via `QwenVLCaptionAdapter` to generate retrieval-oriented descriptive natural language.
 - **OCR**: Uses optical character recognition (e.g., `FlorenceAdapter`) to extract dense text blocks found on the screen.
 
 **Algorithm:**
@@ -63,7 +63,7 @@ flowchart LR
     subgraph Enrichment Service
         Batches[Batching Strategy]
         Adapter{Adapter Selection}
-        VLMCaption[Transformers Caption Adapter]
+        VLMCaption[Qwen VL Caption Adapter]
         OCRModel[Florence OCR Adapter]
     end
 

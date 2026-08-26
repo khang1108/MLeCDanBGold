@@ -84,8 +84,6 @@ class LocalAdapter:
         )
         self.ocr_adapter: Any = ocr_adapter or (
             FlorenceAdapter(OCRConfig(
-                checkpoint=config.caption_generation.model_checkpoint,
-                revision=config.caption_generation.revision,
                 device=config.caption_generation.device,
                 dtype=config.caption_generation.dtype,
             ))
@@ -124,7 +122,6 @@ class LocalAdapter:
         """
         if self.captioner is not None:
             self.captioner.resolve_revision()
-        self._share_caption_backend_with_ocr()
         if self.visual_encoder is not None:
             self.visual_encoder._load_model()
         if (
@@ -146,29 +143,6 @@ class LocalAdapter:
             from hcmai.data.enrichment.transcripts.adapters.diarization import DiarizationAdapter
             self.diarization = DiarizationAdapter(self.transcript_config.diarization)
             self.diarization._load_pipeline()
-
-    def _share_caption_backend_with_ocr(self) -> None:
-        """Reuse one Florence model when caption and OCR use the same pin."""
-        if self.captioner is None or self.ocr_adapter is None:
-            return
-        caption_config = getattr(self.captioner, "config", None)
-        ocr_config = getattr(self.ocr_adapter, "config", None)
-        if caption_config is None or ocr_config is None:
-            return
-        if (
-            getattr(caption_config, "model_checkpoint", None)
-            != getattr(ocr_config, "checkpoint", None)
-            or getattr(caption_config, "revision", None)
-            != getattr(ocr_config, "revision", None)
-        ):
-            return
-        model = getattr(self.captioner, "model", None)
-        processor = getattr(self.captioner, "processor", None)
-        if model is None or processor is None:
-            return
-        self.ocr_adapter.model = model
-        self.ocr_adapter.processor = processor
-        self.ocr_adapter.resolved_revision = self.captioner.resolved_revision
 
     def embed_text(self, texts: list[str], source: str = "visual") -> np.ndarray:
         encoder = (

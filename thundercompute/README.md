@@ -26,7 +26,7 @@ LiteLLM private pass-through ── Cloudflare Access ── hosted inference UR
                                                    ▼
                                   FastAPI API → LLMService
                                                 ├─ SigLIP2/BGE encoders
-                                                ├─ Florence captioner
+                                                ├─ Qwen VL captioner
                                                 ├─ OCR/ASR/diarization services
                                                 └─ Qwen VL reranker
 ```
