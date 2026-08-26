@@ -64,6 +64,7 @@ std::int64_t submission_frame_idx(double avg_fps, std::int64_t timestamp_ms) {
     const long double value = std::floor(
         fps_ceiling * static_cast<long double>(timestamp_ms) / 1000.0L
     );
+
     const long double maximum = static_cast<long double>(
         std::numeric_limits<std::int64_t>::max()
     );
@@ -93,8 +94,8 @@ std::string make_frame_id(
     }
 
     std::ostringstream output;
-    output << video_id << "_raw1fps_" << std::setfill('0') << std::setw(9)
-           << sample_index;
+    output  << video_id << "_raw1fps_" << std::setfill('0') << std::setw(9)
+            << sample_index;
     return output.str();
 }
 

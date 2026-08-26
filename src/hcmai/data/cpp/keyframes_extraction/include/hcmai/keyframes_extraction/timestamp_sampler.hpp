@@ -1,3 +1,11 @@
+/**
+ * @file timestamp_sampler.hpp
+ * @brief Declares deterministic nearest-frame selection at fixed timestamps.
+ *
+ * This contract operates on decoded timestamps only. It does not decode video
+ * or assign competition-facing frame coordinates.
+ */
+
 #pragma once
 
 #include <cstdint>

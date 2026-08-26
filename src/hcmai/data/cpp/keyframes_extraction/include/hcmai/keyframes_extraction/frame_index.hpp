@@ -1,3 +1,11 @@
+/**
+ * @file frame_index.hpp
+ * @brief Declares deterministic competition coordinates and internal IDs.
+ *
+ * This contract separates the competition-facing frame_idx from the native
+ * frame_id used for internal artifact joins.
+ */
+
 #pragma once
 
 #include <cstdint>

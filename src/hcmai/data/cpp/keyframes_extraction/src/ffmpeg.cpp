@@ -287,6 +287,7 @@ std::pair<int, int> scaled_dimensions(
     const long long scaled_height = std::llround(
         static_cast<long double>(source_height) * scale
     );
+
     if (scaled_width <= 0 || scaled_height <= 0 ||
         scaled_width > std::numeric_limits<int>::max() ||
         scaled_height > std::numeric_limits<int>::max()) {
@@ -391,6 +392,8 @@ VideoDecoder::VideoDecoder(const std::filesystem::path& video_path) {
     auto implementation = std::make_unique<Impl>(video_path);
     const std::string path_text = video_path.string();
 
+    // Open the source video and read its stream information.
+    // Return a value < 0 on failure, and a positive value on success.
     int result = avformat_open_input(
         &implementation->format_context,
         path_text.c_str(),
@@ -401,16 +404,22 @@ VideoDecoder::VideoDecoder(const std::filesystem::path& video_path) {
         throw_ffmpeg_error("unable to open video", video_path, result);
     }
 
+    // Retrieve stream information.
     result = avformat_find_stream_info(implementation->format_context, nullptr);
     if (result < 0) {
         throw_ffmpeg_error("unable to inspect video streams", video_path, result);
     }
 
+    // Loop through all streams to find the first video stream.
     AVStream* video_stream = nullptr;
     for (unsigned int index = 0;
-         index < implementation->format_context->nb_streams;
-         ++index) {
+            index < implementation->format_context->nb_streams;
+            ++index) {
+
+        // Get the candidate stream and verify it is a video stream with codec parameters.
         AVStream* candidate = implementation->format_context->streams[index];
+
+        // If the candidate is a video stream, record it and stop searching.
         if (candidate != nullptr && candidate->codecpar != nullptr &&
             candidate->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             video_stream = candidate;
@@ -436,6 +445,8 @@ VideoDecoder::VideoDecoder(const std::filesystem::path& video_path) {
         );
     }
 
+    // Find the decoder for the video stream and allocate a codec context.
+    // A decoder is required to convert compressed packets into raw frames.
     const AVCodec* decoder = avcodec_find_decoder(video_stream->codecpar->codec_id);
     if (decoder == nullptr) {
         throw std::runtime_error(
@@ -449,6 +460,8 @@ VideoDecoder::VideoDecoder(const std::filesystem::path& video_path) {
             "unable to allocate decoder context for '" + video_path.string() + "'"
         );
     }
+    // Copy the codec parameters from the video stream to the
+    // codec context and open the decoder.
     result = avcodec_parameters_to_context(
         implementation->codec_context,
         video_stream->codecpar
@@ -456,6 +469,8 @@ VideoDecoder::VideoDecoder(const std::filesystem::path& video_path) {
     if (result < 0) {
         throw_ffmpeg_error("unable to copy video codec parameters", video_path, result);
     }
+
+    // Open the decoder to prepare for decoding packets into frames.
     result = avcodec_open2(implementation->codec_context, decoder, nullptr);
     if (result < 0) {
         throw_ffmpeg_error("unable to open video decoder", video_path, result);
@@ -470,12 +485,15 @@ VideoDecoder::VideoDecoder(const std::filesystem::path& video_path) {
 
     implementation->packet = av_packet_alloc();
     implementation->decode_frame = av_frame_alloc();
+
     if (implementation->packet == nullptr || implementation->decode_frame == nullptr) {
         throw std::runtime_error(
             "unable to allocate decoder packet or frame for '" + video_path.string() + "'"
         );
     }
 
+    // Record the stream time base and metadata for later use
+    // in decoding and timestamp conversion.
     implementation->time_base = video_stream->time_base;
     implementation->video_info = VideoInfo{
         avg_fps,
@@ -542,11 +560,16 @@ std::optional<DecodedFrame> VideoDecoder::next() {
         return std::nullopt;
     }
 
+    /**
+     * Decodes frames in a loop until a frame is successfully received,
+     * the decoder is exhausted, or an error occurs.
+     */
     while (true) {
         const int receive_result = avcodec_receive_frame(
             impl_->codec_context,
             impl_->decode_frame
         );
+
         if (receive_result == 0) {
             const std::int64_t pts = impl_->decode_frame->best_effort_timestamp;
             try {
@@ -555,6 +578,8 @@ std::optional<DecodedFrame> VideoDecoder::next() {
                     impl_->time_base,
                     impl_->video_path
                 );
+
+                // Clone the decoded frame to a shared pointer for RAII ownership.
                 AVFrame* cloned = av_frame_clone(impl_->decode_frame);
                 if (cloned == nullptr) {
                     throw std::runtime_error(
@@ -562,8 +587,11 @@ std::optional<DecodedFrame> VideoDecoder::next() {
                         impl_->video_path.string() + "'"
                     );
                 }
+
+                // Share the cloned frame so it is freed when no longer used.
                 const std::shared_ptr<AVFrame> image = shared_frame(cloned);
-                av_frame_unref(impl_->decode_frame);
+                av_frame_unref(impl_->decode_frame); // Release the reusable decode frame for the next call.
+
                 return DecodedFrame{
                     impl_->next_ordinal++,
                     pts,
@@ -689,12 +717,18 @@ EncodedImage encode_jpeg(
     }
 
     const int quantizer = jpeg_quantizer(variant.quality);
+
     encoder_context->pix_fmt = AV_PIX_FMT_YUVJ420P;
+
     encoder_context->width = output_width;
     encoder_context->height = output_height;
+
     encoder_context->time_base = AVRational{1, 1};
+
     encoder_context->flags |= AV_CODEC_FLAG_QSCALE;
+
     encoder_context->global_quality = quantizer * FF_QP2LAMBDA;
+
     encoder_context->qmin = quantizer;
     encoder_context->qmax = quantizer;
 
@@ -710,8 +744,10 @@ EncodedImage encode_jpeg(
         );
     }
     encoded_frame->format = encoder_context->pix_fmt;
+
     encoded_frame->width = output_width;
     encoded_frame->height = output_height;
+
     result = av_frame_get_buffer(encoded_frame.get(), 32);
     if (result < 0) {
         throw_ffmpeg_error("unable to allocate JPEG frame buffer", output_path, result);
