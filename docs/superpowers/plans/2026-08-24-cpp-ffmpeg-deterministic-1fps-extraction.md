@@ -950,7 +950,7 @@ rejection, cleanup scoping, and durable-image preservation.
 - Consumes: data/media-info-aic25-b1/media-info/*.json records with filename-stem video IDs, watch_url, and integral length.
 - Produces: deterministic input/media_manifest.jsonl, normalized input/extraction_config.json, and Python manifest/config functions.
 
-- [ ] **Step 1: Write failing input-manifest tests**
+- [x] **Step 1: Write failing input-manifest tests**
 
 ~~~python
 def test_build_native_input_manifest_is_sorted_and_strict(tmp_path: Path) -> None:
@@ -983,7 +983,7 @@ def test_manifest_rejects_duplicate_urls_and_invalid_lengths(tmp_path: Path) -> 
         build_native_input_manifest(media_info, tmp_path / "input.jsonl")
 ~~~
 
-- [ ] **Step 2: Run the Python tests before implementation**
+- [x] **Step 2: Run the Python tests before implementation**
 
 ~~~bash
 pytest -q tests/data/test_custom_manifest.py tests/scripts/test_custom_extraction_cli.py
@@ -991,7 +991,7 @@ pytest -q tests/data/test_custom_manifest.py tests/scripts/test_custom_extractio
 
 Expected: FAIL because the custom manifest module and CLI do not exist.
 
-- [ ] **Step 3: Implement strict deterministic manifest generation**
+- [x] **Step 3: Implement strict deterministic manifest generation**
 
 The module must expose
 build_native_input_manifest(media_info_dir: str | Path, output_path: str | Path)
@@ -1019,7 +1019,7 @@ write_extraction_config serializes those values as JSON and adds a SHA-256
 config_hash over the canonical JSON payload. Native state records that hash;
 later Python handoffs carry the same value.
 
-- [ ] **Step 4: Implement and test the preparation CLI**
+- [x] **Step 4: Implement and test the preparation CLI**
 
 Support:
 
@@ -1035,7 +1035,7 @@ python scripts/prepare_custom_extraction.py
 Print JSON with video_count, unique_url_count, metadata_length_seconds,
 sample_period_ms, and both generated paths.
 
-- [ ] **Step 5: Run tests and corpus metadata validation**
+- [x] **Step 5: Run tests and corpus metadata validation**
 
 ~~~bash
 pytest -q tests/data/test_custom_manifest.py tests/scripts/test_custom_extraction_cli.py
@@ -1050,7 +1050,7 @@ python scripts/prepare_custom_extraction.py \
 Expected: 873 videos, 873 unique URLs, and 470,428 metadata seconds; no video
 is downloaded by this preparation command.
 
-- [ ] **Step 6: Commit the Python input boundary**
+- [x] **Step 6: Commit the Python input boundary**
 
 ~~~bash
 git add src/hcmai/data/ingestion/custom_manifest.py src/hcmai/data/ingestion/__init__.py configs/custom-extraction.yaml scripts/prepare_custom_extraction.py tests/data/test_custom_manifest.py tests/scripts/test_custom_extraction_cli.py
