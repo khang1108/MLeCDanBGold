@@ -6,12 +6,16 @@ import json
 import math
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
+from hcmai.data.ingestion.custom_frames import CustomFrameStoreConfig
 from hcmai.data.ingestion.custom_frames import (
     iter_native_frame_records,
+    materialize_custom_frame_store,
     validate_native_video_bundle,
 )
+from hcmai.data.stores.frame import FrameStore
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -179,3 +183,50 @@ def test_native_validation_rejects_missing_or_escaping_images(tmp_path: Path) ->
     )
     with pytest.raises(ValueError, match="must be relative"):
         validate_native_video_bundle(bundle, run_root=tmp_path / "escaped")
+
+
+def test_materialize_custom_frame_store_publishes_validated_bundle(
+    tmp_path: Path,
+) -> None:
+    """Create one atomic FrameStore without replacing custom identity or images."""
+
+    write_valid_native_bundle(tmp_path, "L01_V001", count=2)
+    write_valid_native_bundle(tmp_path, "L01_V002", count=1)
+
+    output = materialize_custom_frame_store(
+        CustomFrameStoreConfig(
+            run_root=tmp_path,
+            output_root=tmp_path / "corpus",
+            frame_store_id="custom-raw1fps-v1",
+            selected_video_ids=("L01_V002", "L01_V001"),
+        )
+    )
+
+    table = pd.read_parquet(output)
+    assert table["frame_id"].tolist() == [
+        "L01_V001_raw1fps_000000000",
+        "L01_V001_raw1fps_000000001",
+        "L01_V002_raw1fps_000000000",
+    ]
+    assert table["keyframe_order"].isna().all()
+    assert len(FrameStore(output)) == 3
+    manifest = json.loads((tmp_path / "corpus" / "manifest.json").read_text())
+    assert manifest["source"] == "custom_raw_video_1fps"
+    assert manifest["frame_count"] == 3
+    assert manifest["video_count"] == 2
+
+
+def test_materialization_refuses_one_missing_published_video(tmp_path: Path) -> None:
+    """Fail the whole corpus publication rather than silently dropping a video."""
+
+    write_valid_native_bundle(tmp_path, "L01_V001", count=1)
+
+    with pytest.raises(ValueError, match="missing validated published bundle"):
+        materialize_custom_frame_store(
+            CustomFrameStoreConfig(
+                run_root=tmp_path,
+                output_root=tmp_path / "corpus",
+                frame_store_id="custom-raw1fps-v1",
+                selected_video_ids=("L01_V001", "L01_V002"),
+            )
+        )

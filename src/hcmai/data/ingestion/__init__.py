@@ -2,8 +2,10 @@
 
 from .btc import BTCIngestionConfig, import_btc_frame_store
 from .custom_frames import (
+    CustomFrameStoreConfig,
     NativeValidationReport,
     iter_native_frame_records,
+    materialize_custom_frame_store,
     validate_native_video_bundle,
 )
 from .custom_manifest import build_native_input_manifest, write_extraction_config
@@ -11,10 +13,12 @@ from .custom_manifest import build_native_input_manifest, write_extraction_confi
 
 __all__ = [
     "BTCIngestionConfig",
+    "CustomFrameStoreConfig",
     "NativeValidationReport",
     "build_native_input_manifest",
     "import_btc_frame_store",
     "iter_native_frame_records",
+    "materialize_custom_frame_store",
     "validate_native_video_bundle",
     "write_extraction_config",
 ]

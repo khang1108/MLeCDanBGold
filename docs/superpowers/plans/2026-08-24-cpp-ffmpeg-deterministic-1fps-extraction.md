@@ -1160,7 +1160,7 @@ git commit -m "feat: validate native frame bundles"
 - Consumes: a run root containing published per-video bundles and a selected-video list/config.
 - Produces: corpus/frames.parquet, corpus/manifest.json, and a CustomFrameStoreConfig/materialize_custom_frame_store API that existing FrameStore can load.
 
-- [ ] **Step 1: Write failing materialization tests**
+- [x] **Step 1: Write failing materialization tests**
 
 ~~~python
 def test_materialize_custom_frame_store_publishes_validated_bundle(tmp_path: Path) -> None:
@@ -1201,7 +1201,7 @@ def test_materialization_refuses_one_missing_published_video(tmp_path: Path) -> 
         )
 ~~~
 
-- [ ] **Step 2: Run materialization tests before implementation**
+- [x] **Step 2: Run materialization tests before implementation**
 
 ~~~bash
 pytest -q tests/data/test_custom_frames.py tests/scripts/test_custom_extraction_cli.py
@@ -1209,7 +1209,7 @@ pytest -q tests/data/test_custom_frames.py tests/scripts/test_custom_extraction_
 
 Expected: FAIL because no custom corpus materializer exists.
 
-- [ ] **Step 3: Implement atomic global publication**
+- [x] **Step 3: Implement atomic global publication**
 
 Expose CustomFrameStoreConfig with fields run_root, output_root,
 frame_store_id, and selected_video_ids, plus
@@ -1239,7 +1239,7 @@ ordered frame-ID digest. Refuse publication if any selected video is absent,
 not published, invalid, or has an image outside run_root. Do not modify the
 existing BTC output directory.
 
-- [ ] **Step 4: Implement the materialization CLI and run it on fixtures**
+- [x] **Step 4: Implement the materialization CLI and run it on fixtures**
 
 Support:
 
@@ -1254,7 +1254,7 @@ python scripts/materialize_custom_frames.py
 Print the output Parquet path and a JSON count summary. The CLI must not invoke
 FFmpeg, yt-dlp, or any model.
 
-- [ ] **Step 5: Run tests and commit the Parquet boundary**
+- [x] **Step 5: Run tests and commit the Parquet boundary**
 
 ~~~bash
 pytest -q tests/data/test_custom_frames.py tests/scripts/test_custom_extraction_cli.py tests/test_data_loader.py

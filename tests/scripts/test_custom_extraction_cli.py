@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts import prepare_custom_extraction
+from scripts import materialize_custom_frames, prepare_custom_extraction
 
 
 def test_prepare_cli_writes_inputs_and_reports_metadata_only_stats(
@@ -59,3 +59,32 @@ def test_prepare_cli_writes_inputs_and_reports_metadata_only_stats(
     assert result["sample_period_ms"] == 1_000
     assert Path(result["manifest_path"]).is_file()
     assert Path(result["config_path"]).is_file()
+
+
+def test_materialize_cli_never_invokes_native_extraction(
+    tmp_path: Path,
+    capsys: object,
+) -> None:
+    """Materialize an already published bundle through metadata/Parquet only."""
+
+    from tests.data.test_custom_frames import write_valid_native_bundle
+
+    write_valid_native_bundle(tmp_path, "L01_V001", count=1)
+    output_root = tmp_path / "corpus"
+
+    assert materialize_custom_frames.main(
+        [
+            "--run-root",
+            str(tmp_path),
+            "--output-root",
+            str(output_root),
+            "--frame-store-id",
+            "custom-test-v1",
+            "--video-id",
+            "L01_V001",
+        ]
+    ) == 0
+
+    result = json.loads(capsys.readouterr().out)
+    assert Path(result["frames_path"]).is_file()
+    assert result["frame_count"] == 1

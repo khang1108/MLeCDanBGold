@@ -17,7 +17,12 @@ import math
 from pathlib import Path
 from typing import Any, Literal
 
+import pandas as pd
+
 from hcmai.common.schemas import FrameRecord
+from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
+from hcmai.data.enrichment.bundle import publish_staged_bundle
+from hcmai.data.stores.frame import FrameStore
 
 
 _NATIVE_EXTRACTOR_VERSION = "hcmai-keyframes-extractor/0.1.0"
@@ -55,6 +60,48 @@ class _ValidatedBundle:
     rows: tuple[dict[str, object], ...]
     run_root: Path
     bundle_root: Path
+
+
+@dataclass(frozen=True)
+class CustomFrameStoreConfig:
+    """Configuration for one atomic custom raw-video FrameStore publication.
+
+    Attributes:
+        run_root: Native lifecycle root containing validated published bundles.
+        output_root: Directory that receives ``frames.parquet`` and ``manifest.json``.
+        frame_store_id: Isolated lineage identifier for this custom corpus.
+        selected_video_ids: Explicit source IDs required in the published corpus.
+    """
+
+    run_root: Path
+    output_root: Path
+    frame_store_id: str
+    selected_video_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        """Normalize paths and reject an ambiguous or empty corpus selection.
+
+        Raises:
+            ValueError: If lineage or selected IDs are blank, unsafe, duplicated,
+                or absent.
+        """
+
+        normalized_run_root = Path(self.run_root).expanduser()
+        normalized_output_root = Path(self.output_root).expanduser()
+        if not str(normalized_run_root).strip() or not str(normalized_output_root).strip():
+            raise ValueError("run_root and output_root must not be blank")
+        if not isinstance(self.frame_store_id, str) or not self.frame_store_id.strip():
+            raise ValueError("frame_store_id must be a non-blank string")
+        selected = tuple(self.selected_video_ids)
+        if not selected:
+            raise ValueError("selected_video_ids must not be empty")
+        for video_id in selected:
+            _require_safe_video_id(video_id, label="selected_video_ids")
+        if len(selected) != len(set(selected)):
+            raise ValueError("selected_video_ids must not contain duplicates")
+        object.__setattr__(self, "run_root", normalized_run_root)
+        object.__setattr__(self, "output_root", normalized_output_root)
+        object.__setattr__(self, "selected_video_ids", selected)
 
 
 def _require_object(value: object, *, label: str) -> dict[str, object]:
@@ -710,8 +757,166 @@ def iter_native_frame_records(
         )
 
 
+def _submission_coordinate_diagnostics(
+    records: list[FrameRecord],
+) -> dict[str, int]:
+    """Summarize allowed non-unique competition coordinates for observability.
+
+    Args:
+        records: Fully validated canonical rows in final corpus order.
+
+    Returns:
+        Counts for duplicate groups, duplicate rows, and maximum multiplicity.
+    """
+
+    counts = Counter((record.video_id, record.frame_idx) for record in records)
+    duplicate_counts = [count for count in counts.values() if count > 1]
+    return {
+        "duplicate_submission_coordinate_groups": len(duplicate_counts),
+        "duplicate_submission_coordinate_rows": sum(duplicate_counts),
+        "maximum_submission_coordinate_multiplicity": max(counts.values(), default=0),
+    }
+
+
+def _validate_staged_frame_store(
+    frames_path: Path,
+    *,
+    expected_frame_ids: list[str],
+) -> None:
+    """Re-read staged Parquet through shared FrameRecord and FrameStore contracts.
+
+    Args:
+        frames_path: Staged Parquet file before global publication.
+        expected_frame_ids: Exact final deterministic ordering expected from rows.
+
+    Returns:
+        None; returns only after all staged rows and store indexes validate.
+
+    Raises:
+        ValueError: If re-read rows or order differ from the validated input.
+    """
+
+    table = pd.read_parquet(frames_path)
+    rows = table.astype(object).where(table.notna(), None).to_dict(orient="records")
+    records = [FrameRecord.model_validate(row) for row in rows]
+    if [record.frame_id for record in records] != expected_frame_ids:
+        raise ValueError("staged custom FrameStore changed canonical frame order")
+    store = FrameStore(frames_path)
+    if [record.frame_id for record in store.iter_frames()] != expected_frame_ids:
+        raise ValueError("staged custom FrameStore failed runtime order validation")
+
+
+def materialize_custom_frame_store(config: CustomFrameStoreConfig) -> Path:
+    """Atomically publish validated custom native frames as a canonical Parquet store.
+
+    Args:
+        config: Explicit native run, output root, custom lineage, and selected IDs.
+
+    Returns:
+        Final ``frames.parquet`` path under ``config.output_root``.
+
+    Raises:
+        ValueError: If any selected published bundle is missing, invalid, mixed in
+            config provenance, or cannot form one canonical FrameStore.
+        OSError: If staged artifact publication cannot complete atomically.
+    """
+
+    run_root = config.run_root.resolve()
+    if not run_root.is_dir():
+        raise ValueError(f"run_root must be an existing directory: {run_root}")
+
+    selected_video_ids = tuple(sorted(config.selected_video_ids))
+    records: list[FrameRecord] = []
+    reports: list[NativeValidationReport] = []
+    per_video_frame_counts: dict[str, int] = {}
+    for video_id in selected_video_ids:
+        bundle_root = run_root / "published" / video_id
+        if not bundle_root.is_dir():
+            raise ValueError(f"missing validated published bundle: {video_id}")
+        validated = _validated_native_bundle(
+            bundle_root,
+            run_root=run_root,
+            expected_status="published",
+            image_variant="durable",
+        )
+        video_records = [
+            _record_from_native_row(
+                row,
+                run_root=validated.run_root,
+                bundle_root=validated.bundle_root,
+                image_variant="durable",
+            )
+            for row in validated.rows
+        ]
+        if len(video_records) != validated.report.frame_count:
+            raise ValueError("validated native bundle changed during materialization")
+        reports.append(validated.report)
+        records.extend(video_records)
+        per_video_frame_counts[video_id] = len(video_records)
+
+    frame_ids = [record.frame_id for record in records]
+    if len(frame_ids) != len(set(frame_ids)):
+        raise ValueError("custom corpus contains duplicate frame_id values")
+    config_hashes = {report.config_hash for report in reports}
+    if len(config_hashes) != 1:
+        raise ValueError("custom corpus cannot mix native config_hash values")
+
+    diagnostics = _submission_coordinate_diagnostics(records)
+    manifest: dict[str, object] = {
+        "pipeline_version": "custom-raw-video-1fps-v1",
+        "source": "custom_raw_video_1fps",
+        "frame_store_id": config.frame_store_id,
+        "run_root": str(run_root),
+        "video_count": len(selected_video_ids),
+        "frame_count": len(records),
+        "sample_period_ms": 1_000,
+        "submission_coordinate_formula": "floor(ceil(avg_fps) * timestamp_ms / 1000)",
+        "resume_enabled": True,
+        "config_hash": next(iter(config_hashes)),
+        "frame_id_digest": _frame_id_digest(frame_ids),
+        "per_video_frame_counts": per_video_frame_counts,
+        **diagnostics,
+    }
+    output_root = config.output_root
+    output_root.mkdir(parents=True, exist_ok=True)
+    output_path = output_root / "frames.parquet"
+    manifest_path = output_root / "manifest.json"
+    staged_frames = output_root / ".frames.parquet.staged"
+    staged_manifest = output_root / ".manifest.json.staged"
+    table_rows = [record.model_dump(mode="python") for record in records]
+    try:
+        atomic_write(
+            staged_frames,
+            lambda path: write_parquet(
+                pd.DataFrame(
+                    table_rows,
+                    columns=list(FrameRecord.model_fields),
+                ),
+                path,
+                index=False,
+            ),
+        )
+        atomic_write(staged_manifest, lambda path: write_json(manifest, path))
+        _validate_staged_frame_store(
+            staged_frames,
+            expected_frame_ids=frame_ids,
+        )
+        if read_json(staged_manifest) != manifest:
+            raise ValueError("staged custom FrameStore manifest failed round-trip validation")
+        publish_staged_bundle(
+            (staged_frames, staged_manifest),
+            (output_path, manifest_path),
+        )
+    finally:
+        staged_frames.unlink(missing_ok=True)
+        staged_manifest.unlink(missing_ok=True)
+    return output_path
+
+
 __all__ = [
+    "CustomFrameStoreConfig",
     "NativeValidationReport",
     "iter_native_frame_records",
+    "materialize_custom_frame_store",
     "validate_native_video_bundle",
 ]
