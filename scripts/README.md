@@ -116,6 +116,34 @@ frame_enrichment.parquet         temporary compatibility projection only
 This V1 sequence intentionally ends at FrameContext. It does not build a
 retrieval index.
 
+## YOLOE object detection
+
+`generate_object_enrichment.py` only imports organizer-provided detections. A
+self-extracted corpus has none, so `detect_objects.py` runs YOLOE and publishes
+the same per-frame object JSON contract. Install `.[objects]` first.
+
+```bash
+# Detect; the run resumes from published JSON, so --limit is a safe smoke pass
+PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py --limit 200
+PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py
+
+# Import the generated JSON through the existing object importer
+PYTHONPATH=.:src aic/bin/python scripts/generate_object_enrichment.py \
+  --config configs/enrichment.yaml \
+  --objects-root data/objects_yoloe \
+  --output artifacts/enrichment/objects_yoloe \
+  --artifact-version object-yoloe-v1
+
+# Context rebuild; the wider budget holds a finer-grained label vocabulary
+PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
+  --config configs/enrichment.yaml --object-token-budget 80 \
+  --object-frames artifacts/enrichment/objects_yoloe/frames.parquet \
+  --output artifacts/enrichment/context_yoloe
+```
+
+Outputs are published beside the BTC object artifacts rather than over them, so
+both label sources stay comparable.
+
 ## Fast-track multimodal index build
 
 `build_retrieval_indexes.py` is the explicit offline entry point for the
