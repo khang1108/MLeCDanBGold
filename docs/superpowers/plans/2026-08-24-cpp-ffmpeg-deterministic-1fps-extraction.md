@@ -1068,7 +1068,7 @@ git commit -m "feat: prepare custom extraction manifest"
 - Consumes: native staging/{video_id}/frames.jsonl or published/{video_id}/frames.jsonl, its per-video manifest, and run_root.
 - Produces: NativeValidationReport, validated FrameRecord rows, and rejection on any identity/path/count/formula mismatch.
 
-- [ ] **Step 1: Write failing validation tests**
+- [x] **Step 1: Write failing validation tests**
 
 ~~~python
 def test_native_rows_map_to_frame_records_without_keyframe_order(tmp_path: Path) -> None:
@@ -1093,7 +1093,7 @@ def test_native_validation_rejects_formula_mismatch_but_allows_coordinate_collis
         validate_native_video_bundle(bundle, run_root=tmp_path, expected_status="published")
 ~~~
 
-- [ ] **Step 2: Run validation tests before implementation**
+- [x] **Step 2: Run validation tests before implementation**
 
 ~~~bash
 pytest -q tests/data/test_custom_frames.py
@@ -1101,7 +1101,7 @@ pytest -q tests/data/test_custom_frames.py
 
 Expected: FAIL because no native bundle validator exists.
 
-- [ ] **Step 3: Implement typed native-row validation**
+- [x] **Step 3: Implement typed native-row validation**
 
 Create NativeValidationReport with fields video_id, frame_count,
 expected_frame_count, duplicate_submission_coordinate_groups, frame_id_digest,
@@ -1131,7 +1131,7 @@ must be relative to run_root as published/{video_id}/images/{filename}. For
 staging bundles, use staging/{video_id}/images/{filename}. The temporary OCR
 variant must never be written into the final global FrameStore.
 
-- [ ] **Step 4: Run validation and existing frame-store regression tests**
+- [x] **Step 4: Run validation and existing frame-store regression tests**
 
 ~~~bash
 pytest -q tests/data/test_custom_frames.py tests/test_data_loader.py tests/test_frame_assets.py
@@ -1141,7 +1141,7 @@ Expected: PASS, including keyframe_order=None, duplicate
 submission-coordinate acceptance, missing-image rejection, and formula mismatch
 rejection.
 
-- [ ] **Step 5: Commit the Python validator**
+- [x] **Step 5: Commit the Python validator**
 
 ~~~bash
 git add src/hcmai/data/ingestion/custom_frames.py src/hcmai/data/ingestion/__init__.py tests/data/test_custom_frames.py
