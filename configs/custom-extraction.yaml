@@ -7,3 +7,7 @@ enrichment_jpeg_quality: 95
 write_enrichment_images: true
 extractor_version: hcmai-keyframes-extractor/0.1.0
 frame_store_id: custom-raw1fps-v1
+# These operator defaults are recorded in the generated strict JSON config.
+run_root: runs/custom-raw1fps-v1
+native_executable: build/keyframes_extraction/keyframe_extractor
+yt_dlp_binary: yt-dlp

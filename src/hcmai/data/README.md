@@ -1,9 +1,10 @@
 # HCMAI 2026 BTC-native data preparation
 
 `hcmai.data` owns canonical frame ingestion, specialist evidence artifacts,
-derived frame context, and typed data access. The active competition profile
-uses organizer-provided BTC keyframes and objects; it does not decode videos to
-extract another frame set.
+derived frame context, and typed data access. The active competition baseline
+uses organizer-provided BTC keyframes and objects. The custom raw-video path is
+a separately invoked offline corpus with its own run root and frame_store_id;
+it does not overwrite or replace BTC preparation.
 
 ## Competition flow
 
@@ -22,7 +23,9 @@ evidence and is intentionally absent from FrameContext dependency identity and
 text.
 
 `src/hcmai/data/preprocessing/**` remains available for non-BTC experiments.
-It is not used by the HCMAI 2026 competition preparation profile.
+The custom raw-video corpus instead uses the isolated C++17/FFmpeg package at
+`src/hcmai/data/cpp/keyframes_extraction/` and the validation boundary under
+`hcmai.data.ingestion`.
 
 ## Artifact ownership
 
@@ -92,6 +95,72 @@ If the videos live elsewhere, change only `--videos-root`. The V1 enrichment
 sequence ends at FrameContext; retrieval/index construction belongs to a
 separate plan.
 
+## Custom raw-video 1-FPS workflow
+
+This optional offline path retains a separate custom corpus and never modifies
+BTC frames, BTC mappings, or the BTC frame_store_id. It uses the organizer
+competition coordinate exactly as
+`floor(ceil(avg_fps) * timestamp_ms / 1000)`, while its `frame_id` is an
+internal `{video_id}_raw1fps_{sample_index}` identity.
+
+```text
+prepare_custom_extraction.py
+  -> native extract
+  -> validate staging frames.jsonl
+  -> per-video Caption / Objects / visual on durable JPEGs
+  -> per-video OCR on temporary high-resolution JPEGs
+  -> per-video ASR on retained source video
+  -> write_enrichment_handoff
+  -> native state mark-enriched
+  -> native state mark-published
+  -> native cleanup
+  -> materialize corpus/frames.parquet
+  -> build FrameContext, embeddings, and indexes
+```
+
+Prepare metadata and strict native settings without downloading a video:
+
+```bash
+PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_extraction.py \
+  --media-info-dir data/media-info-aic25-b1/media-info \
+  --run-root runs/custom-raw1fps-v1 \
+  --native-executable build/keyframes_extraction/keyframe_extractor \
+  --frame-store-id custom-raw1fps-v1 \
+  --yt-dlp-binary yt-dlp
+```
+
+Run the native extractor only after the local/release gate is accepted:
+
+```bash
+build/keyframes_extraction/keyframe_extractor extract \
+  --manifest runs/custom-raw1fps-v1/input/media_manifest.jsonl \
+  --run-root runs/custom-raw1fps-v1 \
+  --config runs/custom-raw1fps-v1/input/extraction_config.json \
+  --video-id L01_V001 \
+  --fail-fast
+```
+
+`materialize_video_enrichment_frames(..., image_variant="durable")` supplies
+Caption, Objects, and visual stages. Its `image_variant="enrichment"` output
+is OCR-only scratch data and must not be sent to the global materializer.
+After the handoff validator accepts all specialist artifacts, call the Python
+native-state wrappers rather than editing `state/{video_id}.json` directly.
+`cleanup_video` is allowed only after native publication and retains
+`published/{video_id}` durable JPEGs and manifest.
+
+Finally materialize only selected validated published bundles:
+
+```bash
+PYTHONPATH=.:src aic/bin/python scripts/materialize_custom_frames.py \
+  --run-root runs/custom-raw1fps-v1 \
+  --output-root runs/custom-raw1fps-v1/corpus \
+  --frame-store-id custom-raw1fps-v1 \
+  --video-id L01_V001
+```
+
+Custom `FrameRecord.image_path` values are relative to the custom run root, so
+downstream image consumers must configure that run root as their dataset root.
+
 ## Public boundaries
 
 - `src/hcmai/data/pipeline.py`: `DataService` imports the configured BTC frame
@@ -101,6 +170,8 @@ separate plan.
 - `src/hcmai/data/enrichment/transcripts/pipeline.py`: `TranscriptService`
   owns video-level ASR and diarization.
 - `src/hcmai/data/stores/`: typed readers for specialist and derived artifacts.
+- `src/hcmai/data/ingestion/custom_state.py`: safe Python argv wrappers for the
+  native `mark-enriched`, `mark-published`, and `cleanup` lifecycle commands.
 
 Serving code reads prepared artifacts. It must not regenerate captions, OCR,
 objects, transcripts, context, or other corpus-scale outputs in a request.

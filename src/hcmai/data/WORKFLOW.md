@@ -1,8 +1,10 @@
 # Data Ingestion and Enrichment Workflows
 
 This document outlines the BTC-native workflow for producing the canonical
-FrameStore and its multimodal enrichments in the `hcmai` system. Custom video
-frame extraction is not part of the active competition path.
+FrameStore and its multimodal enrichments in the `hcmai` system. BTC remains
+the active competition baseline. Custom raw-video extraction is an explicitly
+separate offline workflow with its own frame_store_id and never replaces BTC
+artifacts in place.
 
 ## 1. Canonical FrameStore Ingestion
 
@@ -123,3 +125,35 @@ flowchart TD
 Across all three pipelines (Preprocessing, Caption/OCR, ASR), data integrity is rigidly enforced:
 - **Foreign Key Stability**: Enrichments strictly depend on `frame_id`. If an enrichment process observes an unknown `frame_id` or reorders the dataset, the write is aborted.
 - **Atomic Operations**: All artifacts (Parquet tables and JSON manifests) write to a `.partial` staging path and are defensively moved/renamed at the end to prevent corruption during an interrupted run.
+
+---
+
+## 3. Custom raw-video 1-FPS workflow
+
+The custom workflow is opt-in and bounded at video granularity. It preserves
+`video_id`, internal `frame_id`, competition-facing `frame_idx`, and actual
+`timestamp_ms` throughout native extraction, enrichment, and materialization.
+`frame_idx` is always checked against
+`floor(ceil(avg_fps) * timestamp_ms / 1000)`; it is never replaced with
+keyframe order or an array position.
+
+1. Run `prepare_custom_extraction.py` to build the sorted media-info JSONL and
+   strict C++ config. This stage reads metadata only and does not download.
+2. Run native `extract` for a bounded selected video/batch. It creates durable
+   JPEGs plus temporary high-resolution OCR JPEGs in `staging/{video_id}`.
+3. Validate the staging bundle. Caption, Object, and visual stages consume the
+   durable table; OCR consumes the high-resolution temporary table; ASR reads
+   the retained source video as independent timeline evidence.
+4. `write_enrichment_handoff` validates Caption/OCR/Object frame identity and
+   ASR video/timeline identity. Each modality may be explicit
+   `not_evaluated`; that status is not treated as negative evidence.
+5. Call `mark_video_enriched`, `mark_video_published`, then `cleanup_video`.
+   Only the native executable writes the state JSON. Cleanup retains
+   `published/{video_id}` durable images and native manifest.
+6. Run `materialize_custom_frames.py` only over validated published IDs. The
+   global custom FrameStore contains durable image paths only, with the custom
+   run root configured as its dataset root for downstream image consumers.
+
+The full corpus remains gated by the synthetic/local acceptance test and a
+separate operational pilot decision. The custom workflow does not authorize
+unbounded download, model inference, or cloud execution from serving paths.

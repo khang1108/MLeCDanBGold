@@ -1373,7 +1373,7 @@ modality status preservation, and artifact identity mismatch rejection.
 - Consumes: native executable path, run root, video ID, and validated handoff/publication manifests.
 - Produces: safe Python calls for native state commands and documented ordering for extraction, enrichment, publication, cleanup, embedding, and indexing.
 
-- [ ] **Step 1: Write failing argv-boundary tests**
+- [x] **Step 1: Write failing argv-boundary tests**
 
 ~~~python
 def test_mark_enriched_invokes_native_command_without_shell(monkeypatch, tmp_path: Path) -> None:
@@ -1400,7 +1400,7 @@ def test_mark_enriched_invokes_native_command_without_shell(monkeypatch, tmp_pat
     ]
 ~~~
 
-- [ ] **Step 2: Run the wrapper test before implementation**
+- [x] **Step 2: Run the wrapper test before implementation**
 
 ~~~bash
 pytest -q tests/data/test_custom_state.py
@@ -1408,7 +1408,7 @@ pytest -q tests/data/test_custom_state.py
 
 Expected: FAIL because the wrapper functions do not exist.
 
-- [ ] **Step 3: Implement explicit native state wrappers**
+- [x] **Step 3: Implement explicit native state wrappers**
 
 Expose mark_video_enriched(native_executable, run_root, video_id,
 handoff_path), mark_video_published(native_executable, run_root, video_id,
@@ -1418,7 +1418,7 @@ Call subprocess.run(argv, check=True, shell=False, capture_output=True,
 text=True). Include stderr in raised errors, reject blank IDs/paths, and never
 edit state JSON from Python. Preserve native idempotency and predecessor checks.
 
-- [ ] **Step 4: Document the end-to-end run order and image policy**
+- [x] **Step 4: Document the end-to-end run order and image policy**
 
 Update the data documentation with this concrete flow:
 
@@ -1440,7 +1440,7 @@ prepare_custom_extraction.py
 State explicitly that BTC preparation remains the active baseline and the
 custom corpus uses a separate frame_store_id and run root.
 
-- [ ] **Step 5: Run wrapper/docs tests and commit**
+- [x] **Step 5: Run wrapper/docs tests and commit**
 
 ~~~bash
 pytest -q tests/data/test_custom_state.py tests/data/test_custom_enrichment.py
