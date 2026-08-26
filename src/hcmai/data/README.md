@@ -146,7 +146,33 @@ is OCR-only scratch data and must not be sent to the global materializer.
 After the handoff validator accepts all specialist artifacts, call the Python
 native-state wrappers rather than editing `state/{video_id}.json` directly.
 `cleanup_video` is allowed only after native publication and retains
-`published/{video_id}` durable JPEGs and manifest.
+`published/{video_id}` durable JPEGs and manifest while removing its temporary
+`published/{video_id}/enrichment_images` OCR scratch directory.
+
+### Local release gate
+
+Before downloading any organizer video, run the complete synthetic gate. It
+builds a three-second local source and exercises extraction, image validation,
+identity-only enrichment handoff validation, guarded publication, scoped
+cleanup, and final FrameStore loading. It never invokes yt-dlp, models, or a
+remote provider.
+
+```bash
+cmake --build build/keyframes_extraction --parallel
+ctest --test-dir build/keyframes_extraction --output-on-failure
+PYTHONPATH=.:src aic/bin/python -m pytest -q \
+  tests/data/test_custom_manifest.py \
+  tests/data/test_custom_frames.py \
+  tests/data/test_custom_enrichment.py \
+  tests/data/test_custom_state.py \
+  tests/scripts/test_custom_extraction_cli.py
+PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai/data/ingestion scripts
+```
+
+Passing this gate is a code-correctness prerequisite, not an approval for an
+unbounded corpus run. A separate bounded pilot must measure download/decode,
+storage, enrichment quality, and cleanup behaviour before selecting the full
+corpus.
 
 Finally materialize only selected validated published bundles:
 

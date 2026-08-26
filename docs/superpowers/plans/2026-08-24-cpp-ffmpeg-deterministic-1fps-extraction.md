@@ -1459,7 +1459,12 @@ git commit -m "docs: document custom extraction lifecycle"
 - Consumes: the built native executable, a synthetic video, the Python manifest/materializer, and native state commands.
 - Produces: a reproducible release gate and a recorded decision point for full-corpus execution.
 
-- [ ] **Step 1: Add the smoke acceptance test**
+> **Local-only scope (2026-08-26):** per the approved operating constraint,
+> ThunderCompute smoke/pilot work and its remote operational record remain
+> intentionally deferred. The local synthetic gate below is still required and
+> complete before the separately requested one-video local download.
+
+- [x] **Step 1: Add the smoke acceptance test**
 
 The test must execute these stages in one temporary run root with concrete
 arguments:
@@ -1533,7 +1538,7 @@ timestamps, the exact formula, readable durable images, readable temporary OCR
 images before cleanup, published durable images after cleanup, no source/staging
 temporary files after cleanup, and a loadable final FrameStore.
 
-- [ ] **Step 2: Run the complete local smoke gate**
+- [x] **Step 2: Run the complete local smoke gate**
 
 ~~~bash
 cmake --build build/keyframes_extraction --parallel

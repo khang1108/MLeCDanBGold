@@ -149,7 +149,9 @@ keyframe order or an array position.
    `not_evaluated`; that status is not treated as negative evidence.
 5. Call `mark_video_enriched`, `mark_video_published`, then `cleanup_video`.
    Only the native executable writes the state JSON. Cleanup retains
-   `published/{video_id}` durable images and native manifest.
+   `published/{video_id}` durable images and native manifest, while removing
+   the selected video's `published/{video_id}/enrichment_images` OCR scratch
+   directory.
 6. Run `materialize_custom_frames.py` only over validated published IDs. The
    global custom FrameStore contains durable image paths only, with the custom
    run root configured as its dataset root for downstream image consumers.
