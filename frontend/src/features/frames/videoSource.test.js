@@ -1,31 +1,34 @@
 import {
   displayVideoId,
-  getS3VideoUrl,
-  s3VideoObjectKey,
+  getYouTubeEmbedUrl,
+  getYouTubeVideoId,
+  getYouTubeWatchUrl,
   timestampSeconds,
 } from './videoSource';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-jest.mock('@aws-sdk/client-s3', () => ({
-  S3Client: jest.fn().mockImplementation((config) => ({ config })),
-  GetObjectCommand: jest.fn().mockImplementation((input) => ({ input })),
-}));
-jest.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: jest.fn() }));
-
-beforeEach(() => getSignedUrl.mockResolvedValue('https://signed.example/video.mp4'));
-
-test('creates a presigned URL for the canonical path-bearing video ID', async () => {
-  await expect(getS3VideoUrl('L21_V001', {
-    bucket: 'hcmai-video-bucket',
-    region: 'ap-southeast-2',
-    accessKeyId: 'access',
-    secretAccessKey: 'secret',
-  })).resolves.toBe('https://signed.example/video.mp4');
-  expect(s3VideoObjectKey('L21_V001')).toBe('data/L21/L21_V001.mp4');
+test('looks up the YouTube URL using the canonical leaf video ID', () => {
+  expect(getYouTubeWatchUrl('folder_1.folder2.L21_V001')).toBe(
+    'https://youtube.com/watch?v=Rzpw5WR7nAY',
+  );
 });
 
-test('does not create an S3 URL without complete credentials', async () => {
-  await expect(getS3VideoUrl('folder.video', { bucket: '', region: 'ap-southeast-2' })).resolves.toBeNull();
+test('extracts video IDs from watch and embed URLs', () => {
+  expect(getYouTubeVideoId('https://youtube.com/watch?v=Rzpw5WR7nAY')).toBe('Rzpw5WR7nAY');
+  expect(getYouTubeVideoId('https://www.youtube.com/embed/Rzpw5WR7nAY')).toBe('Rzpw5WR7nAY');
+});
+
+test('builds an API-enabled embed URL', () => {
+  const embedUrl = getYouTubeEmbedUrl('L21_V001');
+  expect(embedUrl).toContain('https://www.youtube.com/embed/Rzpw5WR7nAY?');
+  expect(embedUrl).toContain('autoplay=0');
+  expect(embedUrl).toContain('enablejsapi=1');
+  expect(embedUrl).toContain('origin=');
+});
+
+test('returns null for unknown video metadata', () => {
+  expect(getYouTubeWatchUrl('unknown-video')).toBeNull();
+  expect(getYouTubeVideoId('unknown-video')).toBeNull();
+  expect(getYouTubeEmbedUrl('unknown-video')).toBeNull();
 });
 
 test('uses only the canonical timestamp for exact source seeking', () => {
