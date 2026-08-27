@@ -9,7 +9,12 @@
 #
 # Configure via environment variables before invoking, e.g.:
 #   LIMIT=10 RUN_ROOT=runs/custom-raw1fps-v1 ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh
+#
+# LIMIT only bounds how many videos the pipeline stage (step 5) processes; it
+# does NOT reduce how many archives get downloaded in step 4. Use ZIP_LIMIT to
+# fetch only the first N archives for a cheap smoke test, e.g. ZIP_LIMIT=1.
 set -euo pipefail
+
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
@@ -20,6 +25,7 @@ VERSION="${VERSION:-custom-raw1fps-v1}"
 FRAME_STORE_ID="${FRAME_STORE_ID:-custom-raw1fps-v1}"
 MEDIA_INFO_DIR="${MEDIA_INFO_DIR:-data/media-info-aic25-b1/media-info}"
 LIMIT="${LIMIT:-}"
+ZIP_LIMIT="${ZIP_LIMIT:-}"
 SKIP_APT="${SKIP_APT:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
@@ -78,7 +84,9 @@ fi
 # --- 4. Download organizer video archives and flatten into {video_id}.mp4 ---
 if [[ "$SKIP_DOWNLOAD" != "1" ]]; then
   mkdir -p "$ZIP_DIR" "$SOURCE_ROOT"
-  for url in "${URLS[@]}"; do
+  URLS_TO_FETCH=("${URLS[@]}")
+  [[ -z "$ZIP_LIMIT" ]] || URLS_TO_FETCH=("${URLS[@]:0:$ZIP_LIMIT}")
+  for url in "${URLS_TO_FETCH[@]}"; do
     fname="$(basename "$url")"
     zip_path="$ZIP_DIR/$fname"
 
@@ -98,12 +106,16 @@ if [[ "$SKIP_DOWNLOAD" != "1" ]]; then
     rm -rf "$extract_dir" "$zip_path"
   done
 
-  missing=0
-  for meta in "$MEDIA_INFO_DIR"/*.json; do
-    vid="$(basename "${meta%.json}")"
-    [[ -f "$SOURCE_ROOT/$vid.mp4" ]] || { echo "MISSING: $vid"; missing=1; }
-  done
-  [[ "$missing" -eq 0 ]] || { echo "one or more organizer videos are missing; aborting before pipeline run"; exit 1; }
+  if [[ -z "$ZIP_LIMIT" ]]; then
+    missing=0
+    for meta in "$MEDIA_INFO_DIR"/*.json; do
+      vid="$(basename "${meta%.json}")"
+      [[ -f "$SOURCE_ROOT/$vid.mp4" ]] || { echo "MISSING: $vid"; missing=1; }
+    done
+    [[ "$missing" -eq 0 ]] || { echo "one or more organizer videos are missing; aborting before pipeline run"; exit 1; }
+  else
+    echo "==> ZIP_LIMIT=$ZIP_LIMIT set, skipping full coverage check (partial download is expected)"
+  fi
 else
   echo "==> SKIP_DOWNLOAD=1, skipping video download"
 fi
