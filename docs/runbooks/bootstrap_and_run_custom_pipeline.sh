@@ -10,8 +10,8 @@
 # Configure via environment variables before invoking, e.g.:
 #   LIMIT=10 RUN_ROOT=runs/custom-raw1fps-v1 ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh
 #
-# LIMIT only bounds how many videos the pipeline stage (step 5) processes; it
-# does NOT reduce how many archives get downloaded in step 4. Use ZIP_LIMIT to
+# LIMIT only bounds how many videos the pipeline stage (step 6) processes; it
+# does NOT reduce how many archives get downloaded in step 5. Use ZIP_LIMIT to
 # fetch only the first N archives for a cheap smoke test, e.g. ZIP_LIMIT=1.
 set -euo pipefail
 
@@ -24,6 +24,7 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-artifacts/custom-raw1fps-v1}"
 VERSION="${VERSION:-custom-raw1fps-v1}"
 FRAME_STORE_ID="${FRAME_STORE_ID:-custom-raw1fps-v1}"
 MEDIA_INFO_DIR="${MEDIA_INFO_DIR:-data/media-info-aic25-b1/media-info}"
+MEDIA_INFO_ZIP_URL="${MEDIA_INFO_ZIP_URL:-https://aic-data.ledo.io.vn/media-info-aic25-b1.zip}"
 LIMIT="${LIMIT:-}"
 ZIP_LIMIT="${ZIP_LIMIT:-}"
 SKIP_APT="${SKIP_APT:-0}"
@@ -81,7 +82,25 @@ if [[ ! -x aic/bin/python ]]; then
   aic/bin/python -m pip install -e '.[embedding]'
 fi
 
-# --- 4. Download organizer video archives and flatten into {video_id}.mp4 ---
+# --- 4. Fetch organizer media-info metadata if not already present locally ---
+if [[ ! -d "$MEDIA_INFO_DIR" || -z "$(find "$MEDIA_INFO_DIR" -maxdepth 1 -name '*.json' -print -quit)" ]]; then
+  echo "==> media-info missing, downloading $MEDIA_INFO_ZIP_URL"
+  media_info_zip="$(mktemp --suffix=.zip)"
+  curl -fL --retry 5 --retry-delay 5 -o "$media_info_zip" "$MEDIA_INFO_ZIP_URL"
+  media_info_extract="$(mktemp -d)"
+  unzip -q "$media_info_zip" -d "$media_info_extract"
+  rm -f "$media_info_zip"
+
+  found_dir="$(find "$media_info_extract" -type f -iname 'L[0-9][0-9]_V*.json' -printf '%h\n' | sort -u | head -n1)"
+  [[ -n "$found_dir" ]] || { echo "no organizer media-info JSON found in $MEDIA_INFO_ZIP_URL"; exit 1; }
+
+  mkdir -p "$(dirname "$MEDIA_INFO_DIR")"
+  rm -rf "$MEDIA_INFO_DIR"
+  mv "$found_dir" "$MEDIA_INFO_DIR"
+  rm -rf "$media_info_extract"
+fi
+
+# --- 5. Download organizer video archives and flatten into {video_id}.mp4 ---
 if [[ "$SKIP_DOWNLOAD" != "1" ]]; then
   mkdir -p "$ZIP_DIR" "$SOURCE_ROOT"
   URLS_TO_FETCH=("${URLS[@]}")
@@ -120,7 +139,7 @@ else
   echo "==> SKIP_DOWNLOAD=1, skipping video download"
 fi
 
-# --- 5. Run the existing pipeline against the local source-root fixture ---
+# --- 6. Run the existing pipeline against the local source-root fixture ---
 PIPELINE_ARGS=(
   --run-root "$RUN_ROOT"
   --output-root "$OUTPUT_ROOT"
@@ -136,6 +155,6 @@ PIPELINE_ARGS=(
 echo "==> running prepare_custom_pipeline.py"
 PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py "${PIPELINE_ARGS[@]}"
 
-# --- 6. Reclaim disk only after the pipeline run above succeeded ---
+# --- 7. Reclaim disk only after the pipeline run above succeeded ---
 echo "==> pipeline succeeded, removing downloaded source videos"
 rm -rf "$SOURCE_ROOT"
