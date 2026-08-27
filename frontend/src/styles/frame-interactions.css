@@ -1,57 +1,33 @@
 /* ─────────────────────────────────────────────────────────── */
-/* COPY BUTTONS & FEEDBACK EFFECTS                            */
+/* FRAME INSPECTOR INTERACTIONS                               */
 /* ─────────────────────────────────────────────────────────── */
-.card-copy-btn,
-.inspector-copy-btn {
-  background: transparent;
-  border: 1px solid var(--color-border);
-  padding: 4px;
-  border-radius: var(--rounded-sm);
-  color: var(--color-ink-muted);
-  cursor: pointer;
+
+.frame-card-actions {
   display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.card-submit-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease, border-color 0.15s ease;
-  opacity: 0.7;
+  min-height: 26px;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  border-radius: var(--rounded-sm);
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-/* Subtle reveal on card header hover */
-.frame-card-header:hover .card-copy-btn {
-  opacity: 1;
-}
-
-.inspector-header:hover .inspector-copy-btn {
-  opacity: 1;
-}
-
-.card-copy-btn:hover,
-.inspector-copy-btn:hover {
-  background-color: var(--color-canvas-soft);
-  border-color: var(--color-primary-light);
-  color: var(--color-ink);
-  opacity: 1 !important;
-}
-
-.card-copy-btn.copied,
-.inspector-copy-btn.copied {
-  color: #10b981; /* green */
-  background-color: #ecfdf5;
-  opacity: 1 !important;
-}
-
-.copy-icon {
-  width: 14px;
-  height: 14px;
-  display: block;
-}
-
-.copy-icon.check {
-  stroke-width: 2.5;
-}
-
-.inspector-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.card-submit-btn:hover {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
 }

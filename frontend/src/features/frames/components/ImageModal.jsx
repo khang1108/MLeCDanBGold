@@ -10,10 +10,10 @@ import {
 } from "../videoSource";
 
 // Inspector uses the official YouTube player and seeks by canonical timestamp.
-// BTC frame_idx remains the submission coordinate; timestamp_ms controls playback.
-const ImageModal = ({ frame, onClose }) => {
+// The selected frame index stays fixed in the header; live playback coordinates
+// are shown in metadata and used for submission.
+const ImageModal = ({ frame, query, onSubmit, onClose }) => {
   const modalCardRef = React.useRef(null);
-  const [copied, setCopied] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [videoError, setVideoError] = useState(null);
   const playerControlsRef = React.useRef(null);
@@ -22,6 +22,13 @@ const ImageModal = ({ frame, onClose }) => {
     [frame.timestamp_ms],
   );
   const [playbackTime, setPlaybackTime] = useState(targetTime);
+  const [submitted, setSubmitted] = useState(false);
+  const liveFrameIdx = useMemo(() => {
+    const fps = Number(frame.fps);
+    return Number.isFinite(playbackTime) && Number.isFinite(fps)
+      ? Math.round(playbackTime * fps)
+      : frame.frame_idx;
+  }, [frame.frame_idx, frame.fps, playbackTime]);
   const videoLabel = displayVideoId(frame.video_id);
   const watchUrl = getYouTubeWatchUrl(frame.video_id);
 
@@ -66,6 +73,16 @@ const ImageModal = ({ frame, onClose }) => {
     playerControlsRef.current = controls;
   }, []);
 
+  const handleSubmit = useCallback(() => {
+    if (!onSubmit) return;
+    onSubmit({
+      line: `${videoLabel},${liveFrameIdx}`,
+      source: "Frame inspector",
+    });
+    setSubmitted(true);
+    window.setTimeout(() => setSubmitted(false), 1200);
+  }, [liveFrameIdx, onSubmit, videoLabel]);
+
   const handleModalKeyDown = useCallback((event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -88,20 +105,20 @@ const ImageModal = ({ frame, onClose }) => {
     }
   }, [onClose]);
 
-  const copy = () => {
-    navigator.clipboard.writeText(`${frame.video_id},${frame.frame_idx}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  };
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div
-        ref={modalCardRef}
-        className="modal-card split-layout"
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={handleModalKeyDown}
-        tabIndex={-1}
-      >
+      <div className="modal-frame-stack" onClick={(event) => event.stopPropagation()}>
+        {query?.trim() && (
+          <div className="modal-query-context" role="status" aria-label="Current query">
+            <p className="modal-query-text">{query.trim()}</p>
+          </div>
+        )}
+        <div
+          ref={modalCardRef}
+          className="modal-card split-layout"
+          onKeyDown={handleModalKeyDown}
+          tabIndex={-1}
+        >
         <div className="modal-viewer-column">
           {videoUrl && targetTime !== null && !videoError ? (
             <div className="modal-video-shell">
@@ -137,17 +154,21 @@ const ImageModal = ({ frame, onClose }) => {
         <div className="modal-inspector-column">
           <div className="inspector-header">
             <span className="inspector-title">
-              {videoLabel} · BTC frame {frame.frame_idx}
+              {videoLabel} · {frame.frame_idx}
             </span>
             <div className="inspector-header-actions">
+              {onSubmit && (
+                <button
+                  type="button"
+                  className={`inspector-submit-btn ${submitted ? "submitted" : ""}`}
+                  onClick={handleSubmit}
+                  aria-label="Submit current frame"
+                >
+                  {submitted ? "✓" : "Submit"}
+                </button>
+              )}
               <button
-                className={`inspector-copy-btn ${copied ? "copied" : ""}`}
-                onClick={copy}
-                title="Copy official video_id,frame_idx"
-              >
-                {copied ? "✓" : "⧉"}
-              </button>
-              <button
+                type="button"
                 className="inspector-close-btn"
                 onClick={onClose}
                 aria-label="Close popup"
@@ -163,14 +184,6 @@ const ImageModal = ({ frame, onClose }) => {
                 {frame.caption || "No caption available"}
               </p>
             </div>
-            {frame.answer && (
-              <div className="inspector-section">
-                <span className="inspector-section-label">VQA Answer</span>
-                <p className="inspector-caption-text vqa-answer-highlight" style={{ fontWeight: '600', color: 'var(--color-primary-light)' }}>
-                  {frame.answer}
-                </p>
-              </div>
-            )}
             <div className="inspector-section">
               <span className="inspector-section-label">Metadata</span>
               <FrameMetadata frame={frame} playbackTime={playbackTime} />
@@ -184,6 +197,7 @@ const ImageModal = ({ frame, onClose }) => {
               </div>
             </div>}
           </div>
+        </div>
         </div>
       </div>
     </div>

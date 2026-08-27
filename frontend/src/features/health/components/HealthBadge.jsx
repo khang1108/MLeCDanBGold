@@ -1,6 +1,6 @@
 import React from 'react';
 
-const HealthBadge = ({ isHealthy, healthData, isChecking }) => {
+const HealthBadge = ({ isHealthy, healthData }) => {
   if (isHealthy === null) {
     return (
       <div className="health-badge checking" title="Checking backend health status...">

@@ -3,16 +3,6 @@
     padding: var(--spacing-md);
   }
 
-  .workspace-header,
-  .results-workspace-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .conversation-layout {
-    flex-direction: column;
-  }
-
   .adhoc-workspace-body {
     flex-direction: column;
   }
@@ -22,14 +12,6 @@
     flex-basis: auto;
   }
 
-  .conversation-panel {
-    flex-basis: auto;
-    width: 100%;
-    height: min(480px, calc(100vh - 120px));
-    min-height: 0;
-  }
-
-  .results-workspace-header,
   .frames-container {
     margin-left: 0;
     padding-left: 0;

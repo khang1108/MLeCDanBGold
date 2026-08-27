@@ -2,13 +2,13 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import App from "./App";
 
-jest.mock("./features/vqa/components/VqaSearchWorkspace", () => (
+jest.mock("./features/search/components/SearchWorkspace", () => (
   function FakeUnifiedWorkspace() {
     return <div>Unified search workspace</div>;
   }
 ));
 jest.mock("./features/health/hooks/useHealthCheck", () => ({
-  useHealthCheck: () => ({ isHealthy: true, healthData: {}, isChecking: false }),
+  useHealthCheck: () => ({ isHealthy: true, healthData: {} }),
 }));
 jest.mock("./features/vim/hooks/useVimMode", () => ({
   useVimMode: () => ({

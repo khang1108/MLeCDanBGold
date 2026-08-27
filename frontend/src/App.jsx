@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import ImageModal from "./features/frames/components/ImageModal";
-import VqaSearchWorkspace from "./features/vqa/components/VqaSearchWorkspace";
+import SearchWorkspace from "./features/search/components/SearchWorkspace";
 import { useHealthCheck } from "./features/health/hooks/useHealthCheck";
 import HealthBadge from "./features/health/components/HealthBadge";
 import { useVimMode } from "./features/vim/hooks/useVimMode";
@@ -10,29 +10,29 @@ import VimHelpModal from "./features/vim/components/VimHelpModal";
 import ApiDocsModal from "./features/docs/components/ApiDocsModal";
 import "./styles/gif-loader.css";
 import "./styles/vim.css";
-import { SubmissionProvider } from "./features/submission/contexts/SubmissionContext";
+import { SubmissionProvider, useSubmission } from "./features/submission/contexts/SubmissionContext";
 
-function App() {
+function AppContent() {
   const [selectedFrame, setSelectedFrame] = useState(null);
+  const [activeQuery, setActiveQuery] = useState("");
   const [topK, setTopK] = useState(20);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const queryInputRef = useRef(null);
-  const { isHealthy, healthData, isChecking } = useHealthCheck();
+  const { isHealthy, healthData } = useHealthCheck();
+  const { requestSubmission } = useSubmission();
   const vim = useVimMode({
     onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
   });
 
   return (
-    <SubmissionProvider>
-      <div className="app-wrapper">
+    <div className="app-wrapper">
       <header className="app-header">
         <div className="app-title-group">
           <h1 className="app-title">HCMAI 2026 Frame Retrieval</h1>
           <HealthBadge
             isHealthy={isHealthy}
             healthData={healthData}
-            isChecking={isChecking}
           />
           <VimModeBadge
             mode={vim.mode}
@@ -55,10 +55,11 @@ function App() {
       </header>
 
       <main className="app-container adhoc-app">
-        <VqaSearchWorkspace
+        <SearchWorkspace
           topK={topK}
           setTopK={setTopK}
           onFrameClick={setSelectedFrame}
+          onQueryChange={setActiveQuery}
           queryInputRef={queryInputRef}
           onFocusQueryInput={() => vim.setMode("INSERT")}
           onBlurQueryInput={() => vim.setMode("NORMAL")}
@@ -68,6 +69,8 @@ function App() {
       {selectedFrame && (
         <ImageModal
           frame={selectedFrame}
+          query={activeQuery}
+          onSubmit={requestSubmission}
           onClose={() => setSelectedFrame(null)}
         />
       )}
@@ -86,6 +89,13 @@ function App() {
         onClose={() => setIsDocsOpen(false)}
       />
     </div>
+  );
+}
+
+function App() {
+  return (
+    <SubmissionProvider>
+      <AppContent />
     </SubmissionProvider>
   );
 }

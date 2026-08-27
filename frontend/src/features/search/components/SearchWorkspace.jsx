@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { frameAssetUrl, searchFrames, searchTrake, suggestQueries } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import FrameCard from "../../frames/components/FrameCard";
@@ -6,55 +6,33 @@ import ToolBox from "../../search-controls/components/ToolBox";
 import QuerySuggestionsPanel from "../../search-controls/components/QuerySuggestionsPanel";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 import { displayVideoId } from "../../frames/videoSource";
-import FileSelectionModal from "../../submission/components/FileSelectionModal";
 import { useSubmission } from "../../submission/contexts/SubmissionContext";
 
-const RETRIEVAL_PREFIX = /^\/(kis)\b\s*/i;
-const TRAKE_PREFIX = /^\/trake\b\s*/i;
-const TRAKE_EVENT_LABEL = /^\s*E(\d+)\s*:\s*(.*)$/i;
+const TRAKE_EVENT_MARKER = /\bE(\d+)\b\s*:?\s*/gi;
 const SESSION_FINGERPRINT_KEY = "hcmai.session.fingerprint";
 const SEARCH_ID_PREFIX = "hcmai.progressive.search_id";
 const PROGRESSIVE_TASKS = ["kis"];
 
 export const parseRetrievalDescription = (description) => {
-  const match = description.match(RETRIEVAL_PREFIX);
-  if (!match) return null;
-  const rawType = match[1].toLowerCase();
-  const queryType = rawType;
-  const query = description.slice(match[0].length).trim();
-  return query ? { queryType, query } : null;
+  const query = description.trim();
+  return query ? { queryType: "kis", query } : null;
 };
 
 export const parseTrakeEvents = (description) => {
-  if (!TRAKE_PREFIX.test(description)) return null;
-  const body = description.replace(TRAKE_PREFIX, "").trim();
-  if (!body) return [];
+  const text = description.trim();
+  const markers = Array.from(text.matchAll(TRAKE_EVENT_MARKER));
+  if (!markers.length || Number(markers[0][1]) !== 1) return null;
+  if (markers.length < 2) return [];
 
-  const events = [];
-  let currentEvent = null;
-  let expectedEventNumber = 1;
+  const events = markers.map((marker, index) => {
+    if (Number(marker[1]) !== index + 1) return null;
+    const start = marker.index + marker[0].length;
+    const end = markers[index + 1]?.index ?? text.length;
+    const event = text.slice(start, end).trim();
+    return event || null;
+  });
 
-  for (const line of body.split(/\r?\n/)) {
-    const label = line.match(TRAKE_EVENT_LABEL);
-    if (label) {
-      const eventNumber = Number(label[1]);
-      if (eventNumber !== expectedEventNumber) return [];
-      expectedEventNumber += 1;
-      currentEvent = [];
-      events.push(currentEvent);
-      if (label[2].trim()) currentEvent.push(label[2].trim());
-      continue;
-    }
-
-    if (!currentEvent) {
-      if (line.trim()) return [];
-      continue;
-    }
-    if (line.trim()) currentEvent.push(line.trim());
-  }
-
-  const normalizedEvents = events.map((parts) => parts.join(" ").trim());
-  return normalizedEvents.some((event) => !event) ? [] : normalizedEvents;
+  return events.some((event) => !event) ? [] : events;
 };
 
 const sessionFingerprint = () => {
@@ -127,13 +105,14 @@ const TrakeResults = ({ events, submissions, warnings, error, hasSearched, onFra
       <div className="frames-scroll-region">
         {groupTrakeFramesByVideo(submissions, events).map((group) => (
           <article className="trake-video-group" key={group.video_id} aria-label={`TRAKE frames for ${displayVideoId(group.video_id)}`}>
-            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 className="trake-video-heading">
               {displayVideoId(group.video_id)}
-              <button 
-                className="btn-secondary" 
-                style={{ padding: '2px 6px', fontSize: '12px' }}
+              <button
+                type="button"
+                className="btn-secondary trake-path-submit-btn"
                 onClick={() => onTrakeSubmit(group)}
                 title="Submit this TRAKE path"
+                aria-label={'Submit TRAKE path for ' + displayVideoId(group.video_id)}
               >
                 ⬆
               </button>
@@ -160,29 +139,59 @@ const TrakeResults = ({ events, submissions, warnings, error, hasSearched, onFra
   </section>
 );
 
-const VqaSearchWorkspace = ({
+const SearchWorkspace = ({
   topK,
   setTopK,
   onFrameClick,
+  onQueryChange,
   queryInputRef,
   onFocusQueryInput,
   onBlurQueryInput,
 }) => {
   const [eventDescription, setEventDescription] = useState("");
-  const [question, setQuestion] = useState("");
   const [resultType, setResultType] = useState(null);
   const [frames, setFrames] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [trakeEvents, setTrakeEvents] = useState([]);
   const [warnings, setWarnings] = useState([]);
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
-  const [vqaLatencyMs, setVqaLatencyMs] = useState(null);
   const [error, setError] = useState(null);
-  const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState(null);
-  const { appendLine } = useSubmission();
+  const queryTextareaRef = useRef(null);
+  const { requestSubmission } = useSubmission();
+
+  const setQueryTextareaRef = useCallback((node) => {
+    queryTextareaRef.current = node;
+    if (queryInputRef) queryInputRef.current = node;
+  }, [queryInputRef]);
+
+  useLayoutEffect(() => {
+    const textarea = queryTextareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    textarea.style.paddingTop = "8px";
+    textarea.style.paddingBottom = "8px";
+    textarea.style.lineHeight = "1.3";
+    const contentHeight = textarea.scrollHeight;
+    const isSingleLine = !/\r?\n/.test(textarea.value) && contentHeight <= 42;
+
+    if (isSingleLine) {
+      textarea.style.height = "42px";
+      textarea.style.paddingTop = "0px";
+      textarea.style.paddingBottom = "0px";
+      textarea.style.lineHeight = "42px";
+      return;
+    }
+
+    textarea.style.height = `${Math.max(contentHeight, 42)}px`;
+  }, [eventDescription]);
+
+  useEffect(() => {
+    onQueryChange?.(eventDescription);
+  }, [eventDescription, onQueryChange]);
 
   const handleSuggestQuery = useCallback(async () => {
     if (isSuggesting) return;
@@ -200,27 +209,27 @@ const VqaSearchWorkspace = ({
 
   const handleSelectSuggestion = useCallback((suggestionText) => {
     const trimmed = (suggestionText || "").trim();
-    const formatted = trimmed.startsWith("/") ? trimmed : `/kis ${trimmed}`;
-    setEventDescription(formatted);
+    setEventDescription(trimmed);
     if (queryInputRef?.current) {
       queryInputRef.current.focus();
     }
   }, [queryInputRef]);
 
-  const handleFrameSubmit = (frame) => {
-    const vid = displayVideoId(frame.video_id);
-    if (resultType === 'vqa') {
-      const answer = frame.answer ? frame.answer.replace(/"/g, '""') : '';
-      appendLine(`${vid},${frame.frame_idx},"${answer}"`);
-    } else {
-      appendLine(`${vid},${frame.frame_idx}`);
-    }
-  };
-
   const handleTrakeSubmit = (group) => {
     const vid = displayVideoId(group.video_id);
-    const framesStr = group.frames.map(f => f.frame_idx).join(',');
-    appendLine(`${vid},${framesStr}`);
+    const framesStr = group.frames.map((frame) => frame.frame_idx).join(',');
+    requestSubmission({
+      line: `${vid},${framesStr}`,
+      source: "TRAKE path",
+    });
+  };
+
+  const handleFrameSubmit = (frame) => {
+    const vid = displayVideoId(frame.video_id);
+    requestSubmission({
+      line: `${vid},${frame.frame_idx}`,
+      source: "KIS/TRAKE frame",
+    });
   };
   const [isSearching, setIsSearching] = useState(false);
   const requestRef = useRef(null);
@@ -230,14 +239,7 @@ const VqaSearchWorkspace = ({
   const submit = useCallback(async (event) => {
     event.preventDefault();
     const rawEventText = eventDescription.trim();
-    const questionText = question.trim();
     if (!rawEventText || isSearching) return;
-
-    if (questionText) {
-      setResultType("vqa");
-      setError("VQA search is no longer available. Remove the question and use /kis or /trake.");
-      return;
-    }
 
     const events = parseTrakeEvents(rawEventText);
     const isTrakeMode = events !== null;
@@ -246,19 +248,14 @@ const VqaSearchWorkspace = ({
     if (isTrakeMode) {
       if (events.length < 2) {
         setResultType("trake");
-        setError("TRAKE requires at least two ordered events labeled E1:, E2:, ... on separate lines.");
+        setError("TRAKE requires at least two ordered events labeled E1, E2, ... .");
         return;
       }
     } else {
       retrieval = parseRetrievalDescription(rawEventText);
-      if (!retrieval) {
-        setResultType(null);
-        setError("Without a question, Event description must start with /kis or /trake.");
-        return;
-      }
     }
 
-    const task = isTrakeMode ? "trake" : retrieval.queryType;
+    const task = isTrakeMode ? "trake" : "kis";
     const searchKey = task === "trake" ? null : progressiveSearchIdKey(task);
     const searchId = searchKey ? window.sessionStorage.getItem(searchKey) : null;
     requestRef.current?.abort();
@@ -271,7 +268,6 @@ const VqaSearchWorkspace = ({
     setSubmissions([]);
     setTrakeEvents([]);
     setSearchLatencyMs(null);
-    setVqaLatencyMs(null);
 
     try {
       let response;
@@ -306,7 +302,7 @@ const VqaSearchWorkspace = ({
         window.sessionStorage.removeItem(searchKey);
       }
       const resetInstruction = requestError?.status === 409
-        ? " Reset this task with New Question before continuing."
+        ? " Reset this task with New Search before continuing."
         : "";
       setResultType(isTrakeMode ? "trake" : "retrieval");
       setError(`${requestError.message || "Failed to contact search API"}${resetInstruction}`);
@@ -316,14 +312,13 @@ const VqaSearchWorkspace = ({
         setIsSearching(false);
       }
     }
-  }, [eventDescription, isSearching, question, topK]);
+  }, [eventDescription, isSearching, topK]);
 
-  const handleNewQuestion = useCallback(() => {
+  const handleNewSearch = useCallback(() => {
     PROGRESSIVE_TASKS.forEach((task) => {
       window.sessionStorage.removeItem(progressiveSearchIdKey(task));
     });
     setEventDescription("");
-    setQuestion("");
     setFrames([]);
     setSubmissions([]);
     setTrakeEvents([]);
@@ -331,7 +326,6 @@ const VqaSearchWorkspace = ({
     setResultType(null);
     setError(null);
     setSearchLatencyMs(null);
-    setVqaLatencyMs(null);
   }, []);
 
 
@@ -343,42 +337,31 @@ const VqaSearchWorkspace = ({
       }
       if (event.key.toLowerCase() === 'n') {
         event.preventDefault();
-        handleNewQuestion();
-      } else if (event.key.toLowerCase() === 'f') {
-        event.preventDefault();
-        setIsFileModalOpen(true);
+        handleNewSearch();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNewQuestion]);
-
-  const vqaFrames = submissions.map((submission) => ({
-    ...submission,
-    scores: { final: submission.joint_score },
-    caption: submission.caption
-      || submission.evidence_summary
-      || `Answer: ${submission.answer}`,
-  }));
+  }, [handleNewSearch]);
 
   return (
-    <div className="adhoc-workspace vqa-workspace">
-      <form className="vqa-query-form" onSubmit={submit}>
-        <div className="adhoc-query-bar">
+    <div className="adhoc-workspace search-workspace">
+      <form className="search-query-form" onSubmit={submit}>
+        <div className="search-query-row">
           <div className="query-input-wrapper">
             <textarea
-              ref={queryInputRef}
-              id="vqa-event"
+              ref={setQueryTextareaRef}
+              id="event-query"
               className="input-text query-input-field"
               rows={1}
               value={eventDescription}
               onChange={(event) => setEventDescription(event.target.value)}
-              placeholder="Event query (/kis, /trake E1: ... E2: ... on new lines)..."
+              placeholder="Describe the event, or add E1, E2, ... for TRAKE"
               onFocus={onFocusQueryInput}
               onBlur={onBlurQueryInput}
               disabled={isSearching}
               onKeyDown={(event) => {
-                const isTrakeInput = !question.trim() && TRAKE_PREFIX.test(eventDescription);
+                const isTrakeInput = parseTrakeEvents(eventDescription) !== null;
                 if (event.key === "Enter" && !event.shiftKey && !isTrakeInput) {
                   event.preventDefault();
                   submit(event);
@@ -386,46 +369,38 @@ const VqaSearchWorkspace = ({
               }}
             />
           </div>
-        </div>
-
-        <div className="adhoc-query-bar">
-          <input
-            id="vqa-question"
-            className="input-text query-input-field"
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Question (optional for VQA)..."
-            disabled={isSearching}
-          />
-          <button
-            type="submit"
-            className="btn-primary query-submit-btn"
-            disabled={isSearching || !eventDescription.trim()}
-          >
-            {isSearching ? "Searching..." : "Search"}
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => setIsFileModalOpen(true)} title="Shortcut: F">
-            Choose CSV
-          </button>
-          <button type="button" className="btn-secondary" onClick={handleNewQuestion} title="Shortcut: N">
-            New Question
-          </button>
-          <button
-            type="button"
-            className="btn-secondary query-suggest-btn"
-            onClick={handleSuggestQuery}
-            disabled={isSuggesting}
-            title="Suggest 5 Queries"
-          >
-            {isSuggesting ? "Suggesting..." : "Suggest Query"}
-          </button>
+          <div className="search-query-actions">
+            <button
+              type="submit"
+              className="btn-primary query-submit-btn"
+              disabled={isSearching || !eventDescription.trim()}
+            >
+              {isSearching ? "Searching..." : "Search"}
+            </button>
+            <button type="button" className="btn-secondary search-action-btn" onClick={handleNewSearch} title="Shortcut: N">
+              New Search
+            </button>
+            <button
+              type="button"
+              className="btn-secondary query-suggest-btn"
+              onClick={handleSuggestQuery}
+              disabled={isSuggesting}
+              title="Suggest 5 Queries"
+            >
+              {isSuggesting ? "Suggesting..." : "Suggest Query"}
+            </button>
+          </div>
         </div>
       </form>
 
       <div className="adhoc-workspace-body">
         <aside className="adhoc-sidebar">
           <h3 className="adhoc-sidebar-title">Options</h3>
-          <ToolBox topK={topK} setTopK={setTopK} onReset={() => setTopK(20)} />
+          <ToolBox
+            topK={topK}
+            setTopK={setTopK}
+            onReset={() => setTopK(20)}
+          />
         </aside>
         <div className="adhoc-results">
           <GifLoaderOverlay isVisible={isSearching} />
@@ -452,29 +427,28 @@ const VqaSearchWorkspace = ({
               onSubmit={handleFrameSubmit}
             />
           )}
-          {!isSearching && resultType !== "trake" && resultType !== "retrieval" && (
+          {!isSearching && !resultType && (
             <FramesBox
-              results={vqaFrames}
+              results={frames}
               isLoading={false}
               error={error}
-              latencyMs={vqaLatencyMs}
+              latencyMs={searchLatencyMs}
               warnings={warnings}
               onFrameClick={onFrameClick}
               onSubmit={handleFrameSubmit}
             />
           )}
-        </div>
-        <QuerySuggestionsPanel
+      </div>
+      <QuerySuggestionsPanel
           suggestions={suggestions}
           isLoading={isSuggesting}
           error={suggestError}
           onSelectSuggestion={handleSelectSuggestion}
-          onRefresh={handleSuggestQuery}
-        />
+        onRefresh={handleSuggestQuery}
+      />
       </div>
-      <FileSelectionModal isOpen={isFileModalOpen} onClose={() => setIsFileModalOpen(false)} />
     </div>
   );
 };
 
-export default VqaSearchWorkspace;
+export default SearchWorkspace;
