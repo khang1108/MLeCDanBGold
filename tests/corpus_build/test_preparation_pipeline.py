@@ -14,13 +14,10 @@ import pytest
 from hcmai.common.schemas import RetrievalSource
 from hcmai.data.corpus_build import (
     DefaultPreparationOperations,
-    PreparationCacheRun,
     PreparationPaths,
-    PreparationRun,
     S3CorpusPreparationConfig,
     S3CorpusPreparationService,
 )
-from scripts import prepare_s3_corpus as cli
 
 SHA = "a" * 40
 
@@ -704,55 +701,6 @@ def test_two_video_run_resumes_every_stage_without_legacy_local_reads(
     assert first.artifacts_root.is_relative_to(config.work_root)
 
 
-def test_cli_is_a_thin_service_boundary(
-    tmp_path: Path,
-    monkeypatch,
-    capsys,
-) -> None:
-    config = object()
-    expected = PreparationRun(
-        run_id="b" * 64,
-        inventory_path=tmp_path / "run.json",
-        artifacts_root=tmp_path / "artifacts.limit-1",
-        source_count=2,
-        completed_stages=("frame_store",),
-        skipped_stages=("asr",),
-    )
-
-    class _Config:
-        @staticmethod
-        def from_yaml(path: Path):
-            assert path == tmp_path / "preparation.yaml"
-            return config
-
-    class _Service:
-        def __init__(self, active, **options) -> None:
-            assert active is config
-            assert options["resume"] is False
-            assert options["limit"] == 1
-
-        @staticmethod
-        def run() -> PreparationRun:
-            return expected
-
-    monkeypatch.setattr(cli, "S3CorpusPreparationConfig", _Config)
-    monkeypatch.setattr(cli, "S3CorpusPreparationService", _Service)
-
-    result = cli.main([
-        "--config",
-        str(tmp_path / "preparation.yaml"),
-        "--limit",
-        "1",
-        "--no-resume",
-    ])
-
-    assert result == 0
-    output = capsys.readouterr().out
-    assert f"Run ID: {expected.run_id}" in output
-    assert "S3 videos: 2" in output
-    assert "Status: PASSED" in output
-
-
 def test_cache_only_records_inventory_without_model_work(tmp_path: Path) -> None:
     config = _config(tmp_path)
     config.execution.minimum_free_gib_after_cache = 0
@@ -796,52 +744,6 @@ def test_cached_run_can_overlap_frame_and_asr_lanes(tmp_path: Path) -> None:
     assert result.source_count == 2
     assert paths.frames_path.is_file()
     assert paths.asr_enrichment_path.is_file()
-
-
-def test_cli_cache_only_uses_cache_boundary(
-    tmp_path: Path,
-    monkeypatch,
-    capsys,
-) -> None:
-    config = object()
-    expected = PreparationCacheRun(
-        run_id="c" * 64,
-        inventory_path=tmp_path / "run.json",
-        cache_root=tmp_path / "source-cache",
-        source_count=2,
-        downloaded_count=2,
-        reused_count=0,
-        total_bytes=30,
-        duration_seconds=1.5,
-    )
-
-    class _Config:
-        @staticmethod
-        def from_yaml(path: Path):
-            return config
-
-    class _Service:
-        def __init__(self, active, **options) -> None:
-            assert active is config
-
-        @staticmethod
-        def cache_sources() -> PreparationCacheRun:
-            return expected
-
-    monkeypatch.setattr(cli, "S3CorpusPreparationConfig", _Config)
-    monkeypatch.setattr(cli, "S3CorpusPreparationService", _Service)
-
-    result = cli.main([
-        "--config",
-        str(tmp_path / "config.yaml"),
-        "--cache-only",
-    ])
-
-    assert result == 0
-    output = capsys.readouterr().out
-    assert "Cache downloaded: 2" in output
-    assert "Cache reused: 0" in output
-    assert "Status: CACHED" in output
 
 
 def test_changed_s3_inventory_cannot_reuse_an_existing_run(

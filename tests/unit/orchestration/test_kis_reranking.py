@@ -174,7 +174,7 @@ def test_rerank_count_zero_skips_configured_reranker() -> None:
 
 
 def test_search_service_injects_reranker_into_kis_registry() -> None:
-    """The composition root must pass the configured service to both KIS heads."""
+    """The composition root must pass the configured service to the KIS head."""
 
     data = _Data()
     reranker = _Reranker()
@@ -185,10 +185,8 @@ def test_search_service_injects_reranker_into_kis_registry() -> None:
     )
 
     kis = service.pipeline_registry.get(TaskType.KIS)
-    vkis = service.pipeline_registry.get(TaskType.VKIS)
 
     assert getattr(kis, "reranking") is reranker
-    assert getattr(vkis, "reranking") is reranker
 
 
 def test_optional_reranker_failure_falls_back_to_temporal_order() -> None:

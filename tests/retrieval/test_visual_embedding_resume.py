@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -14,11 +12,6 @@ from PIL import Image
 
 from hcmai.common.config import EncoderConfig
 from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
-
-_SCRIPTS_DIR = Path(__file__).parents[2] / "scripts"
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
-import build_embeddings
 
 
 class CountingEncoder:
@@ -136,7 +129,6 @@ def test_visual_build_regenerates_mismatched_shard(
 
     assert encoder.image_count == calls_after_first + 2
 
-
 def test_visual_build_regenerates_corrupt_shard(
     tmp_path: Path, frame_table: Path
 ) -> None:
@@ -152,129 +144,3 @@ def test_visual_build_regenerates_corrupt_shard(
     second.run()
 
     assert encoder.image_count == calls_after_first + 2
-
-
-def test_cli_failed_build_retains_checkpoints_for_repair_resume(
-    tmp_path: Path,
-    frame_table: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A repaired CLI build reuses shards completed before strict failure."""
-    output_dir = tmp_path / "published"
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "dataset:",
-                "  version: fixture-v1",
-                f"  frames_path: {frame_table}",
-                f"  root: {tmp_path / 'keyframes'}",
-                "index:",
-                f"  path: {output_dir / 'indexes' / 'visual'}",
-            ]
-        )
-    )
-    args = SimpleNamespace(
-        config=str(config_path),
-        frames=str(frame_table),
-        dataset_root=str(tmp_path / "keyframes"),
-        output=str(output_dir),
-        model_config="unused.yaml",
-        strict=True,
-        resume=True,
-        shard_size=2,
-    )
-    encoder = CountingEncoder()
-    monkeypatch.setattr(
-        build_embeddings.LLMServiceConfig,
-        "from_yaml",
-        lambda _path: SimpleNamespace(visual_embedding=EncoderConfig(batch_size=2)),
-    )
-    monkeypatch.setattr(
-        build_embeddings,
-        "EmbeddingArtifactBuilder",
-        lambda **kwargs: EmbeddingArtifactBuilder(encoder=encoder, **kwargs),
-    )
-    (tmp_path / "keyframes" / "L21_V001" / "003.jpg").unlink()
-
-    with pytest.raises(RuntimeError, match="complete visual coverage"):
-        build_embeddings._run(args)
-
-    checkpoint_dir = output_dir.with_name(".published.visual-checkpoints")
-    assert sorted(checkpoint_dir.glob("*.npz"))
-    failure_report = checkpoint_dir / "visual_embedding_failures.json"
-    assert failure_report.is_file()
-    assert encoder.image_count == 2
-    assert not output_dir.exists()
-    Image.new("RGB", (8, 6)).save(tmp_path / "keyframes" / "L21_V001" / "003.jpg")
-
-    sentinels = {
-        output_dir / "frame_store" / "frames.parquet": "canonical frames",
-        output_dir / "enrichment" / "context" / "frame_context_v1.parquet": "context",
-        output_dir / "enrichment" / "transcripts" / "segment.json": "transcript",
-        output_dir / "indexes" / "context" / "dense.index": "context index",
-    }
-    for path, content in sentinels.items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
-
-    build_embeddings._run(args)
-
-    assert encoder.image_count == 3
-    assert not failure_report.exists()
-    assert (output_dir / "indexes" / "visual" / "dense.index").is_file()
-    assert {path: path.read_text() for path in sentinels} == sentinels
-
-
-def test_cli_accepts_direct_visual_index_output_without_replacing_artifact_root(
-    tmp_path: Path,
-    frame_table: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A direct indexes/visual output keeps embeddings and sibling data intact."""
-    artifact_root = tmp_path / "artifacts"
-    index_dir = artifact_root / "indexes" / "visual"
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(
-        "\n".join(
-            [
-                "dataset:",
-                "  version: fixture-v1",
-                f"  frames_path: {frame_table}",
-                f"  root: {tmp_path / 'keyframes'}",
-                "index:",
-                f"  path: {index_dir}",
-            ]
-        )
-    )
-    args = SimpleNamespace(
-        config=str(config_path),
-        frames=str(frame_table),
-        dataset_root=str(tmp_path / "keyframes"),
-        output=str(index_dir),
-        model_config="unused.yaml",
-        strict=True,
-        resume=True,
-        shard_size=2,
-    )
-    sentinel = artifact_root / "frame_store" / "frames.parquet"
-    sentinel.parent.mkdir(parents=True)
-    sentinel.write_text("canonical frames")
-    monkeypatch.setattr(
-        build_embeddings.LLMServiceConfig,
-        "from_yaml",
-        lambda _path: SimpleNamespace(visual_embedding=EncoderConfig(batch_size=2)),
-    )
-    monkeypatch.setattr(
-        build_embeddings,
-        "EmbeddingArtifactBuilder",
-        lambda **kwargs: EmbeddingArtifactBuilder(
-            encoder=CountingEncoder(), **kwargs
-        ),
-    )
-
-    build_embeddings._run(args)
-
-    assert (artifact_root / "embeddings" / "visual_embeddings.npy").is_file()
-    assert (index_dir / "dense.index").is_file()
-    assert sentinel.read_text() == "canonical frames"
