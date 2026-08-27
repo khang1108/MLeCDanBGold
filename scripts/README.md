@@ -145,6 +145,8 @@ PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py \
   --version custom-raw1fps-v1 \
   --source custom_raw_video_1fps \
   --frame-store-id custom-raw1fps-v1 \
+  --yt-dlp-cookies /home/ubuntu/.config/yt-dlp/youtube.cookies.txt \
+  --yt-dlp-js-runtime node \
   --limit 10 \
   --fail-fast
 ```
@@ -155,6 +157,12 @@ When `--media-info-dir` is omitted, the command downloads
 on subsequent runs. Pass `--media-info-dir` only to override this bootstrap
 with an existing metadata folder; `--media-info-url` can override the ZIP
 source.
+
+YouTube may require authenticated cookies and an external JavaScript runtime.
+`--yt-dlp-cookies` accepts a Netscape-format cookie file; keep it outside the
+repository, restrict it with `chmod 600`, and never publish it as an artifact.
+`--yt-dlp-js-runtime` accepts yt-dlp runtime tokens such as `deno` or `node`.
+Deno 2.3+ is recommended by yt-dlp; Node requires version 22+.
 
 The command resumes native extraction and specialist artifacts, requires zero
 failed Caption/OCR/Object rows before publication, materializes the canonical

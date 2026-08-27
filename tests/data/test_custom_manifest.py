@@ -108,7 +108,14 @@ def test_write_extraction_config_hashes_its_canonical_payload(tmp_path: Path) ->
     )
 
     config = json.loads(output.read_text(encoding="utf-8"))
-    payload = {key: value for key, value in config.items() if key != "config_hash"}
+    operational_fields = {
+        "config_hash",
+        "yt_dlp_cookies_path",
+        "yt_dlp_js_runtime",
+    }
+    payload = {
+        key: value for key, value in config.items() if key not in operational_fields
+    }
     encoded = json.dumps(
         payload,
         ensure_ascii=False,
@@ -123,3 +130,19 @@ def test_write_extraction_config_hashes_its_canonical_payload(tmp_path: Path) ->
     assert config["enrichment_jpeg_quality"] == 95
     assert config["write_enrichment_images"] is True
     assert config["extractor_version"] == "hcmai-keyframes-extractor/0.1.0"
+    assert config["yt_dlp_cookies_path"] is None
+    assert config["yt_dlp_js_runtime"] is None
+
+    authenticated_output = write_extraction_config(
+        tmp_path / "input" / "authenticated_extraction_config.json",
+        run_root=tmp_path / "run",
+        native_executable=tmp_path / "build" / "keyframe_extractor",
+        frame_store_id="custom-raw1fps-v1",
+        yt_dlp_binary="yt-dlp",
+        yt_dlp_cookies_path=tmp_path / "secrets" / "youtube.cookies.txt",
+        yt_dlp_js_runtime="node",
+    )
+    authenticated = json.loads(authenticated_output.read_text(encoding="utf-8"))
+    assert authenticated["config_hash"] == config["config_hash"]
+    assert authenticated["yt_dlp_cookies_path"].endswith("youtube.cookies.txt")
+    assert authenticated["yt_dlp_js_runtime"] == "node"

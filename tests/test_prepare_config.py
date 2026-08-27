@@ -141,6 +141,7 @@ def test_full_pipeline_extra_has_one_transformers_contract() -> None:
     assert "transformers>=5.13, <6.0" in optional["reranking"]
     assert "transformers>=5.13, <6.0" in optional["transcripts"]
     assert "transformers>=5.13, <6.0" in optional["pipeline"]
+    assert "yt-dlp[default]>=2026.8.19, <2027.0" in optional["pipeline"]
 
 
 def test_dataset_contract_is_complete_and_cli_owned() -> None:

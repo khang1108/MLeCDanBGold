@@ -86,6 +86,92 @@ def test_pipeline_rejects_media_info_zip_path_traversal(tmp_path: Path) -> None:
     assert not (tmp_path / "run" / "input" / "escaped.json").exists()
 
 
+def test_pipeline_forwards_yt_dlp_authentication_options(tmp_path: Path) -> None:
+    """Top-level cookies/runtime options must reach the extraction CLI contract."""
+
+    cookies = tmp_path / "youtube.cookies.txt"
+    args = pipeline.parse_args(
+        [
+            "--run-root",
+            str(tmp_path / "run"),
+            "--output-root",
+            str(tmp_path / "output"),
+            "--version",
+            "custom-dataset-v1",
+            "--frame-store-id",
+            "custom-v1",
+            "--yt-dlp-cookies",
+            str(cookies),
+            "--yt-dlp-js-runtime",
+            "node",
+            "--limit",
+            "1",
+        ]
+    )
+
+    extraction = pipeline._extraction_args(args)
+
+    assert extraction.yt_dlp_cookies == cookies
+    assert extraction.yt_dlp_js_runtime == "node"
+
+
+def test_pipeline_surfaces_and_persists_native_extraction_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The top-level command must retain the native per-video root cause."""
+
+    video_id = "L01_V001"
+    media_info_dir = tmp_path / "media-info"
+    media_info_dir.mkdir()
+    (media_info_dir / f"{video_id}.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        pipeline.extract_custom_keyframes,
+        "run",
+        lambda args: {
+            "failed": 1,
+            "selected_video_ids": [video_id],
+            "failures": [
+                {
+                    "video_id": video_id,
+                    "error": "yt-dlp exited with status 1",
+                }
+            ],
+        },
+    )
+    args = pipeline.parse_args(
+        [
+            "--media-info-dir",
+            str(media_info_dir),
+            "--run-root",
+            str(tmp_path / "run"),
+            "--output-root",
+            str(tmp_path / "output"),
+            "--native-executable",
+            "/bin/true",
+            "--version",
+            "custom-dataset-v1",
+            "--frame-store-id",
+            "custom-v1",
+            "--limit",
+            "1",
+        ]
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"L01_V001: yt-dlp exited with status 1.*extraction_report.json",
+    ):
+        pipeline.run(args)
+
+    report = json.loads(
+        (tmp_path / "run" / "input" / "extraction_report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert report["failures"][0]["video_id"] == video_id
+
+
 def test_custom_pipeline_coordinates_every_local_artifact_stage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

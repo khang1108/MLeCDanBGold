@@ -86,6 +86,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=Path("build/keyframes_extraction/keyframe_extractor"),
     )
     parser.add_argument("--yt-dlp-binary", default="yt-dlp")
+    parser.add_argument(
+        "--yt-dlp-cookies",
+        type=Path,
+        help="Netscape-format cookie file used for authenticated downloads.",
+    )
+    parser.add_argument(
+        "--yt-dlp-js-runtime",
+        help="yt-dlp JavaScript runtime token, for example deno or node.",
+    )
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--version", required=True)
     parser.add_argument("--source", default="custom_raw_video_1fps")
@@ -246,6 +255,10 @@ def _extraction_args(args: argparse.Namespace) -> argparse.Namespace:
         "--yt-dlp-binary",
         args.yt_dlp_binary,
     ]
+    if args.yt_dlp_cookies is not None:
+        values.extend(("--yt-dlp-cookies", str(args.yt_dlp_cookies)))
+    if args.yt_dlp_js_runtime is not None:
+        values.extend(("--yt-dlp-js-runtime", args.yt_dlp_js_runtime))
     if args.source_root is not None:
         values.extend(("--source-root", str(args.source_root)))
     if args.video_id:
@@ -258,6 +271,29 @@ def _extraction_args(args: argparse.Namespace) -> argparse.Namespace:
     if args.fail_fast:
         values.append("--fail-fast")
     return extract_custom_keyframes.parse_args(values)
+
+
+def _extraction_failure_message(
+    extraction: dict[str, Any],
+    report_path: Path,
+) -> str:
+    """Format bounded per-video diagnostics for a failed extraction batch."""
+
+    failures = extraction.get("failures")
+    if not isinstance(failures, list) or not failures:
+        return f"custom extraction failed; details: {report_path}"
+
+    diagnostics: list[str] = []
+    for failure in failures[:10]:
+        if not isinstance(failure, dict):
+            continue
+        video_id = str(failure.get("video_id", "unknown-video"))
+        error = str(failure.get("error", "unknown extraction error"))
+        diagnostics.append(f"{video_id}: {error}")
+    remaining = len(failures) - len(diagnostics)
+    suffix = f"; and {remaining} more failure(s)" if remaining > 0 else ""
+    detail = "; ".join(diagnostics) or "unknown extraction error"
+    return f"custom extraction failed: {detail}{suffix}; details: {report_path}"
 
 
 def _run_python(script: str, arguments: Sequence[str]) -> None:
@@ -462,8 +498,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     args.output_root = output_root
     args.media_info_dir = _resolve_media_info_dir(args)
     extraction = extract_custom_keyframes.run(_extraction_args(args))
+    extraction_report_path = run_root / "input" / "extraction_report.json"
+    atomic_write(
+        extraction_report_path,
+        lambda path: write_json(extraction, path),
+    )
     if extraction["failed"]:
-        raise RuntimeError("custom extraction contains failed videos")
+        raise RuntimeError(
+            _extraction_failure_message(extraction, extraction_report_path)
+        )
     selected = tuple(sorted(str(value) for value in extraction["selected_video_ids"]))
     if not selected:
         raise ValueError("custom preparation requires at least one selected video")

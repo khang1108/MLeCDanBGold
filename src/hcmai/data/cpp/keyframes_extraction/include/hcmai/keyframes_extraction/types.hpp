@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace hcmai::keyframes_extraction
@@ -58,6 +59,10 @@ namespace hcmai::keyframes_extraction
         bool write_enrichment_images = true;
         /** @brief Explicit executable used for source-video acquisition. */
         std::string yt_dlp_binary = "yt-dlp";
+        /** @brief Optional Netscape cookie file used only for source acquisition. */
+        std::optional<std::string> yt_dlp_cookies_path;
+        /** @brief Optional yt-dlp JavaScript runtime token such as deno or node. */
+        std::optional<std::string> yt_dlp_js_runtime;
         /** @brief Version recorded in native state and manifests. */
         std::string extractor_version = "hcmai-keyframes-extractor/0.1.0";
         /** @brief Deterministic hash identifying the active configuration. */

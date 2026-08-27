@@ -694,8 +694,18 @@ void download_source(
     const std::filesystem::path output_template =
         source_directory / (input.video_id + ".download.%(ext)s");
 
-    const ProcessResult result = run_process({
+    std::vector<std::string> arguments{
         config.yt_dlp_binary,
+    };
+    if (config.yt_dlp_cookies_path.has_value()) {
+        arguments.push_back("--cookies");
+        arguments.push_back(config.yt_dlp_cookies_path.value());
+    }
+    if (config.yt_dlp_js_runtime.has_value()) {
+        arguments.push_back("--js-runtimes");
+        arguments.push_back(config.yt_dlp_js_runtime.value());
+    }
+    const std::vector<std::string> download_arguments{
         "--no-playlist",
         "--no-progress",
         "--no-part",
@@ -706,7 +716,13 @@ void download_source(
         "--output",
         output_template.string(),
         input.watch_url,
-    });
+    };
+    arguments.insert(
+        arguments.end(),
+        download_arguments.begin(),
+        download_arguments.end()
+    );
+    const ProcessResult result = run_process(arguments);
     if (result.exit_code != 0 || result.signal_number != 0) {
         throw std::runtime_error(process_failure_message(result));
     }

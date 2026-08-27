@@ -71,6 +71,8 @@ int main() {
         "\"enrichment_jpeg_quality\":95,"
         "\"write_enrichment_images\":true,"
         "\"yt_dlp_binary\":\"yt-dlp\","
+        "\"yt_dlp_cookies_path\":\"/tmp/youtube.cookies.txt\","
+        "\"yt_dlp_js_runtime\":\"node\","
         "\"extractor_version\":\"hcmai-keyframes-extractor/0.1.0\","
         "\"config_hash\":\"sha256:test\""
         "}"
@@ -80,6 +82,15 @@ int main() {
     require_true(config.durable_long_edge == 1024, "durable edge must parse");
     require_true(config.durable_jpeg_quality == 92, "durable quality must parse");
     require_true(config.write_enrichment_images, "enrichment image flag must parse");
+    require_true(
+        config.yt_dlp_cookies_path ==
+            std::optional<std::string>("/tmp/youtube.cookies.txt"),
+        "cookie file path must parse"
+    );
+    require_true(
+        config.yt_dlp_js_runtime == std::optional<std::string>("node"),
+        "JavaScript runtime must parse"
+    );
     require_true(config.config_hash == "sha256:test", "config hash must parse");
 
     const NativeFrameRow frame{

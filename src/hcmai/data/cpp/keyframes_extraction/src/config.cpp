@@ -15,6 +15,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -219,6 +220,41 @@ namespace hcmai::keyframes_extraction
         }
 
         /**
+         * @brief Reads an optional non-blank string, accepting absent or null.
+         *
+         * @param object Parsed configuration root object.
+         * @param key Optional JSON member name.
+         * @param path Source path used in validation errors.
+         * @return A copied string when configured; otherwise nullopt.
+         * @throws std::invalid_argument If a present value is not a non-blank string.
+         */
+        std::optional<std::string> optional_string(
+            json_object *object,
+            const char *key,
+            const std::filesystem::path &path
+        )
+        {
+            json_object *value = nullptr;
+            if (!json_object_object_get_ex(object, key, &value) || value == nullptr ||
+                json_object_is_type(value, json_type_null))
+            {
+                return std::nullopt;
+            }
+            if (!json_object_is_type(value, json_type_string))
+            {
+                throw std::invalid_argument("configuration field must be a string '" +
+                                            std::string(key) + "': " + path.string());
+            }
+            const char *raw = json_object_get_string(value);
+            if (raw == nullptr || std::string_view(raw).empty())
+            {
+                throw std::invalid_argument("configuration field must not be blank '" +
+                                            std::string(key) + "': " + path.string());
+            }
+            return std::string(raw);
+        }
+
+        /**
          * @brief Reads a required integer that must fit in the native int type.
          *
          * @param object Parsed configuration root object.
@@ -331,6 +367,10 @@ namespace hcmai::keyframes_extraction
         config.write_enrichment_images =
             required_boolean(root.get(), "write_enrichment_images", path);
         config.yt_dlp_binary = required_string(root.get(), "yt_dlp_binary", path);
+        config.yt_dlp_cookies_path =
+            optional_string(root.get(), "yt_dlp_cookies_path", path);
+        config.yt_dlp_js_runtime =
+            optional_string(root.get(), "yt_dlp_js_runtime", path);
         config.extractor_version =
             required_string(root.get(), "extractor_version", path);
         config.config_hash = required_string(root.get(), "config_hash", path);

@@ -204,6 +204,8 @@ def write_extraction_config(
     native_executable: str | Path,
     frame_store_id: str,
     yt_dlp_binary: str | Path,
+    yt_dlp_cookies_path: str | Path | None = None,
+    yt_dlp_js_runtime: str | None = None,
 ) -> Path:
     """Write native extraction settings and a reproducible configuration hash.
 
@@ -213,6 +215,8 @@ def write_extraction_config(
         native_executable: Native binary path recorded for operator provenance.
         frame_store_id: Separate custom-corpus lineage identifier.
         yt_dlp_binary: Explicit downloader executable path or command name.
+        yt_dlp_cookies_path: Optional Netscape cookie file path passed to yt-dlp.
+        yt_dlp_js_runtime: Optional yt-dlp runtime token such as ``deno`` or ``node``.
 
     Returns:
         The final JSON config path.
@@ -248,8 +252,34 @@ def write_extraction_config(
         "native_executable": normalized_native_executable,
         "frame_store_id": normalized_frame_store_id,
     }
+    # Authentication and runtime locations are operational inputs, not frame
+    # lineage. Excluding them from the hash permits a failed download to retry
+    # with refreshed cookies without invalidating its canonical extraction state.
     config_hash = hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
-    config = {**payload, "config_hash": config_hash}
+    normalized_cookies = (
+        _require_non_blank_string(
+            str(yt_dlp_cookies_path),
+            "yt_dlp_cookies_path",
+            Path(config_path),
+        )
+        if yt_dlp_cookies_path is not None
+        else None
+    )
+    normalized_js_runtime = (
+        _require_non_blank_string(
+            yt_dlp_js_runtime,
+            "yt_dlp_js_runtime",
+            Path(config_path),
+        )
+        if yt_dlp_js_runtime is not None
+        else None
+    )
+    config = {
+        **payload,
+        "yt_dlp_cookies_path": normalized_cookies,
+        "yt_dlp_js_runtime": normalized_js_runtime,
+        "config_hash": config_hash,
+    }
     destination = Path(config_path)
 
     def write_config(temporary_path: Path) -> None:

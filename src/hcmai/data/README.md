@@ -143,6 +143,8 @@ PYTHONPATH=.:src aic/bin/python scripts/extract_custom_keyframes.py \
   --native-executable build/keyframes_extraction/keyframe_extractor \
   --frame-store-id custom-raw1fps-v1 \
   --yt-dlp-binary yt-dlp \
+  --yt-dlp-cookies /home/ubuntu/.config/yt-dlp/youtube.cookies.txt \
+  --yt-dlp-js-runtime node \
   --limit 10 \
   --fail-fast
 ```

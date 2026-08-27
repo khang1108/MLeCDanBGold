@@ -98,6 +98,12 @@ import shutil
 import sys
 
 output = sys.argv[sys.argv.index("--output") + 1].replace("%(ext)s", "mp4")
+expected_cookie = os.environ.get("HCMAI_TEST_YT_DLP_COOKIE")
+if expected_cookie:
+    assert sys.argv[sys.argv.index("--cookies") + 1] == expected_cookie
+expected_runtime = os.environ.get("HCMAI_TEST_YT_DLP_JS_RUNTIME")
+if expected_runtime:
+    assert sys.argv[sys.argv.index("--js-runtimes") + 1] == expected_runtime
 Path(output).parent.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(os.environ["HCMAI_TEST_DOWNLOAD_SOURCE"], output)
 """,
@@ -206,10 +212,14 @@ def test_extract_cli_downloads_selected_batch_and_prepares_enrichment_tables(
         _write_synthetic_media_info(media_info, video_id)
         _make_synthetic_source(source_root, video_id)
     fake_yt_dlp = _make_fake_yt_dlp(tmp_path / "fake-yt-dlp")
+    cookies = tmp_path / "youtube.cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
     monkeypatch.setenv(
         "HCMAI_TEST_DOWNLOAD_SOURCE",
         str(source_root / "L01_V001.mp4"),
     )
+    monkeypatch.setenv("HCMAI_TEST_YT_DLP_COOKIE", str(cookies.resolve()))
+    monkeypatch.setenv("HCMAI_TEST_YT_DLP_JS_RUNTIME", "node")
 
     assert extract_custom_keyframes.main(
         [
@@ -223,6 +233,10 @@ def test_extract_cli_downloads_selected_batch_and_prepares_enrichment_tables(
             "custom-test-v1",
             "--yt-dlp-binary",
             str(fake_yt_dlp),
+            "--yt-dlp-cookies",
+            str(cookies),
+            "--yt-dlp-js-runtime",
+            "node",
             "--limit",
             "1",
         ]
@@ -241,6 +255,35 @@ def test_extract_cli_downloads_selected_batch_and_prepares_enrichment_tables(
     ocr = pd.read_parquet(enrichment_root / "ocr_frames.parquet")
     assert durable["frame_id"].tolist() == ocr["frame_id"].tolist()
     assert durable["image_path"].tolist() != ocr["image_path"].tolist()
+
+
+def test_native_failure_diagnostic_reads_durable_state(tmp_path: Path) -> None:
+    """A native batch failure without stderr still exposes its persisted cause."""
+
+    video_id = "L01_V001"
+    state_path = tmp_path / "state" / f"{video_id}.json"
+    state_path.parent.mkdir()
+    state_path.write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "error": "yt-dlp failed with exit code 1: video unavailable",
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.CompletedProcess(
+        args=["keyframe_extractor"],
+        returncode=2,
+        stdout='{"failed":1}',
+        stderr="",
+    )
+
+    assert extract_custom_keyframes._native_failure_diagnostic(
+        result,
+        tmp_path,
+        video_id,
+    ) == "yt-dlp failed with exit code 1: video unavailable"
 
 
 def test_materialize_cli_never_invokes_native_extraction(

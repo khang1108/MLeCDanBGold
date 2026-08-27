@@ -72,6 +72,7 @@ pipeline = [
     "torchvision>=0.23, <1.0",
     "transformers>=5.13, <6.0",
     "ultralytics-opencv-headless>=8.4, <9.0",
+    "yt-dlp[default]>=2026.8.19, <2027.0",
 ]
 dev = [
     "httpx>=0.28.1",

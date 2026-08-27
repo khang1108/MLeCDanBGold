@@ -66,6 +66,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--frame-store-id", default="custom-raw1fps-v1")
     parser.add_argument("--yt-dlp-binary", default="yt-dlp")
     parser.add_argument(
+        "--yt-dlp-cookies",
+        type=Path,
+        help="Netscape-format cookie file used for authenticated downloads.",
+    )
+    parser.add_argument(
+        "--yt-dlp-js-runtime",
+        help="yt-dlp JavaScript runtime token, for example deno or node.",
+    )
+    parser.add_argument(
         "--source-root",
         type=Path,
         help=(
@@ -174,6 +183,30 @@ def _native_summary(result: subprocess.CompletedProcess[str]) -> dict[str, int]:
     return {field: int(value[field]) for field in fields}
 
 
+def _native_failure_diagnostic(
+    result: subprocess.CompletedProcess[str],
+    run_root: Path,
+    video_id: str,
+) -> str:
+    """Recover a native root cause from stderr or its durable failed state."""
+
+    stderr = result.stderr.strip()
+    if stderr:
+        return stderr
+
+    state_path = run_root / "state" / f"{video_id}.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return "native extraction failed"
+    if not isinstance(state, dict):
+        return "native extraction failed"
+    diagnostic = state.get("error")
+    if isinstance(diagnostic, str) and diagnostic.strip():
+        return diagnostic.strip()
+    return "native extraction failed"
+
+
 def _prepare_enrichment_tables(run_root: Path, video_id: str) -> dict[str, str]:
     """Validate one staging bundle and write its two image-variant tables."""
 
@@ -222,6 +255,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if source_root is None
         else str(args.yt_dlp_binary)
     )
+    yt_dlp_cookies = (
+        args.yt_dlp_cookies.expanduser().resolve()
+        if args.yt_dlp_cookies is not None
+        else None
+    )
+    if yt_dlp_cookies is not None and not yt_dlp_cookies.is_file():
+        raise FileNotFoundError(f"yt-dlp cookie file is unavailable: {yt_dlp_cookies}")
+    yt_dlp_js_runtime = (
+        args.yt_dlp_js_runtime.strip()
+        if args.yt_dlp_js_runtime is not None
+        else None
+    )
+    if args.yt_dlp_js_runtime is not None and not yt_dlp_js_runtime:
+        raise ValueError("--yt-dlp-js-runtime must not be blank")
 
     run_root = args.run_root.expanduser().resolve()
     input_root = run_root / "input"
@@ -235,6 +282,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         native_executable=native_executable,
         frame_store_id=args.frame_store_id,
         yt_dlp_binary=yt_dlp_binary,
+        yt_dlp_cookies_path=yt_dlp_cookies,
+        yt_dlp_js_runtime=yt_dlp_js_runtime,
     )
     expected_version = str(
         json.loads(config_path.read_text(encoding="utf-8"))["extractor_version"]
@@ -291,7 +340,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         try:
             summary = _native_summary(result)
             if result.returncode != 0 or summary["failed"]:
-                diagnostic = result.stderr.strip() or "native extraction failed"
+                diagnostic = _native_failure_diagnostic(
+                    result,
+                    run_root,
+                    video_id,
+                )
                 raise RuntimeError(diagnostic)
 
             for field in ("completed", "skipped", "emitted_frame_count"):
