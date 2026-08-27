@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Sequence
 
@@ -19,6 +20,30 @@ DEFAULT_FRAMES = Path("artifacts/frame_store/frames.parquet")
 DEFAULT_OUTPUT = Path("data/objects_yoloe")
 
 
+def _positive_int(value: str) -> int:
+    """Parse a CLI integer that must represent at least one item."""
+
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer") from error
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be greater than or equal to 1")
+    return parsed
+
+
+def _confidence(value: str) -> float:
+    """Parse a finite YOLO confidence threshold in the inclusive unit range."""
+
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a number") from error
+    if not math.isfinite(parsed) or not 0.0 <= parsed <= 1.0:
+        raise argparse.ArgumentTypeError("must be finite and in the range [0, 1]")
+    return parsed
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse the frame source, detector limits, and object JSON destination."""
 
@@ -27,11 +52,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--dataset-root", default="data")
     parser.add_argument("--model", default="yoloe-26l-seg-pf.pt")
-    parser.add_argument("--min-confidence", type=float, default=0.20)
-    parser.add_argument("--top-k", type=int, default=30)
-    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--min-confidence", type=_confidence, default=0.20)
+    parser.add_argument("--top-k", type=_positive_int, default=30)
+    parser.add_argument("--batch-size", type=_positive_int, default=32)
     parser.add_argument("--device", default=None)
-    parser.add_argument("--limit", type=int, help="Stop after N frames (smoke run)")
+    parser.add_argument(
+        "--limit",
+        type=_positive_int,
+        help="Stop after N frames (smoke run; must be positive)",
+    )
     parser.add_argument(
         "--log-level",
         default="INFO",

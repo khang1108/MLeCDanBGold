@@ -72,7 +72,7 @@ preprocessing = [
     "yacs>=0.1.8, <1.0",
 ]
 objects = [
-    "ultralytics>=8.4, <9.0",
+    "ultralytics-opencv-headless>=8.4, <9.0",
 ]
 dev = [
     "httpx>=0.28.1",

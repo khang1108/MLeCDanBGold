@@ -122,12 +122,13 @@ retrieval index.
 self-extracted corpus has none, so `detect_objects.py` runs YOLOE and publishes
 the same per-frame object JSON contract.
 
-Install `.[objects]`, then swap in the headless OpenCV build that a GPU host
-can import:
+Install the official Ultralytics headless variant through the `objects` extra.
+The standard `ultralytics` package declares `opencv-python`; this server
+workflow intentionally resolves `ultralytics-opencv-headless`, which exposes
+the same Ultralytics API without requiring a manual uninstall/reinstall swap:
 
 ```bash
-aic/bin/python -m pip uninstall -y opencv-python
-aic/bin/python -m pip install --force-reinstall --no-deps opencv-python-headless
+aic/bin/python -m pip install -e ".[objects]"
 ```
 
 ```bash
