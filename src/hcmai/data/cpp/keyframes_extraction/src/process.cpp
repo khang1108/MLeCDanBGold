@@ -196,7 +196,22 @@ std::array<int, 2> make_pipe(std::string_view label) {
  * @return None; this function terminates the child with exit code 127.
  */
 [[noreturn]] void child_fail(const char* message, std::size_t length) noexcept {
-    static_cast<void>(::write(STDERR_FILENO, message, length));
+    std::size_t written = 0U;
+    while (written < length) {
+        const ssize_t result = ::write(
+            STDERR_FILENO,
+            message + written,
+            length - written
+        );
+        if (result > 0) {
+            written += static_cast<std::size_t>(result);
+            continue;
+        }
+        if (result == -1 && errno == EINTR) {
+            continue;
+        }
+        break;
+    }
     _exit(127);
 }
 
