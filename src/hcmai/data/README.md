@@ -2,7 +2,8 @@
 
 `hcmai.data` owns canonical frame ingestion, specialist evidence artifacts,
 derived frame context, and typed data access. The active competition baseline
-uses organizer-provided BTC keyframes and objects. The custom raw-video path is
+uses organizer-provided BTC keyframes and offline YOLOE object enrichment. The
+custom raw-video path is
 a separately invoked offline corpus with its own run root and frame_store_id;
 it does not overwrite or replace BTC preparation.
 
@@ -11,12 +12,13 @@ it does not overwrite or replace BTC preparation.
 ```text
 BTC keyframes ──> Caption ──────┐
               └─> OCR ──────────┤
-BTC objects ────> Object Import ├─> FrameContext V1
+              └─> YOLOE Objects ├─> FrameContext V1
 Videos ─────────> ASR segments  │   (ASR excluded)
                                  └─> specialist artifacts
 ```
 
-Caption, OCR, object import, and ASR produce independent specialist artifacts.
+Caption, OCR, YOLOE object detection, and ASR produce independent specialist
+artifacts.
 FrameContext V1 is a deterministic derived view of Caption, usable normalized
 OCR, and the object summary, in that order. ASR remains timestamped timeline
 evidence and is intentionally absent from FrameContext dependency identity and
@@ -38,7 +40,7 @@ projection never replaces them.
 | `ocr/frames.parquet` | Frame-level OCR source of truth |
 | `ocr/regions.parquet` | Raw OCR regions and boxes; source of truth |
 | `objects/frames.parquet` | Frame-level object counts/summary; source of truth |
-| `objects/detections.parquet` | Every valid BTC detection and box; source of truth |
+| `objects/detections.parquet` | Every valid YOLOE detection and box; source of truth |
 | `transcripts/*.parquet` | Timestamped ASR segment source of truth |
 | `context/frame_context_v1.parquet` | Derived Caption + OCR + Object view |
 | `frame_enrichment.parquet` | Temporary compatibility projection only |
@@ -77,9 +79,11 @@ PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
 PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
   --config configs/enrichment.yaml
 
-# 4. Import organizer-provided object detections; do not re-detect objects.
-PYTHONPATH=.:src aic/bin/python scripts/generate_object_enrichment.py \
-  --config configs/enrichment.yaml
+# 4. Run YOLOE object detection and publish canonical object artifacts.
+PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+  --frames artifacts/frame_store/frames.parquet \
+  --output artifacts/enrichment/objects_yoloe \
+  --dataset-root data
 
 # 5. Generate timestamped ASR segments from the source videos.
 PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
@@ -192,7 +196,7 @@ downstream image consumers must configure that run root as their dataset root.
 - `src/hcmai/data/pipeline.py`: `DataService` imports the configured BTC frame
   store and exposes typed frame/evidence stores.
 - `src/hcmai/data/enrichment/pipeline.py`: `EnrichmentService` runs Caption,
-  OCR, Object Import, and FrameContext through independent stage boundaries.
+  OCR, YOLOE Object Detection, and FrameContext through independent stage boundaries.
 - `src/hcmai/data/enrichment/transcripts/pipeline.py`: `TranscriptService`
   owns video-level ASR and diarization.
 - `src/hcmai/data/stores/`: typed readers for specialist and derived artifacts.

@@ -9,8 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.objects.config import ObjectConfig
-from scripts import generate_object_enrichment as object_cli
+from scripts import detect_objects as object_cli
 from scripts import generate_ocr_enrichment as ocr_cli
 
 
@@ -23,12 +22,6 @@ def _job(tmp_path: Path) -> SimpleNamespace:
         frame_store_id="btc-v1",
         ocr=OCRConfig(checkpoint="fixture/ocr", revision="r1", device="cpu"),
         ocr_output_dir=tmp_path / "ocr",
-        objects_root=tmp_path / "source-objects",
-        object_output_dir=tmp_path / "objects",
-        objects=ObjectConfig(
-            objects_root=tmp_path / "source-objects",
-            output_dir=tmp_path / "objects",
-        ),
     )
 
 
@@ -66,18 +59,22 @@ def test_partial_frame_failures_exit_success_after_publication(
         )
     else:
         monkeypatch.setattr(
-            object_cli.EnrichmentJobConfig, "from_yaml", lambda path: job
-        )
-        monkeypatch.setattr(
-            object_cli.EnrichmentService,
-            "import_objects",
+            object_cli,
+            "run_yoloe",
             lambda *args, **kwargs: {
                 "completed_frames": 2,
                 "failed_frames": 1,
+                "inference_completed_frames": 2,
+                "inference_skipped_frames": 0,
             },
         )
         result = object_cli.main(
-            ["--config", str(tmp_path / "enrichment.yaml")]
+            [
+                "--frames",
+                str(tmp_path / "frames.parquet"),
+                "--output",
+                str(tmp_path / "objects"),
+            ]
         )
 
     assert result == 0
@@ -113,13 +110,13 @@ def test_artifact_level_failure_remains_nonzero(
         ]
         command = ocr_cli.main
     else:
-        monkeypatch.setattr(
-            object_cli.EnrichmentJobConfig, "from_yaml", lambda path: job
-        )
-        monkeypatch.setattr(
-            object_cli.EnrichmentService, "import_objects", fail_publication
-        )
-        arguments = ["--config", str(tmp_path / "enrichment.yaml")]
+        monkeypatch.setattr(object_cli, "run_yoloe", fail_publication)
+        arguments = [
+            "--frames",
+            str(tmp_path / "frames.parquet"),
+            "--output",
+            str(tmp_path / "objects"),
+        ]
         command = object_cli.main
 
     with pytest.raises(OSError, match="artifact publication failed"):

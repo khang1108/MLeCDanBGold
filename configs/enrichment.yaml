@@ -7,7 +7,6 @@ dataset:
   frame_store_id: "btc-keyframes-v1"
   frames_path: "artifacts/frame_store/frames.parquet"
   frame_store_output: "artifacts/frame_store"
-  objects_root: "data/objects"
 
 caption:
   output_dir: "artifacts/enrichment/captions"
@@ -43,7 +42,12 @@ ocr:
 
 objects:
   output_dir: "artifacts/enrichment/objects"
-  artifact_version: "object-v1"
+  model: "yoloe-26l-seg-pf.pt"
+  min_confidence: 0.20
+  top_k: 30
+  batch_size: 32
+  device: "cuda"
+  artifact_version: "object-yoloe-v1"
   summary_min_confidence: 0.25
   max_summary_labels: 20
 

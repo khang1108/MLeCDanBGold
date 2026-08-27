@@ -1,4 +1,4 @@
-"""Behavior tests for strict BTC object evidence import."""
+"""Behavior tests for YOLOE object evidence materialization."""
 
 from __future__ import annotations
 
@@ -12,8 +12,10 @@ import pytest
 from pydantic import ValidationError
 
 from hcmai.common.schemas import ObjectDetection, ObjectEvidence, ProcessingStatus
-from hcmai.data.enrichment.objects.config import ObjectConfig
-from hcmai.data.enrichment.objects.importer import import_objects
+from hcmai.data.enrichment.object_detection import (
+    ObjectDetectionConfig,
+    materialize_object_artifacts,
+)
 
 
 def _frames(tmp_path: Path, count: int = 1) -> Path:
@@ -49,16 +51,15 @@ def _empty_payload() -> dict[str, list[object]]:
     }
 
 
-def _config(tmp_path: Path, **updates: object) -> ObjectConfig:
+def _config(tmp_path: Path, **updates: object) -> ObjectDetectionConfig:
     values = {
-        "objects_root": tmp_path / "objects",
-        "output_dir": tmp_path / "output",
+        "artifact_version": "object-yoloe-v1",
     }
     values.update(updates)
-    return ObjectConfig(**values)
+    return ObjectDetectionConfig(**values)
 
 
-def test_btc_object_import_preserves_counts_multiplicity_and_boxes(tmp_path):
+def test_yoloe_object_materialization_preserves_counts_and_boxes(tmp_path):
     source = _frames(tmp_path)
     _write_object(
         tmp_path / "objects",
@@ -74,7 +75,7 @@ def test_btc_object_import_preserves_counts_multiplicity_and_boxes(tmp_path):
         },
     )
 
-    report = import_objects(
+    report = materialize_object_artifacts(
         source,
         tmp_path / "objects",
         tmp_path / "output",
@@ -126,7 +127,7 @@ def test_btc_string_encoded_numeric_arrays_are_coerced(tmp_path):
         },
     )
 
-    report = import_objects(
+    report = materialize_object_artifacts(
         source,
         tmp_path / "objects",
         tmp_path / "output",
@@ -153,7 +154,7 @@ def test_all_detections_are_retained_but_summary_is_thresholded(tmp_path):
         },
     )
 
-    import_objects(
+    materialize_object_artifacts(
         source,
         tmp_path / "objects",
         tmp_path / "output",
@@ -249,7 +250,7 @@ def test_malformed_object_json_fails_only_its_frame(tmp_path, payload):
         },
     )
 
-    report = import_objects(
+    report = materialize_object_artifacts(
         source,
         tmp_path / "objects",
         tmp_path / "output",
@@ -274,7 +275,7 @@ def test_malformed_object_json_fails_only_its_frame(tmp_path, payload):
 def test_missing_json_is_a_bounded_per_frame_failure(tmp_path):
     source = _frames(tmp_path)
 
-    import_objects(
+    materialize_object_artifacts(
         source,
         tmp_path / "objects",
         tmp_path / "output",
@@ -308,7 +309,7 @@ def test_duplicate_canonical_frame_identity_is_rejected_before_publication(tmp_p
     pd.concat([frames, frames], ignore_index=True).to_parquet(source, index=False)
 
     with pytest.raises(ValueError, match="(?i)duplicate frame_id"):
-        import_objects(
+        materialize_object_artifacts(
             source,
             tmp_path / "objects",
             tmp_path / "output",
@@ -325,9 +326,11 @@ def test_publication_failure_restores_prior_complete_bundle(
     source = _frames(tmp_path)
     _write_object(tmp_path / "objects", "0000", _empty_payload())
     config = _config(tmp_path)
-    import_objects(source, config.objects_root, config.output_dir, config)
+    materialize_object_artifacts(
+        source, tmp_path / "objects", tmp_path / "output", config
+    )
     names = ("frames.parquet", "detections.parquet", "manifest.json")
-    before = {name: (config.output_dir / name).read_bytes() for name in names}
+    before = {name: (tmp_path / "output" / name).read_bytes() for name in names}
 
     _write_object(
         tmp_path / "objects",
@@ -351,15 +354,17 @@ def test_publication_failure_restores_prior_complete_bundle(
     monkeypatch.setattr(Path, "replace", fail_publish_once)
 
     with pytest.raises(OSError, match="injected"):
-        import_objects(source, config.objects_root, config.output_dir, config)
+        materialize_object_artifacts(
+            source, tmp_path / "objects", tmp_path / "output", config
+        )
 
     assert injected
     assert {
-        name: (config.output_dir / name).read_bytes() for name in names
+        name: (tmp_path / "output" / name).read_bytes() for name in names
     } == before
     leftovers = {
         path.name
-        for path in config.output_dir.iterdir()
+        for path in (tmp_path / "output").iterdir()
         if path.name.endswith((".staged", ".backup", ".tmp"))
     }
     assert leftovers == set()
@@ -385,7 +390,7 @@ def test_invalid_canonical_rows_are_rejected_before_string_conversion(
     frames.to_parquet(source, index=False)
 
     with pytest.raises((ValueError, TypeError), match=field):
-        import_objects(
+        materialize_object_artifacts(
             source,
             tmp_path / "objects",
             tmp_path / "output",
@@ -408,7 +413,7 @@ def test_distinct_frames_at_one_submission_coordinate_are_preserved(tmp_path):
     _write_object(tmp_path / "objects", "0000", _empty_payload())
     _write_object(tmp_path / "objects", "0001", _empty_payload())
 
-    report = import_objects(
+    report = materialize_object_artifacts(
         source,
         tmp_path / "objects",
         tmp_path / "output",
@@ -427,7 +432,7 @@ def test_empty_canonical_store_is_rejected(tmp_path):
     pd.read_parquet(source).iloc[0:0].to_parquet(source, index=False)
 
     with pytest.raises(ValueError, match="at least one frame"):
-        import_objects(
+        materialize_object_artifacts(
             source,
             tmp_path / "objects",
             tmp_path / "output",
@@ -448,16 +453,16 @@ def test_lineage_and_casefolded_labels_are_nfc_normalized(tmp_path):
     )
     config = _config(tmp_path, artifact_version="  obje\u0301ct-v1  ")
 
-    report = import_objects(
+    report = materialize_object_artifacts(
         source,
-        config.objects_root,
-        config.output_dir,
+        tmp_path / "objects",
+        tmp_path / "output",
         config,
         frame_store_id="  btc-v1  ",
     )
 
-    frame = pd.read_parquet(config.output_dir / "frames.parquet").iloc[0]
-    detection = pd.read_parquet(config.output_dir / "detections.parquet").iloc[0]
+    frame = pd.read_parquet(tmp_path / "output" / "frames.parquet").iloc[0]
+    detection = pd.read_parquet(tmp_path / "output" / "detections.parquet").iloc[0]
     assert config.artifact_version == "objéct-v1"
     assert frame["artifact_version"] == report["artifact_version"] == "objéct-v1"
     assert frame["frame_store_id"] == report["frame_store_id"] == "btc-v1"
@@ -468,7 +473,7 @@ def test_blank_frame_store_lineage_is_rejected(tmp_path):
     source = _frames(tmp_path)
 
     with pytest.raises(ValueError, match="frame_store_id"):
-        import_objects(
+        materialize_object_artifacts(
             source,
             tmp_path / "objects",
             tmp_path / "output",

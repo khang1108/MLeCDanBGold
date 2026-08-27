@@ -6,9 +6,7 @@ repository root with the `aic/` virtual environment.
 Scripts use the owning public service in each component's `pipeline.py`:
 `DataService`, `EmbeddingService`, `EnrichmentService`, `RetrievalService`, or
 `TranscriptService`. They must not compose another component's adapters,
-stores, or generators directly. `build_benchmark.py` is the sole deliberate
-exception: it uses the internal dense-baseline `RetrievalBenchmark`, which is
-not an end-to-end `EvaluationService`.
+stores, or generators directly.
 
 `prepare_transcripts.py` additionally validates source/config/model manifests,
 supports explicitly disabled diarization, and materializes frame-aligned ASR
@@ -17,50 +15,6 @@ through the canonical `FrameEnrichment`/`ASRStore` contract.
 The root `thundercompute/` directory is the shared hosted-inference component.
 See [`thundercompute/README.md`](../thundercompute/README.md) for its endpoint
 contracts and the manual `tnr create -> scp -> connect -> run -> delete` flow.
-
-## Metadata-only pipeline cost estimate
-
-`estimate_pipeline_cost.py` reads every `watch_url` under the AIC media-info
-directory. It never downloads video or image bytes. By default it queries
-YouTube metadata through `yt-dlp --skip-download`, caches each result, and
-falls back to the JSON `length` field when a URL cannot be probed.
-
-Run a deterministic local estimate without network access:
-
-```bash
-PYTHONPATH=.:src aic/bin/python scripts/estimate_pipeline_cost.py \
-  --no-probe \
-  --output-dir /tmp/hcmai-cost-estimate-aic25-b1
-```
-
-To query URL metadata, omit `--no-probe`. The output directory contains a
-resumable `probe_cache.json`, per-video `video_estimates.csv` and
-`video_estimates.json`, and an aggregate `summary.json`.
-
-Stage time and cost are emitted only for rates supplied in a profile. Replace
-these illustrative values with measured ThunderCompute pilot throughput:
-
-```json
-{
-  "hourly_rate_usd": 0.38,
-  "billed_vm_count": 1,
-  "overhead_fraction": 0.15,
-  "stages": {
-    "caption": {"units_per_second": 2.0, "workers": 1},
-    "ocr": {"units_per_second": 4.0, "workers": 1},
-    "objects": {"units_per_second": 4.0, "workers": 1},
-    "asr": {"units_per_second": 5.0, "workers": 1},
-    "visual_embedding": {"units_per_second": 20.0, "workers": 1},
-    "context_embedding": {"units_per_second": 50.0, "workers": 1},
-    "index": {"units_per_second": 1000.0, "workers": 1}
-  }
-}
-```
-
-Caption, OCR, Object, and embedding rates use frames per second. ASR,
-download, and decode rates use source-video seconds per wall-clock second.
-The first estimator models stages sequentially and keeps billed VM count
-separate from process-level workers.
 
 ## Validate the repository
 
@@ -85,13 +39,13 @@ artifacts.
 
 ## HCMAI 2026 BTC-native enrichment V1
 
-The active competition preparation path starts from BTC keyframes and BTC
-objects. Custom video frame extraction is not part of this profile.
+The active competition preparation path starts from BTC keyframes and YOLOE
+object enrichment. Custom video frame extraction is not part of this profile.
 
 ```text
 BTC keyframes ──> Caption ──────┐
               └─> OCR ──────────┤
-BTC objects ────> Object Import ├─> FrameContext V1
+              └─> YOLOE Objects ├─> FrameContext V1
 Videos ─────────> ASR segments  │   (ASR excluded)
                                  └─> specialist artifacts
 ```
@@ -113,9 +67,11 @@ PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
 PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
   --config configs/enrichment.yaml
 
-# BTC Object Import
-PYTHONPATH=.:src aic/bin/python scripts/generate_object_enrichment.py \
-  --config configs/enrichment.yaml
+# YOLOE objects; publishes raw JSON plus canonical object Parquet artifacts.
+PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+  --frames artifacts/frame_store/frames.parquet \
+  --output artifacts/enrichment/objects_yoloe \
+  --dataset-root data
 
 # Timestamped ASR segments; change data/videos if the source lives elsewhere.
 PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
@@ -144,9 +100,10 @@ retrieval index.
 
 ## YOLOE object detection
 
-`generate_object_enrichment.py` only imports organizer-provided detections. A
-self-extracted corpus has none, so `detect_objects.py` runs YOLOE and publishes
-the same per-frame object JSON contract.
+`detect_objects.py` is the object-enrichment entry point. It runs YOLOE over
+canonical frames, stores resumable raw JSON under `<output>/raw/`, and commits
+the canonical `frames.parquet`, `detections.parquet`, and `manifest.json`
+bundle in the same output directory. No second importer step is required.
 
 Install the official Ultralytics headless variant through the `objects` extra.
 The standard `ultralytics` package declares `opencv-python`; this server
@@ -158,16 +115,10 @@ aic/bin/python -m pip install -e ".[objects]"
 ```
 
 ```bash
-# Detect; the run resumes from published JSON, so --limit is a safe smoke pass
+# Detect and publish; the run resumes from raw JSON. --limit is a degraded
+# smoke artifact and should not be used for a final corpus.
 PYTHONPATH=src aic/bin/python scripts/detect_objects.py --limit 200
 PYTHONPATH=src aic/bin/python scripts/detect_objects.py
-
-# Import the generated JSON through the existing object importer
-PYTHONPATH=src aic/bin/python scripts/generate_object_enrichment.py \
-  --config configs/enrichment.yaml \
-  --objects-root data/objects_yoloe \
-  --output artifacts/enrichment/objects_yoloe \
-  --artifact-version object-yoloe-v1
 
 # Context rebuild; the wider budget holds a finer-grained label vocabulary
 PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
@@ -175,9 +126,6 @@ PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
   --object-frames artifacts/enrichment/objects_yoloe/frames.parquet \
   --output artifacts/enrichment/context_yoloe
 ```
-
-Outputs are published beside the BTC object artifacts rather than over them, so
-both label sources stay comparable.
 
 ## Fast-track multimodal index build
 
@@ -281,20 +229,4 @@ PYTHONPATH=.:src aic/bin/python scripts/build_index.py \
   --embeddings artifacts/embeddings/visual_embeddings.npy \
   --mapping artifacts/embeddings/frame_mapping.parquet \
   --output artifacts/indexes/visual
-```
-
-## Benchmark retrieval
-
-`build_benchmark.py` is a legacy dense-baseline harness, not the selected
-competition evaluator. It still expects `models.embedding` inside the YAML
-passed as `--config`; the current `configs/baseline.yaml` no longer owns that
-checkpoint. Do not treat the command below as runnable with the current
-baseline config until the script is migrated to `thundercompute/config.yaml`.
-
-```bash
-PYTHONPATH=.:src aic/bin/python scripts/build_benchmark.py \
-  --config path/to/legacy-benchmark-config.yaml \
-  --index artifacts/indexes/visual \
-  --queries data/eval/queries.jsonl \
-  --output runs/dense_model_comparison
 ```

@@ -231,7 +231,7 @@ class PreparationOperations(Protocol):
 
     def generate_ocr(self) -> Path: ...
 
-    def import_objects(self) -> Path: ...
+    def detect_objects(self) -> Path: ...
 
     def build_frame_context(self) -> Path: ...
 
@@ -468,12 +468,9 @@ class DefaultPreparationOperations:
         )
 
     def _runtime_object_config(self) -> Any:
-        """Return Object policy aligned to this run's isolated output root."""
+        """Return the configured YOLOE policy for this preparation run."""
 
-        return replace(
-            self.enrichment_job.objects,
-            output_dir=self.paths.object_root,
-        )
+        return self.enrichment_job.objects
 
     def stage_dependency_identity(self, stage: str) -> dict[str, Any]:
         """Return policy dependencies plus expected stable manifest identity.
@@ -493,7 +490,7 @@ class DefaultPreparationOperations:
         }
         caption_config = _identity_value(asdict(caption))
         ocr_config = _identity_value(asdict(ocr))
-        object_config = _identity_value(asdict(objects))
+        object_config = _identity_value(objects.as_dict())
         context_config = _identity_value(asdict(context))
 
         if stage == "caption":
@@ -535,17 +532,13 @@ class DefaultPreparationOperations:
             return {
                 "dependencies": {
                     **common,
-                    "objects_root": str(self.enrichment_job.objects_root),
                     "configuration": object_config,
                 },
                 "manifest": {
                     "artifact_version": objects.artifact_version,
                     "frame_store_id": lineage,
-                    "objects_root": str(
-                        self.enrichment_job.objects_root.resolve()
-                    ),
-                    "summary_min_confidence": objects.summary_min_confidence,
-                    "max_summary_labels": objects.max_summary_labels,
+                    "source": "yoloe",
+                    **object_config,
                 },
             }
         if stage == "frame_context":
@@ -624,17 +617,17 @@ class DefaultPreparationOperations:
             del adapter
         return self.paths.ocr_root / "frame_enrichment.parquet"
 
-    def import_objects(self) -> Path:
-        """Import BTC object evidence through the public enrichment facade."""
+    def detect_objects(self) -> Path:
+        """Run YOLOE and publish object evidence through the public facade."""
 
         from hcmai.data.enrichment.pipeline import EnrichmentService
 
         config = self._runtime_object_config()
-        EnrichmentService.import_objects(
+        EnrichmentService.detect_objects(
             self.paths.frames_path,
-            self.enrichment_job.objects_root,
             self.paths.object_root,
             config,
+            dataset_root=self.enrichment_job.data_root,
             frame_store_id=self._specialist_frame_store_id(),
         )
         return self.paths.object_root / "frames.parquet"
@@ -899,7 +892,7 @@ class S3CorpusPreparationService:
         simple_stages = (
             ("caption", self.config.stages.caption, self.operations.generate_caption),
             ("ocr", self.config.stages.ocr, self.operations.generate_ocr),
-            ("objects", self.config.stages.objects, self.operations.import_objects),
+            ("objects", self.config.stages.objects, self.operations.detect_objects),
             ("asr", self.config.stages.asr, self.operations.materialize_asr),
             (
                 "frame_context",

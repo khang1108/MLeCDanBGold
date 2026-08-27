@@ -117,7 +117,7 @@ class _Operations:
         (root / "manifest.json").write_text("{}", encoding="utf-8")
         return output
 
-    def import_objects(self) -> Path:
+    def detect_objects(self) -> Path:
         self.events.append("objects")
         root = self.paths.object_root
         root.mkdir(parents=True, exist_ok=True)
@@ -193,7 +193,7 @@ def _config(tmp_path: Path) -> S3CorpusPreparationConfig:
     })
 
 
-def test_btc_competition_run_uses_import_then_context_without_preprocessing(
+def test_btc_competition_run_uses_detection_then_context_without_preprocessing(
     tmp_path: Path,
 ) -> None:
     """Route active BTC stages without touching the legacy video frame session."""
@@ -251,7 +251,7 @@ def test_btc_competition_run_uses_import_then_context_without_preprocessing(
             )
             return output
 
-        def import_objects(self) -> Path:
+        def detect_objects(self) -> Path:
             self.events.append("objects")
             self.paths.object_root.mkdir(parents=True, exist_ok=True)
             output = self.paths.object_root / "frames.parquet"
@@ -302,10 +302,10 @@ def test_btc_competition_run_uses_import_then_context_without_preprocessing(
 def test_default_operations_use_public_object_and_context_services_in_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Keep object import and derived context behind their public boundaries."""
+    """Keep object detection and derived context behind public boundaries."""
 
     from hcmai.data.enrichment.context.config import FrameContextConfig
-    from hcmai.data.enrichment.objects.config import ObjectConfig
+    from hcmai.data.enrichment.object_detection import ObjectDetectionConfig
     from hcmai.data.enrichment.pipeline import EnrichmentService
 
     paths = SimpleNamespace(
@@ -318,17 +318,14 @@ def test_default_operations_use_public_object_and_context_services_in_order(
     operations = object.__new__(DefaultPreparationOperations)
     operations.paths = paths
     operations.enrichment_job = SimpleNamespace(
-        objects=ObjectConfig(
-            objects_root=tmp_path / "btc-objects",
-            output_dir=paths.object_root,
-        ),
-        objects_root=tmp_path / "btc-objects",
+        objects=ObjectDetectionConfig(),
+        data_root=tmp_path,
         frame_store_id="btc-fixture-v1",
         context=FrameContextConfig(),
     )
     calls: list[str] = []
 
-    def import_objects(*args: object, **kwargs: object) -> dict[str, object]:
+    def detect_objects(*args: object, **kwargs: object) -> dict[str, object]:
         calls.append("objects")
         return {}
 
@@ -336,10 +333,10 @@ def test_default_operations_use_public_object_and_context_services_in_order(
         calls.append("frame_context")
         return paths.context_root / "frame_context_v1.parquet"
 
-    monkeypatch.setattr(EnrichmentService, "import_objects", import_objects)
+    monkeypatch.setattr(EnrichmentService, "detect_objects", detect_objects)
     monkeypatch.setattr(EnrichmentService, "build_frame_context", build_context)
 
-    operations.import_objects()
+    operations.detect_objects()
     operations.build_frame_context()
 
     assert calls == ["objects", "frame_context"]
@@ -434,7 +431,7 @@ def test_default_context_stage_identity_depends_on_ocr_policy(
     from hcmai.data.enrichment.caption.config import CaptionConfig
     from hcmai.data.enrichment.context.config import FrameContextConfig
     from hcmai.data.enrichment.ocr.config import OCRConfig
-    from hcmai.data.enrichment.objects.config import ObjectConfig
+    from hcmai.data.enrichment.object_detection import ObjectDetectionConfig
 
     operations = object.__new__(DefaultPreparationOperations)
     operations.config = SimpleNamespace(
@@ -469,17 +466,14 @@ def test_default_context_stage_identity_depends_on_ocr_policy(
     )
     operations.enrichment_job = SimpleNamespace(
         frame_store_id="btc-v2",
-        objects_root=tmp_path / "source-objects",
+        data_root=tmp_path,
         caption=operations.caption_job.caption,
         ocr=OCRConfig(
             checkpoint="configured/model",
             revision="configured-revision",
             min_region_confidence=0.0,
         ),
-        objects=ObjectConfig(
-            objects_root=tmp_path / "source-objects",
-            output_dir=tmp_path / "objects",
-        ),
+        objects=ObjectDetectionConfig(),
         context=FrameContextConfig(),
     )
     before_ocr = operations.stage_dependency_identity("ocr")

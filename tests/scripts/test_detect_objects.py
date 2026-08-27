@@ -1,9 +1,14 @@
-"""CLI validation tests for the YOLOE object detection entry point."""
+"""CLI and pipeline tests for the YOLOE object detection entry point."""
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
+from hcmai.data.enrichment.object_detection import ObjectDetectionConfig, run_yoloe
 from scripts.detect_objects import parse_args
 
 
@@ -46,3 +51,112 @@ def test_parse_args_keeps_positive_defaults() -> None:
     assert args.batch_size == 32
     assert args.limit is None
     assert args.min_confidence == 0.20
+
+
+class _FakeVector:
+    """Small tensor-like value used to exercise sorting and top-k selection."""
+
+    def __init__(self, values: list[object]) -> None:
+        self.values = values
+
+    def argsort(self, *, descending: bool) -> "_FakeVector":
+        return _FakeVector(
+            sorted(
+                range(len(self.values)),
+                key=lambda index: self.values[index],
+                reverse=descending,
+            )
+        )
+
+    def __getitem__(self, index: object) -> object:
+        if isinstance(index, _FakeVector):
+            index = index.values
+        if isinstance(index, slice):
+            return _FakeVector(self.values[index])
+        if isinstance(index, list):
+            return _FakeVector([self.values[item] for item in index])
+        return self.values[index]  # type: ignore[index]
+
+    def tolist(self) -> list[object]:
+        return list(self.values)
+
+
+class _FakeBoxes:
+    """Tensor-shaped detection fields returned by the fake YOLOE result."""
+
+    conf = _FakeVector([0.4, 0.9])
+    cls = _FakeVector([1, 0])
+    xyxy = _FakeVector([[0.0, 0.0, 10.0, 10.0], [2.0, 1.0, 18.0, 9.0]])
+
+    def __len__(self) -> int:
+        return len(self.conf.values)
+
+
+class _FakeResult:
+    """One deterministic YOLOE result with two sortable detections."""
+
+    orig_shape = (10, 20)
+    names = {0: "person", 1: "car"}
+    boxes = _FakeBoxes()
+
+
+class _FakeModel:
+    """Capture model invocation without importing or downloading Ultralytics."""
+
+    names = _FakeResult.names
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def predict(self, images: list[str], **kwargs: object) -> list[_FakeResult]:
+        self.calls.append({"images": images, **kwargs})
+        return [_FakeResult() for _ in images]
+
+
+def test_run_yoloe_publishes_raw_and_canonical_artifacts(tmp_path: Path) -> None:
+    """The new pipeline turns fake YOLOE results into the enrichment contract."""
+
+    image = tmp_path / "keyframes/v1/0000.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"fixture")
+    frames = tmp_path / "frames.parquet"
+    pd.DataFrame(
+        [
+            {
+                "frame_id": "v1:0000",
+                "video_id": "v1",
+                "frame_idx": 7,
+                "timestamp_ms": 500,
+                "image_path": "keyframes/v1/0000.jpg",
+                "width": 20,
+                "height": 10,
+            }
+        ]
+    ).to_parquet(frames, index=False)
+
+    model = _FakeModel()
+    report = run_yoloe(
+        frames,
+        tmp_path / "objects",
+        ObjectDetectionConfig(top_k=1, batch_size=1, device="cpu"),
+        dataset_root=tmp_path,
+        frame_store_id="fixture-v1",
+        model=model,
+    )
+
+    raw = json.loads(
+        (tmp_path / "objects/raw/v1/0000.json").read_text(encoding="utf-8")
+    )
+    detections = pd.read_parquet(tmp_path / "objects/detections.parquet")
+    frames_artifact = pd.read_parquet(tmp_path / "objects/frames.parquet")
+
+    assert raw["detection_class_entities"] == ["person"]
+    assert raw["detection_scores"] == [0.9]
+    assert detections[["label", "confidence"]].values.tolist() == [["person", 0.9]]
+    assert frames_artifact[["frame_id", "detection_count"]].values.tolist() == [
+        ["v1:0000", 1]
+    ]
+    assert report["source"] == "yoloe"
+    assert report["completed_frames"] == 1
+    assert report["failed_frames"] == 0
+    assert model.calls[0]["conf"] == 0.2

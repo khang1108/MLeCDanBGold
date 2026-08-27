@@ -119,7 +119,6 @@ dataset:
   frame_store_id: btc-fixture-v1
   frames_path: {frames}
   frame_store_output: {frames.parent}
-  objects_root: {root / 'btc_objects'}
 caption:
   output_dir: {root / 'captions'}
   model_checkpoint: fixture/caption
@@ -149,7 +148,12 @@ ocr:
   min_context_quality: 0.5
 objects:
   output_dir: {root / 'objects'}
-  artifact_version: object-v1
+  model: fixture/yoloe
+  min_confidence: 0.2
+  top_k: 30
+  batch_size: 2
+  device: cpu
+  artifact_version: object-yoloe-v1
   summary_min_confidence: 0.25
   max_summary_labels: 20
 context:
@@ -190,11 +194,11 @@ def test_two_frame_offline_enrichment_and_context_only_rebuild(
         dataset_root=job.data_root,
         frame_store_id=job.frame_store_id,
     )
-    object_report = EnrichmentService.import_objects(
+    object_report = EnrichmentService.detect_objects(
         job.frames_path,
-        job.objects_root,
         job.object_output_dir,
         job.objects,
+        raw_output_root=tmp_path / "btc_objects",
         frame_store_id=job.frame_store_id,
     )
     context_path = EnrichmentService.build_frame_context_from_job(job)
@@ -238,7 +242,7 @@ def test_two_frame_offline_enrichment_and_context_only_rebuild(
     )
     monkeypatch.setattr(
         EnrichmentService,
-        "import_objects",
+        "detect_objects",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("context rebuild imported objects")
         ),
@@ -288,7 +292,6 @@ dataset:
   frame_store_id: fixture-frames-v1
   frames_path: fixture/artifacts/frame_store/frames.parquet
   frame_store_output: fixture/artifacts/frame_store
-  objects_root: fixture/objects
 caption:
   output_dir: fixture/artifacts/captions
   model_checkpoint: fixture/caption
@@ -318,7 +321,12 @@ ocr:
   min_context_quality: 0.5
 objects:
   output_dir: fixture/artifacts/objects
-  artifact_version: object-v1
+  model: fixture/yoloe
+  min_confidence: 0.2
+  top_k: 30
+  batch_size: 1
+  device: cpu
+  artifact_version: object-yoloe-v1
   summary_min_confidence: 0.25
   max_summary_labels: 20
 transcript:
@@ -340,7 +348,6 @@ context:
     project_root = Path(__file__).resolve().parents[3]
 
     assert job.frames_path == project_root / "fixture/artifacts/frame_store/frames.parquet"
-    assert job.objects.objects_root == project_root / "fixture/objects"
     assert job.caption_output_dir == project_root / "fixture/artifacts/captions"
     assert job.context_output_dir == project_root / "fixture/artifacts/context"
 
@@ -351,6 +358,7 @@ def test_default_operations_keep_btc_specialist_lineage_for_context(
     """Run BTC specialists through the active operations before context assembly."""
 
     from hcmai.data.corpus_build.pipeline import DefaultPreparationOperations
+    from hcmai.data.enrichment.object_detection import materialize_object_artifacts
 
     frames = _write_fixture(tmp_path)
     job = EnrichmentJobConfig.from_yaml(_write_config(tmp_path, frames))
@@ -395,10 +403,21 @@ def test_default_operations_keep_btc_specialist_lineage_for_context(
         "create_ocr_adapter",
         lambda config: _OCRAdapter(),
     )
+    monkeypatch.setattr(
+        EnrichmentService,
+        "detect_objects",
+        lambda frames_path, output_dir, config, **kwargs: materialize_object_artifacts(
+            frames_path,
+            tmp_path / "btc_objects",
+            output_dir,
+            config,
+            frame_store_id=kwargs["frame_store_id"],
+        ),
+    )
 
     operations.generate_caption()
     operations.generate_ocr()
-    operations.import_objects()
+    operations.detect_objects()
     context_path = operations.build_frame_context()
 
     assert context_path.exists()

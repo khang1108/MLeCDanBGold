@@ -1,14 +1,14 @@
 # BTC-native media enrichment
 
-`hcmai.data.enrichment` owns independently runnable Caption, OCR, BTC Object
-Import, ASR, and deterministic FrameContext stages. Model-specific code stays
+`hcmai.data.enrichment` owns independently runnable Caption, OCR, YOLOE Object
+Detection, ASR, and deterministic FrameContext stages. Model-specific code stays
 behind feature-local adapters; production scripts call the public service
 boundaries.
 
 ```text
 BTC keyframes ──> Caption ──────┐
               └─> OCR ──────────┤
-BTC objects ────> Object Import ├─> FrameContext V1
+              └─> YOLOE Objects ├─> FrameContext V1
 Videos ─────────> ASR segments  │   (ASR excluded)
                                  └─> specialist artifacts
 ```
@@ -24,7 +24,8 @@ enrichment/
 ├── pipeline.py              # Caption/OCR/Object/Context service boundary
 ├── caption/                 # caption generation, resume, and artifacts
 ├── ocr/                     # raw regions plus derived normalized frame text
-├── objects/                 # lossless BTC detection import and summary
+├── object_detection.py      # YOLOE inference and object artifact materialization
+├── object_artifacts.py      # canonical object Parquet bundle publication
 ├── context/                 # deterministic Caption/OCR/Object serializer
 └── transcripts/             # timestamped ASR/diarization timeline evidence
 ```
@@ -66,8 +67,10 @@ PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
 PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
   --config configs/enrichment.yaml
 
-PYTHONPATH=.:src aic/bin/python scripts/generate_object_enrichment.py \
-  --config configs/enrichment.yaml
+PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+  --frames artifacts/frame_store/frames.parquet \
+  --output artifacts/enrichment/objects_yoloe \
+  --dataset-root data
 
 PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
   --config configs/enrichment.yaml --videos-root data/videos
@@ -77,17 +80,17 @@ PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
 ```
 
 Caption and OCR may use local pinned models or configured hosted adapters.
-Object Import always reads BTC JSON and does not run detection. FrameContext
-only reads existing specialist parquet files and never triggers upstream model
-inference. Index building is outside Enrichment V1.
+Object Detection runs YOLOE offline and commits raw JSON plus canonical object
+artifacts. FrameContext only reads existing specialist parquet files and never
+triggers upstream model inference. Index building is outside Enrichment V1.
 
 ## Resume and dependency rules
 
 - Completed compatible Caption/OCR rows are skipped; failed or incomplete rows
   are retried without rewriting canonical identity.
-- Object Import preserves every valid raw detection and bounding box. Derived
-  counts may apply the configured confidence threshold without deleting raw
-  rows.
+- YOLOE object enrichment preserves every valid raw detection and bounding box.
+  Derived counts may apply the configured confidence threshold without deleting
+  raw rows.
 - Context rebuild identity includes Caption, OCR, Object, frame-store lineage,
   and serializer policy. It excludes ASR.
 - Changing only a Context policy rebuilds Context without touching specialist

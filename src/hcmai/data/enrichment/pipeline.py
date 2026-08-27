@@ -1,8 +1,8 @@
 """Expose thin service boundaries for independent offline enrichment stages.
 
-The service delegates Caption, OCR, BTC Object, and deterministic FrameContext
-materialization. Specialist generation and context serialization remain owned
-by their respective packages.
+The service delegates Caption, OCR, YOLOE object detection, and deterministic
+FrameContext materialization. Specialist generation and context serialization
+remain owned by their respective packages.
 """
 
 from __future__ import annotations
@@ -21,8 +21,10 @@ from hcmai.data.enrichment.context.config import FrameContextConfig
 from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.enrichment.ocr.generator import generate_ocr
 from hcmai.data.enrichment.ocr.models.contracts import OCRAdapter
-from hcmai.data.enrichment.objects.config import ObjectConfig
-from hcmai.data.enrichment.objects.importer import import_objects
+from hcmai.data.enrichment.object_detection import (
+    ObjectDetectionConfig,
+    run_yoloe,
+)
 
 
 @dataclass(frozen=True)
@@ -36,13 +38,12 @@ class EnrichmentJobConfig:
     frame_store_id: str
     frames_path: Path
     frame_store_output: Path
-    objects_root: Path
     caption_output_dir: Path
     caption: CaptionConfig
     ocr_output_dir: Path
     ocr: OCRConfig
     object_output_dir: Path
-    objects: ObjectConfig
+    objects: ObjectDetectionConfig
     transcript_output_dir: Path
     context_output_dir: Path
     context: FrameContextConfig
@@ -75,7 +76,6 @@ class EnrichmentJobConfig:
             "frame_store_id",
             "frames_path",
             "frame_store_output",
-            "objects_root",
         }
         missing = sorted(required_dataset - set(dataset))
         if missing:
@@ -95,11 +95,7 @@ class EnrichmentJobConfig:
 
         object_values = sections["objects"]
         object_output = _required_output(object_values, "objects")
-        object_config = ObjectConfig(
-            objects_root=_project_path(dataset["objects_root"]),
-            output_dir=object_output,
-            **object_values,
-        )
+        object_config = ObjectDetectionConfig(**object_values)
 
         transcript_output = Path(
             sections["transcript"].get(
@@ -117,7 +113,6 @@ class EnrichmentJobConfig:
             frame_store_id=str(dataset["frame_store_id"]),
             frames_path=_project_path(dataset["frames_path"]),
             frame_store_output=_project_path(dataset["frame_store_output"]),
-            objects_root=_project_path(dataset["objects_root"]),
             caption_output_dir=caption_output,
             caption=CaptionConfig.from_dict(caption_values),
             ocr_output_dir=ocr_output,
@@ -188,22 +183,26 @@ class EnrichmentService:
         )
 
     @staticmethod
-    def import_objects(
+    def detect_objects(
         frames_path: str | Path,
-        objects_root: str | Path,
         output_dir: str | Path,
-        config: ObjectConfig,
+        config: ObjectDetectionConfig,
         *,
+        dataset_root: str | Path = ".",
+        raw_output_root: str | Path | None = None,
         frame_store_id: str | None = None,
+        limit: int | None = None,
     ) -> dict[str, Any]:
-        """Import BTC-provided object JSON without running detection."""
+        """Run YOLOE and publish canonical object enrichment artifacts."""
 
-        return import_objects(
+        return run_yoloe(
             frames_path,
-            objects_root,
             output_dir,
             config,
+            dataset_root=dataset_root,
+            raw_output_root=raw_output_root,
             frame_store_id=frame_store_id,
+            limit=limit,
         )
 
     @staticmethod

@@ -18,7 +18,7 @@ from hcmai.common.schemas import (
     RetrievalSource,
     TranscriptSegment,
 )
-from hcmai.data.enrichment.objects.artifacts import write_object_artifacts
+from hcmai.data.enrichment.object_artifacts import write_object_artifacts
 from hcmai.data.pipeline import DataService
 from hcmai.data.stores import CaptionStore, FrameContextStore, ObjectStore
 
