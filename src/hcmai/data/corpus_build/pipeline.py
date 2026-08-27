@@ -14,7 +14,7 @@ import json
 import logging
 import shutil
 from contextlib import contextmanager
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -256,9 +256,10 @@ class DefaultPreparationOperations:
         *,
         resume: bool,
         limit: int | None,
-        enrichment_config: str | Path = "configs/enrichment.yaml",
+        enrichment_config: str | Path = "configs/prepare.yaml",
         model_config: str | Path = "thundercompute/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
+        dataset: Mapping[str, Any] | None = None,
         s3_client: Any | None = None,
     ) -> None:
         from hcmai.common.config import TranscriptJobConfig
@@ -280,10 +281,20 @@ class DefaultPreparationOperations:
         self.enrichment_config = Path(enrichment_config)
         self.model_config_path = Path(model_config)
         self.retrieval_config = Path(retrieval_config)
+        self.dataset = dict(dataset) if dataset is not None else None
         self.s3_client = s3_client
-        self.enrichment_job = EnrichmentJobConfig.from_yaml(self.enrichment_config)
-        self.caption_job = CaptionJobConfig.from_yaml(self.enrichment_config)
-        self.transcript_job = TranscriptJobConfig.from_yaml(self.enrichment_config)
+        self.enrichment_job = EnrichmentJobConfig.from_yaml(
+            self.enrichment_config,
+            dataset=self.dataset,
+        )
+        self.caption_job = CaptionJobConfig.from_yaml(
+            self.enrichment_config,
+            dataset=self.dataset,
+        )
+        self.transcript_job = TranscriptJobConfig.from_yaml(
+            self.enrichment_config,
+            dataset=self.dataset,
+        )
         self.model_config = LLMServiceConfig.from_yaml(self.model_config_path)
         
         self._validate_model_pins()
@@ -407,7 +418,10 @@ class DefaultPreparationOperations:
 
         from hcmai.data.pipeline import DataService
 
-        frames_path = DataService.prepare(self.enrichment_config)
+        frames_path = DataService.prepare(
+            self.enrichment_config,
+            dataset=self.dataset,
+        )
         if frames_path != self.paths.frames_path:
             raise ValueError(
                 "BTC frame store path differs from the active enrichment contract"
@@ -781,23 +795,29 @@ class S3CorpusPreparationService:
         resume: bool = True,
         limit: int | None = None,
         offset: int | None = None,
-        enrichment_config: str | Path = "configs/enrichment.yaml",
+        enrichment_config: str | Path = "configs/prepare.yaml",
         model_config: str | Path = "thundercompute/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
         paths: PreparationPaths | None = None,
+        dataset: Mapping[str, Any] | None = None,
     ) -> None:
         storage = config.preprocessing.s3
         if storage is None:
             raise ValueError("S3 corpus preparation requires S3 storage")
         self.config = config
         self.storage = storage
+        self.dataset = dict(dataset) if dataset is not None else None
         if paths is not None:
             self.paths = paths
         else:
             from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
 
             self.paths = PreparationPaths.from_enrichment_job(
-                config, EnrichmentJobConfig.from_yaml(enrichment_config)
+                config,
+                EnrichmentJobConfig.from_yaml(
+                    enrichment_config,
+                    dataset=self.dataset,
+                ),
             )
         self.paths.state_root.mkdir(parents=True, exist_ok=True)
         self.client = client if client is not None else create_s3_client(storage)
@@ -812,6 +832,7 @@ class S3CorpusPreparationService:
             enrichment_config=enrichment_config,
             model_config=model_config,
             retrieval_config=retrieval_config,
+            dataset=self.dataset,
             s3_client=self.client,
         )
     def run(self) -> PreparationRun:

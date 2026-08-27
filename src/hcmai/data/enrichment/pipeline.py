@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
-from hcmai.common.utils.io import read_yaml
+from hcmai.common.utils.io import read_yaml_section
 from hcmai.data.enrichment.caption.config import CaptionConfig, PROJECT_ROOT
 from hcmai.data.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
 from hcmai.data.enrichment.caption.generator import generate_captions
@@ -25,6 +26,7 @@ from hcmai.data.enrichment.object_detection import (
     ObjectDetectionConfig,
     run_yoloe,
 )
+from hcmai.data.enrichment.dataset_cli import merge_dataset_values
 
 
 @dataclass(frozen=True)
@@ -33,7 +35,7 @@ class EnrichmentJobConfig:
 
     dataset_version: str
     source: str
-    btc_root: Path
+    btc_root: Path | None
     data_root: Path
     frame_store_id: str
     frames_path: Path
@@ -49,29 +51,38 @@ class EnrichmentJobConfig:
     context: FrameContextConfig
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> EnrichmentJobConfig:
-        """Load the complete Enrichment V1 contract from one YAML file."""
+    def from_yaml(
+        cls,
+        path: str | Path,
+        *,
+        dataset: Mapping[str, Any] | None = None,
+    ) -> EnrichmentJobConfig:
+        """Load the complete Enrichment V1 section from preparation YAML."""
 
-        raw = read_yaml(Path(path).expanduser().resolve())
-        if not isinstance(raw, dict):
-            raise ValueError("Enrichment YAML requires a mapping")
+        raw = read_yaml_section(
+            Path(path).expanduser().resolve(),
+            "enrichment",
+        )
 
         sections: dict[str, dict[str, Any]] = {}
-        for name in ("dataset", "caption", "ocr", "objects", "context"):
+        for name in ("caption", "ocr", "objects", "context"):
             value = raw.get(name)
             if not isinstance(value, dict):
                 raise ValueError(f"Enrichment YAML requires a {name} mapping")
             sections[name] = dict(value)
+        configured_dataset = raw.get("dataset")
+        if configured_dataset is not None and not isinstance(configured_dataset, dict):
+            raise ValueError("Enrichment YAML dataset section must be a mapping")
         transcript = raw.get("transcript", {})
         if not isinstance(transcript, dict):
             raise ValueError("Enrichment transcript section must be a mapping")
         sections["transcript"] = dict(transcript)
 
-        dataset = sections["dataset"]
+        dataset_values = merge_dataset_values(raw, dict(dataset) if dataset else None)
+        dataset = dataset_values
         required_dataset = {
             "version",
             "source",
-            "btc_root",
             "data_root",
             "frame_store_id",
             "frames_path",
@@ -82,8 +93,12 @@ class EnrichmentJobConfig:
             raise ValueError(
                 "Missing dataset enrichment configuration: " + ", ".join(missing)
             )
-        if dataset["source"] != "btc_keyframes":
-            raise ValueError("Enrichment V1 dataset source must be 'btc_keyframes'")
+        for field_name in ("version", "source", "frame_store_id"):
+            value = dataset[field_name]
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"Enrichment dataset {field_name} must be a non-empty string"
+                )
 
         caption_values = sections["caption"]
         caption_output = _required_output(caption_values, "caption")
@@ -106,11 +121,15 @@ class EnrichmentJobConfig:
         context_output = _required_output(context_values, "context")
 
         return cls(
-            dataset_version=str(dataset["version"]),
-            source=str(dataset["source"]),
-            btc_root=_project_path(dataset["btc_root"]),
+            dataset_version=dataset["version"].strip(),
+            source=dataset["source"].strip(),
+            btc_root=(
+                _project_path(dataset["btc_root"])
+                if "btc_root" in dataset
+                else None
+            ),
             data_root=_project_path(dataset["data_root"]),
-            frame_store_id=str(dataset["frame_store_id"]),
+            frame_store_id=dataset["frame_store_id"].strip(),
             frames_path=_project_path(dataset["frames_path"]),
             frame_store_output=_project_path(dataset["frame_store_output"]),
             caption_output_dir=caption_output,

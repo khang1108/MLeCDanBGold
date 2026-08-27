@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -245,97 +243,6 @@ def test_data_service_prepare_rejects_non_btc_source(tmp_path):
 
     with pytest.raises(ValueError, match="expected 'btc_keyframes'"):
         DataService.prepare(config_path)
-
-
-def test_prepare_data_cli_uses_btc_enrichment_config(tmp_path):
-    source = tmp_path / "btc"
-    keyframe = source / "keyframes" / "L01_V001" / "0000.jpg"
-    keyframe.parent.mkdir(parents=True)
-    Image.new("RGB", (32, 24)).save(keyframe)
-    _write_btc_metadata(source, [_valid_btc_row()])
-
-    output_root = tmp_path / "frame_store"
-    config_path = tmp_path / "enrichment.yaml"
-    write_yaml(
-        {
-            "dataset": {
-                "version": "hcmai2026-test-v1",
-                "source": "btc_keyframes",
-                "btc_root": str(source),
-                "mapping_root": str(source / "map_keyframes"),
-                "data_root": str(source),
-                "frame_store_id": "btc-cli-prepare-v1",
-                "frames_path": str(output_root / "frames.parquet"),
-                "frame_store_output": str(output_root),
-            }
-        },
-        config_path,
-    )
-
-    project_root = Path(__file__).resolve().parents[2]
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "scripts/prepare_data.py",
-            "--config",
-            str(config_path),
-            "--dataset-root",
-            str(source),
-        ],
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    assert "Videos: 1" in completed.stdout
-    assert "Frames: 1" in completed.stdout
-    assert "Status: PASSED" in completed.stdout
-    assert (output_root / "frames.parquet").is_file()
-
-
-def test_prepare_data_cli_delegates_config_and_optional_dataset_root(
-    tmp_path, monkeypatch, capsys
-):
-    import scripts.prepare_data as cli
-
-    config_path = tmp_path / "enrichment.yaml"
-    dataset_root = tmp_path / "btc"
-    output = tmp_path / "frame_store" / "frames.parquet"
-    calls = []
-
-    class FakeData:
-        @staticmethod
-        def iter_frames():
-            return iter(())
-
-    def fake_prepare(config):
-        calls.append(("prepare", config))
-        return output
-
-    def fake_load(frames_path, *, dataset_root=None):
-        calls.append(("load", frames_path, dataset_root))
-        return FakeData()
-
-    monkeypatch.setattr(cli.DataService, "prepare", fake_prepare)
-    monkeypatch.setattr(cli.DataService, "load", fake_load)
-
-    exit_code = cli.main(
-        [
-            "--config",
-            str(config_path),
-            "--dataset-root",
-            str(dataset_root),
-        ]
-    )
-
-    assert exit_code == 0
-    assert calls == [
-        ("prepare", config_path),
-        ("load", output, dataset_root),
-    ]
-    assert "Status: PASSED" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

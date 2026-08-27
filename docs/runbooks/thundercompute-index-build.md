@@ -7,10 +7,11 @@ indexes during serving.
 
 ## Prepare the organizer mapping explicitly
 
-`configs/indexing.yaml` requires CSV files directly under
-`data/map_keyframes/`. The build command deliberately does not unpack or infer
-this organizer-owned mapping. Prepare it locally in one of these explicit ways
-before publishing the canonical inputs:
+The build command receives all dataset-specific inputs through CLI arguments;
+`configs/prepare.yaml` only owns indexing policies, output layout, storage, and
+model pins. The organizer mapping is passed explicitly through
+`--map-keyframes-root`; the command does not unpack or infer it. Prepare it
+locally in one of these explicit ways before publishing the canonical inputs:
 
 ```bash
 cd /absolute/path/to/local/hcmai
@@ -28,14 +29,36 @@ alternative location may be passed explicitly with
 `--map-keyframes-root /absolute/path/to/map_keyframes`; never substitute an
 image filename, keyframe order, FPS estimate, or timestamp for the BTC map.
 
+Keep this dataset contract in the shell session and append it to every index
+stage command. Change it for another corpus; do not add the values back to the
+YAML:
+
+```bash
+INDEX_DATASET_ARGS=(
+  --version btc-keyframes-v1
+  --source btc_keyframes
+  --frame-store-id btc-keyframes-v1
+  --data-root data
+  --frames artifacts/frame_store/frames.parquet
+  --frame-store-output artifacts/frame_store
+  --frame-manifest artifacts/frame_store/manifest.json
+  --keyframes-root data/keyframes
+  --map-keyframes-root data/map_keyframes
+  --context artifacts/enrichment/context/frame_context_v1.parquet
+  --transcripts artifacts/enrichment/transcripts
+  --expected-video-count 873
+  --expected-frame-count 177321
+)
+```
+
 ## Publish canonical inputs to S3
 
 The source checkout must contain canonical `frames.parquet` and its manifest,
 BTC keyframes and mappings, FrameContext and its manifest, transcripts, and the
-two indexing configs. Publish those artifacts under the prefixes configured in
-`configs/preparation.s3.yaml`; the repository README documents the corresponding
-AWS CLI upload layout. S3 is the supported input and output transfer boundary
-for this workflow, and raw videos are not part of the index build transfer.
+two indexing configs. Publish those artifacts under the prefixes documented in
+the repository README; `configs/prepare.yaml` owns bucket transport under
+`storage.s3`. S3 is the supported input and output transfer boundary for this
+workflow, and raw videos are not part of the index build transfer.
 
 ## S3-first ThunderCompute workflow
 
@@ -53,8 +76,8 @@ The retrieval CLI downloads only the canonical FrameStore, BTC keyframes, BTC
 `map_keyframes`, FrameContext, and timestamped transcripts. It does not
 download raw videos. The mapping prefix is intentionally different from its
 local destination: the organizer archive is published below
-`data/features/map-keyframes/`, while `configs/indexing.yaml` expects
-`data/map_keyframes/`.
+`data/features/map-keyframes/`; the local destination is selected through
+`--map-keyframes-root`.
 
 Start with an inventory-only check, then run the complete local GPU build and
 S3 publication:
@@ -63,21 +86,23 @@ S3 publication:
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 \
   --s3-dry-run \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml \
-  --s3-config configs/preparation.s3.yaml
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  --s3-config configs/prepare.yaml \
+  "${INDEX_DATASET_ARGS[@]}"
 
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 \
   --stage all \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml \
-  --s3-config configs/preparation.s3.yaml \
-  --s3-sync-workers 16 \
-  --s3-upload-workers 8
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  --s3-config configs/prepare.yaml \
+  --s3-sync-workers 8 \
+  --s3-upload-workers 8 \
+  "${INDEX_DATASET_ARGS[@]}"
 ```
 
-`configs/indexing.models.yaml` starts Visual/SigLIP and evidence/BGE at batch
+The `models` section in `configs/prepare.yaml` starts Visual/SigLIP and evidence/BGE at batch
 size `128`, suitable as the first RTX A6000 measurement point. S3 mode uses
 local model adapters; do not combine it with `--inference-url`. The download
 is resumable by byte size and tqdm/log counters report downloaded, skipped, and
@@ -110,7 +135,7 @@ source aic/bin/activate
 ```
 
 If the environment already exists, activate it without reinstalling. Verify
-that the pinned model revisions in `configs/indexing.models.yaml` are available
+that the pinned model revisions in `configs/prepare.yaml` are available
 to the remote Hugging Face cache before starting an offline build.
 
 ## Use a private embedding VM from the local build host
@@ -119,7 +144,7 @@ When SigLIP and BGE are hosted separately through the private Cloudflare
 service, the fast-track builder can keep canonical data and index publication
 local while explicitly offloading only embedding inference. The remote service
 must advertise the exact pinned model names and revisions from
-`configs/indexing.models.yaml` on `/ready`.
+the `models` section of `configs/prepare.yaml` on `/ready`.
 
 ```bash
 export HCMAI_INFERENCE_BASE_URL="https://<private-api-hostname>"
@@ -128,9 +153,10 @@ export HCMAI_CF_ACCESS_CLIENT_SECRET="<service-client-secret>"
 
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage all \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml \
-  --inference-url "$HCMAI_INFERENCE_BASE_URL"
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  --inference-url "$HCMAI_INFERENCE_BASE_URL" \
+  "${INDEX_DATASET_ARGS[@]}"
 ```
 
 `--inference-url` is deliberate: the command never silently reads an endpoint
@@ -140,7 +166,7 @@ SigLIP images to the visual endpoint and both FrameContext and ASR text to the
 BGE `text` family. Leave off the option to build with local models instead.
 
 The A6000 starting batch is 128 in both `thundercompute/config.yaml` and
-`configs/indexing.models.yaml`; adjust it only after observing actual VRAM and
+`configs/prepare.yaml`; adjust its `models` section only after observing actual VRAM and
 latency with the corpus's real image/text lengths. The builder has one active
 embedding batch at a time. Sending several simultaneous requests to one
 single-worker GPU service does not provide server-side microbatching and can
@@ -156,12 +182,12 @@ loads positive-duration unique transcript segments. Duplicate
 `frame_id` is the internal identity.
 
 ```bash
-python scripts/build_retrieval_indexes.py --stage preflight --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+python scripts/build_retrieval_indexes.py --stage preflight --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
 nvidia-smi
-python scripts/build_retrieval_indexes.py --stage visual --config configs/indexing.yaml --model-config configs/indexing.models.yaml
-python scripts/build_retrieval_indexes.py --stage context --config configs/indexing.yaml --model-config configs/indexing.models.yaml
-python scripts/build_retrieval_indexes.py --stage asr --config configs/indexing.yaml --model-config configs/indexing.models.yaml
-python scripts/build_retrieval_indexes.py --stage validate --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+python scripts/build_retrieval_indexes.py --stage visual --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python scripts/build_retrieval_indexes.py --stage context --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python scripts/build_retrieval_indexes.py --stage asr --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python scripts/build_retrieval_indexes.py --stage validate --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
 ```
 
 The stages publish to:
@@ -184,7 +210,7 @@ builds Visual first, releases its GPU model/cache, then reuses one BGE-M3
 adapter for Context and ASR:
 
 ```bash
-python scripts/build_retrieval_indexes.py --stage all --config configs/indexing.yaml --model-config configs/indexing.models.yaml
+python scripts/build_retrieval_indexes.py --stage all --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
 ```
 
 Visual embedding displays a canonical-frame progress bar. Context and ASR show
@@ -233,8 +259,8 @@ source-dependent validator:
 cd "$HCMAI_LOCAL_ROOT"
 aic/bin/python scripts/build_retrieval_indexes.py \
   --stage validate \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml
 ```
 
 When that local validator is applicable, accept a bundle only when it succeeds

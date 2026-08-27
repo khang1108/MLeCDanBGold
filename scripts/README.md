@@ -50,9 +50,20 @@ Videos ─────────> ASR segments  │   (ASR excluded)
                                  └─> specialist artifacts
 ```
 
-Run these commands from the repository root:
+Run these commands from the repository root. `configs/prepare.yaml` contains
+model/stage policies and output layout; dataset identity and FrameStore paths
+are supplied at runtime so the same YAML can be reused for another corpus:
 
 ```bash
+DATASET_ARGS=(
+  --version btc-keyframes-v1
+  --source btc_keyframes
+  --frame-store-id btc-keyframes-v1
+  --data-root data
+  --frames artifacts/frame_store/frames.parquet
+  --frame-store-output artifacts/frame_store
+)
+
 # BTC frame-store ingest
 PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
   --btc-root data --data-root data \
@@ -61,25 +72,24 @@ PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
 
 # Caption
 PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # OCR
 PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # YOLOE objects; publishes raw JSON plus canonical object Parquet artifacts.
 PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
-  --frames artifacts/frame_store/frames.parquet \
-  --output artifacts/enrichment/objects_yoloe \
-  --dataset-root data
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # Timestamped ASR segments; change data/videos if the source lives elsewhere.
 PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
-  --config configs/enrichment.yaml --videos-root data/videos
+  --config configs/prepare.yaml --videos-root data/videos \
+  "${DATASET_ARGS[@]}"
 
 # Deterministic Caption + OCR + Object context; ASR is excluded.
 PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 ```
 
 The authoritative and compatibility outputs are:
@@ -98,6 +108,54 @@ frame_enrichment.parquet         temporary compatibility projection only
 This V1 sequence intentionally ends at FrameContext. It does not build a
 retrieval index.
 
+## Custom keyframe download and extraction
+
+`extract_custom_keyframes.py` accepts an organizer media-info directory and an
+explicit bounded selection. It composes deterministic manifest generation with
+the native yt-dlp/FFmpeg lifecycle and emits per-video FrameRecord tables ready
+for Caption, OCR, Objects, ASR, and visual enrichment:
+
+```bash
+PYTHONPATH=.:src aic/bin/python scripts/extract_custom_keyframes.py \
+  --media-info-dir data/media-info-aic25-b1/media-info \
+  --run-root runs/custom-raw1fps-v1 \
+  --native-executable build/keyframes_extraction/keyframe_extractor \
+  --frame-store-id custom-raw1fps-v1 \
+  --yt-dlp-binary yt-dlp \
+  --limit 10 \
+  --fail-fast
+```
+
+Use `--video-id` repeatedly for a hand-selected batch. `--all` is deliberately
+explicit so a missing selector cannot accidentally start an unbounded corpus
+download. Re-running the command resumes completed native bundles.
+
+For the complete non-S3 workflow, install the unified model environment and
+run the orchestration command. Caption and OCR always use
+`HCMAI_INFERENCE_BASE_URL` (default `https://api.iamphuckhang.dev`); Objects,
+ASR, embeddings, and FAISS remain explicit stages coordinated sequentially:
+
+```bash
+aic/bin/python -m pip install -e ".[pipeline]"
+
+PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py \
+  --media-info-dir data/media-info-aic25-b1/media-info \
+  --run-root runs/custom-raw1fps-v1 \
+  --output-root artifacts/custom-raw1fps-v1 \
+  --native-executable build/keyframes_extraction/keyframe_extractor \
+  --version custom-raw1fps-v1 \
+  --source custom_raw_video_1fps \
+  --frame-store-id custom-raw1fps-v1 \
+  --limit 10 \
+  --fail-fast
+```
+
+The command resumes native extraction and specialist artifacts, requires zero
+failed Caption/OCR/Object rows before publication, materializes the canonical
+FrameStore, builds Context plus Visual/Context/ASR indexes, and cleans source
+video/OCR scratch files only after the index validation report passes. It does
+not upload anything to S3.
+
 ## YOLOE object detection
 
 `detect_objects.py` is the object-enrichment entry point. It runs YOLOE over
@@ -115,36 +173,64 @@ aic/bin/python -m pip install -e ".[objects]"
 ```
 
 ```bash
+DATASET_ARGS=(
+  --version btc-keyframes-v1
+  --source btc_keyframes
+  --frame-store-id btc-keyframes-v1
+  --data-root data
+  --frames artifacts/frame_store/frames.parquet
+  --frame-store-output artifacts/frame_store
+)
+
 # Detect and publish; the run resumes from raw JSON. --limit is a degraded
 # smoke artifact and should not be used for a final corpus.
-PYTHONPATH=src aic/bin/python scripts/detect_objects.py --limit 200
-PYTHONPATH=src aic/bin/python scripts/detect_objects.py
+PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+  --config configs/prepare.yaml --limit 200 "${DATASET_ARGS[@]}"
+PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
-# Context rebuild; the wider budget holds a finer-grained label vocabulary
-PYTHONPATH=src aic/bin/python scripts/build_frame_context.py \
-  --config configs/enrichment.yaml --object-token-budget 80 \
-  --object-frames artifacts/enrichment/objects_yoloe/frames.parquet \
-  --output artifacts/enrichment/context_yoloe
+# Context rebuild. CLI flags remain available for measured experiments.
+PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 ```
 
 ## Fast-track multimodal index build
 
 `build_retrieval_indexes.py` is the explicit offline entry point for the
 competition retrieval profile. It consumes the dedicated
-`configs/indexing.yaml` and `configs/indexing.models.yaml` files and publishes
+`indexing` and `models` sections in `configs/prepare.yaml` plus the explicit
+dataset CLI contract, and publishes
 validated `Visual + FrameContext + segment-native ASR` bundles. The stages are
 independently runnable for diagnosis:
 
 ```bash
+INDEX_DATASET_ARGS=(
+  --version btc-keyframes-v1
+  --source btc_keyframes
+  --frame-store-id btc-keyframes-v1
+  --data-root data
+  --frames artifacts/frame_store/frames.parquet
+  --frame-store-output artifacts/frame_store
+  --frame-manifest artifacts/frame_store/manifest.json
+  --keyframes-root data/keyframes
+  --map-keyframes-root data/map_keyframes
+  --context artifacts/enrichment/context/frame_context_v1.parquet
+  --transcripts artifacts/enrichment/transcripts
+  --expected-video-count 873
+  --expected-frame-count 177321
+)
+
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage preflight \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  "${INDEX_DATASET_ARGS[@]}"
 
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage all \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  "${INDEX_DATASET_ARGS[@]}"
 ```
 
 Preflight requires the external BTC `map_keyframes` CSV directory and writes
@@ -162,9 +248,10 @@ I/O, FAISS publication, and validation remain local:
 ```bash
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage all \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml \
-  --inference-url "$HCMAI_INFERENCE_BASE_URL"
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  --inference-url "$HCMAI_INFERENCE_BASE_URL" \
+  "${INDEX_DATASET_ARGS[@]}"
 ```
 
 Export the appropriate Cloudflare Access client credentials for the HTTP client
@@ -188,11 +275,12 @@ advertised as serving data:
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 \
   --stage all \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml \
-  --s3-config configs/preparation.s3.yaml \
-  --s3-sync-workers 16 \
-  --s3-upload-workers 8
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  --s3-config configs/prepare.yaml \
+  --s3-sync-workers 8 \
+  --s3-upload-workers 8 \
+  "${INDEX_DATASET_ARGS[@]}"
 ```
 
 The local model config starts both SigLIP and BGE at batch size `128`, which is
@@ -214,19 +302,3 @@ data/artifacts/enrichment/transcripts/   -> artifacts/enrichment/transcripts/
 Raw videos and unrelated enrichment/index prefixes are not downloaded. AWS
 credentials remain outside the repository and are resolved through boto3's
 standard credential chain.
-
-## Separate retrieval utilities
-
-The commands below are retained for retrieval development and are not part of
-the BTC-native Enrichment V1 preparation sequence.
-
-## Rebuild only the index
-
-```bash
-PYTHONPATH=.:src aic/bin/python scripts/build_index.py \
-  --config configs/baseline.yaml \
-  --model-config thundercompute/config.yaml \
-  --embeddings artifacts/embeddings/visual_embeddings.npy \
-  --mapping artifacts/embeddings/frame_mapping.parquet \
-  --output artifacts/indexes/visual
-```

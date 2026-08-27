@@ -3,22 +3,20 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import math
 from pathlib import Path
 from typing import Sequence
 
 from hcmai.common.config import resolve_dataset_root, resolve_repository_path
 from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.data.enrichment.object_detection import (
-    ObjectDetectionConfig,
-    normalized_boxes,
-    run_yoloe,
-)
+from hcmai.data.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
+from hcmai.data.enrichment.object_detection import run_yoloe
+from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
 
 logger = get_logger(__name__)
 
-DEFAULT_FRAMES = Path("artifacts/frame_store/frames.parquet")
-DEFAULT_OUTPUT = Path("artifacts/enrichment/objects_yoloe")
+DEFAULT_CONFIG = Path("configs/prepare.yaml")
 
 
 def _positive_int(value: str) -> int:
@@ -49,11 +47,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse frame input, detector settings, and artifact destinations."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--frames", type=Path, default=DEFAULT_FRAMES)
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    add_dataset_arguments(parser)
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUTPUT,
         help="Canonical object artifact directory; raw JSON is stored below raw/.",
     )
     parser.add_argument(
@@ -61,24 +59,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Optional raw JSON directory used for resumable inference.",
     )
-    parser.add_argument("--dataset-root", default="data")
-    parser.add_argument("--model", default="yoloe-26l-seg-pf.pt")
-    parser.add_argument("--min-confidence", type=_confidence, default=0.20)
-    parser.add_argument("--top-k", type=_positive_int, default=30)
-    parser.add_argument("--batch-size", type=_positive_int, default=32)
+    parser.add_argument("--model")
+    parser.add_argument("--min-confidence", type=_confidence)
+    parser.add_argument("--top-k", type=_positive_int)
+    parser.add_argument("--batch-size", type=_positive_int)
     parser.add_argument("--device", default=None)
     parser.add_argument(
         "--artifact-version",
-        default="object-yoloe-v1",
         help="Version recorded in ObjectEvidence and the manifest.",
     )
     parser.add_argument(
         "--summary-min-confidence",
         type=_confidence,
-        default=0.25,
     )
-    parser.add_argument("--max-summary-labels", type=_positive_int, default=20)
-    parser.add_argument("--frame-store-id")
+    parser.add_argument("--max-summary-labels", type=_positive_int)
     parser.add_argument(
         "--limit",
         type=_positive_int,
@@ -97,18 +91,31 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
     configure_logging(args.log_level)
-    config = ObjectDetectionConfig(
-        model=args.model,
-        min_confidence=args.min_confidence,
-        top_k=args.top_k,
-        batch_size=args.batch_size,
-        device=args.device,
-        artifact_version=args.artifact_version,
-        summary_min_confidence=args.summary_min_confidence,
-        max_summary_labels=args.max_summary_labels,
+    dataset = dataset_overrides(args)
+    job = (
+        EnrichmentJobConfig.from_yaml(args.config, dataset=dataset)
+        if dataset is not None
+        else EnrichmentJobConfig.from_yaml(args.config)
     )
-    frames = resolve_repository_path(args.frames)
-    output = resolve_repository_path(args.output)
+    config = replace(
+        job.objects,
+        **{
+            name: value
+            for name, value in {
+                "model": args.model,
+                "min_confidence": args.min_confidence,
+                "top_k": args.top_k,
+                "batch_size": args.batch_size,
+                "device": args.device,
+                "artifact_version": args.artifact_version,
+                "summary_min_confidence": args.summary_min_confidence,
+                "max_summary_labels": args.max_summary_labels,
+            }.items()
+            if value is not None
+        },
+    )
+    frames = resolve_repository_path(args.frames or job.frames_path)
+    output = resolve_repository_path(args.output or job.object_output_dir)
     raw_output = (
         resolve_repository_path(args.raw_output)
         if args.raw_output is not None
@@ -118,9 +125,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         frames,
         output,
         config,
-        dataset_root=resolve_dataset_root(args.dataset_root),
+        dataset_root=resolve_dataset_root(args.data_root or job.data_root),
         raw_output_root=raw_output,
-        frame_store_id=args.frame_store_id,
+        frame_store_id=args.frame_store_id or job.frame_store_id,
         limit=args.limit,
     )
     failed = int(report.get("failed_frames", 0))

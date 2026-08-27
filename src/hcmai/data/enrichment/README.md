@@ -53,30 +53,39 @@ Parquet created before this identity contract must be regenerated or migrated.
 
 ## Commands
 
-Run the complete V1 preparation sequence from the repository root:
+Run the complete V1 preparation sequence from the repository root. Dataset
+identity and canonical paths are CLI-only:
 
 ```bash
+DATASET_ARGS=(
+  --version btc-keyframes-v1
+  --source btc_keyframes
+  --frame-store-id btc-keyframes-v1
+  --data-root data
+  --frames artifacts/frame_store/frames.parquet
+  --frame-store-output artifacts/frame_store
+)
+
 PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
   --btc-root data --data-root data \
   --output-root artifacts/frame_store \
   --frame-store-id btc-keyframes-v1
 
 PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
-  --frames artifacts/frame_store/frames.parquet \
-  --output artifacts/enrichment/objects_yoloe \
-  --dataset-root data
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
-  --config configs/enrichment.yaml --videos-root data/videos
+  --config configs/prepare.yaml --videos-root data/videos \
+  "${DATASET_ARGS[@]}"
 
 PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 ```
 
 Caption and OCR may use local pinned models or configured hosted adapters.

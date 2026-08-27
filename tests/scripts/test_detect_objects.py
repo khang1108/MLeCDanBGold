@@ -42,15 +42,16 @@ def test_parse_args_accepts_confidence_boundaries(value: str) -> None:
     assert args.min_confidence == float(value)
 
 
-def test_parse_args_keeps_positive_defaults() -> None:
-    """Keep safe defaults for all work-size arguments."""
+def test_parse_args_defers_work_defaults_to_prepare_config() -> None:
+    """Keep YAML as the source of truth unless an explicit override is passed."""
 
     args = parse_args([])
 
-    assert args.top_k == 30
-    assert args.batch_size == 32
+    assert args.config == Path("configs/prepare.yaml")
+    assert args.top_k is None
+    assert args.batch_size is None
     assert args.limit is None
-    assert args.min_confidence == 0.20
+    assert args.min_confidence is None
 
 
 class _FakeVector:

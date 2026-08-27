@@ -432,6 +432,100 @@ def test_offline_index_cli_all_runs_strict_sequential_stages(
     assert events == ["preflight", "visual", "context", "asr", "validate"]
 
 
+def test_s3_index_cli_downloads_builds_validates_then_publishes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publish only after every local batch stage and validation succeeds."""
+
+    from scripts import build_retrieval_indexes as workflow
+
+    events: list[str] = []
+    projection = tmp_path / "projected.parquet"
+    projection.write_bytes(b"projection")
+    config = SimpleNamespace(
+        projected_frames_path=projection,
+        output_root=tmp_path / "indexes",
+    )
+    client = object()
+    text_encoder = object()
+
+    monkeypatch.setattr(workflow, "load_offline_config", lambda *args, **kwargs: config)
+    monkeypatch.setattr(workflow, "load_model_config", lambda *args: object())
+    monkeypatch.setattr(
+        workflow,
+        "_load_s3_transport",
+        lambda path: (events.append("open") or client, "bucket"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "_download_s3_inputs",
+        lambda *args: events.append("download"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "run_preflight",
+        lambda received: events.append("preflight") or projection,
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_visual",
+        lambda *args, **kwargs: events.append("visual"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "release_gpu_memory",
+        lambda: events.append("release-gpu"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "create_text_encoder",
+        lambda *args: events.append("load-text") or text_encoder,
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_context",
+        lambda *args, **kwargs: events.append("context"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "build_asr",
+        lambda *args, **kwargs: events.append("asr"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "run_validate",
+        lambda *args: events.append("validate"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "_publish_s3_bundle",
+        lambda *args: events.append("publish"),
+    )
+    monkeypatch.setattr(
+        workflow,
+        "_close_s3_transport",
+        lambda received: events.append("close"),
+    )
+
+    args = workflow.parse_args(["--s3", "--stage", "all"])
+    assert args.s3_sync_workers == 8
+    workflow.run(args)
+
+    assert events == [
+        "open",
+        "download",
+        "preflight",
+        "visual",
+        "release-gpu",
+        "load-text",
+        "context",
+        "asr",
+        "validate",
+        "publish",
+        "close",
+    ]
+
+
 def test_offline_index_cli_all_uses_explicit_remote_embedding_adapters(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -745,6 +839,38 @@ def test_offline_projection_resolves_relative_keyframe_root_once(
 
     assert Path(projected.iloc[0]["image_path"]).is_absolute()
     assert builder._resolve_image(projected.iloc[0]["image_path"]) == image.resolve()
+
+
+def test_custom_projection_uses_canonical_paths_without_btc_mapping(
+    tmp_path: Path,
+) -> None:
+    """Custom extraction needs neither keyframe order nor organizer CSV data."""
+
+    from scripts import build_retrieval_indexes as workflow
+
+    image = tmp_path / "published" / "v1" / "images" / "000000000.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"fixture-image")
+    frames = pd.DataFrame(
+        [
+            {
+                "frame_id": "v1_raw1fps_000000000",
+                "video_id": "v1",
+                "frame_idx": 12,
+                "timestamp_ms": 500,
+                "keyframe_order": None,
+                "image_path": image.relative_to(tmp_path).as_posix(),
+            }
+        ]
+    )
+
+    projected = workflow.project_canonical_images(frames, tmp_path)
+
+    assert projected.iloc[0]["frame_id"] == "v1_raw1fps_000000000"
+    assert projected.iloc[0]["frame_idx"] == 12
+    assert projected.iloc[0]["timestamp_ms"] == 500
+    assert projected.iloc[0]["keyframe_order"] is None
+    assert Path(projected.iloc[0]["image_path"]) == image.resolve()
 
 
 def test_offline_model_config_rejects_mutable_revisions(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.utils.io import read_yaml
+from hcmai.common.utils.io import read_yaml, read_yaml_section
 
 
 class HostedCaptionConfig(BaseModel):
@@ -59,10 +59,17 @@ class LLMServiceConfig(BaseModel):
         return self.evidence_embedding or self.caption_embedding
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> LLMServiceConfig:
+    def from_yaml(
+        cls,
+        path: str | Path,
+        *,
+        section: str | None = None,
+    ) -> LLMServiceConfig:
         """Load model settings while accepting legacy encoder mapping syntax."""
 
-        data = read_yaml(path)
+        data = read_yaml_section(path, section) if section else read_yaml(path)
+        if not isinstance(data, dict):
+            raise ValueError(f"Model config must contain a mapping: {path}")
         for field in (
             "visual_embedding",
             "caption_embedding",

@@ -52,7 +52,7 @@ services:
       # These paths are inside the image/container, not host-relative paths.
       HCMAI_CONFIG_PATH: /app/configs/baseline.yaml
       HCMAI_LLM_CONFIG: /app/thundercompute/config.yaml
-      HCMAI_ENRICHMENT_CONFIG: /app/configs/enrichment.yaml
+      HCMAI_ENRICHMENT_CONFIG: /app/configs/prepare.yaml
       HCMAI_DATASET_ROOT: /app/data
       HCMAI_METADATA_PATH: /app/artifacts/frame_store/frames.parquet
       HCMAI_INDEX_PATH: /app/artifacts/indexes/visual

@@ -259,10 +259,22 @@ def test_two_frame_offline_enrichment_and_context_only_rebuild(
 def test_checked_in_enrichment_config_loads_all_v1_stage_contracts() -> None:
     """Keep checked-in paths and specialist policies accepted by one loader."""
 
-    job = EnrichmentJobConfig.from_yaml("configs/enrichment.yaml")
+    job = EnrichmentJobConfig.from_yaml(
+        "configs/prepare.yaml",
+        dataset={
+            "version": "dataset_v1",
+            "source": "custom_raw_video",
+            "data_root": "runs/dataset_v1",
+            "frame_store_id": "dataset_1",
+            "frames_path": "artifacts/dataset_v1/frame_store/frames.parquet",
+            "frame_store_output": "artifacts/dataset_v1/frame_store",
+        },
+    )
     project_root = Path(__file__).resolve().parents[3]
 
-    assert job.source == "btc_keyframes"
+    assert job.source == "custom_raw_video"
+    assert job.dataset_version == "dataset_v1"
+    assert job.btc_root is None
     assert job.caption_output_dir == project_root / "artifacts/enrichment/captions"
     assert job.ocr_output_dir == project_root / "artifacts/enrichment/ocr"
     assert job.object_output_dir == project_root / "artifacts/enrichment/objects"
@@ -453,10 +465,11 @@ def test_caption_command_propagates_configured_frame_store_lineage(
         }
 
     monkeypatch.setattr(caption_generator, "generate_captions", fake_generate_captions)
+    gateway = SimpleNamespace(close=lambda: None)
     monkeypatch.setattr(
-        caption_generator.AppConfig,
-        "from_yaml",
-        lambda path: SimpleNamespace(inference=SimpleNamespace(enabled=False)),
+        caption_generator.LLMService,
+        "remote",
+        lambda *args, **kwargs: gateway,
     )
     monkeypatch.setattr(
         sys,

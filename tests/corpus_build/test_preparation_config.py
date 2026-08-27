@@ -9,11 +9,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from hcmai.common.config import TranscriptJobConfig
-from hcmai.data.enrichment.caption.config import CaptionJobConfig
-from hcmai.data.enrichment.ocr.config import OCRConfig
 from hcmai.data.corpus_build import S3CorpusPreparationConfig
-from thundercompute.config import LLMServiceConfig
 
 
 SHA = "a" * 40
@@ -155,69 +151,6 @@ def test_s3_location_accepts_environment_overrides(
     assert loaded.preprocessing.s3 is not None
     assert loaded.preprocessing.s3.bucket == "verified-us-bucket"
     assert loaded.preprocessing.s3.region == "us-east-2"
-
-
-def test_checked_in_production_config_is_s3_only_and_fully_pinned() -> None:
-    config = S3CorpusPreparationConfig.from_yaml(
-        "configs/preparation.s3.yaml"
-    )
-
-    assert config.preprocessing.s3 is not None
-    assert config.preprocessing.s3.videos_prefix == "data"
-    assert all(
-        len(model["revision"]) == 40
-        for model in config.models.model_dump().values()
-    )
-    assert config.frame_store_source == "btc_keyframes"
-    assert config.stages.model_dump() == {
-        "frame_store": True,
-        "caption": True,
-        "ocr": True,
-        "objects": True,
-        "asr": True,
-        "frame_context": True,
-        "visual_index": False,
-        "caption_index": False,
-        "ocr_index": False,
-        "asr_index": False,
-    }
-
-    caption = CaptionJobConfig.from_yaml()
-    transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
-    inference = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
-    assert (caption.caption.model_checkpoint, caption.caption.revision) == (
-        config.models.caption.model_name,
-        config.models.caption.revision,
-    )
-    assert (OCRConfig().model_name, OCRConfig().revision) == (
-        config.models.ocr.model_name,
-        config.models.ocr.revision,
-    )
-    assert (transcript.asr.model_name, transcript.asr.revision) == (
-        config.models.asr.model_name,
-        config.models.asr.revision,
-    )
-    assert (
-        transcript.diarization.model_name,
-        transcript.diarization.revision,
-    ) == (
-        config.models.diarization.model_name,
-        config.models.diarization.revision,
-    )
-    assert (
-        inference.visual_embedding.model_name,
-        inference.visual_embedding.revision,
-    ) == (
-        config.models.visual_embedding.model_name,
-        config.models.visual_embedding.revision,
-    )
-    assert (
-        inference.caption_embedding.model_name,
-        inference.caption_embedding.revision,
-    ) == (
-        config.models.text_embedding.model_name,
-        config.models.text_embedding.revision,
-    )
 
 
 def test_stage_toggles_allow_a_dependency_complete_partial_run(

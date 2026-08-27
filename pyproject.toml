@@ -28,22 +28,22 @@ dependencies = [
 [project.optional-dependencies]
 embedding = [
     "sentence-transformers>=3.0, <6.0",
-    "transformers>=4.57.1, <5.0",
-    "torch>=2.0",
+    "transformers>=5.13, <6.0",
+    "torch>=2.8, <3.0",
 ]
 reranking = [
     "accelerate>=1.12, <2.0",
     "qwen-vl-utils>=0.0.14, <0.1",
     "torch>=2.8, <3.0",
     "torchvision>=0.23, <1.0",
-    "transformers>=4.57.1, <5.0",
+    "transformers>=5.13, <6.0",
 ]
 transcripts = [
     "av>=14, <19",
     "silero-vad>=6.2, <7.0",
     "pyannote.audio>=4.0.7, <5.0",
-    "torch>=2.6, <2.10",
-    "torchaudio>=2.6, <2.10",
+    "torch>=2.8, <3.0",
+    "torchaudio>=2.8, <3.0",
     "transformers>=5.13, <6.0",
 ]
 preprocessing = [
@@ -58,6 +58,19 @@ preprocessing = [
     "yacs>=0.1.8, <1.0",
 ]
 objects = [
+    "ultralytics-opencv-headless>=8.4, <9.0",
+]
+pipeline = [
+    "accelerate>=1.12, <2.0",
+    "av>=14, <19",
+    "pyannote.audio>=4.0.7, <5.0",
+    "qwen-vl-utils>=0.0.14, <0.1",
+    "sentence-transformers>=3.0, <6.0",
+    "silero-vad>=6.2, <7.0",
+    "torch>=2.8, <3.0",
+    "torchaudio>=2.8, <3.0",
+    "torchvision>=0.23, <1.0",
+    "transformers>=5.13, <6.0",
     "ultralytics-opencv-headless>=8.4, <9.0",
 ]
 dev = [

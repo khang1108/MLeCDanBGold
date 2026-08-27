@@ -96,7 +96,9 @@ class LocalAdapter:
         path = Path(os.getenv("HCMAI_LLM_CONFIG", "thundercompute/config.yaml"))
         config = LLMServiceConfig.from_yaml(path)
         
-        enrichment_path = Path(os.getenv("HCMAI_ENRICHMENT_CONFIG", "configs/enrichment.yaml"))
+        enrichment_path = Path(
+            os.getenv("HCMAI_ENRICHMENT_CONFIG", "configs/prepare.yaml")
+        )
         transcript_config = TranscriptJobConfig.from_yaml(enrichment_path) if enrichment_path.exists() else None
 
         return cls(

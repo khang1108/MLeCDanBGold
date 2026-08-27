@@ -15,7 +15,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Sequence
 
 from hcmai.common.utils.io import read_json
 from hcmai.common.config import AppConfig
@@ -31,8 +31,9 @@ from hcmai.data.enrichment.caption.report import build_manifest
 from hcmai.data.enrichment.caption.resume import guard_resume, resume_rows
 from hcmai.data.enrichment.caption.runner import run_batches
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
+from hcmai.data.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
 from hcmai.data.stores.frame import FrameStore
-from thundercompute.pipeline import LLMService, LLMServiceConfig
+from thundercompute.pipeline import LLMService
 
 
 def generate_captions(
@@ -127,48 +128,39 @@ def generate_captions(
     write_caption_artifacts(output, order, rows, failures, manifest)
     return manifest
 
-def main() -> int:
-    """Run caption enrichment from YAML."""
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run caption enrichment through the configured inference gateway."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=DEFAULT_ENRICHMENT_CONFIG)
     parser.add_argument("--app-config", default="configs/baseline.yaml")
-    parser.add_argument("--model-config", default="thundercompute/config.yaml")
-    parser.add_argument("--frames")
-    parser.add_argument("--dataset-root")
+    add_dataset_arguments(parser)
     parser.add_argument("--output")
-    args = parser.parse_args()
-    job = CaptionJobConfig.from_yaml(args.config)
-    settings = AppConfig.from_yaml(args.app_config)
-    captioner = None
-    if settings.inference.enabled:
-        from hcmai.data.enrichment.caption.adapters.remote import RemoteCaptionAdapter
-        models = LLMServiceConfig.from_yaml(args.model_config)
-        hosted = models.caption_generation
-        expected = {
-            "model_checkpoint": job.caption.model_checkpoint,
-            "revision": job.caption.revision,
-            "prompt": job.caption.prompt,
-            "decoding": job.caption.decoding,
-        }
-        actual = {key: getattr(hosted, key) for key in expected}
-        if actual != expected:
-            raise ValueError(
-                "Caption generation settings differ between enrichment and "
-                "llm model configuration"
-            )
-        client = LLMService.remote(
-            os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url),
-            settings.inference.timeout_seconds,
-        )
-        captioner = RemoteCaptionAdapter(client, job.caption)
-    manifest = generate_captions(
-        args.frames or job.frames_path,
-        args.output or job.output_dir,
-        job.caption,
-        captioner,
-        dataset_root=args.dataset_root or job.dataset_root,
-        frame_store_id=job.frame_store_id,
+    args = parser.parse_args(argv)
+    dataset = dataset_overrides(args)
+    job = (
+        CaptionJobConfig.from_yaml(args.config, dataset=dataset)
+        if dataset is not None
+        else CaptionJobConfig.from_yaml(args.config)
     )
+    app_path = Path(args.app_config)
+    settings = AppConfig.from_yaml(app_path) if app_path.is_file() else AppConfig()
+    from hcmai.data.enrichment.caption.adapters.remote import RemoteCaptionAdapter
+
+    service = LLMService.remote(
+        os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url),
+        settings.inference,
+    )
+    try:
+        manifest = generate_captions(
+            args.frames or job.frames_path,
+            args.output or job.output_dir,
+            job.caption,
+            RemoteCaptionAdapter(service, job.caption),
+            dataset_root=args.data_root or job.dataset_root,
+            frame_store_id=job.frame_store_id,
+        )
+    finally:
+        service.close()
     keys = "completed_count", "failed_count", "skipped_count", "retried_count"
     print({key: manifest[key] for key in keys})
     return 0

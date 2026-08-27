@@ -137,10 +137,13 @@ The custom workflow is opt-in and bounded at video granularity. It preserves
 `floor(ceil(avg_fps) * timestamp_ms / 1000)`; it is never replaced with
 keyframe order or an array position.
 
-1. Run `prepare_custom_extraction.py` to build the sorted media-info JSONL and
-   strict C++ config. This stage reads metadata only and does not download.
-2. Run native `extract` for a bounded selected video/batch. It creates durable
-   JPEGs plus temporary high-resolution OCR JPEGs in `staging/{video_id}`.
+1. Run `extract_custom_keyframes.py` with a media-info folder and an explicit
+   `--video-id`, `--limit`, or `--all` selection. It writes the sorted metadata
+   manifest/config and invokes native extraction one video at a time.
+2. Native extraction downloads each selected source with shell-free `yt-dlp`,
+   retains it for ASR, and creates durable JPEGs plus temporary high-resolution
+   OCR JPEGs in `staging/{video_id}`. The wrapper validates the bundle and emits
+   durable/OCR FrameRecord tables for specialist enrichment.
 3. Validate the staging bundle. Caption, Object, and visual stages consume the
    durable table; OCR consumes the high-resolution temporary table; ASR reads
    the retained source video as independent timeline evidence.

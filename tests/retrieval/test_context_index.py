@@ -462,7 +462,7 @@ def test_text_embedding_filenames_do_not_absorb_context() -> None:
 def test_pinned_indexing_model_config_has_an_explicit_evidence_encoder() -> None:
     """Offline index builds resolve exact visual and text model revisions."""
 
-    config = LLMServiceConfig.from_yaml("configs/indexing.models.yaml")
+    config = LLMServiceConfig.from_yaml("configs/prepare.yaml", section="models")
 
     assert config.visual_embedding.revision == "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2"
     assert (
@@ -472,15 +472,11 @@ def test_pinned_indexing_model_config_has_an_explicit_evidence_encoder() -> None
 
 
 def test_indexing_config_uses_portable_corpus_paths_and_expected_counts() -> None:
-    """The offline indexing plan remains portable between local and VM runs."""
+    """The offline YAML keeps policies while dataset inputs come from CLI."""
 
-    config = read_yaml("configs/indexing.yaml")
+    config = read_yaml("configs/prepare.yaml")["indexing"]
 
-    assert config["dataset"]["expected_video_count"] == 873
-    assert config["dataset"]["expected_frame_count"] == 177_321
-    assert config["dataset"]["context_path"] == (
-        "artifacts/enrichment/context/frame_context_v1.parquet"
-    )
+    assert "dataset" not in config
     assert config["indexes"] == {
         "visual": "artifacts/indexes/visual",
         "context": "artifacts/indexes/context",

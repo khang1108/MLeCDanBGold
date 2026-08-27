@@ -14,6 +14,7 @@ import subprocess
 
 import pandas as pd
 from PIL import Image
+import pytest
 
 from hcmai.data.ingestion.custom_enrichment import (
     materialize_video_enrichment_frames,
@@ -35,7 +36,10 @@ from hcmai.data.ingestion.custom_state import (
     mark_video_published,
 )
 from hcmai.data.stores.frame import FrameStore
-from scripts import materialize_custom_frames, prepare_custom_extraction
+from scripts import (
+    extract_custom_keyframes,
+    materialize_custom_frames,
+)
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -83,6 +87,26 @@ def _make_synthetic_source(source_root: Path, video_id: str) -> Path:
     return source_path
 
 
+def _make_fake_yt_dlp(path: Path) -> Path:
+    """Create a deterministic downloader double for the native network branch."""
+
+    path.write_text(
+        """#!/usr/bin/env python3
+import os
+from pathlib import Path
+import shutil
+import sys
+
+output = sys.argv[sys.argv.index("--output") + 1].replace("%(ext)s", "mp4")
+Path(output).parent.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(os.environ["HCMAI_TEST_DOWNLOAD_SOURCE"], output)
+""",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path
+
+
 def _write_synthetic_media_info(media_info_dir: Path, video_id: str) -> None:
     """Write the one metadata row consumed by the source-root extraction path.
 
@@ -98,7 +122,7 @@ def _write_synthetic_media_info(media_info_dir: Path, video_id: str) -> None:
     (media_info_dir / f"{video_id}.json").write_text(
         json.dumps(
             {
-                "watch_url": "https://youtube.com/watch?v=synthetic-smoke",
+                "watch_url": f"https://youtube.com/watch?v=synthetic-{video_id}",
                 "length": 3,
             }
         ),
@@ -167,57 +191,56 @@ def _native_executable() -> Path:
     return _NATIVE_EXECUTABLE
 
 
-def test_prepare_cli_writes_inputs_and_reports_metadata_only_stats(
+def test_extract_cli_downloads_selected_batch_and_prepares_enrichment_tables(
     tmp_path: Path,
     capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Create a native manifest/config without invoking a downloader or decoder."""
+    """Download, extract, and prepare one bounded batch in a single command."""
 
+    native_executable = _native_executable()
     media_info = tmp_path / "media-info"
-    media_info.mkdir()
-    (media_info / "L01_V001.json").write_text(
-        json.dumps(
-            {
-                "watch_url": "https://youtube.com/watch?v=a",
-                "length": 3,
-            }
-        ),
-        encoding="utf-8",
-    )
-    (media_info / "L01_V002.json").write_text(
-        json.dumps(
-            {
-                "watch_url": "https://youtube.com/watch?v=b",
-                "length": 4,
-            }
-        ),
-        encoding="utf-8",
-    )
+    source_root = tmp_path / "source-fixtures"
     run_root = tmp_path / "run"
+    for video_id in ("L01_V001", "L01_V002"):
+        _write_synthetic_media_info(media_info, video_id)
+        _make_synthetic_source(source_root, video_id)
+    fake_yt_dlp = _make_fake_yt_dlp(tmp_path / "fake-yt-dlp")
+    monkeypatch.setenv(
+        "HCMAI_TEST_DOWNLOAD_SOURCE",
+        str(source_root / "L01_V001.mp4"),
+    )
 
-    assert prepare_custom_extraction.main(
+    assert extract_custom_keyframes.main(
         [
             "--media-info-dir",
             str(media_info),
             "--run-root",
             str(run_root),
             "--native-executable",
-            str(tmp_path / "keyframe_extractor"),
+            str(native_executable),
             "--frame-store-id",
             "custom-test-v1",
             "--yt-dlp-binary",
-            "yt-dlp",
+            str(fake_yt_dlp),
+            "--limit",
+            "1",
         ]
     ) == 0
 
-    captured = capsys.readouterr()
-    result = json.loads(captured.out)
-    assert result["video_count"] == 2
-    assert result["unique_url_count"] == 2
-    assert result["metadata_length_seconds"] == 7
-    assert result["sample_period_ms"] == 1_000
-    assert Path(result["manifest_path"]).is_file()
-    assert Path(result["config_path"]).is_file()
+    result = json.loads(capsys.readouterr().out)
+    assert result["selected_video_ids"] == ["L01_V001"]
+    assert result["completed"] == 1
+    assert result["failed"] == 0
+    assert result["emitted_frame_count"] == 3
+    assert result["enrichment_ready_video_ids"] == ["L01_V001"]
+    assert not (run_root / "state" / "L01_V002.json").exists()
+    assert (run_root / "source" / "L01_V001.part").is_file()
+    enrichment_root = run_root / "staging" / "L01_V001" / "enrichment"
+    durable = pd.read_parquet(enrichment_root / "durable_frames.parquet")
+    ocr = pd.read_parquet(enrichment_root / "ocr_frames.parquet")
+    assert durable["frame_id"].tolist() == ocr["frame_id"].tolist()
+    assert durable["image_path"].tolist() != ocr["image_path"].tolist()
 
 
 def test_materialize_cli_never_invokes_native_extraction(

@@ -60,10 +60,20 @@ they can be loaded.
 
 ## Run the V1 stages
 
-Run commands from the repository root. Paths and versions shared by the
-specialist stages are pinned in `configs/enrichment.yaml`.
+Run commands from the repository root. Model/stage policies are pinned in
+`configs/prepare.yaml`; dataset identity and FrameStore paths are supplied at
+runtime so the same YAML can be reused for another corpus:
 
 ```bash
+DATASET_ARGS=(
+  --version btc-keyframes-v1
+  --source btc_keyframes
+  --frame-store-id btc-keyframes-v1
+  --data-root data
+  --frames artifacts/frame_store/frames.parquet
+  --frame-store-output artifacts/frame_store
+)
+
 # 1. Import organizer keyframes as the canonical frame store.
 PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
   --btc-root data \
@@ -73,26 +83,25 @@ PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
 
 # 2. Generate captions.
 PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # 3. Generate structured OCR evidence.
 PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # 4. Run YOLOE object detection and publish canonical object artifacts.
 PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
-  --frames artifacts/frame_store/frames.parquet \
-  --output artifacts/enrichment/objects_yoloe \
-  --dataset-root data
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # 5. Generate timestamped ASR segments from the source videos.
 PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
-  --config configs/enrichment.yaml \
-  --videos-root data/videos
+  --config configs/prepare.yaml \
+  --videos-root data/videos \
+  "${DATASET_ARGS[@]}"
 
 # 6. Build FrameContext only from the existing specialist artifacts.
 PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 ```
 
 If the videos live elsewhere, change only `--videos-root`. The V1 enrichment
@@ -108,8 +117,9 @@ competition coordinate exactly as
 internal `{video_id}_raw1fps_{sample_index}` identity.
 
 ```text
-prepare_custom_extraction.py
-  -> native extract
+extract_custom_keyframes.py
+  -> metadata manifest/config
+  -> native download and extract
   -> validate staging frames.jsonl
   -> per-video Caption / Objects / visual on durable JPEGs
   -> per-video OCR on temporary high-resolution JPEGs
@@ -122,16 +132,26 @@ prepare_custom_extraction.py
   -> build FrameContext, embeddings, and indexes
 ```
 
-Prepare metadata and strict native settings without downloading a video:
+For the normal bounded operator path, prepare metadata, download each selected
+source, extract 1-FPS frames, validate its native bundle, and create the
+durable/OCR FrameRecord tables in one resumable command:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_extraction.py \
+PYTHONPATH=.:src aic/bin/python scripts/extract_custom_keyframes.py \
   --media-info-dir data/media-info-aic25-b1/media-info \
   --run-root runs/custom-raw1fps-v1 \
   --native-executable build/keyframes_extraction/keyframe_extractor \
   --frame-store-id custom-raw1fps-v1 \
-  --yt-dlp-binary yt-dlp
+  --yt-dlp-binary yt-dlp \
+  --limit 10 \
+  --fail-fast
 ```
+
+Use repeated `--video-id` values for an explicit batch, or `--all` only after a
+bounded pilot. Downloads remain under `run-root/source/` for ASR. The generated
+`staging/{video_id}/enrichment/durable_frames.parquet` feeds Caption, Objects,
+and visual embedding; `ocr_frames.parquet` feeds only OCR. Re-running the same
+selection resumes from native state and does not re-extract retained bundles.
 
 Run the native extractor only after the local/release gate is accepted:
 

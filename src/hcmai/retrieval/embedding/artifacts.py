@@ -1,8 +1,10 @@
-"""Build strict, resumable visual embeddings from canonical BTC keyframes.
+"""Build strict, resumable visual embeddings from canonical frame stores.
 
 This module owns offline visual artifact construction. It preserves the
-organizer-provided frame coordinates and does not extract or reinterpret video
-frames; the canonical ``frames.parquet`` table remains the identity authority.
+canonical frame coordinates and does not extract or reinterpret video frames;
+the canonical ``frames.parquet`` table remains the identity authority. BTC
+``keyframe_order`` metadata is preserved when present but is not required for
+custom-extracted frames.
 """
 
 from __future__ import annotations
@@ -38,14 +40,13 @@ _REQUIRED_FRAME_COLUMNS = (
     "video_id",
     "frame_idx",
     "timestamp_ms",
-    "keyframe_order",
     "image_path",
 )
 _FAILURE_REPORT_FILENAME = "visual_embedding_failures.json"
 
 
 class EmbeddingArtifactBuilder:
-    """Encode canonical BTC images into aligned, resumable visual artifacts.
+    """Encode canonical images into aligned, resumable visual artifacts.
 
     Shard boundaries are fixed canonical row slices. A completed shard can be
     reused only when both its frame identities and vector shape exactly match
@@ -250,9 +251,10 @@ class EmbeddingArtifactBuilder:
         vectors: np.ndarray,
         records: list[dict[str, Any]],
     ) -> None:
-        """Append vectors and exact organizer coordinates in aligned order."""
+        """Append vectors and exact canonical coordinates in aligned order."""
         for vector, record in zip(vectors, records, strict=True):
             position = len(self.embeddings_list)
+            keyframe_order = record.get("keyframe_order")
             self.embeddings_list.append(vector[None, :])
             self.frame_mapping.append(
                 {
@@ -261,7 +263,11 @@ class EmbeddingArtifactBuilder:
                     "frame_idx": int(record["frame_idx"]),
                     "embedding_index": position,
                     "timestamp_ms": int(record["timestamp_ms"]),
-                    "keyframe_order": int(record["keyframe_order"]),
+                    "keyframe_order": (
+                        None
+                        if keyframe_order is None or bool(pd.isna(keyframe_order))
+                        else int(keyframe_order)
+                    ),
                 }
             )
 

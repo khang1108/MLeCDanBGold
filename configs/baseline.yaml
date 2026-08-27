@@ -99,8 +99,7 @@ api:
   maximum_top_k: 100
 
 inference:
-  enabled: true
-  base_url: "http://127.0.0.1:8100"
+  base_url: "https://api.iamphuckhang.dev"
   timeout_seconds: 120
   connect_timeout_seconds: 5
   read_timeout_seconds: 120

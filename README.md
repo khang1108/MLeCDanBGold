@@ -134,7 +134,7 @@ POST /api/v1/trake
 HCMAI_2026/
 ├── src/hcmai/                 Python package và FastAPI backend
 ├── frontend/                  React frontend
-├── configs/                   baseline, enrichment, indexing, S3 config
+├── configs/                   baseline + unified prepare/model/S3 config
 ├── scripts/                   CLI chuẩn bị dữ liệu, build index, benchmark
 ├── data/
 │   ├── keyframes/             BTC keyframes: <video_id>/<order>.jpg
@@ -193,7 +193,7 @@ aws sts get-caller-identity
 ```
 
 Mặc định profile hiện tại dùng bucket và region trong
-`configs/preparation.s3.yaml`. Có thể override bằng biến môi trường:
+`configs/prepare.yaml` (`storage.s3`). Có thể override bằng biến môi trường:
 
 ```text
 HCMAI_S3_BUCKET
@@ -280,19 +280,37 @@ dùng entrypoint sau trên máy ThunderCompute. `--s3-dry-run` chỉ inventory,
 không download và không build:
 
 ```bash
+INDEX_DATASET_ARGS=(
+  --version btc-keyframes-v1
+  --source btc_keyframes
+  --frame-store-id btc-keyframes-v1
+  --data-root data
+  --frames artifacts/frame_store/frames.parquet
+  --frame-store-output artifacts/frame_store
+  --frame-manifest artifacts/frame_store/manifest.json
+  --keyframes-root data/keyframes
+  --map-keyframes-root data/map_keyframes
+  --context artifacts/enrichment/context/frame_context_v1.parquet
+  --transcripts artifacts/enrichment/transcripts
+  --expected-video-count 873
+  --expected-frame-count 177321
+)
+
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 --s3-dry-run \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml \
-  --s3-config configs/preparation.s3.yaml
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  --s3-config configs/prepare.yaml \
+  "${INDEX_DATASET_ARGS[@]}"
 
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3 --stage all \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml \
-  --s3-config configs/preparation.s3.yaml \
-  --s3-sync-workers 16 \
-  --s3-upload-workers 8
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  --s3-config configs/prepare.yaml \
+  --s3-sync-workers 8 \
+  --s3-upload-workers 8 \
+  "${INDEX_DATASET_ARGS[@]}"
 ```
 
 S3 mode chỉ tải keyframes, map_keyframes, FrameStore, FrameContext và
@@ -344,8 +362,9 @@ bundle:
 ```bash
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage validate \
-  --config configs/indexing.yaml \
-  --model-config configs/indexing.models.yaml
+  --config configs/prepare.yaml \
+  --model-config configs/prepare.yaml \
+  "${INDEX_DATASET_ARGS[@]}"
 ```
 
 Checkout chỉ phục vụ bundle không thể chạy lại source-dependent validator;
@@ -645,6 +664,5 @@ backend.
 - [`thundercompute/README.md`](thundercompute/README.md):
   flow triển khai thủ công create/scp/SSH/delete và inference contracts.
 - [`configs/baseline.yaml`](configs/baseline.yaml): cấu hình serving/search.
-- [`configs/enrichment.yaml`](configs/enrichment.yaml): enrichment BTC-native.
-- [`configs/indexing.yaml`](configs/indexing.yaml): offline index build.
+- [`configs/prepare.yaml`](configs/prepare.yaml): stage policies, S3 transport và model pins; dataset inputs truyền qua CLI.
 - [`thundercompute/config.yaml`](thundercompute/config.yaml): model checkpoint và reranker config.

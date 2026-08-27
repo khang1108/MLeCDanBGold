@@ -21,8 +21,9 @@ from hcmai.common.schemas import (
     TranscriptSegment,
 )
 from hcmai.common.schemas.search import SearchFilters
-from hcmai.common.utils.io import read_json, read_yaml
+from hcmai.common.utils.io import read_json, read_yaml_section
 from hcmai.data.assets import FrameAssetResolver, FrameAssetStatus
+from hcmai.data.enrichment.dataset_cli import merge_dataset_values
 from hcmai.data.enrichment.transcripts.store import TranscriptStore
 from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
 from hcmai.data.stores import (
@@ -144,21 +145,23 @@ class DataService:
         *,
         resume: bool = True,
         limit: int | None = None,
+        dataset: Mapping[str, object] | None = None,
     ) -> Path:
         """Import the BTC-native frame store configured for HCMAI 2026.
 
         ``resume`` and ``limit`` remain in the public signature for caller
-        compatibility. BTC V1 ingestion is deterministic and always imports
-        the complete metadata table.
+        compatibility. Dataset identity and paths are supplied by the runtime
+        ``dataset`` mapping; a legacy dataset section is read only for old
+        focused fixtures. BTC V1 ingestion is deterministic and always
+        imports the complete metadata table.
         """
 
         resolved_config = Path(config_path).expanduser().resolve()
-        raw_config = read_yaml(resolved_config)
-        if not isinstance(raw_config, Mapping):
-            raise ValueError(f"Expected a YAML mapping in {config_path}")
-        dataset = raw_config.get("dataset")
-        if not isinstance(dataset, Mapping):
-            raise ValueError("Enrichment YAML requires a dataset mapping")
+        raw_config = read_yaml_section(resolved_config, "enrichment")
+        dataset_values = merge_dataset_values(
+            raw_config,
+            dict(dataset) if dataset else None,
+        )
 
         required = {
             "version",
@@ -170,20 +173,20 @@ class DataService:
             "frames_path",
             "frame_store_output",
         }
-        missing = sorted(required.difference(dataset))
+        missing = sorted(required.difference(dataset_values))
         if missing:
             raise ValueError(
                 "Missing dataset configuration: " + ", ".join(missing)
             )
 
-        source = str(dataset["source"])
+        source = str(dataset_values["source"])
         if source != "btc_keyframes":
             raise ValueError(
                 f"Unsupported dataset.source {source!r}; expected 'btc_keyframes'"
             )
 
-        output_root = _project_path(str(dataset["frame_store_output"]))
-        frames_path = _project_path(str(dataset["frames_path"]))
+        output_root = _project_path(str(dataset_values["frame_store_output"]))
+        frames_path = _project_path(str(dataset_values["frames_path"]))
         expected_frames_path = output_root / "frames.parquet"
         if frames_path.resolve() != expected_frames_path.resolve():
             raise ValueError(
@@ -193,11 +196,11 @@ class DataService:
 
         return import_btc_frame_store(
             BTCIngestionConfig(
-                btc_root=_project_path(str(dataset["btc_root"])),
-                mapping_root=_project_path(str(dataset["mapping_root"])),
-                data_root=_project_path(str(dataset["data_root"])),
+                btc_root=_project_path(str(dataset_values["btc_root"])),
+                mapping_root=_project_path(str(dataset_values["mapping_root"])),
+                data_root=_project_path(str(dataset_values["data_root"])),
                 output_root=output_root,
-                frame_store_id=str(dataset["frame_store_id"]),
+                frame_store_id=str(dataset_values["frame_store_id"]),
             )
         )
 

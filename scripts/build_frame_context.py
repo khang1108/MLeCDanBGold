@@ -7,10 +7,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
+from hcmai.data.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
 from hcmai.data.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 
 
-DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/enrichment.yaml"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/prepare.yaml"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -18,12 +19,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--frames", type=Path)
+    add_dataset_arguments(parser)
     parser.add_argument("--captions", type=Path)
     parser.add_argument("--ocr-frames", type=Path)
     parser.add_argument("--object-frames", type=Path)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--frame-store-id")
     parser.add_argument("--context-version")
     parser.add_argument("--caption-token-budget", type=int)
     parser.add_argument("--ocr-token-budget", type=int)
@@ -36,7 +36,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Build configuration and delegate context materialization to the service."""
 
     args = parse_args(argv)
-    job = EnrichmentJobConfig.from_yaml(args.config)
+    dataset = dataset_overrides(args)
+    job = (
+        EnrichmentJobConfig.from_yaml(args.config, dataset=dataset)
+        if dataset is not None
+        else EnrichmentJobConfig.from_yaml(args.config)
+    )
     config = replace(
         job.context,
         **{

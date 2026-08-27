@@ -109,6 +109,23 @@ def test_visual_build_reuses_valid_completed_shard(
     assert encoder.image_count == calls_after_first
 
 
+def test_visual_build_accepts_custom_frames_without_keyframe_order(
+    tmp_path: Path, frame_table: Path
+) -> None:
+    """Custom extraction keeps canonical identity without a BTC keyframe order."""
+    frames = pd.read_parquet(frame_table).drop(columns=["keyframe_order"])
+    frames.to_parquet(frame_table, index=False)
+
+    builder = _builder(tmp_path, CountingEncoder(), frame_table)
+    builder.run()
+
+    mapping = pd.read_parquet(builder.mapping_file)
+    assert mapping["frame_id"].tolist() == ["frame-1", "frame-2", "frame-3"]
+    assert mapping["frame_idx"].tolist() == [90, 180, 270]
+    assert mapping["timestamp_ms"].tolist() == [3_000, 6_000, 9_000]
+    assert mapping["keyframe_order"].isna().all()
+
+
 def test_visual_build_regenerates_mismatched_shard(
     tmp_path: Path, frame_table: Path
 ) -> None:

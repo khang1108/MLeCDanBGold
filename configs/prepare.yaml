@@ -1,0 +1,127 @@
+# Single source of truth for the offline preparation pipeline.
+# Serving/search remains in baseline.yaml; LiteLLM routing remains in litellm.yaml.
+
+enrichment:
+  caption:
+    output_dir: "artifacts/enrichment/captions"
+    model_checkpoint: "Qwen/Qwen3-VL-8B-Instruct"
+    revision: "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
+    prompt: "qwen vl"
+    decoding:
+      max_new_tokens: 160
+      do_sample: false
+    device: "cuda"
+    precision: "bf16"
+    dtype: "bfloat16"
+    image_size: 768
+    batch_size: 32
+    enrichment_version: "caption_qwen_vl_v1"
+    write_interval: 2000
+
+  ocr:
+    output_dir: "artifacts/enrichment/ocr"
+    enabled: true
+    backend: "florence2"
+    checkpoint: "florence-community/Florence-2-base-ft"
+    revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
+    device: "cuda"
+    dtype: "bfloat16"
+    batch_size: 32
+    image_size: 768
+    enrichment_version: "florence2_ocr_v1"
+    artifact_version: "ocr-v1"
+    min_region_confidence: 0.0
+    min_context_quality: 0.5
+
+  objects:
+    output_dir: "artifacts/enrichment/objects"
+    model: "yoloe-26l-seg-pf.pt"
+    min_confidence: 0.20
+    top_k: 30
+    batch_size: 32
+    device: "cuda"
+    artifact_version: "object-yoloe-v1"
+    summary_min_confidence: 0.25
+    max_summary_labels: 20
+
+  transcript:
+    output_dir: "artifacts/enrichment/transcripts"
+    frame_enrichment_path: "artifacts/enrichment/asr/frame_enrichment.parquet"
+    pipeline_version: "transcript-pipeline-v1"
+    schema_version: "transcript-segment-v1"
+    enrichment_version: "asr-frame-v1"
+    frame_evidence_window_ms: 2000
+    asr:
+      model_name: "Qwen/Qwen3-ASR-1.7B-hf"
+      revision: "bcd2b5b7f32b480ab5790554cfa8347f246a14f3"
+      device: "cuda"
+      dtype: "bfloat16"
+      audio_sample_rate: 16000
+    diarization:
+      enabled: true
+      model_name: "pyannote/speaker-diarization-community-1"
+      revision: "3533c8cf8e369892e6b79ff1bf80f7b0286a54ee"
+      device: "cuda"
+      audio_sample_rate: 16000
+
+  context:
+    output_dir: "artifacts/enrichment/context"
+    context_version: "frame-context-v1"
+    caption_token_budget: 80
+    ocr_token_budget: 80
+    object_token_budget: 40
+    min_ocr_quality: 0.5
+
+storage:
+  # Credentials are resolved by boto3 and must not be stored here.
+  s3:
+    bucket: mlecdanbgold-hcmai-hk
+    region: ap-east-1
+    endpoint_url: https://s3.ap-east-1.amazonaws.com
+    connect_timeout_seconds: 10
+    read_timeout_seconds: 300
+    max_attempts: 4
+
+indexing:
+  build:
+    strict_visual_coverage: true
+    resume: true
+    visual_shard_size: 2048
+
+  indexes:
+    visual: artifacts/indexes/visual
+    context: artifacts/indexes/context
+    asr_segments: artifacts/indexes/asr_segments
+
+  projection:
+    max_projection_gap_ms: 5000
+
+models:
+  visual_embedding:
+    backend: siglip
+    model_name: google/siglip2-base-patch16-224
+    revision: 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2
+    device: cuda
+    # RTX A6000 starting point; reduce only after measuring an actual OOM.
+    batch_size: 128
+    image_size: 224
+    dtype: float32
+
+  evidence_embedding:
+    backend: bge_m3
+    model_name: BAAI/bge-m3
+    revision: 5617a9f61b028005a4858fdac845db406aefb181
+    device: cuda
+    batch_size: 128
+    max_length: 8192
+    dtype: float32
+
+  # Compatibility fallback for consumers that still resolve caption_embedding.
+  caption_embedding:
+    backend: bge_m3
+    model_name: BAAI/bge-m3
+    revision: 5617a9f61b028005a4858fdac845db406aefb181
+    device: cuda
+    batch_size: 128
+    max_length: 8192
+    dtype: float32

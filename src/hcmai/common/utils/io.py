@@ -52,6 +52,25 @@ def read_yaml(path: PathValue) -> Any:
         return yaml.safe_load(file)
 
 
+def read_yaml_section(path: PathValue, section: str) -> dict[str, Any]:
+    """Read one namespaced mapping from a shared or standalone YAML file.
+
+    Shared production configuration uses explicit top-level sections. Returning
+    the root mapping when the requested section is absent preserves small,
+    focused fixture files without duplicating production configuration.
+    """
+
+    values = read_yaml(path)
+    if not isinstance(values, dict):
+        raise ValueError(f"YAML must contain a mapping: {Path(path)}")
+    nested = values.get(section)
+    if nested is None:
+        return dict(values)
+    if not isinstance(nested, dict):
+        raise ValueError(f"YAML section {section!r} must contain a mapping")
+    return dict(nested)
+
+
 def write_yaml(
     data: Any,
     path: PathValue,
@@ -132,6 +151,7 @@ __all__ = [
     "read_json",
     "read_parquet",
     "read_yaml",
+    "read_yaml_section",
     "write_json",
     "write_parquet",
     "write_yaml",

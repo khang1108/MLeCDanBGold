@@ -9,17 +9,26 @@ from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
+import json
 import logging
 import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import mkdtemp
+from collections.abc import Mapping
 from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from hcmai.data.enrichment.dataset_cli import (
+    add_dataset_arguments,
+    dataset_overrides,
+    merge_dataset_values,
+)
 
 
 LOGGER = logging.getLogger("hcmai.offline_indexes")
@@ -32,14 +41,34 @@ class DatasetInputs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: str = Field(min_length=1)
+    source: str = Field(min_length=1)
+    frame_store_id: str = Field(min_length=1)
+    data_root: Path
     frames_path: Path
+    frame_store_output: Path
     frame_manifest: Path
-    keyframes_root: Path
-    map_keyframes_root: Path
+    keyframes_root: Path | None = None
+    map_keyframes_root: Path | None = None
     context_path: Path
     transcripts_path: Path
     expected_video_count: int = Field(gt=0)
     expected_frame_count: int = Field(gt=0)
+
+    @property
+    def uses_btc_mapping(self) -> bool:
+        """Return whether organizer keyframe coordinates are authoritative."""
+
+        return self.source == "btc_keyframes"
+
+    @property
+    def visual_root(self) -> Path:
+        """Return the root used to resolve canonical image paths."""
+
+        if self.uses_btc_mapping:
+            if self.keyframes_root is None:
+                raise ValueError("btc_keyframes requires keyframes_root")
+            return self.keyframes_root
+        return self.data_root
 
 
 class BuildOptions(BaseModel):
@@ -80,7 +109,7 @@ class ProjectionOptions(BaseModel):
 
 
 class OfflineIndexConfig(BaseModel):
-    """Validated shape of the dedicated ``configs/indexing.yaml`` file."""
+    """Validated shape of the ``indexing`` preparation-config section."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -149,20 +178,35 @@ class RemoteEmbeddingAdapters:
     text: Any | None = None
 
 
+def _positive_int(value: str) -> int:
+    """Parse a strictly positive integer used by dataset coverage arguments."""
+
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer") from error
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be greater than or equal to 1")
+    return parsed
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse the explicit offline stage and optional path overrides."""
 
     parser = argparse.ArgumentParser(
         description="Build and validate Visual + FrameContext + segment-ASR indexes"
     )
-    parser.add_argument("--config", default="configs/indexing.yaml")
-    parser.add_argument("--model-config", default="configs/indexing.models.yaml")
+    parser.add_argument("--config", default="configs/prepare.yaml")
+    parser.add_argument("--model-config", default="configs/prepare.yaml")
     parser.add_argument("--stage", choices=STAGES, default="all")
-    parser.add_argument("--frames")
+    add_dataset_arguments(parser)
+    parser.add_argument("--frame-manifest")
     parser.add_argument("--keyframes-root")
     parser.add_argument("--map-keyframes-root")
     parser.add_argument("--context")
     parser.add_argument("--transcripts")
+    parser.add_argument("--expected-video-count", type=_positive_int)
+    parser.add_argument("--expected-frame-count", type=_positive_int)
     parser.add_argument("--output-root")
     parser.add_argument(
         "--inference-url",
@@ -182,8 +226,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--s3-config",
-        default="configs/preparation.s3.yaml",
-        help="YAML containing preprocessing.s3 credentials/region settings",
+        default="configs/prepare.yaml",
+        help="YAML containing shared S3 bucket/region transport settings",
     )
     parser.add_argument("--s3-keyframes-prefix", default="data/keyframes")
     parser.add_argument(
@@ -206,8 +250,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--s3-sync-workers",
         type=int,
-        default=16,
-        help="Concurrent S3 input transfers (default: 16)",
+        default=8,
+        help="Concurrent S3 input transfers (default: 8)",
     )
     parser.add_argument(
         "--s3-upload-workers",
@@ -223,37 +267,115 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _index_dataset_overrides(
+    args: argparse.Namespace,
+) -> dict[str, Any] | None:
+    """Combine shared dataset CLI fields with indexing-specific inputs.
+
+    The function deliberately returns ``None`` when no dataset argument is
+    present so unit tests can inject an already-built config. A real invocation
+    against ``configs/prepare.yaml`` then fails in ``load_offline_config`` with
+    a clear missing-field error instead of silently reading a hidden dataset.
+    """
+
+    common = dataset_overrides(args)
+    index_fields = {
+        "frame_manifest": args.frame_manifest,
+        "keyframes_root": args.keyframes_root,
+        "map_keyframes_root": args.map_keyframes_root,
+        "context_path": args.context,
+        "transcripts_path": args.transcripts,
+        "expected_video_count": args.expected_video_count,
+        "expected_frame_count": args.expected_frame_count,
+    }
+    if common is None:
+        if any(value is not None for value in index_fields.values()):
+            common_fields = (
+                "version",
+                "source",
+                "frame_store_id",
+                "data_root",
+                "frames_path",
+                "frame_store_output",
+            )
+            all_fields = {
+                name: getattr(args, name, None) for name in common_fields
+            }
+            all_fields.update(index_fields)
+            missing = ", ".join(
+                name.replace("_", "-")
+                for name, value in all_fields.items()
+                if value is None
+            )
+            raise ValueError(
+                "index dataset arguments must be supplied together; missing: "
+                + missing
+            )
+        return None
+
+    required_fields = {
+        "frame_manifest",
+        "context_path",
+        "transcripts_path",
+        "expected_video_count",
+        "expected_frame_count",
+    }
+    if common["source"] == "btc_keyframes":
+        required_fields.update({"keyframes_root", "map_keyframes_root"})
+    missing = [
+        name
+        for name in required_fields
+        if index_fields[name] is None
+    ]
+    if missing:
+        raise ValueError(
+            "index dataset arguments must be supplied together; missing: "
+            + ", ".join(name.replace("_", "-") for name in missing)
+        )
+    return {**common, **index_fields}
+
+
 def load_offline_config(
     config_path: str | Path,
     model_config_path: str | Path,
     *,
+    dataset: Mapping[str, Any] | None = None,
     frames: str | Path | None = None,
+    frame_manifest: str | Path | None = None,
     keyframes_root: str | Path | None = None,
     map_keyframes_root: str | Path | None = None,
     context: str | Path | None = None,
     transcripts: str | Path | None = None,
+    expected_video_count: int | None = None,
+    expected_frame_count: int | None = None,
     output_root: str | Path | None = None,
 ) -> OfflineIndexConfig:
-    """Load the dedicated indexing mapping without coercing it to AppConfig."""
+    """Load indexing policies and one explicit runtime dataset contract.
 
-    from hcmai.common.utils.io import read_yaml
+    The checked-in preparation YAML owns build policies and output layout. The
+    dataset identity, FrameStore paths, source roots, and expected coverage are
+    supplied by ``dataset`` from the CLI. A legacy ``indexing.dataset`` mapping
+    remains readable for old fixture configurations only.
+    """
+
+    from hcmai.common.utils.io import read_yaml_section
 
     config_file = Path(config_path)
     model_file = Path(model_config_path)
-    raw = read_yaml(config_file)
-    if not isinstance(raw, dict):
-        raise ValueError(f"Indexing config must contain a mapping: {config_file}")
-    config = OfflineIndexConfig.model_validate(
-        {**raw, "config_path": config_file, "model_config_path": model_file}
+    raw = read_yaml_section(config_file, "indexing")
+    dataset_values = merge_dataset_values(
+        raw,
+        dict(dataset) if dataset else None,
     )
 
-    dataset_updates: dict[str, Path] = {}
+    dataset_updates: dict[str, Any] = {}
     if frames is not None:
         frames_path = Path(frames)
         dataset_updates.update(
             frames_path=frames_path,
-            frame_manifest=frames_path.with_name("manifest.json"),
         )
+    if frame_manifest is not None:
+        dataset_updates["frame_manifest"] = Path(frame_manifest)
     for name, value in (
         ("keyframes_root", keyframes_root),
         ("map_keyframes_root", map_keyframes_root),
@@ -262,10 +384,21 @@ def load_offline_config(
     ):
         if value is not None:
             dataset_updates[name] = Path(value)
-    if dataset_updates:
-        config = config.model_copy(
-            update={"dataset": config.dataset.model_copy(update=dataset_updates)}
-        )
+    for name, value in (
+        ("expected_video_count", expected_video_count),
+        ("expected_frame_count", expected_frame_count),
+    ):
+        if value is not None:
+            dataset_updates[name] = value
+    dataset_values.update(dataset_updates)
+    config = OfflineIndexConfig.model_validate(
+        {
+            **raw,
+            "dataset": dataset_values,
+            "config_path": config_file,
+            "model_config_path": model_file,
+        }
+    )
 
     if output_root is not None:
         root = Path(output_root)
@@ -286,7 +419,7 @@ def load_model_config(path: str | Path) -> Any:
 
     from thundercompute.config import LLMServiceConfig
 
-    config = LLMServiceConfig.from_yaml(path)
+    config = LLMServiceConfig.from_yaml(path, section="models")
     for label, encoder in (
         ("visual_embedding", config.visual_embedding),
         ("evidence_embedding", config.resolved_evidence_embedding),
@@ -301,37 +434,12 @@ def load_model_config(path: str | Path) -> Any:
 
 
 def _load_s3_transport(config_path: str | Path) -> tuple[Any, str]:
-    """Create an S3 client from the repository's standard credential config.
+    """Create an S3 client from the preparation config's storage section."""
 
-    The repository's production preparation config wraps this section below a
-    top-level ``preparation`` key, so use its validated loader to normalize
-    environment overrides and nested S3 settings.  The retrieval builder does
-    not run the corpus-preparation stages themselves. Credentials continue to
-    come from boto3's standard chain or the existing ``HCMAI_S3_*`` overrides.
-    """
+    from hcmai.data.s3 import create_s3_client, load_s3_config
 
-    from hcmai.data.corpus_build.config import S3CorpusPreparationConfig
-    from hcmai.data.s3 import create_s3_client
-
-    preparation = S3CorpusPreparationConfig.from_yaml(config_path)
-    storage = preparation.preprocessing.s3
-    if storage is None:
-        raise ValueError(f"S3 settings are missing from {config_path}")
+    storage = load_s3_config(config_path)
     return create_s3_client(storage), storage.bucket
-
-
-def _s3_module() -> Any:
-    """Import the S3 transfer helper in both CLI and package-test contexts."""
-
-    try:
-        from scripts import retrieval_s3
-    except ModuleNotFoundError:
-        # When this file is executed directly, Python places ``scripts/`` on
-        # sys.path rather than the repository root.
-        import retrieval_s3
-
-        return retrieval_s3
-    return retrieval_s3
 
 
 def _download_s3_inputs(
@@ -347,7 +455,8 @@ def _download_s3_inputs(
     stopped ThunderCompute job to be restarted without deleting its cache.
     """
 
-    transfer = _s3_module()
+    from hcmai.data.s3 import download_prefix
+
     inputs = (
         (
             "BTC keyframes",
@@ -362,7 +471,7 @@ def _download_s3_inputs(
         (
             "canonical FrameStore",
             args.s3_frame_store_prefix,
-            config.dataset.frames_path.parent,
+            config.dataset.frame_store_output,
         ),
         (
             "FrameContext",
@@ -376,7 +485,7 @@ def _download_s3_inputs(
         ),
     )
     for label, prefix, destination in inputs:
-        stats = transfer.download_prefix(
+        stats = download_prefix(
             client,
             bucket,
             prefix,
@@ -403,8 +512,9 @@ def _publish_s3_bundle(
 ) -> None:
     """Publish a passed local bundle and advance its S3 latest pointer."""
 
-    transfer = _s3_module()
-    publication = transfer.publish_retrieval_bundle(
+    from hcmai.data.s3 import publish_retrieval_bundle
+
+    publication = publish_retrieval_bundle(
         client,
         bucket,
         config.output_root,
@@ -604,6 +714,30 @@ def project_staged_keyframes(
     return projected
 
 
+def project_canonical_images(
+    frames: pd.DataFrame,
+    dataset_root: str | Path,
+) -> pd.DataFrame:
+    """Resolve custom canonical image paths without BTC mapping metadata.
+
+    The custom extractor already owns ``frame_idx`` and ``timestamp_ms``.
+    This projection changes only ``image_path`` to an absolute, root-confined
+    path so embedding cannot reinterpret canonical identity.
+    """
+
+    root = Path(dataset_root).expanduser().resolve()
+    projected = frames.copy()
+    resolved_paths: list[str] = []
+    for value in projected["image_path"]:
+        candidate = Path(str(value)).expanduser()
+        image = (candidate if candidate.is_absolute() else root / candidate).resolve()
+        if not image.is_file() or not image.is_relative_to(root):
+            raise ValueError(f"Canonical image is outside the dataset root: {image}")
+        resolved_paths.append(str(image))
+    projected["image_path"] = resolved_paths
+    return projected
+
+
 def _require_usable_context_ids(data: Any) -> set[str]:
     """Return frame IDs whose deterministic Context text can be indexed."""
 
@@ -691,10 +825,10 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     dataset = config.dataset
     frames_path = _require_file(dataset.frames_path, "Canonical frames")
     manifest_path = _require_file(dataset.frame_manifest, "Canonical frame manifest")
-    keyframes_root = _require_directory(dataset.keyframes_root, "BTC keyframes")
-    mapping_root = _require_directory(dataset.map_keyframes_root, "BTC map_keyframes")
     context_path = _require_file(dataset.context_path, "FrameContext")
-    _require_file(context_path.with_name("manifest.json"), "FrameContext manifest")
+    context_manifest_path = _require_file(
+        context_path.with_name("manifest.json"), "FrameContext manifest"
+    )
     transcripts_path = dataset.transcripts_path
     if not transcripts_path.exists():
         raise FileNotFoundError(
@@ -704,6 +838,17 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     manifest = read_json(manifest_path)
     if not isinstance(manifest, dict):
         raise ValueError("Canonical frame manifest must contain an object")
+    if manifest.get("frame_store_id") != dataset.frame_store_id:
+        raise ValueError(
+            "Canonical frame manifest frame_store_id does not match the CLI contract"
+        )
+    context_manifest = read_json(context_manifest_path)
+    if not isinstance(context_manifest, dict) or (
+        context_manifest.get("frame_store_id") != dataset.frame_store_id
+    ):
+        raise ValueError(
+            "FrameContext manifest frame_store_id does not match the CLI contract"
+        )
     frames = cast(pd.DataFrame, pd.read_parquet(frames_path))
     required_columns = {
         "frame_id",
@@ -711,9 +856,10 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
         "frame_idx",
         "timestamp_ms",
         "fps",
-        "keyframe_order",
         "image_path",
     }
+    if dataset.uses_btc_mapping:
+        required_columns.add("keyframe_order")
     missing = sorted(required_columns.difference(frames.columns))
     if missing:
         raise ValueError("Canonical frames are missing columns: " + ", ".join(missing))
@@ -734,28 +880,41 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     if manifest.get("video_count") not in (None, video_count):
         raise ValueError("Canonical manifest video_count does not match frames.parquet")
 
-    mapping = load_btc_keyframe_map(mapping_root)
-    mapping_video_count = int(cast(Any, mapping["video_id"]).nunique())
-    if mapping_video_count != dataset.expected_video_count:
-        raise ValueError(
-            f"BTC mapping video count {mapping_video_count} != {dataset.expected_video_count}"
+    if dataset.uses_btc_mapping:
+        keyframes_root = _require_directory(
+            cast(Path, dataset.keyframes_root), "BTC keyframes"
         )
-    if len(mapping) != dataset.expected_frame_count:
-        raise ValueError(
-            f"BTC mapping row count {len(mapping)} != {dataset.expected_frame_count}"
+        mapping_root = _require_directory(
+            cast(Path, dataset.map_keyframes_root), "BTC map_keyframes"
         )
-    frame_keys = set(zip(frames["video_id"], frames["keyframe_order"], strict=True))
-    mapping_keys = set(
-        zip(mapping["video_id"], mapping["keyframe_order"], strict=True)
-    )
-    if frame_keys != mapping_keys:
-        raise ValueError("Canonical frames and BTC mapping keys do not join completely")
-    mapped = _apply_btc_mapping_authority(frames, mapping)
-    projected = project_staged_keyframes(mapped, keyframes_root)
-    LOGGER.info(
-        "BTC mapping projection ready rows=%d; validating FrameStore and FrameContext",
-        len(projected),
-    )
+        mapping = load_btc_keyframe_map(mapping_root)
+        mapping_video_count = int(cast(Any, mapping["video_id"]).nunique())
+        if mapping_video_count != dataset.expected_video_count:
+            raise ValueError(
+                f"BTC mapping video count {mapping_video_count} != {dataset.expected_video_count}"
+            )
+        if len(mapping) != dataset.expected_frame_count:
+            raise ValueError(
+                f"BTC mapping row count {len(mapping)} != {dataset.expected_frame_count}"
+            )
+        frame_keys = set(
+            zip(frames["video_id"], frames["keyframe_order"], strict=True)
+        )
+        mapping_keys = set(
+            zip(mapping["video_id"], mapping["keyframe_order"], strict=True)
+        )
+        if frame_keys != mapping_keys:
+            raise ValueError(
+                "Canonical frames and BTC mapping keys do not join completely"
+            )
+        mapped = _apply_btc_mapping_authority(frames, mapping)
+        projected = project_staged_keyframes(mapped, keyframes_root)
+        LOGGER.info("BTC mapping projection ready rows=%d", len(projected))
+    else:
+        mapping_video_count = video_count
+        mapping = frames
+        projected = project_canonical_images(frames, dataset.data_root)
+        LOGGER.info("Custom canonical image projection ready rows=%d", len(projected))
 
     data = DataService.load(frames_path, context_path=context_path)
     canonical_ids = set(frames["frame_id"].astype(str))
@@ -828,11 +987,19 @@ def _require_projected_frames(config: OfflineIndexConfig) -> Path:
 
 
 def _config_fingerprint(config: OfflineIndexConfig) -> str:
-    """Fingerprint both immutable inputs that define the index build."""
+    """Fingerprint files plus the explicit dataset contract for this build."""
 
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
 
-    return fingerprint_files([config.config_path, config.model_config_path])
+    file_fingerprint = fingerprint_files([config.config_path, config.model_config_path])
+    dataset = json.dumps(
+        config.dataset.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(
+        f"{file_fingerprint}\0{dataset}".encode("utf-8")
+    ).hexdigest()
 
 
 def _visual_source_fingerprint(config: OfflineIndexConfig) -> str:
@@ -840,7 +1007,12 @@ def _visual_source_fingerprint(config: OfflineIndexConfig) -> str:
 
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
 
-    mapping_files = sorted(config.dataset.map_keyframes_root.glob("*.csv"))
+    mapping_files = (
+        sorted(config.dataset.map_keyframes_root.glob("*.csv"))
+        if config.dataset.uses_btc_mapping
+        and config.dataset.map_keyframes_root is not None
+        else []
+    )
     return fingerprint_files(
         [
             config.dataset.frames_path,
@@ -869,7 +1041,7 @@ def build_visual(
     try:
         builder = EmbeddingArtifactBuilder(
             frames_path=Path(projected_frames),
-            dataset_root=config.dataset.keyframes_root,
+            dataset_root=config.dataset.visual_root,
             output_dir=workspace,
             encoder_config=models.visual_embedding,
             dataset_version=config.dataset.version,
@@ -1217,6 +1389,8 @@ def run_validate(config: OfflineIndexConfig, models: Any) -> Path:
     report = {
         "status": "passed",
         "dataset_version": config.dataset.version,
+        "dataset_source": config.dataset.source,
+        "frame_store_id": config.dataset.frame_store_id,
         "inputs": inputs.report(),
         "indexes": {
             name: {
@@ -1245,14 +1419,19 @@ def run_validate(config: OfflineIndexConfig, models: Any) -> Path:
 def run(args: argparse.Namespace) -> None:
     """Dispatch one stage or the sequential single-process A6000 workflow."""
 
+    dataset = _index_dataset_overrides(args)
     config = load_offline_config(
         args.config,
         args.model_config,
+        dataset=dataset,
         frames=args.frames,
+        frame_manifest=args.frame_manifest,
         keyframes_root=args.keyframes_root,
         map_keyframes_root=args.map_keyframes_root,
         context=args.context,
         transcripts=args.transcripts,
+        expected_video_count=args.expected_video_count,
+        expected_frame_count=args.expected_frame_count,
         output_root=args.output_root,
     )
     if args.s3 and args.inference_url is not None:

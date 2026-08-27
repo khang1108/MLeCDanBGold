@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any, Literal
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
@@ -168,19 +169,40 @@ class TranscriptJobConfig(BaseModel):
     frame_enrichment_path: Path = Path(
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
+    frame_store_id: str | None = None
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> TranscriptJobConfig:
-        """Load the transcript section from the shared enrichment YAML."""
+    def from_yaml(
+        cls,
+        path: str | Path,
+        *,
+        dataset: Mapping[str, object] | None = None,
+    ) -> TranscriptJobConfig:
+        """Load transcript settings from the shared preparation YAML."""
 
-        from hcmai.common.utils.io import read_yaml
+        from hcmai.common.utils.io import read_yaml_section
 
         config_path = Path(path).expanduser().resolve()
-        raw = read_yaml(config_path)
-        transcript = raw.get("transcript") if isinstance(raw, dict) else None
+        raw = read_yaml_section(config_path, "enrichment")
+        configured_dataset = raw.get("dataset", {})
+        if configured_dataset is None:
+            configured_dataset = {}
+        if not isinstance(configured_dataset, dict):
+            raise ValueError("Enrichment YAML dataset section must be a mapping")
+        dataset_values = dict(configured_dataset)
+        if dataset:
+            dataset_values.update(dict(dataset))
+        transcript = raw.get("transcript")
         if not isinstance(transcript, dict):
             raise ValueError("Enrichment YAML requires a transcript mapping")
-        config = cls.model_validate(transcript)
+        transcript_values = dict(transcript)
+        if "frames_path" not in transcript_values:
+            frames_path = dataset_values.get("frames_path")
+            if frames_path is not None:
+                transcript_values["frames_path"] = frames_path
+        if dataset_values.get("frame_store_id") is not None:
+            transcript_values["frame_store_id"] = dataset_values["frame_store_id"]
+        config = cls.model_validate(transcript_values)
         project_root = Path(__file__).resolve().parents[3]
         return config.model_copy(update={
             "output_dir": _project_path(config.output_dir, project_root),
@@ -392,7 +414,9 @@ class ApiConfig(BaseModel):
 class InferenceConfig(BaseModel):
     """Connection from the local data plane to the private GPU service."""
 
-    enabled: bool = False
+    # The shared gateway is the normal execution path. Keep this compatibility
+    # field for older consumers, but omission must never silently disable it.
+    enabled: bool = True
     base_url: str = "https://api.iamphuckhang.dev"
     timeout_seconds: float = Field(default=10, gt=0, le=120)
     connect_timeout_seconds: float = Field(default=5, gt=0, le=120)

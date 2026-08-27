@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Sequence
 
 from hcmai.common.config import TranscriptJobConfig
+from hcmai.data.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
 from hcmai.data.enrichment.transcripts.materialize import (
     materialize_transcript_artifact,
 )
 from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
 
-DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/enrichment.yaml"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/prepare.yaml"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -21,8 +22,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--videos-root", required=True, type=Path)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    add_dataset_arguments(parser)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--frames", type=Path)
     parser.add_argument("--frame-enrichment-output", type=Path)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--no-resume", action="store_true")
@@ -34,7 +35,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run transcription and print its compact final report."""
 
     args = parse_args(argv)
-    config = TranscriptJobConfig.from_yaml(args.config)
+    dataset = dataset_overrides(args)
+    if dataset is None:
+        raise ValueError(
+            "transcript preparation requires the complete dataset CLI contract"
+        )
+    config = TranscriptJobConfig.from_yaml(args.config, dataset=dataset)
     if args.no_diarization:
         config = config.model_copy(update={
             "diarization": config.diarization.model_copy(update={"enabled": False})
@@ -61,6 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{config.asr.model_name}@{config.asr.revision}:"
                 f"{config.pipeline_version}"
             ),
+            frame_store_id=config.frame_store_id,
         )
     print(f"Expected videos: {report.expected}")
     print(f"Transcribed: {report.transcribed}")

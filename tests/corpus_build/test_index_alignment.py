@@ -195,6 +195,14 @@ def test_four_aligned_indexes_exactly_match_canonical_frame_identities(
         paths,
         resume=True,
         limit=None,
+        dataset={
+            "version": "fixture-v1",
+            "source": "custom_raw_video",
+            "frame_store_id": "fixture-store-v1",
+            "data_root": paths.frame_store_root,
+            "frames_path": paths.frames_path,
+            "frame_store_output": paths.frame_store_root,
+        },
     )
     
     # Mock the text encoder

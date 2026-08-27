@@ -6,13 +6,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
-from hcmai.common.utils.io import read_yaml
+from hcmai.common.utils.io import read_yaml_section
+from hcmai.data.enrichment.dataset_cli import merge_dataset_values
 
 ENRICHMENT_VERSION = "enrichment_version"
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
-DEFAULT_ENRICHMENT_CONFIG = PROJECT_ROOT / "configs" / "enrichment.yaml"
+DEFAULT_ENRICHMENT_CONFIG = PROJECT_ROOT / "configs" / "prepare.yaml"
 
 
 @dataclass(frozen=True)
@@ -64,14 +66,19 @@ class CaptionJobConfig:
 
     @classmethod
     def from_yaml(
-        cls, path: str | Path = DEFAULT_ENRICHMENT_CONFIG
+        cls,
+        path: str | Path = DEFAULT_ENRICHMENT_CONFIG,
+        *,
+        dataset: Mapping[str, Any] | None = None,
     ) -> CaptionJobConfig:
-        """Load a complete caption job from YAML."""
+        """Load a complete caption job from the preparation config."""
         config_path = Path(path).expanduser().resolve()
-        raw = read_yaml(config_path)
-        if not isinstance(raw, dict):
-            raise ValueError(f"Expected a YAML mapping in {config_path}")
-        dataset, caption = raw.get("dataset"), raw.get("caption")
+        raw = read_yaml_section(config_path, "enrichment")
+        dataset_values = merge_dataset_values(
+            raw,
+            dict(dataset) if dataset else None,
+        )
+        dataset, caption = dataset_values, raw.get("caption")
         if not isinstance(dataset, dict) or not isinstance(caption, dict):
             raise ValueError("Enrichment YAML requires dataset and caption mappings")
 

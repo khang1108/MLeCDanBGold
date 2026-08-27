@@ -55,13 +55,19 @@ export HF_TOKEN="hf_..."
 
 PYTHONPATH=.:src python scripts/prepare_transcripts.py \
   --videos-root /path/to/dataset \
-  --config configs/enrichment.yaml
+  --config configs/prepare.yaml \
+  --version <dataset-version> \
+  --source <dataset-source> \
+  --frame-store-id <frame-store-id> \
+  --data-root /path/to/dataset \
+  --frames /path/to/frame_store/frames.parquet \
+  --frame-store-output /path/to/frame_store
 ```
 
 Trước khi chạy, chấp nhận điều kiện của
 [`community-1`](https://huggingface.co/pyannote/speaker-diarization-community-1).
 Token chỉ đọc từ `HF_TOKEN`, không lưu trong code hoặc output. Model revisions
-được pin trong `configs/enrichment.yaml`. Có thể thêm `--limit 2`,
+được pin trong section `enrichment.transcript` của `configs/prepare.yaml`. Có thể thêm `--limit 2`,
 `--no-resume`, hoặc `--no-diarization`. Khi diarization tắt,
 `speaker_id=None` vẫn là transcript hợp lệ.
 

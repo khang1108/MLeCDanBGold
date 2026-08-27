@@ -54,7 +54,8 @@ def test_baseline_config_matches_runtime_contract() -> None:
         TaskType.KIS,
         TaskType.TRAKE,
     }
-    assert config.inference.base_url == "http://127.0.0.1:8100"
+    assert config.inference.enabled is True
+    assert config.inference.base_url == "https://api.iamphuckhang.dev"
 
 
 def test_fusion_weights_require_every_remaining_task_type() -> None:
@@ -115,23 +116,34 @@ def test_llm_config_is_the_model_authority() -> None:
 
 
 def test_enrichment_config_is_loaded_from_root_yaml() -> None:
-    config = CaptionJobConfig.from_yaml()
     project_root = Path(__file__).resolve().parents[1]
+    dataset = {
+        "version": "dataset_v1",
+        "source": "custom_raw_video",
+        "data_root": "runs/dataset_v1",
+        "frame_store_id": "dataset_1",
+        "frames_path": "artifacts/dataset_v1/frame_store/frames.parquet",
+        "frame_store_output": "artifacts/dataset_v1/frame_store",
+    }
+
+    config = CaptionJobConfig.from_yaml(dataset=dataset)
 
     assert config.caption.model_checkpoint == "Qwen/Qwen3-VL-8B-Instruct"
     assert config.caption.revision == "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
     assert config.caption.prompt == "qwen vl"
     assert config.caption.decoding["max_new_tokens"] == 160
-    assert config.caption.dataset_version == "hcmai2026_v1"
-    assert config.dataset_root == project_root / "data"
-    assert config.frames_path == project_root / "artifacts/frame_store/frames.parquet"
+    assert config.caption.dataset_version == "dataset_v1"
+    assert config.dataset_root == project_root / "runs/dataset_v1"
+    assert config.frames_path == project_root / "artifacts/dataset_v1/frame_store/frames.parquet"
     assert config.output_dir == project_root / "artifacts/enrichment/captions"
-    assert config.frame_store_id == "btc-keyframes-v1"
+    assert config.frame_store_id == "dataset_1"
 
-    transcript = TranscriptJobConfig.from_yaml("configs/enrichment.yaml")
+    transcript = TranscriptJobConfig.from_yaml(
+        "configs/prepare.yaml", dataset=dataset
+    )
     assert transcript.asr.revision == "bcd2b5b7f32b480ab5790554cfa8347f246a14f3"
     assert transcript.diarization.revision == "3533c8cf8e369892e6b79ff1bf80f7b0286a54ee"
-    assert transcript.frames_path == project_root / "artifacts/frame_store/frames.parquet"
+    assert transcript.frames_path == project_root / "artifacts/dataset_v1/frame_store/frames.parquet"
     assert transcript.frame_enrichment_path == (
         project_root / "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
@@ -184,8 +196,14 @@ def test_relative_caption_paths_do_not_depend_on_process_working_directory(
 def test_caption_job_rejects_non_path_dataset_root(tmp_path: Path) -> None:
     """Reject malformed YAML paths before passing them to ``pathlib``."""
 
-    raw = yaml.safe_load(Path("configs/enrichment.yaml").read_text(encoding="utf-8"))
-    raw["dataset"]["data_root"] = 123
+    raw = yaml.safe_load(Path("configs/prepare.yaml").read_text(encoding="utf-8"))[
+        "enrichment"
+    ]
+    raw["dataset"] = {
+        "version": "dataset_v1",
+        "data_root": 123,
+        "frames_path": "artifacts/dataset_v1/frame_store/frames.parquet",
+    }
     config_path = tmp_path / "enrichment.yaml"
     config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
 
