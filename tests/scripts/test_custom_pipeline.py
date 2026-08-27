@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 import shutil
+import zipfile
 
 import pandas as pd
 import pytest
@@ -17,6 +19,71 @@ def _argument_value(arguments: list[str], name: str) -> Path:
     """Return one path argument captured from a stage command."""
 
     return Path(arguments[arguments.index(name) + 1])
+
+
+def _pipeline_args(tmp_path: Path, media_info_url: str) -> argparse.Namespace:
+    """Parse a minimal auto-download invocation for metadata bootstrap tests."""
+
+    return pipeline.parse_args(
+        [
+            "--media-info-url",
+            media_info_url,
+            "--run-root",
+            str(tmp_path / "run"),
+            "--output-root",
+            str(tmp_path / "output"),
+            "--version",
+            "custom-dataset-v1",
+            "--frame-store-id",
+            "custom-v1",
+            "--limit",
+            "1",
+        ]
+    )
+
+
+def test_pipeline_downloads_and_reuses_default_media_info_layout(
+    tmp_path: Path,
+) -> None:
+    """Missing local metadata downloads once and resolves media-info/*.json."""
+
+    source_archive = tmp_path / "fixture.zip"
+    with zipfile.ZipFile(source_archive, "w") as archive:
+        archive.writestr(
+            "media-info/L01_V001.json",
+            json.dumps(
+                {
+                    "watch_url": "https://youtube.com/watch?v=synthetic",
+                    "length": 3,
+                }
+            ),
+        )
+    args = _pipeline_args(tmp_path, source_archive.as_uri())
+
+    first = pipeline._resolve_media_info_dir(args)
+    source_archive.unlink()
+    second = pipeline._resolve_media_info_dir(args)
+
+    assert first == second
+    assert first.name == "media-info"
+    assert (first / "L01_V001.json").is_file()
+    assert (
+        tmp_path / "run" / "input" / pipeline.MEDIA_INFO_ARCHIVE_NAME
+    ).is_file()
+
+
+def test_pipeline_rejects_media_info_zip_path_traversal(tmp_path: Path) -> None:
+    """Organizer metadata bootstrap must not write outside its extraction root."""
+
+    source_archive = tmp_path / "unsafe.zip"
+    with zipfile.ZipFile(source_archive, "w") as archive:
+        archive.writestr("../escaped.json", "{}")
+    args = _pipeline_args(tmp_path, source_archive.as_uri())
+
+    with pytest.raises(ValueError, match="unsafe media-info ZIP member"):
+        pipeline._resolve_media_info_dir(args)
+
+    assert not (tmp_path / "run" / "input" / "escaped.json").exists()
 
 
 def test_custom_pipeline_coordinates_every_local_artifact_stage(
@@ -38,6 +105,9 @@ def test_custom_pipeline_coordinates_every_local_artifact_stage(
     source.parent.mkdir(parents=True)
     source.write_bytes(b"synthetic-video")
     events: list[str] = []
+    media_info_dir = tmp_path / "media-info"
+    media_info_dir.mkdir()
+    (media_info_dir / f"{video_id}.json").write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(
         pipeline.extract_custom_keyframes,
@@ -113,7 +183,7 @@ def test_custom_pipeline_coordinates_every_local_artifact_stage(
     args = pipeline.parse_args(
         [
             "--media-info-dir",
-            str(tmp_path / "media-info"),
+            str(media_info_dir),
             "--run-root",
             str(run_root),
             "--output-root",

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Run custom video preparation from media metadata through local indexes.
 
-This command coordinates the existing native extractor, specialist enrichment,
-native publication, canonical FrameStore materialization, FrameContext, and
-retrieval-index builders. It intentionally does not upload to S3. Model-heavy
-stages remain separate subprocesses so one stage releases RAM/VRAM before the
-next stage starts.
+When no local metadata directory is supplied, this command first downloads and
+safely extracts the organizer media-info ZIP. It then coordinates the existing
+native extractor, specialist enrichment, native publication, canonical
+FrameStore materialization, FrameContext, and retrieval-index builders. It
+intentionally does not upload to S3. Model-heavy stages remain separate
+subprocesses so one stage releases RAM/VRAM before the next stage starts.
 """
 
 from __future__ import annotations
@@ -13,11 +14,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 from typing import Any, Literal, Sequence
+from urllib.request import Request, urlopen
+import zipfile
 
 import pandas as pd
 
@@ -38,6 +43,11 @@ from scripts import extract_custom_keyframes
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "prepare.yaml"
 DEFAULT_APP_CONFIG = PROJECT_ROOT / "configs" / "baseline.yaml"
+DEFAULT_MEDIA_INFO_URL = "https://aic-data.ledo.io.vn/media-info-aic25-b1.zip"
+MEDIA_INFO_ARCHIVE_NAME = "media-info-aic25-b1.zip"
+MAX_MEDIA_INFO_ARCHIVE_BYTES = 64 * 1024 * 1024
+MAX_MEDIA_INFO_EXTRACTED_BYTES = 256 * 1024 * 1024
+MAX_MEDIA_INFO_MEMBERS = 50_000
 
 
 def _positive_int(value: str) -> int:
@@ -55,7 +65,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--app-config", type=Path, default=DEFAULT_APP_CONFIG)
-    parser.add_argument("--media-info-dir", type=Path, required=True)
+    parser.add_argument(
+        "--media-info-dir",
+        type=Path,
+        help=(
+            "Use an existing organizer media-info directory. When omitted, "
+            "the pipeline downloads and extracts --media-info-url under run-root."
+        ),
+    )
+    parser.add_argument(
+        "--media-info-url",
+        default=DEFAULT_MEDIA_INFO_URL,
+        help="ZIP source used when --media-info-dir is omitted.",
+    )
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument(
@@ -80,6 +102,133 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Keep native source and OCR scratch files after a passed index build.",
     )
     return parser.parse_args(argv)
+
+
+def _discover_media_info_dir(root: Path) -> Path:
+    """Find the unique extracted directory containing media-info JSON files."""
+
+    preferred = root / "media-info"
+    if preferred.is_dir() and any(preferred.glob("*.json")):
+        return preferred.resolve()
+    if root.is_dir() and any(root.glob("*.json")):
+        return root.resolve()
+
+    candidates = sorted(
+        {path.parent.resolve() for path in root.rglob("*.json") if path.is_file()},
+        key=str,
+    )
+    if not candidates:
+        raise ValueError(f"media-info archive contains no JSON files: {root}")
+    if len(candidates) != 1:
+        raise ValueError("media-info archive contains multiple JSON directories")
+    return candidates[0]
+
+
+def _download_media_info_archive(url: str, output: Path) -> None:
+    """Download the bounded media-info ZIP through an atomic local file."""
+
+    request = Request(url, headers={"User-Agent": "HCMAI/2026 media-info bootstrap"})
+
+    def write_download(temporary: Path) -> None:
+        with urlopen(request, timeout=60) as response, temporary.open("wb") as target:
+            content_length = response.headers.get("Content-Length")
+            if (
+                content_length is not None
+                and int(content_length) > MAX_MEDIA_INFO_ARCHIVE_BYTES
+            ):
+                raise ValueError("media-info archive exceeds the download size limit")
+
+            downloaded = 0
+            while chunk := response.read(1024 * 1024):
+                downloaded += len(chunk)
+                if downloaded > MAX_MEDIA_INFO_ARCHIVE_BYTES:
+                    raise ValueError(
+                        "media-info archive exceeds the download size limit"
+                    )
+                target.write(chunk)
+            if downloaded == 0:
+                raise ValueError("media-info archive download is empty")
+
+    atomic_write(output, write_download)
+
+
+def _safe_extract_media_info_archive(archive: Path, output: Path) -> Path:
+    """Atomically extract a bounded ZIP without links or escaping members."""
+
+    with zipfile.ZipFile(archive) as source:
+        members = source.infolist()
+        if not members or len(members) > MAX_MEDIA_INFO_MEMBERS:
+            raise ValueError("media-info archive has an invalid member count")
+        extracted_bytes = sum(member.file_size for member in members)
+        if extracted_bytes > MAX_MEDIA_INFO_EXTRACTED_BYTES:
+            raise ValueError("media-info archive exceeds the extraction size limit")
+
+        validated: list[tuple[zipfile.ZipInfo, tuple[str, ...]]] = []
+        for member in members:
+            normalized = member.filename.replace("\\", "/")
+            relative = PurePosixPath(normalized)
+            parts = tuple(part for part in relative.parts if part not in ("", "."))
+            unix_mode = member.external_attr >> 16
+            if (
+                relative.is_absolute()
+                or not parts
+                or ".." in parts
+                or stat.S_ISLNK(unix_mode)
+            ):
+                raise ValueError(f"unsafe media-info ZIP member: {member.filename}")
+            validated.append((member, parts))
+
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=".media-info-extract-", dir=output.parent
+        ) as temporary_value:
+            temporary = Path(temporary_value) / "content"
+            temporary.mkdir()
+            for member, parts in validated:
+                destination = temporary.joinpath(*parts)
+                if member.is_dir():
+                    destination.mkdir(parents=True, exist_ok=True)
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with (
+                    source.open(member) as compressed,
+                    destination.open("wb") as target,
+                ):
+                    shutil.copyfileobj(compressed, target, length=1024 * 1024)
+
+            media_info_dir = _discover_media_info_dir(temporary)
+            relative_media_info = media_info_dir.relative_to(temporary)
+            if output.exists():
+                raise FileExistsError(
+                    f"invalid existing media-info extraction must be removed: {output}"
+                )
+            temporary.replace(output)
+
+    return (output / relative_media_info).resolve()
+
+
+def _resolve_media_info_dir(args: argparse.Namespace) -> Path:
+    """Return explicit metadata or bootstrap the default resumable archive."""
+
+    if args.media_info_dir is not None:
+        media_info_dir = args.media_info_dir.expanduser().resolve()
+        if not media_info_dir.is_dir():
+            raise NotADirectoryError(media_info_dir)
+        if not any(media_info_dir.glob("*.json")):
+            raise ValueError(
+                f"media-info directory contains no JSON files: {media_info_dir}"
+            )
+        return media_info_dir
+
+    input_root = args.run_root / "input"
+    extraction_root = input_root / "media-info-aic25-b1"
+    if extraction_root.is_dir():
+        return _discover_media_info_dir(extraction_root)
+
+    archive = input_root / MEDIA_INFO_ARCHIVE_NAME
+    if not archive.is_file():
+        _download_media_info_archive(args.media_info_url, archive)
+    return _safe_extract_media_info_archive(archive, extraction_root)
 
 
 def _extraction_args(args: argparse.Namespace) -> argparse.Namespace:
@@ -300,6 +449,7 @@ def _completed_report(
 def run(args: argparse.Namespace) -> dict[str, Any]:
     """Execute or resume every non-S3 custom preparation stage."""
 
+    downloads_media_info = args.media_info_dir is None
     run_root = args.run_root.expanduser().resolve()
     output_root = args.output_root.expanduser().resolve()
     native = args.native_executable.expanduser()
@@ -310,6 +460,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     args.app_config = args.app_config.expanduser().resolve()
     args.run_root = run_root
     args.output_root = output_root
+    args.media_info_dir = _resolve_media_info_dir(args)
     extraction = extract_custom_keyframes.run(_extraction_args(args))
     if extraction["failed"]:
         raise RuntimeError("custom extraction contains failed videos")
@@ -506,6 +657,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "dataset_version": args.version,
         "dataset_source": args.source,
         "frame_store_id": args.frame_store_id,
+        "media_info_dir": str(args.media_info_dir),
+        "media_info_url": args.media_info_url if downloads_media_info else None,
         "selected_video_ids": list(selected),
         "video_count": video_count,
         "frame_count": frame_count,

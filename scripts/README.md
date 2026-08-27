@@ -139,7 +139,6 @@ ASR, embeddings, and FAISS remain explicit stages coordinated sequentially:
 aic/bin/python -m pip install -e ".[pipeline]"
 
 PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py \
-  --media-info-dir data/media-info-aic25-b1/media-info \
   --run-root runs/custom-raw1fps-v1 \
   --output-root artifacts/custom-raw1fps-v1 \
   --native-executable build/keyframes_extraction/keyframe_extractor \
@@ -149,6 +148,13 @@ PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py \
   --limit 10 \
   --fail-fast
 ```
+
+When `--media-info-dir` is omitted, the command downloads
+`https://aic-data.ledo.io.vn/media-info-aic25-b1.zip`, safely extracts its
+`media-info/*.json` records under `run-root/input/`, and reuses that local copy
+on subsequent runs. Pass `--media-info-dir` only to override this bootstrap
+with an existing metadata folder; `--media-info-url` can override the ZIP
+source.
 
 The command resumes native extraction and specialist artifacts, requires zero
 failed Caption/OCR/Object rows before publication, materializes the canonical
