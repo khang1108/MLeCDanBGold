@@ -12,13 +12,12 @@ from hcmai.common.utils.io import read_yaml
 class HostedCaptionConfig(BaseModel):
     """Caption model settings owned by the hosted inference service."""
 
-    model_checkpoint: str = "florence-community/Florence-2-base-ft"
-    revision: str | None = "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
-    prompt: str = "<CAPTION>"
+    model_checkpoint: str = "Qwen/Qwen3-VL-8B-Instruct"
+    revision: str | None = "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
+    prompt: str = "qwen vl"
     decoding: dict = Field(
         default_factory=lambda: {
-            "max_new_tokens": 64,
-            "num_beams": 3,
+            "max_new_tokens": 160,
             "do_sample": False,
         }
     )

@@ -118,12 +118,10 @@ def test_enrichment_config_is_loaded_from_root_yaml() -> None:
     config = CaptionJobConfig.from_yaml()
     project_root = Path(__file__).resolve().parents[1]
 
-    assert (
-        config.caption.model_checkpoint
-        == "florence-community/Florence-2-base-ft"
-    )
-    assert config.caption.revision == "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
-    assert config.caption.decoding["num_beams"] == 3
+    assert config.caption.model_checkpoint == "Qwen/Qwen3-VL-8B-Instruct"
+    assert config.caption.revision == "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
+    assert config.caption.prompt == "qwen vl"
+    assert config.caption.decoding["max_new_tokens"] == 160
     assert config.caption.dataset_version == "hcmai2026_v1"
     assert config.dataset_root == project_root / "data"
     assert config.frames_path == project_root / "artifacts/frame_store/frames.parquet"

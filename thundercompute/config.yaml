@@ -3,12 +3,11 @@ server:
   port: 8100
 
 caption_generation:
-  model_checkpoint: "florence-community/Florence-2-base-ft"
-  revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
-  prompt: "<CAPTION>"
+  model_checkpoint: "Qwen/Qwen3-VL-8B-Instruct"
+  revision: "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
+  prompt: "qwen vl"
   decoding:
-    max_new_tokens: 64
-    num_beams: 3
+    max_new_tokens: 160
     do_sample: false
   device: "cuda"
   dtype: "bfloat16"

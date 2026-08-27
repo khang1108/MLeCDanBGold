@@ -20,7 +20,7 @@ from typing import Any
 from hcmai.common.utils.io import read_json
 from hcmai.common.config import AppConfig
 from hcmai.data.enrichment.caption.artifacts import write_caption_artifacts
-from hcmai.data.enrichment.caption.adapters.transformers import TransformersCaptionAdapter
+from hcmai.data.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
 from hcmai.data.enrichment.caption.config import (
     DEFAULT_ENRICHMENT_CONFIG,
     CaptionConfig,
@@ -58,7 +58,7 @@ def generate_captions(
         raise ValueError("input frames contain duplicate frame_id values")
 
     output = Path(output_dir)
-    captioner = captioner or TransformersCaptionAdapter(config)
+    captioner = captioner or QwenVLCaptionAdapter(config)
     output.mkdir(parents=True, exist_ok=True)
 
     manifest_path = output / "manifest.json"

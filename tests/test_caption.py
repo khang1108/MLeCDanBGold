@@ -1,14 +1,20 @@
 from __future__ import annotations
+
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
 from PIL import Image
+
 from hcmai.common.utils.io import atomic_write
-from hcmai.data.enrichment.caption.adapters.transformers import TransformersCaptionAdapter
+from hcmai.data.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
 from hcmai.data.enrichment.caption.config import CaptionConfig
 from hcmai.data.enrichment.caption.generator import generate_captions
+
+
 class Backend:
     instances = 0
     def __init__(self, reject_red: bool = False):
@@ -43,11 +49,49 @@ def config() -> CaptionConfig:
         enrichment_version="caption_test",
         dataset_version="fixture_v1",
     )
+
+
+def test_qwen_batch_trims_chat_prompt_and_tokenizer_markers() -> None:
+    """Decode only newly generated tokens and keep stored text clean."""
+
+    import torch
+
+    class Processor:
+        def __init__(self) -> None:
+            self.tokenizer = SimpleNamespace(padding_side="right")
+            self.messages = None
+
+        def apply_chat_template(self, messages, **kwargs):
+            self.messages = messages
+            return {
+                "input_ids": torch.tensor([[1, 2, 3], [1, 2, 3]]),
+                "attention_mask": torch.ones((2, 3), dtype=torch.long),
+            }
+
+        def batch_decode(self, values, **kwargs):
+            assert values.tolist() == [[7, 8], [9, 10]]
+            return ["A clean caption.<pad>", "Another caption.<|im_end|>"]
+
+    class Model:
+        config = SimpleNamespace(_commit_hash="qwen-fixture-sha")
+
+        def generate(self, **kwargs):
+            return torch.tensor([[1, 2, 3, 7, 8], [1, 2, 3, 9, 10]])
+
+    cfg = config()
+    processor = Processor()
+    adapter = QwenVLCaptionAdapter(cfg, model=Model(), processor=processor)
+    result = adapter.caption_batch([Image.new("RGB", (8, 8)), Image.new("RGB", (8, 8))])
+
+    assert result == ["A clean caption.", "Another caption."]
+    assert processor.tokenizer.padding_side == "left"
+    assert processor.messages[0][0]["content"][0]["type"] == "image"
+    assert processor.messages[0][0]["content"][1]["type"] == "text"
 def test_batch_order_contract_black_and_completed_resume(tmp_path):
     Backend.instances = 0
     frames = make_frames(tmp_path, [(0, 0, 0), (1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)])
     backend, cfg, output = Backend(), config(), tmp_path / "out"
-    first = generate_captions(frames, output, cfg, TransformersCaptionAdapter(
+    first = generate_captions(frames, output, cfg, QwenVLCaptionAdapter(
         cfg, batch_fn=backend), dataset_root=tmp_path)
     table = pd.read_parquet(output / "frame_enrichment.parquet")
     assert Backend.instances == 1 and backend.calls == [2, 2, 1]; assert table.frame_id.tolist() == [f"f{i}" for i in range(5)]
@@ -57,7 +101,7 @@ def test_batch_order_contract_black_and_completed_resume(tmp_path):
     assert first["completed_count"] == 5 and first["failed_count"] == 0
     assert first["effective_configuration"]["batch_size"] == 2 and first["dataset_root"] == str(tmp_path)
     assert json.loads((output / "failures.json").read_text()) == []
-    attempts, broken = [], TransformersCaptionAdapter(cfg)
+    attempts, broken = [], QwenVLCaptionAdapter(cfg)
     def fail():
         attempts.append(1)
         raise RuntimeError("unavailable")
@@ -68,7 +112,7 @@ def test_batch_order_contract_black_and_completed_resume(tmp_path):
     assert attempts == [1] and isinstance(results[0], RuntimeError)
     unused = Backend(); table["error_message"] = float("nan")
     table.to_parquet(output / "frame_enrichment.parquet", index=False)
-    second = generate_captions(frames, output, cfg, TransformersCaptionAdapter(
+    second = generate_captions(frames, output, cfg, QwenVLCaptionAdapter(
         cfg, batch_fn=unused), dataset_root=tmp_path)
     assert unused.calls == [] and second["skipped_count"] == 5
     assert second["completed_count"] == 5 and second["retried_count"] == 0
@@ -78,11 +122,11 @@ def test_batch_order_contract_black_and_completed_resume(tmp_path):
             generate_captions(frames, output, changed, dataset_root=tmp_path)
 def test_resume_rejects_a_different_resolved_revision(tmp_path):
     frames, cfg, output = make_frames(tmp_path, [(0, 0, 0)]), config(), tmp_path / "out"
-    first_captioner = TransformersCaptionAdapter(cfg, batch_fn=Backend())
+    first_captioner = QwenVLCaptionAdapter(cfg, batch_fn=Backend())
     first_captioner.resolved_revision = "model-sha-one"
     first = generate_captions(frames, output, cfg, first_captioner, dataset_root=tmp_path)
     assert first["resolved_model_revision"] == "model-sha-one"
-    second_captioner = TransformersCaptionAdapter(cfg, batch_fn=Backend())
+    second_captioner = QwenVLCaptionAdapter(cfg, batch_fn=Backend())
     second_captioner.resolved_revision = "model-sha-two"
     with pytest.raises(ValueError, match="resolved_model_revision"):
         generate_captions(frames, output, cfg, second_captioner, dataset_root=tmp_path)
@@ -90,7 +134,7 @@ def test_explicit_failures_retry_and_malformed_row(tmp_path):
     frames = make_frames(tmp_path, [(255, 0, 0), (0, 255, 0), "missing",
                                     "corrupt", (0, 0, 0)])
     cfg, output, backend = config(), tmp_path / "out", Backend(reject_red=True)
-    first = generate_captions(frames, output, cfg, TransformersCaptionAdapter(
+    first = generate_captions(frames, output, cfg, QwenVLCaptionAdapter(
         cfg, batch_fn=backend), dataset_root=tmp_path)
     table = pd.read_parquet(output / "frame_enrichment.parquet")
     failures = json.loads((output / "failures.json").read_text())
@@ -102,7 +146,7 @@ def test_explicit_failures_retry_and_malformed_row(tmp_path):
     for name, color in (("f2.png", (1, 1, 1)), ("f3.png", (2, 2, 2))):
         Image.new("RGB", (8, 8), color).save(tmp_path / name)
     retry = Backend()
-    second = generate_captions(frames, output, cfg, TransformersCaptionAdapter(
+    second = generate_captions(frames, output, cfg, QwenVLCaptionAdapter(
         cfg, batch_fn=retry), dataset_root=tmp_path)
     assert second["skipped_count"] == 2 and second["retried_count"] == 3
     assert retry.calls == [2, 1] and second["completed_count"] == 5
@@ -110,7 +154,7 @@ def test_explicit_failures_retry_and_malformed_row(tmp_path):
     table.loc[table.frame_id == "f0", "text"] = ""
     table.to_parquet(output / "captions.parquet", index=False)
     malformed = Backend()
-    third = generate_captions(frames, output, cfg, TransformersCaptionAdapter(
+    third = generate_captions(frames, output, cfg, QwenVLCaptionAdapter(
         cfg, batch_fn=malformed), dataset_root=tmp_path)
     final = pd.read_parquet(output / "frame_enrichment.parquet")
     assert malformed.calls == [1] and third["retried_count"] == 1

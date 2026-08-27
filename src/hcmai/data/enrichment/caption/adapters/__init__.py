@@ -1,5 +1,7 @@
-"""Các Adapters cho mô hình Captioning.
+"""Adapters for local and hosted frame caption generation.
 
-Chứa các cài đặt giao tiếp (cục bộ hoặc từ xa) để chạy mô hình sinh văn bản mô tả khung hình."""
+The local caption backend is Qwen VL; OCR remains owned by the separate
+Florence adapter under the OCR package.
+"""
 
 __all__: list[str] = []

@@ -543,7 +543,7 @@ def test_asr_only_environment_does_not_construct_unrequested_models(
     assert not hasattr(LLMServiceConfig.from_yaml("thundercompute/config.yaml"), "vqa_model")
 
 
-def test_caption_and_ocr_share_one_identically_pinned_florence_backend():
+def test_caption_and_ocr_use_independent_model_backends():
     config = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
     model = object()
     processor = object()
@@ -554,14 +554,11 @@ def test_caption_and_ocr_share_one_identically_pinned_florence_backend():
         resolved_revision=config.caption_generation.revision,
         resolve_revision=lambda: config.caption_generation.revision,
     )
-    ocr = FlorenceAdapter(
-        OCRConfig(
-            checkpoint=config.caption_generation.model_checkpoint,
-            revision=config.caption_generation.revision,
-            device=config.caption_generation.device,
-            dtype=config.caption_generation.dtype,
-        )
-    )
+    ocr = FlorenceAdapter(OCRConfig())
+    ocr_model = object()
+    ocr_processor = object()
+    ocr.model = ocr_model
+    ocr.processor = ocr_processor
     adapter = LocalAdapter(
         config,
         captioner=captioner,
@@ -575,5 +572,9 @@ def test_caption_and_ocr_share_one_identically_pinned_florence_backend():
 
     adapter.load()
 
-    assert ocr.model is model
-    assert ocr.processor is processor
+    assert config.caption_generation.model_checkpoint == "Qwen/Qwen3-VL-8B-Instruct"
+    assert ocr.config.model_name == "florence-community/Florence-2-base-ft"
+    assert ocr.model is ocr_model
+    assert ocr.processor is ocr_processor
+    assert ocr.model is not model
+    assert ocr.processor is not processor

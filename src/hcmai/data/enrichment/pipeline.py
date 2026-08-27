@@ -13,7 +13,7 @@ from typing import Any
 
 from hcmai.common.utils.io import read_yaml
 from hcmai.data.enrichment.caption.config import CaptionConfig, PROJECT_ROOT
-from hcmai.data.enrichment.caption.adapters.transformers import TransformersCaptionAdapter
+from hcmai.data.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
 from hcmai.data.enrichment.caption.generator import generate_captions
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
 from hcmai.data.enrichment.context.builder import build_frame_context
@@ -254,7 +254,7 @@ class EnrichmentService:
     def create_caption_adapter(config: CaptionConfig) -> CaptionAdapter:
         """Create the configured local caption adapter."""
 
-        return TransformersCaptionAdapter(config)
+        return QwenVLCaptionAdapter(config)
 
     @staticmethod
     def create_ocr_adapter(config: OCRConfig) -> OCRAdapter:

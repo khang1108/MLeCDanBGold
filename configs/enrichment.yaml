@@ -10,19 +10,18 @@ dataset:
 
 caption:
   output_dir: "artifacts/enrichment/captions"
-  model_checkpoint: "florence-community/Florence-2-base-ft"
-  revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
-  prompt: "<CAPTION>"
+  model_checkpoint: "Qwen/Qwen3-VL-8B-Instruct"
+  revision: "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
+  prompt: "qwen vl"
   decoding:
-    max_new_tokens: 64
-    num_beams: 3
+    max_new_tokens: 160
     do_sample: false
   device: "cuda"
   precision: "bf16"
   dtype: "bfloat16"
   image_size: 768
-  batch_size: 64
-  enrichment_version: "caption_v1"
+  batch_size: 32
+  enrichment_version: "caption_qwen_vl_v1"
   write_interval: 2000
 
 ocr:
