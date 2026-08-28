@@ -17,6 +17,11 @@ from hcmai.data.custom_pipeline.config import (
     SchedulingConfig,
     StageBatchConfig,
 )
+from hcmai.data.custom_pipeline.asr import (
+    ASRReuseBundle,
+    require_asr_video_coverage,
+    validate_asr_source,
+)
 from hcmai.data.custom_pipeline.contracts import RunIdentity
 from hcmai.data.custom_pipeline.state import (
     ArchiveRecord,
@@ -30,6 +35,7 @@ from hcmai.data.custom_pipeline.state import (
 )
 
 __all__ = [
+    "ASRReuseBundle",
     "ArchivePlan",
     "ArchivePlanEntry",
     "ArchiveRecord",
@@ -46,4 +52,6 @@ __all__ = [
     "VideoRecord",
     "VideoStage",
     "compute_batch_id",
+    "require_asr_video_coverage",
+    "validate_asr_source",
 ]
