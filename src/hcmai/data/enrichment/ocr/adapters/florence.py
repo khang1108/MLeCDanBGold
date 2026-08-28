@@ -77,6 +77,7 @@ class FlorenceAdapter:
         try:
             import torch
             from transformers import AutoModelForImageTextToText, AutoProcessor
+            from transformers.utils import logging as hf_logging
 
             dtype = {"bfloat16": torch.bfloat16}.get(
                 self.config.dtype, torch.float32
@@ -92,6 +93,7 @@ class FlorenceAdapter:
                 self.config.model_name, dtype=dtype, **options
             )
             self.model = loaded_model.to(self.config.device).eval()
+            hf_logging.set_verbosity_error()
             self.resolved_revision = (
                 getattr(self.model.config, "_commit_hash", None)
                 or self.config.revision
