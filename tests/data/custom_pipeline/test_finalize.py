@@ -263,7 +263,6 @@ def test_finalize_corpus_produces_global_indexes_and_report(tmp_path: Path) -> N
         store,
         ["L01", "L02"],
         tmp_path / "batches",
-        image_root,
         output_root,
         dataset_version="dataset_v1",
     )
@@ -297,7 +296,6 @@ def test_finalize_corpus_rejects_incomplete_archive_plan(tmp_path: Path) -> None
             store,
             ["L01", "L02"],
             tmp_path / "batches",
-            image_root,
             tmp_path / "final_corpus",
             dataset_version="dataset_v1",
         )

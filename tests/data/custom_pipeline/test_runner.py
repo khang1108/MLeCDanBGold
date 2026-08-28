@@ -340,11 +340,9 @@ def test_finalize_pipeline_produces_a_report(fake_curl: Path, tmp_path: Path) ->
     )
 
     report = finalize_pipeline(
-        context,
         state_store,
         plan,
         context.artifacts_root / "batches",
-        tmp_path / "images",
         tmp_path / "final_corpus",
         dataset_version="dataset_v1",
     )

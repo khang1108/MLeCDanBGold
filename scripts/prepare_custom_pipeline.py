@@ -780,11 +780,9 @@ def _cmd_finalize(args: argparse.Namespace) -> dict[str, Any]:
     plan = ArchivePlan.from_urls(args.archive_urls)
     state_store = PipelineStateStore(context.run_root)
     report = finalize_pipeline(
-        context,
         state_store,
         plan,
         context.artifacts_root / "batches",
-        args.run_root,
         context.artifacts_root,
         dataset_version=args.version,
     )

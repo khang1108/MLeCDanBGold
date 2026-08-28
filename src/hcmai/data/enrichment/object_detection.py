@@ -236,14 +236,11 @@ def load_vocab(path: str | Path) -> list[str]:
     source = Path(path)
     if not source.is_file():
         raise FileNotFoundError(f"required detector vocabulary not found: {source}")
-    names: list[str] = []
-    seen: set[str] = set()
-    for line in source.read_text(encoding="utf-8").splitlines():
-        name = " ".join(unicodedata.normalize("NFC", line).split()).casefold()
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        names.append(name)
+    normalized = (
+        " ".join(unicodedata.normalize("NFC", line).split()).casefold()
+        for line in source.read_text(encoding="utf-8").splitlines()
+    )
+    names = [name for name in dict.fromkeys(normalized) if name]
     if not names:
         raise ValueError(f"detector vocabulary is empty: {source}")
     return names

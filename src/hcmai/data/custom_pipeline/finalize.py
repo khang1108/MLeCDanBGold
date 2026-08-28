@@ -275,7 +275,6 @@ def finalize_corpus(
     state_store: PipelineStateStore,
     archive_ids: Sequence[str],
     batches_root: str | Path,
-    dataset_root: str | Path,
     output_root: str | Path,
     *,
     dataset_version: str,
@@ -303,12 +302,7 @@ def finalize_corpus(
     frame_counts: dict[str, int] = {
         "frames": len(compact_frame_metadata(batch_manifests, corpus_dir / "frames.parquet"))
     }
-    for kind in FRAME_NATIVE_TABLE_NAMES:
-        table = compact_specialist_shards(
-            kind, _shard_paths_for_kind(batch_manifests, kind), corpus_dir / f"{kind}.parquet"
-        )
-        frame_counts[kind] = len(table)
-    for kind in CHILD_TABLE_NAMES:
+    for kind in _SPECIALIST_KINDS:
         table = compact_specialist_shards(
             kind, _shard_paths_for_kind(batch_manifests, kind), corpus_dir / f"{kind}.parquet"
         )

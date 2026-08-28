@@ -194,9 +194,10 @@ def process_archive(
     record = state_store.get_archive(archive_id)
     assert record is not None
 
-    if record.stage in (ArchiveStage.PENDING, ArchiveStage.DOWNLOADING):
-        if record.stage == ArchiveStage.PENDING:
-            state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADING)
+    if record.stage == ArchiveStage.PENDING:
+        record = state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADING)
+
+    if record.stage == ArchiveStage.DOWNLOADING:
         download_archive(
             archive_entry.url,
             zip_path,
@@ -204,9 +205,7 @@ def process_archive(
             run_root=context.run_root,
             active_root=context.active_root,
         )
-        state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADED)
-        record = state_store.get_archive(archive_id)
-        assert record is not None
+        record = state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADED)
 
     inventory: ArchiveInventory
     if record.stage == ArchiveStage.DOWNLOADED:
@@ -226,8 +225,8 @@ def process_archive(
 
     batch_ids: list[str] = []
     groups = plan_archive_batches(inventory, batch_size=context.scheduling.max_videos_per_batch)
-    stop = len(groups) if batch_limit is None else batch_offset + batch_limit
-    for batch_index, video_group in list(enumerate(groups))[batch_offset:stop]:
+    stop = None if batch_limit is None else batch_offset + batch_limit
+    for batch_index, video_group in enumerate(groups[batch_offset:stop], start=batch_offset):
         batch_id = compute_batch_id(archive_id, batch_index)
         batch_ids.append(batch_id)
         _process_one_batch(
@@ -383,11 +382,9 @@ def pipeline_status(
 
 
 def finalize_pipeline(
-    context: RunnerContext,
     state_store: PipelineStateStore,
     plan: ArchivePlan,
     batches_root: str | Path,
-    dataset_root: str | Path,
     output_root: str | Path,
     *,
     dataset_version: str,
@@ -402,7 +399,6 @@ def finalize_pipeline(
         state_store,
         archive_ids,
         batches_root,
-        dataset_root,
         output_root,
         dataset_version=dataset_version,
     )
