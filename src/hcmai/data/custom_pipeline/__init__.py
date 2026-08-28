@@ -61,6 +61,15 @@ from hcmai.data.custom_pipeline.finalize import (
     finalize_corpus,
     require_full_plan_cleaned,
 )
+from hcmai.data.custom_pipeline.runner import (
+    BatchArtifacts,
+    PreflightReport,
+    RunnerContext,
+    finalize_pipeline,
+    pipeline_status,
+    preflight_pipeline,
+    process_archive,
+)
 from hcmai.data.custom_pipeline.shards import (
     BatchIndexInventory,
     IndexArtifactSummary,
@@ -140,4 +149,11 @@ __all__ = [
     "discover_committed_batches",
     "finalize_corpus",
     "require_full_plan_cleaned",
+    "BatchArtifacts",
+    "PreflightReport",
+    "RunnerContext",
+    "finalize_pipeline",
+    "pipeline_status",
+    "preflight_pipeline",
+    "process_archive",
 ]
