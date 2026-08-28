@@ -1,23 +1,29 @@
 #!/usr/bin/env bash
-# Bootstrap the native keyframe extractor, fetch organizer video archives via
-# curl (bypassing yt-dlp through the existing --source-root fixture path), and
-# run the custom raw-1fps pipeline end to end.
+# Bootstrap the native keyframe extractor and run the local resumable A6000
+# custom-corpus pipeline (see docs/superpowers/plans/2026-08-28-a6000-100gb-
+# custom-pipeline.md) through its four subcommands: preflight, process-
+# archive, status, finalize.
 #
 # Usage: run from the repository root on the target host (e.g. ThunderCompute)
 # with the "aic" virtualenv already created (python -m venv aic && aic/bin/python
 # -m pip install -e '.[embedding]'), or let this script create it.
 #
-# Configure via environment variables before invoking, e.g.:
-#   LIMIT=10 RUN_ROOT=runs/custom-raw1fps-v1 ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh
+# Configure via environment variables before invoking, e.g. a cheap one-archive
+# smoke test (Gate B):
+#   ZIP_LIMIT=1 ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh
 #
-# LIMIT only bounds how many videos the pipeline stage (step 7) processes; it
-# does NOT reduce how many archives get downloaded in step 6. Use ZIP_LIMIT to
-# fetch only the first N archives for a cheap smoke test, e.g. ZIP_LIMIT=1.
+# ZIP_LIMIT/ZIP_OFFSET bound how many archives (not videos) the pipeline
+# processes in this invocation via --limit/--offset; the pipeline itself
+# downloads, extracts, and cleans up each archive ZIP (no manual curl/unzip
+# step here anymore). finalize only runs automatically when ZIP_LIMIT is
+# unset, since it requires the complete frozen archive plan to be cleaned.
 #
 # Only OCR calls the thundercompute inference gateway in this pipeline
 # (caption/objects/ASR/diarization/embedding stages already run local models
-# in-process). Step 4 starts that gateway on localhost so OCR never leaves
-# this host; set SKIP_INFERENCE_SERVER=1 to reuse an already-running gateway.
+# in-process, and ASR is reused from --transcripts-root/--asr-index-root,
+# never regenerated). Step 4 starts that gateway on localhost so OCR never
+# leaves this host; set SKIP_INFERENCE_SERVER=1 to reuse an already-running
+# gateway.
 set -euo pipefail
 
 
@@ -30,11 +36,14 @@ VERSION="${VERSION:-custom-raw1fps-v1}"
 FRAME_STORE_ID="${FRAME_STORE_ID:-custom-raw1fps-v1}"
 MEDIA_INFO_DIR="${MEDIA_INFO_DIR:-data/media-info-aic25-b1/media-info}"
 MEDIA_INFO_ZIP_URL="${MEDIA_INFO_ZIP_URL:-https://aic-data.ledo.io.vn/media-info-aic25-b1.zip}"
-LIMIT="${LIMIT:-}"
+# Existing, already-validated ASR evidence for these same source videos; the
+# custom pipeline only ever reuses this, it never re-runs ASR/diarization.
+TRANSCRIPTS_ROOT="${TRANSCRIPTS_ROOT:-artifacts/enrichment/transcripts}"
+ASR_INDEX_ROOT="${ASR_INDEX_ROOT:-artifacts/indexes/asr_segments}"
+ZIP_OFFSET="${ZIP_OFFSET:-0}"
 ZIP_LIMIT="${ZIP_LIMIT:-}"
 SKIP_APT="${SKIP_APT:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
-SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
 SKIP_INFERENCE_SERVER="${SKIP_INFERENCE_SERVER:-0}"
 INFERENCE_HOST="${INFERENCE_HOST:-127.0.0.1}"
 INFERENCE_PORT="${INFERENCE_PORT:-8100}"
@@ -43,8 +52,6 @@ export HCMAI_INFERENCE_BASE_URL
 
 INFERENCE_LOG="$RUN_ROOT/inference_gateway.log"
 
-ZIP_DIR="$RUN_ROOT/raw_zips"
-SOURCE_ROOT="$RUN_ROOT/videos_source"
 BUILD_DIR="build/keyframes_extraction"
 NATIVE_EXECUTABLE="$BUILD_DIR/keyframe_extractor"
 
@@ -125,6 +132,7 @@ else
 fi
 
 # --- 5. Fetch organizer media-info metadata if not already present locally ---
+mkdir -p "$RUN_ROOT"
 if [[ ! -d "$MEDIA_INFO_DIR" || -z "$(find "$MEDIA_INFO_DIR" -maxdepth 1 -name '*.json' -print -quit)" ]]; then
   echo "==> media-info missing, downloading $MEDIA_INFO_ZIP_URL"
   media_info_zip="$(mktemp --suffix=.zip)"
@@ -142,46 +150,10 @@ if [[ ! -d "$MEDIA_INFO_DIR" || -z "$(find "$MEDIA_INFO_DIR" -maxdepth 1 -name '
   rm -rf "$media_info_extract"
 fi
 
-# --- 6. Download organizer video archives and flatten into {video_id}.mp4 ---
-if [[ "$SKIP_DOWNLOAD" != "1" ]]; then
-  mkdir -p "$ZIP_DIR" "$SOURCE_ROOT"
-  URLS_TO_FETCH=("${URLS[@]}")
-  [[ -z "$ZIP_LIMIT" ]] || URLS_TO_FETCH=("${URLS[@]:0:$ZIP_LIMIT}")
-  for url in "${URLS_TO_FETCH[@]}"; do
-    fname="$(basename "$url")"
-    zip_path="$ZIP_DIR/$fname"
-
-    echo "==> downloading $fname"
-    curl -fL -C - --retry 5 --retry-delay 5 -o "$zip_path" "$url"
-
-    echo "==> extracting $fname"
-    extract_dir="$(mktemp -d)"
-    unzip -q "$zip_path" -d "$extract_dir"
-
-    find "$extract_dir" -type f \( -iname 'L[0-9][0-9]_V*.mp4' -o -iname 'L[0-9][0-9]_V*.mkv' -o -iname 'L[0-9][0-9]_V*.webm' \) -print0 |
-      while IFS= read -r -d '' f; do
-        stem="$(basename "${f%.*}")"
-        mv "$f" "$SOURCE_ROOT/${stem}.mp4"
-      done
-
-    rm -rf "$extract_dir" "$zip_path"
-  done
-
-  if [[ -z "$ZIP_LIMIT" ]]; then
-    missing=0
-    for meta in "$MEDIA_INFO_DIR"/*.json; do
-      vid="$(basename "${meta%.json}")"
-      [[ -f "$SOURCE_ROOT/$vid.mp4" ]] || { echo "MISSING: $vid"; missing=1; }
-    done
-    [[ "$missing" -eq 0 ]] || { echo "one or more organizer videos are missing; aborting before pipeline run"; exit 1; }
-  else
-    echo "==> ZIP_LIMIT=$ZIP_LIMIT set, skipping full coverage check (partial download is expected)"
-  fi
-else
-  echo "==> SKIP_DOWNLOAD=1, skipping video download"
-fi
-
-# --- 7. Run the existing pipeline against the local source-root fixture ---
+# --- 6. Run the local resumable pipeline through its four subcommands ---
+# The pipeline itself downloads, safely extracts, and cleans up each archive
+# ZIP (see hcmai.data.custom_pipeline.archive); there is no manual curl/unzip
+# step or --source-root/--yt-dlp-binary flag anymore.
 PIPELINE_ARGS=(
   --run-root "$RUN_ROOT"
   --output-root "$OUTPUT_ROOT"
@@ -189,14 +161,27 @@ PIPELINE_ARGS=(
   --frame-store-id "$FRAME_STORE_ID"
   --media-info-dir "$MEDIA_INFO_DIR"
   --native-executable "$NATIVE_EXECUTABLE"
-  --source-root "$SOURCE_ROOT"
-  --yt-dlp-binary yt-dlp
+  --transcripts-root "$TRANSCRIPTS_ROOT"
+  --asr-index-root "$ASR_INDEX_ROOT"
+  --offset "$ZIP_OFFSET"
 )
-[[ -z "$LIMIT" ]] || PIPELINE_ARGS+=(--limit "$LIMIT")
+for url in "${URLS[@]}"; do
+  PIPELINE_ARGS+=(--archive-url "$url")
+done
+[[ -z "$ZIP_LIMIT" ]] || PIPELINE_ARGS+=(--limit "$ZIP_LIMIT")
 
-echo "==> running prepare_custom_pipeline.py"
-PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py "${PIPELINE_ARGS[@]}"
+echo "==> preflight"
+PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py preflight "${PIPELINE_ARGS[@]}"
 
-# --- 8. Reclaim disk only after the pipeline run above succeeded ---
-echo "==> pipeline succeeded, removing downloaded source videos"
-rm -rf "$SOURCE_ROOT"
+echo "==> process-archive (offset=$ZIP_OFFSET limit=${ZIP_LIMIT:-<all remaining>})"
+PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py process-archive "${PIPELINE_ARGS[@]}"
+
+echo "==> status"
+PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py status "${PIPELINE_ARGS[@]}"
+
+if [[ -z "$ZIP_LIMIT" ]]; then
+  echo "==> finalize (full archive plan)"
+  PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py finalize "${PIPELINE_ARGS[@]}"
+else
+  echo "==> ZIP_LIMIT=$ZIP_LIMIT set; skipping finalize until the full archive plan is cleaned"
+fi
