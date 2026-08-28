@@ -1,29 +1,31 @@
-# Chạy tiếp trên 3 máy
+# Chạy tiếp trên 3 instance mới
 
-Ba máy đã cài sẵn từ trước. Không clone lại, không `aws configure` lại — chỉ vào đúng thư mục cũ rồi copy khối của mình.
+Mỗi máy copy đúng một khối. Hai chỗ phải nhập tay: `tmux new -s aic` và `aws configure`.
 
-Máy 0 giữ `Videos_L21_a`, Máy 1 giữ `Videos_L22_a`. Hai archive đó đã giải nén sẵn trên chính máy đó nên phải để đúng máy đó chạy tiếp; máy khác cầm sang sẽ không có `archive_manifest.json` để nạp lại.
+Batch nào đã commit trước đó đều được bỏ qua — mỗi khối kéo `state/batches/` và `state/videos/` chung về trước khi chạy. Cố tình không kéo `state/archives/`: máy cũ đã mất, archive dở phải được tải và giải nén lại từ đầu trên máy mới.
 
-Batch nào đã commit thì `_process_one_batch` tự bỏ qua, cứ chạy đè lên là được.
+Sau `aws configure` chạy `aws sts get-caller-identity`; sai key thì `aws s3 sync` im lặng không kéo gì và pipeline chết ở bước ASR index.
 
-Trước khi copy, xem thực tế đã commit tới đâu:
-
-```bash
-aws s3 ls --recursive s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ | grep _SUCCESS.json
-```
-
-## Máy 0 — L21_a, rồi L23_a L24_a L25_a L26_a
+## Máy 0 — L21_a, L23_a, L24_a, L25_a, L26_a
 
 ```bash
+sudo apt-get update && sudo apt-get install -y tmux aria2
 tmux new -s aic
 
+git clone -b feat/detection https://github.com/khang1108/MLeCDanBGold.git
 cd MLeCDanBGold
+python -m venv aic
 source aic/bin/activate
-git pull
+pip install --upgrade pip awscli
+aws configure
+aws sts get-caller-identity
+aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/ --exclude 'custom-raw1fps-v1/batches/*'
 aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/batches/ runs/custom-raw1fps-v1/state/batches/
 aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custom-raw1fps-v1/state/videos/
-ZIP_OFFSET=0 ZIP_LIMIT=1 SKIP_APT=1 SKIP_BUILD=1 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+mkdir -p runs/transcripts-all
+cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
+cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
+ZIP_OFFSET=0 ZIP_LIMIT=1 TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m0-a0.log
 ZIP_OFFSET=2 ZIP_LIMIT=4 ALLOW_OFFSET_GAP=1 SKIP_APT=1 SKIP_BUILD=1 SKIP_INFERENCE_SERVER=1 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
@@ -32,18 +34,26 @@ aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 1 — L22_a, rồi L26_b L26_c L26_d L26_e
+## Máy 1 — L22_a, L26_b, L26_c, L26_d, L26_e
 
 ```bash
+sudo apt-get update && sudo apt-get install -y tmux aria2
 tmux new -s aic
 
+git clone -b feat/detection https://github.com/khang1108/MLeCDanBGold.git
 cd MLeCDanBGold
+python -m venv aic
 source aic/bin/activate
-git pull
+pip install --upgrade pip awscli
+aws configure
+aws sts get-caller-identity
+aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/ --exclude 'custom-raw1fps-v1/batches/*'
 aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/batches/ runs/custom-raw1fps-v1/state/batches/
 aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custom-raw1fps-v1/state/videos/
-ZIP_OFFSET=1 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 SKIP_APT=1 SKIP_BUILD=1 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+mkdir -p runs/transcripts-all
+cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
+cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
+ZIP_OFFSET=1 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m1-a1.log
 ZIP_OFFSET=6 ZIP_LIMIT=4 ALLOW_OFFSET_GAP=1 SKIP_APT=1 SKIP_BUILD=1 SKIP_INFERENCE_SERVER=1 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
@@ -52,18 +62,26 @@ aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 2 — L27_a L28_a L29_a L30_a
+## Máy 2 — L27_a, L28_a, L29_a, L30_a
 
 ```bash
+sudo apt-get update && sudo apt-get install -y tmux aria2
 tmux new -s aic
 
+git clone -b feat/detection https://github.com/khang1108/MLeCDanBGold.git
 cd MLeCDanBGold
+python -m venv aic
 source aic/bin/activate
-git pull
+pip install --upgrade pip awscli
+aws configure
+aws sts get-caller-identity
+aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/ --exclude 'custom-raw1fps-v1/batches/*'
 aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/batches/ runs/custom-raw1fps-v1/state/batches/
 aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custom-raw1fps-v1/state/videos/
-ZIP_OFFSET=10 ZIP_LIMIT=4 ALLOW_OFFSET_GAP=1 SKIP_APT=1 SKIP_BUILD=1 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+mkdir -p runs/transcripts-all
+cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
+cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
+ZIP_OFFSET=10 ZIP_LIMIT=4 ALLOW_OFFSET_GAP=1 TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m2-a10.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
