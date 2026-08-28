@@ -359,9 +359,16 @@ def _media_info_digest(media_info_dir: Path) -> str:
 
 
 def _artifact_config_fingerprint(config_path: Path) -> str:
-    """Hash the additive ``custom_pipeline`` config section."""
+    """Hash the artifact-shaping part of the ``custom_pipeline`` config section.
 
-    raw = read_yaml_section(config_path, "custom_pipeline")
+    Scheduling and stage batch sizes are excluded: they change only how work is
+    chunked across hosts, never the produced artifacts, so retuning them per
+    GPU must not invalidate a resumable run.
+    """
+
+    raw = dict(read_yaml_section(config_path, "custom_pipeline"))
+    for throughput_key in ("scheduling", "stage_batches"):
+        raw.pop(throughput_key, None)
     payload = json.dumps(raw, sort_keys=True).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
