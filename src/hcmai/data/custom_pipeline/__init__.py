@@ -22,6 +22,15 @@ from hcmai.data.custom_pipeline.asr import (
     require_asr_video_coverage,
     validate_asr_source,
 )
+from hcmai.data.custom_pipeline.commit import (
+    BatchInventory,
+    BatchValidationError,
+    FileInventoryEntry,
+    build_batch_inventory,
+    cleanup_ephemeral_batch,
+    commit_local_batch,
+    validate_local_batch,
+)
 from hcmai.data.custom_pipeline.archive import (
     ArchiveInventory,
     ArchiveMember,
@@ -72,12 +81,15 @@ __all__ = [
     "ArchiveStage",
     "ArchiveWorkWindow",
     "BatchIndexInventory",
+    "BatchInventory",
     "BatchRecord",
     "BatchStage",
+    "BatchValidationError",
     "CustomPipelineConfig",
     "DiskAdmissionError",
     "DiskBudgetConfig",
     "DiskSnapshot",
+    "FileInventoryEntry",
     "IndexArtifactSummary",
     "PipelineStateStore",
     "RunIdentity",
@@ -102,4 +114,8 @@ __all__ = [
     "split_batch_artifacts_by_video",
     "validate_video_shard",
     "write_video_shard",
+    "build_batch_inventory",
+    "cleanup_ephemeral_batch",
+    "commit_local_batch",
+    "validate_local_batch",
 ]
