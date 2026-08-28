@@ -32,6 +32,7 @@ logger = get_logger(__name__)
 _MEMBER_PATTERN = re.compile(r"^L\d{2}/L\d{2}_V\d{3}\.mp4$")
 _ZIP_SYMLINK_UNIX_MODE = 0o120000
 _DEFAULT_MAX_RETRIES = 5
+_DOWNLOAD_CONNECTIONS = 16
 
 
 class ArchiveSafetyError(ValueError):
@@ -93,26 +94,50 @@ def download_archive(
         operation=f"download_archive:{destination_path.name}",
     )
 
-    argv = [
-        "curl",
-        "-fL",
-        "--progress-bar",
-        "-C",
-        "-",
-        "--retry",
-        str(max_retries),
-        "--retry-delay",
-        "5",
-        "-o",
-        str(part_path),
-        url,
-    ]
+    if shutil.which("aria2c") is not None:
+        argv = [
+            "aria2c",
+            "--continue=true",
+            "--file-allocation=none",
+            "--max-connection-per-server",
+            str(_DOWNLOAD_CONNECTIONS),
+            "--split",
+            str(_DOWNLOAD_CONNECTIONS),
+            "--min-split-size",
+            "16M",
+            "--max-tries",
+            str(max_retries),
+            "--retry-wait",
+            "5",
+            "--summary-interval",
+            "10",
+            "--dir",
+            str(part_path.parent),
+            "-o",
+            part_path.name,
+            url,
+        ]
+    else:
+        argv = [
+            "curl",
+            "-fL",
+            "--progress-bar",
+            "-C",
+            "-",
+            "--retry",
+            str(max_retries),
+            "--retry-delay",
+            "5",
+            "-o",
+            str(part_path),
+            url,
+        ]
     logger.info("downloading archive %s -> %s", url, part_path)
     try:
         subprocess.run(argv, check=True, shell=False)
     except subprocess.CalledProcessError as error:
         raise RuntimeError(
-            f"archive download failed for {url}: curl exited {error.returncode}"
+            f"archive download failed for {url}: {argv[0]} exited {error.returncode}"
         ) from error
 
     downloaded_bytes = part_path.stat().st_size
