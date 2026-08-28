@@ -127,3 +127,4 @@ docs/template/
 .codex/
 .claude/
 .agents/
+deploy_cloudflared_private.txt

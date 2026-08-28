@@ -167,3 +167,16 @@ def test_store_requires_its_source_column(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="asr_text"):
         ASRStore(path)
+
+
+def test_store_ignores_columns_outside_its_contract(
+    evidence_paths: dict[RetrievalSource, Path],
+) -> None:
+    path = evidence_paths[RetrievalSource.CAPTION]
+    table = pd.read_parquet(path)
+    table["video_url"] = "https://youtube.com/watch?v=Rzpw5WR7nAY"
+    table.to_parquet(path, index=False)
+
+    store = CaptionStore(path)
+
+    assert store.get_text("L01_V001_00000010") == "A cook holds a pan."

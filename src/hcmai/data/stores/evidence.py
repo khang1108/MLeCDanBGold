@@ -59,6 +59,15 @@ def _nullable_rows(table: pd.DataFrame) -> list[dict[str, Any]]:
     return cast(list[dict[str, Any]], values.to_dict(orient="records"))
 
 
+def _contract_values(
+    row: dict[str, Any],
+    contract: type[BaseModel],
+) -> dict[str, Any]:
+    """Keep only declared columns so an extra artifact column is ignored."""
+
+    return {name: row[name] for name in contract.model_fields if name in row}
+
+
 def _strict_int(value: object, field: str) -> int:
     """Reject boolean, floating-point, and string integer representations."""
 
@@ -207,7 +216,7 @@ class _TypedEvidenceStore(Generic[_EvidenceT]):
         for index, row in enumerate(_nullable_rows(table)):
             frame_id, video_id, frame_idx, timestamp_ms = _frame_identity(row)
             try:
-                record = contract.model_validate(row)
+                record = contract.model_validate(_contract_values(row, contract))
             except Exception as error:
                 raise ValueError(
                     f"Malformed {contract.__name__} row {index} "

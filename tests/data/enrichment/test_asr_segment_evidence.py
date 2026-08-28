@@ -61,6 +61,21 @@ def test_legacy_segment_defaults_and_round_trips_through_store(
     assert TranscriptSegment.model_validate_json(loaded.model_dump_json()) == legacy
 
 
+def test_store_ignores_columns_outside_the_segment_contract(
+    tmp_path: Path,
+) -> None:
+    """Load a segment artifact that carries a column for another consumer."""
+
+    path = tmp_path / "segments.parquet"
+    extra = dict(_legacy_segment())
+    extra["video_url"] = "https://youtube.com/watch?v=Rzpw5WR7nAY"
+    pd.DataFrame([extra]).to_parquet(path, index=False)
+
+    loaded = TranscriptStore(path).get("v1_segment_000000")
+
+    assert loaded == TranscriptSegment.model_validate(_legacy_segment())
+
+
 def test_transcript_segment_validates_duration_and_confidence() -> None:
     """Keep positive media duration and calibrated confidence bounds strict."""
 

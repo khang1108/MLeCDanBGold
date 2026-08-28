@@ -30,7 +30,17 @@ def load_transcript_records(
     for path in paths:
         table = pd.read_parquet(path).astype(object)
         rows = table.where(table.notna(), None).to_dict(orient="records")
-        records.extend(TranscriptSegment.model_validate(row) for row in rows)
+        # Keep only declared columns so an extra artifact column is ignored.
+        records.extend(
+            TranscriptSegment.model_validate(
+                {
+                    name: row[name]
+                    for name in TranscriptSegment.model_fields
+                    if name in row
+                }
+            )
+            for row in rows
+        )
 
     identifiers = [record.segment_id for record in records]
     if len(set(identifiers)) != len(identifiers):

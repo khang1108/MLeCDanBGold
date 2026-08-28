@@ -1,0 +1,34 @@
+tnr scp deploy_cloudflared_private.txt 0:/home/ubuntu/deploy.sh
+tnr connect 0
+sudo bash /home/ubuntu/deploy.sh
+
+# FRONTEND
+npm --prefix frontend start
+
+# BACKEND
+set -a; source .env; set +a
+PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
+
+# YOLOE DETECT
+ssh tnr-0 'mkdir -p ~/hcmai/scripts ~/hcmai/artifacts/frame_store ~/hcmai/data/keyframes'
+tnr scp /home/nino/Downloads/MLeCDanBGold/scripts/detect_objects.py 0:/home/ubuntu/hcmai/scripts/
+tnr scp /home/nino/Downloads/MLeCDanBGold/pyproject.toml 0:/home/ubuntu/hcmai/
+tnr scp /home/nino/Downloads/MLeCDanBGold/README.md 0:/home/ubuntu/hcmai/
+tnr scp /home/nino/Downloads/MLeCDanBGold/src 0:/home/ubuntu/hcmai/
+tnr scp /home/nino/Downloads/MLeCDanBGold/artifacts/frame_store/frames.parquet 0:/home/ubuntu/hcmai/artifacts/frame_store/
+tnr scp /home/nino/Downloads/MLeCDanBGold/data/keyframes/L21_V001 0:/home/ubuntu/hcmai/data/keyframes/
+
+tnr connect 0
+
+cd ~/hcmai
+python3 -m venv aic
+aic/bin/python -m pip install -e '.[objects]'
+aic/bin/python -m pip uninstall -y opencv-python
+aic/bin/python -m pip install --force-reinstall --no-deps opencv-python-headless
+PYTHONPATH=src aic/bin/python scripts/detect_objects.py --limit 200 --device cuda
+
+python3 -c "
+import json
+d = json.load(open('data/objects_yoloe/L21_V001/001.json'))
+for l, s in zip(d['detection_class_entities'], d['detection_scores']):
+    print(f'{s:.3f} {l}')"
