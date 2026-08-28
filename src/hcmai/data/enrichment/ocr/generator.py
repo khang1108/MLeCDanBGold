@@ -17,6 +17,7 @@ from typing import Any, cast
 import pandas as pd
 from PIL import Image
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from hcmai.common.schemas import OCREvidence, OCRRegion
 from hcmai.common.utils.image import load_image
@@ -159,6 +160,7 @@ def _load_ocr_image(frame: FrameRow, config: OCRConfig, root: Path) -> Any:
         return error
 
 
+@logging_redirect_tqdm()
 def _process(
     todo: list[FrameRow],
     rows: dict[str, OCREvidence],
@@ -183,6 +185,7 @@ def _process(
         range(0, len(todo), config.batch_size),
         desc="Generating OCR",
         unit="batch",
+        dynamic_ncols=True,
     ):
         chunk = todo[start : start + config.batch_size]
         valid: list[tuple[FrameRow, Image.Image]] = []
