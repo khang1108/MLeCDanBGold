@@ -322,3 +322,10 @@ def test_stage_archive_source_links_rejects_missing_video(tmp_path: Path) -> Non
     extracted_dir.mkdir()
     with pytest.raises(ArchiveSafetyError, match="missing requested video"):
         stage_archive_source_links(extracted_dir, ["L01_V999"], tmp_path / "source")
+
+
+def test_inspect_archive_accepts_a_non_line_number_directory(tmp_path: Path) -> None:
+    zip_path = tmp_path / "Videos_L21_a.zip"
+    _write_zip(zip_path, {"video/L21_V001.mp4": b"a" * 10})
+    inventory = inspect_archive(zip_path, budget=_generous_budget())
+    assert inventory.video_ids == ("L21_V001",)

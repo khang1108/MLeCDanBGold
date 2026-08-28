@@ -25,11 +25,9 @@ from hcmai.data.custom_pipeline.disk import require_write_capacity
 
 logger = get_logger(__name__)
 
-# Organizer archives nest each video under a line-number directory, e.g.
-# "L21/L21_V001.mp4". The directory and filename line numbers need not match
-# so a video misfiled under a neighboring directory is still caught later as
-# a duplicate video_id rather than silently rejected as an unknown shape.
-_MEMBER_PATTERN = re.compile(r"^L\d{2}/L\d{2}_V\d{3}\.mp4$")
+# Organizer archives nest each video under a directory whose name varies by
+# batch ("L21/", "video/"); only the Lxx_Vnnn.mp4 basename is load-bearing.
+_MEMBER_PATTERN = re.compile(r"^(?:[^/]+/)+L\d{2}_V\d{3}\.mp4$")
 _ZIP_SYMLINK_UNIX_MODE = 0o120000
 _DEFAULT_MAX_RETRIES = 5
 _DOWNLOAD_CONNECTIONS = 16
