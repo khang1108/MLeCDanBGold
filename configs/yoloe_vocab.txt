@@ -1,24 +1,36 @@
+abacus
+accessory
 accordion
+acorn
 adhesive tape
+adult
 aerosol can
 air conditioner
 aircraft
+aircraft model
 airplane
 alarm clock
 alcohol
 alligator
 almond
 alpaca
+altar
 ambulance
+amethyst
 amplifier
+anchor
 animal
 anklet
 ant
 antelope
 antenna
+antique
+anvil
 ao dai
 apple
+apple juice
 applesauce
+appliance
 apricot
 apron
 aquarium
@@ -30,9 +42,13 @@ armoire
 armor
 army tank
 artichoke
+artifact
 ashtray
 asparagus
+astronaut
+athlete
 atomizer
+audi
 auto part
 automatic washer
 avocado
@@ -40,10 +56,17 @@ award
 awning
 ax
 axe
+azalea
 baboon
+baby
+baby bottle
 baby buggy
 backdrop
 backpack
+bacon
+badge
+badminton
+bag
 bagel
 bagpipe
 baguet
@@ -55,14 +78,21 @@ ballet skirt
 balloon
 bamboo
 banana
+banana leaf
+banana tree
 band aid
 band-aid
 bandage
 bandanna
+bandeau
 banjo
 banner
+bar
+barbecue grill
 barbell
 barge
+barn
+barn owl
 barrel
 barrette
 barrow
@@ -71,27 +101,40 @@ baseball base
 baseball bat
 baseball cap
 baseball glove
+baseball uniform
+basin
 basket
+basket container
 basketball
 basketball backboard
+basketball player
+bass
 bass horn
 bat
 bat (animal)
+bath heater
 bath mat
 bath towel
 bathrobe
 bathroom accessory
 bathroom cabinet
+bathroom sink
 bathtub
 batter
 battery
+bayberry
+beach towel
 beachball
 bead
 beaker
+bean
+bean bag chair
 bean curd
 beanbag
 beanie
 bear
+bear cub
+beaver
 bed
 bedpan
 bedspread
@@ -102,19 +145,26 @@ beeper
 beer
 beer bottle
 beer can
+beet
 beetle
 bell
 bell pepper
 belt
 belt buckle
 bench
+bengal tiger
 beret
+berry
+beverage
 bib
+bibimbap
 bible
+bichon
 bicycle
 bicycle helmet
 bicycle wheel
 bidet
+bill
 billboard
 billiard table
 binder
@@ -138,10 +188,14 @@ blinker
 blouse
 blue jay
 blueberry
+bluebird
+board
+board eraser
 boat
 bob
 bobbin
 bobby pin
+bobcat
 boiled egg
 bolo tie
 bolt
@@ -153,6 +207,7 @@ booklet
 bookmark
 boom microphone
 boot
+border collie
 bottle
 bottle cap
 bottle opener
@@ -163,38 +218,53 @@ bow and arrow
 bow-tie
 bowl
 bowler hat
+bowling
 bowling ball
 bowling equipment
 box
+box turtle
+boxer
 boxing glove
 boy
 bracelet
 brake light
+brandy
 brass plaque
 brassiere
 bread
 bread-bin
 breechcloth
+brick
 bridal gown
+bride
+bridesmaid
 bridge
 briefcase
 broach
 broccoli
 bronze sculpture
+brooch
 broom
 brown bear
 brownie
+brush
+brussels sprout
 brussels sprouts
 bubble gum
+bubble tea
 bucket
+buddha
+buffalo
 building
 bull
 bulldog
 bulldozer
+bullet
 bullet train
 bulletin board
 bulletproof vest
 bullhorn
+bumblebee
 bun
 bunk bed
 buoy
@@ -211,6 +281,9 @@ cabbage
 cabin car
 cabinet
 cabinetry
+cable car
+cactus
+cage
 cake
 cake stand
 calculator
@@ -233,6 +306,7 @@ candy cane
 canister
 cannon
 canoe
+canopy bed
 cantaloup
 cantaloupe
 canteen
@@ -242,14 +316,18 @@ cappuccino
 car
 car battery
 card
+cardboard
 cardigan
 cargo ship
 carnation
 carnivore
+carp
 carrot
 cart
 carton
+cash
 cash register
+cashew
 casserole
 cassette
 cassette deck
@@ -258,35 +336,54 @@ castle
 cat
 cat furniture
 caterpillar
+catfish
 cattle
 cauliflower
+caviar
 cayenne
 cd player
 ceiling fan
 celery
 cello
 cellular telephone
+centerpiece
 centipede
 chain mail
 chainsaw
 chair
+chairlift
 chaise longue
 chalice
+chalk
+champagne
 chandelier
 chap
+charger
+chariot
+chassis
 checkbook
 checkerboard
 cheese
 cheetah
 cherry
+cherry tomato
 chessboard
 chest of drawers
+chestnut
 chicken
+chicken coop
 chickpea
+chihuahua
+child
 chili
 chime
+chimpanzee
 chinaware
+chinese cabbage
+chip
+chipmunk
 chisel
+chocolate
 chocolate bar
 chocolate cake
 chocolate milk
@@ -296,17 +393,22 @@ chopping board
 chopstick
 chopsticks
 christmas tree
+chrysanthemum
+church
 cider
+cigar
 cigar box
 cigarette
 cigarette case
 cincture
 cistern
+clam
 clarinet
 clasp
 cleansing agent
 cleat
 clementine
+climber
 clip
 clipboard
 clippers
@@ -315,6 +417,7 @@ clock
 clock tower
 closet
 clothes hamper
+clothesline
 clothespin
 clothing
 clutch bag
@@ -328,7 +431,9 @@ cocktail
 cocktail shaker
 cocoa
 coconut
+coconut tree
 coffee
+coffee bean
 coffee cup
 coffee maker
 coffee table
@@ -340,30 +445,39 @@ colander
 coleslaw
 colored marker
 coloring material
+comb
 combination lock
 comic book
 common fig
 common sunflower
 compass
+computer
+computer desk
 computer keyboard
 computer monitor
 computer mouse
+conch
 condiment
+condom
+conductor
 cone
 conical hat
 container
 control
 convenience store
+converter
 convertible
 cooker
 cookie
 cooking spray
 cooking utensil
 cooler
+coral
 corded phone
 cork
 corkboard
 corkscrew
+corn
 cornbread
 cornet
 cornice
@@ -374,6 +488,8 @@ costume
 couch
 cougar
 countertop
+coupe
+courgette
 cover
 coverall
 cow
@@ -382,6 +498,8 @@ cowboy hat
 crab
 crabmeat
 cracker
+cranberry
+crane
 crape
 crate
 crawfish
@@ -390,12 +508,17 @@ cream
 cream pitcher
 crescent roll
 crib
+cricket
 cricket ball
+cricketer
 crisp
 crock pot
 crocodile
 croissant
+crop top
+cross
 crossbar
+crosswalk
 crouton
 crow
 crowbar
@@ -404,6 +527,7 @@ crucifix
 cruise ship
 crumb
 crutch
+crystal
 cub
 cube
 cucumber
@@ -412,6 +536,8 @@ cup
 cupboard
 cupcake
 curling iron
+currant
+currency
 curtain
 cushion
 cutting board
@@ -420,17 +546,24 @@ cylinder
 cymbal
 dagger
 dairy product
+daisy
 dalmatian
 dam
+dancer
+dandelion
+dart
 dartboard
 date
 deadbolt
+debris
 deck chair
 deer
+denim jacket
 dental floss
 desk
 dessert
 detergent
+diamond
 diaper
 diary
 dice
@@ -440,8 +573,10 @@ digital display
 dinghy
 dining table
 dinosaur
+diploma
 dirt bike
 dirt road
+disco ball
 dish
 dish antenna
 dishrag
@@ -449,8 +584,10 @@ dishtowel
 dishwasher
 dishwasher detergent
 dispenser
+diver
 diving board
 dixie cup
+dock
 dog
 dog bed
 dog collar
@@ -459,13 +596,17 @@ dollar
 dollhouse
 dolphin
 domestic ass
+domino
 donut
 door
 door handle
 doorknob
 doormat
+doorplate
+dough
 doughnut
 dove
+dragon
 dragon costume
 dragonfly
 drawer
@@ -477,29 +618,36 @@ drill
 drill (tool)
 drink
 drinking straw
+drinking water
 drone
 dropper
 drum
+drummer
 drumstick
 duck
 duckling
 duct tape
 duffel bag
 dumbbell
+dumpling
 dumpster
+durian
 dustpan
 eagle
 earphone
 earplug
 earring
 earrings
+earth
 easel
+easter egg
 eclair
 edible corn
 eel
 egg
 egg (food)
 egg roll
+egg tart
 egg yolk
 eggbeater
 eggplant
@@ -507,11 +655,19 @@ electric chair
 elephant
 elevator car
 elk
+emblem
+embroidery
+emerald
+entrance
 envelope
+equestrian
 eraser
+erhu
 escargot
+espresso
 excavator
 eyepatch
+fabric
 face powder
 facial tissue holder
 falcon
@@ -519,6 +675,7 @@ fan
 fashion accessory
 fast food
 faucet
+fawn
 fax
 fedora
 ferret
@@ -526,6 +683,7 @@ ferris wheel
 ferry
 fig
 fighter jet
+figure skater
 figurine
 file
 file cabinet
@@ -536,11 +694,16 @@ fire engine
 fire extinguisher
 fire hose
 fire hydrant
+fire truck
+firecracker
+fireman
 fireplace
 fireplug
 first-aid kit
 fish
 fishbowl
+fisherman
+fishing boat
 fishing net
 fishing rod
 flag
@@ -550,45 +713,61 @@ flannel
 flap
 flash
 flashlight
+flatfish
+flea
 fleece
 flip-flop
 flipper
+flood
+floor fan
 flower
 flower arrangement
 flowerpot
 flute
 flute glass
+fly
 flying disc
 foal
+folder
 folding chair
 food
 food processor
+food truck
 football
 football helmet
+football player
+footstall
 footstool
 footwear
 fork
 forklift
 fountain
+fountain pen
 fox
 freight car
 french fries
 french horn
 french toast
 freshener
+fried egg
+fried rice
 frisbee
 frog
 fruit
 fruit juice
+fruit salad
+fruit stand
 frying pan
 fudge
 fuel nozzle
 fuel pump
 fume hood
 funnel
+fur
 furniture
 futon
 gag
+game controller
 gameboard
 garbage
 garbage truck
@@ -601,49 +780,67 @@ gas station
 gas stove
 gasmask
 gazelle
+gear
 gelatin
 gemstone
 generator
+geranium
+german shepherd
 giant panda
 gift wrap
 ginger
+gingerbread house
 giraffe
 girl
 glass
 glasses
 globe
 glove
+go
 goat
 goggles
+golden retriever
 goldfish
+golf
 golf ball
 golf cart
 golf club
 golfcart
+golfer
 gondola
 gong
 goose
 gorilla
 gourd
+grampus
 grape
 grapefruit
+grasshopper
 grater
 gravestone
 gravy boat
 green bean
 green onion
+greeting card
 griddle
 grill
 grinder
 grits
 grizzly
 grocery bag
+groom
 guacamole
+guard
 guardrail
+guinea pig
 guitar
+guitarist
 gull
 gun
+guzheng
+gymnast
 hair curler
+hair drier
 hair dryer
 hair spray
 hairbrush
@@ -660,6 +857,7 @@ hand dryer
 hand glass
 hand towel
 handbag
+handball
 handcart
 handcuff
 handgun
@@ -668,14 +866,19 @@ handle
 handsaw
 harbor seal
 hardback book
+hardware
 harmonica
 harmonium
 harp
 harpsichord
+harvester
 hat
 hatbox
+hawthorn
+hazelnut
 headband
 headboard
+headdress
 headlight
 headphones
 headscarf
@@ -686,35 +889,48 @@ heater
 hedgehog
 helicopter
 helmet
+hen
+hermit crab
 heron
 high heels
 highchair
 hiking equipment
 hinge
 hippopotamus
+hockey
+hockey player
 hockey stick
+hoe
 hog
 home appliance
 home plate
 honey
 honeycomb
+hoodie
 hook
 hookah
 horizontal bar
+hornbill
 horned cow
 hornet
 horse
 horse buggy
 horse carriage
+horse cart
+horseshoe
 hose
+hospital bed
+hot air balloon
 hot dog
 hot sauce
 hot-air balloon
 hotplate
 hourglass
 house
+house finch
 houseboat
 houseplant
+hula hoop
 human arm
 human beard
 human body
@@ -731,19 +947,29 @@ human nose
 humidifier
 hummingbird
 hummus
+hurdle
+hydrant
 ice cream
+ice cream cone
 ice maker
 ice pack
 ice skate
 icecream
 identity card
+igloo
 igniter
+impala
+incense
 indoor rower
+induction cooker
 infant bed
 inhaler
+injection
 inkpad
 insect
 invertebrate
+invitation
+ipad
 ipod
 iron
 ironing board
@@ -751,6 +977,7 @@ irrigation canal
 isopod
 jacket
 jacuzzi
+jade
 jaguar (animal)
 jam
 jar
@@ -767,16 +994,22 @@ jewelry
 joystick
 jug
 juice
+juicer
+jujube
+jump rope
 jumpsuit
+kale
 kangaroo
 kayak
 keg
 kennel
 kettle
 key
+keyboard
 keycard
 kilt
 kimono
+king crab
 kitchen & dining room table
 kitchen appliance
 kitchen knife
@@ -789,11 +1022,14 @@ kitten
 kiwi fruit
 knee pad
 knife
+knit
 knitting needle
 knob
 knocker
+knot
 koala
 lab coat
+lace dress
 ladder
 ladle
 ladybug
@@ -810,14 +1046,18 @@ laptop
 laptop computer
 lasagna
 latch
+latte
 lavender (plant)
 lawn mower
 leather
+leather jacket
 legging
 lego
 legume
 lemon
 lemonade
+lens
+lentil
 leopard
 lettuce
 license plate
@@ -836,18 +1076,28 @@ lion dance costume
 lip balm
 lipstick
 liquor
+litchi
 lizard
 lobster
+lock
 locker
 log
 lollipop
+lorry
+lotus
 loveseat
 luggage and bags
 lynx
+macaroni
+macaw
+machete
 machine gun
 magazine
 magnet
+magnifying glass
 magpie
+mahout
+maid
 mail slot
 mailbox
 mallard
@@ -859,7 +1109,10 @@ manatee
 mandarin orange
 manger
 mango
+mangosteen
 manhole
+manhole cover
+mannequin
 map
 map legend
 maple
@@ -867,6 +1120,7 @@ maracas
 marine invertebrates
 marine mammal
 marker
+market stall
 martini
 mascot
 mashed potato
@@ -876,21 +1130,33 @@ mast
 mat
 matchbox
 mattress
+mausoleum
 measuring cup
 measuring stick
+meat
 meatball
 mechanical fan
+medal
 medical equipment
 medicine
+medicine cabinet
+megaphone
 melon
+menu
+mermaid
 microphone
 microscope
+microwave
 microwave oven
 milestone
 milestone marker
+military uniform
 milk
 milk can
 milkshake
+miner
+mineral water
+minibus
 miniskirt
 minivan
 mint candy
@@ -902,62 +1168,90 @@ mixing bowl
 mobile phone
 money
 monitor
+monk
 monkey
+monkey wrench
+monster truck
+moose
 mop
+moped
+mortar
+moth
+motherboard
 moths and butterflies
 motor
 motor scooter
 motor vehicle
+motorbike
+motorboat
 motorcycle
+motorcycle helmet
 mound
+mountain bike
 mountain pass
 mouse
 mousepad
 mud puddle
 muffin
 mug
+mulberry
 mule
 mushroom
 music stool
 musical instrument
 musical keyboard
+musician
+mussel
 nail (construction)
+nail polish
 nailfile
 napkin
 neckerchief
 necklace
 necktie
+nectarine
 needle
 nest
+net
 newspaper
 newsstand
 nightshirt
 nightstand
+noodle
 nosebag
 noseband
 notebook
 notepad
+notepaper
+nurse
 nut
 nutcracker
+oak
 oar
+obelisk
 oboe
 octopus
 office building
 office supplies
 oil lamp
 okra
+olive
 olive oil
 omelet
 onion
+opal
 open pit mine
 orange
 orange juice
+orangutan
 organ (musical instrument)
 ostrich
 otter
 ottoman
+outhouse
 oven
 overalls
+overcoat
 owl
 oyster
 pacifier
@@ -965,16 +1259,22 @@ packet
 pad
 paddle
 padlock
+pagoda
 paintbrush
+painter
 painting
 pajamas
+palace
 palette
 palm tree
 pan
 pancake
 panda
+pansy
 pantyhose
 papaya
+paper bag
+paper cup
 paper cutter
 paper plate
 paper towel
@@ -988,16 +1288,26 @@ parchment
 parka
 parking meter
 parrot
+parsley
+partridge
+passenger
 passenger car
 passenger ship
+passenger train
+passion fruit
 passport
 pasta
 pastry
 patty
+pavilion
 pea
 peach
+peacock
+peanut
 peanut butter
 pear
+pearl
+pecan
 peeler
 pegboard
 pelican
@@ -1010,17 +1320,24 @@ pendulum
 penguin
 pennant
 penny
+peony
 pepper
 pepper mill
+pepperoni
+perch
 perfume
+persian cat
 persimmon
 person
 personal care
 personal flotation device
 pet
+petunia
 pew
 phonebook
 phonograph record
+photographer
+pianist
 piano
 pickle
 pickup truck
@@ -1031,50 +1348,72 @@ pig
 pigeon
 piggy bank
 pillow
+pilot
 pin
+pine nut
 pineapple
 pinecone
 ping-pong ball
+pink
 pinwheel
+pipa
 pipe
 pipe bowl
 pirate flag
+pistachio
 pistol
 pita
 pitcher
 pitcher (container)
+pitcher plant
 pitchfork
 pizza
 pizza cutter
+placard
 place mat
+plane
 plant
+plaster
 plastic bag
+plasticine
 plate
 platter
+playing card
 playpen
 pliers
 plow
+plug
+plum
 plumbing fixture
 plume
 pocket watch
 pocketknife
+pod
 podium
+pointer
 poker
 poker chip
 polar bear
 pole
 police cruiser
+police van
 polo shirt
 pomegranate
+pomeranian
 poncho
 pond
 pony
+poodle
 pool table
 pop
 popcorn
+poppy
 popsicle
 porch
 porcupine
+porridge
+portfolio
+porthole
 postbox
 postcard
 poster
@@ -1083,6 +1422,7 @@ potato
 potholder
 pottery
 pouch
+poultry
 power plugs and sockets
 power shovel
 prawn
@@ -1092,6 +1432,7 @@ pretzel
 price board
 printer
 projectile
+projection screen
 projector
 projector screen
 propeller
@@ -1099,12 +1440,15 @@ prune
 pudding
 puffer
 puffin
+pug
 pug-dog
 pumpkin
+pumpkin seed
 puncher
 punching bag
 puppet
 puppy
+quail
 quarry
 quesadilla
 quiche
@@ -1116,95 +1460,142 @@ race car
 racket
 radar
 radiator
+radio
 radio receiver
 radish
 raft
 rag doll
 railcar
+rainbow trout
 raincoat
+raisin
+rake
 ram
 raspberry
 rat
 ratchet (device)
 raven
 rays and skates
+razor
 razorblade
 reamer
 rearview mirror
 receipt
 recliner
 record player
+recorder
 red neckerchief
 red panda
 reflector
 refrigerator
+remote
 remote control
 reptile
 reservoir
 rhinoceros
 rib
+rice
+rice cooker
+rice field
 rice noodles
+rickshaw
+rider
 rifle
 ring
 ring binder
 river boat
+roach
 road map
 road sign
 robe
 rocket
 rocking chair
 rodent
+roe deer
+roller
 roller skate
 roller skates
 rollerblade
 rolling pin
 root beer
 rose
+rottweiler
+round table
 router
+rowboat
 rubber band
+rubble
+rubik's cube
+ruby
+rugby
 rugby ball
+rugby player
 ruler
 runner
+rye
+sack
 saddle
 saddle blanket
 saddlebag
+safe
+safety helmet
 safety pin
 sail
+sailboat
+sailor
+sake
 salad
 salad plate
+salamander
 salami
 salmon
 salsa
 salt and pepper shakers
 saltshaker
+samoyed
 sandal
 sandwich
+sanitary napkin
+sashimi
 satchel
+satellite
 saucepan
 saucer
 sausage
 sawhorse
 saxophone
+saxophonist
+scaffold
 scale
+scallop
 scarecrow
 scarf
+schnauzer
 school bus
 school uniform
 scissors
+scooter
 scoreboard
 scorpion
 scraper
+screw
 screwdriver
 scrubbing brush
 sculpture
 sea lion
 sea turtle
+sea urchin
 seabird
 seafood
 seahorse
+seal
 seaplane
 seashell
 seat belt
+seaweed
+sedan
+seed
+seesaw
 segway
 serving tray
 sewing machine
@@ -1219,12 +1610,15 @@ shawl
 shears
 sheep
 shelf
+shell
 shellfish
 shepherd dog
 sherbert
 shield
 shirt
 shoe
+shop window
+shopfront
 shopping bag
 shopping cart
 short pants
@@ -1239,15 +1633,21 @@ shower curtain
 shower head
 shredder
 shrimp
+shrine
+signage
 signboard
 silo
+singer
 sink
+skate
 skateboard
+skateboarder
 skewer
 ski
 ski boot
 ski parka
 ski pole
+skier
 skirt
 skull
 skullcap
@@ -1258,12 +1658,16 @@ sleeping bag
 slide
 sling
 slipper
+sloth
 slow cooker
+slug
 sluice gate
 smoothie
 snack
 snail
 snake
+snorkel
+snow leopard
 snowboard
 snowman
 snowmobile
@@ -1272,10 +1676,12 @@ soap
 soap dispenser
 soccer ball
 sock
+socket
 sofa
 sofa bed
 softball
 solar array
+soldier
 sombrero
 soup
 soup bowl
@@ -1283,32 +1689,46 @@ soupspoon
 sour cream
 soya milk
 space shuttle
+spaghetti
 sparkler
 sparrow
 spatula
 speaker
 spear
 spectacles
+speedboat
+speedometer
 spice rack
 spider
+spinach
+spire
 sponge
 spoon
 sports equipment
 sports uniform
 sportswear
 spotlight
+spray
+spring roll
+sprout
+squash
 squash (plant)
 squid
 squirrel
+squirrel monkey
 stage
 stagecoach
 stairs
+stall
+staple
 stapler
 starfish
+starfruit
 stationary bicycle
 statue
 steak
 steak knife
+steam locomotive
 steamer pot
 steering wheel
 step stool
@@ -1316,8 +1736,10 @@ stepladder
 stereo
 stethoscope
 stew
+stilt
 stirrer
 stirrup
+stone carving
 stool
 stop sign
 stove
@@ -1327,9 +1749,11 @@ straw
 strawberry
 street light
 street sign
+street vendor
 streetlight
 stretcher
 string cheese
+student
 studio couch
 stylus
 submarine
@@ -1341,11 +1765,15 @@ suit
 suitcase
 sun hat
 sunflower
+sunflower seed
 sunglasses
 sunhat
+supermarket shelf
 surfboard
+surfer
 sushi
 suspenders
+swab
 swan
 sweat pants
 sweatband
@@ -1353,17 +1781,22 @@ sweater
 sweatshirt
 sweet potato
 swim cap
+swimmer
 swimming pool
 swimsuit
 swimwear
+switch
 sword
+swordfish
 syringe
+t-shirt
 tabasco sauce
 table
 table lamp
 table tennis racket
 table-tennis table
 tablecloth
+tablet
 tablet computer
 tableware
 tachometer
@@ -1371,12 +1804,14 @@ taco
 tag
 taillight
 tambourine
+tangerine
 tank
 tank top
 tap
 tape
 tape measure
 tapestry
+taro
 tarp
 tart
 tartan
@@ -1384,26 +1819,39 @@ tassel
 taxi
 tea
 tea bag
+tea pot
 teacup
 teakettle
 teapot
+teddy
 teddy bear
+tee
 telephone
 telephone booth
 telephone pole
 telephoto lens
+telescope
 television
 television camera
 television set
+temple
+tempura
+tennis
 tennis ball
+tennis net
+tennis player
 tennis racket
 tent
 tequila
+test tube
 thermometer
+thermos
 thermos bottle
 thermostat
 thimble
+thistle
 thread
+throw pillow
 thumbtack
 tiara
 tick
@@ -1414,16 +1862,21 @@ timer
 tin can
 tinfoil
 tinsel
+tiramisu
 tire
+tissue
 tissue paper
 toast
 toaster
 toaster oven
 tobacco pipe
+tofu
 toilet
 toilet paper
 toilet tissue
 tomato
+tomato soup
+tomb
 tongs
 tool
 toolbox
@@ -1434,12 +1887,15 @@ torch
 tortilla
 tortoise
 tote bag
+totem pole
+toucan
 tow truck
 towel
 towel rack
 tower
 toy
 tractor
+traffic cone
 traffic light
 traffic sign
 trailer truck
@@ -1457,43 +1913,56 @@ triangle
 tricycle
 tripod
 trombone
+trophy
 trophy cup
 trousers
 truck
 truffle
 trumpet
 trunk
+tub
+tube
+tugboat
+tulip
+tuna
 turban
 turkey
 turnip
 turtle
 turtleneck
 tux
+tv cabinet
 typewriter
+ukulele
 umbrella
 underdrawers
 underwear
 unicycle
+uniform
 urinal
 urn
 vacuum cleaner
 van
 vase
 vat
+vault
 vegetable
 vehicle
 vehicle registration plate
 veil
 vending machine
 vent
+vessel
 vest
 videotape
 vinegar
 violin
+violinist
 visor
 vodka
 volleyball
 volleyball (ball)
+volleyball player
 vulture
 waffle
 waffle iron
@@ -1504,19 +1973,23 @@ walking stick
 wall clock
 wall socket
 wallet
+walnut
 walrus
 wardrobe
 washbasin
+washer
 washing machine
 waste container
 watch
 water bottle
+water buffalo
 water cooler
 water faucet
 water gun
 water heater
 water hyacinth
 water jug
+water purifier
 water scooter
 water ski
 water tower
@@ -1529,30 +2002,37 @@ webcam
 wedding cake
 wedding ring
 weighing scale
+well
 wet suit
 whale
+whale shark
 wheel
 wheelchair
 whipped cream
 whisk
 whistle
+white wine
 whiteboard
 wig
+wildebeest
 willow
 wind chime
 windmill
 window
 window blind
 window box
+window frame
 windshield wiper
 windsock
 wine
 wine bottle
 wine bucket
+wine cabinet
 wine glass
 wine rack
 wineglass
 winter melon
+witch hat
 wok
 wolf
 woman
@@ -1560,13 +2040,20 @@ wood-burning stove
 wooden leg
 wooden spoon
 woodpecker
+wool
 worm
 wreath
 wrench
 wristband
 wristlet
+writing brush
 yacht
+yak
+yoga mat
 yogurt
 yoke
+yolk
+youth
+yurt
 zebra
 zucchini
