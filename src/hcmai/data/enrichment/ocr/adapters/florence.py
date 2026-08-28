@@ -139,4 +139,6 @@ class FlorenceAdapter:
             results.append(
                 OCRResult(text=value, regions=parsed_regions, raw_output=raw)
             )
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         return results
