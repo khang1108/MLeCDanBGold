@@ -191,8 +191,9 @@ def process_archive(
     record = state_store.get_archive(archive_id)
     assert record is not None
 
-    if record.stage == ArchiveStage.PENDING:
-        state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADING)
+    if record.stage in (ArchiveStage.PENDING, ArchiveStage.DOWNLOADING):
+        if record.stage == ArchiveStage.PENDING:
+            state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADING)
         download_archive(
             archive_entry.url,
             zip_path,
@@ -202,6 +203,7 @@ def process_archive(
         )
         state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADED)
         record = state_store.get_archive(archive_id)
+        assert record is not None
 
     inventory: ArchiveInventory
     if record.stage == ArchiveStage.DOWNLOADED:

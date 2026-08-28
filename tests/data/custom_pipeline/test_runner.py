@@ -238,6 +238,35 @@ def test_process_archive_commits_one_batch_and_cleans_archive(
     assert not (context.active_root / "archives" / plan.entries[0].archive_id).exists()
 
 
+def test_process_archive_resumes_an_interrupted_download(
+    fake_curl: Path, tmp_path: Path
+) -> None:
+    context = _context(tmp_path)
+    plan = ArchivePlan.from_urls(["https://example.org/Videos_L01.zip"])
+    state_store = PipelineStateStore(context.run_root)
+    state_store.create_or_resume_run(
+        _identity(plan), ArchiveWorkWindow(offset=0, limit=1)
+    )
+    archive_id = plan.entries[0].archive_id
+    state_store.ensure_archive(archive_id, plan.entries[0].position)
+    state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADING)
+
+    batch_ids = process_archive(
+        context,
+        state_store,
+        plan.entries[0],
+        _make_produce_batch_artifacts(state_store),
+        _asr_bundle_factory(tmp_path / "asr_indexes"),
+        dataset_version="dataset_v1",
+        visual_model_name="siglip-test",
+        context_model_name="bge-test",
+    )
+
+    assert len(batch_ids) == 1
+    archive_record = state_store.get_archive(archive_id)
+    assert archive_record is not None and archive_record.stage == ArchiveStage.CLEANED
+
+
 def test_pipeline_status_reports_recommended_next_offset(fake_curl: Path, tmp_path: Path) -> None:
     context = _context(tmp_path)
     plan = ArchivePlan.from_urls(["https://example.org/Videos_L01.zip"])
