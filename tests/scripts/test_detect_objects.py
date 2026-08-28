@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 import pytest
@@ -171,6 +172,42 @@ def test_run_yoloe_publishes_raw_and_canonical_artifacts(tmp_path: Path) -> None
     assert report["completed_frames"] == 1
     assert report["failed_frames"] == 0
     assert model.calls[0]["conf"] == 0.2
+    assert model.calls[0]["max_det"] == 1
+
+
+def test_each_predict_call_sees_only_its_own_batch(tmp_path: Path) -> None:
+    """Frames must not accumulate across iterations into one ever-growing call."""
+
+    rows = []
+    for index in range(4):
+        image = tmp_path / f"keyframes/v1/{index:04d}.jpg"
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(b"fixture")
+        rows.append(
+            {
+                "frame_id": f"v1:{index:04d}",
+                "video_id": "v1",
+                "frame_idx": index,
+                "timestamp_ms": index * 100,
+                "image_path": f"keyframes/v1/{index:04d}.jpg",
+                "width": 20,
+                "height": 10,
+            }
+        )
+    frames = tmp_path / "frames.parquet"
+    pd.DataFrame(rows).to_parquet(frames, index=False)
+
+    model = _FakeModel()
+    run_yoloe(
+        frames,
+        tmp_path / "objects",
+        ObjectDetectionConfig(top_k=1, batch_size=2, device="cpu"),
+        dataset_root=tmp_path,
+        frame_store_id="fixture-v1",
+        model=model,
+    )
+
+    assert [len(cast(list[str], call["images"])) for call in model.calls] == [2, 2]
 
 
 def test_load_vocab_normalizes_deduplicates_and_preserves_order(

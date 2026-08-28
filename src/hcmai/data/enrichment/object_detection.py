@@ -461,9 +461,8 @@ def run_yoloe(
         active_resolver = resolver or FrameAssetResolver(dataset_root)
         batch_starts = range(0, len(pending), config.batch_size)
 
-        batch: list[tuple[str, Path]] = []
         for start in tqdm(batch_starts, desc="YOLOE object detection", unit="batch"):
-
+            batch: list[tuple[str, Path]] = []
             for video_id, image_path in pending[start : start + config.batch_size]:
                 try:
                     batch.append((video_id, active_resolver.resolve_value(image_path)))
@@ -476,6 +475,7 @@ def run_yoloe(
             results = detector.predict(
                 [str(image) for _, image in batch],
                 conf=config.min_confidence,
+                max_det=config.top_k,
                 device=config.device,
                 verbose=False,
             )

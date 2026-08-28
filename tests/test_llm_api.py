@@ -515,6 +515,21 @@ def test_asr_readiness_requires_the_enabled_model_to_be_loaded():
     assert adapter.readiness().ready is True
 
 
+def test_load_fails_when_asr_is_enabled_without_a_transcript_config():
+    adapter = LocalAdapter(
+        LLMServiceConfig(),
+        enable_caption=False,
+        enable_visual_embedding=False,
+        enable_caption_embedding=False,
+        enable_reranker=False,
+        enable_asr=True,
+        transcript_config=None,
+    )
+
+    with pytest.raises(RuntimeError, match="HCMAI_ENRICHMENT_CONFIG"):
+        adapter.load()
+
+
 def test_asr_only_environment_does_not_construct_unrequested_models(
     monkeypatch,
 ):
