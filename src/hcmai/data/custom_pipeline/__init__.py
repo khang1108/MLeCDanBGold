@@ -49,6 +49,18 @@ from hcmai.data.custom_pipeline.disk import (
     require_write_capacity,
     snapshot_disk,
 )
+from hcmai.data.custom_pipeline.finalize import (
+    BatchManifest,
+    FinalizeError,
+    build_dense_index_from_precomputed,
+    build_segment_index_from_precomputed,
+    compact_batch_embeddings,
+    compact_frame_metadata,
+    compact_specialist_shards,
+    discover_committed_batches,
+    finalize_corpus,
+    require_full_plan_cleaned,
+)
 from hcmai.data.custom_pipeline.shards import (
     BatchIndexInventory,
     IndexArtifactSummary,
@@ -82,6 +94,7 @@ __all__ = [
     "ArchiveWorkWindow",
     "BatchIndexInventory",
     "BatchInventory",
+    "BatchManifest",
     "BatchRecord",
     "BatchStage",
     "BatchValidationError",
@@ -90,6 +103,7 @@ __all__ = [
     "DiskBudgetConfig",
     "DiskSnapshot",
     "FileInventoryEntry",
+    "FinalizeError",
     "IndexArtifactSummary",
     "PipelineStateStore",
     "RunIdentity",
@@ -118,4 +132,12 @@ __all__ = [
     "cleanup_ephemeral_batch",
     "commit_local_batch",
     "validate_local_batch",
+    "build_dense_index_from_precomputed",
+    "build_segment_index_from_precomputed",
+    "compact_batch_embeddings",
+    "compact_frame_metadata",
+    "compact_specialist_shards",
+    "discover_committed_batches",
+    "finalize_corpus",
+    "require_full_plan_cleaned",
 ]
