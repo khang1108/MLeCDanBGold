@@ -90,6 +90,14 @@ def test_gap_before_offset_is_rejected(tmp_path: Path) -> None:
         store.create_or_resume_run(_identity(), ArchiveWorkWindow(offset=2, limit=1))
 
 
+def test_allow_offset_gap_lets_one_host_take_a_later_shard(tmp_path: Path) -> None:
+    store = PipelineStateStore(tmp_path)
+    accepted = store.create_or_resume_run(
+        _identity(), ArchiveWorkWindow(offset=3, limit=1), allow_offset_gap=True
+    )
+    assert accepted["work_windows"][-1]["offset"] == 3
+
+
 def test_cleaned_overlap_replay_is_idempotent(tmp_path: Path) -> None:
     store = PipelineStateStore(tmp_path)
     store.create_or_resume_run(_identity(), ArchiveWorkWindow(offset=0, limit=1))

@@ -224,6 +224,7 @@ class PipelineStateStore:
         self,
         identity: RunIdentity,
         work_window: ArchiveWorkWindow,
+        allow_offset_gap: bool = False,
     ) -> dict[str, Any]:
         """Create a new run or resume an existing one with a matching identity.
 
@@ -245,7 +246,8 @@ class PipelineStateStore:
         else:
             windows = []
 
-        self._require_no_gap_before_offset(work_window.offset)
+        if not allow_offset_gap:
+            self._require_no_gap_before_offset(work_window.offset)
         windows.append(
             {
                 "offset": work_window.offset,
@@ -264,7 +266,12 @@ class PipelineStateStore:
         return record
 
     def _require_no_gap_before_offset(self, offset: int) -> None:
-        """Ensure every archive position before ``offset`` is already cleaned."""
+        """Ensure every archive position before ``offset`` is already cleaned.
+
+        Only an unbounded window is checked: a bounded ``--limit`` window is a
+        deliberate shard of the plan taken by one host, and completeness is
+        enforced instead by finalize, which requires every archive cleaned.
+        """
 
         for position in range(offset):
             record = self._read_archive_by_position(position)

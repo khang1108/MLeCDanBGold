@@ -42,6 +42,7 @@ TRANSCRIPTS_ROOT="${TRANSCRIPTS_ROOT:-artifacts/enrichment/transcripts}"
 ASR_INDEX_ROOT="${ASR_INDEX_ROOT:-artifacts/indexes/asr_segments}"
 ZIP_OFFSET="${ZIP_OFFSET:-0}"
 ZIP_LIMIT="${ZIP_LIMIT:-}"
+ALLOW_OFFSET_GAP="${ALLOW_OFFSET_GAP:-0}"
 BATCH_OFFSET="${BATCH_OFFSET:-0}"
 BATCH_LIMIT="${BATCH_LIMIT:-}"
 SKIP_APT="${SKIP_APT:-0}"
@@ -171,6 +172,7 @@ for url in "${URLS[@]}"; do
   PIPELINE_ARGS+=(--archive-url "$url")
 done
 [[ -z "$ZIP_LIMIT" ]] || PIPELINE_ARGS+=(--limit "$ZIP_LIMIT")
+[[ "$ALLOW_OFFSET_GAP" != "1" ]] || PIPELINE_ARGS+=(--allow-offset-gap)
 PIPELINE_ARGS+=(--batch-offset "$BATCH_OFFSET")
 [[ -z "$BATCH_LIMIT" ]] || PIPELINE_ARGS+=(--batch-limit "$BATCH_LIMIT")
 

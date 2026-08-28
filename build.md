@@ -18,7 +18,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=0 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=0 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a0-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -41,7 +41,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=0 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=0 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a0-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -64,7 +64,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=1 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=1 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a1-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -87,7 +87,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=1 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=1 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a1-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -110,7 +110,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=2 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=2 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a2-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -133,7 +133,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=2 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=2 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a2-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -156,7 +156,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=3 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=3 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a3-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -179,7 +179,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=3 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=3 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a3-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -202,7 +202,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=4 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=4 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a4-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -225,7 +225,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=4 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=4 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a4-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -248,7 +248,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=5 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=5 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a5-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -271,7 +271,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=5 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=5 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a5-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -294,7 +294,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=6 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=6 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a6-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -317,7 +317,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=6 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=6 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a6-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -340,7 +340,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=7 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=7 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a7-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -363,7 +363,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=7 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=7 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a7-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -386,7 +386,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=8 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=8 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a8-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -409,7 +409,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=8 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=8 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a8-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -432,7 +432,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=9 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=9 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a9-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -455,7 +455,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=9 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=9 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a9-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -478,7 +478,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=10 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
+ZIP_OFFSET=10 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a10-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -501,7 +501,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=10 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=10 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a10-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -524,7 +524,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=11 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT= \
+ZIP_OFFSET=11 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a11-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -547,7 +547,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=12 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT= \
+ZIP_OFFSET=12 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a12-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -570,7 +570,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=13 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT= \
+ZIP_OFFSET=13 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a13-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -597,7 +597,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=11 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=11 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a11-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -620,7 +620,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=12 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=12 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a12-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
@@ -643,7 +643,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=13 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
+ZIP_OFFSET=13 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a13-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/

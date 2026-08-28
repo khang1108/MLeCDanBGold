@@ -633,6 +633,7 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--allow-offset-gap", action="store_true")
     parser.add_argument("--batch-offset", type=int, default=0)
     parser.add_argument("--batch-limit", type=int, default=None)
 
@@ -716,7 +717,9 @@ def _cmd_process_archive(args: argparse.Namespace) -> dict[str, Any]:
     window = ArchiveWorkWindow(offset=args.offset, limit=args.limit)
 
     state_store = PipelineStateStore(context.run_root)
-    state_store.create_or_resume_run(_build_run_identity(args, plan), window)
+    state_store.create_or_resume_run(
+        _build_run_identity(args, plan), window, allow_offset_gap=args.allow_offset_gap
+    )
 
     produce_batch_artifacts = _make_produce_batch_artifacts(args, state_store)
     asr_bundle_factory = _make_asr_bundle_factory(args)
