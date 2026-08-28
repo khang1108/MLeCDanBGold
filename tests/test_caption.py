@@ -192,6 +192,29 @@ def test_explicit_failures_retry_and_malformed_row(tmp_path):
         generate_captions(frames, output, cfg, dataset_root=tmp_path)
 
 
+def test_resume_survives_a_throughput_change_but_not_a_decoding_change(tmp_path: Path) -> None:
+    """Retuning batch size per GPU must not invalidate captions already written."""
+
+    from dataclasses import asdict
+
+    from hcmai.data.enrichment.caption.resume import guard_resume
+
+    cfg = config()
+    captions = tmp_path / "captions.parquet"
+    captions.write_bytes(b"")
+    old = {
+        "enrichment_version": cfg.enrichment_version,
+        "effective_configuration": asdict(cfg),
+        "dataset_root": str(tmp_path),
+    }
+
+    guard_resume(captions, old, replace(cfg, batch_size=64, write_interval=500), tmp_path)
+
+    retuned = replace(cfg, decoding={"max_new_tokens": 96, "do_sample": False})
+    with pytest.raises(ValueError, match="changed decoding"):
+        guard_resume(captions, old, retuned, tmp_path)
+
+
 def test_cli_rejects_non_positive_batch_size_and_image_workers() -> None:
     """The CLI must reject bad worker/batch overrides before loading any job."""
 

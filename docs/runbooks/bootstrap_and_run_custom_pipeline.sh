@@ -42,6 +42,9 @@ TRANSCRIPTS_ROOT="${TRANSCRIPTS_ROOT:-artifacts/enrichment/transcripts}"
 ASR_INDEX_ROOT="${ASR_INDEX_ROOT:-artifacts/indexes/asr_segments}"
 ZIP_OFFSET="${ZIP_OFFSET:-0}"
 ZIP_LIMIT="${ZIP_LIMIT:-}"
+ALLOW_OFFSET_GAP="${ALLOW_OFFSET_GAP:-0}"
+BATCH_OFFSET="${BATCH_OFFSET:-0}"
+BATCH_LIMIT="${BATCH_LIMIT:-}"
 SKIP_APT="${SKIP_APT:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_INFERENCE_SERVER="${SKIP_INFERENCE_SERVER:-0}"
@@ -49,6 +52,7 @@ INFERENCE_HOST="${INFERENCE_HOST:-127.0.0.1}"
 INFERENCE_PORT="${INFERENCE_PORT:-8100}"
 HCMAI_INFERENCE_BASE_URL="${HCMAI_INFERENCE_BASE_URL:-http://${INFERENCE_HOST}:${INFERENCE_PORT}}"
 export HCMAI_INFERENCE_BASE_URL
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 INFERENCE_LOG="$RUN_ROOT/inference_gateway.log"
 
@@ -79,7 +83,7 @@ if [[ "$SKIP_APT" != "1" ]]; then
   sudo apt-get install -y \
     build-essential cmake pkg-config ninja-build \
     libavformat-dev libavcodec-dev libavutil-dev libswscale-dev \
-    libjson-c-dev ffmpeg curl unzip
+    libjson-c-dev ffmpeg curl unzip aria2
 else
   echo "==> SKIP_APT=1, skipping apt-get install"
 fi
@@ -98,8 +102,8 @@ fi
 if [[ ! -x aic/bin/python ]]; then
   echo "==> creating aic virtualenv"
   python3 -m venv aic
-  aic/bin/python -m pip install -e '.[embedding]'
 fi
+aic/bin/python -m pip install -e '.[pipeline]'
 
 # --- 4. Start the local OCR inference gateway so OCR never calls the public domain ---
 mkdir -p "$RUN_ROOT"
@@ -169,6 +173,9 @@ for url in "${URLS[@]}"; do
   PIPELINE_ARGS+=(--archive-url "$url")
 done
 [[ -z "$ZIP_LIMIT" ]] || PIPELINE_ARGS+=(--limit "$ZIP_LIMIT")
+[[ "$ALLOW_OFFSET_GAP" != "1" ]] || PIPELINE_ARGS+=(--allow-offset-gap)
+PIPELINE_ARGS+=(--batch-offset "$BATCH_OFFSET")
+[[ -z "$BATCH_LIMIT" ]] || PIPELINE_ARGS+=(--batch-limit "$BATCH_LIMIT")
 
 echo "==> preflight"
 PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py preflight "${PIPELINE_ARGS[@]}"

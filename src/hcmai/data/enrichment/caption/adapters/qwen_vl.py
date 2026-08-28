@@ -96,6 +96,7 @@ class QwenVLCaptionAdapter:
         if self.model is None or self.processor is None:
             import torch
             from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+            from transformers.utils import logging as hf_logging
 
             revision = {"revision": self.config.revision} if self.config.revision else {}
             self._dtype = _dtype_for(torch, self.config.dtype)
@@ -112,6 +113,7 @@ class QwenVLCaptionAdapter:
             )
             self.model = self.model or loaded_model.to(self.config.device)
             self.model.eval()
+            hf_logging.set_verbosity_error()
         self.resolved_revision = (
             getattr(getattr(self.model, "config", None), "_commit_hash", None)
             or self.config.revision

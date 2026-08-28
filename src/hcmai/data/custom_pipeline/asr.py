@@ -115,9 +115,14 @@ def _validate_index_coverage(
 ) -> int:
     """Confirm the persisted ASR index has finite, matching vectors for one video."""
 
-    positions = index.video_positions(video_id)
-    if positions.size == 0:
-        raise ValueError(f"ASR index has no vectors for reusable video: {video_id}")
+    if segment_table.empty:
+        return 0
+    try:
+        positions = index.video_positions(video_id)
+    except KeyError:
+        raise ValueError(
+            f"ASR index has no vectors for reusable video: {video_id}"
+        ) from None
     if positions.size != len(segment_table):
         raise ValueError(
             f"ASR index vector count for {video_id} ({positions.size}) disagrees "

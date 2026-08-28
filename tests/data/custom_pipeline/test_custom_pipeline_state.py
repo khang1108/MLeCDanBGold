@@ -90,6 +90,14 @@ def test_gap_before_offset_is_rejected(tmp_path: Path) -> None:
         store.create_or_resume_run(_identity(), ArchiveWorkWindow(offset=2, limit=1))
 
 
+def test_allow_offset_gap_lets_one_host_take_a_later_shard(tmp_path: Path) -> None:
+    store = PipelineStateStore(tmp_path)
+    accepted = store.create_or_resume_run(
+        _identity(), ArchiveWorkWindow(offset=3, limit=1), allow_offset_gap=True
+    )
+    assert accepted["work_windows"][-1]["offset"] == 3
+
+
 def test_cleaned_overlap_replay_is_idempotent(tmp_path: Path) -> None:
     store = PipelineStateStore(tmp_path)
     store.create_or_resume_run(_identity(), ArchiveWorkWindow(offset=0, limit=1))
@@ -167,6 +175,23 @@ def test_batch_transitions_are_ordered_forward_only(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Video stage transitions + bounded failure history
 # ---------------------------------------------------------------------------
+
+
+def test_replaying_an_uncommitted_batch_keeps_the_furthest_stage(tmp_path: Path) -> None:
+    store = PipelineStateStore(tmp_path)
+    store.ensure_batch("L01-batch000", "L01", ["L01_V001"])
+    store.ensure_video("L01_V001", "L01-batch000")
+    store.advance_video("L01_V001", VideoStage.SOURCE_READY)
+    store.advance_video("L01_V001", VideoStage.EXTRACTED)
+    store.advance_batch("L01-batch000", BatchStage.EXTRACTED)
+
+    store.advance_video("L01_V001", VideoStage.SOURCE_READY)
+    store.advance_batch("L01-batch000", BatchStage.EXTRACTED)
+
+    assert store.get_video("L01_V001").stage == VideoStage.EXTRACTED
+    assert store.get_batch("L01-batch000").stage == BatchStage.EXTRACTED
+    store.advance_video("L01_V001", VideoStage.CAPTIONED)
+    assert store.get_video("L01_V001").stage == VideoStage.CAPTIONED
 
 
 def test_video_transitions_are_ordered_forward_only(tmp_path: Path) -> None:

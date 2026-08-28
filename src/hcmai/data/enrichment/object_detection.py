@@ -45,6 +45,7 @@ class ObjectDetectionConfig:
     """Reproducibility and summary policy for one YOLOE enrichment run."""
 
     model: str = "yoloe-26l-seg-pf.pt"
+    vocab_path: str | None = None
     min_confidence: float = 0.20
     top_k: int = 30
     batch_size: int = 32
@@ -62,6 +63,10 @@ class ObjectDetectionConfig:
             not isinstance(self.device, str) or not self.device.strip()
         ):
             raise ValueError("device must be a non-empty string or null")
+        if self.vocab_path is not None and (
+            not isinstance(self.vocab_path, str) or not self.vocab_path.strip()
+        ):
+            raise ValueError("vocab_path must be a non-empty string or null")
         if not isinstance(self.artifact_version, str) or not self.artifact_version.strip():
             raise ValueError("artifact_version must not be empty")
         for name, value in (
@@ -81,6 +86,11 @@ class ObjectDetectionConfig:
                 raise ValueError(f"{name} must be finite and in [0, 1]")
 
         object.__setattr__(self, "model", self.model.strip())
+        object.__setattr__(
+            self,
+            "vocab_path",
+            self.vocab_path.strip() if self.vocab_path is not None else None,
+        )
         object.__setattr__(self, "min_confidence", float(self.min_confidence))
         object.__setattr__(
             self,
@@ -218,6 +228,25 @@ def normalized_boxes(pixel_boxes: list[list[float]], width: int, height: int) ->
         ]
         for x_min, y_min, x_max, y_max in pixel_boxes
     ]
+
+
+def load_vocab(path: str | Path) -> list[str]:
+    """Read one prompt class per line, order-preserving and deduplicated."""
+
+    source = Path(path)
+    if not source.is_file():
+        raise FileNotFoundError(f"required detector vocabulary not found: {source}")
+    names: list[str] = []
+    seen: set[str] = set()
+    for line in source.read_text(encoding="utf-8").splitlines():
+        name = " ".join(unicodedata.normalize("NFC", line).split()).casefold()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    if not names:
+        raise ValueError(f"detector vocabulary is empty: {source}")
+    return names
 
 
 def _failure_evidence(
@@ -421,6 +450,14 @@ def run_yoloe(
         if detector is None:
             yolo_module = import_module("ultralytics")
             detector = yolo_module.YOLOE(config.model)
+        if config.vocab_path is not None:
+            names = load_vocab(config.vocab_path)
+            detector.set_classes(names, detector.get_text_pe(names))
+            logger.info(
+                "Prompted YOLOE with %d classes from %s",
+                len(names),
+                config.vocab_path,
+            )
         active_resolver = resolver or FrameAssetResolver(dataset_root)
         batch_starts = range(0, len(pending), config.batch_size)
 
@@ -493,6 +530,7 @@ def run_yoloe(
 
 __all__ = [
     "ObjectDetectionConfig",
+    "load_vocab",
     "materialize_object_artifacts",
     "normalized_boxes",
     "pending_frames",

@@ -224,6 +224,7 @@ class PipelineStateStore:
         self,
         identity: RunIdentity,
         work_window: ArchiveWorkWindow,
+        allow_offset_gap: bool = False,
     ) -> dict[str, Any]:
         """Create a new run or resume an existing one with a matching identity.
 
@@ -245,7 +246,8 @@ class PipelineStateStore:
         else:
             windows = []
 
-        self._require_no_gap_before_offset(work_window.offset)
+        if not allow_offset_gap:
+            self._require_no_gap_before_offset(work_window.offset)
         windows.append(
             {
                 "offset": work_window.offset,
@@ -264,7 +266,12 @@ class PipelineStateStore:
         return record
 
     def _require_no_gap_before_offset(self, offset: int) -> None:
-        """Ensure every archive position before ``offset`` is already cleaned."""
+        """Ensure every archive position before ``offset`` is already cleaned.
+
+        Only an unbounded window is checked: a bounded ``--limit`` window is a
+        deliberate shard of the plan taken by one host, and completeness is
+        enforced instead by finalize, which requires every archive cleaned.
+        """
 
         for position in range(offset):
             record = self._read_archive_by_position(position)
@@ -363,9 +370,13 @@ class PipelineStateStore:
         return record
 
     def advance_batch(self, batch_id: str, stage: BatchStage) -> BatchRecord:
+        """Advance one batch, keeping the furthest stage when an uncommitted batch replays."""
+
         record = self.get_batch(batch_id)
         if record is None:
             raise ValueError(f"unknown batch_id: {batch_id}")
+        if _BATCH_ORDER.index(stage) < _BATCH_ORDER.index(record.stage):
+            return record
         _check_forward_transition(_BATCH_ORDER, record.stage, stage, kind="batch")
         record.stage = stage
         record.updated_at = _now()
@@ -409,9 +420,13 @@ class PipelineStateStore:
         return record
 
     def advance_video(self, video_id: str, stage: VideoStage) -> VideoRecord:
+        """Advance one video, keeping the furthest stage when an uncommitted batch replays."""
+
         record = self.get_video(video_id)
         if record is None:
             raise ValueError(f"unknown video_id: {video_id}")
+        if _VIDEO_ORDER.index(stage) < _VIDEO_ORDER.index(record.stage):
+            return record
         _check_forward_transition(_VIDEO_ORDER, record.stage, stage, kind="video")
         record.stage = stage
         record.updated_at = _now()

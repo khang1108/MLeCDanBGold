@@ -359,9 +359,16 @@ def _media_info_digest(media_info_dir: Path) -> str:
 
 
 def _artifact_config_fingerprint(config_path: Path) -> str:
-    """Hash the additive ``custom_pipeline`` config section."""
+    """Hash the artifact-shaping part of the ``custom_pipeline`` config section.
 
-    raw = read_yaml_section(config_path, "custom_pipeline")
+    Scheduling and stage batch sizes are excluded: they change only how work is
+    chunked across hosts, never the produced artifacts, so retuning them per
+    GPU must not invalidate a resumable run.
+    """
+
+    raw = dict(read_yaml_section(config_path, "custom_pipeline"))
+    for throughput_key in ("scheduling", "stage_batches"):
+        raw.pop(throughput_key, None)
     payload = json.dumps(raw, sort_keys=True).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
@@ -633,6 +640,9 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--allow-offset-gap", action="store_true")
+    parser.add_argument("--batch-offset", type=int, default=0)
+    parser.add_argument("--batch-limit", type=int, default=None)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -714,7 +724,9 @@ def _cmd_process_archive(args: argparse.Namespace) -> dict[str, Any]:
     window = ArchiveWorkWindow(offset=args.offset, limit=args.limit)
 
     state_store = PipelineStateStore(context.run_root)
-    state_store.create_or_resume_run(_build_run_identity(args, plan), window)
+    state_store.create_or_resume_run(
+        _build_run_identity(args, plan), window, allow_offset_gap=args.allow_offset_gap
+    )
 
     produce_batch_artifacts = _make_produce_batch_artifacts(args, state_store)
     asr_bundle_factory = _make_asr_bundle_factory(args)
@@ -732,6 +744,8 @@ def _cmd_process_archive(args: argparse.Namespace) -> dict[str, Any]:
             dataset_version=args.version,
             visual_model_name=visual_model_name,
             context_model_name=context_model_name,
+            batch_offset=args.batch_offset,
+            batch_limit=args.batch_limit,
         )
     return {"command": "process-archive", "committed_batches": committed_batches}
 

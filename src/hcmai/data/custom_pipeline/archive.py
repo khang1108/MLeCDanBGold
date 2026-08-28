@@ -25,13 +25,12 @@ from hcmai.data.custom_pipeline.disk import require_write_capacity
 
 logger = get_logger(__name__)
 
-# Organizer archives nest each video under a line-number directory, e.g.
-# "L21/L21_V001.mp4". The directory and filename line numbers need not match
-# so a video misfiled under a neighboring directory is still caught later as
-# a duplicate video_id rather than silently rejected as an unknown shape.
-_MEMBER_PATTERN = re.compile(r"^L\d{2}/L\d{2}_V\d{3}\.mp4$")
+# Organizer archives nest each video under a directory whose name varies by
+# batch ("L21/", "video/"); only the Lxx_Vnnn.mp4 basename is load-bearing.
+_MEMBER_PATTERN = re.compile(r"^(?:[^/]+/)+L\d{2}_V\d{3}\.mp4$")
 _ZIP_SYMLINK_UNIX_MODE = 0o120000
 _DEFAULT_MAX_RETRIES = 5
+_DOWNLOAD_CONNECTIONS = 16
 
 
 class ArchiveSafetyError(ValueError):
@@ -93,25 +92,51 @@ def download_archive(
         operation=f"download_archive:{destination_path.name}",
     )
 
-    argv = [
-        "curl",
-        "-fL",
-        "-C",
-        "-",
-        "--retry",
-        str(max_retries),
-        "--retry-delay",
-        "5",
-        "-o",
-        str(part_path),
-        url,
-    ]
+    if shutil.which("aria2c") is not None:
+        argv = [
+            "aria2c",
+            "--continue=true",
+            "--file-allocation=none",
+            "--max-connection-per-server",
+            str(_DOWNLOAD_CONNECTIONS),
+            "--split",
+            str(_DOWNLOAD_CONNECTIONS),
+            "--min-split-size",
+            "16M",
+            "--max-tries",
+            str(max_retries),
+            "--retry-wait",
+            "5",
+            "--summary-interval",
+            "10",
+            "--dir",
+            str(part_path.parent),
+            "-o",
+            part_path.name,
+            url,
+        ]
+    else:
+        argv = [
+            "curl",
+            "-fL",
+            "--progress-bar",
+            "-C",
+            "-",
+            "--retry",
+            str(max_retries),
+            "--retry-delay",
+            "5",
+            "-o",
+            str(part_path),
+            url,
+        ]
     logger.info("downloading archive %s -> %s", url, part_path)
     try:
-        subprocess.run(argv, check=True, shell=False, capture_output=True, text=True)
+        subprocess.run(argv, check=True, shell=False)
     except subprocess.CalledProcessError as error:
-        diagnostic = (error.stderr or error.stdout or "").strip()
-        raise RuntimeError(f"archive download failed for {url}: {diagnostic}") from error
+        raise RuntimeError(
+            f"archive download failed for {url}: {argv[0]} exited {error.returncode}"
+        ) from error
 
     downloaded_bytes = part_path.stat().st_size
     if downloaded_bytes > budget.max_archive_download_bytes:

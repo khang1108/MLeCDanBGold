@@ -54,7 +54,8 @@ def _write_transcript(transcripts_root: Path, video_id: str, segments: list[dict
                 "end_ms": segment["end_ms"],
             }
             for segment in segments
-        ]
+        ],
+        columns=["segment_id", "video_id", "start_ms", "end_ms"],
     )
     table.to_parquet(video_dir / f"{video_id}.parquet")
 
@@ -179,6 +180,16 @@ def test_index_vector_count_mismatch_is_rejected(tmp_path: Path) -> None:
     _build_index(index_root, [{"video_id": "L01_V001", **segments[0]}])
     with pytest.raises(ValueError, match="disagrees with transcript segment count"):
         validate_asr_source(transcripts_root, index_root, ["L01_V001"])
+
+
+def test_silent_video_with_an_empty_transcript_is_accepted(tmp_path: Path) -> None:
+    transcripts_root, index_root = _default_fixture(tmp_path)
+    _write_transcript(transcripts_root, "L01_V003", [])
+
+    bundle = validate_asr_source(transcripts_root, index_root, ["L01_V001", "L01_V003"])
+
+    assert bundle.video_ids == ("L01_V001", "L01_V003")
+    assert bundle.segment_count == 2
 
 
 def test_corrupt_index_checksum_is_rejected(tmp_path: Path) -> None:

@@ -30,7 +30,12 @@ def guard_resume(
     previous, current = old.get("effective_configuration"), asdict(config)
     if not isinstance(previous, dict):
         raise ValueError("Cannot safely resume: effective configuration is missing")
-    changed = [key for key, value in current.items() if previous.get(key) != value]
+    throughput_only = {"batch_size", "write_interval"}
+    changed = [
+        key
+        for key, value in current.items()
+        if key not in throughput_only and previous.get(key) != value
+    ]
     if old.get("dataset_root") != str(root):
         changed.append("dataset_root")
     if resolved_revision is not None and old.get("resolved_model_revision") != resolved_revision:

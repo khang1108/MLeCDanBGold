@@ -176,8 +176,10 @@ def process_archive(
     dataset_version: str,
     visual_model_name: str,
     context_model_name: str,
+    batch_offset: int = 0,
+    batch_limit: int | None = None,
 ) -> list[str]:
-    """Resume one archive URL through commit and cleanup for every batch.
+    """Resume one contiguous slice of an archive's batches through commit and cleanup.
 
     Returns:
         The ordered list of committed ``batch_id`` values for this archive.
@@ -191,8 +193,9 @@ def process_archive(
     record = state_store.get_archive(archive_id)
     assert record is not None
 
-    if record.stage == ArchiveStage.PENDING:
-        state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADING)
+    if record.stage in (ArchiveStage.PENDING, ArchiveStage.DOWNLOADING):
+        if record.stage == ArchiveStage.PENDING:
+            state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADING)
         download_archive(
             archive_entry.url,
             zip_path,
@@ -202,6 +205,7 @@ def process_archive(
         )
         state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADED)
         record = state_store.get_archive(archive_id)
+        assert record is not None
 
     inventory: ArchiveInventory
     if record.stage == ArchiveStage.DOWNLOADED:
@@ -221,7 +225,8 @@ def process_archive(
 
     batch_ids: list[str] = []
     groups = plan_archive_batches(inventory, batch_size=context.scheduling.max_videos_per_batch)
-    for batch_index, video_group in enumerate(groups):
+    stop = len(groups) if batch_limit is None else batch_offset + batch_limit
+    for batch_index, video_group in list(enumerate(groups))[batch_offset:stop]:
         batch_id = compute_batch_id(archive_id, batch_index)
         batch_ids.append(batch_id)
         _process_one_batch(
