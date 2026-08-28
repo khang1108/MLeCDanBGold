@@ -301,3 +301,18 @@ def test_custom_pipeline_coordinates_every_local_artifact_stage(
     ]
     assert (output_root / "frame_store" / "frames.parquet").is_file()
     assert (output_root / "prepare_report.json").is_file()
+
+
+def test_context_artifact_passes_without_a_specialist_status_column(tmp_path: Path) -> None:
+    """FrameContext is derived, not inferred, so it carries no per-frame status."""
+
+    path = tmp_path / "frame_context_v1.parquet"
+    pd.DataFrame([{"frame_id": "v1:0000", "context_text": "a"}]).to_parquet(path, index=False)
+
+    table = pipeline._require_complete_frame_artifact(
+        path, ["v1:0000"], "Context", require_status=False
+    )
+    assert table["context_text"].tolist() == ["a"]
+
+    with pytest.raises(ValueError, match="missing processing status"):
+        pipeline._require_complete_frame_artifact(path, ["v1:0000"], "Caption")

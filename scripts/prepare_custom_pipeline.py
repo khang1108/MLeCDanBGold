@@ -231,13 +231,17 @@ def _transcript_path(root: Path, video_id: str) -> Path:
     return root / video_id.split("_", maxsplit=1)[0] / f"{video_id}.parquet"
 
 
-def _require_complete_frame_artifact(path: Path, expected_frame_ids: list[str], label: str) -> pd.DataFrame:
+def _require_complete_frame_artifact(
+    path: Path, expected_frame_ids: list[str], label: str, *, require_status: bool = True
+) -> pd.DataFrame:
     """Reject a specialist artifact containing failed or missing frame rows."""
 
     table = pd.read_parquet(path)
     actual_ids = table["frame_id"].astype(str).tolist()
     if actual_ids != expected_frame_ids:
         raise ValueError(f"{label} artifact does not cover the batch's canonical frame order")
+    if not require_status:
+        return table
     if "status" not in table:
         raise ValueError(f"{label} artifact is missing processing status")
     if set(table["status"].astype(str)) != {"completed"}:
@@ -528,7 +532,10 @@ def _make_produce_batch_artifacts(
             ],
         )
         context_table = _require_complete_frame_artifact(
-            context_root / "frame_context_v1.parquet", frame_ids, "Context"
+            context_root / "frame_context_v1.parquet",
+            frame_ids,
+            "Context",
+            require_status=False,
         )
         for video_id in video_ids:
             state_store.advance_video(video_id, VideoStage.CONTEXT_COMPLETE)
