@@ -25,14 +25,13 @@ non-zero result:
 ```bash
 PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai thundercompute
 PYTHONPATH=.:src aic/bin/python -m pytest -q
-docker compose config --quiet
 CI=true npm --prefix frontend test -- --watchAll=false --runInBand
 npm --prefix frontend run build
 git diff --check
 ```
 
-These checks cover Python imports, the complete backend suite, Compose
-rendering, the complete frontend suite, the frontend production build, and
+These checks cover Python imports, the complete backend suite, the complete
+frontend suite, the frontend production build, and
 whitespace validation. Tests use local fixtures and deterministic fakes; the
 verification commands must not invoke remote inference or rebuild corpus
 artifacts.
@@ -267,9 +266,6 @@ PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --inference-url "$HCMAI_INFERENCE_BASE_URL" \
   "${INDEX_DATASET_ARGS[@]}"
 ```
-
-Export the appropriate Cloudflare Access client credentials for the HTTP client
-separately; do not place them in a config file or command history.
 
 For the environment-driven local-to-A6000 transfer commands and safe staged
 workflow, follow

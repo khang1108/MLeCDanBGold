@@ -1,6 +1,13 @@
 
 # C++/FFmpeg Deterministic 1-FPS Extraction Implementation Plan
 
+> **Source-strategy update (2026-08-28):** The extraction/sampling/identity
+> requirements in this plan remain valid, but yt-dlp/watch-URL acquisition is
+> superseded by the archive-only design and Task 3 in
+> `docs/superpowers/plans/2026-08-28-a6000-100gb-custom-pipeline.md`. The active
+> pipeline processes the organizer ZIP URLs from the runbook serially and feeds
+> local hard-linked MP4 files to the native extractor.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a resumable Linux C++17/FFmpeg extractor under src/hcmai/data/cpp/keyframes_extraction/ and a Python validation/materialization boundary that produces a competition-correct custom 1-FPS FrameStore without changing the BTC-native baseline.
@@ -1585,6 +1592,67 @@ within the ThunderCompute disk budget.
 git add tests/data/test_custom_frames.py tests/scripts/test_custom_extraction_cli.py src/hcmai/data/README.md
 git commit -m "test: gate custom extraction before corpus run"
 ~~~
+
+## Progress update — 2026-08-28
+
+The implementation has moved beyond the original native-extraction plan. The
+status below is based on the current checkout and committed history; it does
+not treat a merged change as a successful full-corpus run.
+
+### Native extraction gate
+
+- [x] Tasks 1–12: C++17/FFmpeg extraction, JSONL contracts, exact
+  `frame_idx`, atomic state, Python validation/materialization, image variants,
+  and enrichment handoff are implemented.
+- [x] Task 13, Steps 1–2: synthetic end-to-end acceptance test and local
+  native/Python gate are implemented in the plan.
+- [ ] Task 13, Step 3: one-video ThunderCompute smoke run is not recorded.
+- [ ] Task 13, Step 4: representative pilot and disk/latency release decision
+  are not recorded.
+- [ ] Task 13, Step 5: the smoke-gate operational record still needs its final
+  commit/update.
+
+### Post-plan integration already landed
+
+- [x] Unified custom preparation entry point in `scripts/prepare_custom_pipeline.py`.
+- [x] End-to-end bootstrap launcher in
+  `docs/runbooks/bootstrap_and_run_custom_pipeline.sh` covering native build,
+  metadata/video acquisition, pipeline execution, and post-success cleanup.
+- [x] Organizer media-info ZIP bootstrap and bounded selection controls.
+- [x] Qwen3-VL caption stage with resumable batch processing.
+- [x] YOLOE object detection with resumable raw JSON and canonical object
+  artifacts.
+- [x] OCR, FrameContext, and Visual/Context/ASR index stages are connected to
+  the custom preparation command.
+- [x] Download/native diagnostic and progress logging improvements are present.
+- [x] Automated S3 publication was removed from the approved successor scope;
+  artifact backup/synchronization is operator-owned.
+
+### Operational gap superseded by the A6000 / 100 GB plan
+
+The current unified command still extracts all requested videos first, retains
+their source files, then runs enrichment over the combined FrameStore. The
+runbook also downloads and retains organizer archive contents before pipeline
+execution. The approved successor does not use the earlier one-video strategy:
+it processes one ZIP at a time and complete groups of at most eight videos
+through enrichment, FrameContext, embeddings, and visual/context/ASR batch
+indexes. It reuses ASR, atomically commits local batch artifacts, then deletes
+only ZIP/MP4/OCR/native temporary data while retaining durable keyframes.
+Archive `offset` and archive-count `limit` allow contiguous invocations to
+resume one fixed corpus on an A6000 / 100 GB / 6-vCPU machine. Automated cloud
+publication is outside the pipeline. Implementation and rollout are tracked
+only in the 2026-08-28 plan.
+
+### Verification on 2026-08-28
+
+- Native CMake build and CTest: **9/9 passed**.
+- Python bytecode compilation: **passed**.
+- Bootstrap runbook shell syntax: **passed**.
+- Focused Python tests: **blocked during collection** because the active
+  Python 3.14 environment does not have `pyarrow` installed; no model or video
+  download was started.
+- `git diff --check`: currently reports one extra blank line at EOF in the
+  uncommitted `src/hcmai/common/utils/logging.py` change.
 
 ## Spec coverage review
 

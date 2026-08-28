@@ -8,26 +8,21 @@ not own downstream object lookup or FrameContext assembly.
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass
 import json
 import logging
 import math
+import unicodedata
+from collections import Counter, defaultdict
+from dataclasses import asdict, dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import Any
-import unicodedata
 
 import pyarrow.parquet as pq
-
-from hcmai.common.schemas import (
-    FrameRecord,
-    ObjectDetection,
-    ObjectEvidence,
-    ProcessingStatus,
-)
+from hcmai.common.schemas import FrameRecord, ObjectDetection, ObjectEvidence, ProcessingStatus
 from hcmai.data.assets import FrameAssetError, FrameAssetResolver
 from hcmai.data.enrichment.object_artifacts import write_object_artifacts_streaming
+from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +62,7 @@ class ObjectDetectionConfig:
             not isinstance(self.device, str) or not self.device.strip()
         ):
             raise ValueError("device must be a non-empty string or null")
-        if (
-            not isinstance(self.artifact_version, str)
-            or not self.artifact_version.strip()
-        ):
+        if not isinstance(self.artifact_version, str) or not self.artifact_version.strip():
             raise ValueError("artifact_version must not be empty")
         for name, value in (
             ("top_k", self.top_k),
@@ -170,23 +162,19 @@ def _parse_payload(payload: object) -> list[ObjectDetection]:
         if not isinstance(box_value, list) or len(box_value) != 4:
             raise ValueError(f"detection_boxes[{index}] must contain four values")
         ymin, xmin, ymax, xmax = [
-            _finite_unit_number(value, f"detection_boxes[{index}]")
-            for value in box_value
+            _finite_unit_number(value, f"detection_boxes[{index}]") for value in box_value
         ]
         if ymin > ymax or xmin > xmax:
             raise ValueError(f"detection_boxes[{index}] minimum exceeds maximum")
         detections.append(
             ObjectDetection(
                 label=_normalized_label(label_value),
-                confidence=_finite_unit_number(
-                    score_value, f"detection_scores[{index}]"
-                ),
+                confidence=_finite_unit_number(score_value, f"detection_scores[{index}]"),
                 x_min=xmin,
                 y_min=ymin,
                 x_max=xmax,
                 y_max=ymax,
-            )
-        )
+        ))
     return detections
 
 
@@ -203,9 +191,7 @@ def _derived_summary(
     counts = Counter(detection.label for detection in retained)
     maximums: dict[str, float] = defaultdict(float)
     for detection in retained:
-        maximums[detection.label] = max(
-            maximums[detection.label], detection.confidence
-        )
+        maximums[detection.label] = max(maximums[detection.label], detection.confidence)
     labels = sorted(
         counts,
         key=lambda label: (-counts[label], -maximums[label], label),
@@ -215,9 +201,7 @@ def _derived_summary(
     return dict(counts), summary
 
 
-def normalized_boxes(
-    pixel_boxes: list[list[float]], width: int, height: int
-) -> list[list[float]]:
+def normalized_boxes(pixel_boxes: list[list[float]], width: int, height: int) -> list[list[float]]:
     """Convert pixel ``x1,y1,x2,y2`` to BTC ``ymin,xmin,ymax,xmax``."""
 
     if width < 1 or height < 1:
@@ -226,12 +210,11 @@ def normalized_boxes(
     def unit(value: float) -> float:
         return min(1.0, max(0.0, value))
 
-    return [
-        [
-            unit(y_min / height),
-            unit(x_min / width),
-            unit(y_max / height),
-            unit(x_max / width),
+    return [[
+        unit(y_min / height),
+        unit(x_min / width),
+        unit(y_max / height),
+        unit(x_max / width),
         ]
         for x_min, y_min, x_max, y_max in pixel_boxes
     ]
@@ -272,11 +255,7 @@ def _object_path(frame: FrameRecord, raw_output_root: Path) -> Path:
 def _frame_from_row(row: dict[str, object]) -> FrameRecord:
     """Validate one streamed canonical frame row without retaining the store."""
 
-    values = {
-        name: row[name]
-        for name in FrameRecord.model_fields
-        if name in row
-    }
+    values = {name: row[name] for name in FrameRecord.model_fields if name in row}
     return FrameRecord.model_validate(values)
 
 
@@ -309,14 +288,15 @@ def materialize_object_artifacts(
     def batches():
         nonlocal completed, failed, frame_count, detection_count
         seen_frames: set[str] = set()
+
+        evidence_rows: list[ObjectEvidence] = []
+
+        detection_rows: list[dict[str, Any]] = []
         for frames in _frame_batches(source):
-            evidence_rows: list[ObjectEvidence] = []
-            detection_rows: list[dict[str, Any]] = []
+
             for frame in frames:
                 if frame.frame_id in seen_frames:
-                    raise ValueError(
-                        "object frame rows contain duplicate frame_id values"
-                    )
+                    raise ValueError("object frame rows contain duplicate frame_id values")
                 seen_frames.add(frame.frame_id)
                 try:
                     object_path = _object_path(frame, raw_root)
@@ -336,16 +316,14 @@ def materialize_object_artifacts(
                         artifact_version=config.artifact_version,
                     )
                     for detection_index, detection in enumerate(detections):
-                        detection_rows.append(
-                            {
-                                "frame_id": evidence.frame_id,
-                                "video_id": evidence.video_id,
-                                "frame_idx": evidence.frame_idx,
-                                "timestamp_ms": evidence.timestamp_ms,
-                                "detection_index": detection_index,
-                                **detection.model_dump(mode="json"),
-                            }
-                        )
+                        detection_rows.append({
+                            "frame_id": evidence.frame_id,
+                            "video_id": evidence.video_id,
+                            "frame_idx": evidence.frame_idx,
+                            "timestamp_ms": evidence.timestamp_ms,
+                            "detection_index": detection_index,
+                            **detection.model_dump(mode="json"),
+                        })
                     completed += 1
                 except Exception as error:
                     evidence = _failure_evidence(
@@ -444,8 +422,11 @@ def run_yoloe(
             yolo_module = import_module("ultralytics")
             detector = yolo_module.YOLOE(config.model)
         active_resolver = resolver or FrameAssetResolver(dataset_root)
-        for start in range(0, len(pending), config.batch_size):
-            batch: list[tuple[str, Path]] = []
+        batch_starts = range(0, len(pending), config.batch_size)
+
+        batch: list[tuple[str, Path]] = []
+        for start in tqdm(batch_starts, desc="YOLOE object detection", unit="batch"):
+
             for video_id, image_path in pending[start : start + config.batch_size]:
                 try:
                     batch.append((video_id, active_resolver.resolve_value(image_path)))
@@ -462,9 +443,7 @@ def run_yoloe(
                 verbose=False,
             )
             if len(results) != len(batch):
-                raise RuntimeError(
-                    "YOLOE returned a different result count than the input batch"
-                )
+                raise RuntimeError("YOLOE returned a different result count than the input batch")
             for (video_id, image), result in zip(batch, results, strict=True):
                 height, width = result.orig_shape
                 boxes = result.boxes
@@ -478,17 +457,14 @@ def run_yoloe(
                     order = boxes.conf.argsort(descending=True)[: config.top_k]
                     payload = {
                         "detection_class_entities": [
-                            str(result.names[int(index)])
-                            for index in boxes.cls[order].tolist()
+                            str(result.names[int(index)]) for index in boxes.cls[order].tolist()
                         ],
                         "detection_scores": [
-                            min(1.0, max(0.0, float(score)))
-                            for score in boxes.conf[order].tolist()
+                            min(1.0, max(0.0, float(score))) for score in boxes.conf[order].tolist()
                         ],
                         "detection_boxes": normalized_boxes(
                             boxes.xyxy[order].tolist(), width, height
-                        ),
-                    }
+                    ),}
                 publish_raw_json(raw_root / video_id / f"{image.stem}.json", payload)
                 inference_completed += 1
 

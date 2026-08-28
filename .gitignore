@@ -80,7 +80,7 @@ outputs/
 
 # Local deployment secrets and private operator scripts.
 /thundercompute/.env
-thundercompute/deploy_cloudflared_private.sh
+thundercompute/run.sh
 /.thundercompute/
 /.secrets/*
 

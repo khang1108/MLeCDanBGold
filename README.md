@@ -401,8 +401,6 @@ export HCMAI_INDEX_PATH="$PWD/artifacts/indexes/visual"
 
 # GPU inference remote; nếu API chạy trên cùng máy thì dùng http://127.0.0.1:8100.
 export HCMAI_INFERENCE_BASE_URL="https://api.iamphuckhang.dev"
-export HCMAI_CF_ACCESS_CLIENT_ID="<cloudflare-service-client-id>"
-export HCMAI_CF_ACCESS_CLIENT_SECRET="<cloudflare-service-client-secret>"
 ```
 
 Khởi động backend:
@@ -421,8 +419,7 @@ curl -I http://127.0.0.1:8000/api/v1/frames/L28_V021_keyframe_000343/thumbnail
 
 Request thumbnail sẽ phục vụ trực tiếp keyframe nếu `thumbnail_path` trong
 FrameStore là `None`. Nếu health báo `remote inference` unavailable, kiểm tra
-GPU VM, Cloudflare Access header/credentials và endpoint `/ready` của inference
-service.
+GPU VM/tunnel và endpoint `/ready` của inference service.
 
 ### 5.2. Windows PowerShell
 
@@ -444,8 +441,6 @@ $env:HCMAI_DATASET_ROOT = (Join-Path (Get-Location) "data")
 $env:HCMAI_METADATA_PATH = (Join-Path (Get-Location) "artifacts\frame_store\frames.parquet")
 $env:HCMAI_INDEX_PATH = (Join-Path (Get-Location) "artifacts\indexes\visual")
 $env:HCMAI_INFERENCE_BASE_URL = "https://api.iamphuckhang.dev"
-$env:HCMAI_CF_ACCESS_CLIENT_ID = "<cloudflare-service-client-id>"
-$env:HCMAI_CF_ACCESS_CLIENT_SECRET = "<cloudflare-service-client-secret>"
 ```
 
 Khởi động và kiểm tra backend:
@@ -541,50 +536,35 @@ Không đặt `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` hoặc credential tư
 vào `REACT_APP_*`: React sẽ đưa chúng vào bundle public. Video preview nên dùng
 URL tạm thời do backend cấp; keyframe search hiện được phục vụ qua FastAPI.
 
-## 7. Chạy backend + frontend bằng Docker Compose
+## 7. Chạy backend + frontend thủ công
 
-Docker Compose khởi chạy ba service:
+Tạo root `.env` từ `.env.example` nếu chưa có. Backend gọi trực tiếp
+`HCMAI_INFERENCE_BASE_URL`.
 
-- `backend`: FastAPI ở `http://localhost:8000`;
-- `litellm`: gateway pass-through nội bộ trên `litellm:4000`;
-- `frontend`: React production build qua Nginx ở `http://localhost:3000`.
-
-Luồng inference là:
-
-```text
-browser -> backend:8000 -> litellm:4000 -> https://api.iamphuckhang.dev
-```
-
-LiteLLM chỉ map các route inference custom mà backend đang sử dụng. Nó không
-dịch sang OpenAI schema và không publish port ra host. Cloudflare Access
-credentials chỉ được cấp cho backend; backend chuyển tiếp chúng qua gateway
-đến upstream, frontend không bao giờ nhận được các biến này.
-
-Backend đọc `data/` và `artifacts/` từ host ở chế độ read-only. Ba runtime
-index được resolve rõ ràng trong container:
-
-- `/app/artifacts/indexes/visual`;
-- `/app/artifacts/indexes/context`;
-- `/app/artifacts/indexes/asr_segments`.
-
-Tạo root `.env` từ `.env.example` nếu chưa có, sau đó chạy:
+Mở terminal thứ nhất tại repository root:
 
 ```bash
 [ -f .env ] || cp .env.example .env
-docker compose up --build -d
-docker compose ps
-curl -sS http://localhost:8000/health
+set -a
+source .env
+set +a
+PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app \
+  --host 127.0.0.1 --port 8000 --reload
 ```
 
-Mở `http://localhost:3000`. `REACT_APP_API_BASE_URL` được đóng gói lúc build
-frontend; trong môi trường Docker local phải để browser truy cập được backend
-qua `http://localhost:8000`, không dùng hostname nội bộ `backend`.
-
-Dừng và xem log:
+Mở terminal thứ hai để chạy frontend:
 
 ```bash
-docker compose logs -f backend
-docker compose down
+npm --prefix frontend ci
+cp frontend/.env.example frontend/.env
+npm --prefix frontend start
+```
+
+Đặt `REACT_APP_API_BASE_URL=http://127.0.0.1:8000` trong `frontend/.env`, rồi
+mở `http://127.0.0.1:3000`. Kiểm tra backend bằng:
+
+```bash
+curl -sS http://127.0.0.1:8000/health
 ```
 
 ## 8. Kiểm tra và phát triển
@@ -608,7 +588,6 @@ duy trì và xử lý mọi exit code khác `0` trước khi phát hành:
 ```bash
 PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai thundercompute
 PYTHONPATH=.:src aic/bin/python -m pytest -q
-docker compose config --quiet
 CI=true npm --prefix frontend test -- --watchAll=false --runInBand
 npm --prefix frontend run build
 git diff --check

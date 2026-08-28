@@ -148,8 +148,6 @@ the `models` section of `configs/prepare.yaml` on `/ready`.
 
 ```bash
 export HCMAI_INFERENCE_BASE_URL="https://<private-api-hostname>"
-export HCMAI_CF_ACCESS_CLIENT_ID="<service-client-id>"
-export HCMAI_CF_ACCESS_CLIENT_SECRET="<service-client-secret>"
 
 PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --stage all \

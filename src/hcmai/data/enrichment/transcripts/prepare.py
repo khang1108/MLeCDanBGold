@@ -16,7 +16,6 @@ from time import perf_counter
 from typing import cast
 
 import pandas as pd
-
 from hcmai.common.schemas import TranscriptSegment
 from hcmai.common.utils.io import atomic_write, write_json
 from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, read_audio
@@ -25,6 +24,7 @@ from hcmai.data.enrichment.transcripts.adapters.remote import (
     RemoteASRAdapter,
     RemoteDiarizationAdapter,
 )
+
 from hcmai.data.enrichment.transcripts.manifest import (
     TranscriptManifest,
     expected_manifest,
@@ -32,9 +32,11 @@ from hcmai.data.enrichment.transcripts.manifest import (
     fingerprint_source,
     reusable_transcript,
 )
+
 from hcmai.data.enrichment.transcripts.publication import publish_staged, staging_path
 from hcmai.data.enrichment.transcripts.store import load_transcript_records
 from hcmai.data.s3 import VIDEO_EXTENSIONS
+from tqdm import tqdm
 
 TRANSCRIPT_DTYPES = {
     "segment_id": "string",
@@ -77,16 +79,13 @@ def _table(records: list[TranscriptSegment]) -> pd.DataFrame:
             columns=list(TRANSCRIPT_DTYPES),
         )
         if records
-        else pd.DataFrame({
-            name: pd.Series(dtype=dtype) for name, dtype in TRANSCRIPT_DTYPES.items()
-        })
-    )
+        else pd.DataFrame(
+            {name: pd.Series(dtype=dtype) for name, dtype in TRANSCRIPT_DTYPES.items()}
+    ))
     return table.astype(TRANSCRIPT_DTYPES)
 
 
-def _validate_records(
-    records: list[TranscriptSegment], video_id: str
-) -> list[TranscriptSegment]:
+def _validate_records(records: list[TranscriptSegment], video_id: str) -> list[TranscriptSegment]:
     """Validate canonical identity, order, and monotonic media intervals."""
 
     expected_indexes = list(range(len(records)))
@@ -96,10 +95,7 @@ def _validate_records(
         raise ValueError("transcript provider changed canonical video identity")
     if len({record.segment_id for record in records}) != len(records):
         raise ValueError("transcript segment IDs must be unique")
-    if any(
-        record.start_ms < 0 or record.end_ms <= record.start_ms
-        for record in records
-    ):
+    if any(record.start_ms < 0 or record.end_ms <= record.start_ms for record in records):
         raise ValueError("transcript intervals must have positive media duration")
     for previous, current in zip(records, records[1:]):
         if current.start_ms < previous.start_ms or current.end_ms < previous.end_ms:
@@ -168,9 +164,7 @@ def _prepare_video(
         engine.config,
         diarizer.config if diarizer is not None else None,
         asr_revision=engine.resolved_revision,
-        diarization_revision=(
-            diarizer.resolved_revision if diarizer is not None else None
-        ),
+        diarization_revision=(diarizer.resolved_revision if diarizer is not None else None),
         schema_version=schema_version,
         pipeline_version=pipeline_version,
     )
@@ -195,8 +189,7 @@ def _prepare_video(
         decode_seconds = 0.0
         transcribe_audio_fn = getattr(engine, "transcribe_audio", None)
         decoded_api = callable(transcribe_audio_fn) and (
-            diarizer is None
-            or callable(getattr(diarizer, "assign_speakers_audio", None))
+            diarizer is None or callable(getattr(diarizer, "assign_speakers_audio", None))
         )
         if decoded_api and callable(transcribe_audio_fn):
             decode_started = perf_counter()
@@ -220,9 +213,7 @@ def _prepare_video(
                 records = diarizer.assign_speakers(video, records)
             else:
                 if diarizer.config.audio_sample_rate != decoded.sample_rate:
-                    raise ValueError(
-                        "ASR and diarization must use the same audio sample rate"
-                    )
+                    raise ValueError("ASR and diarization must use the same audio sample rate")
                 records = diarizer.assign_speakers_audio(decoded, records)
             diarization_seconds = perf_counter() - diarization_started
         else:
@@ -296,9 +287,7 @@ def _video_files(root: Path, limit: int | None) -> list[Path]:
     for path in candidates:
         current = videos.get(path.stem)
         if current and fingerprint_source(current) != fingerprint_source(path):
-            raise ValueError(
-                f"Conflicting video_id with different source content: {path.stem}"
-            )
+            raise ValueError(f"Conflicting video_id with different source content: {path.stem}")
         videos.setdefault(path.stem, path)
     return [videos[video_id] for video_id in sorted(videos)][:limit]
 
@@ -329,7 +318,7 @@ def prepare_transcripts(
     output_root.mkdir(parents=True, exist_ok=True)
     failures: dict[str, str] = {}
     segment_counts: list[int] = []
-    for video in videos:
+    for video in tqdm(videos, desc="ASR transcript preparation", unit="video"):
         try:
             _, count = prepare_transcript_video(
                 video_path=video,

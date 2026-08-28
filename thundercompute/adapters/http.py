@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 
 
 class InferenceClient:
-    """One bounded HTTP client with optional Cloudflare service credentials."""
+    """One bounded HTTP client for the remote inference contract."""
 
     def __init__(
         self,

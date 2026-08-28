@@ -1,5 +1,11 @@
 # C++/FFmpeg Deterministic 1-FPS Extraction Design
 
+> **Source-strategy update (2026-08-28):** Native sampling, JPEG, state, and
+> identity decisions below remain applicable. Network acquisition through
+> yt-dlp/watch URLs is superseded by
+> `docs/superpowers/specs/2026-08-28-a6000-100gb-custom-pipeline-design.md`, which
+> makes organizer ZIP archives from the runbook the only active video source.
+
 **Date:** 2026-08-24  
 **Status:** Design for user review  
 **Scope:** HCMAI custom raw-video timeline extraction and its per-video artifact lifecycle

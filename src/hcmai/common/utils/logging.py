@@ -6,15 +6,17 @@ import logging
 from os import PathLike
 from pathlib import Path
 
-
 PathValue = str | PathLike[str]
 
 DEFAULT_FORMAT = (
     "%(asctime)s | %(levelname)-8s | %(name)s | "
-    "[%(pathname)s, %(filename)s/%(funcName)s:%(lineno)d] | %(message)s"
+    "%(filename)s:%(lineno)d (%(funcName)s) | %(message)s"
 )
 
 _RESET = "\033[0m"
+_DIM = "\033[2m"
+_NAME_COLOR = "\033[36m"
+_LOCATION_COLOR = "\033[35m"
 _LEVEL_COLORS = {
     logging.DEBUG: "\033[36m",
     logging.INFO: "\033[32m",
@@ -25,19 +27,26 @@ _LEVEL_COLORS = {
 
 
 class ColoredFormatter(logging.Formatter):
-    """Add an ANSI color to the level name without altering the log record."""
+    """Colorize timestamp, level, logger name, and file:line on the console."""
+
+    def formatTime(
+        self, record: logging.LogRecord, datefmt: str | None = None
+    ) -> str:
+        """Dim the timestamp so status and location stand out."""
+        return f"{_DIM}{logging.Formatter.formatTime(self, record, datefmt)}{_RESET}"
 
     def format(self, record: logging.LogRecord) -> str:
-        color = _LEVEL_COLORS.get(record.levelno)
-        if color is None:
-            return super().format(record)
-
-        original_levelname = record.levelname
-        record.levelname = f"{color}{original_levelname}{_RESET}"
+        """Format a record while restoring fields mutated for terminal colors."""
+        level_color = _LEVEL_COLORS.get(record.levelno, "")
+        original = (record.levelname, record.name, record.filename, record.funcName)
+        record.levelname = f"{level_color}{record.levelname}{_RESET}"
+        record.name = f"{_NAME_COLOR}{record.name}{_RESET}"
+        record.filename = f"{_LOCATION_COLOR}{record.filename}"
+        record.funcName = f"{record.funcName}{_RESET}"
         try:
-            return super().format(record)
+            return logging.Formatter.format(self, record)
         finally:
-            record.levelname = original_levelname
+            record.levelname, record.name, record.filename, record.funcName = original
 
 
 def get_logger(name: str) -> logging.Logger:

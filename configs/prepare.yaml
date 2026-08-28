@@ -1,5 +1,5 @@
 # Single source of truth for the offline preparation pipeline.
-# Serving/search remains in baseline.yaml; LiteLLM routing remains in litellm.yaml.
+# Serving and search configuration remains in baseline.yaml.
 
 enrichment:
   caption:

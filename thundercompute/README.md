@@ -18,10 +18,7 @@ React UI
 Local FastAPI ── KIS/TRAKE retrieval, temporal alignment, materialization
    │ HTTP adapter
    ▼
-LiteLLM private pass-through ── Cloudflare Access ── hosted inference URL
-                                      │
-                                      ▼
-                         Cloudflare Tunnel ── localhost:8100 on GPU VM
+Hosted inference URL ── Cloudflare Tunnel ── localhost:8100 on GPU VM
                                                    │
                                                    ▼
                                   FastAPI API → LLMService
@@ -74,8 +71,6 @@ which shared capabilities load:
 | `HCMAI_ENABLE_ASR` | GPU service | Load ASR capability |
 | `HCMAI_ENABLE_DIARIZATION` | GPU service | Load diarization capability |
 | `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted inference API base URL |
-| `HCMAI_CF_ACCESS_CLIENT_ID` | Local backend | Cloudflare service credential |
-| `HCMAI_CF_ACCESS_CLIENT_SECRET` | Local backend | Cloudflare service credential |
 
 Every remote encoder checkpoint, vector dimension, normalization and dtype must
 remain compatible with its local FAISS artifact. A different embedding contract
@@ -137,7 +132,7 @@ directly. The private server is the intentional transport-entry exception.
 ## Manual GPU VM deployment
 
 VM lifecycle is intentionally operator-run. There is no tracked launcher,
-delete script, deployment-script template or Docker lifecycle controller. Use
+delete script, deployment-script template or container lifecycle controller. Use
 your authenticated `tnr` CLI profile, upload the source/config bundle selected
 for the deployment, connect to the VM, and run the service there.
 

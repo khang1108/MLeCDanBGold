@@ -10,9 +10,14 @@
 # Configure via environment variables before invoking, e.g.:
 #   LIMIT=10 RUN_ROOT=runs/custom-raw1fps-v1 ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh
 #
-# LIMIT only bounds how many videos the pipeline stage (step 6) processes; it
-# does NOT reduce how many archives get downloaded in step 5. Use ZIP_LIMIT to
+# LIMIT only bounds how many videos the pipeline stage (step 7) processes; it
+# does NOT reduce how many archives get downloaded in step 6. Use ZIP_LIMIT to
 # fetch only the first N archives for a cheap smoke test, e.g. ZIP_LIMIT=1.
+#
+# Only OCR calls the thundercompute inference gateway in this pipeline
+# (caption/objects/ASR/diarization/embedding stages already run local models
+# in-process). Step 4 starts that gateway on localhost so OCR never leaves
+# this host; set SKIP_INFERENCE_SERVER=1 to reuse an already-running gateway.
 set -euo pipefail
 
 
@@ -30,6 +35,13 @@ ZIP_LIMIT="${ZIP_LIMIT:-}"
 SKIP_APT="${SKIP_APT:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
+SKIP_INFERENCE_SERVER="${SKIP_INFERENCE_SERVER:-0}"
+INFERENCE_HOST="${INFERENCE_HOST:-127.0.0.1}"
+INFERENCE_PORT="${INFERENCE_PORT:-8100}"
+HCMAI_INFERENCE_BASE_URL="${HCMAI_INFERENCE_BASE_URL:-http://${INFERENCE_HOST}:${INFERENCE_PORT}}"
+export HCMAI_INFERENCE_BASE_URL
+
+INFERENCE_LOG="$RUN_ROOT/inference_gateway.log"
 
 ZIP_DIR="$RUN_ROOT/raw_zips"
 SOURCE_ROOT="$RUN_ROOT/videos_source"
@@ -82,7 +94,37 @@ if [[ ! -x aic/bin/python ]]; then
   aic/bin/python -m pip install -e '.[embedding]'
 fi
 
-# --- 4. Fetch organizer media-info metadata if not already present locally ---
+# --- 4. Start the local OCR inference gateway so OCR never calls the public domain ---
+mkdir -p "$RUN_ROOT"
+if [[ "$SKIP_INFERENCE_SERVER" != "1" ]]; then
+  if curl -fsS "$HCMAI_INFERENCE_BASE_URL/health" >/dev/null 2>&1; then
+    echo "==> inference gateway already responding at $HCMAI_INFERENCE_BASE_URL"
+  else
+    echo "==> starting local OCR inference gateway on $HCMAI_INFERENCE_BASE_URL"
+    HCMAI_LLM_CONFIG="thundercompute/config.yaml" \
+    HCMAI_ENABLE_CAPTION=false \
+    HCMAI_ENABLE_OCR=true \
+    HCMAI_ENABLE_ASR=false \
+    HCMAI_ENABLE_VISUAL_EMBEDDING=false \
+    HCMAI_ENABLE_CAPTION_EMBEDDING=false \
+    HCMAI_ENABLE_RERANKER=false \
+    PYTHONPATH=.:src nohup aic/bin/python -m uvicorn thundercompute.server.api:app \
+      --host "$INFERENCE_HOST" --port "$INFERENCE_PORT" --workers 1 \
+      >"$INFERENCE_LOG" 2>&1 &
+    disown
+
+    for _ in $(seq 1 60); do
+      curl -fsS "$HCMAI_INFERENCE_BASE_URL/ready" >/dev/null 2>&1 && break
+      sleep 5
+    done
+    curl -fsS "$HCMAI_INFERENCE_BASE_URL/ready" >/dev/null 2>&1 \
+      || { echo "inference gateway did not become ready; see $INFERENCE_LOG"; exit 1; }
+  fi
+else
+  echo "==> SKIP_INFERENCE_SERVER=1, assuming $HCMAI_INFERENCE_BASE_URL is already reachable"
+fi
+
+# --- 5. Fetch organizer media-info metadata if not already present locally ---
 if [[ ! -d "$MEDIA_INFO_DIR" || -z "$(find "$MEDIA_INFO_DIR" -maxdepth 1 -name '*.json' -print -quit)" ]]; then
   echo "==> media-info missing, downloading $MEDIA_INFO_ZIP_URL"
   media_info_zip="$(mktemp --suffix=.zip)"
@@ -100,7 +142,7 @@ if [[ ! -d "$MEDIA_INFO_DIR" || -z "$(find "$MEDIA_INFO_DIR" -maxdepth 1 -name '
   rm -rf "$media_info_extract"
 fi
 
-# --- 5. Download organizer video archives and flatten into {video_id}.mp4 ---
+# --- 6. Download organizer video archives and flatten into {video_id}.mp4 ---
 if [[ "$SKIP_DOWNLOAD" != "1" ]]; then
   mkdir -p "$ZIP_DIR" "$SOURCE_ROOT"
   URLS_TO_FETCH=("${URLS[@]}")
@@ -139,7 +181,7 @@ else
   echo "==> SKIP_DOWNLOAD=1, skipping video download"
 fi
 
-# --- 6. Run the existing pipeline against the local source-root fixture ---
+# --- 7. Run the existing pipeline against the local source-root fixture ---
 PIPELINE_ARGS=(
   --run-root "$RUN_ROOT"
   --output-root "$OUTPUT_ROOT"
@@ -155,6 +197,6 @@ PIPELINE_ARGS=(
 echo "==> running prepare_custom_pipeline.py"
 PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py "${PIPELINE_ARGS[@]}"
 
-# --- 7. Reclaim disk only after the pipeline run above succeeded ---
+# --- 8. Reclaim disk only after the pipeline run above succeeded ---
 echo "==> pipeline succeeded, removing downloaded source videos"
 rm -rf "$SOURCE_ROOT"

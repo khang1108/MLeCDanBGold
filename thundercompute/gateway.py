@@ -60,7 +60,6 @@ class InferenceGateway:
         self._owns_client = client is None
         self.client = client or httpx.Client(
             base_url=base_url.rstrip("/"),
-            headers=_access_headers(),
             timeout=self._timeout(None),
         )
         self.retry_policy = RetryPolicy.from_config(config)
@@ -246,16 +245,3 @@ def _status_error(
         retryable=status in _TRANSIENT_STATUS_CODES,
         status_code=status,
     )
-
-
-def _access_headers() -> dict[str, str]:
-    import os
-
-    client_id = os.getenv("HCMAI_CF_ACCESS_CLIENT_ID")
-    secret = os.getenv("HCMAI_CF_ACCESS_CLIENT_SECRET")
-    if not client_id or not secret:
-        return {}
-    return {
-        "CF-Access-Client-Id": client_id,
-        "CF-Access-Client-Secret": secret,
-    }

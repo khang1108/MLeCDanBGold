@@ -1,4 +1,4 @@
-"""Private GPU inference API exposed only through Cloudflare Access."""
+"""Private GPU inference API served through the configured tunnel."""
 
 from __future__ import annotations
 
