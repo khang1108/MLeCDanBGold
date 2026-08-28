@@ -169,6 +169,23 @@ def test_batch_transitions_are_ordered_forward_only(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_replaying_an_uncommitted_batch_keeps_the_furthest_stage(tmp_path: Path) -> None:
+    store = PipelineStateStore(tmp_path)
+    store.ensure_batch("L01-batch000", "L01", ["L01_V001"])
+    store.ensure_video("L01_V001", "L01-batch000")
+    store.advance_video("L01_V001", VideoStage.SOURCE_READY)
+    store.advance_video("L01_V001", VideoStage.EXTRACTED)
+    store.advance_batch("L01-batch000", BatchStage.EXTRACTED)
+
+    store.advance_video("L01_V001", VideoStage.SOURCE_READY)
+    store.advance_batch("L01-batch000", BatchStage.EXTRACTED)
+
+    assert store.get_video("L01_V001").stage == VideoStage.EXTRACTED
+    assert store.get_batch("L01-batch000").stage == BatchStage.EXTRACTED
+    store.advance_video("L01_V001", VideoStage.CAPTIONED)
+    assert store.get_video("L01_V001").stage == VideoStage.CAPTIONED
+
+
 def test_video_transitions_are_ordered_forward_only(tmp_path: Path) -> None:
     store = PipelineStateStore(tmp_path)
     store.ensure_video("L01_V001", "L01-batch000")

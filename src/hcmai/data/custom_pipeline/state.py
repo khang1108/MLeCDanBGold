@@ -363,9 +363,13 @@ class PipelineStateStore:
         return record
 
     def advance_batch(self, batch_id: str, stage: BatchStage) -> BatchRecord:
+        """Advance one batch, keeping the furthest stage when an uncommitted batch replays."""
+
         record = self.get_batch(batch_id)
         if record is None:
             raise ValueError(f"unknown batch_id: {batch_id}")
+        if _BATCH_ORDER.index(stage) < _BATCH_ORDER.index(record.stage):
+            return record
         _check_forward_transition(_BATCH_ORDER, record.stage, stage, kind="batch")
         record.stage = stage
         record.updated_at = _now()
@@ -409,9 +413,13 @@ class PipelineStateStore:
         return record
 
     def advance_video(self, video_id: str, stage: VideoStage) -> VideoRecord:
+        """Advance one video, keeping the furthest stage when an uncommitted batch replays."""
+
         record = self.get_video(video_id)
         if record is None:
             raise ValueError(f"unknown video_id: {video_id}")
+        if _VIDEO_ORDER.index(stage) < _VIDEO_ORDER.index(record.stage):
+            return record
         _check_forward_transition(_VIDEO_ORDER, record.stage, stage, kind="video")
         record.stage = stage
         record.updated_at = _now()
