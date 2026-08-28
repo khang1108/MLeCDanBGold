@@ -8,7 +8,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.data.enrichment.object_detection import ObjectDetectionConfig, run_yoloe
+from hcmai.data.enrichment.object_detection import (
+    ObjectDetectionConfig,
+    load_vocab,
+    run_yoloe,
+)
 from scripts.detect_objects import parse_args
 
 
@@ -113,6 +117,12 @@ class _FakeModel:
         self.calls.append({"images": images, **kwargs})
         return [_FakeResult() for _ in images]
 
+    def get_text_pe(self, names: list[str]) -> list[str]:
+        return names
+
+    def set_classes(self, names: list[str], embeddings: list[str]) -> None:
+        self.prompted = names
+
 
 def test_run_yoloe_publishes_raw_and_canonical_artifacts(tmp_path: Path) -> None:
     """The new pipeline turns fake YOLOE results into the enrichment contract."""
@@ -161,3 +171,64 @@ def test_run_yoloe_publishes_raw_and_canonical_artifacts(tmp_path: Path) -> None
     assert report["completed_frames"] == 1
     assert report["failed_frames"] == 0
     assert model.calls[0]["conf"] == 0.2
+
+
+def test_load_vocab_normalizes_deduplicates_and_preserves_order(
+    tmp_path: Path,
+) -> None:
+    """Blank, duplicate, and differently cased entries collapse to one order."""
+
+    path = tmp_path / "vocab.txt"
+    path.write_text(
+        "Road Sign\n\n  milestone  marker \nroad sign\ndam\n", encoding="utf-8"
+    )
+
+    assert load_vocab(path) == ["road sign", "milestone marker", "dam"]
+
+
+@pytest.mark.parametrize("content", ["", "\n  \n"])
+def test_load_vocab_rejects_an_empty_vocabulary(tmp_path: Path, content: str) -> None:
+    """An empty prompt list must fail loudly instead of silencing detection."""
+
+    path = tmp_path / "vocab.txt"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="empty"):
+        load_vocab(path)
+
+
+def test_run_yoloe_prompts_the_detector_with_the_configured_vocabulary(
+    tmp_path: Path,
+) -> None:
+    """A configured vocabulary reaches the detector before any frame is scored."""
+
+    image = tmp_path / "keyframes/v1/0000.jpg"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"fixture")
+    frames = tmp_path / "frames.parquet"
+    pd.DataFrame(
+        [
+            {
+                "frame_id": "v1:0000",
+                "video_id": "v1",
+                "frame_idx": 7,
+                "timestamp_ms": 500,
+                "image_path": "keyframes/v1/0000.jpg",
+                "width": 20,
+                "height": 10,
+            }
+        ]
+    ).to_parquet(frames, index=False)
+    vocab = tmp_path / "vocab.txt"
+    vocab.write_text("person\ncar\ndam\n", encoding="utf-8")
+
+    model = _FakeModel()
+    run_yoloe(
+        frames,
+        tmp_path / "objects",
+        ObjectDetectionConfig(batch_size=1, device="cpu", vocab_path=str(vocab)),
+        dataset_root=tmp_path,
+        model=model,
+    )
+
+    assert model.prompted == ["person", "car", "dam"]

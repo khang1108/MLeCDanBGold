@@ -176,6 +176,12 @@ canonical frames, stores resumable raw JSON under `<output>/raw/`, and commits
 the canonical `frames.parquet`, `detections.parquet`, and `manifest.json`
 bundle in the same output directory. No second importer step is required.
 
+`configs/prepare.yaml` prompts YOLOE with `configs/yoloe_vocab.txt`: 1572
+classes merged from OpenImages boxable, LVIS, and terms read off the query set.
+Set `vocab_path: null` and `model: yoloe-26l-seg-pf.pt` to fall back to the
+prompt-free checkpoint, whose 4585 RAM tags are scene descriptors (`dusk`,
+`harbor`, `royal`) rather than the countable objects `[OBJECTS]` carries.
+
 Install the official Ultralytics headless variant through the `objects` extra.
 The standard `ultralytics` package declares `opencv-python`; this server
 workflow intentionally resolves `ultralytics-opencv-headless`, which exposes

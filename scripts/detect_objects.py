@@ -60,6 +60,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Optional raw JSON directory used for resumable inference.",
     )
     parser.add_argument("--model")
+    parser.add_argument(
+        "--vocab",
+        type=Path,
+        help="Text-prompt class list, one per line; omit to use the model vocabulary.",
+    )
     parser.add_argument("--min-confidence", type=_confidence)
     parser.add_argument("--top-k", type=_positive_int)
     parser.add_argument("--batch-size", type=_positive_int)
@@ -103,6 +108,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             name: value
             for name, value in {
                 "model": args.model,
+                "vocab_path": (
+                    str(resolve_repository_path(args.vocab))
+                    if args.vocab is not None
+                    else None
+                ),
                 "min_confidence": args.min_confidence,
                 "top_k": args.top_k,
                 "batch_size": args.batch_size,

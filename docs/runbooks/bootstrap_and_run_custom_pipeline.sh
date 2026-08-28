@@ -98,8 +98,8 @@ fi
 if [[ ! -x aic/bin/python ]]; then
   echo "==> creating aic virtualenv"
   python3 -m venv aic
-  aic/bin/python -m pip install -e '.[embedding]'
 fi
+aic/bin/python -m pip install -e '.[pipeline]'
 
 # --- 4. Start the local OCR inference gateway so OCR never calls the public domain ---
 mkdir -p "$RUN_ROOT"
