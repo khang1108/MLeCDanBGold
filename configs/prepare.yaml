@@ -8,13 +8,13 @@ enrichment:
     revision: "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
     prompt: "qwen vl"
     decoding:
-      max_new_tokens: 160
+      max_new_tokens: 96
       do_sample: false
     device: "cuda"
     precision: "bf16"
     dtype: "bfloat16"
     image_size: 768
-    batch_size: 32
+    batch_size: 64
     enrichment_version: "caption_qwen_vl_v1"
     write_interval: 2000
 

@@ -131,7 +131,7 @@ def test_enrichment_config_is_loaded_from_root_yaml() -> None:
     assert config.caption.model_checkpoint == "Qwen/Qwen3-VL-8B-Instruct"
     assert config.caption.revision == "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
     assert config.caption.prompt == "qwen vl"
-    assert config.caption.decoding["max_new_tokens"] == 160
+    assert config.caption.decoding["max_new_tokens"] == 96
     assert config.caption.dataset_version == "dataset_v1"
     assert config.dataset_root == project_root / "runs/dataset_v1"
     assert config.frames_path == project_root / "artifacts/dataset_v1/frame_store/frames.parquet"
