@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hcmai-socketapp"
+version = "0.1.0"
+description = "Bounded HTTP video origin for HCMAI local video playback"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[project.scripts]
+socketapp = "socketapp.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["socketapp*"]
