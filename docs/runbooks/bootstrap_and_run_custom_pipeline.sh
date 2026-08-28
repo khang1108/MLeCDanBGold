@@ -83,7 +83,7 @@ if [[ "$SKIP_APT" != "1" ]]; then
   sudo apt-get install -y \
     build-essential cmake pkg-config ninja-build \
     libavformat-dev libavcodec-dev libavutil-dev libswscale-dev \
-    libjson-c-dev ffmpeg curl unzip
+    libjson-c-dev ffmpeg curl unzip aria2
 else
   echo "==> SKIP_APT=1, skipping apt-get install"
 fi
