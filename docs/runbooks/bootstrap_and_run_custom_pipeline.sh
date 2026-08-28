@@ -42,6 +42,8 @@ TRANSCRIPTS_ROOT="${TRANSCRIPTS_ROOT:-artifacts/enrichment/transcripts}"
 ASR_INDEX_ROOT="${ASR_INDEX_ROOT:-artifacts/indexes/asr_segments}"
 ZIP_OFFSET="${ZIP_OFFSET:-0}"
 ZIP_LIMIT="${ZIP_LIMIT:-}"
+BATCH_OFFSET="${BATCH_OFFSET:-0}"
+BATCH_LIMIT="${BATCH_LIMIT:-}"
 SKIP_APT="${SKIP_APT:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_INFERENCE_SERVER="${SKIP_INFERENCE_SERVER:-0}"
@@ -169,6 +171,8 @@ for url in "${URLS[@]}"; do
   PIPELINE_ARGS+=(--archive-url "$url")
 done
 [[ -z "$ZIP_LIMIT" ]] || PIPELINE_ARGS+=(--limit "$ZIP_LIMIT")
+PIPELINE_ARGS+=(--batch-offset "$BATCH_OFFSET")
+[[ -z "$BATCH_LIMIT" ]] || PIPELINE_ARGS+=(--batch-limit "$BATCH_LIMIT")
 
 echo "==> preflight"
 PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py preflight "${PIPELINE_ARGS[@]}"

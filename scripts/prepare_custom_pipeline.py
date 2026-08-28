@@ -633,6 +633,8 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--batch-offset", type=int, default=0)
+    parser.add_argument("--batch-limit", type=int, default=None)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -732,6 +734,8 @@ def _cmd_process_archive(args: argparse.Namespace) -> dict[str, Any]:
             dataset_version=args.version,
             visual_model_name=visual_model_name,
             context_model_name=context_model_name,
+            batch_offset=args.batch_offset,
+            batch_limit=args.batch_limit,
         )
     return {"command": "process-archive", "committed_batches": committed_batches}
 
