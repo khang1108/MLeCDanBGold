@@ -22,6 +22,16 @@ from hcmai.data.custom_pipeline.asr import (
     require_asr_video_coverage,
     validate_asr_source,
 )
+from hcmai.data.custom_pipeline.archive import (
+    ArchiveInventory,
+    ArchiveMember,
+    ArchiveSafetyError,
+    download_archive,
+    extract_archive_atomically,
+    inspect_archive,
+    plan_archive_batches,
+    stage_archive_source_links,
+)
 from hcmai.data.custom_pipeline.contracts import RunIdentity
 from hcmai.data.custom_pipeline.disk import (
     DiskAdmissionError,
@@ -43,9 +53,12 @@ from hcmai.data.custom_pipeline.state import (
 
 __all__ = [
     "ASRReuseBundle",
+    "ArchiveInventory",
+    "ArchiveMember",
     "ArchivePlan",
     "ArchivePlanEntry",
     "ArchiveRecord",
+    "ArchiveSafetyError",
     "ArchiveStage",
     "ArchiveWorkWindow",
     "BatchRecord",
@@ -61,9 +74,14 @@ __all__ = [
     "VideoRecord",
     "VideoStage",
     "compute_batch_id",
+    "download_archive",
+    "extract_archive_atomically",
+    "inspect_archive",
     "measure_tree_bytes",
+    "plan_archive_batches",
     "require_asr_video_coverage",
     "require_write_capacity",
     "snapshot_disk",
+    "stage_archive_source_links",
     "validate_asr_source",
 ]
