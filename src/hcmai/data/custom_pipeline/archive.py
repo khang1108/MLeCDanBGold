@@ -96,6 +96,7 @@ def download_archive(
     argv = [
         "curl",
         "-fL",
+        "--progress-bar",
         "-C",
         "-",
         "--retry",
@@ -108,10 +109,11 @@ def download_archive(
     ]
     logger.info("downloading archive %s -> %s", url, part_path)
     try:
-        subprocess.run(argv, check=True, shell=False, capture_output=True, text=True)
+        subprocess.run(argv, check=True, shell=False)
     except subprocess.CalledProcessError as error:
-        diagnostic = (error.stderr or error.stdout or "").strip()
-        raise RuntimeError(f"archive download failed for {url}: {diagnostic}") from error
+        raise RuntimeError(
+            f"archive download failed for {url}: curl exited {error.returncode}"
+        ) from error
 
     downloaded_bytes = part_path.stat().st_size
     if downloaded_bytes > budget.max_archive_download_bytes:

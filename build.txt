@@ -1,0 +1,30 @@
+git clone -b feat/detection https://github.com/khang1108/MLeCDanBGold.git
+cd MLeCDanBGold
+
+python -m venv aic
+source aic/bin/activate
+pip install --upgrade pip
+pip install awscli
+
+aws configure
+
+aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
+
+mkdir -p runs/transcripts-all
+cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
+cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
+
+find runs/transcripts-all -name '*.manifest.json' | wc -l
+wc -l configs/yoloe_vocab.txt
+
+TRANSCRIPTS_ROOT=runs/transcripts-all ZIP_LIMIT=1 ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh
+
+python -c "
+import pandas as pd
+d = pd.read_parquet('artifacts/enrichment/objects/detections.parquet')
+print(d.label.value_counts().head(30))
+print('frames:', d.frame_id.nunique())
+"
+
+TRANSCRIPTS_ROOT=runs/transcripts-all nohup ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh > runs/full.log 2>&1 &
+tail -f runs/full.log
