@@ -136,6 +136,12 @@ class LocalAdapter:
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
 
+        if (self.enable_asr or self.enable_diarization) and not self.transcript_config:
+            raise RuntimeError(
+                "transcript config is required when ASR or diarization is enabled; "
+                "check HCMAI_ENRICHMENT_CONFIG"
+            )
+
         if self.enable_asr and self.transcript_config:
             from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
             self.asr = ASRAdapter(self.transcript_config.asr)
