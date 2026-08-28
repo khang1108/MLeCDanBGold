@@ -20,6 +20,8 @@ tmux new -s aic
 cd MLeCDanBGold
 source aic/bin/activate
 git pull
+aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/batches/ runs/custom-raw1fps-v1/state/batches/
+aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custom-raw1fps-v1/state/videos/
 ZIP_OFFSET=0 ZIP_LIMIT=1 SKIP_APT=1 SKIP_BUILD=1 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m0-a0.log
@@ -38,6 +40,8 @@ tmux new -s aic
 cd MLeCDanBGold
 source aic/bin/activate
 git pull
+aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/batches/ runs/custom-raw1fps-v1/state/batches/
+aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custom-raw1fps-v1/state/videos/
 ZIP_OFFSET=1 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 SKIP_APT=1 SKIP_BUILD=1 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m1-a1.log
@@ -56,6 +60,8 @@ tmux new -s aic
 cd MLeCDanBGold
 source aic/bin/activate
 git pull
+aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/batches/ runs/custom-raw1fps-v1/state/batches/
+aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custom-raw1fps-v1/state/videos/
 ZIP_OFFSET=10 ZIP_LIMIT=4 ALLOW_OFFSET_GAP=1 SKIP_APT=1 SKIP_BUILD=1 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m2-a10.log
