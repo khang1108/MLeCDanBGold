@@ -1,7 +1,7 @@
 """Tests for compacting committed local batches into a global corpus.
 
 Supplies batches out of order and asserts stable identity order, exact
-counts, retained-image existence checks, empty child-table support,
+counts, canonical frame-table compaction, empty child-table support,
 duplicate/foreign/overlap rejection, finite/dimension validation, and
 contiguous global mappings across all three global indexes.
 """
@@ -9,6 +9,7 @@ contiguous global mappings across all three global indexes.
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -93,9 +94,6 @@ def _commit_one_batch(
         "ocr_frames": pd.DataFrame([dict(row, normalized_text=None) for row in frames]),
         "object_frames": pd.DataFrame([dict(row, summary=None) for row in frames]),
         "context": pd.DataFrame([dict(row, context_text="context") for row in frames]),
-        "frames": pd.DataFrame(
-            [dict(row, image_path=str((image_root / f"{row['frame_id']}.jpg").relative_to(image_root))) for row in frames]
-        ),
     }
     child_tables = {
         "ocr_regions": pd.DataFrame(columns=["frame_id", "video_id"]),
@@ -113,6 +111,10 @@ def _commit_one_batch(
     staging_root = root / f"staging_{batch_id}"
     for video_id in video_ids:
         write_video_shard(shards[video_id], staging_root)
+
+    pd.DataFrame(
+        [dict(row, image_path=f"{row['frame_id']}.jpg", width=20, height=10) for row in frames]
+    ).to_parquet(staging_root / "frames.parquet", index=False)
 
     asr_bundle = _asr_bundle_for(video_ids, root / f"asr_index_{batch_id}")
     build_batch_index_bundle(
@@ -161,25 +163,28 @@ def test_discover_rejects_overlapping_video_ids_across_batches(tmp_path: Path) -
 # ---------------------------------------------------------------------------
 
 
-def test_compact_frame_metadata_validates_retained_image_paths(tmp_path: Path) -> None:
+def test_compact_frame_metadata_carries_serving_columns_across_batches(tmp_path: Path) -> None:
     image_root = tmp_path / "images"
+    _commit_one_batch(tmp_path, "L02-batch000", "L02", ["L02_V001"], 3, image_root)
     _commit_one_batch(tmp_path, "L01-batch000", "L01", ["L01_V001"], 2, image_root)
     manifests = discover_committed_batches(tmp_path / "batches")
 
-    table = compact_frame_metadata(manifests, image_root, tmp_path / "frames.parquet")
-    assert len(table) == 2
+    table = compact_frame_metadata(manifests, tmp_path / "frames.parquet")
+
+    assert len(table) == 5
+    assert table["video_id"].tolist()[:2] == ["L01_V001", "L01_V001"]
+    assert set(table.columns) >= {"frame_id", "image_path", "width", "height", "timestamp_ms"}
 
 
-def test_compact_frame_metadata_rejects_missing_retained_image(tmp_path: Path) -> None:
+def test_compact_frame_metadata_does_not_need_the_keyframe_images(tmp_path: Path) -> None:
+    """Finalize must run on a host that only holds committed batch artifacts."""
+
     image_root = tmp_path / "images"
     _commit_one_batch(tmp_path, "L01-batch000", "L01", ["L01_V001"], 1, image_root)
     manifests = discover_committed_batches(tmp_path / "batches")
+    shutil.rmtree(image_root)
 
-    for image_path in image_root.rglob("*.jpg"):
-        image_path.unlink()
-
-    with pytest.raises(FinalizeError, match="missing"):
-        compact_frame_metadata(manifests, image_root, tmp_path / "frames.parquet")
+    assert len(compact_frame_metadata(manifests, tmp_path / "frames.parquet")) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +271,8 @@ def test_finalize_corpus_produces_global_indexes_and_report(tmp_path: Path) -> N
     assert report["batch_count"] == 2
     assert report["video_count"] == 2
     assert report["frame_counts"]["caption"] == 5
+    assert report["frame_counts"]["frames"] == 5
+    assert (output_root / "corpus" / "frames.parquet").is_file()
     assert report["vector_counts"]["visual"] == 5
     assert report["vector_counts"]["asr_segments"] == 2
     assert (output_root / "reports" / "finalize_report.json").is_file()

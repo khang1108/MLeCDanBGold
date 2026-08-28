@@ -113,6 +113,7 @@ def _build_staged_batch(staging_root: Path) -> None:
     )
     for video_id in _VIDEO_IDS:
         write_video_shard(shards[video_id], staging_root)
+    pd.DataFrame(_FRAMES).to_parquet(staging_root / "frames.parquet", index=False)
 
     asr_bundle = _asr_bundle(staging_root.parent / "asr_index")
     build_batch_index_bundle(
@@ -156,6 +157,17 @@ def test_validate_local_batch_rejects_missing_payload(tmp_path: Path) -> None:
     inventory = build_batch_inventory(staging_root, "L01-batch000", _VIDEO_IDS)
     (staging_root / "videos" / _VIDEO_A / "caption.parquet").unlink()
     with pytest.raises(BatchValidationError, match="missing artifacts"):
+        validate_local_batch("L01-batch000", _VIDEO_IDS, staging_root, inventory)
+
+
+def test_validate_local_batch_rejects_a_batch_without_canonical_frames(tmp_path: Path) -> None:
+    """Serving needs frames.parquet, so a batch lacking it must never commit."""
+
+    staging_root = tmp_path / "staging"
+    _build_staged_batch(staging_root)
+    inventory = build_batch_inventory(staging_root, "L01-batch000", _VIDEO_IDS)
+    (staging_root / "frames.parquet").unlink()
+    with pytest.raises(BatchValidationError, match="canonical frames.parquet"):
         validate_local_batch("L01-batch000", _VIDEO_IDS, staging_root, inventory)
 
 

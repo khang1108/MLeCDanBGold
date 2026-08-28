@@ -593,7 +593,7 @@ def _make_produce_batch_artifacts(
             cleanup_video(native_executable, run_root, video_id)
 
         return BatchArtifacts(
-            frames_table=base,
+            frames_table=durable_table.reset_index(drop=True),
             frame_native_tables=frame_native_tables,
             child_tables=child_tables,
             visual_vectors=visual_vectors,

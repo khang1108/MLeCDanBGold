@@ -173,6 +173,9 @@ def validate_local_batch(
             f"match requested ({batch_id}, {tuple(video_ids)})"
         )
 
+    if not (staging_root / "frames.parquet").is_file():
+        raise BatchValidationError(f"batch {batch_id} is missing its canonical frames.parquet")
+
     for video_id in video_ids:
         video_dir = staging_root / "videos" / video_id
         missing = [name for name in _REQUIRED_VIDEO_ARTIFACTS if not (video_dir / name).is_file()]

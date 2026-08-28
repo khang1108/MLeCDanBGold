@@ -126,11 +126,11 @@ def compact_specialist_shards(
     shard_paths: Sequence[Path],
     output: str | Path,
 ) -> pd.DataFrame:
-    """Stream-concatenate one specialist kind's per-video shards deterministically.
+    """Stream-concatenate one specialist kind's shards deterministically.
 
-    Frame-native kinds (see ``FRAME_NATIVE_TABLE_NAMES``) are ordered by
-    ``(video_id, frame_id)`` and must not contain a duplicate ``frame_id``.
-    Child kinds may be empty and are concatenated in shard order.
+    Every kind outside ``CHILD_TABLE_NAMES`` is one row per frame, so it is
+    ordered by ``(video_id, frame_id)`` and must not contain a duplicate
+    ``frame_id``. Child kinds may be empty and are concatenated in shard order.
 
     Raises:
         FinalizeError: If a shard path is missing, no shards are supplied, or
@@ -146,7 +146,7 @@ def compact_specialist_shards(
         raise FinalizeError(f"no {kind} shards supplied")
 
     table = pd.concat(tables, ignore_index=True)
-    if kind in FRAME_NATIVE_TABLE_NAMES:
+    if kind not in CHILD_TABLE_NAMES:
         if table["frame_id"].duplicated().any():
             raise FinalizeError(f"duplicate frame_id found while compacting {kind}")
         table = table.sort_values(["video_id", "frame_id"]).reset_index(drop=True)
@@ -158,32 +158,22 @@ def compact_specialist_shards(
 
 def compact_frame_metadata(
     batch_manifests: Sequence[BatchManifest],
-    dataset_root: str | Path,
     output: str | Path,
 ) -> pd.DataFrame:
-    """Compact retained per-video ``frames`` shards without decoding images.
+    """Compact each committed batch's retained canonical frame table.
 
-    Every row's ``image_path`` is checked for existence on disk; image bytes
-    are never loaded.
+    Image paths are carried through verbatim and never opened; finalize may run
+    on a host that holds no keyframe images.
 
     Raises:
-        FinalizeError: If any declared image path does not exist.
+        FinalizeError: If a batch retained no canonical frame table.
     """
 
-    root = Path(dataset_root)
-    table = compact_specialist_shards(
-        "frames", _shard_paths_for_kind(batch_manifests, "frames"), output
+    return compact_specialist_shards(
+        "frames",
+        [manifest.root / "frames.parquet" for manifest in batch_manifests],
+        output,
     )
-    missing = [
-        str(value)
-        for value in table["image_path"]
-        if not (Path(str(value)) if Path(str(value)).is_absolute() else root / str(value)).is_file()
-    ]
-    if missing:
-        raise FinalizeError(
-            f"{len(missing)} retained image path(s) are missing, e.g. {missing[:5]}"
-        )
-    return table
 
 
 def compact_batch_embeddings(
@@ -310,7 +300,9 @@ def finalize_corpus(
     corpus_dir = output_root / "corpus"
     indexes_dir = output_root / "indexes"
 
-    frame_counts: dict[str, int] = {}
+    frame_counts: dict[str, int] = {
+        "frames": len(compact_frame_metadata(batch_manifests, corpus_dir / "frames.parquet"))
+    }
     for kind in FRAME_NATIVE_TABLE_NAMES:
         table = compact_specialist_shards(
             kind, _shard_paths_for_kind(batch_manifests, kind), corpus_dir / f"{kind}.parquet"

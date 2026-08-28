@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from hcmai.common.utils.io import write_parquet
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.custom_pipeline.archive import (
     ArchiveInventory,
@@ -315,6 +316,7 @@ def _process_one_batch(
     staging_root = context.active_root / "batch" / batch_id
     for video_id in video_ids:
         write_video_shard(shards[video_id], staging_root)
+    write_parquet(artifacts.frames_table, staging_root / "frames.parquet", index=False)
     state_store.advance_batch(batch_id, BatchStage.ARTIFACTS_COMPLETE)
 
     asr_bundle = asr_bundle_factory(video_ids)
