@@ -15,6 +15,7 @@ pkg_check_modules(JSONC REQUIRED IMPORTED_TARGET json-c)
 
 add_library(keyframes_core STATIC
     src/config.cpp
+    src/disk_guard.cpp
     src/extractor.cpp
     src/ffmpeg.cpp
     src/frame_index.cpp
@@ -60,6 +61,10 @@ add_executable(test_ffmpeg tests/test_ffmpeg.cpp)
 target_link_libraries(test_ffmpeg PRIVATE keyframes_core)
 target_compile_options(test_ffmpeg PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
+add_executable(test_disk_guard tests/test_disk_guard.cpp)
+target_link_libraries(test_disk_guard PRIVATE keyframes_core)
+target_compile_options(test_disk_guard PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
 add_executable(test_extractor_smoke tests/test_extractor_smoke.cpp)
 target_link_libraries(test_extractor_smoke PRIVATE keyframes_core)
 target_compile_options(test_extractor_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -82,6 +87,7 @@ add_test(NAME jsonl_unit COMMAND test_jsonl)
 add_test(NAME frame_index_unit COMMAND test_frame_index)
 add_test(NAME timestamp_sampler_unit COMMAND test_timestamp_sampler)
 add_test(NAME ffmpeg_unit COMMAND test_ffmpeg)
+add_test(NAME disk_guard_unit COMMAND test_disk_guard)
 add_test(NAME extractor_smoke COMMAND test_extractor_smoke)
 add_test(NAME publication_unit COMMAND test_publication)
 add_test(NAME keyframe_extractor_version COMMAND keyframe_extractor --version)

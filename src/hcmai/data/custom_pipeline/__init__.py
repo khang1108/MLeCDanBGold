@@ -23,6 +23,13 @@ from hcmai.data.custom_pipeline.asr import (
     validate_asr_source,
 )
 from hcmai.data.custom_pipeline.contracts import RunIdentity
+from hcmai.data.custom_pipeline.disk import (
+    DiskAdmissionError,
+    DiskSnapshot,
+    measure_tree_bytes,
+    require_write_capacity,
+    snapshot_disk,
+)
 from hcmai.data.custom_pipeline.state import (
     ArchiveRecord,
     ArchiveStage,
@@ -44,7 +51,9 @@ __all__ = [
     "BatchRecord",
     "BatchStage",
     "CustomPipelineConfig",
+    "DiskAdmissionError",
     "DiskBudgetConfig",
+    "DiskSnapshot",
     "PipelineStateStore",
     "RunIdentity",
     "SchedulingConfig",
@@ -52,6 +61,9 @@ __all__ = [
     "VideoRecord",
     "VideoStage",
     "compute_batch_id",
+    "measure_tree_bytes",
     "require_asr_video_coverage",
+    "require_write_capacity",
+    "snapshot_disk",
     "validate_asr_source",
 ]

@@ -278,6 +278,34 @@ namespace hcmai::keyframes_extraction
         }
 
         /**
+         * @brief Reads an optional integer member, defaulting when absent.
+         *
+         * @param object Parsed configuration root object.
+         * @param key Optional JSON member name.
+         * @param path Source path used in validation errors.
+         * @param default_value Value returned when the member is absent or null.
+         * @return The member value, or `default_value` when unset.
+         * @throws std::invalid_argument If a present value is not an integer.
+         */
+        std::int64_t optional_integer(json_object *object, const char *key,
+                                      const std::filesystem::path &path,
+                                      std::int64_t default_value)
+        {
+            json_object *value = nullptr;
+            if (!json_object_object_get_ex(object, key, &value) || value == nullptr ||
+                json_object_is_type(value, json_type_null))
+            {
+                return default_value;
+            }
+            if (!json_object_is_type(value, json_type_int))
+            {
+                throw std::invalid_argument("configuration field must be an integer '" +
+                                            std::string(key) + "': " + path.string());
+            }
+            return json_object_get_int64(value);
+        }
+
+        /**
          * @brief Reads a configuration file without changing its bytes.
          *
          * @param path Filesystem path to the configuration document.
@@ -330,6 +358,10 @@ namespace hcmai::keyframes_extraction
         {
             throw std::invalid_argument("yt_dlp_binary must not be blank");
         }
+        if (config.disk_reserve_bytes < 0)
+        {
+            throw std::invalid_argument("disk_reserve_bytes must not be negative");
+        }
         if (config.extractor_version.empty())
         {
             throw std::invalid_argument("extractor_version must not be blank");
@@ -366,6 +398,8 @@ namespace hcmai::keyframes_extraction
             required_int(root.get(), "enrichment_jpeg_quality", path);
         config.write_enrichment_images =
             required_boolean(root.get(), "write_enrichment_images", path);
+        config.disk_reserve_bytes =
+            optional_integer(root.get(), "disk_reserve_bytes", path, 0);
         config.yt_dlp_binary = required_string(root.get(), "yt_dlp_binary", path);
         config.yt_dlp_cookies_path =
             optional_string(root.get(), "yt_dlp_cookies_path", path);

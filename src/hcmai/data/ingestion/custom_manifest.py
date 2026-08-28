@@ -206,6 +206,7 @@ def write_extraction_config(
     yt_dlp_binary: str | Path,
     yt_dlp_cookies_path: str | Path | None = None,
     yt_dlp_js_runtime: str | None = None,
+    disk_reserve_bytes: int = 0,
 ) -> Path:
     """Write native extraction settings and a reproducible configuration hash.
 
@@ -217,6 +218,8 @@ def write_extraction_config(
         yt_dlp_binary: Explicit downloader executable path or command name.
         yt_dlp_cookies_path: Optional Netscape cookie file path passed to yt-dlp.
         yt_dlp_js_runtime: Optional yt-dlp runtime token such as ``deno`` or ``node``.
+        disk_reserve_bytes: Minimum free bytes the native extractor must keep
+            free before each frame write; zero disables the reserve check.
 
     Returns:
         The final JSON config path.
@@ -245,6 +248,8 @@ def write_extraction_config(
         "yt_dlp_binary",
         Path(config_path),
     )
+    if disk_reserve_bytes < 0:
+        raise ValueError("disk_reserve_bytes must not be negative")
     payload = {
         **_NATIVE_CONFIG_DEFAULTS,
         "yt_dlp_binary": normalized_yt_dlp_binary,
@@ -278,6 +283,7 @@ def write_extraction_config(
         **payload,
         "yt_dlp_cookies_path": normalized_cookies,
         "yt_dlp_js_runtime": normalized_js_runtime,
+        "disk_reserve_bytes": disk_reserve_bytes,
         "config_hash": config_hash,
     }
     destination = Path(config_path)

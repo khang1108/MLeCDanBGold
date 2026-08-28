@@ -112,6 +112,7 @@ def test_write_extraction_config_hashes_its_canonical_payload(tmp_path: Path) ->
         "config_hash",
         "yt_dlp_cookies_path",
         "yt_dlp_js_runtime",
+        "disk_reserve_bytes",
     }
     payload = {
         key: value for key, value in config.items() if key not in operational_fields

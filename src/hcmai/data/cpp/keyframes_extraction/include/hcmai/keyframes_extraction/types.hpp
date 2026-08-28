@@ -57,6 +57,11 @@ namespace hcmai::keyframes_extraction
         int enrichment_jpeg_quality = 95;
         /** @brief Whether temporary high-quality enrichment images are emitted. */
         bool write_enrichment_images = true;
+        /**
+         * @brief Minimum free bytes required on the frame-output filesystem
+         * before each frame write; zero disables the reserve check.
+         */
+        std::int64_t disk_reserve_bytes = 0;
         /** @brief Explicit executable used for source-video acquisition. */
         std::string yt_dlp_binary = "yt-dlp";
         /** @brief Optional Netscape cookie file used only for source acquisition. */

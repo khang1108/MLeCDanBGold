@@ -10,6 +10,7 @@
 #include "hcmai/keyframes_extraction/extractor.hpp"
 
 #include "hcmai/keyframes_extraction/config.hpp"
+#include "hcmai/keyframes_extraction/disk_guard.hpp"
 #include "hcmai/keyframes_extraction/ffmpeg.hpp"
 #include "hcmai/keyframes_extraction/frame_index.hpp"
 #include "hcmai/keyframes_extraction/jsonl.hpp"
@@ -1130,6 +1131,13 @@ NativeVideoManifest extract_native_bundle(
     TimestampSampler sampler(config.sample_period_ms);
     std::optional<DecodedFrame> previous;
     std::uint64_t emitted_frame_count = 0;
+    const DiskBudgetGuard disk_guard(
+        static_cast<std::uint64_t>(config.disk_reserve_bytes)
+    );
+    const std::uint64_t estimated_frame_bytes = estimate_frame_write_bytes(
+        config.durable_long_edge,
+        config.write_enrichment_images
+    );
 
     {
         std::ofstream output(
@@ -1165,6 +1173,9 @@ NativeVideoManifest extract_native_bundle(
                     previous,
                     current.value()
                 );
+                // Refuse to start writing a frame that would breach the local
+                // disk reserve; a partially written frame is never valid.
+                disk_guard.require_capacity(bundle_directory, estimated_frame_bytes);
                 static_cast<void>(emit_selected_frame(
                     input,
                     config,
