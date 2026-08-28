@@ -210,6 +210,45 @@ def test_each_predict_call_sees_only_its_own_batch(tmp_path: Path) -> None:
     assert [len(cast(list[str], call["images"])) for call in model.calls] == [2, 2]
 
 
+def test_artifacts_span_more_than_one_parquet_batch_without_duplicates(
+    tmp_path: Path,
+) -> None:
+    """Row buffers must reset per parquet batch instead of re-emitting earlier frames."""
+
+    rows = []
+    for index in range(600):
+        image = tmp_path / f"keyframes/v1/{index:04d}.jpg"
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(b"fixture")
+        rows.append(
+            {
+                "frame_id": f"v1:{index:04d}",
+                "video_id": "v1",
+                "frame_idx": index,
+                "timestamp_ms": index * 100,
+                "image_path": f"keyframes/v1/{index:04d}.jpg",
+                "width": 20,
+                "height": 10,
+            }
+        )
+    frames = tmp_path / "frames.parquet"
+    pd.DataFrame(rows).to_parquet(frames, index=False)
+
+    report = run_yoloe(
+        frames,
+        tmp_path / "objects",
+        ObjectDetectionConfig(top_k=1, batch_size=256, device="cpu"),
+        dataset_root=tmp_path,
+        frame_store_id="fixture-v1",
+        model=_FakeModel(),
+    )
+
+    published = pd.read_parquet(tmp_path / "objects/frames.parquet")
+    assert report["frame_count"] == 600
+    assert published["frame_id"].is_unique
+    assert len(published) == 600
+
+
 def test_load_vocab_normalizes_deduplicates_and_preserves_order(
     tmp_path: Path,
 ) -> None:

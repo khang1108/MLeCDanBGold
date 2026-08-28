@@ -318,11 +318,9 @@ def materialize_object_artifacts(
         nonlocal completed, failed, frame_count, detection_count
         seen_frames: set[str] = set()
 
-        evidence_rows: list[ObjectEvidence] = []
-
-        detection_rows: list[dict[str, Any]] = []
         for frames in _frame_batches(source):
-
+            evidence_rows: list[ObjectEvidence] = []
+            detection_rows: list[dict[str, Any]] = []
             for frame in frames:
                 if frame.frame_id in seen_frames:
                     raise ValueError("object frame rows contain duplicate frame_id values")
