@@ -799,14 +799,18 @@ ls artifacts/custom-raw1fps-v1/batches/*/*/_SUCCESS.json | wc -l
 
 ## Gộp và finalize
 
-Chạy trên đúng một máy, sau khi cả 25 máy đã sync xong.
+Chạy trên đúng một máy, sau khi cả 25 máy đã sync xong. Máy 20 (L27_a, 2 batch) xong sớm nhất nên dùng máy đó.
 
 ```bash
 aws s3 sync s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ artifacts/custom-raw1fps-v1/batches/
 aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/ runs/custom-raw1fps-v1/state/
-TRANSCRIPTS_ROOT=runs/transcripts-all ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/finalize.log
-ls artifacts/custom-raw1fps-v1/batches/*/*/_SUCCESS.json | wc -l
+ls artifacts/custom-raw1fps-v1/batches/*/*/manifest.json | wc -l
+FINALIZE_ONLY=1 SKIP_APT=1 SKIP_BUILD=1 SKIP_INFERENCE_SERVER=1 \
+  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/finalize.log
 ```
+
+Dòng `wc -l` phải ra đúng tổng số batch của cả corpus. `finalize` chỉ kiểm tra 14 archive đã ở `cleaned` và không có video nào bị hai batch cùng nhận — nó **không** phát hiện thiếu batch. Thiếu mà vẫn chạy thì ra corpus khuyết mà không báo lỗi.
 
 ## Kiểm tra kết quả
 
