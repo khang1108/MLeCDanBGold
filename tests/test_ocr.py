@@ -101,6 +101,19 @@ def test_relative_image_paths_resolve_against_dataset_root(tmp_path):
         source, tmp_path / "out", config(), engine=Engine(), dataset_root=tmp_path)
     assert report["completed_frames"] == 1
     assert report["dataset_root"] == str(tmp_path)
+def test_image_workers_parallel_loading_preserves_order_and_output(tmp_path):
+    """Concurrent image loading must not reorder rows or change OCR text."""
+
+    source = frames(tmp_path, [0, 1, 2, 3, 4])
+    sequential = generate_ocr(
+        source, tmp_path / "sequential", config(), engine=Engine())
+    parallel = generate_ocr(
+        source, tmp_path / "parallel", config(), engine=Engine(), image_workers=4)
+    sequential_table = pd.read_parquet(tmp_path / "sequential/frame_enrichment.parquet")
+    parallel_table = pd.read_parquet(tmp_path / "parallel/frame_enrichment.parquet")
+    assert sequential_table.frame_id.tolist() == parallel_table.frame_id.tolist()
+    assert sequential["completed_frames"] == parallel["completed_frames"]
+    assert sequential_table.ocr_text.tolist() == parallel_table.ocr_text.tolist()
 @pytest.mark.parametrize("outputs", [
     [OCRResult(cast(str, 3))],
     [OCRResult("text", (region("text", float("nan")),))],

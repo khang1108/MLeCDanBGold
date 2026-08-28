@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
@@ -44,6 +44,7 @@ def generate_captions(
     *,
     dataset_root: str | Path = ".",
     frame_store_id: str | None = None,
+    image_workers: int = 1,
 ) -> dict[str, Any]:
     """Generate or resume one deterministic caption enrichment artifact."""
     started, began, frames_path = datetime.now(timezone.utc), perf_counter(), Path(frames_path)
@@ -107,6 +108,7 @@ def generate_captions(
         provisional,
         frame_store_id=frame_store_id,
         resolved_revision=resolved_revision,
+        image_workers=image_workers,
     )
 
     if set(rows) != set(order):
@@ -129,19 +131,54 @@ def generate_captions(
     return manifest
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run caption enrichment through the configured inference gateway."""
+    """Run caption enrichment through a local model or the inference gateway."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=DEFAULT_ENRICHMENT_CONFIG)
     parser.add_argument("--app-config", default="configs/baseline.yaml")
     add_dataset_arguments(parser)
     parser.add_argument("--output")
+    parser.add_argument(
+        "--execution-backend",
+        choices=("local", "remote"),
+        default="remote",
+        help="Run captioning in-process ('local') or via the inference gateway ('remote').",
+    )
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--image-workers", type=int, default=1)
     args = parser.parse_args(argv)
+    if args.batch_size is not None and args.batch_size < 1:
+        parser.error("--batch-size must be positive")
+    if args.image_workers < 1:
+        parser.error("--image-workers must be positive")
+
     dataset = dataset_overrides(args)
     job = (
         CaptionJobConfig.from_yaml(args.config, dataset=dataset)
         if dataset is not None
         else CaptionJobConfig.from_yaml(args.config)
     )
+    caption_config = (
+        replace(job.caption, batch_size=args.batch_size)
+        if args.batch_size is not None
+        else job.caption
+    )
+
+    if args.execution_backend == "local":
+        # Local runs never start a remote gateway process or connection.
+        captioner: CaptionAdapter = QwenVLCaptionAdapter(caption_config)
+        manifest = generate_captions(
+            args.frames or job.frames_path,
+            args.output or job.output_dir,
+            caption_config,
+            captioner,
+            dataset_root=args.data_root or job.dataset_root,
+            frame_store_id=job.frame_store_id,
+            image_workers=args.image_workers,
+        )
+        keys = "completed_count", "failed_count", "skipped_count", "retried_count"
+        print({key: manifest[key] for key in keys})
+        return 0
+
     app_path = Path(args.app_config)
     settings = AppConfig.from_yaml(app_path) if app_path.is_file() else AppConfig()
     from hcmai.data.enrichment.caption.adapters.remote import RemoteCaptionAdapter
@@ -154,10 +191,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest = generate_captions(
             args.frames or job.frames_path,
             args.output or job.output_dir,
-            job.caption,
-            RemoteCaptionAdapter(service, job.caption),
+            caption_config,
+            RemoteCaptionAdapter(service, caption_config),
             dataset_root=args.data_root or job.dataset_root,
             frame_store_id=job.frame_store_id,
+            image_workers=args.image_workers,
         )
     finally:
         service.close()

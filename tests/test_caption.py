@@ -120,6 +120,28 @@ def test_batch_order_contract_black_and_completed_resume(tmp_path):
     for changed, name in ((replace(cfg, prompt="<DETAILED_CAPTION>"), "prompt"), (replace(cfg, model_checkpoint="other/model"), "model_checkpoint")):
         with pytest.raises(ValueError, match=name):
             generate_captions(frames, output, changed, dataset_root=tmp_path)
+def test_image_workers_parallel_loading_preserves_order_and_output(tmp_path):
+
+    Backend.instances = 0
+    frames = make_frames(tmp_path, [(0, 0, 0), (1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)])
+    backend, cfg = Backend(), config()
+    sequential_out, parallel_out = tmp_path / "sequential", tmp_path / "parallel"
+
+    generate_captions(
+        frames, sequential_out, cfg, QwenVLCaptionAdapter(cfg, batch_fn=Backend()),
+        dataset_root=tmp_path,
+    )
+    generate_captions(
+        frames, parallel_out, cfg, QwenVLCaptionAdapter(cfg, batch_fn=Backend()),
+        dataset_root=tmp_path, image_workers=4,
+    )
+
+    sequential_table = pd.read_parquet(sequential_out / "frame_enrichment.parquet")
+    parallel_table = pd.read_parquet(parallel_out / "frame_enrichment.parquet")
+    assert sequential_table.frame_id.tolist() == parallel_table.frame_id.tolist()
+    assert sequential_table.caption.tolist() == parallel_table.caption.tolist()
+
+
 def test_resume_rejects_a_different_resolved_revision(tmp_path):
     frames, cfg, output = make_frames(tmp_path, [(0, 0, 0)]), config(), tmp_path / "out"
     first_captioner = QwenVLCaptionAdapter(cfg, batch_fn=Backend())
@@ -168,3 +190,24 @@ def test_explicit_failures_retry_and_malformed_row(tmp_path):
     (output / "captions.parquet").write_bytes(b"corrupt")
     with pytest.raises(RuntimeError, match="Cannot resume corrupted Parquet"):
         generate_captions(frames, output, cfg, dataset_root=tmp_path)
+
+
+def test_cli_rejects_non_positive_batch_size_and_image_workers() -> None:
+    """The CLI must reject bad worker/batch overrides before loading any job."""
+
+    from hcmai.data.enrichment.caption.generator import main as caption_main
+
+    with pytest.raises(SystemExit):
+        caption_main(["--batch-size", "0"])
+    with pytest.raises(SystemExit):
+        caption_main(["--image-workers", "0"])
+
+
+def test_cli_accepts_local_and_remote_execution_backend_choices() -> None:
+    """``--execution-backend`` must only accept the two supported values."""
+
+    from hcmai.data.enrichment.caption.generator import main as caption_main
+
+    with pytest.raises(SystemExit):
+        caption_main(["--execution-backend", "gpu-cluster"])
+

@@ -191,6 +191,7 @@ class EnrichmentService:
         *,
         dataset_root: str | Path = ".",
         frame_store_id: str | None = None,
+        image_workers: int = 1,
     ) -> dict[str, Any]:
         return generate_ocr(
             frames_path,
@@ -199,6 +200,7 @@ class EnrichmentService:
             adapter,
             dataset_root=dataset_root,
             frame_store_id=frame_store_id,
+            image_workers=image_workers,
         )
 
     @staticmethod

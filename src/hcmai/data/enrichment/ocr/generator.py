@@ -7,6 +7,7 @@ completed, lineage-matching, region-consistent rows are reused.
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from numbers import Integral
 from pathlib import Path
@@ -144,6 +145,20 @@ def _resume(
     return rows, regions, todo, skipped, retried
 
 
+def _load_ocr_image(frame: FrameRow, config: OCRConfig, root: Path) -> Any:
+    """Load and thumbnail one frame's OCR image, or return the raised exception."""
+
+    try:
+        path = Path(str(frame["image_path"])).expanduser()
+        image_path = path if path.is_absolute() else root / path
+        image = load_image(image_path, mode="RGB")
+        if config.image_size:
+            image.thumbnail((config.image_size, config.image_size))
+        return image
+    except Exception as error:  # noqa: BLE001 - surfaced as a per-frame failure row
+        return error
+
+
 def _process(
     todo: list[FrameRow],
     rows: dict[str, OCREvidence],
@@ -156,34 +171,40 @@ def _process(
     *,
     frame_store_id: str | None,
     model_revision: str | None,
+    image_workers: int = 1,
 ) -> None:
-    """Process independent batches while containing per-frame failures."""
+    """Process independent batches while containing per-frame failures.
+
+    ``image_workers`` only parallelizes local disk image decoding/thumbnailing;
+    it never changes image content, order, or the resulting OCR rows.
+    """
 
     for start in tqdm(
         range(0, len(todo), config.batch_size),
         desc="Generating OCR",
         unit="batch",
     ):
+        chunk = todo[start : start + config.batch_size]
         valid: list[tuple[FrameRow, Image.Image]] = []
-        for frame in todo[start : start + config.batch_size]:
+        if image_workers > 1 and len(chunk) > 1:
+            with ThreadPoolExecutor(max_workers=image_workers) as pool:
+                loaded = list(pool.map(lambda frame: _load_ocr_image(frame, config, root), chunk))
+        else:
+            loaded = [_load_ocr_image(frame, config, root) for frame in chunk]
+        for frame, outcome in zip(chunk, loaded):
             frame_id = str(frame["frame_id"])
-            try:
-                path = Path(str(frame["image_path"])).expanduser()
-                image_path = path if path.is_absolute() else root / path
-                image = load_image(image_path, mode="RGB")
-                if config.image_size:
-                    image.thumbnail((config.image_size, config.image_size))
-                valid.append((frame, image))
-            except Exception as error:
+            if isinstance(outcome, Exception):
                 rows[frame_id], failures[frame_id] = failure_row(
                     frame,
                     config,
                     "image_load",
-                    error,
+                    outcome,
                     frame_store_id=frame_store_id,
                     model_revision=model_revision,
                 )
                 regions[frame_id] = []
+            else:
+                valid.append((frame, outcome))
         if not valid:
             continue
 
@@ -230,6 +251,7 @@ def generate_ocr(
     *,
     dataset_root: str | Path = ".",
     frame_store_id: str | None = None,
+    image_workers: int = 1,
 ) -> dict[str, Any]:
     """Generate or resume deterministic structured OCR artifacts."""
 
@@ -293,6 +315,7 @@ def generate_ocr(
             root,
             frame_store_id=frame_store_id,
             model_revision=expected_revision,
+            image_workers=image_workers,
         )
 
     revision = getattr(engine, "resolved_revision", None) or expected_revision

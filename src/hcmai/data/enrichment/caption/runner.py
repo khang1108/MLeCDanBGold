@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -13,6 +14,18 @@ from hcmai.common.utils.image import load_image
 from hcmai.data.enrichment.caption.artifacts import write_caption_artifacts
 from hcmai.data.enrichment.caption.config import CaptionConfig
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
+
+
+def _load_frame_image(frame: dict[str, Any], config: CaptionConfig, root: Path) -> Any:
+    """Load and thumbnail one frame's image, or return the raised exception."""
+
+    try:
+        path = Path(str(frame["image_path"])).expanduser()
+        image = load_image(path if path.is_absolute() else root / path, mode="RGB")
+        image.thumbnail((config.image_size, config.image_size))
+        return image
+    except Exception as error:  # noqa: BLE001 - surfaced as a per-frame failure row
+        return error
 
 
 def _failure(
@@ -64,8 +77,13 @@ def run_batches(
     *,
     frame_store_id: str | None,
     resolved_revision: str | None,
+    image_workers: int = 1,
 ) -> list[float]:
-    """Run caption batches while retaining a typed row for every frame."""
+    """Run caption batches while retaining a typed row for every frame.
+
+    ``image_workers`` only parallelizes local disk image decoding/thumbnailing;
+    it never changes image content, order, or the resulting caption rows.
+    """
 
     latencies: list[float] = []
     since_write = 0
@@ -79,25 +97,27 @@ def run_batches(
     for start in range(0, len(todo), config.batch_size):
         chunk = todo[start : start + config.batch_size]
         valid: list[tuple[dict[str, Any], Any]] = []
-        for frame in chunk:
-            frame_id = str(frame["frame_id"])
-            try:
-                path = Path(str(frame["image_path"])).expanduser()
-                image = load_image(
-                    path if path.is_absolute() else root / path, mode="RGB"
+        if image_workers > 1 and len(chunk) > 1:
+            with ThreadPoolExecutor(max_workers=image_workers) as pool:
+                loaded = list(
+                    pool.map(lambda frame: _load_frame_image(frame, config, root), chunk)
                 )
-                image.thumbnail((config.image_size, config.image_size))
-                valid.append((frame, image))
-            except Exception as error:
+        else:
+            loaded = [_load_frame_image(frame, config, root) for frame in chunk]
+        for frame, outcome in zip(chunk, loaded):
+            frame_id = str(frame["frame_id"])
+            if isinstance(outcome, Exception):
                 rows[frame_id], failures[frame_id] = _failure(
                     frame,
                     config,
                     frame_store_id=frame_store_id,
                     resolved_revision=resolved_revision,
                     stage="image_load",
-                    error_code=type(error).__name__,
-                    error_message=str(error),
+                    error_code=type(outcome).__name__,
+                    error_message=str(outcome),
                 )
+            else:
+                valid.append((frame, outcome))
         if valid:
             began = perf_counter()
             try:
