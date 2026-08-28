@@ -18,14 +18,32 @@ from hcmai.data.custom_pipeline.config import (
     StageBatchConfig,
 )
 from hcmai.data.custom_pipeline.contracts import RunIdentity
+from hcmai.data.custom_pipeline.state import (
+    ArchiveRecord,
+    ArchiveStage,
+    BatchRecord,
+    BatchStage,
+    PipelineStateStore,
+    VideoRecord,
+    VideoStage,
+    compute_batch_id,
+)
 
 __all__ = [
     "ArchivePlan",
     "ArchivePlanEntry",
+    "ArchiveRecord",
+    "ArchiveStage",
     "ArchiveWorkWindow",
+    "BatchRecord",
+    "BatchStage",
     "CustomPipelineConfig",
     "DiskBudgetConfig",
+    "PipelineStateStore",
     "RunIdentity",
     "SchedulingConfig",
     "StageBatchConfig",
+    "VideoRecord",
+    "VideoStage",
+    "compute_batch_id",
 ]
