@@ -37,6 +37,7 @@ from urllib.request import Request, urlopen
 import zipfile
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.io import atomic_write, read_json, read_yaml_section, write_json, write_parquet
@@ -330,7 +331,10 @@ def _encode_visual_vectors(image_paths: list[Path], config: EncoderConfig):
     from hcmai.retrieval.embedding.adapters.siglip import SigLIPAdapter
 
     adapter = SigLIPAdapter(config)
-    images = [load_image(path, mode="RGB") for path in image_paths]
+    images = [
+        load_image(path, mode="RGB")
+        for path in tqdm(image_paths, desc="Loading durable images", unit="image", dynamic_ncols=True)
+    ]
     return adapter.encode_images(images)
 
 

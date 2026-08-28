@@ -18,6 +18,8 @@ import shutil
 import subprocess
 from typing import Any, Sequence
 
+from tqdm.auto import tqdm
+
 from hcmai.data.ingestion import (
     build_native_input_manifest,
     materialize_video_enrichment_frames,
@@ -314,7 +316,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     published_video_ids: list[str] = []
     failures: list[dict[str, str]] = []
 
-    for video_id in selected_video_ids:
+    for video_id in tqdm(
+        selected_video_ids, desc="Extracting keyframes", unit="video", dynamic_ncols=True
+    ):
         command = [
             str(native_executable),
             "extract",

@@ -38,7 +38,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=0 ZIP_LIMIT=1 BATCH_OFFSET=0 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a0-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -70,7 +70,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=1 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a1-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -102,7 +102,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=2 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a2-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -134,7 +134,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=3 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a3-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -166,7 +166,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=4 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=6 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a4-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -198,7 +198,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=4 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=6 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a4-b6.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -230,7 +230,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=5 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=5 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a5-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -262,7 +262,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=5 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=5 BATCH_LIMIT=5 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a5-b5.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -294,7 +294,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=5 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=10 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a5-b10.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -326,7 +326,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=6 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=5 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a6-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -358,7 +358,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=6 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=5 BATCH_LIMIT=5 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a6-b5.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -390,7 +390,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=6 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=10 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a6-b10.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -422,7 +422,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=7 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=5 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a7-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -454,7 +454,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=7 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=5 BATCH_LIMIT=5 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a7-b5.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -486,7 +486,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=7 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=10 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a7-b10.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -518,7 +518,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=8 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=7 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a8-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -550,7 +550,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=8 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=7 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a8-b7.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -582,7 +582,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=9 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=7 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a9-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -614,7 +614,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=9 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=7 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a9-b7.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -646,7 +646,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=10 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a10-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -678,7 +678,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=11 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a11-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -710,7 +710,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=12 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a12-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -742,7 +742,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=13 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a13-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -774,7 +774,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=13 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=4 BATCH_LIMIT=4 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a13-b4.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -806,7 +806,7 @@ cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 ru
   aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 done) &
 ZIP_OFFSET=13 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 BATCH_OFFSET=8 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a13-b8.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ --exclude '*/pipeline/*' --exclude '*/frame_store/*'
 aws s3 sync runs/custom-raw1fps-v1/published/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/published/
@@ -861,7 +861,7 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ artifacts/
 aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/ runs/custom-raw1fps-v1/state/
 ls artifacts/custom-raw1fps-v1/batches/*/*/manifest.json | wc -l
 FINALIZE_ONLY=1 SKIP_APT=1 SKIP_BUILD=1 SKIP_INFERENCE_SERVER=1 \
-  TRANSCRIPTS_ROOT=runs/transcripts-all \
+  TRANSCRIPTS_ROOT=runs/transcripts-all TQDM_MININTERVAL=5 \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/finalize.log
 ```
 

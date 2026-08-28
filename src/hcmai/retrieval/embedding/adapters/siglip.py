@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from PIL import Image
+from tqdm.auto import tqdm
 
 from transformers import AutoModel, AutoProcessor
 from hcmai.common.config import EncoderConfig
@@ -86,7 +87,12 @@ class SigLIPAdapter:
 
         embeddings_list: list[np.ndarray] = []
         batch_times: list[float] = []
-        for start in range(0, len(items), self.config.batch_size):
+        for start in tqdm(
+            range(0, len(items), self.config.batch_size),
+            desc=f"SigLIP2 encoding {input_name}",
+            unit="batch",
+            dynamic_ncols=True,
+        ):
             batch = items[start : start + self.config.batch_size]
             with Timer() as timer:
                 inputs = self._processor_inputs(batch, input_name)

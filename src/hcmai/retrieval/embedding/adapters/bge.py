@@ -63,7 +63,7 @@ class BGEAdapter:
                 batch_size=self.config.batch_size,
                 convert_to_numpy=True,
                 normalize_embeddings=True,
-                show_progress_bar=False,
+                show_progress_bar=True,
             ),
             dtype=self.config.dtype,
         )
