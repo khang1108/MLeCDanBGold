@@ -1,40 +1,66 @@
 #!/usr/bin/env python3
-"""Run custom video preparation from media metadata through local indexes.
+"""Run the local A6000/100GB custom corpus pipeline in resumable subcommands.
 
-When no local metadata directory is supplied, this command first downloads and
-safely extracts the organizer media-info ZIP. It then coordinates the existing
-native extractor, specialist enrichment, native publication, canonical
-FrameStore materialization, FrameContext, and retrieval-index builders. It
-intentionally does not upload to S3. Model-heavy stages remain separate
-subprocesses so one stage releases RAM/VRAM before the next stage starts.
+Subcommands:
+  preflight        Validate local prerequisites and the requested archive
+                    work window without downloading anything.
+  process-archive  Resume every archive in the requested work window through
+                    committed local batches (extraction, Caption, OCR,
+                    Objects, FrameContext, visual/context embeddings, and the
+                    three batch indexes).
+  status           Report local archive/batch state and the recommended next
+                    offset. Read-only.
+  finalize         Compact every committed batch into the final corpus once
+                    the complete frozen archive plan is cleaned.
+
+This CLI has no video selector, yt-dlp option, or cloud destination option:
+every archive URL in the ordered plan is processed in canonical groups of at
+most eight videos (see docs/superpowers/plans/2026-08-28-a6000-100gb-custom-
+pipeline.md), and publication to any remote store is an operator-owned,
+out-of-band step.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import os
-from pathlib import Path, PurePosixPath
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
-from typing import Any, Literal, Sequence
+from collections.abc import Callable, Sequence
+from pathlib import Path, PurePosixPath
+from typing import Any
 from urllib.request import Request, urlopen
 import zipfile
 
 import pandas as pd
 
-from hcmai.common.schemas import FrameRecord
-from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
+from hcmai.common.config import EncoderConfig
+from hcmai.common.utils.io import atomic_write, read_json, read_yaml_section, write_json, write_parquet
+from hcmai.data.custom_pipeline.asr import ASRReuseBundle, validate_asr_source
+from hcmai.data.custom_pipeline.config import (
+    ArchivePlan,
+    ArchiveWorkWindow,
+    CustomPipelineConfig,
+)
+from hcmai.data.custom_pipeline.contracts import RunIdentity
+from hcmai.data.custom_pipeline.runner import (
+    BatchArtifacts,
+    RunnerContext,
+    finalize_pipeline,
+    pipeline_status,
+    preflight_pipeline,
+    process_archive,
+)
+from hcmai.data.custom_pipeline.state import PipelineStateStore, VideoStage
 from hcmai.data.ingestion import (
-    CustomFrameStoreConfig,
     cleanup_video,
     iter_native_frame_records,
     mark_video_enriched,
     mark_video_published,
-    materialize_custom_frame_store,
     write_enrichment_handoff,
 )
 from scripts import extract_custom_keyframes
@@ -50,67 +76,10 @@ MAX_MEDIA_INFO_EXTRACTED_BYTES = 256 * 1024 * 1024
 MAX_MEDIA_INFO_MEMBERS = 50_000
 
 
-def _positive_int(value: str) -> int:
-    """Parse one strictly positive CLI integer."""
-
-    parsed = int(value)
-    if parsed < 1:
-        raise argparse.ArgumentTypeError("must be greater than or equal to 1")
-    return parsed
-
-
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse one explicit custom-corpus preparation contract."""
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--app-config", type=Path, default=DEFAULT_APP_CONFIG)
-    parser.add_argument(
-        "--media-info-dir",
-        type=Path,
-        help=(
-            "Use an existing organizer media-info directory. When omitted, "
-            "the pipeline downloads and extracts --media-info-url under run-root."
-        ),
-    )
-    parser.add_argument(
-        "--media-info-url",
-        default=DEFAULT_MEDIA_INFO_URL,
-        help="ZIP source used when --media-info-dir is omitted.",
-    )
-    parser.add_argument("--run-root", type=Path, required=True)
-    parser.add_argument("--output-root", type=Path, required=True)
-    parser.add_argument(
-        "--native-executable",
-        type=Path,
-        default=Path("build/keyframes_extraction/keyframe_extractor"),
-    )
-    parser.add_argument("--yt-dlp-binary", default="yt-dlp")
-    parser.add_argument(
-        "--yt-dlp-cookies",
-        type=Path,
-        help="Netscape-format cookie file used for authenticated downloads.",
-    )
-    parser.add_argument(
-        "--yt-dlp-js-runtime",
-        help="yt-dlp JavaScript runtime token, for example deno or node.",
-    )
-    parser.add_argument("--source-root", type=Path)
-    parser.add_argument("--version", required=True)
-    parser.add_argument("--source", default="custom_raw_video_1fps")
-    parser.add_argument("--frame-store-id", required=True)
-    selection = parser.add_mutually_exclusive_group(required=True)
-    selection.add_argument("--video-id", action="append")
-    selection.add_argument("--limit", type=_positive_int)
-    selection.add_argument("--all", action="store_true")
-    parser.add_argument("--fail-fast", action="store_true")
-    parser.add_argument("--no-diarization", action="store_true")
-    parser.add_argument(
-        "--keep-temporary",
-        action="store_true",
-        help="Keep native source and OCR scratch files after a passed index build.",
-    )
-    return parser.parse_args(argv)
+# ---------------------------------------------------------------------------
+# Media-info bootstrap (unchanged from the prior monolithic CLI: safe,
+# atomic, and independent of archive/batch orchestration).
+# ---------------------------------------------------------------------------
 
 
 def _discover_media_info_dir(root: Path) -> Path:
@@ -141,19 +110,14 @@ def _download_media_info_archive(url: str, output: Path) -> None:
     def write_download(temporary: Path) -> None:
         with urlopen(request, timeout=60) as response, temporary.open("wb") as target:
             content_length = response.headers.get("Content-Length")
-            if (
-                content_length is not None
-                and int(content_length) > MAX_MEDIA_INFO_ARCHIVE_BYTES
-            ):
+            if content_length is not None and int(content_length) > MAX_MEDIA_INFO_ARCHIVE_BYTES:
                 raise ValueError("media-info archive exceeds the download size limit")
 
             downloaded = 0
             while chunk := response.read(1024 * 1024):
                 downloaded += len(chunk)
                 if downloaded > MAX_MEDIA_INFO_ARCHIVE_BYTES:
-                    raise ValueError(
-                        "media-info archive exceeds the download size limit"
-                    )
+                    raise ValueError("media-info archive exceeds the download size limit")
                 target.write(chunk)
             if downloaded == 0:
                 raise ValueError("media-info archive download is empty")
@@ -178,19 +142,12 @@ def _safe_extract_media_info_archive(archive: Path, output: Path) -> Path:
             relative = PurePosixPath(normalized)
             parts = tuple(part for part in relative.parts if part not in ("", "."))
             unix_mode = member.external_attr >> 16
-            if (
-                relative.is_absolute()
-                or not parts
-                or ".." in parts
-                or stat.S_ISLNK(unix_mode)
-            ):
+            if relative.is_absolute() or not parts or ".." in parts or stat.S_ISLNK(unix_mode):
                 raise ValueError(f"unsafe media-info ZIP member: {member.filename}")
             validated.append((member, parts))
 
         output.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(
-            prefix=".media-info-extract-", dir=output.parent
-        ) as temporary_value:
+        with tempfile.TemporaryDirectory(prefix=".media-info-extract-", dir=output.parent) as temporary_value:
             temporary = Path(temporary_value) / "content"
             temporary.mkdir()
             for member, parts in validated:
@@ -199,112 +156,54 @@ def _safe_extract_media_info_archive(archive: Path, output: Path) -> Path:
                     destination.mkdir(parents=True, exist_ok=True)
                     continue
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                with (
-                    source.open(member) as compressed,
-                    destination.open("wb") as target,
-                ):
+                with source.open(member) as compressed, destination.open("wb") as target:
                     shutil.copyfileobj(compressed, target, length=1024 * 1024)
 
             media_info_dir = _discover_media_info_dir(temporary)
             relative_media_info = media_info_dir.relative_to(temporary)
             if output.exists():
-                raise FileExistsError(
-                    f"invalid existing media-info extraction must be removed: {output}"
-                )
+                raise FileExistsError(f"invalid existing media-info extraction must be removed: {output}")
             temporary.replace(output)
 
     return (output / relative_media_info).resolve()
 
 
-def _resolve_media_info_dir(args: argparse.Namespace) -> Path:
+def _resolve_media_info_dir(media_info_dir: Path | None, media_info_url: str, run_root: Path) -> Path:
     """Return explicit metadata or bootstrap the default resumable archive."""
 
-    if args.media_info_dir is not None:
-        media_info_dir = args.media_info_dir.expanduser().resolve()
-        if not media_info_dir.is_dir():
-            raise NotADirectoryError(media_info_dir)
-        if not any(media_info_dir.glob("*.json")):
-            raise ValueError(
-                f"media-info directory contains no JSON files: {media_info_dir}"
-            )
-        return media_info_dir
+    if media_info_dir is not None:
+        resolved = media_info_dir.expanduser().resolve()
+        if not resolved.is_dir():
+            raise NotADirectoryError(resolved)
+        if not any(resolved.glob("*.json")):
+            raise ValueError(f"media-info directory contains no JSON files: {resolved}")
+        return resolved
 
-    input_root = args.run_root / "input"
+    input_root = run_root / "input"
     extraction_root = input_root / "media-info-aic25-b1"
     if extraction_root.is_dir():
         return _discover_media_info_dir(extraction_root)
 
     archive = input_root / MEDIA_INFO_ARCHIVE_NAME
     if not archive.is_file():
-        _download_media_info_archive(args.media_info_url, archive)
+        _download_media_info_archive(media_info_url, archive)
     return _safe_extract_media_info_archive(archive, extraction_root)
 
 
-def _extraction_args(args: argparse.Namespace) -> argparse.Namespace:
-    """Build the native extraction namespace without shell interpolation."""
-
-    values = [
-        "--media-info-dir",
-        str(args.media_info_dir),
-        "--run-root",
-        str(args.run_root),
-        "--native-executable",
-        str(args.native_executable),
-        "--frame-store-id",
-        args.frame_store_id,
-        "--yt-dlp-binary",
-        args.yt_dlp_binary,
-    ]
-    if args.yt_dlp_cookies is not None:
-        values.extend(("--yt-dlp-cookies", str(args.yt_dlp_cookies)))
-    if args.yt_dlp_js_runtime is not None:
-        values.extend(("--yt-dlp-js-runtime", args.yt_dlp_js_runtime))
-    if args.source_root is not None:
-        values.extend(("--source-root", str(args.source_root)))
-    if args.video_id:
-        for video_id in args.video_id:
-            values.extend(("--video-id", video_id))
-    elif args.limit is not None:
-        values.extend(("--limit", str(args.limit)))
-    else:
-        values.append("--all")
-    if args.fail_fast:
-        values.append("--fail-fast")
-    return extract_custom_keyframes.parse_args(values)
-
-
-def _extraction_failure_message(
-    extraction: dict[str, Any],
-    report_path: Path,
-) -> str:
-    """Format bounded per-video diagnostics for a failed extraction batch."""
-
-    failures = extraction.get("failures")
-    if not isinstance(failures, list) or not failures:
-        return f"custom extraction failed; details: {report_path}"
-
-    diagnostics: list[str] = []
-    for failure in failures[:10]:
-        if not isinstance(failure, dict):
-            continue
-        video_id = str(failure.get("video_id", "unknown-video"))
-        error = str(failure.get("error", "unknown extraction error"))
-        diagnostics.append(f"{video_id}: {error}")
-    remaining = len(failures) - len(diagnostics)
-    suffix = f"; and {remaining} more failure(s)" if remaining > 0 else ""
-    detail = "; ".join(diagnostics) or "unknown extraction error"
-    return f"custom extraction failed: {detail}{suffix}; details: {report_path}"
+# ---------------------------------------------------------------------------
+# Isolated local specialist-stage subprocesses.
+# ---------------------------------------------------------------------------
 
 
 def _run_python(script: str, arguments: Sequence[str]) -> None:
     """Run one model-heavy stage in an isolated Python process."""
 
+    import os
+
     environment = os.environ.copy()
     current = environment.get("PYTHONPATH")
     repository_paths = f"{PROJECT_ROOT}:{PROJECT_ROOT / 'src'}"
-    environment["PYTHONPATH"] = (
-        f"{repository_paths}:{current}" if current else repository_paths
-    )
+    environment["PYTHONPATH"] = f"{repository_paths}:{current}" if current else repository_paths
     subprocess.run(
         [sys.executable, str(PROJECT_ROOT / "scripts" / script), *arguments],
         cwd=PROJECT_ROOT,
@@ -326,111 +225,19 @@ def _bundle_root(run_root: Path, video_id: str) -> Path:
     raise FileNotFoundError(f"native bundle is unavailable for {video_id}")
 
 
-def _materialize_batch_frames(
-    run_root: Path,
-    video_ids: tuple[str, ...],
-    output: Path,
-    *,
-    image_variant: Literal["durable", "enrichment"],
-) -> Path:
-    """Publish one deterministic temporary FrameStore over selected bundles."""
-
-    records = [
-        record
-        for video_id in sorted(video_ids)
-        for record in iter_native_frame_records(
-            _bundle_root(run_root, video_id),
-            run_root=run_root,
-            image_variant=image_variant,
-        )
-    ]
-    expected_ids = [record.frame_id for record in records]
-    if output.is_file():
-        existing = pd.read_parquet(output)
-        if existing["frame_id"].astype(str).tolist() == expected_ids:
-            return output
-        raise ValueError("temporary FrameStore selection changed inside one run")
-
-    table = pd.DataFrame(
-        [record.model_dump(mode="python") for record in records],
-        columns=list(FrameRecord.model_fields),
-    )
-    atomic_write(output, lambda path: write_parquet(table, path, index=False))
-    return output
-
-
-def _dataset_arguments(
-    args: argparse.Namespace,
-    frames_path: Path,
-    frame_store_root: Path,
-) -> list[str]:
-    """Return the complete shared dataset CLI contract for one stage."""
-
-    return [
-        "--version",
-        args.version,
-        "--source",
-        args.source,
-        "--frame-store-id",
-        args.frame_store_id,
-        "--data-root",
-        str(args.run_root),
-        "--frames",
-        str(frames_path),
-        "--frame-store-output",
-        str(frame_store_root),
-    ]
-
-
-def _stage_video_aliases(run_root: Path, video_ids: tuple[str, ...]) -> Path:
-    """Expose extension-bearing hard links for transcript source discovery."""
-
-    output = run_root / "pipeline" / "videos"
-    output.mkdir(parents=True, exist_ok=True)
-    for video_id in video_ids:
-        source = run_root / "source" / f"{video_id}.part"
-        destination = output / f"{video_id}.mp4"
-        if destination.is_file() and source.is_file() and (
-            destination.stat().st_size == source.stat().st_size
-        ):
-            continue
-        if not source.is_file():
-            raise FileNotFoundError(f"retained native source is unavailable: {source}")
-        destination.unlink(missing_ok=True)
-        try:
-            os.link(source, destination)
-        except OSError:
-            shutil.copy2(source, destination)
-    return output
-
-
 def _transcript_path(root: Path, video_id: str) -> Path:
     """Return the grouped transcript path owned by TranscriptService."""
 
     return root / video_id.split("_", maxsplit=1)[0] / f"{video_id}.parquet"
 
 
-def _transcripts_complete(root: Path, video_ids: tuple[str, ...]) -> bool:
-    """Return whether every selected video has a committed transcript pair."""
-
-    return all(
-        (path := _transcript_path(root, video_id)).is_file()
-        and path.with_suffix(".manifest.json").is_file()
-        for video_id in video_ids
-    )
-
-
-def _require_complete_frame_artifact(
-    path: Path,
-    expected_frame_ids: list[str],
-    label: str,
-) -> pd.DataFrame:
+def _require_complete_frame_artifact(path: Path, expected_frame_ids: list[str], label: str) -> pd.DataFrame:
     """Reject a specialist artifact containing failed or missing frame rows."""
 
     table = pd.read_parquet(path)
     actual_ids = table["frame_id"].astype(str).tolist()
     if actual_ids != expected_frame_ids:
-        raise ValueError(f"{label} artifact does not cover canonical frame order")
+        raise ValueError(f"{label} artifact does not cover the batch's canonical frame order")
     if "status" not in table:
         raise ValueError(f"{label} artifact is missing processing status")
     if set(table["status"].astype(str)) != {"completed"}:
@@ -438,12 +245,8 @@ def _require_complete_frame_artifact(
     return table
 
 
-def _write_video_projection(
-    table: pd.DataFrame,
-    frame_ids: list[str],
-    output: Path,
-) -> Path:
-    """Write one exact per-video specialist projection for native handoff."""
+def _write_video_projection(table: pd.DataFrame, frame_ids: list[str], output: Path) -> Path:
+    """Write one exact per-video specialist projection for the native handoff."""
 
     order = {frame_id: index for index, frame_id in enumerate(frame_ids)}
     selected = table[table["frame_id"].astype(str).isin(order)].copy()
@@ -455,274 +258,535 @@ def _write_video_projection(
     return output
 
 
-def _completed_report(
-    report_path: Path,
-    args: argparse.Namespace,
-    selected: tuple[str, ...],
-) -> dict[str, Any] | None:
-    """Return a complete matching run report, otherwise require normal resume."""
+def _load_or_empty(path: Path, columns: list[str]) -> pd.DataFrame:
+    """Read one optional child parquet, or an empty table with the given columns."""
 
-    if not report_path.is_file():
-        return None
-    value = read_json(report_path)
-    if not isinstance(value, dict):
-        return None
-    identity = {
-        "status": "passed",
-        "dataset_version": args.version,
-        "dataset_source": args.source,
-        "frame_store_id": args.frame_store_id,
-        "selected_video_ids": list(selected),
-    }
-    if any(value.get(name) != expected for name, expected in identity.items()):
-        return None
-    for raw_path in value.get("required_artifacts", []):
-        if not Path(str(raw_path)).exists():
-            return None
-    return value
+    if path.is_file():
+        return pd.read_parquet(path)
+    return pd.DataFrame(columns=columns)
 
 
-def run(args: argparse.Namespace) -> dict[str, Any]:
-    """Execute or resume every non-S3 custom preparation stage."""
+def _materialize_frames_for_videos(
+    run_root: Path,
+    video_ids: list[str],
+    output: Path,
+    *,
+    image_variant: str,
+) -> Path:
+    """Publish a deterministic per-batch FrameStore slice over selected bundles."""
 
-    downloads_media_info = args.media_info_dir is None
-    run_root = args.run_root.expanduser().resolve()
-    output_root = args.output_root.expanduser().resolve()
+    from hcmai.common.schemas import FrameRecord
+
+    records = [
+        record
+        for video_id in sorted(video_ids)
+        for record in iter_native_frame_records(
+            _bundle_root(run_root, video_id), run_root=run_root, image_variant=image_variant
+        )
+    ]
+    table = pd.DataFrame(
+        [record.model_dump(mode="python") for record in records],
+        columns=list(FrameRecord.model_fields),
+    )
+    atomic_write(output, lambda path: write_parquet(table, path, index=False))
+    return output
+
+
+def _dataset_arguments(args: argparse.Namespace, frames_path: Path, frame_store_root: Path) -> list[str]:
+    """Return the shared dataset CLI contract used by every specialist stage."""
+
+    return [
+        "--version", args.version,
+        "--source", args.source,
+        "--frame-store-id", args.frame_store_id,
+        "--data-root", str(args.run_root),
+        "--frames", str(frames_path),
+        "--frame-store-output", str(frame_store_root),
+    ]
+
+
+def _resolve_native_executable(args: argparse.Namespace) -> Path:
+    """Resolve the native extractor executable relative to the repo root."""
+
     native = args.native_executable.expanduser()
-    args.native_executable = (
-        native if native.is_absolute() else PROJECT_ROOT / native
-    ).resolve()
+    return (native if native.is_absolute() else PROJECT_ROOT / native).resolve()
+
+
+def _load_encoder_config(config_path: Path, section: str) -> EncoderConfig:
+    """Load one pinned encoder configuration from the shared models section."""
+
+    models = read_yaml_section(config_path, "models")
+    return EncoderConfig.from_dict(models[section])
+
+
+def _encode_visual_vectors(image_paths: list[Path], config: EncoderConfig):
+    """Encode durable images into L2-normalized visual vectors."""
+
+    from hcmai.common.utils.image import load_image
+    from hcmai.retrieval.embedding.adapters.siglip import SigLIPAdapter
+
+    adapter = SigLIPAdapter(config)
+    images = [load_image(path, mode="RGB") for path in image_paths]
+    return adapter.encode_images(images)
+
+
+def _encode_context_vectors(texts: list[str], config: EncoderConfig):
+    """Encode FrameContext text into L2-normalized context vectors."""
+
+    from hcmai.retrieval.embedding.adapters.bge import BGEAdapter
+
+    adapter = BGEAdapter(config)
+    return adapter.encode_text(texts)
+
+
+def _model_name(config_path: Path, section: str) -> str:
+    """Return one pinned encoder's model_name for index provenance."""
+
+    return read_yaml_section(config_path, "models")[section]["model_name"]
+
+
+# ---------------------------------------------------------------------------
+# Batch identity (RunIdentity) helpers.
+# ---------------------------------------------------------------------------
+
+
+def _media_info_digest(media_info_dir: Path) -> str:
+    """Hash every organizer media-info filename/size deterministically."""
+
+    entries = sorted((path.name, path.stat().st_size) for path in media_info_dir.glob("*.json"))
+    payload = json.dumps(entries, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _artifact_config_fingerprint(config_path: Path) -> str:
+    """Hash the additive ``custom_pipeline`` config section."""
+
+    raw = read_yaml_section(config_path, "custom_pipeline")
+    payload = json.dumps(raw, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _model_revisions(config_path: Path) -> dict[str, str]:
+    """Collect every pinned model revision that affects local artifact identity."""
+
+    enrichment = read_yaml_section(config_path, "enrichment")
+    models = read_yaml_section(config_path, "models")
+    return {
+        "caption": enrichment["caption"]["revision"],
+        "ocr": enrichment["ocr"]["revision"],
+        "asr": enrichment["transcript"]["asr"]["revision"],
+        "visual_embedding": models["visual_embedding"]["revision"],
+        "evidence_embedding": models["evidence_embedding"]["revision"],
+    }
+
+
+def _asr_lineage_digest(asr_index_root: Path) -> str:
+    """Hash the persisted, checksum-validated ASR index's provenance metadata."""
+
+    from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+
+    index = SegmentDenseIndex.load(asr_index_root)
+    payload = json.dumps(index.metadata.to_dict(), sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _build_run_identity(args: argparse.Namespace, plan: ArchivePlan) -> RunIdentity:
+    """Build the immutable identity that must match to resume local state."""
+
+    return RunIdentity(
+        version=args.version,
+        source=args.source,
+        frame_store_id=args.frame_store_id,
+        media_info_digest=_media_info_digest(args.media_info_dir),
+        archive_plan_digest=plan.digest,
+        artifact_config_fingerprint=_artifact_config_fingerprint(args.config),
+        model_revisions=_model_revisions(args.config),
+        asr_lineage_digest=_asr_lineage_digest(args.asr_index_root),
+    )
+
+
+# ---------------------------------------------------------------------------
+# The real per-batch specialist + embedding pipeline (produce_batch_artifacts).
+# ---------------------------------------------------------------------------
+
+
+def _make_produce_batch_artifacts(
+    args: argparse.Namespace, state_store: PipelineStateStore
+) -> Callable[[str, list[str], list[Path]], BatchArtifacts]:
+    """Build the callback that runs real local stages for one batch.
+
+    Runs native extraction, then Caption/OCR/Objects as isolated
+    subprocesses, then FrameContext, then encodes visual/context vectors
+    in-process. Advances each video's state from ``source_ready`` through
+    ``embeddings_complete`` as each real stage completes, and performs the
+    native per-video enriched/published/cleanup handoff so native scratch is
+    reclaimed once a video's specialist evidence is durable.
+    """
+
+    run_root = args.run_root.expanduser().resolve()
+    native_executable = _resolve_native_executable(args)
+    visual_encoder_config = _load_encoder_config(args.config, "visual_embedding")
+    context_encoder_config = _load_encoder_config(args.config, "evidence_embedding")
+
+    def _produce(batch_id: str, video_ids: list[str], source_paths: list[Path]) -> BatchArtifacts:
+        for video_id in video_ids:
+            state_store.advance_video(video_id, VideoStage.SOURCE_READY)
+
+        source_root = source_paths[0].parent
+        extraction_argv = [
+            "--media-info-dir", str(args.media_info_dir),
+            "--run-root", str(run_root),
+            "--native-executable", str(native_executable),
+            "--frame-store-id", args.frame_store_id,
+            # yt-dlp is never invoked here: --source-root always wins for
+            # archive-sourced videos, but the native CLI still requires this flag.
+            "--yt-dlp-binary", "yt-dlp",
+            "--source-root", str(source_root),
+            "--fail-fast",
+        ]
+        for video_id in video_ids:
+            extraction_argv.extend(("--video-id", video_id))
+        extraction = extract_custom_keyframes.run(extract_custom_keyframes.parse_args(extraction_argv))
+        if extraction["failed"]:
+            raise RuntimeError(f"native extraction failed for batch {batch_id}: {extraction.get('failures')}")
+
+        for video_id in video_ids:
+            state_store.advance_video(video_id, VideoStage.EXTRACTED)
+
+        batch_root = run_root / "active" / "batch" / batch_id
+        pipeline_root = batch_root / "pipeline"
+        frame_store_root = batch_root / "frame_store"
+        durable_frames = _materialize_frames_for_videos(
+            run_root, video_ids, pipeline_root / "durable_frames.parquet", image_variant="durable"
+        )
+        ocr_frames_path = _materialize_frames_for_videos(
+            run_root, video_ids, pipeline_root / "ocr_frames.parquet", image_variant="enrichment"
+        )
+        frame_ids = pd.read_parquet(durable_frames)["frame_id"].astype(str).tolist()
+
+        caption_root = pipeline_root / "enrichment" / "captions"
+        ocr_root = pipeline_root / "enrichment" / "ocr"
+        object_root = pipeline_root / "enrichment" / "objects"
+        context_root = pipeline_root / "enrichment" / "context"
+
+        common = _dataset_arguments(args, durable_frames, frame_store_root)
+        _run_python(
+            "generate_enrichment.py",
+            [
+                "--config", str(args.config),
+                "--app-config", str(args.app_config),
+                "--output", str(caption_root),
+                "--execution-backend", "local",
+                *common,
+            ],
+        )
+        for video_id in video_ids:
+            state_store.advance_video(video_id, VideoStage.CAPTIONED)
+
+        # NOTE: generate_ocr_enrichment.py does not yet expose a local
+        # execution backend; this still requires a reachable inference
+        # gateway (see --app-config) until that CLI is updated.
+        _run_python(
+            "generate_ocr_enrichment.py",
+            [
+                "--config", str(args.config),
+                "--app-config", str(args.app_config),
+                "--output", str(ocr_root),
+                *_dataset_arguments(args, ocr_frames_path, frame_store_root),
+            ],
+        )
+        for video_id in video_ids:
+            state_store.advance_video(video_id, VideoStage.OCR_COMPLETE)
+
+        _run_python(
+            "detect_objects.py",
+            ["--config", str(args.config), "--output", str(object_root), *common],
+        )
+        for video_id in video_ids:
+            state_store.advance_video(video_id, VideoStage.OBJECTS_COMPLETE)
+
+        caption_table = _require_complete_frame_artifact(caption_root / "captions.parquet", frame_ids, "Caption")
+        ocr_table = _require_complete_frame_artifact(ocr_root / "frames.parquet", frame_ids, "OCR")
+        object_table = _require_complete_frame_artifact(object_root / "frames.parquet", frame_ids, "Object")
+
+        _run_python(
+            "build_frame_context.py",
+            [
+                "--config", str(args.config),
+                "--captions", str(caption_root / "captions.parquet"),
+                "--ocr-frames", str(ocr_root / "frames.parquet"),
+                "--object-frames", str(object_root / "frames.parquet"),
+                "--output", str(context_root),
+                *common,
+            ],
+        )
+        context_table = _require_complete_frame_artifact(
+            context_root / "frame_context_v1.parquet", frame_ids, "Context"
+        )
+        for video_id in video_ids:
+            state_store.advance_video(video_id, VideoStage.CONTEXT_COMPLETE)
+
+        durable_table = pd.read_parquet(durable_frames)
+        image_paths = [
+            path if (path := Path(str(value))).is_absolute() else run_root / path
+            for value in durable_table["image_path"]
+        ]
+        visual_vectors = _encode_visual_vectors(image_paths, visual_encoder_config)
+        context_texts = [
+            str(value) if value is not None else "" for value in context_table["context_text"]
+        ]
+        context_vectors = _encode_context_vectors(context_texts, context_encoder_config)
+        for video_id in video_ids:
+            state_store.advance_video(video_id, VideoStage.EMBEDDINGS_COMPLETE)
+
+        base = durable_table[["frame_id", "video_id", "frame_idx", "timestamp_ms"]].reset_index(drop=True)
+        mapping = base.assign(embedding_index=range(len(base)))
+
+        frame_native_tables = {
+            "caption": caption_table.reset_index(drop=True),
+            "ocr_frames": ocr_table.reset_index(drop=True),
+            "object_frames": object_table.reset_index(drop=True),
+            "context": context_table.reset_index(drop=True),
+        }
+        child_tables = {
+            "ocr_regions": _load_or_empty(ocr_root / "regions.parquet", ["frame_id", "video_id"]),
+            "object_detections": _load_or_empty(object_root / "detections.parquet", ["frame_id", "video_id"]),
+        }
+
+        # Native per-video handoff/publish/cleanup so native scratch is
+        # reclaimed once a video's specialist evidence is durable.
+        for video_id in video_ids:
+            bundle = _bundle_root(run_root, video_id)
+            if bundle.parent.name == "published":
+                continue
+            records = list(iter_native_frame_records(bundle, run_root=run_root))
+            video_frame_ids = [record.frame_id for record in records]
+            handoff_root = bundle / "enrichment" / "handoff_artifacts"
+            handoff_root.mkdir(parents=True, exist_ok=True)
+            handoff = write_enrichment_handoff(
+                bundle,
+                artifact_paths={
+                    "caption": _write_video_projection(caption_table, video_frame_ids, handoff_root / "caption.parquet"),
+                    "ocr": _write_video_projection(ocr_table, video_frame_ids, handoff_root / "ocr.parquet"),
+                    "objects": _write_video_projection(object_table, video_frame_ids, handoff_root / "objects.parquet"),
+                    "asr": _transcript_path(args.transcripts_root, video_id),
+                },
+                output_path=bundle / "enrichment" / "handoff.json",
+                frame_store_id=args.frame_store_id,
+            )
+            mark_video_enriched(native_executable, run_root, video_id, handoff)
+            mark_video_published(native_executable, run_root, video_id, bundle / "manifest.json")
+            cleanup_video(native_executable, run_root, video_id)
+
+        return BatchArtifacts(
+            frames_table=base,
+            frame_native_tables=frame_native_tables,
+            child_tables=child_tables,
+            visual_vectors=visual_vectors,
+            visual_mapping=mapping,
+            context_vectors=context_vectors,
+            context_mapping=mapping,
+        )
+
+    return _produce
+
+
+def _make_asr_bundle_factory(args: argparse.Namespace) -> Callable[[list[str]], ASRReuseBundle]:
+    """Validate and return reusable ASR evidence for exactly one batch's videos."""
+
+    def _factory(video_ids: list[str]) -> ASRReuseBundle:
+        return validate_asr_source(args.transcripts_root, args.asr_index_root, video_ids)
+
+    return _factory
+
+
+# ---------------------------------------------------------------------------
+# CLI parsing.
+# ---------------------------------------------------------------------------
+
+
+def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add options common to every subcommand."""
+
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--app-config", type=Path, default=DEFAULT_APP_CONFIG)
+    parser.add_argument("--media-info-dir", type=Path)
+    parser.add_argument("--media-info-url", default=DEFAULT_MEDIA_INFO_URL)
+    parser.add_argument("--run-root", type=Path, required=True)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument(
+        "--native-executable", type=Path, default=Path("build/keyframes_extraction/keyframe_extractor")
+    )
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--source", default="custom_raw_video_1fps")
+    parser.add_argument("--frame-store-id", required=True)
+    parser.add_argument("--transcripts-root", type=Path, required=True)
+    parser.add_argument("--asr-index-root", type=Path, required=True)
+    parser.add_argument("--report", type=Path, help="Optional path to also write the JSON report.")
+    parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
+    parser.add_argument(
+        "--archive-url",
+        dest="archive_urls",
+        action="append",
+        required=True,
+        help="One organizer ZIP URL; repeat in the runbook's exact fixed order.",
+    )
+    parser.add_argument("--offset", type=int, default=0)
+    parser.add_argument("--limit", type=int, default=None)
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse one explicit local pipeline subcommand."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    for name, help_text in (
+        ("preflight", "Validate local prerequisites without downloading anything."),
+        ("process-archive", "Resume every archive in the work window through committed batches."),
+        ("status", "Report local pipeline state."),
+        ("finalize", "Compact every committed batch once the full plan is cleaned."),
+    ):
+        subparser = subparsers.add_parser(name, help=help_text)
+        _add_shared_arguments(subparser)
+
+    return parser.parse_args(argv)
+
+
+# ---------------------------------------------------------------------------
+# Subcommand handlers.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_shared_paths(args: argparse.Namespace) -> None:
+    """Resolve every path argument once, in place, before any subcommand runs."""
+
+    args.run_root = args.run_root.expanduser().resolve()
+    args.output_root = args.output_root.expanduser().resolve()
     args.config = args.config.expanduser().resolve()
     args.app_config = args.app_config.expanduser().resolve()
-    args.run_root = run_root
-    args.output_root = output_root
-    args.media_info_dir = _resolve_media_info_dir(args)
-    extraction = extract_custom_keyframes.run(_extraction_args(args))
-    extraction_report_path = run_root / "input" / "extraction_report.json"
-    atomic_write(
-        extraction_report_path,
-        lambda path: write_json(extraction, path),
-    )
-    if extraction["failed"]:
-        raise RuntimeError(
-            _extraction_failure_message(extraction, extraction_report_path)
-        )
-    selected = tuple(sorted(str(value) for value in extraction["selected_video_ids"]))
-    if not selected:
-        raise ValueError("custom preparation requires at least one selected video")
+    args.transcripts_root = args.transcripts_root.expanduser().resolve()
+    args.asr_index_root = args.asr_index_root.expanduser().resolve()
+    args.media_info_dir = _resolve_media_info_dir(args.media_info_dir, args.media_info_url, args.run_root)
 
-    report_path = output_root / "prepare_report.json"
-    completed = _completed_report(report_path, args, selected)
-    if completed is not None:
-        return completed
 
-    pipeline_root = run_root / "pipeline"
-    frame_store_root = output_root / "frame_store"
-    enrichment_root = output_root / "enrichment"
-    caption_root = enrichment_root / "captions"
-    ocr_root = enrichment_root / "ocr"
-    object_root = enrichment_root / "objects"
-    transcript_root = enrichment_root / "transcripts"
-    context_root = enrichment_root / "context"
-    index_root = output_root / "indexes"
-    durable_frames = _materialize_batch_frames(
-        run_root,
-        selected,
-        pipeline_root / "durable_frames.parquet",
-        image_variant="durable",
-    )
-    ocr_frames = _materialize_batch_frames(
-        run_root,
-        selected,
-        pipeline_root / "ocr_frames.parquet",
-        image_variant="enrichment",
-    )
-    expected_ids = pd.read_parquet(durable_frames)["frame_id"].astype(str).tolist()
+def _build_runner_context(args: argparse.Namespace, custom_config: CustomPipelineConfig) -> RunnerContext:
+    """Build the shared local runner context from resolved CLI arguments."""
 
-    common = _dataset_arguments(args, durable_frames, frame_store_root)
-    _run_python(
-        "generate_enrichment.py",
-        [
-            "--config",
-            str(args.config),
-            "--app-config",
-            str(args.app_config),
-            "--output",
-            str(caption_root),
-            *common,
-        ],
-    )
-    _run_python(
-        "generate_ocr_enrichment.py",
-        [
-            "--config",
-            str(args.config),
-            "--app-config",
-            str(args.app_config),
-            "--output",
-            str(ocr_root),
-            *_dataset_arguments(args, ocr_frames, frame_store_root),
-        ],
-    )
-    _run_python(
-        "detect_objects.py",
-        ["--config", str(args.config), "--output", str(object_root), *common],
+    return RunnerContext(
+        run_root=args.run_root,
+        artifacts_root=args.output_root,
+        native_executable=_resolve_native_executable(args),
+        disk_budget=custom_config.disk,
+        scheduling=custom_config.scheduling,
     )
 
-    if not _transcripts_complete(transcript_root, selected):
-        videos_root = _stage_video_aliases(run_root, selected)
-        transcript_arguments = [
-            "--config",
-            str(args.config),
-            "--videos-root",
-            str(videos_root),
-            "--output",
-            str(transcript_root),
-            "--frame-enrichment-output",
-            str(enrichment_root / "asr" / "frame_enrichment.parquet"),
-            *common,
-        ]
-        if args.no_diarization:
-            transcript_arguments.append("--no-diarization")
-        _run_python("prepare_transcripts.py", transcript_arguments)
 
-    caption_table = _require_complete_frame_artifact(
-        caption_root / "captions.parquet", expected_ids, "Caption"
-    )
-    ocr_table = _require_complete_frame_artifact(
-        ocr_root / "frames.parquet", expected_ids, "OCR"
-    )
-    object_table = _require_complete_frame_artifact(
-        object_root / "frames.parquet", expected_ids, "Object"
-    )
+def _cmd_preflight(args: argparse.Namespace) -> dict[str, Any]:
+    """Validate local prerequisites and the requested work window."""
 
-    for video_id in selected:
-        bundle = _bundle_root(run_root, video_id)
-        if bundle.parent.name == "published":
-            continue
-        records = list(iter_native_frame_records(bundle, run_root=run_root))
-        frame_ids = [record.frame_id for record in records]
-        handoff_root = bundle / "enrichment" / "handoff_artifacts"
-        handoff_root.mkdir(parents=True, exist_ok=True)
-        handoff = write_enrichment_handoff(
-            bundle,
-            artifact_paths={
-                "caption": _write_video_projection(
-                    caption_table, frame_ids, handoff_root / "caption.parquet"
-                ),
-                "ocr": _write_video_projection(
-                    ocr_table, frame_ids, handoff_root / "ocr.parquet"
-                ),
-                "objects": _write_video_projection(
-                    object_table, frame_ids, handoff_root / "objects.parquet"
-                ),
-                "asr": _transcript_path(transcript_root, video_id),
-            },
-            output_path=bundle / "enrichment" / "handoff.json",
-            frame_store_id=args.frame_store_id,
-        )
-        mark_video_enriched(
-            args.native_executable, run_root, video_id, handoff
-        )
-        mark_video_published(
-            args.native_executable,
-            run_root,
-            video_id,
-            bundle / "manifest.json",
-        )
-
-    frames_path = materialize_custom_frame_store(
-        CustomFrameStoreConfig(
-            run_root=run_root,
-            output_root=frame_store_root,
-            frame_store_id=args.frame_store_id,
-            selected_video_ids=selected,
-        )
-    )
-    canonical = pd.read_parquet(frames_path)
-    frame_count = len(canonical)
-    video_count = int(canonical["video_id"].nunique())
-    final_common = _dataset_arguments(args, frames_path, frame_store_root)
-    context_path = context_root / "frame_context_v1.parquet"
-    _run_python(
-        "build_frame_context.py",
-        [
-            "--config",
-            str(args.config),
-            "--captions",
-            str(caption_root / "captions.parquet"),
-            "--ocr-frames",
-            str(ocr_root / "frames.parquet"),
-            "--object-frames",
-            str(object_root / "frames.parquet"),
-            "--output",
-            str(context_root),
-            *final_common,
-        ],
-    )
-    _run_python(
-        "build_retrieval_indexes.py",
-        [
-            "--stage",
-            "all",
-            "--config",
-            str(args.config),
-            "--model-config",
-            str(args.config),
-            "--frame-manifest",
-            str(frame_store_root / "manifest.json"),
-            "--context",
-            str(context_path),
-            "--transcripts",
-            str(transcript_root),
-            "--expected-video-count",
-            str(video_count),
-            "--expected-frame-count",
-            str(frame_count),
-            "--output-root",
-            str(index_root),
-            *final_common,
-        ],
-    )
-
-    build_report_path = index_root / "build_report.json"
-    build_report = read_json(build_report_path)
-    if not isinstance(build_report, dict) or build_report.get("status") != "passed":
-        raise RuntimeError("index build did not publish a passed validation report")
-
-    if not args.keep_temporary:
-        for video_id in selected:
-            cleanup_video(args.native_executable, run_root, video_id)
-        shutil.rmtree(pipeline_root / "videos", ignore_errors=True)
-
-    report = {
-        "status": "passed",
-        "dataset_version": args.version,
-        "dataset_source": args.source,
-        "frame_store_id": args.frame_store_id,
-        "media_info_dir": str(args.media_info_dir),
-        "media_info_url": args.media_info_url if downloads_media_info else None,
-        "selected_video_ids": list(selected),
-        "video_count": video_count,
-        "frame_count": frame_count,
-        "required_artifacts": [
-            str(frames_path),
-            str(caption_root / "captions.parquet"),
-            str(ocr_root / "frames.parquet"),
-            str(object_root / "frames.parquet"),
-            str(context_path),
-            str(build_report_path),
-        ],
+    custom_config = CustomPipelineConfig.from_yaml(args.config)
+    context = _build_runner_context(args, custom_config)
+    plan = ArchivePlan.from_urls(args.archive_urls)
+    window = ArchiveWorkWindow(offset=args.offset, limit=args.limit)
+    report = preflight_pipeline(context, plan, window)
+    return {
+        "command": "preflight",
+        "ok": report.ok,
+        "problems": list(report.problems),
+        "native_executable_found": report.native_executable_found,
+        "ffmpeg_found": report.ffmpeg_found,
+        "curl_found": report.curl_found,
+        "measured_cpus": report.measured_cpus,
+        "free_bytes": report.disk.free_bytes,
+        "active_bytes": report.disk.active_bytes,
+        "archive_plan_size": report.archive_plan_size,
+        "work_window": report.work_window,
     }
-    atomic_write(report_path, lambda path: write_json(report, path))
-    return report
+
+
+def _cmd_process_archive(args: argparse.Namespace) -> dict[str, Any]:
+    """Resume every archive in the requested work window."""
+
+    custom_config = CustomPipelineConfig.from_yaml(args.config)
+    context = _build_runner_context(args, custom_config)
+    plan = ArchivePlan.from_urls(args.archive_urls)
+    window = ArchiveWorkWindow(offset=args.offset, limit=args.limit)
+
+    state_store = PipelineStateStore(context.run_root)
+    state_store.create_or_resume_run(_build_run_identity(args, plan), window)
+
+    produce_batch_artifacts = _make_produce_batch_artifacts(args, state_store)
+    asr_bundle_factory = _make_asr_bundle_factory(args)
+    visual_model_name = _model_name(args.config, "visual_embedding")
+    context_model_name = _model_name(args.config, "evidence_embedding")
+
+    committed_batches: dict[str, list[str]] = {}
+    for entry in window.select(plan):
+        committed_batches[entry.archive_id] = process_archive(
+            context,
+            state_store,
+            entry,
+            produce_batch_artifacts,
+            asr_bundle_factory,
+            dataset_version=args.version,
+            visual_model_name=visual_model_name,
+            context_model_name=context_model_name,
+        )
+    return {"command": "process-archive", "committed_batches": committed_batches}
+
+
+def _cmd_status(args: argparse.Namespace) -> dict[str, Any]:
+    """Report read-only local pipeline state."""
+
+    custom_config = CustomPipelineConfig.from_yaml(args.config)
+    context = _build_runner_context(args, custom_config)
+    plan = ArchivePlan.from_urls(args.archive_urls)
+    state_store = PipelineStateStore(context.run_root)
+    status = pipeline_status(context, state_store, plan)
+    return {"command": "status", **status}
+
+
+def _cmd_finalize(args: argparse.Namespace) -> dict[str, Any]:
+    """Compact every committed batch once the full plan is cleaned."""
+
+    custom_config = CustomPipelineConfig.from_yaml(args.config)
+    context = _build_runner_context(args, custom_config)
+    plan = ArchivePlan.from_urls(args.archive_urls)
+    state_store = PipelineStateStore(context.run_root)
+    report = finalize_pipeline(
+        context,
+        state_store,
+        plan,
+        context.artifacts_root / "batches",
+        args.run_root,
+        context.artifacts_root,
+        dataset_version=args.version,
+    )
+    return {"command": "finalize", **report}
+
+
+_HANDLERS: dict[str, Callable[[argparse.Namespace], dict[str, Any]]] = {
+    "preflight": _cmd_preflight,
+    "process-archive": _cmd_process_archive,
+    "status": _cmd_status,
+    "finalize": _cmd_finalize,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the custom preparation pipeline and print its final report."""
+    """Dispatch one local pipeline subcommand and print its JSON report."""
 
-    report = run(parse_args(argv))
-    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    from hcmai.common.utils.logging import configure_logging
+
+    args = parse_args(argv)
+    configure_logging(args.log_level)
+    _resolve_shared_paths(args)
+
+    report = _HANDLERS[args.command](args)
+    if args.report is not None:
+        atomic_write(args.report, lambda path: write_json(report, path))
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True, default=str))
     return 0
 
 
