@@ -62,7 +62,7 @@ def test_prepare_yaml_routes_every_offline_stage_from_one_file() -> None:
 
     path = Path("configs/prepare.yaml")
     raw = read_yaml(path)
-    assert set(raw) == {"enrichment", "storage", "indexing", "models"}
+    assert set(raw) == {"enrichment", "storage", "indexing", "models", "custom_pipeline"}
     assert "dataset" not in raw["enrichment"]
     assert "dataset" not in raw["indexing"]
 

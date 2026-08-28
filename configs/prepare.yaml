@@ -125,3 +125,33 @@ models:
     batch_size: 128
     max_length: 8192
     dtype: float32
+
+# Local A6000 / 100 GB / 6-vCPU custom raw-video pipeline profile. Additive
+# only: it does not alter any BTC-keyframe default above. Every disk,
+# scheduling, and stage-batch value is PROPOSED and pilot-tunable until
+# measured on the A6000 pilot run.
+custom_pipeline:
+  run_root: "runs/dataset_v1"
+  artifacts_root: "artifacts/dataset_v1"
+  device: "cuda"
+  dtype: "bfloat16"
+  disk:
+    min_free_gib: 15
+    max_active_gib: 30
+    max_archive_download_gib: 20
+    max_archive_uncompressed_gib: 25
+  scheduling:
+    available_cpus: 6
+    max_videos_per_batch: 8
+    extractor_processes: 2
+    ffmpeg_threads_per_process: 2
+    image_workers: 3
+    prefetch_batches: 2
+    cpu_only_threads: 6
+  stage_batches:
+    caption: 8
+    ocr: 32
+    objects: 32
+    visual: 128
+    context: 128
+    minimum: 1
