@@ -1,3 +1,6 @@
+sudo apt-get update && sudo apt-get install -y tmux
+tmux new -s aic
+
 git clone -b feat/detection https://github.com/khang1108/MLeCDanBGold.git
 cd MLeCDanBGold
 
@@ -26,5 +29,4 @@ print(d.label.value_counts().head(30))
 print('frames:', d.frame_id.nunique())
 "
 
-TRANSCRIPTS_ROOT=runs/transcripts-all nohup ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh > runs/full.log 2>&1 &
-tail -f runs/full.log
+TRANSCRIPTS_ROOT=runs/transcripts-all ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/full.log
