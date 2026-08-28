@@ -22,11 +22,26 @@ wc -l configs/yoloe_vocab.txt
 
 TRANSCRIPTS_ROOT=runs/transcripts-all ZIP_LIMIT=1 ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh
 
+ls artifacts/custom-raw1fps-v1/batches/*/*/_SUCCESS.json
+
 python -c "
-import pandas as pd
-d = pd.read_parquet('artifacts/enrichment/objects/detections.parquet')
-print(d.label.value_counts().head(30))
-print('frames:', d.frame_id.nunique())
+import glob, pandas as pd
+root = 'artifacts/custom-raw1fps-v1/batches/*/*/videos/*'
+def load(name):
+    f = sorted(glob.glob(f'{root}/{name}.parquet'))
+    print(name, 'shards:', len(f))
+    return pd.concat(map(pd.read_parquet, f), ignore_index=True) if f else pd.DataFrame()
+det = load('object_detections')
+print(det.label.value_counts().head(30))
+print('detected frames:', det.frame_id.nunique())
+cap = load('caption')
+print('captions:', cap.status.value_counts().to_dict())
+print(cap.text.dropna().head(3).tolist())
+ocr = load('ocr_regions')
+print('ocr regions:', len(ocr))
+ctx = load('context')
+print('context empty:', ctx.context_text.fillna('').eq('').sum(), '/', len(ctx))
+print(ctx.context_text.dropna().head(2).tolist())
 "
 
 TRANSCRIPTS_ROOT=runs/transcripts-all ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/full.log
