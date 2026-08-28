@@ -799,7 +799,7 @@ ls artifacts/custom-raw1fps-v1/batches/*/*/_SUCCESS.json | wc -l
 
 ## Gộp và finalize
 
-Chạy trên đúng một máy, sau khi cả 25 máy đã sync xong. Máy 20 (L27_a, 2 batch) xong sớm nhất nên dùng máy đó.
+Chạy trên đúng một máy, sau khi cả 25 máy đã sync xong. Máy 20 (L27_a, 2 batch) xong sớm nhất nên dùng máy đó. Chạy ở máy local cũng được — bước này chỉ ghép parquet và dựng FAISS từ vector có sẵn, không nạp model và không cần GPU; cần khoảng 50 GB đĩa trống và 8 GB RAM lúc dựng index context.
 
 ```bash
 aws s3 sync s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/ artifacts/custom-raw1fps-v1/batches/
