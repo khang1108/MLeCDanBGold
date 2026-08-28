@@ -2,7 +2,7 @@
 
 Mỗi máy copy đúng một khối bên dưới. Sau `tmux new -s aic` và `aws configure` phải nhập tay rồi chạy tiếp phần còn lại.
 
-## Máy 1 — Videos_L21_a, batch 0+4
+## Máy 1 — Videos_L21_a, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -18,14 +18,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=0 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=0 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a0-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 2 — Videos_L21_a, batch 4+hết
+## Máy 2 — Videos_L21_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -41,14 +41,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=0 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=0 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a0-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a0-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 3 — Videos_L22_a, batch 0+4
+## Máy 3 — Videos_L22_a, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -64,14 +64,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=1 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=1 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a1-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 4 — Videos_L22_a, batch 4+hết
+## Máy 4 — Videos_L22_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -87,14 +87,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=1 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=1 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a1-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a1-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 5 — Videos_L23_a, batch 0+4
+## Máy 5 — Videos_L23_a, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -110,14 +110,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=2 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=2 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a2-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 6 — Videos_L23_a, batch 4+hết
+## Máy 6 — Videos_L23_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -133,14 +133,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=2 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=2 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a2-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a2-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 7 — Videos_L24_a, batch 0+4
+## Máy 7 — Videos_L24_a, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -156,14 +156,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=3 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=3 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a3-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 8 — Videos_L24_a, batch 4+hết
+## Máy 8 — Videos_L24_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -179,14 +179,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=3 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=3 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a3-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a3-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 9 — Videos_L25_a, batch 0+4
+## Máy 9 — Videos_L25_a, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -202,14 +202,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=4 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=4 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a4-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 10 — Videos_L25_a, batch 4+hết
+## Máy 10 — Videos_L25_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -225,14 +225,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=4 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=4 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a4-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a4-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 11 — Videos_L26_a, batch 0+4
+## Máy 11 — Videos_L26_a, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -248,14 +248,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=5 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=5 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a5-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 12 — Videos_L26_a, batch 4+hết
+## Máy 12 — Videos_L26_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -271,14 +271,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=5 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=5 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a5-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a5-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 13 — Videos_L26_b, batch 0+4
+## Máy 13 — Videos_L26_b, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -294,14 +294,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=6 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=6 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a6-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 14 — Videos_L26_b, batch 4+hết
+## Máy 14 — Videos_L26_b, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -317,14 +317,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=6 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=6 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a6-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a6-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 15 — Videos_L26_c, batch 0+4
+## Máy 15 — Videos_L26_c, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -340,14 +340,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=7 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=7 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a7-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 16 — Videos_L26_c, batch 4+hết
+## Máy 16 — Videos_L26_c, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -363,14 +363,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=7 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=7 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a7-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a7-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 17 — Videos_L26_d, batch 0+4
+## Máy 17 — Videos_L26_d, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -386,14 +386,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=8 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=8 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a8-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 18 — Videos_L26_d, batch 4+hết
+## Máy 18 — Videos_L26_d, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -409,14 +409,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=8 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=8 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a8-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a8-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 19 — Videos_L26_e, batch 0+4
+## Máy 19 — Videos_L26_e, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -432,14 +432,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=9 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=9 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a9-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 20 — Videos_L26_e, batch 4+hết
+## Máy 20 — Videos_L26_e, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -455,14 +455,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=9 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=9 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a9-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a9-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 21 — Videos_L27_a, batch 0+4
+## Máy 21 — Videos_L27_a, batch 0+2
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -478,14 +478,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=10 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=4 \
+ZIP_OFFSET=10 ZIP_LIMIT=1 BATCH_OFFSET=0 BATCH_LIMIT=2 \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a10-b0.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-## Máy 22 — Videos_L27_a, batch 4+hết
+## Máy 22 — Videos_L27_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -501,9 +501,9 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=10 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=10 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a10-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a10-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
@@ -581,7 +581,7 @@ aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1f
 
 Thuê thêm thì đưa vào đây trước, vì archive 11/12/13 hiện chỉ có một máy.
 
-### Máy 26 — Videos_L28_a, batch 4+hết
+### Máy 26 — Videos_L28_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -597,14 +597,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=11 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=11 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a11-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a11-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-### Máy 27 — Videos_L29_a, batch 4+hết
+### Máy 27 — Videos_L29_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -620,14 +620,14 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=12 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=12 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a12-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a12-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
 
-### Máy 28 — Videos_L30_a, batch 4+hết
+### Máy 28 — Videos_L30_a, batch 2+hết
 
 ```bash
 sudo apt-get update && sudo apt-get install -y tmux aria2
@@ -643,9 +643,9 @@ aws s3 sync s3://mlecdanbgold-db/artifacts/ artifacts/
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
-ZIP_OFFSET=13 ZIP_LIMIT=1 BATCH_OFFSET=4 BATCH_LIMIT= \
+ZIP_OFFSET=13 ZIP_LIMIT=1 BATCH_OFFSET=2 BATCH_LIMIT= \
   TRANSCRIPTS_ROOT=runs/transcripts-all \
-  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a13-b4.log
+  ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/a13-b2.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
 aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
 ```
