@@ -16,6 +16,7 @@ const FramesBox = ({
   const structuredLatency = typeof latencyMs === "object" && latencyMs !== null;
   const totalLatencyMs = structuredLatency ? latencyMs.total : latencyMs;
   if (isLoading) return null;
+
   return (
     <section className="frames-container">
       {error && (
@@ -33,31 +34,33 @@ const FramesBox = ({
             frames in{" "}
             <span className="latency-highlight">{totalLatencyMs}ms</span>
           </div>
-          {structuredLatency && <div className="latency-stages">
-            <span className="latency-stage-item">
-              Query: {latencyMs.query_processing + latencyMs.query_encoding}ms
-            </span>
-            <span className="latency-stage-divider">|</span>
-            <span className="latency-stage-item">
-              Retrieval: {latencyMs.candidate_retrieval}ms
-            </span>
-            <span className="latency-stage-divider">|</span>
-            <span className="latency-stage-item">
-              Fusion: {latencyMs.fusion}ms
-            </span>
-            {latencyMs.reranking > 0 && (
-              <>
-                <span className="latency-stage-divider">|</span>
-                <span className="latency-stage-item">
-                  Rerank: {latencyMs.reranking}ms
-                </span>
-              </>
-            )}
-            <span className="latency-stage-divider">|</span>
-            <span className="latency-stage-item">
-              Materialize: {latencyMs.materialization}ms
-            </span>
-          </div>}
+          {structuredLatency && (
+            <div className="latency-stages">
+              <span className="latency-stage-item">
+                Query: {latencyMs.query_processing + latencyMs.query_encoding}ms
+              </span>
+              <span className="latency-stage-divider">|</span>
+              <span className="latency-stage-item">
+                Retrieval: {latencyMs.candidate_retrieval}ms
+              </span>
+              <span className="latency-stage-divider">|</span>
+              <span className="latency-stage-item">
+                Fusion: {latencyMs.fusion}ms
+              </span>
+              {latencyMs.reranking > 0 && (
+                <>
+                  <span className="latency-stage-divider">|</span>
+                  <span className="latency-stage-item">
+                    Rerank: {latencyMs.reranking}ms
+                  </span>
+                </>
+              )}
+              <span className="latency-stage-divider">|</span>
+              <span className="latency-stage-item">
+                Materialize: {latencyMs.materialization}ms
+              </span>
+            </div>
+          )}
         </div>
       )}
       {!error && warnings.length > 0 && (

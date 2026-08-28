@@ -4,24 +4,13 @@ import {
   searchTrake,
 } from './search';
 
-const originalMockBackend = process.env.REACT_APP_MOCK_BACKEND;
-
 const response = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
   status,
   json: jest.fn().mockResolvedValue(payload),
 });
 
-beforeEach(() => {
-  delete process.env.REACT_APP_MOCK_BACKEND;
-});
-
 afterEach(() => jest.restoreAllMocks());
-
-afterAll(() => {
-  if (originalMockBackend === undefined) delete process.env.REACT_APP_MOCK_BACKEND;
-  else process.env.REACT_APP_MOCK_BACKEND = originalMockBackend;
-});
 
 test('builds canonical frame asset URLs for materialized TRAKE cards', () => {
   expect(frameAssetUrl('folder/frame 1', 'thumbnail')).toBe(
@@ -53,21 +42,6 @@ test('posts the canonical standalone search request', async () => {
       }),
     }),
   );
-});
-
-test('uses the local KIS mock only when the mock env flag is enabled', async () => {
-  const previous = process.env.REACT_APP_MOCK_BACKEND;
-  process.env.REACT_APP_MOCK_BACKEND = 'true';
-  const fetchSpy = jest.spyOn(global, 'fetch');
-
-  try {
-    const payload = await searchFrames({ query: 'red boat', topK: 5, queryType: 'kis' });
-    expect(payload.results).toHaveLength(5);
-    expect(fetchSpy).not.toHaveBeenCalled();
-  } finally {
-    if (previous === undefined) delete process.env.REACT_APP_MOCK_BACKEND;
-    else process.env.REACT_APP_MOCK_BACKEND = previous;
-  }
 });
 
 test('resolves API-relative frame asset URLs', async () => {

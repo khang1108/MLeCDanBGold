@@ -54,8 +54,24 @@ test('embeds the mapped YouTube video and passes the selected timestamp', async 
   expect(video.getAttribute('data-target-time')).toBe('5');
   expect(screen.getByText('125')).toBeTruthy();
   expect(screen.getByText('5000 ms')).toBeTruthy();
+  expect(screen.getByText('L21_V001 · 125')).toBeTruthy();
+  expect(screen.queryByText(/BTC frame 125/i)).toBeNull();
   expect(screen.getByText('FPS')).toBeTruthy();
   expect(screen.getByText('25')).toBeTruthy();
+});
+
+test('shows the active query above the frame inspector without a label', () => {
+  render(
+    <ImageModal
+      frame={frame}
+      query={'a person enters the room E1 and sits down'}
+      onClose={jest.fn()}
+    />,
+  );
+
+  expect(screen.getByRole('status', { name: 'Current query' })).toBeTruthy();
+  expect(screen.getByText('a person enters the room E1 and sits down')).toBeTruthy();
+  expect(screen.queryByText('Current query')).toBeNull();
 });
 
 test('prefers canonical timestamp over frame_idx/fps when they identify different moments', async () => {
@@ -79,13 +95,33 @@ test('keeps the direct iframe focusable for native YouTube keyboard controls', a
   expect(video.getAttribute('tabindex')).toBe('0');
 });
 
-test('uses the real player time to update the displayed frame index', async () => {
+test('uses the real player time for metadata while keeping the selected frame in the header', async () => {
   render(<ImageModal frame={{ ...frame, fps: 30 }} onClose={jest.fn()} />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Report player time' }));
 
   expect(screen.getByText('156')).toBeTruthy();
   expect(screen.getByText('5200 ms')).toBeTruthy();
+  expect(screen.getByText('L21_V001 · 125')).toBeTruthy();
+});
+
+test('submits the live video position from the inspector header', async () => {
+  const onSubmit = jest.fn();
+  render(
+    <ImageModal
+      frame={{ ...frame, fps: 30 }}
+      onSubmit={onSubmit}
+      onClose={jest.fn()}
+    />,
+  );
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Report player time' }));
+  fireEvent.click(screen.getByRole('button', { name: /submit current frame/i }));
+
+  expect(onSubmit).toHaveBeenCalledWith({
+    line: 'L21_V001,156',
+    source: 'Frame inspector',
+  });
 });
 
 test('shows an unavailable message when no YouTube metadata is mapped', async () => {

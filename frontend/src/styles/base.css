@@ -34,8 +34,6 @@ p,
 svg,
 path,
 .query-input-field,
-.toolbox-input,
-.toolbox-slider,
 .btn-primary,
 .btn-utility,
 .frame-card {
@@ -81,14 +79,6 @@ h3 {
   color: var(--color-ink);
 }
 
-.title {
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: -0.125px;
-  color: var(--color-ink);
-}
-
 .body-md {
   font-size: 16px;
   font-weight: 400;
@@ -96,26 +86,10 @@ h3 {
   color: var(--color-ink-secondary);
 }
 
-.body-sm {
-  font-size: 15px;
-  font-weight: 400;
-  line-height: 1.33;
-  color: var(--color-ink-secondary);
-}
-
 .caption {
   font-size: 14px;
   font-weight: 400;
   line-height: 1.43;
-  color: var(--color-ink-muted);
-}
-
-.eyebrow {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.33;
-  letter-spacing: 0.125px;
-  text-transform: uppercase;
   color: var(--color-ink-muted);
 }
 
@@ -127,24 +101,6 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-}
-
-/* Premium Card and Panel Bases */
-.card-flat {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--rounded-lg);
-  padding: var(--spacing-lg);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.card-elevated {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--rounded-lg);
-  padding: var(--spacing-lg);
-  box-shadow: var(--shadow-level-1);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 /* Text Inputs */

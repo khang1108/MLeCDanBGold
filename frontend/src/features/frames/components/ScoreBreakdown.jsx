@@ -18,13 +18,14 @@ const ScoreBreakdown = ({
   const rows = scoreLabels.filter(
     ([key]) => scores[key] !== null && scores[key] !== undefined,
   );
-  if (asRows)
+  if (asRows) {
     return rows.map(([key, label]) => (
       <div key={key} className="inspector-score-row">
         <span className="score-row-name">{label}</span>
         <span className="score-row-val">{scores[key].toFixed(2)}</span>
       </div>
     ));
+  }
   return (
     <table className={className}>
       <tbody>

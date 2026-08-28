@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import YouTubePlayer from './YouTubePlayer';
 
 let fakePlayer;

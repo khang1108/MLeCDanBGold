@@ -1,10 +1,11 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { frameAssetUrl, searchFrames, searchTrake } from '../../../api/search';
-import VqaSearchWorkspace, {
+import SearchWorkspace, {
+  parseRetrievalDescription,
   parseTrakeEvents,
   progressiveSearchIdKey,
-} from './VqaSearchWorkspace';
+} from './SearchWorkspace';
 
 jest.mock('../../../api/search');
 
@@ -15,41 +16,28 @@ beforeEach(() => {
   window.sessionStorage.clear();
 });
 
-const EVENT_PLACEHOLDER = 'Event query (/kis, /trake E1: ... E2: ... on new lines)...';
-const QUESTION_PLACEHOLDER = 'Question (optional for VQA)...';
-
-const submit = (eventDescription, question = '') => {
+const EVENT_PLACEHOLDER = 'Describe the event, or add E1, E2, ... for TRAKE';
+const submit = (eventDescription) => {
   fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
     target: { value: eventDescription },
   });
-  if (question) {
-    fireEvent.change(screen.getByPlaceholderText(QUESTION_PLACEHOLDER), {
-      target: { value: question },
-    });
-  }
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 };
 
 test('parses sequentially labeled TRAKE events and rejects invalid numbering', () => {
   expect(parseTrakeEvents(
-    '/trake\nE1: first event\nE2: second event\nE3: third event',
+    'A video description. E1: first event E2: second event E3: third event',
   )).toEqual(['first event', 'second event', 'third event']);
-  expect(parseTrakeEvents('/trake\nE1: first event\nE3: third event')).toEqual([]);
-  expect(parseTrakeEvents('/trake first event | second event')).toEqual([]);
-});
-
-test('a question stops locally because VQA search is unavailable', () => {
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  submit('/kis a red vehicle passes', 'What color is it?');
-
-  expect(screen.getByRole('alert').textContent).toContain('VQA search is no longer available');
-  expect(searchFrames).not.toHaveBeenCalled();
-  expect(searchTrake).not.toHaveBeenCalled();
+  expect(parseTrakeEvents(
+    'A video description.\nE1 first event\nE2 second event',
+  )).toEqual(['first event', 'second event']);
+  expect(parseTrakeEvents('A video description. E1: first event E3: third event')).toEqual([]);
+  expect(parseTrakeEvents('A normal KIS description')).toBeNull();
 });
 
 test.each([
-  ['/kis a red vehicle passes', 'kis', 'a red vehicle passes'],
-])('without a question routes %s through frame search', async (
+  ['a red vehicle passes', 'kis', 'a red vehicle passes'],
+])('routes %s through frame search', async (
   description,
   queryType,
   query,
@@ -57,7 +45,7 @@ test.each([
   searchFrames.mockResolvedValueOnce({
     results: [], warnings: [], latency_ms: { total: 4 },
   });
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
+  render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
   submit(description);
 
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
@@ -99,8 +87,8 @@ test('TRAKE groups clickable event frame cards by video and orders them by frame
     total_results: 3,
     warnings: [],
   });
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
-  submit('/trake\nE1: person enters\nE2: person leaves');
+  render(<SearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
+  submit('Person enters and leaves.\nE1: person enters\nE2: person leaves');
 
   await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
     expect.objectContaining({ events: ['person enters', 'person leaves'], topK: 20 }),
@@ -124,19 +112,17 @@ test('TRAKE groups clickable event frame cards by video and orders them by frame
 });
 
 test('TRAKE requires at least two events without making a request', () => {
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  submit('/trake\nE1: only one event');
+  render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
+  submit('A short video. E1: only one event');
   expect(screen.getByRole('alert').textContent).toContain('at least two');
   expect(searchTrake).not.toHaveBeenCalled();
 });
 
-test('requires a task prefix when the question is empty', () => {
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  submit('a red vehicle passes');
-  expect(screen.getByRole('alert').textContent).toContain(
-    'Without a question, Event description must start with /kis or /trake',
-  );
-  expect(searchFrames).not.toHaveBeenCalled();
+test('defaults plain descriptions to KIS', () => {
+  expect(parseRetrievalDescription('a red vehicle passes')).toEqual({
+    queryType: 'kis',
+    query: 'a red vehicle passes',
+  });
 });
 
 test('active KIS results preserve backend fps when the user opens a frame', async () => {
@@ -156,8 +142,8 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
     warnings: [],
     latency_ms: { total: 4 },
   });
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
-  submit('/kis red boat');
+  render(<SearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
+  submit('red boat');
 
   const frameImage = await screen.findByAltText('Frame frame-kis');
   fireEvent.click(frameImage);
@@ -169,10 +155,10 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   }));
 });
 
-test('New Question clears the KIS progressive ID', () => {
+test('New Search clears the KIS progressive ID', () => {
   const keys = ['kis'].map(progressiveSearchIdKey);
   keys.forEach((key, index) => window.sessionStorage.setItem(key, `search-${index}`));
-  render(<VqaSearchWorkspace topK={20} setTopK={jest.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: 'New Question' }));
+  render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'New Search' }));
   keys.forEach((key) => expect(window.sessionStorage.getItem(key)).toBeNull());
 });

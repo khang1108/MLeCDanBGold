@@ -1,5 +1,4 @@
 import { API_BASE_URL, requestJson } from "./client";
-import { mockBackendEnabled, mockSearchFrames } from './mockSearch';
 
 export const resolveApiUrl = (value) => {
   if (!value || /^(?:https?:|data:)/i.test(value)) return value;
@@ -38,11 +37,6 @@ export const searchFrames = async ({
   searchId,
   signal,
 }) => {
-  if (mockBackendEnabled() && queryType?.toLowerCase() === 'kis') {
-    return mockSearchFrames({ query, topK });
-  }
-
-
   const body = {
     query: query.trim(),
     top_k: topK,
@@ -84,13 +78,6 @@ export const searchTrake = async ({ events, topK, signal }) => {
     throw new Error('TRAKE server returned an invalid response contract');
   }
   return payload;
-};
-
-export const submitCsvFiles = async (files) => {
-  return requestJson('/api/v1/submission', {
-    method: 'POST',
-    body: { files },
-  });
 };
 
 export const suggestQueries = async ({ count = 5, query = '', signal } = {}) => {

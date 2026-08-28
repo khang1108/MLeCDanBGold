@@ -100,7 +100,6 @@ const YouTubePlayer = ({
   onTimeUpdate,
   onIframeFocus,
   onPlayerReady,
-  onError,
 }) => {
   const playerIdRef = useRef(null);
   const playerRef = useRef(null);
@@ -108,7 +107,6 @@ const YouTubePlayer = ({
   const onTimeUpdateRef = useRef(onTimeUpdate);
   const onIframeFocusRef = useRef(onIframeFocus);
   const onPlayerReadyRef = useRef(onPlayerReady);
-  const onErrorRef = useRef(onError);
   const [apiFailed, setApiFailed] = useState(false);
 
   if (!playerIdRef.current) {
@@ -120,7 +118,6 @@ const YouTubePlayer = ({
   onTimeUpdateRef.current = onTimeUpdate;
   onIframeFocusRef.current = onIframeFocus;
   onPlayerReadyRef.current = onPlayerReady;
-  onErrorRef.current = onError;
 
   useEffect(() => {
     let disposed = false;
@@ -168,7 +165,6 @@ const YouTubePlayer = ({
         onTimeUpdateRef.current?.(seekTime);
       } catch (error) {
         console.error('[HCMAI YouTube] seek failed:', error);
-        onErrorRef.current?.(error);
       }
     };
 
@@ -243,7 +239,6 @@ const YouTubePlayer = ({
                 videoId,
                 embedUrl,
               });
-              onErrorRef.current?.(event.data);
             },
           },
         });
@@ -253,7 +248,6 @@ const YouTubePlayer = ({
         if (disposed) return;
         console.error('[HCMAI YouTube] API initialization failed:', error);
         setApiFailed(true);
-        onErrorRef.current?.(error);
       });
 
     return () => {
@@ -276,9 +270,8 @@ const YouTubePlayer = ({
       onTimeUpdate?.(targetTime);
     } catch (error) {
       console.error('[HCMAI YouTube] target seek failed:', error);
-      onError?.(error);
     }
-  }, [targetTime, onError, onTimeUpdate]);
+  }, [targetTime, onTimeUpdate]);
 
   if (apiFailed) {
     return (
