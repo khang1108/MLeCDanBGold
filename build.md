@@ -25,6 +25,10 @@ aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custo
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
+(while sleep 600; do
+  aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
+  aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
+done) &
 ZIP_OFFSET=0 ZIP_LIMIT=1 TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m0-a0.log
 ZIP_OFFSET=2 ZIP_LIMIT=4 ALLOW_OFFSET_GAP=1 SKIP_APT=1 SKIP_BUILD=1 SKIP_INFERENCE_SERVER=1 \
@@ -53,6 +57,10 @@ aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custo
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
+(while sleep 600; do
+  aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
+  aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
+done) &
 ZIP_OFFSET=1 ZIP_LIMIT=1 ALLOW_OFFSET_GAP=1 TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m1-a1.log
 ZIP_OFFSET=6 ZIP_LIMIT=4 ALLOW_OFFSET_GAP=1 SKIP_APT=1 SKIP_BUILD=1 SKIP_INFERENCE_SERVER=1 \
@@ -81,6 +89,10 @@ aws s3 sync s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/videos/ runs/custo
 mkdir -p runs/transcripts-all
 cp -rsn "$PWD"/artifacts/enrichment/transcripts/L2[1-4] runs/transcripts-all/
 cp -rsn "$PWD"/artifacts/transcripts/L2[4-9] "$PWD"/artifacts/transcripts/L30 runs/transcripts-all/
+(while sleep 600; do
+  aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
+  aws s3 sync runs/custom-raw1fps-v1/state/ s3://mlecdanbgold-db/runs/custom-raw1fps-v1/state/
+done) &
 ZIP_OFFSET=10 ZIP_LIMIT=4 ALLOW_OFFSET_GAP=1 TRANSCRIPTS_ROOT=runs/transcripts-all \
   ./docs/runbooks/bootstrap_and_run_custom_pipeline.sh 2>&1 | tee runs/m2-a10.log
 aws s3 sync artifacts/custom-raw1fps-v1/batches/ s3://mlecdanbgold-db/artifacts/custom-raw1fps-v1/batches/
