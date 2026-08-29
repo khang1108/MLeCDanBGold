@@ -255,19 +255,28 @@ def _concatenate_shard_vectors(
 def _subset_asr_segments(
     asr_bundle: ASRReuseBundle, video_ids: Sequence[str]
 ) -> tuple[np.ndarray, pd.DataFrame]:
-    """Subset persisted ASR vectors/mapping for exactly ``video_ids``.
+    """Subset persisted ASR vectors/mapping for the speaking ``video_ids``.
 
     Reuses the already-validated :class:`SegmentDenseIndex`; no ASR inference
     or text embedding is ever performed here.
     """
 
     index = SegmentDenseIndex.load(asr_bundle.index_root)
+    indexed = set(index.posting_video_ids)
     vector_parts: list[np.ndarray] = []
     mapping_parts: list[pd.DataFrame] = []
     for video_id in video_ids:
+        if video_id not in indexed:
+            logger.info("no ASR segment for %s; excluded from the batch ASR index", video_id)
+            continue
         positions = index.video_positions(video_id)
         vector_parts.append(np.asarray(index.vectors[positions]))
         mapping_parts.append(index.mapping.iloc[positions].reset_index(drop=True))
+
+    if not vector_parts:
+        raise ValueError(
+            f"no ASR segments for any of {list(video_ids)}; cannot build a batch ASR index"
+        )
 
     vectors = np.concatenate(vector_parts, axis=0)
     mapping = pd.concat(mapping_parts, ignore_index=True)

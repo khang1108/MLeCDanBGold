@@ -257,6 +257,36 @@ def test_build_batch_index_bundle_produces_three_loadable_scoped_indexes(
     assert set(asr_index.mapping["video_id"]) == {_VIDEO_A, _VIDEO_B}
 
 
+def test_build_batch_index_bundle_skips_videos_without_asr_segments(tmp_path: Path) -> None:
+    inputs = _default_inputs()
+    shards = split_batch_artifacts_by_video(**inputs)
+    index_root = tmp_path / "asr_index"
+    bundle = _build_asr_bundle(index_root)
+    silent_index = SegmentDenseIndex.load(index_root)
+    kept = silent_index.mapping[silent_index.mapping["video_id"] != _VIDEO_B].copy()
+    kept["embedding_index"] = np.arange(len(kept))
+    SegmentDenseIndex.build(
+        np.eye(len(kept), 3, dtype=np.float32), kept, dataset_version="v1", model_name="test"
+    ).save(index_root)
+
+    inventory = build_batch_index_bundle(
+        "L01-batch000",
+        _VIDEO_IDS,
+        shards,
+        bundle,
+        tmp_path / "batch_indexes",
+        dataset_version="v1",
+        visual_model_name="siglip-test",
+        context_model_name="bge-test",
+    )
+
+    assert inventory.video_ids == (_VIDEO_A, _VIDEO_B)
+    assert inventory.visual.vector_count == 3
+    assert inventory.asr_segments.vector_count == 1
+    asr_index = SegmentDenseIndex.load(tmp_path / "batch_indexes" / "asr_segments")
+    assert set(asr_index.mapping["video_id"]) == {_VIDEO_A}
+
+
 def test_build_batch_index_bundle_rejects_missing_shard(tmp_path: Path) -> None:
     inputs = _default_inputs()
     shards = split_batch_artifacts_by_video(**inputs)
