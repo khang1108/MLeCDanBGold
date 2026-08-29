@@ -29,6 +29,7 @@ from hcmai.data.ingestion.custom_frames import (
 
 
 _REQUIRED_ARTIFACT_KEYS = ("caption", "ocr", "objects", "asr")
+_ASR_STREAM_SKEW_TOLERANCE_MS = 2000
 
 
 @dataclass(frozen=True)
@@ -349,7 +350,7 @@ def _validate_asr_artifact(
         )
         if end_ms <= start_ms:
             raise ValueError("asr timeline segments must have positive duration")
-        if native_duration_ms >= 0 and end_ms > native_duration_ms:
+        if native_duration_ms >= 0 and end_ms > native_duration_ms + _ASR_STREAM_SKEW_TOLERANCE_MS:
             raise ValueError("asr timeline segment exceeds native video duration")
         if start_ms < previous_start or end_ms < previous_end:
             raise ValueError("asr timeline segments must be monotonic")

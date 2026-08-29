@@ -163,3 +163,56 @@ def test_handoff_preserves_explicit_not_evaluated_status(tmp_path: Path) -> None
         "not_evaluated"
     }
     assert {entry["path"] for entry in payload["artifacts"].values()} == {""}
+
+
+def _asr_artifact_ending_at(path: Path, video_id: str, end_ms: int) -> Path:
+    """Write one ASR segment whose timeline ends at an exact millisecond."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [
+            {
+                "segment_id": f"{video_id}_segment_000000",
+                "video_id": video_id,
+                "segment_index": 0,
+                "start_ms": 0,
+                "end_ms": end_ms,
+                "text": "fixture speech",
+            }
+        ]
+    ).to_parquet(path, index=False)
+    return path
+
+
+def test_handoff_tolerates_audio_stream_skew_but_rejects_a_different_cut(
+    tmp_path: Path,
+) -> None:
+    """Accept millisecond stream skew past the decoded duration, reject a real overrun."""
+
+    bundle = write_valid_native_bundle(
+        tmp_path,
+        "L01_V001",
+        count=2,
+        status="enrichment_pending",
+    )
+    artifacts = _valid_artifact_map(bundle)
+    artifacts["asr"] = _asr_artifact_ending_at(
+        bundle / "enrichment" / "asr-skewed.parquet", "L01_V001", 2062
+    )
+    write_enrichment_handoff(
+        bundle,
+        artifact_paths=artifacts,
+        output_path=bundle / "enrichment" / "handoff.json",
+        frame_store_id="custom-raw1fps-v1",
+    )
+
+    artifacts["asr"] = _asr_artifact_ending_at(
+        bundle / "enrichment" / "asr-overrun.parquet", "L01_V001", 5000
+    )
+    with pytest.raises(ValueError, match="exceeds native video duration"):
+        write_enrichment_handoff(
+            bundle,
+            artifact_paths=artifacts,
+            output_path=bundle / "enrichment" / "handoff.json",
+            frame_store_id="custom-raw1fps-v1",
+        )
