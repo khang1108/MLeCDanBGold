@@ -23,3 +23,4 @@ def inline_router_threadpool(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("hcmai.api.routers.search.run_in_threadpool", run_inline)
     monkeypatch.setattr("hcmai.api.routers.trake.run_in_threadpool", run_inline)
+    monkeypatch.setattr("hcmai.api.routers.frames.run_in_threadpool", run_inline)

@@ -179,14 +179,54 @@ def _load_fast_track_data(
     dataset_root: Path,
     messages: list[str],
 ) -> None:
-    """Attach typed Context and transcript stores independently when usable.
+    """Attach optional evidence and video metadata independently when usable.
 
-    Each optional store is validated through :meth:`DataService.load`. A bad
-    optional artifact therefore cannot discard canonical frames or a usable
-    store from the other evidence family.
+    Each optional store validates its own identity before attachment. A bad
+    artifact therefore cannot discard canonical frames or a usable store from
+    another evidence family.
     """
 
-    configured_context_path = settings.dataset.enrichment.context_path
+    enrichment = settings.dataset.enrichment
+    for source, configured_path in (
+        (RetrievalSource.CAPTION, enrichment.caption_path),
+        (RetrievalSource.OCR, enrichment.ocr_path),
+    ):
+        path = (
+            resolve_repository_path(configured_path)
+            if configured_path is not None
+            else None
+        )
+        if not _typed_artifact_available(path, allow_directory=False):
+            messages.append(f"{source.value.upper()} artifact not available at {path}")
+            continue
+        assert path is not None
+        try:
+            data.load_evidence(source, path)
+        except Exception as error:
+            messages.append(
+                f"Could not load {source.value} artifact {path}: "
+                f"{type(error).__name__}: {error}"
+            )
+
+    configured_object_path = enrichment.object_path
+    object_path = (
+        resolve_repository_path(configured_object_path)
+        if configured_object_path is not None
+        else None
+    )
+    if not _typed_artifact_available(object_path, allow_directory=False):
+        messages.append(f"OBJECTS artifact not available at {object_path}")
+    else:
+        assert object_path is not None
+        try:
+            data.load_object_counts(object_path)
+        except Exception as error:
+            messages.append(
+                f"Could not load objects artifact {object_path}: "
+                f"{type(error).__name__}: {error}"
+            )
+
+    configured_context_path = enrichment.context_path
     context_path = (
         resolve_repository_path(configured_context_path)
         if configured_context_path is not None
@@ -209,7 +249,7 @@ def _load_fast_track_data(
                 f"{type(error).__name__}: {error}"
             )
 
-    configured_transcript_path = settings.dataset.enrichment.transcripts_path
+    configured_transcript_path = enrichment.transcripts_path
     transcript_path = (
         resolve_repository_path(configured_transcript_path)
         if configured_transcript_path is not None
@@ -234,6 +274,26 @@ def _load_fast_track_data(
                 f"{type(error).__name__}: {error}"
             )
 
+    configured_video_metadata_path = settings.dataset.media_info_path
+    video_metadata_path = (
+        resolve_repository_path(configured_video_metadata_path)
+        if configured_video_metadata_path is not None
+        else None
+    )
+    if not _metadata_directory_available(video_metadata_path):
+        messages.append(
+            f"VIDEO metadata artifact not available at {video_metadata_path}"
+        )
+    else:
+        assert video_metadata_path is not None
+        try:
+            data.load_video_metadata(video_metadata_path)
+        except Exception as error:
+            messages.append(
+                f"Could not load video metadata {video_metadata_path}: "
+                f"{type(error).__name__}: {error}"
+            )
+
 
 def _typed_artifact_available(
     path: Path | None,
@@ -251,6 +311,12 @@ def _typed_artifact_available(
         and path.is_dir()
         and any(item.is_file() for item in path.rglob("*.parquet"))
     )
+
+
+def _metadata_directory_available(path: Path | None) -> bool:
+    """Return whether an organizer media-info directory has JSON records."""
+
+    return path is not None and path.is_dir() and any(path.glob("*.json"))
 
 
 def _load_retrieval(

@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
+    FrameCatalogEntry,
     FrameRecord,
     RetrievalSource,
     SubmissionResult,
@@ -85,6 +86,13 @@ class SearchService:
         if self.data is None:
             raise SearchServiceUnavailableError("Frame store not loaded")
         return self.data.get_frame(frame_id)
+
+    def list_frames(self) -> list[FrameCatalogEntry]:
+        """Return every canonical keyframe with its loaded catalog evidence."""
+
+        if self.data is None:
+            raise SearchServiceUnavailableError("Frame store not loaded")
+        return list(self.data.iter_frame_catalog_entries())
 
     def neighbors(
         self, frame_id: str, window_ms: int, include_self: bool = True

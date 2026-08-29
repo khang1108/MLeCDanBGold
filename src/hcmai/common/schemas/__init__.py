@@ -2,6 +2,8 @@ from .base import *
 from .enum import *
 from .evidence import *
 
+from .catalog import FrameCatalogEntry
+
 from .frame import FrameEnrichment, FrameRecord, validate_frame_enrichment
 from .inference import (
     AudioReferenceRequest,
@@ -71,6 +73,7 @@ __all__ = [
     "SearchResponse",
     "SubmissionResult",
     "FrameRecord",
+    "FrameCatalogEntry",
     "FrameEnrichment",
     "validate_frame_enrichment",
     "QueryUnit",

@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from hcmai.common.schemas import FrameRecord, SubmissionResult
+from hcmai.common.schemas import FrameCatalogEntry, FrameRecord, SubmissionResult
 from hcmai.data.assets import FrameAssetError, FrameAssetResolver
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
@@ -49,6 +50,19 @@ def create_frames_router(
         except KeyError as error:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(error),
+            ) from error
+
+    @router.get("/api/v1/list-frames", response_model=list[FrameCatalogEntry])
+    async def list_frames() -> list[FrameCatalogEntry]:
+        """Return every canonical frame with loaded catalog evidence."""
+
+        try:
+            service = _search_service(service_container)
+            return await run_in_threadpool(service.list_frames)
+        except SearchServiceUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(error),
             ) from error
 

@@ -10,6 +10,7 @@ import pytest
 
 from hcmai.common.schemas import (
     CaptionEvidence,
+    FrameCatalogEntry,
     FrameContext,
     ObjectDetection,
     ObjectEvidence,
@@ -171,6 +172,65 @@ def test_data_service_exposes_typed_specialist_evidence(tmp_path: Path) -> None:
     context = data.get_frame_context("f1")
     assert isinstance(context, FrameContext)
     assert context.context_version == "frame-context-v1"
+
+
+def test_data_service_materializes_catalog_entries_from_specialist_stores(
+    tmp_path: Path,
+) -> None:
+    """Join frame-native evidence, timeline ASR, and video metadata per frame."""
+
+    frames_path = _write_frames(tmp_path)
+    caption_path, ocr_path, object_path, _ = _write_specialist_artifacts(tmp_path)
+    transcript_path = tmp_path / "transcripts.parquet"
+    segment = TranscriptSegment(
+        segment_id="v1_segment_000000",
+        video_id="v1",
+        segment_index=0,
+        start_ms=900,
+        end_ms=1_100,
+        text="A runner passes the cafe.",
+        language="en",
+    )
+    pd.DataFrame([segment.model_dump(mode="json")]).to_parquet(
+        transcript_path, index=False
+    )
+    metadata_root = tmp_path / "media-info"
+    metadata_root.mkdir()
+    (metadata_root / "v1.json").write_text(
+        json.dumps(
+            {
+                "title": "Morning run",
+                "watch_url": "https://example.test/watch?v=v1",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    data = DataService.load(
+        frames_path,
+        {
+            RetrievalSource.CAPTION: caption_path,
+            RetrievalSource.OCR: ocr_path,
+        },
+        object_counts_path=object_path,
+        transcript_path=transcript_path,
+        video_metadata_path=metadata_root,
+    )
+
+    entry = next(data.iter_frame_catalog_entries())
+
+    assert isinstance(entry, FrameCatalogEntry)
+    assert entry.model_dump() == {
+        "video_id": "v1",
+        "frame_id": "f1",
+        "frame_idx": 10,
+        "caption": "A person runs.",
+        "ocr": "cafe",
+        "objects": {"person": 2},
+        "title": "Morning run",
+        "asr_segments": [segment.model_dump(mode="json")],
+        "video_url": "https://example.test/watch?v=v1",
+    }
 
 
 def test_data_service_returns_half_open_transcript_overlap_chronologically(

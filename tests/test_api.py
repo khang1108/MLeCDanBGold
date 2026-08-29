@@ -13,6 +13,7 @@ from fastapi.routing import APIRoute
 
 from hcmai.app import create_app
 from hcmai.common.schemas.frame import FrameRecord
+from hcmai.common.schemas.catalog import FrameCatalogEntry
 from hcmai.common.schemas.enum import RetrievalSource
 from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.data.pipeline import DataService
@@ -58,6 +59,15 @@ class MockFrameStore:
         if store is None:
             return None
         return store.get_text(frame_id)
+
+    def iter_frame_catalog_entries(self):
+        """Expose one minimal catalog row for the list-frames API fixture."""
+
+        yield FrameCatalogEntry(
+            video_id=self.record.video_id,
+            frame_id=self.record.frame_id,
+            frame_idx=self.record.frame_idx,
+        )
 
 
 class MockRetriever:
@@ -304,6 +314,27 @@ def test_get_frame_endpoint(api_app: FastAPI) -> None:
 
     notFoundResponse = request(api_app, "GET", "/api/v1/frames/UNKNOWN_FRAME")
     assert notFoundResponse.status_code == 404
+
+
+def test_list_frames_endpoint_returns_catalog_entries(api_app: FastAPI) -> None:
+    """List every frame through the catalog response contract."""
+
+    response = request(api_app, "GET", "/api/v1/list-frames")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "video_id": "L21_V001",
+            "frame_id": "L21_V001_00000090",
+            "frame_idx": 90,
+            "caption": None,
+            "ocr": None,
+            "objects": None,
+            "title": None,
+            "asr_segments": [],
+            "video_url": None,
+        }
+    ]
 
 
 def test_missing_required_config_aborts_startup(

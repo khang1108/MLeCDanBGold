@@ -3,9 +3,11 @@ dataset:
   # Runtime asset root. Canonical image_path values point to data/keyframes/.
   root: "data"
   frames_path: "artifacts/frame_store/frames.parquet"
+  media_info_path: "data/media-info-aic25-b1/media-info"
   enrichment:
-    caption_path: "artifacts/enrichment/caption/frame_enrichment.parquet"
-    ocr_path: "artifacts/enrichment/ocr/frame_enrichment.parquet"
+    caption_path: "artifacts/enrichment/captions/captions.parquet"
+    ocr_path: "artifacts/enrichment/ocr/frames.parquet"
+    object_path: "artifacts/enrichment/objects/frames.parquet"
     asr_path: "artifacts/enrichment/asr/frame_enrichment.parquet"
     context_path: "artifacts/enrichment/context/frame_context_v1.parquet"
     transcripts_path: "artifacts/enrichment/transcripts"

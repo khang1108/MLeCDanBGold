@@ -41,6 +41,11 @@ that feature package. In particular, caption/OCR types belong under
   processing-status metadata associated with a `frame_id`. Duplicate object
   labels are removed while preserving order.
 
+### `catalog.py`
+
+- `FrameCatalogEntry`: API projection of canonical identity plus loaded caption,
+  OCR, object-count, video metadata, and timestamp-containing ASR segments.
+
 ### `transcript.py`
 
 - `TranscriptSegment`: canonical text, language, dominant speaker, and

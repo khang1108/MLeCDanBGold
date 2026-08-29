@@ -55,11 +55,12 @@ class EnrichmentArtifactsConfig(BaseModel):
     """Paths to source-specific frame-enrichment artifacts."""
 
     caption_path: Path | None = Path(
-        "artifacts/enrichment/caption/frame_enrichment.parquet"
+        "artifacts/enrichment/captions/captions.parquet"
     )
     ocr_path: Path | None = Path(
-        "artifacts/enrichment/ocr/frame_enrichment.parquet"
+        "artifacts/enrichment/ocr/frames.parquet"
     )
+    object_path: Path | None = Path("artifacts/enrichment/objects/frames.parquet")
     asr_path: Path | None = Path(
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
@@ -75,6 +76,7 @@ class DatasetConfig(BaseModel):
     version: str = "hcmai2026_v1"
     root: Path = Path("data")
     frames_path: Path = Path("artifacts/frame_store/frames.parquet")
+    media_info_path: Path | None = Path("data/media-info-aic25-b1/media-info")
     enrichment: EnrichmentArtifactsConfig = Field(
         default_factory=EnrichmentArtifactsConfig
     )

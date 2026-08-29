@@ -393,7 +393,11 @@ def test_modern_data_loads_only_existing_typed_artifacts(
         "dataset": {
             "frames_path": frames,
             "root": tmp_path,
+            "media_info_path": None,
             "enrichment": {
+                "caption_path": None,
+                "ocr_path": None,
+                "object_path": None,
                 "context_path": context,
                 "transcripts_path": transcripts,
             },

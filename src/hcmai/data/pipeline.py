@@ -14,6 +14,7 @@ from itertools import islice
 from pathlib import Path
 
 from hcmai.common.schemas import (
+    FrameCatalogEntry,
     FrameContext,
     FrameRecord,
     ObjectEvidence,
@@ -31,8 +32,10 @@ from hcmai.data.stores import (
     CaptionStore,
     FrameContextStore,
     FrameStore,
+    ObjectCountsStore,
     ObjectStore,
     OCRStore,
+    VideoMetadataStore,
 )
 
 EvidenceStore = CaptionStore | OCRStore | ASRStore
@@ -60,8 +63,10 @@ class DataService:
         evidence_stores: Mapping[RetrievalSource, EvidenceStore] | None = None,
         asset_resolver: FrameAssetResolver | None = None,
         object_store: ObjectStore | None = None,
+        object_counts_store: ObjectCountsStore | None = None,
         context_store: FrameContextStore | None = None,
         transcript_store: TranscriptStore | None = None,
+        video_metadata_store: VideoMetadataStore | None = None,
     ) -> None:
         """Initialize the facade from already loaded specialist stores."""
 
@@ -69,8 +74,10 @@ class DataService:
         self.evidence_stores = dict(evidence_stores or {})
         self.asset_resolver = asset_resolver
         self.object_store = object_store
+        self.object_counts_store = object_counts_store
         self.context_store = context_store
         self.transcript_store = transcript_store
+        self.video_metadata_store = video_metadata_store
 
     @classmethod
     def load(
@@ -80,8 +87,10 @@ class DataService:
         *,
         dataset_root: str | Path | None = None,
         object_path: str | Path | None = None,
+        object_counts_path: str | Path | None = None,
         context_path: str | Path | None = None,
         transcript_path: str | Path | None = None,
+        video_metadata_path: str | Path | None = None,
     ) -> "DataService":
         """Load canonical frames and any explicitly configured evidence."""
 
@@ -91,6 +100,11 @@ class DataService:
             for source, path in (evidence_paths or {}).items()
         }
         objects = ObjectStore(object_path) if object_path is not None else None
+        object_counts = (
+            ObjectCountsStore(object_counts_path)
+            if object_counts_path is not None
+            else None
+        )
         contexts = (
             FrameContextStore(context_path) if context_path is not None else None
         )
@@ -103,10 +117,18 @@ class DataService:
                     f"{transcript_artifact}"
                 )
             transcripts = TranscriptStore(transcript_artifact)
+        video_metadata = (
+            VideoMetadataStore(video_metadata_path)
+            if video_metadata_path is not None
+            else None
+        )
         for store in (*evidence.values(), objects, contexts):
             if store is not None and not isinstance(store, ASRStore):
                 _validate_canonical_identity(frames, store)
                 _validate_canonical_lineage(frames, store)
+        if object_counts is not None:
+            _validate_object_counts_identity(frames, object_counts)
+            _validate_object_counts_lineage(frames, object_counts)
         resolver = (
             FrameAssetResolver(dataset_root)
             if dataset_root is not None
@@ -117,8 +139,10 @@ class DataService:
             evidence,
             resolver,
             objects,
+            object_counts,
             contexts,
             transcripts,
+            video_metadata,
         )
 
     def load_evidence(
@@ -280,6 +304,58 @@ class DataService:
         except KeyError:
             return None
 
+    def load_object_counts(self, artifact_path: str | Path) -> ObjectCountsStore:
+        """Load compact object counts for catalog materialization."""
+
+        store = ObjectCountsStore(artifact_path)
+        _validate_object_counts_identity(self._frames(), store)
+        _validate_object_counts_lineage(self._frames(), store)
+        self.object_counts_store = store
+        return store
+
+    def get_object_counts(self, frame_id: str) -> dict[str, int] | None:
+        """Return object label counts without materializing raw detections."""
+
+        if self.object_counts_store is None:
+            return None
+        return self.object_counts_store.get_counts(frame_id)
+
+    def load_video_metadata(self, metadata_path: str | Path) -> VideoMetadataStore:
+        """Load organizer title and watch-URL metadata for catalog responses."""
+
+        store = VideoMetadataStore(metadata_path)
+        self.video_metadata_store = store
+        return store
+
+    def iter_frame_catalog_entries(self) -> Iterator[FrameCatalogEntry]:
+        """Join loaded evidence into one lightweight catalog row per frame.
+
+        The canonical FrameStore controls iteration order. Missing artifacts
+        remain nullable, and ASR uses exact half-open timestamp containment.
+        """
+
+        for frame in self.iter_frames():
+            video_metadata = (
+                self.video_metadata_store.get(frame.video_id)
+                if self.video_metadata_store is not None
+                else None
+            )
+            yield FrameCatalogEntry(
+                video_id=frame.video_id,
+                frame_id=frame.frame_id,
+                frame_idx=frame.frame_idx,
+                caption=self.get_evidence(frame.frame_id, RetrievalSource.CAPTION),
+                ocr=self.get_evidence(frame.frame_id, RetrievalSource.OCR),
+                objects=self.get_object_counts(frame.frame_id),
+                title=video_metadata.title if video_metadata is not None else None,
+                asr_segments=self.get_transcript_segments_at_time(
+                    frame.video_id, frame.timestamp_ms
+                ),
+                video_url=(
+                    video_metadata.video_url if video_metadata is not None else None
+                ),
+            )
+
     def get_frame_context(self, frame_id: str) -> FrameContext | None:
         """Return deterministic derived context for one frame, when loaded."""
 
@@ -326,6 +402,27 @@ class DataService:
         records = self.transcript_store.get_in_range(video_id, start_ms, end_ms)
         return sorted(
             records,
+            key=lambda row: (
+                row.start_ms,
+                row.end_ms,
+                row.segment_index,
+                row.segment_id,
+            ),
+        )
+
+    def get_transcript_segments_at_time(
+        self,
+        video_id: str,
+        timestamp_ms: int,
+    ) -> list[TranscriptSegment]:
+        """Return every ASR segment containing one frame timestamp."""
+
+        if timestamp_ms < 0:
+            raise ValueError("timestamp_ms must be non-negative")
+        if self.transcript_store is None:
+            return []
+        return sorted(
+            self.transcript_store.get_at_time(video_id, timestamp_ms),
             key=lambda row: (
                 row.start_ms,
                 row.end_ms,
@@ -406,5 +503,57 @@ def _validate_canonical_lineage(
     if store.frame_store_id != canonical:
         raise ValueError(
             "Evidence frame_store_id does not match canonical frame_store_id: "
+            f"{store.artifact_path}"
+        )
+
+
+def _validate_object_counts_identity(
+    frames: FrameStore,
+    store: ObjectCountsStore,
+) -> None:
+    """Reject compact object counts that do not match canonical frame identity."""
+
+    for record in store.iter_records():
+        try:
+            frame = frames.get(record.frame_id)
+        except KeyError:
+            raise ValueError(
+                "Object counts contain unknown canonical frame_id: "
+                f"{record.frame_id}"
+            ) from None
+        if (
+            record.video_id != frame.video_id
+            or record.frame_idx != frame.frame_idx
+            or record.timestamp_ms != frame.timestamp_ms
+        ):
+            raise ValueError(
+                "Object counts do not match canonical identity for frame_id "
+                f"{record.frame_id!r}"
+            )
+
+
+def _validate_object_counts_lineage(
+    frames: FrameStore,
+    store: ObjectCountsStore,
+) -> None:
+    """Compare object-count lineage with the canonical frame manifest."""
+
+    manifest_path = frames.metadata_path.with_name("manifest.json")
+    if not manifest_path.exists():
+        return
+    try:
+        manifest = read_json(manifest_path)
+    except Exception as error:
+        raise ValueError(
+            f"Malformed canonical frame manifest: {manifest_path}"
+        ) from error
+    if not isinstance(manifest, Mapping):
+        raise ValueError("Canonical frame manifest must contain an object")
+    canonical = manifest.get("frame_store_id")
+    if canonical is None or store.frame_store_id is None:
+        return
+    if canonical != store.frame_store_id:
+        raise ValueError(
+            "Object counts frame_store_id does not match canonical frame_store_id: "
             f"{store.artifact_path}"
         )

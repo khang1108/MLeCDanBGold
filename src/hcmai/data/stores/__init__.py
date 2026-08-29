@@ -14,6 +14,7 @@ from hcmai.data.stores.evidence import (
     ObjectStore,
     OCRStore,
 )
+from hcmai.data.stores.catalog import ObjectCountsStore, VideoMetadataStore
 from hcmai.data.stores.frame import FrameStore
 
 __all__ = [
@@ -23,4 +24,6 @@ __all__ = [
     "FrameStore",
     "ObjectStore",
     "OCRStore",
+    "ObjectCountsStore",
+    "VideoMetadataStore",
 ]
