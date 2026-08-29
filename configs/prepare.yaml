@@ -26,7 +26,7 @@ enrichment:
     revision: "0b03b6f15a4a211370fb204aee4e7dd48887ea37"
     device: "cuda"
     dtype: "bfloat16"
-    batch_size: 32
+    batch_size: 64
     image_size: 768
     enrichment_version: "florence2_ocr_v1"
     artifact_version: "ocr-v1"
