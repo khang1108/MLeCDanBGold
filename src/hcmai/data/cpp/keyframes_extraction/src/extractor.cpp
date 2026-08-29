@@ -1216,13 +1216,19 @@ NativeVideoManifest extract_native_bundle(
         config.sample_period_ms,
         emitted_frame_count
     );
-    if (expected_frame_count != emitted_frame_count) {
+    const bool tail_target_undecodable =
+        video_info.duration_ms >= 0 &&
+        video_info.duration_ms % config.sample_period_ms != 0 &&
+        expected_frame_count == emitted_frame_count + 1;
+    if (expected_frame_count != emitted_frame_count && !tail_target_undecodable) {
         throw std::runtime_error(
             "decoded sample count mismatch for " + input.video_id +
             ": expected " + std::to_string(expected_frame_count) +
             ", emitted " + std::to_string(emitted_frame_count)
         );
     }
+    const std::uint64_t target_frame_count =
+        tail_target_undecodable ? emitted_frame_count : expected_frame_count;
     validate_emitted_bundle(
         input,
         config,
@@ -1237,7 +1243,7 @@ NativeVideoManifest extract_native_bundle(
         input.video_id,
         "enrichment_pending",
         video_info.duration_ms,
-        expected_frame_count,
+        target_frame_count,
         emitted_frame_count,
         video_info.avg_fps,
         video_info.avg_fps_rational,

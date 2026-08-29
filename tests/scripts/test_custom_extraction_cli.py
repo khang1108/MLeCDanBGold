@@ -286,6 +286,52 @@ def test_native_failure_diagnostic_reads_durable_state(tmp_path: Path) -> None:
     ) == "yt-dlp failed with exit code 1: video unavailable"
 
 
+def test_native_failure_diagnostic_prefers_state_over_ffmpeg_noise(tmp_path: Path) -> None:
+    """FFmpeg's stderr warnings never shadow the persisted native cause."""
+
+    video_id = "L25_V008"
+    state_path = tmp_path / "state" / f"{video_id}.json"
+    state_path.parent.mkdir()
+    state_path.write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "error": "decoded sample count mismatch for L25_V008: expected 1213, emitted 1212",
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.CompletedProcess(
+        args=["keyframe_extractor"],
+        returncode=1,
+        stdout='{"failed":1}',
+        stderr="[swscaler @ 0x5] deprecated pixel format used, make sure you did set range correctly",
+    )
+
+    assert extract_custom_keyframes._native_failure_diagnostic(
+        result,
+        tmp_path,
+        video_id,
+    ) == "decoded sample count mismatch for L25_V008: expected 1213, emitted 1212"
+
+
+def test_native_failure_diagnostic_falls_back_to_stderr(tmp_path: Path) -> None:
+    """A failure with no durable state still surfaces the native stderr."""
+
+    result = subprocess.CompletedProcess(
+        args=["keyframe_extractor"],
+        returncode=1,
+        stdout="",
+        stderr="unable to open source file",
+    )
+
+    assert extract_custom_keyframes._native_failure_diagnostic(
+        result,
+        tmp_path,
+        "L01_V001",
+    ) == "unable to open source file"
+
+
 def test_materialize_cli_never_invokes_native_extraction(
     tmp_path: Path,
     capsys: object,

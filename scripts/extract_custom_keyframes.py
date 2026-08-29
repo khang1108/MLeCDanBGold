@@ -190,23 +190,18 @@ def _native_failure_diagnostic(
     run_root: Path,
     video_id: str,
 ) -> str:
-    """Recover a native root cause from stderr or its durable failed state."""
-
-    stderr = result.stderr.strip()
-    if stderr:
-        return stderr
+    """Recover a native root cause from its durable failed state, else stderr."""
 
     state_path = run_root / "state" / f"{video_id}.json"
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, OSError, json.JSONDecodeError):
-        return "native extraction failed"
-    if not isinstance(state, dict):
-        return "native extraction failed"
-    diagnostic = state.get("error")
-    if isinstance(diagnostic, str) and diagnostic.strip():
-        return diagnostic.strip()
-    return "native extraction failed"
+        state = None
+    if isinstance(state, dict):
+        diagnostic = state.get("error")
+        if isinstance(diagnostic, str) and diagnostic.strip():
+            return diagnostic.strip()
+    return result.stderr.strip() or "native extraction failed"
 
 
 def _prepare_enrichment_tables(run_root: Path, video_id: str) -> dict[str, str]:
