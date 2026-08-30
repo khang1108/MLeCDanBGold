@@ -9,34 +9,38 @@ from hcmai.common.schemas import (
     FrameRecord,
     RetrievalSource,
 )
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
-class TinyData:
-    record_count = 1
-    video_metadata_store = None
+class TinyCorpus:
+    def __len__(self):
+        return 1
 
-    def get_frame(self, frame_id):
+    def frame(self, frame_id):
         assert frame_id == "frame-1"
         return FrameRecord(
             frame_id="frame-1", video_id="video-1", frame_idx=7,
             timestamp_ms=1_000, image_path="unused.jpg", width=4, height=4,
         )
 
-    def get_evidence(self, frame_id, source):
-        del frame_id, source
-        return None
-
-    def get_object_counts(self, frame_id):
+    def caption(self, frame_id):
         del frame_id
         return None
+    ocr = caption
 
-    def get_transcript_segments_at_time(self, video_id, timestamp_ms):
-        del video_id, timestamp_ms
-        return []
+    def objects(self, frame_id):
+        del frame_id
+        return ()
+
+    def title(self, video_id):
+        del video_id
+        return None
+    def transcript(self, video_id, start_ms, end_ms):
+        del video_id, start_ms, end_ms
+        return None
 
 
 class TinyRetrieval:
@@ -59,7 +63,7 @@ class TinyRetrieval:
 
 def _service():
     return SearchService(
-        cast(DataService, TinyData()),
+        cast(Corpus, TinyCorpus()),
         cast(RetrievalService, TinyRetrieval()),
         config=SearchConfig(),
     )

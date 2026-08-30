@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hcmai.common.schemas import FrameRecord, RetrievalSource
+from hcmai.common.schemas import FrameRecord
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.temporal import AlignedPath
 
@@ -10,14 +10,7 @@ from hcmai.temporal import AlignedPath
 class _Data:
     """Expose the minimal canonical data surface used by the materializer."""
 
-    video_metadata_store = None
-
-    def __init__(self) -> None:
-        """Record requested evidence modalities for the baseline assertion."""
-
-        self.sources: list[RetrievalSource] = []
-
-    def get_frame(self, frame_id: str) -> FrameRecord:
+    def frame(self, frame_id: str) -> FrameRecord:
         """Return one canonical representative frame."""
 
         return FrameRecord(
@@ -30,35 +23,47 @@ class _Data:
             height=360,
         )
 
-    def get_evidence(self, frame_id: str, source: RetrievalSource) -> str | None:
-        """Record specialist evidence reads and return no optional text."""
+    def caption(self, frame_id: str) -> str | None:
+        """Return no optional caption evidence."""
 
         assert frame_id == "frame-1"
-        self.sources.append(source)
         return None
 
-    def get_object_counts(self, frame_id: str) -> None:
+    def ocr(self, frame_id: str) -> str | None:
+        """Return no optional OCR evidence."""
+
+        assert frame_id == "frame-1"
+        return None
+
+    def objects(self, frame_id: str) -> tuple[str, ...]:
         """Return no optional object evidence."""
 
         assert frame_id == "frame-1"
-        return None
+        return ()
 
-    def get_transcript_segments_at_time(
+    def transcript(
         self,
         video_id: str,
-        timestamp_ms: int,
-    ) -> list[object]:
+        start_ms: int,
+        end_ms: int,
+    ) -> str | None:
         """Return no ASR segments for the representative timestamp."""
 
-        assert (video_id, timestamp_ms) == ("V01", 1_000)
-        return []
+        assert (video_id, start_ms, end_ms) == ("V01", 1_000, 1_001)
+        return None
+
+    def title(self, video_id: str) -> str | None:
+        """Return no optional organizer title."""
+
+        assert video_id == "V01"
+        return None
 
 
 def test_materializer_exposes_raw_path_score_without_context_retrieval() -> None:
     """Keep detached context scoring out of the Phase A KIS projection."""
 
-    data = _Data()
-    result = SearchMaterializer(data).build_kis_result(
+    corpus = _Data()
+    result = SearchMaterializer(corpus).build_kis_result(
         AlignedPath(
             video_id="V01",
             score=0.73,
@@ -69,5 +74,4 @@ def test_materializer_exposes_raw_path_score_without_context_retrieval() -> None
     )
 
     assert result.score == 0.73
-    assert data.sources == [RetrievalSource.CAPTION, RetrievalSource.OCR]
     assert "context" not in result.metadata.model_dump()

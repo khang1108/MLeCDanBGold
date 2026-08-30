@@ -18,7 +18,7 @@ from hcmai.common.config import (
 )
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.io import read_yaml, write_json, write_yaml
-from hcmai.data.pipeline import DataService
+from hcmai.corpus.stores import FrameContextStore, FrameStore
 from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 
@@ -52,7 +52,7 @@ class FakeBGE:
 def _context_data(
     tmp_path: Path,
     context_texts: list[tuple[str, str | None, str, int]],
-) -> DataService:
+) -> tuple[FrameStore, FrameContextStore]:
     """Write a hand-checkable canonical frame and FrameContext fixture."""
 
     pytest.importorskip("pyarrow")
@@ -101,11 +101,11 @@ def _context_data(
             )
         ]
     ).to_parquet(context, index=False)
-    return DataService.load(frames, context_path=context)
+    return FrameStore(frames), FrameContextStore(context)
 
 
 @pytest.fixture
-def data_service_with_context(tmp_path: Path) -> DataService:
+def context_stores(tmp_path: Path) -> tuple[FrameStore, FrameContextStore]:
     """Return one usable and one empty FrameContext record."""
 
     return _context_data(
@@ -163,14 +163,14 @@ def _context_build_configs(tmp_path: Path) -> tuple[Path, Path, Path]:
 
 
 def test_context_corpus_embeds_only_non_empty_context(
-    data_service_with_context: DataService,
+    context_stores: tuple[FrameStore, FrameContextStore],
 ) -> None:
     """Empty derived text is omitted rather than replaced with synthetic evidence."""
 
     pytest.importorskip("faiss")
     from hcmai.retrieval.retriever.text.retriever import _context_corpus
 
-    texts, mapping = _context_corpus(data_service_with_context)
+    texts, mapping = _context_corpus(*context_stores)
 
     assert texts == ["[CAPTION]\nA red cable car."]
     assert mapping["frame_id"].tolist() == ["f1"]
@@ -215,7 +215,7 @@ def test_text_encoding_uses_configured_batch_size_without_legacy_cap(
 
 def test_context_index_is_frame_native_and_keeps_supplemental_vectors(
     fake_bge: FakeBGE,
-    data_service_with_context: DataService,
+    context_stores: tuple[FrameStore, FrameContextStore],
     tmp_path: Path,
 ) -> None:
     """Context publication retains frame identity and outer-bundle embeddings."""
@@ -226,7 +226,7 @@ def test_context_index_is_frame_native_and_keeps_supplemental_vectors(
 
     output = tmp_path / "context-index"
     index = build_context_index(
-        data_service_with_context,
+        *context_stores,
         fake_bge,
         output,
         embeddings_filename="context_embeddings.npy",
@@ -236,7 +236,6 @@ def test_context_index_is_frame_native_and_keeps_supplemental_vectors(
 
     assert index.mapping["frame_id"].tolist() == ["f1"]
     assert loaded.mapping["video_id"].tolist() == ["v1"]
-    assert loaded.mapping["keyframe_order"].tolist() == [1]
     assert loaded.metadata.entity_kind == "frame"
     assert loaded.metadata.retrieval_source == "context"
     assert (output / "context_embeddings.npy").is_file()

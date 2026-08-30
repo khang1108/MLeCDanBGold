@@ -51,7 +51,7 @@ class FakeData:
         ),
     }
 
-    def get_frame(self, frame_id: str) -> FrameRecord:
+    def frame(self, frame_id: str) -> FrameRecord:
         """Return the canonical frame identified by a ranked path entry."""
 
         return self.frames[frame_id]

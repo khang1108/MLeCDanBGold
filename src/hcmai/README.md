@@ -14,7 +14,7 @@ FastAPI router
   -> TemporalSearchService
   -> RetrievalService.score_event_videos()
   -> pure monotonic DP
-  -> DataService canonical materialization
+  -> Corpus canonical materialization
   -> competition-compatible response
 ```
 
@@ -32,7 +32,7 @@ flowchart TB
     KIS --> ALIGN[TemporalSearchService]
     TRAKE --> ALIGN
     ALIGN --> RET[RetrievalService]
-    ALIGN --> DATA[DataService]
+    ALIGN --> DATA[Corpus]
     KIS --> KOUT[SearchResponse]
     TRAKE --> TOUT[TRAKEResponse]
 ```

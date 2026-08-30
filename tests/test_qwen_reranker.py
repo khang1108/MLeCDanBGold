@@ -5,7 +5,7 @@ import pytest
 import torch
 from PIL import Image
 from hcmai.common.schemas import RetrievalCandidate
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.retrieval.reranking.adapters import qwen
 from hcmai.retrieval.reranking.adapters.qwen import QwenAdapter, QwenRerankerError
 from hcmai.retrieval.reranking.config import QwenRerankerConfig, RerankerConfig
@@ -99,9 +99,12 @@ def test_composition_preserves_candidates(tmp_path):
         Image.new("RGB", (2, 2), (index, 3 - index, 0)).save(path)
         records[str(index)] = SimpleNamespace(image_path=path)
         candidates.append(RetrievalCandidate(frame_id=str(index), metadata={"i": index}))
-    store = SimpleNamespace(get_frame=lambda frame_id: records[frame_id])
+    store = SimpleNamespace(
+        frame=lambda frame_id: records[frame_id],
+        image_path=lambda frame_id: records[frame_id].image_path,
+    )
     output = RerankingService(
-        cast(DataService, store), RerankerConfig(batch_size=2), scorer()
+        cast(Corpus, store), RerankerConfig(batch_size=2), scorer()
     ).rerank("q", candidates)
     assert len(output) == 3 and {x.frame_id for x in output} == {"0", "1", "2"}
     assert all(x.reranker_score == x.final_score for x in output)

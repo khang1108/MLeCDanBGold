@@ -1,4 +1,4 @@
-"""Typed specialist-evidence access through the public data facade."""
+"""Typed artifact validation and public Corpus evidence projections."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import pytest
 
 from hcmai.common.schemas import (
     CaptionEvidence,
-    FrameCatalogEntry,
     FrameContext,
     ObjectDetection,
     ObjectEvidence,
@@ -19,9 +18,9 @@ from hcmai.common.schemas import (
     RetrievalSource,
     TranscriptSegment,
 )
-from hcmai.data.enrichment.object_artifacts import write_object_artifacts
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.corpus.stores import CaptionStore, FrameContextStore, ObjectStore
+from hcmai.data.enrichment.object_artifacts import write_object_artifacts
 
 
 def _write_frames(root: Path) -> Path:
@@ -141,40 +140,33 @@ def _write_specialist_artifacts(root: Path) -> tuple[Path, Path, Path, Path]:
     return caption_path, ocr_path, object_path, context_path
 
 
-def test_data_service_exposes_typed_specialist_evidence(tmp_path: Path) -> None:
+def test_corpus_projects_runtime_evidence_without_hiding_specialist_stores(
+    tmp_path: Path,
+) -> None:
     frames_path = _write_frames(tmp_path)
     caption_path, ocr_path, object_path, context_path = (
         _write_specialist_artifacts(tmp_path)
     )
 
-    data = DataService.load(
+    corpus = Corpus.open(
         frames_path,
         {
             RetrievalSource.CAPTION: caption_path,
             RetrievalSource.OCR: ocr_path,
         },
-        object_path=object_path,
-        context_path=context_path,
+        object_counts_path=object_path,
     )
 
-    assert isinstance(
-        next(data.iter_evidence(RetrievalSource.CAPTION)), CaptionEvidence
-    )
-    assert isinstance(next(data.iter_evidence(RetrievalSource.OCR)), OCREvidence)
-    assert data.get_evidence("f1", RetrievalSource.CAPTION) == "A person runs."
-    assert data.get_evidence("f1", RetrievalSource.OCR) == "cafe"
+    assert corpus.caption("f1") == "A person runs."
+    assert corpus.ocr("f1") == "cafe"
+    assert corpus.objects("f1") == ("person",)
 
-    objects = data.get_object_evidence("f1")
-    assert isinstance(objects, ObjectEvidence)
-    assert objects.counts == {"person": 2}
-    assert [item.confidence for item in objects.detections] == [0.9, 0.8]
-
-    context = data.get_frame_context("f1")
+    context = FrameContextStore(context_path).get("f1")
     assert isinstance(context, FrameContext)
     assert context.context_version == "frame-context-v1"
 
 
-def test_data_service_materializes_catalog_entries_from_specialist_stores(
+def test_corpus_projects_runtime_metadata_from_specialist_stores(
     tmp_path: Path,
 ) -> None:
     """Join frame-native evidence, timeline ASR, and video metadata per frame."""
@@ -206,7 +198,7 @@ def test_data_service_materializes_catalog_entries_from_specialist_stores(
         encoding="utf-8",
     )
 
-    data = DataService.load(
+    corpus = Corpus.open(
         frames_path,
         {
             RetrievalSource.CAPTION: caption_path,
@@ -217,23 +209,16 @@ def test_data_service_materializes_catalog_entries_from_specialist_stores(
         video_metadata_path=metadata_root,
     )
 
-    entry = next(data.iter_frame_catalog_entries())
-
-    assert isinstance(entry, FrameCatalogEntry)
-    assert entry.model_dump() == {
-        "video_id": "v1",
-        "frame_id": "f1",
-        "frame_idx": 10,
-        "caption": "A person runs.",
-        "ocr": "cafe",
-        "objects": {"person": 2},
-        "title": "Morning run",
-        "asr_segments": [segment.model_dump(mode="json")],
-        "video_url": "https://example.test/watch?v=v1",
-    }
+    assert corpus.caption("f1") == "A person runs."
+    assert corpus.ocr("f1") == "cafe"
+    assert corpus.objects("f1") == ("person",)
+    assert corpus.title("v1") == "Morning run"
+    assert corpus.transcript_segments("v1", 1_000, 1_001) == (
+        corpus.transcript_segments("v1", 1_000, 1_001)[0],
+    )
 
 
-def test_data_service_returns_half_open_transcript_overlap_chronologically(
+def test_corpus_returns_half_open_transcript_overlap_chronologically(
     tmp_path: Path,
 ) -> None:
     frames_path = _write_frames(tmp_path)
@@ -280,19 +265,19 @@ def test_data_service_returns_half_open_transcript_overlap_chronologically(
         [segment.model_dump(mode="json") for segment in segments]
     ).to_parquet(transcript_path, index=False)
 
-    data = DataService.load(frames_path, transcript_path=transcript_path)
+    corpus = Corpus.open(frames_path, transcript_path=transcript_path)
 
     assert [
         segment.segment_id
-        for segment in data.get_transcript_segments("v1", 1_000, 2_000)
+        for segment in corpus.transcript_segments("v1", 1_000, 2_000)
     ] == ["first", "second"]
-    assert data.get_transcript_segments("missing", 1_000, 2_000) == []
-    assert data.get_transcript_segments("v1", 1_200, 1_200) == []
+    assert corpus.transcript_segments("missing", 1_000, 2_000) == ()
+    assert corpus.transcript_segments("v1", 1_200, 1_200) == ()
 
     with pytest.raises(ValueError, match="start_ms.*non-negative"):
-        data.get_transcript_segments("v1", -1, 1_000)
+        corpus.transcript_segments("v1", -1, 1_000)
     with pytest.raises(ValueError, match="end_ms.*start_ms"):
-        data.get_transcript_segments("v1", 2_000, 1_000)
+        corpus.transcript_segments("v1", 2_000, 1_000)
 
 
 def test_load_evidence_rejects_noncanonical_typed_identity(tmp_path: Path) -> None:
@@ -311,10 +296,8 @@ def test_load_evidence_rejects_noncanonical_typed_identity(tmp_path: Path) -> No
             ).model_dump(mode="json")
         ]
     ).to_parquet(caption_path, index=False)
-    data = DataService.load(frames_path)
-
     with pytest.raises(ValueError, match="canonical identity"):
-        data.load_evidence(RetrievalSource.CAPTION, caption_path)
+        Corpus.open(frames_path, {RetrievalSource.CAPTION: caption_path})
 
 
 def test_missing_or_null_specialist_evidence_returns_none(tmp_path: Path) -> None:
@@ -334,16 +317,15 @@ def test_missing_or_null_specialist_evidence_returns_none(tmp_path: Path) -> Non
             ).model_dump(mode="json")
         ]
     ).to_parquet(caption_path, index=False)
-    data = DataService.load(
+    corpus = Corpus.open(
         frames_path, {RetrievalSource.CAPTION: caption_path}
     )
 
-    assert data.get_evidence("f1", RetrievalSource.CAPTION) is None
-    assert data.get_evidence("missing", RetrievalSource.CAPTION) is None
-    assert data.get_evidence("f1", RetrievalSource.OCR) is None
-    assert data.get_object_evidence("f1") is None
-    assert data.get_frame_context("f1") is None
-    assert data.get_transcript_segments("v1", 0, 1) == []
+    assert corpus.caption("f1") is None
+    assert corpus.caption("missing") is None
+    assert corpus.ocr("f1") is None
+    assert corpus.objects("f1") == ()
+    assert corpus.transcript_segments("v1", 0, 1) == ()
 
 
 def test_public_stores_validate_malformed_and_incomplete_artifacts(
@@ -391,7 +373,7 @@ def test_public_stores_validate_malformed_and_incomplete_artifacts(
         FrameContextStore(tmp_path / "missing-context.parquet")
 
     with pytest.raises(FileNotFoundError, match="Transcript artifact does not exist"):
-        DataService.load(
+        Corpus.open(
             _write_frames(tmp_path),
             transcript_path=tmp_path / "missing-transcripts",
         )
@@ -480,7 +462,7 @@ def test_object_store_rejects_coercible_frame_identity(tmp_path: Path) -> None:
         ObjectStore(path)
 
 
-def test_data_service_rejects_timestamp_mismatch_with_canonical_frame(
+def test_corpus_rejects_timestamp_mismatch_with_canonical_frame(
     tmp_path: Path,
 ) -> None:
     """Reject evidence whose timestamp disagrees with its canonical frame."""
@@ -494,7 +476,7 @@ def test_data_service_rejects_timestamp_mismatch_with_canonical_frame(
     ).to_parquet(caption_path, index=False)
 
     with pytest.raises(ValueError, match="canonical identity"):
-        DataService.load(
+        Corpus.open(
             frames_path,
             {RetrievalSource.CAPTION: caption_path},
         )
@@ -552,7 +534,7 @@ def test_typed_store_rejects_adjacent_manifest_identity_mismatch(
         CaptionStore(path)
 
 
-def test_data_service_compares_specialist_lineage_to_canonical_manifest(
+def test_corpus_compares_specialist_lineage_to_canonical_manifest(
     tmp_path: Path,
 ) -> None:
     """Tie typed specialist evidence to the loaded canonical frame store."""
@@ -581,7 +563,7 @@ def test_data_service_compares_specialist_lineage_to_canonical_manifest(
     )
 
     with pytest.raises(ValueError, match="frame_store_id.*canonical"):
-        DataService.load(
+        Corpus.open(
             frames_path,
             {RetrievalSource.CAPTION: caption_path},
         )

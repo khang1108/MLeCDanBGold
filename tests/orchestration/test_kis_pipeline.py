@@ -45,14 +45,10 @@ class FakeAlignment:
         )
 
 
-class FakeData:
+class FakeCorpus:
     """Expose only the canonical data reads KIS materialization needs."""
 
-    video_metadata_store = SimpleNamespace(
-        get=lambda video_id: SimpleNamespace(title="Cooking Episode")
-    )
-
-    def get_frame(self, frame_id: str) -> FrameRecord:
+    def frame(self, frame_id: str) -> FrameRecord:
         """Resolve a synthetic canonical frame record."""
 
         index = int(frame_id[1:])
@@ -66,37 +62,47 @@ class FakeData:
             height=360,
         )
 
-    def get_evidence(self, frame_id: str, source: RetrievalSource) -> str | None:
+    def caption(self, frame_id: str) -> str | None:
         """Provide frame-native evidence only for the representative frame."""
 
         assert frame_id == "f2"
-        return {
-            RetrievalSource.CAPTION: "chef coats ingredient",
-            RetrievalSource.OCR: "FLOUR",
-        }.get(source)
+        return "chef coats ingredient"
 
-    def get_object_counts(self, frame_id: str) -> dict[str, int] | None:
+    def ocr(self, frame_id: str) -> str | None:
+        """Provide OCR evidence for the representative frame."""
+
+        assert frame_id == "f2"
+        return "FLOUR"
+
+    def objects(self, frame_id: str) -> tuple[str, ...]:
         """Return unordered labels to verify deterministic metadata ordering."""
 
         assert frame_id == "f2"
-        return {"person": 1, "bowl": 1}
+        return ("bowl", "person")
 
-    def get_transcript_segments_at_time(
+    def transcript(
         self,
         video_id: str,
-        timestamp_ms: int,
-    ) -> list[SimpleNamespace]:
+        start_ms: int,
+        end_ms: int,
+    ) -> str | None:
         """Return transcript evidence only at the representative timestamp."""
 
-        assert (video_id, timestamp_ms) == ("V01", 2_000)
-        return [SimpleNamespace(text=" coat it with flour ")]
+        assert (video_id, start_ms, end_ms) == ("V01", 2_000, 2_001)
+        return "coat it with flour"
+
+    def title(self, video_id: str) -> str | None:
+        """Provide the organizer title for the aligned video."""
+
+        assert video_id == "V01"
+        return "Cooking Episode"
 
 
 def test_kis_projects_middle_frame_and_materializes_representative_metadata() -> None:
     """Keep every aligned path entry while selecting the deterministic midpoint."""
 
     alignment = FakeAlignment()
-    response = KISPipeline(FakeData(), alignment).execute(
+    response = KISPipeline(FakeCorpus(), alignment).execute(
         SearchRequest(query="e1\ne2\ne3\ne4\ne5", top_k=1)
     )
     result = response.results[0]
@@ -123,7 +129,7 @@ def test_kis_returns_empty_response_without_searching_for_whitespace_query() -> 
 
     alignment = FakeAlignment()
 
-    response = KISPipeline(FakeData(), alignment).execute(
+    response = KISPipeline(FakeCorpus(), alignment).execute(
         SearchRequest(query=" \n\t ", top_k=1)
     )
 

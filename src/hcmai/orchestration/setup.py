@@ -14,7 +14,7 @@ from hcmai.common.config import (
 )
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from thundercompute.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
@@ -48,7 +48,7 @@ def load_search_service(messages: list[str]) -> SearchService:
             f"{configured_dataset_path} to {dataset_root}"
         )
     index_dir = _runtime_path("HCMAI_INDEX_PATH", settings.index.path)
-    data = _load_data(
+    corpus = _load_corpus(
         settings,
         metadata_path,
         dataset_root,
@@ -61,10 +61,10 @@ def load_search_service(messages: list[str]) -> SearchService:
         index_dir,
         llm,
         messages,
-        data=data,
+        corpus=corpus,
     )
     return SearchService(
-        data=data,
+        corpus=corpus,
         retrieval=retrieval,
         config=settings.search,
         llm=llm,
@@ -114,19 +114,26 @@ def _load_remote_llm(
     return service
 
 
-def _load_data(
+def _load_corpus(
     settings: AppConfig,
     metadata_path: Path,
     dataset_root: Path,
     messages: list[str],
-) -> DataService | None:
+) -> Corpus | None:
     if not metadata_path.is_file() or metadata_path.stat().st_size == 0:
         messages.append(f"Metadata not available at {metadata_path}")
         return None
     try:
-        data = DataService.load(
+        evidence_paths, object_path, transcript_path, video_metadata_path = (
+            _configured_corpus_artifacts(settings, messages)
+        )
+        corpus = Corpus.open(
             metadata_path,
+            evidence_paths=evidence_paths,
             dataset_root=dataset_root,
+            object_counts_path=object_path,
+            transcript_path=transcript_path,
+            video_metadata_path=video_metadata_path,
         )
     except Exception as error:
         messages.append(
@@ -134,48 +141,33 @@ def _load_data(
             f"{type(error).__name__}: {error}"
         )
         return None
-    _load_fast_track_data(
-        data,
-        settings,
-        metadata_path,
-        dataset_root,
-        messages,
-    )
-    asset_status = data.frame_asset_status()
     logger.info(
-        "DataService loaded path=%s dataset_root=%s frames=%d "
-        "frame_assets_ready=%s checked=%d missing=%d",
+        "Corpus loaded path=%s dataset_root=%s frames=%d",
         metadata_path,
         dataset_root,
-        len(data),
-        asset_status.ready,
-        asset_status.checked,
-        asset_status.missing,
+        len(corpus),
     )
-    if not asset_status.ready:
-        messages.append(
-            "Frame assets unavailable under "
-            f"{dataset_root}: checked={asset_status.checked} "
-            f"missing={asset_status.missing}"
-        )
-    return data
+    return corpus
 
 
-def _load_fast_track_data(
-    data: DataService,
+def _configured_corpus_artifacts(
     settings: AppConfig,
-    metadata_path: Path,
-    dataset_root: Path,
     messages: list[str],
-) -> None:
-    """Attach optional evidence and video metadata independently when usable.
+) -> tuple[
+    dict[RetrievalSource, Path],
+    Path | None,
+    Path | None,
+    Path | None,
+]:
+    """Select existing optional Corpus artifacts and retain startup diagnostics.
 
-    Each optional store validates its own identity before attachment. A bad
-    artifact therefore cannot discard canonical frames or a usable store from
-    another evidence family.
+    ``Corpus.open`` is intentionally the sole runtime loader.  Context and
+    raw-detection artifacts are not Corpus inputs, so their availability is
+    not used to alter this runtime composition.
     """
 
     enrichment = settings.dataset.enrichment
+    evidence_paths: dict[RetrievalSource, Path] = {}
     for source, configured_path in (
         (RetrievalSource.CAPTION, enrichment.caption_path),
         (RetrievalSource.OCR, enrichment.ocr_path),
@@ -189,13 +181,7 @@ def _load_fast_track_data(
             messages.append(f"{source.value.upper()} artifact not available at {path}")
             continue
         assert path is not None
-        try:
-            data.load_evidence(source, path)
-        except Exception as error:
-            messages.append(
-                f"Could not load {source.value} artifact {path}: "
-                f"{type(error).__name__}: {error}"
-            )
+        evidence_paths[source] = path
 
     configured_object_path = enrichment.object_path
     object_path = (
@@ -205,38 +191,7 @@ def _load_fast_track_data(
     )
     if not _typed_artifact_available(object_path, allow_directory=False):
         messages.append(f"OBJECTS artifact not available at {object_path}")
-    else:
-        assert object_path is not None
-        try:
-            data.load_object_counts(object_path)
-        except Exception as error:
-            messages.append(
-                f"Could not load objects artifact {object_path}: "
-                f"{type(error).__name__}: {error}"
-            )
-
-    configured_context_path = enrichment.context_path
-    context_path = (
-        resolve_repository_path(configured_context_path)
-        if configured_context_path is not None
-        else None
-    )
-    if not _typed_artifact_available(context_path, allow_directory=False):
-        messages.append(f"CONTEXT artifact not available at {context_path}")
-    else:
-        assert context_path is not None
-        try:
-            typed = DataService.load(
-                metadata_path,
-                dataset_root=dataset_root,
-                context_path=context_path,
-            )
-            data.context_store = typed.context_store
-        except Exception as error:
-            messages.append(
-                f"Could not load context artifact {context_path}: "
-                f"{type(error).__name__}: {error}"
-            )
+        object_path = None
 
     configured_transcript_path = enrichment.transcripts_path
     transcript_path = (
@@ -248,20 +203,7 @@ def _load_fast_track_data(
         messages.append(
             f"ASR transcript artifact not available at {transcript_path}"
         )
-    else:
-        assert transcript_path is not None
-        try:
-            typed = DataService.load(
-                metadata_path,
-                dataset_root=dataset_root,
-                transcript_path=transcript_path,
-            )
-            data.transcript_store = typed.transcript_store
-        except Exception as error:
-            messages.append(
-                f"Could not load transcript artifact {transcript_path}: "
-                f"{type(error).__name__}: {error}"
-            )
+        transcript_path = None
 
     configured_video_metadata_path = settings.dataset.media_info_path
     video_metadata_path = (
@@ -273,15 +215,9 @@ def _load_fast_track_data(
         messages.append(
             f"VIDEO metadata artifact not available at {video_metadata_path}"
         )
-    else:
-        assert video_metadata_path is not None
-        try:
-            data.load_video_metadata(video_metadata_path)
-        except Exception as error:
-            messages.append(
-                f"Could not load video metadata {video_metadata_path}: "
-                f"{type(error).__name__}: {error}"
-            )
+        video_metadata_path = None
+
+    return evidence_paths, object_path, transcript_path, video_metadata_path
 
 
 def _typed_artifact_available(
@@ -314,7 +250,7 @@ def _load_retrieval(
     index_dir: Path,
     llm: LLMService | None,
     messages: list[str],
-    data: DataService | None,
+    corpus: Corpus | None,
 ) -> RetrievalService | None:
     if not index_dir.is_dir():
         messages.append(f"Index directory not available at {index_dir}")
@@ -336,7 +272,7 @@ def _load_retrieval(
         visual,
         visual_encoder,
         llm,
-        data,
+        corpus,
         messages,
     )
 
@@ -347,7 +283,7 @@ def _load_fast_track_retrieval(
     visual: Any,
     visual_encoder: Any,
     llm: LLMService | None,
-    data: DataService | None,
+    corpus: Corpus | None,
     messages: list[str],
 ) -> RetrievalService | None:
     """Load validated retrieval indexes without default reranker wiring.
@@ -356,7 +292,7 @@ def _load_fast_track_retrieval(
     segment-ASR indexes remain optional detached retrieval capabilities.
     """
 
-    if data is None or data.frame_store is None:
+    if corpus is None:
         messages.append(
             "Canonical frame store unavailable for fast-track retrieval"
         )
@@ -447,7 +383,7 @@ def _load_fast_track_retrieval(
         context_index=context,
         asr_segment_index=asr_segment,
         text_encoder=text_encoder,
-        frame_store=data.frame_store,
+        corpus=corpus,
         fusion=settings.search.fusion,
         cache_config=settings.search.cache,
         max_projection_gap_ms=settings.index.asr_projection_max_gap_ms,

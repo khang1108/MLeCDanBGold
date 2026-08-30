@@ -5,13 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from hcmai.common.schemas import FrameCatalogEntry, FrameRecord, SubmissionResult
-from hcmai.corpus.assets import FrameAssetError, FrameAssetResolver
-from hcmai.data.pipeline import DataService
+from hcmai.common.schemas import SubmissionResult
+from hcmai.corpus.assets import FrameAssetError
+from hcmai.corpus.models import Frame
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.common.utils.logging import get_logger
 
@@ -36,10 +36,10 @@ def create_frames_router(
     """Create routes that materialize only canonical frame identities."""
 
     router = APIRouter()
-    fallback_resolver = FrameAssetResolver(dataset_root)
+    del dataset_root
 
-    @router.get("/api/v1/frames/{frame_id}", response_model=FrameRecord)
-    async def get_frame(frame_id: str) -> FrameRecord:
+    @router.get("/api/v1/frames/{frame_id}", response_model=Frame)
+    async def get_frame(frame_id: str) -> Frame:
         try:
             return _search_service(service_container).get_frame(frame_id)
         except SearchServiceUnavailableError as error:
@@ -50,19 +50,6 @@ def create_frames_router(
         except KeyError as error:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(error),
-            ) from error
-
-    @router.get("/api/v1/list-frames", response_model=list[FrameCatalogEntry])
-    async def list_frames() -> list[FrameCatalogEntry]:
-        """Return every canonical frame with loaded catalog evidence."""
-
-        try:
-            service = _search_service(service_container)
-            return await run_in_threadpool(service.list_frames)
-        except SearchServiceUnavailableError as error:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(error),
             ) from error
 
@@ -79,12 +66,14 @@ def create_frames_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=str(error),
             ) from error
-        data = getattr(_search_service(service_container), "data", None)
+        corpus = getattr(_search_service(service_container), "corpus", None)
         try:
+            if corpus is None:
+                raise RuntimeError("Frame store not loaded")
             resolved = (
-                data.resolve_frame_asset(frame, thumbnail=thumbnail)
-                if isinstance(data, DataService)
-                else fallback_resolver.resolve_frame(frame, thumbnail=thumbnail)
+                corpus.thumbnail_path(frame_id)
+                if thumbnail
+                else corpus.image_path(frame_id)
             )
         except (FrameAssetError, RuntimeError) as error:
             logger.warning(
@@ -109,31 +98,6 @@ def create_frames_router(
     @router.get("/api/v1/frames/{frame_id}/image")
     async def get_frame_image(frame_id: str) -> FileResponse:
         return frame_asset(frame_id, thumbnail=False)
-
-    @router.get(
-        "/api/v1/frames/{frame_id}/neighbors",
-        response_model=list[FrameRecord],
-    )
-    async def get_frame_neighbors(
-        frame_id: str,
-        window_ms: int = Query(default=5_000, ge=0, le=3_600_000),
-    ) -> list[FrameRecord]:
-        try:
-            return _search_service(service_container).neighbors(
-                frame_id,
-                window_ms=window_ms,
-                include_self=True,
-            )
-        except SearchServiceUnavailableError as error:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=str(error),
-            ) from error
-        except KeyError as error:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(error),
-            ) from error
 
     @router.post("/api/v1/submit", response_model=SubmissionResult)
     async def submit_frame(frame_id: str) -> SubmissionResult:

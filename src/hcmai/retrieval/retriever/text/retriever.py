@@ -18,7 +18,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 from hcmai.common.schemas import RetrievalSource
-from hcmai.data.pipeline import DataService
+from hcmai.corpus.stores import ASRStore, CaptionStore, FrameContextStore, FrameStore, OCRStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
@@ -54,19 +54,20 @@ class ContextRetriever(DenseRetriever):
 
 
 def _text_corpus(
-    data: DataService,
+    frames: FrameStore,
+    evidence: CaptionStore | OCRStore | ASRStore,
     source: RetrievalSource,
 ) -> tuple[list[str], pd.DataFrame]:
     """Join usable enrichment text to canonical frame identity."""
 
     texts: list[str] = []
     mapping: list[dict[str, Any]] = []
-    for row in data.iter_evidence(source):
+    for row in evidence.iter_records():
         frame_id = str(getattr(row, "frame_id"))
-        text = data.get_evidence(frame_id, source)
+        text = evidence.get_text(frame_id)
         if text is None:
             continue
-        frame = data.get_frame(frame_id)
+        frame = frames.get(frame_id)
         mapping.append(
             {
                 "frame_id": frame.frame_id,
@@ -84,7 +85,10 @@ def _text_corpus(
     return texts, pd.DataFrame(mapping)
 
 
-def _context_corpus(data: DataService) -> tuple[list[str], pd.DataFrame]:
+def _context_corpus(
+    frames: FrameStore,
+    contexts: FrameContextStore,
+) -> tuple[list[str], pd.DataFrame]:
     """Join non-empty deterministic context text to canonical frame identity.
 
     Context remains strictly frame-native. ASR is deliberately excluded because
@@ -93,17 +97,16 @@ def _context_corpus(data: DataService) -> tuple[list[str], pd.DataFrame]:
 
     texts: list[str] = []
     rows: list[dict[str, object]] = []
-    for context in data.iter_frame_contexts():
-        text = data.get_frame_context_text(context.frame_id)
+    for context in contexts.iter_records():
+        text = contexts.get_text(context.frame_id)
         if text is None:
             continue
-        frame = data.get_frame(context.frame_id)
+        frame = frames.get(context.frame_id)
         rows.append(
             {
                 "frame_id": frame.frame_id,
                 "video_id": frame.video_id,
                 "frame_idx": frame.frame_idx,
-                "keyframe_order": frame.keyframe_order,
                 "timestamp_ms": frame.timestamp_ms,
                 "embedding_index": len(texts),
             }
@@ -153,7 +156,8 @@ def _encode_texts(
 
 
 def build_text_index(
-    data: DataService,
+    frames: FrameStore,
+    evidence: CaptionStore | OCRStore | ASRStore,
     encoder: TextEmbeddingAdapter,
     source: RetrievalSource,
     output_dir: str | Path,
@@ -162,9 +166,7 @@ def build_text_index(
     dataset_version: str,
     index_type: str = "flat_ip",
 ) -> DenseIndex:
-    """Đọc dữ liệu (text) từ DataService, gọi encoder để trích xuất vector đặc trưng,
-    và xây dựng (build) một index hoàn chỉnh (bao gồm metadata và vector index) rồi lưu xuống đĩa.
-    """
+    """Build a text index from validated offline evidence and canonical frames."""
 
     if source not in _TEXT_SOURCES:
         raise ValueError(f"Unsupported text evidence source {source.value!r}")
@@ -174,7 +176,7 @@ def build_text_index(
         or artifact_name.suffix != ".npy"
     ):
         raise ValueError("embeddings_filename must be a plain .npy filename")
-    texts, mapping = _text_corpus(data, source)
+    texts, mapping = _text_corpus(frames, evidence, source)
     vectors = _normalized(_encode_texts(texts, encoder, source))
     if len(vectors) != len(mapping):
         raise ValueError(
@@ -194,7 +196,8 @@ def build_text_index(
 
 
 def build_context_index(
-    data: DataService,
+    frames: FrameStore,
+    contexts: FrameContextStore,
     encoder: TextEmbeddingAdapter,
     output_dir: str | Path,
     *,
@@ -206,7 +209,7 @@ def build_context_index(
     """Build and safely publish the dedicated frame-native Context index."""
 
     artifact_name = _embedding_artifact_name(embeddings_filename)
-    texts, mapping = _context_corpus(data)
+    texts, mapping = _context_corpus(frames, contexts)
     vectors = _normalized(_encode_texts(texts, encoder, RetrievalSource.CONTEXT))
     if len(vectors) != len(mapping):
         raise ValueError(
@@ -276,7 +279,8 @@ def _encoder_revision(encoder: TextEmbeddingAdapter) -> str | None:
 
 
 def build_text_embedding_artifacts(
-    data: DataService,
+    frames: FrameStore,
+    evidence: CaptionStore | OCRStore | ASRStore,
     encoder: TextEmbeddingAdapter,
     source: RetrievalSource,
     output_dir: str | Path,
@@ -290,7 +294,7 @@ def build_text_embedding_artifacts(
     artifact_name = Path(embeddings_filename)
     if artifact_name.name != embeddings_filename or artifact_name.suffix != ".npy":
         raise ValueError("embeddings_filename must be a plain .npy filename")
-    texts, mapping = _text_corpus(data, source)
+    texts, mapping = _text_corpus(frames, evidence, source)
     vectors = _normalized(_encode_texts(texts, encoder, source))
     if len(vectors) != len(mapping):
         raise ValueError("text embedding count does not match mapping rows")

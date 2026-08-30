@@ -10,7 +10,7 @@ from __future__ import annotations
 from time import perf_counter
 
 from hcmai.api.contracts import SearchLatency, SearchRequest, SearchResponse
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.temporal_search import TemporalSearchService
 from hcmai.temporal import split_query_events
@@ -21,14 +21,14 @@ class KISPipeline:
 
     def __init__(
         self,
-        data: DataService | None,
+        corpus: Corpus | None,
         temporal: TemporalSearchService | None,
     ) -> None:
         """Bind canonical materialization and the shared temporal service."""
 
-        self.data = data
+        self.corpus = corpus
         self.temporal = temporal
-        self.materializer = SearchMaterializer(data) if data is not None else None
+        self.materializer = SearchMaterializer(corpus) if corpus is not None else None
 
     def execute(self, request: SearchRequest) -> SearchResponse:
         """Split query text, search temporal paths, and materialize each midpoint.
@@ -56,7 +56,7 @@ class KISPipeline:
                 ),
             )
 
-        if self.data is None or self.materializer is None:
+        if self.corpus is None or self.materializer is None:
             raise RuntimeError("canonical frame data is not loaded")
         if self.temporal is None:
             raise RuntimeError("temporal search service is not loaded")

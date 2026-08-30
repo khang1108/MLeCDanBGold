@@ -738,13 +738,13 @@ def project_canonical_images(
     return projected
 
 
-def _require_usable_context_ids(data: Any) -> set[str]:
+def _require_usable_context_ids(contexts: Any) -> set[str]:
     """Return frame IDs whose deterministic Context text can be indexed."""
 
     usable = {
         context.frame_id
-        for context in data.iter_frame_contexts()
-        if data.get_frame_context_text(context.frame_id) is not None
+        for context in contexts.iter_records()
+        if contexts.get_text(context.frame_id) is not None
     }
     if not usable:
         raise ValueError("FrameContext artifact contains no usable context_text")
@@ -819,7 +819,7 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     from hcmai.data.ingestion.keyframe_map import (
         load_btc_keyframe_map,
     )
-    from hcmai.data.pipeline import DataService
+    from hcmai.corpus.stores import FrameContextStore
     from hcmai.data.enrichment.transcripts.store import TranscriptStore
 
     dataset = config.dataset
@@ -916,11 +916,11 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
         projected = project_canonical_images(frames, dataset.data_root)
         LOGGER.info("Custom canonical image projection ready rows=%d", len(projected))
 
-    data = DataService.load(frames_path, context_path=context_path)
+    contexts = FrameContextStore(context_path)
     canonical_ids = set(frames["frame_id"].astype(str))
     context_ids: set[str] = set()
     has_usable_context = False
-    for context in data.iter_frame_contexts():
+    for context in contexts.iter_records():
         context_ids.add(context.frame_id)
         if context.context_text is not None and context.context_text.strip():
             has_usable_context = True
@@ -1121,15 +1121,17 @@ def build_context(
 ) -> Any:
     """Build FrameContext directly from its typed store and shared BGE encoder."""
 
-    from hcmai.data.pipeline import DataService
+    from hcmai.corpus.stores import FrameContextStore, FrameStore
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
     from hcmai.retrieval.retriever.dense.index import DenseIndex
     from hcmai.retrieval.retriever.text.retriever import build_context_index
 
     selected = encoder or create_text_encoder(models)
-    data = DataService.load(projected_frames, context_path=config.dataset.context_path)
+    frames = FrameStore(projected_frames)
+    contexts = FrameContextStore(config.dataset.context_path)
     index = build_context_index(
-        data,
+        frames,
+        contexts,
         selected,
         config.indexes.context,
         embeddings_filename="context_embeddings.npy",

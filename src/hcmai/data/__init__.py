@@ -4,7 +4,7 @@ Chịu trách nhiệm quản lý toàn bộ vòng đời dữ liệu (từ thô 
 
 Các tính năng chính:
 1. Quản lý kho dữ liệu: Hỗ trợ tương tác với FrameStore và EvidenceStore.
-2. API Gateway: Cung cấp `DataService` như một cổng giao tiếp duy nhất cho toàn hệ thống orchestration.
+2. Offline preparation: publishes artifacts consumed by the runtime Corpus.
 3. Định nghĩa Dataset: Quản lý metadata cốt lõi và các hằng số liên quan đến cuộc thi."""
 
 # Artifact preparation remains here temporarily; runtime corpus reads live in

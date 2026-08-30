@@ -30,7 +30,7 @@ for decoding. There is no candidate-video shortlisting in this baseline.
 
 For each candidate video, retrieval yields a `VideoEventScores` matrix with
 one row per event and one ordered column per canonical frame. The orchestration
-service validates returned metadata against `DataService` before exposing an
+service validates returned metadata against `Corpus` before exposing an
 `AlignedPath(video_id, score, frame_ids, frame_idxs, timestamps_ms)`.
 
 ## 5. Monotonic DP

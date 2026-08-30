@@ -7,7 +7,7 @@ from pathlib import Path
 from hcmai.common.config import AppConfig
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
-from hcmai.data.pipeline import DataService
+from hcmai.corpus.stores import ASRStore, CaptionStore, FrameContextStore, FrameStore, OCRStore
 from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
 from thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
@@ -127,9 +127,11 @@ def build_text_artifacts(
     selected_encoder = _text_encoder(
         settings, models, encoder, source=source
     )
-    data = DataService.load(frames, {source: enrichment})
+    frame_store = FrameStore(frames)
+    evidence = _text_store(source, enrichment)
     index = build_text_index(
-        data,
+        frame_store,
+        evidence,
         selected_encoder,
         source,
         output,
@@ -172,9 +174,11 @@ def build_context_artifacts(
         context.with_name("manifest.json"), "CONTEXT manifest"
     )
     selected_encoder = _context_encoder(settings, models, encoder)
-    data = DataService.load(frames, context_path=context)
+    frame_store = FrameStore(frames)
+    contexts = FrameContextStore(context)
     index = build_context_index(
-        data,
+        frame_store,
+        contexts,
         selected_encoder,
         output,
         embeddings_filename=settings.index.context_embedding_filename,
@@ -190,6 +194,23 @@ def build_context_artifacts(
         index.metadata.embedding_dim,
     )
     return index
+
+
+def _text_store(
+    source: RetrievalSource,
+    artifact_path: Path,
+) -> CaptionStore | OCRStore | ASRStore:
+    """Open the offline specialist store required by one text index build."""
+
+    stores = {
+        RetrievalSource.CAPTION: CaptionStore,
+        RetrievalSource.OCR: OCRStore,
+        RetrievalSource.ASR: ASRStore,
+    }
+    try:
+        return stores[source](artifact_path)
+    except KeyError:
+        raise ValueError(f"Unsupported text source {source.value!r}") from None
 
 
 def _context_encoder(

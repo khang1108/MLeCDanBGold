@@ -215,7 +215,7 @@ downstream image consumers must configure that run root as their dataset root.
 
 ## Public boundaries
 
-- `src/hcmai/data/pipeline.py`: `DataService` imports the configured BTC frame
+- `src/hcmai/data/corpus_build/btc.py` imports the configured BTC frame
   store and exposes typed frame/evidence stores.
 - `src/hcmai/data/enrichment/pipeline.py`: `EnrichmentService` runs Caption,
   OCR, YOLOE Object Detection, and FrameContext through independent stage boundaries.

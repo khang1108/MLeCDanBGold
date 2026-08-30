@@ -92,7 +92,7 @@ def test_search_route_reports_missing_runtime_dependencies() -> None:
     app = FastAPI()
     app.include_router(
         create_search_router(
-            {"service": SearchService(data=None, retrieval=None)}
+            {"service": SearchService(corpus=None, retrieval=None)}
         )
     )
 

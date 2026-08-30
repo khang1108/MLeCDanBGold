@@ -13,10 +13,8 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from hcmai.app import create_app
-from hcmai.common.schemas.frame import FrameRecord
-from hcmai.common.schemas.catalog import FrameCatalogEntry
 from hcmai.common.schemas.enum import RetrievalSource
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus, Frame
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
@@ -30,15 +28,13 @@ class MockFrameStore:
     video_metadata_store = None
 
     def __init__(self, evidence=None) -> None:
-        self.record = FrameRecord(
+        self.record = Frame(
             frame_id="L21_V001_00000090",
             video_id="L21_V001",
             frame_idx=90,
             timestamp_ms=3600,
             image_path="/data/keyframes/L21_V001/090.jpg",
             thumbnail_path="/data/thumbnails/L21_V001/090.jpg",
-            width=1920,
-            height=1080,
         )
         self._records = [self.record]
         self.evidence = evidence or {}
@@ -48,47 +44,34 @@ class MockFrameStore:
             return self.record
         raise KeyError(f"Frame ID {frame_id!r} not found")
 
-    get_frame = get
+    frame = get
 
-    @property
-    def record_count(self) -> int:
+    def __len__(self) -> int:
         return len(self._records)
 
-    def has_evidence(self, source) -> bool:
-        return source in self.evidence
-
-    def get_evidence(self, frame_id, source):
+    def _evidence(self, frame_id, source):
         store = self.evidence.get(source)
         if store is None:
             return None
         return store.get_text(frame_id)
 
-    def get_object_counts(self, frame_id):
-        """Return no optional object evidence for the API fixture."""
+    def caption(self, frame_id):
+        return self._evidence(frame_id, RetrievalSource.CAPTION)
 
-        assert frame_id == self.record.frame_id
+    def ocr(self, frame_id):
+        return self._evidence(frame_id, RetrievalSource.OCR)
+
+    def objects(self, frame_id):
+        del frame_id
+        return ()
+
+    def title(self, video_id):
+        del video_id
         return None
 
-    def get_transcript_segments_at_time(self, video_id, timestamp_ms):
-        """Project configured ASR text as timestamped timeline evidence."""
-
-        assert (video_id, timestamp_ms) == (
-            self.record.video_id,
-            self.record.timestamp_ms,
-        )
-        store = self.evidence.get(RetrievalSource.ASR)
-        if store is None:
-            return []
-        return [SimpleNamespace(text=store.get_text(self.record.frame_id))]
-
-    def iter_frame_catalog_entries(self):
-        """Expose one minimal catalog row for the list-frames API fixture."""
-
-        yield FrameCatalogEntry(
-            video_id=self.record.video_id,
-            frame_id=self.record.frame_id,
-            frame_idx=self.record.frame_idx,
-        )
+    def transcript(self, video_id, start_ms, end_ms):
+        del video_id, start_ms, end_ms
+        return self._evidence(self.record.frame_id, RetrievalSource.ASR)
 
 
 class MockRetriever:
@@ -125,7 +108,7 @@ def api_app() -> FastAPI:
     store = MockFrameStore()
     retriever = MockRetriever()
     service = SearchService(
-        data=cast(DataService, store),
+        corpus=cast(Corpus, store),
         retrieval=cast(RetrievalService, retriever),
     )
     return create_app(search_service=service)
@@ -237,7 +220,7 @@ def test_search_materializes_configured_text_evidence() -> None:
         RetrievalSource.ASR: MockEvidenceStore("Cho bơ vào chảo."),
     }
     service = SearchService(
-        cast(DataService, MockFrameStore(stores)),
+        cast(Corpus, MockFrameStore(stores)),
         cast(RetrievalService, MockRetriever()),
     )
     app = create_app(search_service=service)
@@ -247,9 +230,6 @@ def test_search_materializes_configured_text_evidence() -> None:
         app, "POST", "/api/v1/search", json={"query": "cooking"}
     ).json()["results"][0]
 
-    assert health["evidence_stores"] == {
-        "caption": True, "ocr": True, "asr": True
-    }
     metadata = result["metadata"]
     assert (metadata["caption"], metadata["ocr"], metadata["asr"]) == (
         "A person cooking.", "BƠ", "Cho bơ vào chảo."
@@ -302,7 +282,7 @@ def test_vqa_route_is_not_registered(api_app: FastAPI) -> None:
 
 
 def test_degraded_service_preserves_unavailable_statuses() -> None:
-    app = create_app(SearchService(data=None, retrieval=None))
+    app = create_app(SearchService(corpus=None, retrieval=None))
 
     search = request(
         app, "POST", "/api/v1/search", json={"query": "red bus"}
@@ -343,26 +323,6 @@ def test_get_frame_endpoint(api_app: FastAPI) -> None:
     notFoundResponse = request(api_app, "GET", "/api/v1/frames/UNKNOWN_FRAME")
     assert notFoundResponse.status_code == 404
 
-
-def test_list_frames_endpoint_returns_catalog_entries(api_app: FastAPI) -> None:
-    """List every frame through the catalog response contract."""
-
-    response = request(api_app, "GET", "/api/v1/list-frames")
-
-    assert response.status_code == 200
-    assert response.json() == [
-        {
-            "video_id": "L21_V001",
-            "frame_id": "L21_V001_00000090",
-            "frame_idx": 90,
-            "caption": None,
-            "ocr": None,
-            "objects": None,
-            "title": None,
-            "asr_segments": [],
-            "video_url": None,
-        }
-    ]
 
 
 def test_missing_required_config_aborts_startup(

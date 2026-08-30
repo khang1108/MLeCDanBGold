@@ -5,13 +5,12 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from numbers import Real
-from pathlib import Path
 from typing import Any
 
 from hcmai.common.schemas import RetrievalCandidate
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.logging import get_logger
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.retrieval.reranking.config import QwenRerankerConfig, RerankerConfig
 from hcmai.retrieval.reranking.models import HostedRerankingAdapter, RerankingAdapter
 
@@ -64,33 +63,27 @@ class RerankingService:
 
     def __init__(
         self,
-        data: DataService,
+        corpus: Corpus,
         config: RerankerConfig,
         adapter: RerankingAdapter,
-        *,
-        dataset_root: str | Path = ".",
     ) -> None:
-        self.data = data
+        self.corpus = corpus
         self.config = config
         self.adapter = adapter
-        self.dataset_root = Path(dataset_root).expanduser().resolve()
 
     @classmethod
     def remote(
         cls,
-        data: DataService,
+        corpus: Corpus,
         config: RerankerConfig,
         client: Any,
-        *,
-        dataset_root: str | Path = ".",
     ) -> RerankingService:
         from hcmai.retrieval.reranking.adapters.remote import RemoteAdapter
 
         return cls(
-            data,
+            corpus,
             config,
             RemoteAdapter(client),
-            dataset_root=dataset_root,
         )
 
     @staticmethod
@@ -147,13 +140,8 @@ class RerankingService:
             for position, candidate in enumerate(copies):
                 asset_reference: object = "<unresolved>"
                 try:
-                    frame = self.data.get_frame(candidate.frame_id)
-                    asset_reference = getattr(frame, "image_path", asset_reference)
-                    if isinstance(self.data, DataService):
-                        image_path = self.data.resolve_frame_asset(frame)
-                    else:
-                        path = Path(str(frame.image_path)).expanduser()
-                        image_path = path if path.is_absolute() else self.dataset_root / path
+                    image_path = self.corpus.image_path(candidate.frame_id)
+                    asset_reference = image_path
                     prepared.append((position, load_image(image_path, mode="RGB")))
                 except Exception as error:
                     # Keep the public fallback category stable, but retain the

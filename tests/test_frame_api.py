@@ -9,7 +9,8 @@ from fastapi.routing import APIRoute
 
 from hcmai.app import create_app
 from hcmai.common.schemas import FrameRecord
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
+from hcmai.corpus.assets import FrameAssetResolver
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 
@@ -29,10 +30,13 @@ def test_frame_asset_is_served_only_from_dataset_root(
                 frame_id=frame_id, video_id="v1", frame_idx=0,
                 timestamp_ms=0, image_path=path, width=1, height=1,
             )
-        get_frame = get
+        frame = get
+
+        def image_path(self, frame_id):
+            return FrameAssetResolver(tmp_path).resolve_frame(self.frame(frame_id))
     monkeypatch.setenv("HCMAI_DATASET_ROOT", str(tmp_path))
     app = create_app(SearchService(
-        cast(DataService, Store()), cast(RetrievalService, object())
+        cast(Corpus, Store()), cast(RetrievalService, object())
     ))
     route = next(
         route

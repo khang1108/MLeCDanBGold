@@ -38,7 +38,7 @@ from hcmai.data.enrichment.transcripts.materialize import (
 )
 from hcmai.data.enrichment.transcripts.prepare import prepare_transcripts
 from hcmai.data.enrichment.transcripts.publication import publish_staged
-from hcmai.data.pipeline import DataService
+from hcmai.corpus.stores import ASRStore, FrameStore
 
 
 class _Frame:
@@ -352,7 +352,7 @@ def test_materialization_rejects_unknown_frame_foreign_key(tmp_path: Path) -> No
         )
 
 
-def test_materialized_rows_validate_and_load_through_data_service(tmp_path: Path) -> None:
+def test_materialized_rows_validate_with_offline_stores(tmp_path: Path) -> None:
     frame = _frame("f1", "v1", 1_500)
     frames_path = tmp_path / "frames.parquet"
     pd.DataFrame([frame.model_dump(mode="json")]).to_parquet(frames_path, index=False)
@@ -367,12 +367,11 @@ def test_materialized_rows_validate_and_load_through_data_service(tmp_path: Path
     )
 
     write_asr_enrichment(output, rows, canonical_frame_ids={"f1"})
-    data = DataService.load(
-        frames_path, {RetrievalSource.ASR: output}
-    )
+    FrameStore(frames_path)
+    evidence = ASRStore(output)
 
     assert all(FrameEnrichment.model_validate(row.model_dump()) for row in rows)
-    assert data.get_evidence("f1", RetrievalSource.ASR) == "hello"
+    assert evidence.get_text("f1") == "hello"
 
 
 def test_completed_manifests_materialize_speech_and_no_speech_videos(
@@ -403,13 +402,12 @@ def test_completed_manifests_materialize_speech_and_no_speech_videos(
         enrichment_version="asr-v1",
         model_name="asr@revision:pipeline-v1",
     )
-    data = DataService.load(
-        frames_path, {RetrievalSource.ASR: output}
-    )
+    FrameStore(frames_path)
+    evidence = ASRStore(output)
 
-    assert data.get_evidence("f1", RetrievalSource.ASR) == "hello"
-    assert data.get_evidence("f2", RetrievalSource.ASR) is None
-    assert [row.frame_id for row in data.iter_evidence(RetrievalSource.ASR)] == [
+    assert evidence.get_text("f1") == "hello"
+    assert evidence.get_text("f2") is None
+    assert [row.frame_id for row in evidence.iter_records()] == [
         "f1", "f2"
     ]
 

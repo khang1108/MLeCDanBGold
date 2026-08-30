@@ -25,7 +25,7 @@ from hcmai.common.schemas import (
     ModelStatus,
     RetrievalSource,
 )
-from hcmai.corpus.stores.frame import FrameStore
+from hcmai.corpus import Corpus
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
@@ -150,7 +150,7 @@ def _frame_mapping() -> pd.DataFrame:
     )
 
 
-def _frame_store(tmp_path: Path) -> FrameStore:
+def _corpus(tmp_path: Path) -> Corpus:
     """Persist the canonical coordinates used for ASR segment projection."""
 
     pytest.importorskip("pyarrow")
@@ -177,7 +177,7 @@ def _frame_store(tmp_path: Path) -> FrameStore:
             },
         ]
     ).to_parquet(path, index=False)
-    return FrameStore(path)
+    return Corpus.open(path)
 
 
 def _indexes() -> tuple[DenseIndex, DenseIndex, SegmentDenseIndex]:
@@ -252,7 +252,7 @@ def _service(
         context_index=context if include_context else None,
         asr_segment_index=segments if include_asr else None,
         text_encoder=text_encoder if include_context or include_asr else None,
-        frame_store=_frame_store(tmp_path),
+        corpus=_corpus(tmp_path),
         fusion=FusionConfig(required_sources={RetrievalSource.VISUAL}),
         cache_config=cache_config,
         max_projection_gap_ms=1_000,
@@ -338,7 +338,7 @@ def test_fast_track_requires_text_encoder_for_any_text_index(
             context_index=context if include_context else None,
             asr_segment_index=segments if include_asr else None,
             text_encoder=None,
-            frame_store=_frame_store(tmp_path),
+            corpus=_corpus(tmp_path),
             fusion=FusionConfig(required_sources={RetrievalSource.VISUAL}),
         )
 
@@ -368,8 +368,13 @@ def test_fast_track_visual_scoring_uses_visual_family(
         captured.update(index=index, vectors=vectors, args=args)
         return []
 
-    monkeypatch.setattr(
-        "hcmai.retrieval.retriever.pipeline.score_all_videos", fake_score
+    # A setup-loader test may deliberately reload this module under a scoped
+    # FAISS stub. Patch the concrete method globals so this assertion remains
+    # bound to the service class that constructed ``service``.
+    monkeypatch.setitem(
+        service.score_event_videos.__func__.__globals__,
+        "score_all_videos",
+        fake_score,
     )
 
     assert service.score_event_videos(["red cable car"]) == []
@@ -903,12 +908,12 @@ def test_offline_preflight_rejects_evidence_with_no_usable_corpus() -> None:
     from hcmai.common.schemas import ProcessingStatus
 
     context = SimpleNamespace(frame_id="f1")
-    data = SimpleNamespace(
-        iter_frame_contexts=lambda: iter((context,)),
-        get_frame_context_text=lambda frame_id: None,
+    contexts = SimpleNamespace(
+        iter_records=lambda: iter((context,)),
+        get_text=lambda frame_id: None,
     )
     with pytest.raises(ValueError, match="no usable context_text"):
-        workflow._require_usable_context_ids(data)
+        workflow._require_usable_context_ids(contexts)
 
     failed_segment = SimpleNamespace(
         status=ProcessingStatus.FAILED,

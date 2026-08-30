@@ -115,7 +115,7 @@ frames như một compatibility artifact dẫn xuất; đây không phải ASR s
 truth và không phải input của `FrameContext`.
 Chỉ video có completed manifest được emit; video no-speech có completed row với
 `asr_text=None`, còn video chưa evaluate không bị biến thành negative evidence.
-Online `DataService` đọc file này qua existing `ASRStore`.
+Online `Corpus` reads this artifact through the runtime transcript store.
 
 ## Parquet schema
 

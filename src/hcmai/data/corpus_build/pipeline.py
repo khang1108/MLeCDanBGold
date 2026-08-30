@@ -416,9 +416,9 @@ class DefaultPreparationOperations:
     def prepare_btc_frame_store(self) -> Path:
         """Import organizer keyframes without constructing a video preprocessor."""
 
-        from hcmai.data.pipeline import DataService
+        from hcmai.data.corpus_build.btc import prepare_btc_frame_store
 
-        frames_path = DataService.prepare(
+        frames_path = prepare_btc_frame_store(
             self.enrichment_config,
             dataset=self.dataset,
         )
@@ -751,7 +751,7 @@ class DefaultPreparationOperations:
         self, source: RetrievalSource
     ) -> tuple[Path, Path]:
         from hcmai.common.config import AppConfig
-        from hcmai.data.pipeline import DataService
+        from hcmai.corpus.stores import ASRStore, CaptionStore, FrameStore, OCRStore
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
         from hcmai.retrieval.retriever.pipeline import RetrievalService
 
@@ -770,12 +770,16 @@ class DefaultPreparationOperations:
                 )
             )
         settings = AppConfig.from_yaml(self.retrieval_config)
-        data = DataService.load(
-            self.paths.frames_path,
-            {source: self.paths.enrichment_path(source)},
-        )
+        stores = {
+            RetrievalSource.CAPTION: CaptionStore,
+            RetrievalSource.OCR: OCRStore,
+            RetrievalSource.ASR: ASRStore,
+        }
+        frame_store = FrameStore(self.paths.frames_path)
+        evidence = stores[source](self.paths.enrichment_path(source))
         return RetrievalService.build_text_embedding_artifacts(
-            data,
+            frame_store,
+            evidence,
             self._text_encoder,
             source,
             self.paths.index_root(source),

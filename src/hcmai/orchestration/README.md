@@ -20,7 +20,7 @@ FastAPI
     → SearchService
     → explicit KISPipeline or TRAKEPipeline
     → TemporalSearchService + RetrievalService
-    → DataService-backed canonical materialization
+    → Corpus-backed canonical materialization
 ```
 
 Both workflows consume one stateless ordered event-to-frame alignment service.
@@ -35,7 +35,7 @@ create or modify offline artifacts.
 
 Canonical identity is immutable. `TemporalSearchService` validates every
 retrieval-owned `frame_id`, `video_id`, `frame_idx`, and timestamp against
-`DataService` before exposing an `AlignedPath`. Workflow projection preserves
+`Corpus` before exposing an `AlignedPath`. Workflow projection preserves
 those parallel arrays, and the backend supplies all frame and thumbnail URLs.
 
 KIS and TRAKE return the same public latency stages: `query_ms`,

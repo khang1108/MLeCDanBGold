@@ -1,4 +1,4 @@
-"""Characterize fields exposed by the pre-migration runtime loaders.
+"""Characterize fields exposed by the public runtime corpus loader.
 
 Every artifact is a tiny Parquet fixture created in ``tmp_path``.  The tests
 intentionally include nullable evidence values to freeze their meaning as
@@ -17,8 +17,8 @@ from hcmai.common.schemas import (
     RetrievalSource,
     TranscriptSegment,
 )
+from hcmai.corpus import Corpus
 from hcmai.corpus.models import TranscriptSegment as RuntimeTranscriptSegment
-from hcmai.data.pipeline import DataService
 from hcmai.corpus.stores.frame import FrameStore
 
 
@@ -152,30 +152,21 @@ def test_evidence_and_transcript_loaders_preserve_nullable_fields(
         ]
     ).to_parquet(transcript_path, index=False)
 
-    data = DataService.load(
+    corpus = Corpus.open(
         frames_path,
         {
             RetrievalSource.CAPTION: caption_path,
             RetrievalSource.OCR: ocr_path,
         },
-        object_path=object_path,
+        object_counts_path=object_path,
         transcript_path=transcript_path,
     )
 
-    caption = next(data.iter_evidence(RetrievalSource.CAPTION))
-    ocr = next(data.iter_evidence(RetrievalSource.OCR))
-    transcript = data.get_transcript_segments_at_time("video-001", 1_250)[0]
+    transcript = corpus.transcript_segments("video-001", 1_250, 1_251)[0]
 
-    assert caption.text is None
-    assert data.get_evidence("frame-001", RetrievalSource.CAPTION) is None
-    assert ocr.raw_text is None
-    assert ocr.normalized_text is None
-    assert data.get_evidence("frame-001", RetrievalSource.OCR) is None
-    objects = data.get_object_evidence("frame-001")
-    assert objects is not None
-    assert objects.counts == {}
-    assert objects.summary is None
-    assert objects.detection_count == 0
+    assert corpus.caption("frame-001") is None
+    assert corpus.ocr("frame-001") is None
+    assert corpus.objects("frame-001") == ()
     assert transcript == RuntimeTranscriptSegment(
         segment_id="video-001-segment-000",
         video_id="video-001",

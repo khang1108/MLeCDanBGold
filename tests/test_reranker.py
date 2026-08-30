@@ -5,7 +5,7 @@ from typing import Callable, Sequence, cast
 import pytest
 from PIL import Image
 from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.retrieval.reranking.config import RerankerConfig
 from hcmai.retrieval.reranking.pipeline import (
     RerankerContractError,
@@ -23,7 +23,10 @@ class Store:
         if frame_id not in self.records:
             raise KeyError(frame_id)
         return self.records[frame_id]
-    get_frame = get
+    frame = get
+
+    def image_path(self, frame_id):
+        return self.get(frame_id).image_path
 class Backend:
     instances = 0
     def __init__(self, result=None, error=None):
@@ -57,7 +60,7 @@ def test_success_identity_batches_scores_order_and_lifecycle(tmp_path):
     before = [item.model_dump() for item in inputs]
     backend = Backend(lambda images: [image.getpixel((0, 0))[0] for image in images])
     reranker = RerankingService(
-        cast(DataService, store), RerankerConfig(batch_size=6), backend
+        cast(Corpus, store), RerankerConfig(batch_size=6), backend
     )
     output = reranker.rerank("query", inputs)
     assert len(output) == 20 and {item.frame_id for item in output} == {f"f{i}" for i in range(20)}
@@ -70,18 +73,11 @@ def test_success_identity_batches_scores_order_and_lifecycle(tmp_path):
     assert before == [item.model_dump() for item in inputs] and Backend.instances == 1
     assert reranker.rerank("query", []) == [] and len(reranker.rerank("query", [inputs[0]])) == 1
     tied = RerankingService(
-        cast(DataService, store), RerankerConfig(batch_size=20),
+        cast(Corpus, store), RerankerConfig(batch_size=20),
         Backend(lambda images: [1] * len(images)),
     )
     assert [item.frame_id for item in tied.rerank("q", inputs)] == [item.frame_id for item in inputs]
     assert all(RetrievalCandidate.model_validate(item.model_dump()) for item in output)
-    relative_store = make_store(tmp_path, 1)
-    relative_store.records["f0"].image_path = Path("f0.png")
-    relative = RerankingService(
-        cast(DataService, relative_store), RerankerConfig(), Backend(lambda _: [1]),
-        dataset_root=tmp_path,
-    ).rerank("q", [candidate(0)])
-    assert relative[0].reranker_score == 1
 
 def test_candidate_image_failure_aborts_reranking(tmp_path):
     store, inputs = make_store(tmp_path, 8), [candidate(i) for i in range(8)]
@@ -89,7 +85,7 @@ def test_candidate_image_failure_aborts_reranking(tmp_path):
     backend = Backend(lambda images: [0.4] * len(images))
     with pytest.raises(RerankerUnavailableError, match="frame_asset_missing"):
         RerankingService(
-            cast(DataService, store), RerankerConfig(batch_size=10), backend
+            cast(Corpus, store), RerankerConfig(batch_size=10), backend
         ).rerank("q", inputs)
 
 @pytest.mark.parametrize(
@@ -103,7 +99,7 @@ def test_candidate_image_failure_aborts_reranking(tmp_path):
 def test_backend_failure_aborts_request(tmp_path, error, expected):
     store, inputs, backend = make_store(tmp_path, 3), [candidate(i) for i in range(3)], Backend(error=error)
     reranker = RerankingService(
-        cast(DataService, store), RerankerConfig(batch_size=3), backend
+        cast(Corpus, store), RerankerConfig(batch_size=3), backend
     )
     with pytest.raises(expected):
         reranker.rerank("q", inputs)
@@ -113,7 +109,7 @@ def test_count_mismatch_aborts_request(tmp_path):
     results, backend = iter([[0.5, 0.4], []]), Backend(lambda _: next(results))
     with pytest.raises(RerankerContractError):
         RerankingService(
-            cast(DataService, store), RerankerConfig(batch_size=2), backend
+            cast(Corpus, store), RerankerConfig(batch_size=2), backend
         ).rerank("q", inputs)
 
 
@@ -121,6 +117,6 @@ def test_invalid_score_aborts_request(tmp_path):
     store, inputs = make_store(tmp_path, 1), [candidate(0)]
     with pytest.raises(RerankerInvalidScoreError):
         RerankingService(
-            cast(DataService, store), RerankerConfig(),
+            cast(Corpus, store), RerankerConfig(),
             Backend(lambda _: [float("nan")])
         ).rerank("q", inputs)

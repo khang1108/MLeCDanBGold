@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from hcmai.common.schemas import RetrievalSource
+from hcmai.common.utils.io import read_json
 from hcmai.corpus.assets import FrameAssetResolver
 from hcmai.corpus.models import Frame, TranscriptSegment
 from hcmai.corpus.stores import (
@@ -87,11 +88,11 @@ class Corpus:
             if object_counts_path is not None
             else None
         )
-        transcripts = (
-            TranscriptStore(transcript_path)
-            if transcript_path is not None
-            else None
-        )
+        if transcript_path is not None and not Path(transcript_path).exists():
+            raise FileNotFoundError(
+                f"Transcript artifact does not exist: {transcript_path}"
+            )
+        transcripts = TranscriptStore(transcript_path) if transcript_path else None
         video_metadata = (
             VideoMetadataStore(video_metadata_path)
             if video_metadata_path is not None
@@ -100,8 +101,10 @@ class Corpus:
 
         for store in evidence.values():
             cls._validate_evidence_identity(frames, store)
+            cls._validate_evidence_lineage(frames, store)
         if object_counts is not None:
             cls._validate_object_counts_identity(frames, object_counts)
+            cls._validate_object_counts_lineage(frames, object_counts)
 
         return cls(
             frames,
@@ -120,6 +123,11 @@ class Corpus:
         """Return one canonical frame, preserving its organizer coordinates."""
 
         return self._frames.get(frame_id)
+
+    def __len__(self) -> int:
+        """Return the number of canonical frames loaded for runtime search."""
+
+        return len(self._frames)
 
     def frames(self, frame_ids: Sequence[str]) -> list[Frame]:
         """Return canonical frames in the requested order, including duplicates."""
@@ -303,6 +311,60 @@ class Corpus:
                     "Object counts do not match canonical identity for frame_id "
                     f"{record.frame_id!r}"
                 )
+
+    @staticmethod
+    def _validate_evidence_lineage(
+        frames: FrameStore,
+        store: CaptionStore | OCRStore,
+    ) -> None:
+        """Require text evidence to match the canonical manifest lineage."""
+
+        canonical = Corpus._canonical_frame_store_id(frames)
+        if canonical is not None and store.frame_store_id != canonical:
+            raise ValueError(
+                "Evidence frame_store_id does not match canonical frame_store_id: "
+                f"{store.artifact_path}"
+            )
+
+    @staticmethod
+    def _validate_object_counts_lineage(
+        frames: FrameStore,
+        store: ObjectCountsStore,
+    ) -> None:
+        """Require optional object counts to preserve canonical lineage."""
+
+        canonical = Corpus._canonical_frame_store_id(frames)
+        if canonical is not None and store.frame_store_id not in (None, canonical):
+            raise ValueError(
+                "Object counts frame_store_id does not match canonical "
+                f"frame_store_id: {store.artifact_path}"
+            )
+
+    @staticmethod
+    def _canonical_frame_store_id(frames: FrameStore) -> str | None:
+        """Read and validate optional published lineage beside frame metadata."""
+
+        manifest_path = frames.metadata_path.with_name("manifest.json")
+        if not manifest_path.exists():
+            return None
+        try:
+            manifest = read_json(manifest_path)
+        except Exception as error:
+            raise ValueError(
+                f"Malformed canonical frame manifest: {manifest_path}"
+            ) from error
+        if not isinstance(manifest, Mapping):
+            raise ValueError("Canonical frame manifest must contain an object")
+        canonical = manifest.get("frame_store_id")
+        if canonical is None:
+            return None
+        if (
+            not isinstance(canonical, str)
+            or not canonical
+            or canonical.strip() != canonical
+        ):
+            raise ValueError("Canonical frame manifest has invalid frame_store_id")
+        return canonical
 
 
 __all__ = ["Corpus"]

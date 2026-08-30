@@ -60,7 +60,7 @@ def test_load_search_service_has_visual_only_requirements_and_no_reranker(
     """Build the default service without attaching any reranking dependency."""
 
     settings = AppConfig()
-    fake_data = cast(Any, SimpleNamespace())
+    fake_corpus = cast(Any, SimpleNamespace())
     fake_retrieval = cast(
         Any,
         SimpleNamespace(active_sources=(RetrievalSource.VISUAL,)),
@@ -71,7 +71,9 @@ def test_load_search_service_has_visual_only_requirements_and_no_reranker(
 
         monkeypatch.setattr(setup, "_load_app_config", lambda: settings)
         monkeypatch.setattr(setup, "_load_model_config", lambda: SimpleNamespace())
-        monkeypatch.setattr(setup, "_load_data", lambda *args, **kwargs: fake_data)
+        monkeypatch.setattr(
+            setup, "_load_corpus", lambda *args, **kwargs: fake_corpus
+        )
         monkeypatch.setattr(setup, "_load_remote_llm", lambda *args, **kwargs: None)
 
         def load_retrieval(
@@ -81,13 +83,13 @@ def test_load_search_service_has_visual_only_requirements_and_no_reranker(
             llm: object,
             messages: list[str],
             *,
-            data: object,
+            corpus: object,
         ) -> object:
             """Capture required sources while returning a fake retriever."""
 
             del models_arg, index_dir, llm, messages
             captured["required_sources"] = settings_arg.search.fusion.required_sources
-            captured["data"] = data
+            captured["corpus"] = corpus
             return fake_retrieval
 
         monkeypatch.setattr(setup, "_load_retrieval", load_retrieval)
@@ -95,7 +97,7 @@ def test_load_search_service_has_visual_only_requirements_and_no_reranker(
         service = setup.load_search_service(messages=[])
 
         assert captured["required_sources"] == {RetrievalSource.VISUAL}
-        assert captured["data"] is fake_data
+        assert captured["corpus"] is fake_corpus
         assert service.retrieval is fake_retrieval
         assert not hasattr(service, "reranking")
         assert not hasattr(service.kis, "reranking")

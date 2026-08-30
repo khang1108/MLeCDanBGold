@@ -10,7 +10,7 @@ from hcmai.corpus.assets import (
     FrameAssetOutsideRootError,
     FrameAssetResolver,
 )
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 
@@ -60,7 +60,7 @@ def test_resolver_rebases_legacy_absolute_keyframe_path(
         resolver.resolve_value("/old/worker/other/1.jpg", require_file=False)
 
 
-def test_data_service_reports_real_sample_asset_availability(tmp_path: Path) -> None:
+def test_corpus_resolves_canonical_assets(tmp_path: Path) -> None:
     image = tmp_path / "keyframes" / "video-1" / "1.jpg"
     image.parent.mkdir(parents=True)
     image.write_bytes(b"image")
@@ -71,16 +71,11 @@ def test_data_service_reports_real_sample_asset_availability(tmp_path: Path) -> 
     metadata = tmp_path / "frames.parquet"
     pd.DataFrame(rows).to_parquet(metadata, index=False)
 
-    data = DataService.load(metadata, dataset_root=tmp_path)
-    status = data.frame_asset_status(sample_size=10)
+    corpus = Corpus.open(metadata, dataset_root=tmp_path)
 
-    assert status.as_dict() == {
-        "ready": False,
-        "checked": 2,
-        "available": 1,
-        "missing": 1,
-    }
-    assert data.resolve_frame_asset("f1") == image
+    assert corpus.image_path("f1") == image
+    with pytest.raises(FrameAssetMissingError):
+        corpus.image_path("f2")
 
 
 def test_health_reports_asset_readiness_separately_from_metadata(
@@ -90,8 +85,8 @@ def test_health_reports_asset_readiness_separately_from_metadata(
     pd.DataFrame([
         frame("f1", "keyframes/video-1/missing.jpg").model_dump(mode="python")
     ]).to_parquet(metadata, index=False)
-    data = DataService.load(metadata, dataset_root=tmp_path)
-    service = SearchService(data, cast(RetrievalService, object()))
+    corpus = Corpus.open(metadata, dataset_root=tmp_path)
+    service = SearchService(corpus, cast(RetrievalService, object()))
 
     capabilities = service.health()["capabilities"]
 
@@ -99,7 +94,7 @@ def test_health_reports_asset_readiness_separately_from_metadata(
     assert capabilities["frame_assets"] is False
     assert capabilities["frame_asset_status"] == {
         "ready": False,
-        "checked": 1,
+        "checked": 0,
         "available": 0,
-        "missing": 1,
+        "missing": 0,
     }

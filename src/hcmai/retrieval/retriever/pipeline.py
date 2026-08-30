@@ -11,7 +11,7 @@ import pandas as pd
 
 from hcmai.common.config import FusionConfig, RetrievalCacheConfig
 from hcmai.common.schemas import RetrievalResult, RetrievalSource
-from hcmai.corpus.stores.frame import FrameStore
+from hcmai.corpus import Corpus
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME, DenseIndex
 from hcmai.retrieval.retriever.cache import EmbeddingCache
@@ -78,7 +78,7 @@ class RetrievalService:
         context_index: DenseIndex | None,
         asr_segment_index: SegmentDenseIndex | None,
         text_encoder: TextEmbeddingAdapter | None,
-        frame_store: FrameStore,
+        corpus: Corpus,
         fusion: FusionConfig,
         cache_config: RetrievalCacheConfig | None = None,
         max_projection_gap_ms: int = 5_000,
@@ -122,11 +122,16 @@ class RetrievalService:
             )
         if asr_segment_index is not None:
             assert text_encoder is not None
+            frames = tuple(
+                corpus.frames(
+                    [str(frame_id) for frame_id in visual_index.mapping["frame_id"]]
+                )
+            )
             retrievers.append(
                 ASRSegmentRetriever(
                     text_encoder,
                     asr_segment_index,
-                    frame_store,
+                    frames,
                     cache,
                     prompt_version,
                     max_projection_gap_ms,
@@ -296,7 +301,8 @@ class RetrievalService:
 
     @staticmethod
     def build_text_embedding_artifacts(
-        data: Any,
+        frames: Any,
+        evidence: Any,
         encoder: TextEmbeddingAdapter,
         source: RetrievalSource,
         output_dir: str | Path,
@@ -311,7 +317,8 @@ class RetrievalService:
         )
 
         return build_text_embedding_artifacts(
-            data,
+            frames,
+            evidence,
             encoder,
             source,
             output_dir,

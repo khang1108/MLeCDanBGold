@@ -9,7 +9,7 @@ from hcmai.common.schemas import (
     FrameRecord, RetrievalSource,
 )
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
@@ -30,23 +30,24 @@ class Store:
             return self._records[0]
         raise KeyError(frame_id)
 
-    get_frame = get
+    frame = get
 
-    @property
-    def record_count(self):
+    def __len__(self):
         return len(self._records)
 
-    def has_evidence(self, source):
-        return False
-
-    def get_evidence(self, frame_id, source):
+    def caption(self, frame_id):
+        del frame_id
         return None
-
-    def get_object_counts(self, frame_id):
+    ocr = caption
+    def objects(self, frame_id):
+        del frame_id
+        return ()
+    def title(self, video_id):
+        del video_id
         return None
-
-    def get_transcript_segments_at_time(self, video_id, timestamp_ms):
-        return []
+    def transcript(self, video_id, start_ms, end_ms):
+        del video_id, start_ms, end_ms
+        return None
 
 class Retriever:
     def score_event_videos(self, events, filters=None, **kwargs):
@@ -77,7 +78,7 @@ def request(app, method, path, **kwargs):
 def test_app_exposes_only_standalone_search_contract() -> None:
     store, retriever = Store(), Retriever()
     service = SearchService(
-        cast(DataService, store), cast(RetrievalService, retriever)
+        cast(Corpus, store), cast(RetrievalService, retriever)
     )
     app = create_app(service)
     health = request(app, "GET", "/health").json()

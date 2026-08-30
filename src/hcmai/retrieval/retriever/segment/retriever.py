@@ -21,7 +21,7 @@ from hcmai.common.schemas import (
     RetrievalSource,
     RetrievalTrace,
 )
-from hcmai.corpus.stores.frame import FrameStore
+from hcmai.corpus.models import Frame
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.cache import EmbeddingCache
 from hcmai.retrieval.retriever.query_batch import (
@@ -45,7 +45,7 @@ class ASRSegmentRetriever:
         self,
         encoder: TextEmbeddingAdapter,
         index: SegmentDenseIndex,
-        frame_store: FrameStore,
+        frames: tuple[Frame, ...] | object,
         embedding_cache: EmbeddingCache | None = None,
         prompt_version: str = "query-v1",
         max_projection_gap_ms: int = 5_000,
@@ -64,11 +64,10 @@ class ASRSegmentRetriever:
             )
         self.encoder = encoder
         self.index = index
-        self.frame_store = frame_store
         self.embedding_cache = embedding_cache
         self.prompt_version = prompt_version
         self.projector = SegmentFrameProjector(
-            frame_store,
+            frames,
             max_projection_gap_ms=max_projection_gap_ms,
         )
 

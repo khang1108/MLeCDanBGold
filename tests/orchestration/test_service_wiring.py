@@ -7,16 +7,13 @@ from typing import Any, cast
 from hcmai.orchestration.pipeline import SearchService
 
 
-class _Data:
-    """Placeholder canonical-data dependency used only for composition."""
+class _Corpus:
+    """Placeholder canonical Corpus dependency used only for composition."""
 
-    record_count = 0
+    def __len__(self) -> int:
+        """Expose the public Corpus cardinality protocol."""
 
-    def has_evidence(self, source: object) -> bool:
-        """Report no optional evidence for health composition."""
-
-        del source
-        return False
+        return 0
 
 
 class _Retrieval:
@@ -27,7 +24,7 @@ def test_kis_and_trake_share_one_temporal_service() -> None:
     """Build both explicit workflows over exactly one temporal facade."""
 
     service = SearchService(
-        data=cast(Any, _Data()),
+        corpus=cast(Any, _Corpus()),
         retrieval=cast(Any, _Retrieval()),
     )
 
@@ -39,10 +36,10 @@ def test_health_uses_loaded_dependencies_not_task_registration() -> None:
     """Report explicit task readiness without a generic query-type registry."""
 
     ready = SearchService(
-        data=cast(Any, _Data()),
+        corpus=cast(Any, _Corpus()),
         retrieval=cast(Any, _Retrieval()),
     ).health()["capabilities"]
-    unavailable = SearchService(data=None, retrieval=None).health()["capabilities"]
+    unavailable = SearchService(corpus=None, retrieval=None).health()["capabilities"]
 
     assert (ready["search"], ready["kis"], ready["trake"]) == (True, True, True)
     assert (unavailable["search"], unavailable["kis"], unavailable["trake"]) == (

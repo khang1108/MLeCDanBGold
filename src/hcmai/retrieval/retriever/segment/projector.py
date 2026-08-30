@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from numbers import Integral
+from collections import defaultdict
+from collections.abc import Sequence
 from typing import Literal, Mapping
 
 from hcmai.corpus.models import Frame
-from hcmai.corpus.stores.frame import FrameStore
 
 ProjectionKind = Literal["inside_segment", "nearest_midpoint"]
 
@@ -38,10 +39,10 @@ class SegmentFrameProjector:
 
     def __init__(
         self,
-        frame_store: FrameStore,
+        frames: Sequence[Frame] | object,
         max_projection_gap_ms: int = 5_000,
     ) -> None:
-        """Bind a canonical frame store and inclusive nearest-frame gap limit."""
+        """Bind canonical frame projections and an inclusive gap limit."""
 
         if (
             isinstance(max_projection_gap_ms, bool)
@@ -49,7 +50,23 @@ class SegmentFrameProjector:
             or max_projection_gap_ms < 0
         ):
             raise ValueError("max_projection_gap_ms must be a non-negative integer")
-        self.frame_store = frame_store
+        records = getattr(frames, "iter_frames", lambda: frames)()
+        grouped: defaultdict[str, list[Frame]] = defaultdict(list)
+        for frame in records:
+            grouped[frame.video_id].append(frame)
+        self.frames_by_video = {
+            video_id: tuple(
+                sorted(
+                    values,
+                    key=lambda frame: (
+                        frame.timestamp_ms,
+                        frame.frame_idx,
+                        frame.frame_id,
+                    ),
+                )
+            )
+            for video_id, values in grouped.items()
+        }
         self.max_projection_gap_ms = int(max_projection_gap_ms)
 
     def project_row(
@@ -83,7 +100,7 @@ class SegmentFrameProjector:
         canonical_video_id = _validated_video_id(video_id)
         if canonical_video_id is None:
             return None
-        frames = self.frame_store.get_by_video(canonical_video_id)
+        frames = self.frames_by_video.get(canonical_video_id, ())
         if not frames:
             return None
 

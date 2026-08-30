@@ -32,16 +32,11 @@ class _LoadedService:
         self.active_sources = sources
 
 
-class _FakeData(SimpleNamespace):
-    """DataService-shaped fake retaining the real length protocol."""
+class _FakeCorpus(SimpleNamespace):
+    """Corpus-shaped fake retaining the public length protocol."""
 
     def __len__(self) -> int:
         return 1
-
-    def frame_asset_status(self) -> SimpleNamespace:
-        """Return the ready startup diagnostic exposed by DataService."""
-
-        return SimpleNamespace(ready=True, checked=1, missing=0)
 
 
 def _metadata(
@@ -188,7 +183,7 @@ def test_modern_profile_loads_visual_context_and_segment_asr(
 ) -> None:
     settings = _modern_settings(tmp_path)
     encoder_sources, captured = _install_modern_loaders(monkeypatch, settings)
-    frame_store = object()
+    corpus = object()
     messages: list[str] = []
 
     service = setup._load_retrieval(
@@ -197,7 +192,7 @@ def test_modern_profile_loads_visual_context_and_segment_asr(
         settings.index.path,
         None,
         messages,
-        data=cast(Any, SimpleNamespace(frame_store=frame_store)),
+        corpus=cast(Any, corpus),
     )
 
     assert cast(_LoadedService, service).active_sources == (
@@ -206,7 +201,7 @@ def test_modern_profile_loads_visual_context_and_segment_asr(
         RetrievalSource.ASR,
     )
     assert encoder_sources == ["visual", "text"]
-    assert captured["frame_store"] is frame_store
+    assert captured["corpus"] is corpus
     assert captured["max_projection_gap_ms"] == 5_000
     assert messages == []
 
@@ -270,7 +265,7 @@ def test_modern_index_paths_allow_environment_overrides(
         settings.index.path,
         None,
         [],
-        data=cast(Any, SimpleNamespace(frame_store=object())),
+        corpus=cast(Any, object()),
     )
 
     assert loaded_paths == [settings.index.path, override_context, override_asr]
@@ -312,7 +307,7 @@ def test_optional_incompatible_context_is_skipped_with_clear_warning(
         settings.index.path,
         None,
         messages,
-        data=cast(Any, SimpleNamespace(frame_store=object())),
+        corpus=cast(Any, object()),
     )
 
     assert cast(_LoadedService, service).active_sources == (
@@ -343,7 +338,7 @@ def test_incompatible_asr_dimension_degrades_to_context(
         settings.index.path,
         None,
         messages,
-        data=cast(Any, SimpleNamespace(frame_store=object())),
+        corpus=cast(Any, object()),
     )
 
     assert cast(_LoadedService, service).active_sources == (
@@ -371,21 +366,21 @@ def test_missing_required_context_disables_retrieval(
         settings.index.path,
         None,
         messages,
-        data=cast(Any, SimpleNamespace(frame_store=object())),
+        corpus=cast(Any, object()),
     )
 
     assert service is None
     assert any("CONTEXT index not available" in message for message in messages)
 
 
-def test_modern_data_loads_only_existing_typed_artifacts(
+def test_corpus_loader_opens_configured_usable_artifacts_once(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     frames = tmp_path / "frames.parquet"
     frames.write_bytes(b"frames")
-    context = tmp_path / "context.parquet"
-    context.write_bytes(b"context")
+    captions = tmp_path / "captions.parquet"
+    captions.write_bytes(b"captions")
     transcripts = tmp_path / "transcripts"
     transcripts.mkdir()
     (transcripts / "video.parquet").write_bytes(b"segments")
@@ -395,32 +390,24 @@ def test_modern_data_loads_only_existing_typed_artifacts(
             "root": tmp_path,
             "media_info_path": None,
             "enrichment": {
-                "caption_path": None,
+                "caption_path": captions,
                 "ocr_path": None,
                 "object_path": None,
-                "context_path": context,
+                "context_path": None,
                 "transcripts_path": transcripts,
             },
         }
     })
     calls: list[dict[str, Any]] = []
-    canonical = _FakeData(
-        context_store=None,
-        transcript_store=None,
-        load_evidence=lambda *_: pytest.fail("legacy evidence was loaded"),
-    )
+    canonical = _FakeCorpus()
 
-    def load_data(*args, **kwargs):
+    def open_corpus(*args, **kwargs):
         calls.append(kwargs)
-        if "context_path" in kwargs:
-            return SimpleNamespace(context_store="context-store")
-        if "transcript_path" in kwargs:
-            return SimpleNamespace(transcript_store="transcript-store")
         return canonical
 
-    monkeypatch.setattr(setup.DataService, "load", staticmethod(load_data))
+    monkeypatch.setattr(setup.Corpus, "open", staticmethod(open_corpus))
 
-    loaded = setup._load_data(
+    loaded = setup._load_corpus(
         settings,
         frames,
         tmp_path,
@@ -428,23 +415,23 @@ def test_modern_data_loads_only_existing_typed_artifacts(
     )
 
     assert loaded is canonical
-    assert canonical.context_store == "context-store"
-    assert canonical.transcript_store == "transcript-store"
     assert calls == [
-        {"dataset_root": tmp_path},
-        {"dataset_root": tmp_path, "context_path": context},
-        {"dataset_root": tmp_path, "transcript_path": transcripts},
+        {
+            "evidence_paths": {RetrievalSource.CAPTION: captions},
+            "dataset_root": tmp_path,
+            "object_counts_path": None,
+            "transcript_path": transcripts,
+            "video_metadata_path": None,
+        },
     ]
 
 
-def test_invalid_typed_data_keeps_canonical_frames_and_other_typed_store(
+def test_invalid_corpus_open_keeps_startup_degraded_with_diagnostic(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     frames = tmp_path / "frames.parquet"
     frames.write_bytes(b"frames")
-    context = tmp_path / "context.parquet"
-    context.write_bytes(b"bad-context")
     transcripts = tmp_path / "transcripts.parquet"
     transcripts.write_bytes(b"segments")
     settings = AppConfig.model_validate({
@@ -452,34 +439,25 @@ def test_invalid_typed_data_keeps_canonical_frames_and_other_typed_store(
             "frames_path": frames,
             "root": tmp_path,
             "enrichment": {
-                "context_path": context,
                 "transcripts_path": transcripts,
             },
         }
     })
-    canonical = _FakeData(context_store=None, transcript_store=None)
+    def open_corpus(*args, **kwargs):
+        raise ValueError("lineage mismatch")
 
-    def load_data(*args, **kwargs):
-        if "context_path" in kwargs:
-            raise ValueError("lineage mismatch")
-        if "transcript_path" in kwargs:
-            return SimpleNamespace(transcript_store="transcript-store")
-        return canonical
-
-    monkeypatch.setattr(setup.DataService, "load", staticmethod(load_data))
+    monkeypatch.setattr(setup.Corpus, "open", staticmethod(open_corpus))
     messages: list[str] = []
 
-    loaded = setup._load_data(
+    loaded = setup._load_corpus(
         settings,
         frames,
         tmp_path,
         messages,
     )
 
-    assert loaded is canonical
-    assert canonical.context_store is None
-    assert canonical.transcript_store == "transcript-store"
-    assert any("Could not load context artifact" in message for message in messages)
+    assert loaded is None
+    assert any("Could not load metadata" in message for message in messages)
 
 
 def test_removed_environment_profile_is_rejected(
@@ -503,12 +481,12 @@ def test_public_startup_selects_fast_track_once(
     monkeypatch.setattr(setup, "_load_app_config", lambda: settings)
     monkeypatch.setattr(setup, "_load_model_config", _models)
     monkeypatch.setattr(setup, "_load_remote_llm", lambda *_: None)
-    data = SimpleNamespace(frame_store=object())
+    corpus = SimpleNamespace()
 
-    def load_data(*args, **kwargs):
-        return data
+    def load_corpus(*args, **kwargs):
+        return corpus
 
-    monkeypatch.setattr(setup, "_load_data", load_data)
+    monkeypatch.setattr(setup, "_load_corpus", load_corpus)
     visual = SimpleNamespace(metadata=_metadata(
         model_name="visual/model",
         model_revision="visual-revision",

@@ -10,18 +10,17 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from hcmai.api.contracts import SearchResult, SearchResultMetadata
-from hcmai.common.schemas import RetrievalSource
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.temporal import AlignedPath
 
 
 class SearchMaterializer:
     """Resolve aligned KIS paths into public representative-frame results."""
 
-    def __init__(self, data: DataService) -> None:
-        """Retain the read-only canonical data facade used for materialization."""
+    def __init__(self, corpus: Corpus) -> None:
+        """Retain the read-only Corpus facade used for materialization."""
 
-        self.data = data
+        self.corpus = corpus
 
     def build_kis_result(self, path: AlignedPath) -> SearchResult:
         """Project one aligned path to its upper-middle canonical frame.
@@ -42,7 +41,7 @@ class SearchMaterializer:
 
         representative = len(path.frame_ids) // 2
         frame_id = path.frame_ids[representative]
-        frame = self.data.get_frame(frame_id)
+        frame = self.corpus.frame(frame_id)
 
         # The organizer-provided coordinate is submission-critical. A path
         # may not silently replace it with keyframe order or any local index.
@@ -56,23 +55,17 @@ class SearchMaterializer:
         thumbnail_urls = [
             self._thumbnail_url(aligned_id) for aligned_id in path.frame_ids
         ]
-        caption = self.data.get_evidence(frame.frame_id, RetrievalSource.CAPTION)
-        ocr = self.data.get_evidence(frame.frame_id, RetrievalSource.OCR)
-        counts = self.data.get_object_counts(frame.frame_id) or {}
-        objects = sorted(counts)
-        video_meta = (
-            self.data.video_metadata_store.get(frame.video_id)
-            if self.data.video_metadata_store is not None
-            else None
-        )
-        title = video_meta.title if video_meta is not None else None
-        segments = self.data.get_transcript_segments_at_time(
+        # A one-millisecond half-open range retains Phase A's point-containment
+        # semantics without treating nearby timeline speech as frame evidence.
+        title = self.corpus.title(frame.video_id)
+        caption = self.corpus.caption(frame.frame_id)
+        ocr = self.corpus.ocr(frame.frame_id)
+        objects = list(self.corpus.objects(frame.frame_id))
+        asr = self.corpus.transcript(
             frame.video_id,
             frame.timestamp_ms,
+            frame.timestamp_ms + 1,
         )
-        asr = " ".join(
-            segment.text.strip() for segment in segments if segment.text.strip()
-        ) or None
 
         return SearchResult(
             frame_id=frame.frame_id,

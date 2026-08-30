@@ -8,6 +8,8 @@ import pytest
 from PIL import Image
 
 from hcmai.common.utils.io import write_yaml
+from hcmai.corpus import Corpus
+from hcmai.data.corpus_build.btc import prepare_btc_frame_store
 
 
 def _valid_btc_row(**updates: object) -> dict[str, object]:
@@ -83,10 +85,8 @@ def test_btc_import_does_not_require_preprocessing_fields(tmp_path):
     assert row["time_base"] is None
     assert list(row["selection_reasons"]) == ["btc_keyframe"]
 
-    from hcmai.data.pipeline import DataService
-
-    data = DataService.load(output, dataset_root=source)
-    assert data.resolve_frame_asset(str(row["frame_id"])) == keyframe
+    corpus = Corpus.open(output, dataset_root=source)
+    assert corpus.image_path(str(row["frame_id"])) == keyframe
 
     manifest = json.loads((output.parent / "manifest.json").read_text())
     assert manifest["pipeline_version"] == "btc-keyframe-ingestion-v1"
@@ -138,8 +138,7 @@ def test_ingestion_cli_delegates_to_reusable_importer(
     assert capsys.readouterr().out.strip() == str(expected_output)
 
 
-def test_data_service_prepare_uses_btc_dataset_config(tmp_path):
-    from hcmai.data.pipeline import DataService
+def test_btc_preparation_uses_btc_dataset_config(tmp_path):
 
     source = tmp_path / "btc"
     keyframe = source / "keyframes" / "L01_V001" / "0000.jpg"
@@ -165,23 +164,20 @@ def test_data_service_prepare_uses_btc_dataset_config(tmp_path):
         config_path,
     )
 
-    output = DataService.prepare(config_path)
+    output = prepare_btc_frame_store(config_path)
 
     assert output == output_root / "frames.parquet"
     assert pd.read_parquet(output).iloc[0]["frame_idx"] == 120
-    data = DataService.load(output)
-    assert data.contains_submission("L01_V001", 120)
-    assert not data.contains_submission("L01_V001", 1)
+    corpus = Corpus.open(output)
+    assert corpus.frame("L01_V001:0000").frame_idx == 120
     manifest = json.loads((output_root / "manifest.json").read_text())
     assert manifest["frame_store_id"] == "btc-service-v1"
 
 
-def test_data_service_prepare_resolves_btc_paths_from_project_root(
+def test_btc_preparation_resolves_btc_paths_from_project_root(
     tmp_path, monkeypatch
 ):
     """Keep active BTC output paths independent of the command's CWD."""
-
-    from hcmai.data.pipeline import DataService
 
     project_root = Path(__file__).resolve().parents[2]
     config_path = tmp_path / "enrichment.yaml"
@@ -208,10 +204,12 @@ def test_data_service_prepare_resolves_btc_paths_from_project_root(
         captured.append(config)
         return config.output_root / "frames.parquet"
 
-    monkeypatch.setattr("hcmai.data.pipeline.import_btc_frame_store", fake_import)
+    monkeypatch.setattr(
+        "hcmai.data.corpus_build.btc.import_btc_frame_store", fake_import
+    )
     monkeypatch.chdir(tmp_path)
 
-    output = DataService.prepare(config_path)
+    output = prepare_btc_frame_store(config_path)
 
     assert output == project_root / "fixture/artifacts/frame_store/frames.parquet"
     assert captured[0].btc_root == project_root / "fixture/btc"
@@ -220,8 +218,7 @@ def test_data_service_prepare_resolves_btc_paths_from_project_root(
     assert captured[0].output_root == project_root / "fixture/artifacts/frame_store"
 
 
-def test_data_service_prepare_rejects_non_btc_source(tmp_path):
-    from hcmai.data.pipeline import DataService
+def test_btc_preparation_rejects_non_btc_source(tmp_path):
 
     output_root = tmp_path / "frame_store"
     config_path = tmp_path / "enrichment.yaml"
@@ -242,7 +239,7 @@ def test_data_service_prepare_rejects_non_btc_source(tmp_path):
     )
 
     with pytest.raises(ValueError, match="expected 'btc_keyframes'"):
-        DataService.prepare(config_path)
+        prepare_btc_frame_store(config_path)
 
 
 @pytest.mark.parametrize(

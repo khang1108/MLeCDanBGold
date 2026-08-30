@@ -13,7 +13,7 @@ from time import perf_counter
 from typing import TYPE_CHECKING
 
 from hcmai.common.config import AlignmentConfig
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.dp import AlignedPath, DPPath, rank_paths
 
@@ -35,13 +35,13 @@ class TemporalSearchService:
 
     def __init__(
         self,
-        data: DataService,
+        corpus: Corpus,
         retrieval: RetrievalService,
         config: AlignmentConfig,
     ) -> None:
         """Bind canonical data access, retrieval scoring, and DP settings."""
 
-        self.data = data
+        self.corpus = corpus
         self.retrieval = retrieval
         self.config = config
 
@@ -111,7 +111,7 @@ class TemporalSearchService:
 
         for position, frame_id in enumerate(video.frame_ids):
             canonical_frame_id = str(frame_id)
-            frame = self.data.get_frame(canonical_frame_id)
+            frame = self.corpus.frame(canonical_frame_id)
             if frame.video_id != video.video_id:
                 raise ValueError("dense score frame has mixed canonical video identity")
             if frame.frame_id != canonical_frame_id:
@@ -142,7 +142,7 @@ class TemporalSearchService:
             if int(video.frame_idx[position]) != frame_idx:
                 raise ValueError("decoded path frame_idx conflicts with score metadata")
 
-            frame = self.data.get_frame(frame_id)
+            frame = self.corpus.frame(frame_id)
             timestamp_ms = round(float(video.timestamps_ms[position]))
             if frame.video_id != row.video_id:
                 raise ValueError("decoded path frame has mixed canonical video identity")

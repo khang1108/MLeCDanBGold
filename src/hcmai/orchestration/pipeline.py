@@ -12,14 +12,10 @@ from hcmai.api.contracts import (
     TRAKEResponse,
 )
 from hcmai.common.config import SearchConfig
-from hcmai.common.schemas import (
-    FrameCatalogEntry,
-    FrameRecord,
-    RetrievalSource,
-    SubmissionResult,
-)
+from hcmai.common.schemas import RetrievalSource, SubmissionResult
 from hcmai.common.utils.logging import get_logger
-from hcmai.data.pipeline import DataService
+from hcmai.corpus import Corpus
+from hcmai.corpus.models import Frame
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.common.observability import METRICS
@@ -42,28 +38,28 @@ class SearchService:
 
     def __init__(
         self,
-        data: DataService | None,
+        corpus: Corpus | None,
         retrieval: RetrievalService | None,
         config: SearchConfig | None = None,
         llm: LLMService | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
-        self.data = data
+        self.corpus = corpus
         self.retrieval = retrieval
         self.config = config or SearchConfig()
         self.llm = llm
 
         temporal = (
             TemporalSearchService(
-                self.data,
+                self.corpus,
                 self.retrieval,
                 self.config.alignment,
             )
-            if self.data is not None and self.retrieval is not None
+            if self.corpus is not None and self.retrieval is not None
             else None
         )
-        self.kis = KISPipeline(self.data, temporal)
+        self.kis = KISPipeline(self.corpus, temporal)
         self.trake = TRAKEPipeline(temporal)
 
     @classmethod
@@ -74,30 +70,12 @@ class SearchService:
 
         return load_search_service(messages)
 
-    def get_frame(self, frame_id: str) -> FrameRecord:
-        """Resolve one frame through the canonical data authority."""
+    def get_frame(self, frame_id: str) -> Frame:
+        """Resolve one frame through the public canonical Corpus authority."""
 
-        if self.data is None:
+        if self.corpus is None:
             raise SearchServiceUnavailableError("Frame store not loaded")
-        return self.data.get_frame(frame_id)
-
-    def list_frames(self) -> list[FrameCatalogEntry]:
-        """Return every canonical keyframe with its loaded catalog evidence."""
-
-        if self.data is None:
-            raise SearchServiceUnavailableError("Frame store not loaded")
-        return list(self.data.iter_frame_catalog_entries())
-
-    def neighbors(
-        self, frame_id: str, window_ms: int, include_self: bool = True
-    ) -> list[FrameRecord]:
-        """Return canonical temporal neighbors around one frame."""
-
-        if self.data is None:
-            raise SearchServiceUnavailableError("Frame store not loaded")
-        return self.data.neighbors(
-            frame_id, window_ms=window_ms, include_self=include_self
-        )
+        return self.corpus.frame(frame_id)
 
     def submission(self, frame_id: str) -> SubmissionResult:
         """Build the official submission identity for one canonical frame."""
@@ -114,7 +92,7 @@ class SearchService:
     def health(self, startup_messages: Sequence[str] = ()) -> dict[str, Any]:
         """Report readiness and capability status without mutating services."""
 
-        data_ready = self.data is not None
+        corpus_ready = self.corpus is not None
         retrieval_ready = self.retrieval is not None
         asset_status = self._frame_asset_status()
         active_sources = (
@@ -122,7 +100,7 @@ class SearchService:
             if self.retrieval is not None
             else set()
         )
-        search_ready = data_ready and retrieval_ready
+        search_ready = corpus_ready and retrieval_ready
         default_remote_capabilities = {
             "embedding": False,
             "reranking": False,
@@ -140,18 +118,10 @@ class SearchService:
         )
         return {
             "status": "ok",
-            "ready": data_ready and retrieval_ready,
-            "frame_store_loaded": data_ready,
+            "ready": corpus_ready and retrieval_ready,
+            "frame_store_loaded": corpus_ready,
             "retriever_loaded": retrieval_ready,
-            "total_frames": self.data.record_count if self.data is not None else 0,
-            "evidence_stores": {
-                source.value: self.data.has_evidence(source) if self.data else False
-                for source in (
-                    RetrievalSource.CAPTION,
-                    RetrievalSource.OCR,
-                    RetrievalSource.ASR,
-                )
-            },
+            "total_frames": len(self.corpus) if self.corpus is not None else 0,
             "remote_inference": (
                 self.llm.gateway_health()
                 if self.llm is not None
@@ -181,11 +151,9 @@ class SearchService:
         }
 
     def _frame_asset_status(self) -> dict[str, int | bool]:
-        """Return bounded frame-asset readiness diagnostics."""
+        """Report that Corpus deliberately does not expose bulk asset sampling."""
 
-        if not isinstance(self.data, DataService):
-            return {"ready": False, "checked": 0, "available": 0, "missing": 0}
-        return self.data.frame_asset_status().as_dict()
+        return {"ready": False, "checked": 0, "available": 0, "missing": 0}
 
     def close(self) -> None:
         """Close optional inference resources owned by the service."""
@@ -209,7 +177,7 @@ class SearchService:
         """Reject online search when canonical data or retrieval is unavailable."""
 
         missing: list[str] = []
-        if self.data is None:
+        if self.corpus is None:
             missing.append("canonical frame data")
         if self.retrieval is None:
             missing.append("retrieval service")
