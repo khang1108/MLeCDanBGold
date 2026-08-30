@@ -35,13 +35,6 @@ class QueryLanguage(str, Enum):
     MIXED = "mixed"
 
 
-class TaskType(str, Enum):
-    """Task type of each query."""
-
-    KIS = "kis"
-    TRAKE = "trake"
-
-
 class QueryDifficulty(str, Enum):
     """Human-assigned difficulty of an evaluation query."""
 

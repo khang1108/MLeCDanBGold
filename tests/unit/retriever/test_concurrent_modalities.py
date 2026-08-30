@@ -13,7 +13,6 @@ from hcmai.common.schemas import (
     RetrievalResult,
     RetrievalSource,
     RetrievalTrace,
-    TaskType,
 )
 from hcmai.retrieval.retriever.concurrent import (
     ModalitySearchExecutor,
@@ -46,7 +45,6 @@ class DelayedRetriever:
         self.encoder = encoder
         self.delay_seconds = delay_seconds
         self.failure = failure
-        self.query_types: list[TaskType] = []
 
     @property
     def source_family(self) -> SourceFamily:
@@ -59,11 +57,7 @@ class DelayedRetriever:
         self,
         query_batch,
         top_k,
-        filters,
-        query_type=TaskType.KIS,
     ):
-        del filters
-        self.query_types.append(query_type)
         sleep(self.delay_seconds)
         if self.failure is not None:
             raise self.failure
@@ -100,7 +94,7 @@ def _fusion(
     return RRFFusionRetriever(retrievers, config, executor), executor
 
 
-def test_modality_delays_overlap_and_query_type_reaches_every_source() -> None:
+def test_modality_delays_overlap_for_every_source() -> None:
     visual_encoder = FixtureEncoder("fixture/visual")
     text_encoder = FixtureEncoder("fixture/text")
     retrievers = [
@@ -117,14 +111,13 @@ def test_modality_delays_overlap_and_query_type_reaches_every_source() -> None:
     fusion, executor = _fusion(retrievers)
     try:
         started = perf_counter()
-        result = fusion.search("event", query_type=TaskType.TRAKE)
+        result = fusion.search("event")
         elapsed = perf_counter() - started
     finally:
         executor.close()
 
     assert len(result.candidates) == 4
     assert elapsed < 0.14
-    assert all(item.query_types == [TaskType.TRAKE] for item in retrievers)
 
 
 def test_optional_caption_failure_warns_and_normalizes_active_weights() -> None:

@@ -320,10 +320,7 @@ def _load_retrieval(
         messages.append(f"Index directory not available at {index_dir}")
         return None
     try:
-        visual = RetrievalService.load_index(
-            index_dir,
-            subset_search_threshold=settings.index.subset_search_threshold,
-        )
+        visual = RetrievalService.load_index(index_dir)
         visual_encoder = _query_encoder(
             models.visual_embedding, visual, llm, "visual"
         )
@@ -469,16 +466,10 @@ def _load_fast_track_index(
         return None
     try:
         if source is RetrievalSource.CONTEXT:
-            index = RetrievalService.load_index(
-                path,
-                subset_search_threshold=settings.index.subset_search_threshold,
-            )
+            index = RetrievalService.load_index(path)
             expected_entity_kind = "frame"
         else:
-            index = SegmentDenseIndex.load(
-                path,
-                subset_search_threshold=settings.index.subset_search_threshold,
-            )
+            index = SegmentDenseIndex.load(path)
             expected_entity_kind = "segment"
         metadata = index.metadata
         if metadata.schema_version != "dense-index-v2":

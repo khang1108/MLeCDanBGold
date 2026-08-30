@@ -20,9 +20,7 @@ from hcmai.common.schemas import (
     RetrievalResult,
     RetrievalSource,
     RetrievalTrace,
-    TaskType,
 )
-from hcmai.common.schemas.search import SearchFilters
 from hcmai.data.stores.frame import FrameStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.cache import EmbeddingCache
@@ -95,28 +93,21 @@ class ASRSegmentRetriever:
         self,
         query_batch: QueryEmbeddingBatch,
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalResult]:
         """Search segments, project hits, deduplicate frames, and assign ASR ranks."""
 
-        del query_type
         self._validate_query_batch(query_batch)
         timer = StageTimer(PipelineStage.SEARCH.value)
-        scores, positions = self.index.search_filtered(
-            query_batch.vectors,
-            top_k,
-            filters,
-        )
+        scores, positions = self.index.search(query_batch.vectors, top_k)
         search_trace = timer.finish(
             input_count=len(query_batch.embeddings),
             output_count=sum(position >= 0 for row in positions for position in row),
-            backend="faiss_or_exact_subset",
+            backend="faiss",
         )
         return [
             RetrievalResult(
                 candidates=self._materialize(
-                    scores[row_index], positions[row_index], top_k, filters
+                    scores[row_index], positions[row_index], top_k
                 ),
                 trace=RetrievalTrace(stages={search_trace.stage: search_trace}),
             )
@@ -127,8 +118,6 @@ class ASRSegmentRetriever:
         self,
         queries: list[str],
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalResult]:
         """Encode and retrieve an ordered query batch without per-query encoding."""
 
@@ -136,7 +125,7 @@ class ASRSegmentRetriever:
             return []
         started = perf_counter()
         batch = self.encode(queries)
-        results = self.search_vectors(batch, top_k, filters, query_type)
+        results = self.search_vectors(batch, top_k)
         first_candidate_ms = (perf_counter() - started) * 1_000
         return [
             result.model_copy(
@@ -157,12 +146,10 @@ class ASRSegmentRetriever:
         self,
         query: str,
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> RetrievalResult:
         """Preserve the single-query convenience boundary."""
 
-        return self.search_batch([query], top_k, filters, query_type)[0]
+        return self.search_batch([query], top_k)[0]
 
     def _validate_query_batch(self, batch: QueryEmbeddingBatch) -> None:
         """Require query vectors compatible with the immutable segment bundle."""
@@ -185,11 +172,9 @@ class ASRSegmentRetriever:
         scores: Any,
         positions: Any,
         top_k: int,
-        filters: SearchFilters | None,
     ) -> list[RetrievalCandidate]:
         """Project segment rows and retain one strongest hit per canonical frame."""
 
-        minimum = filters.min_score if filters is not None else None
         selected: dict[
             str,
             tuple[tuple[float, str, int, int, int], RetrievalCandidate],
@@ -199,8 +184,6 @@ class ASRSegmentRetriever:
             if position < 0:
                 continue
             score = float(raw_score)
-            if minimum is not None and score < minimum:
-                continue
             row = self.index.mapping.iloc[position]
             projection = self.projector.project(
                 str(row["video_id"]),

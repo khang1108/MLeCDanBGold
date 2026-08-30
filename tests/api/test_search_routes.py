@@ -59,7 +59,6 @@ def test_search_route_calls_explicit_kis_method() -> None:
     assert response.status_code == 200
     assert service.requests == [SearchRequest(query="chef cooks", top_k=3)]
     assert "query_type" not in response.json()
-    assert "search_id" not in response.json()
 
 
 def test_search_route_keeps_pydantic_validation() -> None:

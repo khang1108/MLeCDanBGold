@@ -11,7 +11,6 @@ faiss = pytest.importorskip("faiss")
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.schemas.retrieval import RetrievalCandidate
-from hcmai.common.schemas.search import SearchFilters
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
 
@@ -102,35 +101,3 @@ class TestSearch:
         result = retriever.search("q", top_k=5)
         assert result.trace.duration_for("query_encoding") >= 0.0
         assert result.trace.duration_for("index_search") >= 0.0
-
-
-class TestFilters:
-    def test_video_id_filter(self, corpus, index):
-        embeddings, _ = corpus
-        retriever = DenseRetriever(FakeEncoder(embeddings, MODEL_NAME, 0), index)
-        filters = SearchFilters(video_ids=["v002"])
-        candidates = retriever.search("q", top_k=10, filters=filters)
-
-        assert candidates, "expected at least one v002 frame"
-        assert all(
-            c.metadata["frame"]["video_id"] == "v002" for c in candidates
-        )
-
-    def test_time_range_filter(self, corpus, index):
-        embeddings, _ = corpus
-        retriever = DenseRetriever(FakeEncoder(embeddings, MODEL_NAME, 0), index)
-        filters = SearchFilters(start_time_ms=3000, end_time_ms=6000)
-        candidates = retriever.search("q", top_k=10, filters=filters)
-
-        assert all(
-            3000 <= c.metadata["frame"]["timestamp_ms"] <= 6000 for c in candidates
-        )
-
-    def test_min_score_filter(self, corpus, index):
-        embeddings, _ = corpus
-        retriever = DenseRetriever(FakeEncoder(embeddings, MODEL_NAME, 2), index)
-        filters = SearchFilters(min_score=0.99)
-        candidates = retriever.search("q", top_k=10, filters=filters)
-
-        # Only the near-exact self match clears the high threshold.
-        assert [c.frame_id for c in candidates] == ["f002"]

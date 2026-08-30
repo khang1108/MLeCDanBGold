@@ -18,11 +18,9 @@ import faiss
 import numpy as np
 import pandas as pd
 
-from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.io import read_json, write_json
 from hcmai.retrieval.retriever.artifacts import publish_directory, sha256_file
 from hcmai.retrieval.retriever.dense.index import IndexArtifactError
-from hcmai.retrieval.retriever.filtered import exact_subset_search
 from hcmai.retrieval.retriever.models.metadata import IndexMetadata
 
 INDEX_FILENAME = "dense.index"
@@ -81,7 +79,6 @@ class SegmentDenseIndex:
         posting_positions: np.ndarray | None = None,
         start_ms: np.ndarray | None = None,
         end_ms: np.ndarray | None = None,
-        subset_search_threshold: int = 100_000,
     ) -> None:
         """Wrap a validated live index and its segment-only support arrays.
 
@@ -112,7 +109,6 @@ class SegmentDenseIndex:
             if end_ms is not None
             else self.mapping["end_ms"].to_numpy(dtype=np.int64)
         )
-        self.subset_search_threshold = subset_search_threshold
         self._video_slices = {
             video_id: slice(
                 int(self.posting_offsets[position]),
@@ -215,8 +211,6 @@ class SegmentDenseIndex:
     def load(
         cls,
         index_dir: Path | str,
-        *,
-        subset_search_threshold: int = 100_000,
     ) -> SegmentDenseIndex:
         """Load and fully validate a published segment index bundle.
 
@@ -282,7 +276,6 @@ class SegmentDenseIndex:
             posting_positions=posting_positions,
             start_ms=start_ms,
             end_ms=end_ms,
-            subset_search_threshold=subset_search_threshold,
         )
 
     def search(self, query_vectors: np.ndarray, top_k: int) -> tuple[np.ndarray, np.ndarray]:
@@ -320,66 +313,6 @@ class SegmentDenseIndex:
         """Return each segment's timeline order within its source video."""
 
         return self.mapping["segment_index"].to_numpy(dtype=np.int64)
-
-    def search_filtered(
-        self,
-        query_vectors: np.ndarray,
-        top_k: int,
-        filters: SearchFilters | None,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Search globally or exactly score only positions allowed by filters."""
-
-        allowed = self.filtered_positions(filters)
-        if allowed is None:
-            return self.search(query_vectors, top_k)
-        return exact_subset_search(
-            query_vectors,
-            self.vectors,
-            allowed,
-            top_k,
-            chunk_size=self.subset_search_threshold,
-        )
-
-    def filtered_positions(self, filters: SearchFilters | None) -> np.ndarray | None:
-        """Return positions overlapping a half-open requested time interval.
-
-        A segment ``[a, b)`` overlaps a requested range ``[start, end)`` when
-        ``b > start`` and ``a < end``.  Therefore merely touching a requested
-        endpoint is excluded, and an explicit zero-width requested range is
-        empty by definition.
-        """
-
-        if filters is None or not (
-            filters.video_ids
-            or filters.start_time_ms is not None
-            or filters.end_time_ms is not None
-        ):
-            return None
-        if (
-            filters.start_time_ms is not None
-            and filters.end_time_ms is not None
-            and filters.start_time_ms == filters.end_time_ms
-        ):
-            return np.empty(0, dtype=np.int64)
-        if filters.video_ids:
-            groups = [
-                self.posting_positions[bounds]
-                for video_id in filters.video_ids
-                if (bounds := self._video_slices.get(video_id)) is not None
-            ]
-            positions = (
-                np.unique(np.concatenate(groups))
-                if groups
-                else np.empty(0, dtype=np.int64)
-            )
-        else:
-            positions = np.arange(self.metadata.vector_count, dtype=np.int64)
-        if filters.start_time_ms is not None:
-            positions = positions[self.end_ms[positions] > filters.start_time_ms]
-        if filters.end_time_ms is not None:
-            positions = positions[self.start_ms[positions] < filters.end_time_ms]
-        return positions
-
 
 def _validate_build_inputs(embeddings: np.ndarray, mapping: pd.DataFrame) -> None:
     """Validate the immutable segment identity and normalized-vector contract."""

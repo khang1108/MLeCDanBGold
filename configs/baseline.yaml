@@ -26,7 +26,6 @@ index:
 
   asr_projection_max_gap_ms: 5000
 
-  subset_search_threshold: 100000
 
   text_embedding_filenames:
     caption: "caption_embeddings.npy"
@@ -64,10 +63,8 @@ search:
     modality_max_workers: 4
     required_sources: [visual]
     normalize_active_weights: true
-    # Neutral starting point only. Tune per task on labeled validation queries.
-    task_weights:
-      kis: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
-      trake: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
+    # Neutral starting point only. Tune on labeled validation queries.
+    source_weights: {visual: 1.0, context: 1.0, caption: 1.0, ocr: 1.0, asr: 1.0}
 
 api:
   default_top_k: 20

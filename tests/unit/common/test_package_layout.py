@@ -31,7 +31,10 @@ def test_canonical_grouped_import_paths_are_available(module_name: str) -> None:
     "module_name",
     [
         "hcmai.common.schemas.vqa",
+        "hcmai.common.schemas.search",
+        "hcmai.common.schemas.trake",
         "hcmai.pipelines",
+        "hcmai.retrieval.retriever.filtered",
         "hcmai.temporal.aligners.monotonic_dp",
         "hcmai.temporal.settings",
         "hcmai.temporal.service",

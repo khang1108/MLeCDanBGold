@@ -21,7 +21,6 @@ from hcmai.common.schemas import (
     RetrievalSource,
     TranscriptSegment,
 )
-from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.io import read_json, read_yaml_section
 from hcmai.data.assets import FrameAssetResolver, FrameAssetStatus
 from hcmai.data.enrichment.dataset_cli import merge_dataset_values
@@ -244,9 +243,6 @@ class DataService:
         return self._frames().get_neighbors(
             frame_id, window_ms=window_ms, include_self=include_self
         )
-
-    def filter_frame_ids(self, filters: SearchFilters | None = None) -> list[str]:
-        return self._frames().filter_frame_ids(filters)
 
     def iter_frames(self) -> Iterator[FrameRecord]:
         return self._frames().iter_frames()

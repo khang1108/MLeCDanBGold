@@ -1,7 +1,7 @@
 # Retriever
 
-`hcmai.retrieval.retriever` owns visual, caption, OCR, and frame-aligned ASR search,
-plus task-weighted reciprocal-rank fusion. Other components call the public
+`hcmai.retrieval.retriever` owns visual, Context, and segment-ASR search,
+plus source-weighted reciprocal-rank fusion. Other components call the public
 `RetrievalService`; index and modality implementations remain internal.
 
 ```text
@@ -14,15 +14,16 @@ retriever/
 │   ├── index.py                # Exact FAISS index
 │   └── retriever.py            # Visual dense search
 ├── text/
-│   ├── artifacts.py            # Caption/OCR/ASR artifact builder
-│   └── retriever.py            # Frame-aligned text search
-├── fusion/rrf.py               # Four-source task-weighted RRF
+│   ├── artifacts.py            # Caption/OCR/ASR/Context artifact builder
+│   └── retriever.py            # Frame-native Context search
+├── segment/                    # Segment-native ASR search and projection
+├── fusion/rrf.py               # Source-weighted RRF
 └── evaluation/benchmark.py     # Internal dense-baseline benchmark
 ```
 
 Embedding models and their adapters belong to `hcmai.retrieval.embedding`, not this
-package. Shared inputs and outputs use `SearchFilters`, `TaskType`,
-`RetrievalCandidate`, and `RetrievalResult` from `hcmai.common.schemas`.
+package. Shared outputs use `RetrievalCandidate` and `RetrievalResult` from
+`hcmai.common.schemas`; detached search accepts only query text and `top_k`.
 
 ## Public service
 
@@ -32,7 +33,6 @@ from hcmai.retrieval.retriever.pipeline import RetrievalService
 result = retrieval_service.search(
     query="một người đang đi bộ",
     top_k=100,
-    query_type=task_type,
 )
 candidates = result.candidates
 encoding_ms = result.trace.duration_for("query_encoding")

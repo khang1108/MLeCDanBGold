@@ -72,8 +72,6 @@ def test_kis_request_has_only_query_and_top_k() -> None:
     assert request.top_k == 20
 
     with pytest.raises(ValidationError):
-        SearchRequest.model_validate({"query": "x", "search_id": "legacy"})
-    with pytest.raises(ValidationError):
         SearchRequest.model_validate({"query": "x", "filters": {"video_ids": ["v1"]}})
     with pytest.raises(ValidationError):
         SearchRequest.model_validate({"query": "x", "query_type": "kis"})

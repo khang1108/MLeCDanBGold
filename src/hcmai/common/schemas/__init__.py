@@ -24,20 +24,8 @@ from .inference import (
     TranscriptInferenceResponse,
 )
 from .retrieval import RetrievalCandidate, RetrievalResult, SearchScores
-from .search import (
-    SearchFilters,
-    SearchLatency,
-    SearchRequest,
-    SearchResponse,
-    SearchResult,
-)
 from .submission import SubmissionResult
 from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
-from .trake import (
-    TRAKERequest,
-    TRAKEResponse,
-    TRAKESubmission,
-)
 from .transcript import TranscriptSegment
 
 __all__ = [
@@ -46,7 +34,6 @@ __all__ = [
     "ProcessingStatus",
     "RetrievalSource",
     "QueryLanguage",
-    "TaskType",
     "QueryDifficulty",
     "SearchScores",
     "RetrievalCandidate",
@@ -55,11 +42,6 @@ __all__ = [
     "StageTrace",
     "PipelineTrace",
     "RetrievalTrace",
-    "SearchFilters",
-    "SearchRequest",
-    "SearchLatency",
-    "SearchResult",
-    "SearchResponse",
     "SubmissionResult",
     "FrameRecord",
     "FrameCatalogEntry",
@@ -81,9 +63,6 @@ __all__ = [
     "TextEmbeddingRequest",
     "TextEmbeddingResponse",
     "TranscriptInferenceResponse",
-    "TRAKERequest",
-    "TRAKEResponse",
-    "TRAKESubmission",
     "TranscriptSegment",
     "CaptionEvidence",
     "OCRRegion",

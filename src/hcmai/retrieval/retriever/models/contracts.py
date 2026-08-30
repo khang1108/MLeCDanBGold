@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from hcmai.common.schemas import RetrievalResult, RetrievalSource, TaskType
-from hcmai.common.schemas.search import SearchFilters
+from hcmai.common.schemas import RetrievalResult, RetrievalSource
 from hcmai.retrieval.retriever.query_batch import (
     QueryEmbeddingBatch,
     SourceFamily,
@@ -17,16 +16,12 @@ class Retriever(Protocol):
         self,
         query: str,
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> RetrievalResult: ...
 
     def search_batch(
         self,
         queries: list[str],
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalResult]: ...
 
 
@@ -42,6 +37,4 @@ class VectorRetriever(Retriever, Protocol):
         self,
         query_batch: QueryEmbeddingBatch,
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalResult]: ...

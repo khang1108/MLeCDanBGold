@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from hcmai.common.schemas import (
     FrameRecord,
-    SearchResult,
-    SearchScores,
-    TRAKESubmission,
 )
 from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
 
@@ -83,35 +80,3 @@ def test_official_frame_idx_uses_btc_coordinate_without_recomputing_from_time() 
     )
 
     assert official_frame_idx(frame) == 7
-
-
-def test_search_result_streaming_fields() -> None:
-    result = SearchResult(
-        rank=1,
-        frame_id="L26_V196_001_keyframe_000001",
-        frame_ids=["L26_V196_001_keyframe_000001"],
-        video_id="L26_b.L26_V196.001",
-        frame_idx=150,
-        fps=25.0,
-        timestamp_ms=6000,
-        scores=SearchScores(final=0.9),
-    )
-    assert result.video_id == "L26_b.L26_V196.001"
-    assert result.fps == 25.0
-    assert result.frame_idx == 150
-    assert result.frame_ids == ["L26_V196_001_keyframe_000001"]
-
-
-def test_trake_submission_streaming_fields() -> None:
-    submission = TRAKESubmission(
-        rank=1,
-        video_id="L26_b.L26_V196.001",
-        frame_ids=["f1", "f2"],
-        frame_idxs=[10, 20],
-        timestamps_ms=[400, 800],
-        fps=25.0,
-    )
-    assert submission.video_id == "L26_b.L26_V196.001"
-    assert submission.fps == 25.0
-    assert submission.frame_idxs == [10, 20]
-    assert submission.frame_ids == ["f1", "f2"]

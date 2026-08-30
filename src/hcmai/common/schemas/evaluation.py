@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field, field_validator
 
 from .base import ContractModel, NonEmptyString
-from .enum import QueryDifficulty, QueryLanguage, TaskType
+from .enum import QueryDifficulty, QueryLanguage
 
 class EvaluationQuery(ContractModel):
     """One labelled query used by the offline evaluation harness."""
@@ -12,7 +14,7 @@ class EvaluationQuery(ContractModel):
     query_id: NonEmptyString
     query: NonEmptyString = Field(max_length=1_000)
     language: QueryLanguage
-    task_type: TaskType
+    task_type: Literal["kis", "trake"]
     difficulty: QueryDifficulty
     gold_frame_ids: list[NonEmptyString] = Field(min_length=1)
     gold_video_ids: list[NonEmptyString] = Field(default_factory=list)

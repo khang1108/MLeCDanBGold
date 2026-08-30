@@ -18,8 +18,6 @@ from hcmai.common.utils.io import read_json, write_json
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
 from hcmai.retrieval.retriever.artifacts import publish_directory, sha256_file
-from hcmai.common.schemas.search import SearchFilters
-from hcmai.retrieval.retriever.filtered import exact_subset_search
 from hcmai.retrieval.retriever.models.metadata import IndexMetadata
 
 logger = get_logger(__name__)
@@ -75,7 +73,6 @@ class DenseIndex:
         posting_offsets: np.ndarray | None = None,
         posting_positions: np.ndarray | None = None,
         timestamps: np.ndarray | None = None,
-        subset_search_threshold: int = 100_000,
     ) -> None:
         """Wrap a live FAISS index with its frame mapping and metadata.
 
@@ -98,7 +95,6 @@ class DenseIndex:
             if timestamps is not None
             else self.mapping["timestamp_ms"].to_numpy(dtype=np.int64)
         )
-        self.subset_search_threshold = subset_search_threshold
         self._video_slices = {
             video_id: slice(
                 int(self.posting_offsets[index]),
@@ -247,8 +243,6 @@ class DenseIndex:
     def load(
         cls,
         index_dir: Path | str,
-        *,
-        subset_search_threshold: int = 100_000,
     ) -> DenseIndex:
         """Load an index directory and reject mismatched artifacts.
 
@@ -377,7 +371,6 @@ class DenseIndex:
             posting_offsets=posting_offsets,
             posting_positions=posting_positions,
             timestamps=timestamps,
-            subset_search_threshold=subset_search_threshold,
         )
 
     def search(self, query_vectors: np.ndarray, top_k: int) -> tuple[np.ndarray, np.ndarray]:
@@ -450,59 +443,6 @@ class DenseIndex:
     def frame_idx(self) -> np.ndarray:
         """In-video frame index of each index position."""
         return self.mapping["frame_idx"].to_numpy()
-
-    def search_filtered(
-        self,
-        query_vectors: np.ndarray,
-        top_k: int,
-        filters: SearchFilters | None,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Use FAISS when unrestricted and exact narrowed vectors otherwise."""
-
-        allowed = self.filtered_positions(filters)
-        if allowed is None:
-            return self.search(query_vectors, top_k)
-        return exact_subset_search(
-            query_vectors,
-            self.vectors,
-            allowed,
-            top_k,
-            chunk_size=self.subset_search_threshold,
-        )
-
-    def filtered_positions(
-        self,
-        filters: SearchFilters | None,
-    ) -> np.ndarray | None:
-        if filters is None or not (
-            filters.video_ids
-            or filters.start_time_ms is not None
-            or filters.end_time_ms is not None
-        ):
-            return None
-        if filters.video_ids:
-            groups = []
-            for video_id in filters.video_ids:
-                bounds = self._video_slices.get(video_id)
-                if bounds is not None:
-                    groups.append(self.posting_positions[bounds])
-            positions = (
-                np.unique(np.concatenate(groups))
-                if groups
-                else np.empty(0, dtype=np.int64)
-            )
-        else:
-            positions = np.arange(self.metadata.vector_count, dtype=np.int64)
-        if filters.start_time_ms is not None:
-            positions = positions[
-                self.timestamps[positions] >= filters.start_time_ms
-            ]
-        if filters.end_time_ms is not None:
-            positions = positions[
-                self.timestamps[positions] <= filters.end_time_ms
-            ]
-        return positions
-
 
 def _postings(
     mapping: pd.DataFrame,

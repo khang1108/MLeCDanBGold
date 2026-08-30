@@ -19,7 +19,6 @@ from hcmai.common.schemas import (
     RetrievalResult,
     RetrievalSource,
     RetrievalTrace,
-    SearchRequest,
     StageStatus,
     StageTrace,
 )

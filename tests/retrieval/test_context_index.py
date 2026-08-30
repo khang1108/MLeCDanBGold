@@ -16,8 +16,7 @@ from hcmai.common.config import (
     InferenceConfig,
     IndexConfig,
 )
-from hcmai.common.schemas import RetrievalSource, TaskType
-from hcmai.common.schemas.search import SearchFilters
+from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.io import read_yaml, write_json, write_yaml
 from hcmai.data.pipeline import DataService
 from thundercompute.config import LLMServiceConfig
@@ -246,48 +245,6 @@ def test_context_index_is_frame_native_and_keeps_supplemental_vectors(
     )
 
 
-def test_context_filtered_search_round_trip_matches_allowed_brute_force(
-    fake_bge: FakeBGE,
-    tmp_path: Path,
-) -> None:
-    """Frame-native context filtering must equal dot products on allowed rows."""
-
-    pytest.importorskip("faiss")
-    from hcmai.retrieval.retriever.text.retriever import build_context_index
-
-    data = _context_data(
-        tmp_path,
-        [
-            ("f1", "[CAPTION]\nA red cable car.", "v1", 1000),
-            ("f2", "[CAPTION]\nA crowded market.", "v1", 2000),
-            ("f3", "[CAPTION]\nA red cable car.", "v2", 1000),
-            ("f4", "[CAPTION]\nA crowded market.", "v1", 3000),
-        ],
-    )
-    index = build_context_index(
-        data,
-        fake_bge,
-        tmp_path / "context-index",
-        embeddings_filename="context_embeddings.npy",
-        dataset_version="test-v1",
-    )
-    query = np.asarray([[1.0, 0.0]], dtype=np.float32)
-    filters = SearchFilters(
-        video_ids=["v1"], start_time_ms=900, end_time_ms=2500
-    )
-    allowed = index.filtered_positions(filters)
-    assert allowed is not None
-    brute_scores = query @ np.asarray(index.vectors)[allowed].T
-    expected = allowed[np.argsort(-brute_scores[0], kind="stable")]
-
-    scores, positions = index.search_filtered(query, 10, filters)
-
-    assert positions[0].tolist() == expected.tolist()
-    np.testing.assert_allclose(
-        scores[0], brute_scores[0][np.argsort(-brute_scores[0], kind="stable")]
-    )
-
-
 def test_context_artifact_builder_uses_evidence_encoder_and_manifest_lineage(
     fake_bge: FakeBGE,
     tmp_path: Path,
@@ -420,12 +377,12 @@ evidence_embedding:
 
 
 def test_fusion_accepts_context_as_a_source() -> None:
-    """Every task receives an explicit neutral context fusion weight by default."""
+    """Context receives an explicit neutral fusion weight by default."""
 
     config = FusionConfig()
 
-    assert RetrievalSource.CONTEXT in config.task_weights[TaskType.KIS]
-    assert set(config.task_weights[TaskType.KIS]) == set(RetrievalSource)
+    assert RetrievalSource.CONTEXT in config.source_weights
+    assert set(config.source_weights) == set(RetrievalSource)
 
 
 def test_context_and_segment_paths_are_dedicated_to_the_runtime() -> None:
@@ -494,4 +451,4 @@ def test_baseline_enables_context_and_segment_startup() -> None:
     assert index["context_path"] == "artifacts/indexes/context"
     assert index["asr_segment_path"] == "artifacts/indexes/asr_segments"
     assert index["asr_projection_max_gap_ms"] == 5_000
-    assert all("context" in weights for weights in baseline["search"]["fusion"]["task_weights"].values())
+    assert "context" in baseline["search"]["fusion"]["source_weights"]

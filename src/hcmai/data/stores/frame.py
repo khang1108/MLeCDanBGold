@@ -24,8 +24,6 @@ Typical usage::
         "L21_V001_keyframe_000001", window_ms=5_000
     )
 
-    # Filter IDs for the retrieval stage
-    ids = store.filter_frame_ids(SearchFilters(video_ids=["L21_V001"]))
 """
 
 from __future__ import annotations
@@ -39,7 +37,6 @@ from typing import cast
 import pandas as pd
 
 from hcmai.common.schemas.frame import FrameRecord
-from hcmai.common.schemas.search import SearchFilters
 
 
 class FrameStore:
@@ -54,8 +51,7 @@ class FrameStore:
         sorted by ``(timestamp_ms, frame_idx, frame_id)`` for temporal
         neighbour queries.
     * ``_records`` – ``tuple[FrameRecord]`` in the original Parquet
-        row order, used by ``filter_frame_ids`` to return IDs in a
-        deterministic, reproducible sequence.
+        row order, used for deterministic whole-corpus iteration.
 
     Attributes:
         metadata_path: Resolved path to the ``frames.parquet`` file
@@ -277,38 +273,4 @@ class FrameStore:
             for neighbor in self._records_by_video[frame.video_id]
             if start_time <= neighbor.timestamp_ms <= end_time
             and (include_self or neighbor.frame_id != frame.frame_id)
-        ]
-
-    def filter_frame_ids(
-        self,
-        filters: SearchFilters | None,
-    ) -> list[str]:
-        """Return frame IDs matching the given search filters.
-        
-        Args:
-            filters: ``SearchFilters`` instance specifying optional
-                ``video_ids``, ``start_time_ms``, and ``end_time_ms``
-                constraints.  Pass ``None`` to return all IDs.
-
-        Returns:
-            Ordered list of ``frame_id`` strings satisfying all supplied
-            filter conditions, in Parquet row order.
-        """
-
-        if filters is None:
-            return [record.frame_id for record in self._records]
-
-        video_ids = set(filters.video_ids)
-        return [
-            record.frame_id
-            for record in self._records
-            if (not video_ids or record.video_id in video_ids)
-            and (
-                filters.start_time_ms is None
-                or record.timestamp_ms >= filters.start_time_ms
-            )
-            and (
-                filters.end_time_ms is None
-                or record.timestamp_ms <= filters.end_time_ms
-            )
         ]

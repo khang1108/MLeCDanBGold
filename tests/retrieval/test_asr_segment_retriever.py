@@ -425,24 +425,6 @@ def test_asr_segment_retriever_projects_deduplicates_and_preserves_provenance(
     }
 
 
-def test_asr_segment_retriever_applies_min_score_before_materialization(
-    tmp_path: Path,
-) -> None:
-    """Treat the request threshold as a raw ASR segment-score cutoff."""
-
-    from hcmai.common.schemas.search import SearchFilters
-    from hcmai.retrieval.retriever.segment.retriever import ASRSegmentRetriever
-
-    frames, index = _online_retrieval_fixture(tmp_path)
-    retriever = ASRSegmentRetriever(FakeBGE(), index, frames)
-
-    result = retriever.search(
-        "hello", top_k=3, filters=SearchFilters(min_score=0.9)
-    )
-
-    assert [candidate.frame_id for candidate in result] == ["f1"]
-
-
 def test_asr_segment_retriever_rejects_incompatible_query_batch(
     tmp_path: Path,
 ) -> None:

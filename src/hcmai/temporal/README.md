@@ -49,8 +49,7 @@ are explicit `search.alignment` configuration, not hidden constants.
 
 KIS aligns the planned events and deterministically projects each path to a
 single representative frame while retaining all canonical path IDs for evidence
-inspection. It returns the existing `SearchResponse` shape and does not create
-server-side state from the compatibility `search_id` field.
+inspection. Its thin HTTP response is a stateless projection of those paths.
 
 ## 7. TRAKE projection
 

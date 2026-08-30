@@ -13,7 +13,7 @@ from hcmai.common.config import (
     resolve_dataset_root,
     resolve_repository_path,
 )
-from hcmai.common.schemas import RetrievalSource, TaskType
+from hcmai.common.schemas import RetrievalSource
 from hcmai.data.enrichment.caption.config import CaptionJobConfig
 from thundercompute.config import LLMServiceConfig
 
@@ -44,7 +44,7 @@ def test_baseline_config_matches_runtime_contract() -> None:
         RetrievalSource.OCR: "ocr_embeddings.npy",
         RetrievalSource.ASR: "asr_embeddings.npy",
     }
-    assert config.search.fusion.task_weights[TaskType.KIS] == {
+    assert config.search.fusion.source_weights == {
         source: 1.0 for source in RetrievalSource
     }
     assert config.search.alignment.top_k == 500
@@ -54,10 +54,6 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.search.alignment.event_power == 1.0
     assert config.search.alignment.chunk_size == 65_536
     assert config.search.alignment.cluster_delta == 0.0
-    assert set(config.search.fusion.task_weights) == {
-        TaskType.KIS,
-        TaskType.TRAKE,
-    }
     assert config.inference.enabled is True
     assert config.inference.base_url == "https://api.iamphuckhang.dev"
 
@@ -69,14 +65,12 @@ def test_search_config_rejects_retired_progressive_options() -> None:
         SearchConfig.model_validate({"progressive": {}})
 
 
-def test_fusion_weights_require_every_remaining_task_type() -> None:
-    """Do not allow one active task to inherit another task's fusion policy."""
+def test_fusion_weights_require_every_retrieval_source() -> None:
+    """Do not allow an active source to inherit an implicit fusion weight."""
 
-    with pytest.raises(ValueError, match="every TaskType"):
+    with pytest.raises(ValueError, match="source_weights must configure"):
         FusionConfig(
-            task_weights={
-                TaskType.KIS: {source: 1.0 for source in RetrievalSource},
-            }
+            source_weights={RetrievalSource.VISUAL: 1.0}
         )
 
 

@@ -25,10 +25,9 @@ that feature package. In particular, caption/OCR types belong under
 - `ProcessingStatus`: offline processing state: `pending`, `processing`,
   `completed`, or `failed`.
 - `RetrievalSource`: evidence source used during retrieval: `visual`,
-  `caption`, `ocr`, or `asr`.
+  `context`, `caption`, `ocr`, or `asr`.
 - `QueryLanguage`: query language: Vietnamese (`vi`), English (`en`), or
   mixed (`mixed`).
-- `TaskType`: public task type: `kis` or `trake`.
 - `QueryDifficulty`: evaluation difficulty: `easy`, `medium`, or `hard`.
 
 ### `frame.py`
@@ -70,40 +69,14 @@ that feature package. In particular, caption/OCR types belong under
   aggregation helpers.
 - `RetrievalTrace`: request-scoped retrieval specialization of `PipelineTrace`.
 
-### `search.py`
-
-- `SearchFilters`: optional video and time-range restrictions. Video IDs are
-  deduplicated, and `end_time_ms` cannot precede `start_time_ms`.
-- `SearchRequest`: public standalone-search request containing a typed
-  `query_type`, a non-empty query, bounded `top_k`, optional filters, and an
-  optional compatibility `search_id`. Alignment execution is stateless.
-- `SearchLatency`: non-negative latency measurements for each search stage and
-  the total request, in milliseconds.
-- `SearchResult`: one ranked result with required singular canonical
-  `frame_id`, bounded scene `frame_ids`, BTC `frame_idx`, preview URLs,
-  enrichment text, and scores.
-- `SearchResponse`: complete search response with request metadata, latency,
-  results, warnings, and the optional echoed `search_id`. `total_results` must
-  match the result list and cannot exceed `top_k`.
-
-### `trake.py`
-
-- `TRAKERequest`: raw query and optional caller-supplied ordered events.
-- `TRAKESubmission`: one same-video canonical frame mapping per ordered event.
-  Aligned `frame_ids`, BTC `frame_idxs`, and `timestamps_ms` preserve both
-  exact internal identity and competition coordinates for UI playback.
-- `TRAKEResponse`: bounded ranked temporal-alignment submissions.
-
-### `task.py`
-
-- `TaskRequest` and `TaskResponse`: discriminated KIS and TRAKE unions for
-  internal task routing and typed API adapters.
-
 ### `evaluation.py`
 
 - `EvaluationQuery`: labelled query for offline evaluation. It contains the
   query metadata, gold frame/video IDs, temporal tolerance, tags, and optional
   notes. ID and tag lists are deduplicated while preserving order.
+
+Public KIS and TRAKE HTTP contracts live under `hcmai.api.contracts`; they are
+not shared retrieval-domain models.
 
 ### `submission.py`
 

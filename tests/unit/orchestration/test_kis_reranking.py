@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from hcmai.common.schemas import FrameRecord, SearchRequest
+from hcmai.api.contracts import SearchRequest
+from hcmai.common.schemas import FrameRecord
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.temporal import AlignedPath
 
 
 class _Data:
     """Minimal canonical data provider for the KIS materializer."""
+
+    video_metadata_store = None
 
     def get_frame(self, frame_id: str) -> FrameRecord:
         """Resolve a canonical frame without adding specialist evidence."""
@@ -31,6 +34,18 @@ class _Data:
         del frame_id, source
         return None
 
+    def get_object_counts(self, frame_id):
+        """Keep object evidence absent in the visual alignment baseline."""
+
+        del frame_id
+        return None
+
+    def get_transcript_segments_at_time(self, video_id, timestamp_ms):
+        """Keep transcript evidence absent in the visual alignment baseline."""
+
+        del video_id, timestamp_ms
+        return []
+
 
 class _Alignment:
     """Return a fixed path whose score differs from all frame-local scores."""
@@ -50,6 +65,8 @@ class _Alignment:
                     timestamps_ms=(frame.timestamp_ms,),
                 ),
             ),
+            retrieval_ms=0.0,
+            alignment_ms=0.0,
         )
 
 
@@ -60,6 +77,4 @@ def test_default_kis_uses_dp_path_score_without_a_rerank_stage() -> None:
         SearchRequest(query="red bus", top_k=1)
     )
 
-    assert response.results[0].scores.final == 1.75
-    assert response.results[0].scores.reranker is None
-    assert "rerank" not in response.trace.stages
+    assert response.results[0].score == 1.75

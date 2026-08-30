@@ -24,9 +24,6 @@ class Store:
             raise KeyError(frame_id)
         return self.records[frame_id]
     get_frame = get
-    def filter_frame_ids(self, _):
-        raise AssertionError("corpus enumeration is forbidden")
-
 class Backend:
     instances = 0
     def __init__(self, result=None, error=None):

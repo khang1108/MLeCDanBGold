@@ -8,7 +8,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
-from hcmai.common.schemas.enum import RetrievalSource, TaskType
+from hcmai.common.schemas.enum import RetrievalSource
 
 # Recall cut-offs frozen for baseline comparison
 RECALL_CUTOFFS: tuple[int, ...] = (1, 5, 20, 50, 100)
@@ -237,7 +237,6 @@ class IndexConfig(BaseModel):
     context_embedding_filename: str = "context_embeddings.npy"
     asr_segment_embedding_filename: str = "asr_embeddings.npy"
     asr_projection_max_gap_ms: int = Field(default=5_000, ge=0)
-    subset_search_threshold: int = Field(default=100_000, ge=1)
     text_embedding_filenames: dict[RetrievalSource, str] = Field(
         default_factory=lambda: {
             RetrievalSource.CAPTION: "caption_embeddings.npy",
@@ -277,30 +276,24 @@ class FusionConfig(BaseModel):
         default_factory=lambda: {RetrievalSource.VISUAL}
     )
     normalize_active_weights: bool = True
-    task_weights: dict[TaskType, dict[RetrievalSource, float]] = Field(
-        default_factory=lambda: {
-            task: {source: 1.0 for source in FUSION_SOURCES}
-            for task in TaskType
-        }
+    source_weights: dict[RetrievalSource, float] = Field(
+        default_factory=lambda: {source: 1.0 for source in FUSION_SOURCES}
     )
 
     @model_validator(mode="after")
-    def validate_task_weights(self) -> FusionConfig:
-        """Require an explicit positive weight for every task and modality."""
+    def validate_source_weights(self) -> FusionConfig:
+        """Require one explicit positive weight for every retrieval source."""
 
-        if set(self.task_weights) != set(TaskType):
-            raise ValueError("fusion task_weights must configure every TaskType")
         expected = set(FUSION_SOURCES)
         if not self.required_sources.issubset(expected):
             raise ValueError("required_sources contains an unknown modality")
-        for task, weights in self.task_weights.items():
-            if set(weights) != expected:
-                raise ValueError(
-                    f"fusion task_weights[{task.value!r}] must configure "
-                    "visual, context, caption, ocr, and asr"
-                )
-            if any(weight <= 0 for weight in weights.values()):
-                raise ValueError("fusion weights must be greater than zero")
+        if set(self.source_weights) != expected:
+            raise ValueError(
+                "fusion source_weights must configure visual, context, "
+                "caption, ocr, and asr"
+            )
+        if any(weight <= 0 for weight in self.source_weights.values()):
+            raise ValueError("fusion weights must be greater than zero")
         return self
 
 

@@ -11,9 +11,7 @@ from hcmai.common.schemas import (
     RetrievalSource,
     RetrievalTrace,
     StageStatus,
-    TaskType,
 )
-from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.observability import PipelineStage
 from hcmai.common.observability.tracing import StageTimer
 from hcmai.retrieval.retriever.query_batch import QueryEmbeddingBatch
@@ -24,8 +22,6 @@ class VectorSearchIndex(Protocol):
         self,
         query_batch: QueryEmbeddingBatch,
         top_k: int,
-        filters: SearchFilters | None,
-        query_type: TaskType,
     ) -> list[RetrievalResult]: ...
 
 
@@ -48,8 +44,6 @@ class ModalitySearchJob:
     query_batch: QueryEmbeddingBatch
     index: VectorSearchIndex
     top_k: int
-    filters: SearchFilters | None
-    query_type: TaskType
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,8 +93,6 @@ class ModalitySearchExecutor:
                 job.index.search_vectors,
                 job.query_batch,
                 job.top_k,
-                job.filters,
-                job.query_type,
             )
             futures.append((job, future, timer))
 
@@ -122,7 +114,7 @@ class ModalitySearchExecutor:
                     error_category=category,
                     input_count=len(job.query_batch.embeddings),
                     output_count=0,
-                    backend="faiss_or_exact_subset",
+                    backend="faiss",
                 )
                 warning = (
                     f"{job.source.value} retrieval unavailable ({category})"

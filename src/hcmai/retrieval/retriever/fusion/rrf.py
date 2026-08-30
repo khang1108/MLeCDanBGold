@@ -11,10 +11,8 @@ from hcmai.common.schemas import (
     RetrievalResult,
     RetrievalSource,
     RetrievalTrace,
-    TaskType,
 )
 from hcmai.common.schemas.retrieval import RetrievalCandidate
-from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.observability import PipelineStage
 from hcmai.common.observability.tracing import StageTimer
 from hcmai.retrieval.retriever.concurrent import (
@@ -69,19 +67,15 @@ class RRFFusionRetriever:
         self,
         query: str,
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> RetrievalResult:
-        """Retrieve, merge exact frame IDs, and apply task-specific weights."""
+        """Retrieve, merge exact frame IDs, and apply source weights."""
 
-        return self.search_batch([query], top_k, filters, query_type)[0]
+        return self.search_batch([query], top_k)[0]
 
     def search_batch(
         self,
         queries: list[str],
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalResult]:
         """Encode each source family once and fuse every query in order."""
 
@@ -108,8 +102,6 @@ class RRFFusionRetriever:
                     query_batch=batches[family],
                     index=retriever,
                     top_k=top_k,
-                    filters=filters,
-                    query_type=query_type,
                 )
             )
 
@@ -149,7 +141,6 @@ class RRFFusionRetriever:
                 self._fuse(
                     children,
                     top_k,
-                    query_type,
                     trace,
                     warnings=warnings,
                     active_sources=active_sources,
@@ -167,7 +158,6 @@ class RRFFusionRetriever:
         self,
         child_results: list[tuple[Any, RetrievalResult]],
         top_k: int,
-        query_type: TaskType,
         trace: RetrievalTrace,
         *,
         warnings: list[str] | None = None,
@@ -193,7 +183,6 @@ class RRFFusionRetriever:
                 )
 
         weights = self._active_weights(
-            query_type,
             active_sources or _result_sources(child_results),
         )
         fused = [
@@ -224,10 +213,9 @@ class RRFFusionRetriever:
 
     def _active_weights(
         self,
-        query_type: TaskType,
         active_sources: set[RetrievalSource],
     ) -> dict[RetrievalSource, float]:
-        weights = self.config.task_weights[query_type]
+        weights = self.config.source_weights
         configured_sources = {
             source
             for retriever in self.retrievers

@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hcmai.common.schemas.search import SearchFilters
 from hcmai.retrieval.retriever.artifacts import sha256_file
 
 
@@ -191,33 +190,6 @@ def test_segment_index_rejects_forbidden_frame_identity() -> None:
         )
 
 
-def test_segment_filter_uses_half_open_overlap(tiny_segment_index) -> None:
-    """Segments touching either requested boundary do not overlap its interior."""
-
-    positions = tiny_segment_index.filtered_positions(
-        SearchFilters(video_ids=["v1"], start_time_ms=1000, end_time_ms=2000)
-    )
-
-    assert positions is not None
-    assert tiny_segment_index.mapping.iloc[positions]["segment_id"].tolist() == ["s2"]
-
-
-def test_segment_filtered_search_matches_brute_force(tiny_segment_index) -> None:
-    """Subset retrieval ranks only overlapping ASR vectors by exact dot product."""
-
-    query = np.asarray([[0.1, 0.8, 0.6]], dtype=np.float32)
-    filters = SearchFilters(video_ids=["v1"], start_time_ms=1000, end_time_ms=3000)
-    allowed = tiny_segment_index.filtered_positions(filters)
-    assert allowed is not None
-    brute_scores = query @ np.asarray(tiny_segment_index.vectors)[allowed].T
-    ordering = np.argsort(-brute_scores[0], kind="stable")
-
-    scores, positions = tiny_segment_index.search_filtered(query, 10, filters)
-
-    assert positions[0].tolist() == allowed[ordering].tolist()
-    np.testing.assert_allclose(scores[0], brute_scores[0][ordering])
-
-
 def test_segment_global_search_matches_brute_force(tiny_segment_index) -> None:
     """Unfiltered FAISS search remains the exact global vector baseline."""
 
@@ -343,18 +315,3 @@ def test_segment_load_rejects_rechecksummed_malformed_mapping(
 
     with pytest.raises(IndexArtifactError, match=message):
         SegmentDenseIndex.load(output)
-
-
-def test_zero_width_segment_filter_returns_no_results(tiny_segment_index) -> None:
-    """An explicit empty time interval cannot match a non-empty segment."""
-
-    filters = SearchFilters(start_time_ms=1000, end_time_ms=1000)
-
-    positions = tiny_segment_index.filtered_positions(filters)
-    scores, hits = tiny_segment_index.search_filtered(
-        np.asarray([[1.0, 0.0, 0.0]], dtype=np.float32), 10, filters
-    )
-
-    assert positions is not None
-    assert positions.tolist() == []
-    assert scores.shape == hits.shape == (1, 0)

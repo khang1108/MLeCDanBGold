@@ -6,7 +6,6 @@ import pandas as pd
 import pytest
 
 from hcmai.common.schemas.frame import FrameRecord
-from hcmai.common.schemas.search import SearchFilters
 from hcmai.data.stores import frame as frame_module
 from hcmai.data.stores.frame import FrameStore
 
@@ -102,7 +101,7 @@ def test_store_loads_parquet_once(
     store = FrameStore(metadata_path)
     store.get("L21_V001_00000030")
     store.get_many(["L21_V001_00000010", "L21_V001_00000020"])
-    store.filter_frame_ids(None)
+    list(store.iter_frames())
 
     assert calls == 1
 
@@ -190,35 +189,13 @@ def test_get_neighbors_rejects_negative_window(metadata_path: Path) -> None:
             window_ms=-1,
         )
 
-
-def test_filter_frame_ids_applies_inclusive_supported_filters(
-    metadata_path: Path,
-) -> None:
-    """Filter on video and time while deliberately ignoring min_score."""
-
-    store = FrameStore(metadata_path)
-    filters = SearchFilters(
-        video_ids=["L21_V001"],
-        start_time_ms=1_000,
-        end_time_ms=1_600,
-        min_score=10.0,
-    )
-
-    assert store.filter_frame_ids(filters) == [
-        "L21_V001_00000030",
-        "L21_V001_00000020",
-        "L21_V001_00000040",
-    ]
-
-
-def test_filter_frame_ids_without_filters_preserves_metadata_order(
+def test_iter_frames_preserves_metadata_order(
     metadata_path: Path,
     frame_rows: list[dict[str, object]],
 ) -> None:
-    """Return every frame in canonical metadata order without restrictions."""
+    """Return every frame in canonical metadata order."""
 
     expected = [str(row["frame_id"]) for row in frame_rows]
     store = FrameStore(metadata_path)
 
-    assert store.filter_frame_ids(None) == expected
-    assert store.filter_frame_ids(SearchFilters()) == expected
+    assert [frame.frame_id for frame in store.iter_frames()] == expected

@@ -10,8 +10,7 @@ import numpy as np
 import pandas as pd
 
 from hcmai.common.config import FusionConfig, RetrievalCacheConfig
-from hcmai.common.schemas import RetrievalResult, RetrievalSource, TaskType
-from hcmai.common.schemas.search import SearchFilters
+from hcmai.common.schemas import RetrievalResult, RetrievalSource
 from hcmai.data.stores.frame import FrameStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME, DenseIndex
@@ -184,21 +183,19 @@ class RetrievalService:
         self,
         query: str,
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> RetrievalResult:
-        return self._retriever.search(query, top_k, filters, query_type)
+        """Retrieve one query globally through the configured detached stack."""
+
+        return self._retriever.search(query, top_k)
 
     def search_batch(
         self,
         queries: list[str],
         top_k: int = 100,
-        filters: SearchFilters | None = None,
-        query_type: TaskType = TaskType.KIS,
     ) -> list[RetrievalResult]:
         """Retrieve multiple ordered queries with batched encoder calls."""
 
-        return self._retriever.search_batch(queries, top_k, filters, query_type)
+        return self._retriever.search_batch(queries, top_k)
 
     def _retriever_for(self, source_family: SourceFamily) -> Any:
         """Return the one configured retriever owning an embedding family."""
@@ -214,13 +211,8 @@ class RetrievalService:
     @staticmethod
     def load_index(
         index_dir: str | Path,
-        *,
-        subset_search_threshold: int = 100_000,
     ) -> DenseIndex:
-        return DenseIndex.load(
-            index_dir,
-            subset_search_threshold=subset_search_threshold,
-        )
+        return DenseIndex.load(index_dir)
 
     @staticmethod
     def build_index(
