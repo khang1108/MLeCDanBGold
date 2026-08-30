@@ -43,7 +43,7 @@ from scripts import (
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_NATIVE_EXECUTABLE = _PROJECT_ROOT / "build" / "keyframes_extraction" / "keyframe_extractor"
+_NATIVE_EXECUTABLE = _PROJECT_ROOT / "build" / "keyframes-extraction" / "keyframe_extractor"
 
 
 def _make_synthetic_source(source_root: Path, video_id: str) -> Path:
@@ -192,7 +192,7 @@ def _native_executable() -> Path:
 
     assert _NATIVE_EXECUTABLE.is_file(), (
         "build the native extractor before running this release gate: "
-        "cmake --build build/keyframes_extraction --parallel"
+        "cmake --build build/keyframes-extraction --parallel"
     )
     return _NATIVE_EXECUTABLE
 

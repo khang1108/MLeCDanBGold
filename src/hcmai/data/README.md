@@ -140,7 +140,7 @@ durable/OCR FrameRecord tables in one resumable command:
 PYTHONPATH=.:src aic/bin/python scripts/extract_custom_keyframes.py \
   --media-info-dir data/media-info-aic25-b1/media-info \
   --run-root runs/custom-raw1fps-v1 \
-  --native-executable build/keyframes_extraction/keyframe_extractor \
+  --native-executable build/keyframes-extraction/keyframe_extractor \
   --frame-store-id custom-raw1fps-v1 \
   --yt-dlp-binary yt-dlp \
   --yt-dlp-cookies /home/ubuntu/.config/yt-dlp/youtube.cookies.txt \
@@ -158,7 +158,7 @@ selection resumes from native state and does not re-extract retained bundles.
 Run the native extractor only after the local/release gate is accepted:
 
 ```bash
-build/keyframes_extraction/keyframe_extractor extract \
+build/keyframes-extraction/keyframe_extractor extract \
   --manifest runs/custom-raw1fps-v1/input/media_manifest.jsonl \
   --run-root runs/custom-raw1fps-v1 \
   --config runs/custom-raw1fps-v1/input/extraction_config.json \
@@ -184,8 +184,8 @@ cleanup, and final FrameStore loading. It never invokes yt-dlp, models, or a
 remote provider.
 
 ```bash
-cmake --build build/keyframes_extraction --parallel
-ctest --test-dir build/keyframes_extraction --output-on-failure
+cmake --build build/keyframes-extraction --parallel
+ctest --test-dir build/keyframes-extraction --output-on-failure
 PYTHONPATH=.:src aic/bin/python -m pytest -q \
   tests/data/test_custom_manifest.py \
   tests/data/test_custom_frames.py \

@@ -56,7 +56,7 @@ export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 
 INFERENCE_LOG="$RUN_ROOT/inference_gateway.log"
 
-BUILD_DIR="build/keyframes_extraction"
+BUILD_DIR="build/keyframes-extraction"
 NATIVE_EXECUTABLE="$BUILD_DIR/keyframe_extractor"
 
 URLS=(

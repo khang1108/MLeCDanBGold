@@ -61,7 +61,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--native-executable",
         type=Path,
-        default=Path("build/keyframes_extraction/keyframe_extractor"),
+        default=Path("build/keyframes-extraction/keyframe_extractor"),
     )
     parser.add_argument("--frame-store-id", default="custom-raw1fps-v1")
     parser.add_argument("--yt-dlp-binary", default="yt-dlp")

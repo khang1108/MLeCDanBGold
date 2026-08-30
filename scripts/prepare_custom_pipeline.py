@@ -622,7 +622,7 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument(
-        "--native-executable", type=Path, default=Path("build/keyframes_extraction/keyframe_extractor")
+        "--native-executable", type=Path, default=Path("build/keyframes-extraction/keyframe_extractor")
     )
     parser.add_argument("--version", required=True)
     parser.add_argument("--source", default="custom_raw_video_1fps")

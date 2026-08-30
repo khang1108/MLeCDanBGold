@@ -118,7 +118,7 @@ for Caption, OCR, Objects, ASR, and visual enrichment:
 PYTHONPATH=.:src aic/bin/python scripts/extract_custom_keyframes.py \
   --media-info-dir data/media-info-aic25-b1/media-info \
   --run-root runs/custom-raw1fps-v1 \
-  --native-executable build/keyframes_extraction/keyframe_extractor \
+  --native-executable build/keyframes-extraction/keyframe_extractor \
   --frame-store-id custom-raw1fps-v1 \
   --yt-dlp-binary yt-dlp \
   --limit 10 \
@@ -140,7 +140,7 @@ aic/bin/python -m pip install -e ".[pipeline]"
 PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py \
   --run-root runs/custom-raw1fps-v1 \
   --output-root artifacts/custom-raw1fps-v1 \
-  --native-executable build/keyframes_extraction/keyframe_extractor \
+  --native-executable build/keyframes-extraction/keyframe_extractor \
   --version custom-raw1fps-v1 \
   --source custom_raw_video_1fps \
   --frame-store-id custom-raw1fps-v1 \
