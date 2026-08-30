@@ -30,3 +30,17 @@ The existing retrieval package-layout test also requires the unavailable
 `faiss` dependency. A remaining import from the pre-Task-8 retrieval segment
 artifact builder still points at the old transcript artifact path and should
 be resolved by Task 8 when that builder moves to `offline/indexes`.
+
+## Fix round 1
+
+- Restored `offline.enrichment.caption.__main__` to delegate through
+  `EnrichmentService.run_caption_cli()`, preserving the moved entry point's
+  original execution path and options.
+- Updated `src/hcmai/data/WORKFLOW.md` with the new `offline.*` producer
+  ownership and `hcmai.corpus.stores` runtime boundary.
+- Kept the small import deferrals in the aggregate enrichment service and
+  object detector so the required `--help` path does not require optional
+  Parquet dependencies; generation behavior and call signatures are unchanged.
+
+Fix-round validation: compileall, caption `--help`, and the focused suite all
+passed (`43 passed`).

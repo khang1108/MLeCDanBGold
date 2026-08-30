@@ -6,9 +6,15 @@ the active competition baseline. Custom raw-video extraction is an explicitly
 separate offline workflow with its own frame_store_id and never replaces BTC
 artifacts in place.
 
+Artifact producers are imported from `offline.ingestion`,
+`offline.preprocessing`, and `offline.enrichment` (with corpus assembly under
+`offline.ingestion.corpus_build`). Runtime readers use the typed
+`hcmai.corpus.stores` modules; serving code does not import the offline
+producers.
+
 ## 1. Canonical FrameStore Ingestion
 
-`import_btc_frame_store` validates BTC metadata, joins the organizer's
+`offline.ingestion.import_btc_frame_store` validates BTC metadata, joins the organizer's
 keyframe mapping, preserves `video_id`, `frame_id`, `frame_idx`, and
 `timestamp_ms`, and atomically publishes `frames.parquet` plus its manifest.
 The resulting FrameStore is the source of truth for Caption, OCR, Object, and
