@@ -28,7 +28,7 @@ from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.common.observability import METRICS
 from hcmai.common.utils.video import official_frame_idx
-from hcmai.temporal import TemporalAlignmentService
+from hcmai.orchestration.temporal_search import TemporalSearchService
 
 logger = get_logger(__name__)
 
@@ -225,7 +225,7 @@ class SearchService:
         """Build task heads and inject one temporal facade into every task."""
 
         alignment = (
-            TemporalAlignmentService(
+            TemporalSearchService(
                 self.data,
                 self.retrieval,
                 self.config.alignment,
@@ -239,5 +239,5 @@ class SearchService:
                 alignment,
             )
         ]
-        pipelines.append(cast(Any, TRAKEPipeline(alignment)))
+        pipelines.append(cast(Any, TRAKEPipeline(self.data, alignment)))
         return PipelineRegistry(pipelines)

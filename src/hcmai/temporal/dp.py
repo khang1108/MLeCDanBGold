@@ -26,18 +26,49 @@ class DPPath:
     frame_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class AlignedPath:
+    """A canonical temporal path materialized from one decoded DP row."""
+
+    video_id: str
+    score: float
+    frame_ids: tuple[str, ...]
+    frame_idxs: tuple[int, ...]
+    timestamps_ms: tuple[int, ...]
+
+
 def cluster_starts(scores: np.ndarray, delta: float) -> np.ndarray:
     """Map each frame to its score-cluster start within a video.
 
     A positive ``delta`` prevents multiple aligned events from landing in one
     near-identical score cluster. The default of zero disables this optional
     diversification constraint.
+
+    Args:
+        scores: np.ndarray
+            A [event, frame] array of shape (n_events, n_frames) containing the event-to-frame scores.
+        delta: float
+            The minimum score difference required to start a new cluster.
+
+    Returns:
+        np.ndarray
+            An array of length n_frames where each element indicates the start of the score cluster for that frame.
     """
 
+    # ``scores`` is indexed as [event, frame], but clustering compares a
+    # complete score profile per frame. Transposing makes ``columns[t]`` the
+    # vector [score(event_0, t), score(event_1, t), ...]. A contiguous layout
+    # avoids a strided view while the loop repeatedly reads these vectors.
     columns = np.ascontiguousarray(scores.T)
+
+    # ``starts[t]`` will hold the first frame position of the cluster that
+    # contains frame ``t``. Frame zero always begins the first cluster.
     starts = np.zeros(len(columns), dtype=np.int64)
+
     anchor = 0
     for frame in range(1, len(columns)):
+        # Compare to the cluster anchor rather than the immediately preceding
+        # frame. This bounds the whole cluster's drift from its first profile.
         if np.abs(columns[frame] - columns[anchor]).max() > delta:
             anchor = frame
         starts[frame] = anchor
@@ -60,28 +91,51 @@ def align_video(
 
     scores = np.asarray(video.scores, dtype=np.float64)
     n_events, n_frames = scores.shape
+
     if n_frames < n_events:
         return []
     if event_power != 1.0:
         scores = np.clip(scores, 0.0, None) ** event_power
 
     frames = np.arange(n_frames)
-    starts = cluster_starts(scores, cluster_delta) if cluster_delta > 0.0 else frames
+
+    # With clustering disabled, every frame starts its own admissible region.
+    # With it enabled, a later event may only enter after the prior region.
+    starts = (
+        cluster_starts(scores, cluster_delta)
+        if cluster_delta > 0.0
+        else frames
+    )
 
     if int(np.count_nonzero(starts == frames)) < n_events:
         return []
-    
+
+    # Event ``e`` at a frame in a cluster beginning at ``s`` can only inherit
+    # from a predecessor at or before ``s - 1``. This enforces strict frame
+    # order normally and also prevents reuse within a clustered score region.
     source = starts - 1
     reachable = source >= 0
     source = source.clip(0)
 
+    # The recurrence is score(previous) + score(current) - lambda_gap *
+    # (timestamp(current) - timestamp(previous)). Rewriting it below as
+    # ``previous + weighted_time`` then ``current - weighted_time`` permits a
+    # prefix maximum instead of an O(n_frames^2) predecessor search.
     weighted_time = lambda_gap * np.asarray(video.timestamps_ms, dtype=np.float64)
     current = scores[0]
     back = np.zeros((n_events, n_frames), dtype=np.int64)
+    
     for event in range(1, n_events):
         shifted = current + weighted_time
+
+        # At each position t, ``running[t]`` is the best predecessor score
+        # among frames 0..t. ``argmax`` records the matching frame for later
+        # reconstruction; ties deliberately use the latest matching frame.
         running = np.maximum.accumulate(shifted)
         argmax = np.maximum.accumulate(np.where(shifted == running, frames, 0))
+
+        # ``source`` limits each endpoint to valid predecessors. Frame/cluster
+        # starts with no earlier predecessor are explicitly unreachable.
         current = np.where(
             reachable, scores[event] - weighted_time + running[source], -np.inf
         )
@@ -93,6 +147,9 @@ def align_video(
             break
         position = int(endpoint)
         path = [position]
+
+        # Follow one stored predecessor for each earlier event, then reverse
+        # because decoding begins from the final event's endpoint.
         for event in range(n_events - 1, 0, -1):
             position = int(back[event, position])
             path.append(position)
@@ -124,6 +181,9 @@ def rank_paths(
 
     if not videos:
         return []
+
+    # Ask every video for enough alternatives that taking rows level-by-level
+    # can fill ``max_rows`` even when some videos have no valid path.
     depth = math.ceil(max_rows / len(videos))
     per_video = [
         align_video(video, lambda_gap, depth, event_power, cluster_delta)
@@ -131,6 +191,8 @@ def rank_paths(
     ]
     rows: list[DPPath] = []
     for level in range(depth):
+        # Level zero contains each video's best path, level one its second
+        # best, etc. Sorting only inside a level preserves this diversity rule.
         rows.extend(
             sorted(
                 (paths[level] for paths in per_video if len(paths) > level),

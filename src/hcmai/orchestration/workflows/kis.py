@@ -13,7 +13,6 @@ from uuid import uuid4
 from hcmai.common.observability import PipelineStage
 from hcmai.common.observability.tracing import StageTimer, log_stage
 from hcmai.common.schemas import (
-    AlignmentPath,
     RetrievalCandidate,
     RetrievalTrace,
     SearchRequest,
@@ -24,11 +23,12 @@ from hcmai.common.schemas import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.materializer import SearchMaterializer
+from hcmai.orchestration.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,
 )
-from hcmai.temporal import TemporalAlignmentService, build_alignment_plan
+from hcmai.temporal import AlignedPath, split_query_events
 
 logger = get_logger(__name__)
 
@@ -54,7 +54,7 @@ class KISPipeline:
     def __init__(
         self,
         data: DataService | None,
-        alignment: TemporalAlignmentService | None,
+        alignment: TemporalSearchService | None,
     ) -> None:
         """Initialize canonical materialization and the shared alignment facade."""
 
@@ -96,16 +96,21 @@ class KISPipeline:
             output_count=1,
             backend="pydantic",
         )
-        plan = build_alignment_plan(request.query, request.events, request.filters)
+        events = split_query_events(request.query)
 
         alignment_timer = StageTimer(PipelineStage.LOCALIZATION.value)
-        aligned = self.alignment.align(plan, max_paths=request.top_k)
+        search = self.alignment.search(
+            events,
+            top_k=request.top_k,
+        )
         alignment_trace = alignment_timer.finish(
-            input_count=len(plan.events),
-            output_count=len(aligned.paths),
+            input_count=len(events),
+            output_count=len(search.paths),
             backend="monotonic_dp",
         )
-        candidates = [_path_to_candidate(path) for path in aligned.paths]
+        candidates = [
+            _path_to_candidate(path, self.data) for path in search.paths
+        ]
 
         materialization_started = perf_counter()
         materialization_timer = StageTimer(PipelineStage.MATERIALIZATION.value)
@@ -154,23 +159,22 @@ class KISPipeline:
         logger.info(
             "[%s] KIS completed events=%d videos=%d paths=%d",
             request_id_value,
-            len(plan.events),
-            aligned.candidate_video_count,
+            len(events),
+            len({path.video_id for path in search.paths}),
             len(candidates),
         )
         return response
 
 
-def _path_to_candidate(path: AlignmentPath) -> RetrievalCandidate:
-    """Select the deterministic representative while preserving every path ID."""
+def _path_to_candidate(path: AlignedPath, data: DataService) -> RetrievalCandidate:
+    """Select a midpoint frame while retaining the complete canonical path."""
 
-    frame = path.frames[len(path.frames) // 2]
+    frame_ids = path.frame_ids
+    frame = data.get_frame(frame_ids[len(frame_ids) // 2])
     return RetrievalCandidate(
         frame_id=frame.frame_id,
         final_score=path.score,
         metadata={
-            "path_id": path.path_id,
-            "event_ids": list(path.event_ids),
-            "frame_ids": [item.frame_id for item in path.frames],
+            "frame_ids": list(frame_ids),
         },
     )

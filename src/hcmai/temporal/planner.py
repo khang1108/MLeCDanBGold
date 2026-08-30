@@ -1,61 +1,53 @@
-"""Deterministically convert a KIS or TRAKE query into ordered events.
+"""Deterministically split a KIS query into ordered event text.
 
-This module owns only query segmentation and plan construction. It does not
-infer event meaning with an LLM, retrieve frames, or perform temporal
-alignment, which keeps the visual-only baseline reproducible.
+This module owns only backend query segmentation for the baseline temporal
+search flow. It does not validate TRAKE requests, infer event meaning with an
+LLM, retrieve frames, or perform temporal alignment.
 """
 
 from __future__ import annotations
 
 import re
 
-from hcmai.common.schemas import AlignmentEvent, AlignmentPlan, SearchFilters
+from collections.abc import Sequence
 
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 
-def build_alignment_plan(
-    query: str,
-    events: list[str] | None = None,
-    filters: SearchFilters | None = None,
-) -> AlignmentPlan:
-    """Build one deterministic ordered plan from explicit events or query text.
+def split_query_events(query: str) -> tuple[str, ...]:
+    """Split one query into deterministic ordered event text.
 
-    Explicit events preserve caller order. Otherwise, nonempty lines take
-    precedence over sentence boundaries, and a single remaining query becomes
-    one event. Whitespace is normalized without semantic rewriting.
+    Nonempty lines take precedence over sentence boundaries, and a single
+    remaining query becomes one event. Whitespace is normalized without
+    semantic rewriting. The return value is intentionally a plain tuple so the
+    baseline has no alignment DTO.
     """
 
-    if events is not None:
-        parts = _normalize_parts(events, strip_terminal_punctuation=False)
+    lines = _normalize_parts(query.splitlines(), strip_terminal_punctuation=False)
+    if len(lines) >= 2:
+        parts = lines
     else:
-        lines = _normalize_parts(query.splitlines(), strip_terminal_punctuation=False)
-        if len(lines) >= 2:
-            parts = lines
-        else:
-            sentences = _normalize_parts(
-                _SENTENCE_BOUNDARY.split(query),
-                strip_terminal_punctuation=True,
-            )
-            parts = sentences if len(sentences) >= 2 else _normalize_parts(
+        sentences = _normalize_parts(
+            _SENTENCE_BOUNDARY.split(query),
+            strip_terminal_punctuation=True,
+        )
+        parts = (
+            sentences
+            if len(sentences) >= 2
+            else _normalize_parts(
                 [query],
                 strip_terminal_punctuation=False,
             )
+        )
 
     if not parts:
         raise ValueError("alignment query must contain at least one event")
 
-    return AlignmentPlan(
-        events=tuple(
-            AlignmentEvent(event_id=f"e{index}", text=text, order=index)
-            for index, text in enumerate(parts)
-        ),
-        filters=filters,
-    )
+    return tuple(parts)
 
 
 def _normalize_parts(
-    values: list[str],
+    values: Sequence[str],
     *,
     strip_terminal_punctuation: bool,
 ) -> list[str]:

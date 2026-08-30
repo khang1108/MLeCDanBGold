@@ -2,35 +2,34 @@
 
 `hcmai.temporal` owns the stateless ordered event-to-frame baseline used by
 both public task heads. It is deliberately small: planning, score-matrix
-decoding, and canonical path materialization. Task-specific formatting stays
-in the KIS and TRAKE workflows.
+decoding, and canonical-ID validation. Task-specific frame materialization and
+response formatting stay in the KIS and TRAKE workflows.
 
 ## 1. Problem definition: ordered event-to-frame alignment
 
-Given ordered events, return a same-video sequence of BTC keyframes whose
-positions strictly increase. Every result preserves `video_id`, `frame_id`,
-`frame_idx`, and `timestamp_ms`; `frame_idx` remains the competition-facing
-coordinate and is never inferred from array order.
+Given ordered events, return a same-video sequence of canonical frame IDs whose
+positions strictly increase. `VideoEventScores` and the task workflows retain
+the corresponding `video_id`, `frame_idx`, and `timestamp_ms`; `frame_idx`
+remains the competition-facing coordinate and is never inferred from array
+order.
 
 ## 2. Query planning
 
-`planner.py` maps explicit events, or a deterministic decomposition of a
-query, into `AlignmentPlan` and ordered `AlignmentEvent` values. Planning does
-not retrieve data, call models, or decide task-specific response formatting.
+`planner.py` deterministically splits a KIS query into an ordered tuple of
+event strings. TRAKE provides ordered events directly. Planning does not
+retrieve data, call models, or decide task-specific response formatting.
 
 ## 3. Candidate video scoring
 
-`TemporalAlignmentService` calls `RetrievalService.score_event_videos()` once
-per alignment request. Requested video and time filters are applied during
-score acquisition; unsupported `min_score` filters are rejected rather than
-silently ignored.
+`TemporalSearchService` calls `RetrievalService.score_event_videos()` once per
+request and scores the full canonical visual corpus for each ordered event.
 
 ## 4. Event x frame score matrix
 
 For each candidate video, retrieval yields a `VideoEventScores` matrix with
-one row per event and one ordered column per canonical frame. The temporal
-package validates returned metadata against `DataService` before exposing it
-as an `AlignmentPath`.
+one row per event and one ordered column per canonical frame. The orchestration
+service validates returned metadata against `DataService` before exposing an
+`AlignedPath(video_id, score, frame_ids, frame_idxs, timestamps_ms)`.
 
 ## 5. Monotonic DP
 
@@ -49,7 +48,7 @@ are explicit `search.alignment` configuration, not hidden constants.
 ## 6. KIS projection
 
 KIS aligns the planned events and deterministically projects each path to a
-single representative frame while retaining the path's identity for evidence
+single representative frame while retaining all canonical path IDs for evidence
 inspection. It returns the existing `SearchResponse` shape and does not create
 server-side state from the compatibility `search_id` field.
 
@@ -82,9 +81,9 @@ record are in
 
 | Module | Owns | Does not own |
 | --- | --- | --- |
-| `planner.py` | deterministic event plans | retrieval or response formatting |
+| `planner.py` | deterministic ordered event text | retrieval or response formatting |
 | `dp.py` | pure monotonic path decoding | data access or HTTP concerns |
-| `service.py` | scoring, identity validation, canonical paths | KIS/TRAKE output schemas |
+| `orchestration/temporal_search.py` | scoring, identity validation, `AlignedPath` values | KIS/TRAKE output schemas |
 
 Run small hand-checkable fixtures with:
 

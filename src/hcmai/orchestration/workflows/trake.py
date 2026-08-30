@@ -12,12 +12,13 @@ from hcmai.common.schemas import (
     TRAKESubmission,
 )
 from hcmai.common.utils.logging import get_logger
-from hcmai.common.utils.video import derive_fps, format_video_id, official_frame_idx
+from hcmai.common.utils.video import derive_fps, format_video_id
+from hcmai.data.pipeline import DataService
+from hcmai.orchestration.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,
 )
-from hcmai.temporal import TemporalAlignmentService, build_alignment_plan
 
 logger = get_logger(__name__)
 
@@ -29,13 +30,17 @@ class TRAKEPipeline:
 
     def __init__(
         self,
-        alignment: TemporalAlignmentService | None,
+        data: DataService | None,
+        alignment: TemporalSearchService | None,
     ) -> None:
-        """Initialize the TRAKE task head with the shared alignment facade."""
+        """Initialize canonical data access and the shared alignment facade."""
 
+        self.data = data
         self.alignment = alignment
 
     def execute(self, request: TaskRequest) -> TRAKEResponse:
+        """Align ordered events and project canonical IDs into a TRAKE response."""
+
         if not isinstance(request, TRAKERequest):
             raise TaskPipelineRequestError(
                 "TRAKEPipeline requires a TRAKE request"
@@ -43,6 +48,8 @@ class TRAKEPipeline:
 
         if self.alignment is None:
             raise TaskPipelineDependencyError("Alignment service not loaded")
+        if self.data is None:
+            raise TaskPipelineDependencyError("Frame store not loaded")
 
         events = request.events
         if events is None:
@@ -54,10 +61,9 @@ class TRAKEPipeline:
 
         request_id = f"trake-{digest.hexdigest()[:12]}"
 
-        plan = build_alignment_plan(request.query, events)
-        aligned = self.alignment.align(plan, max_paths=request.top_k)
+        search = self.alignment.search(events, top_k=request.top_k)
+        rows = search.paths
 
-        rows = aligned.paths
         logger.info(
             "[%s] trake completed events=%d videos=%d rows=%d",
             request_id,
@@ -77,12 +83,20 @@ class TRAKEPipeline:
                     rank=rank,
                     video_id=format_video_id(
                         row.video_id,
-                        fallback_path=row.frames[0].image_path if row.frames else None,
+                        fallback_path=(
+                            self.data.get_frame(row.frame_ids[0]).image_path
+                            if row.frame_ids
+                            else None
+                        ),
                     ),
-                    frame_ids=[frame.frame_id for frame in row.frames],
-                    frame_idxs=[official_frame_idx(frame) for frame in row.frames],
-                    timestamps_ms=[frame.timestamp_ms for frame in row.frames],
-                    fps=derive_fps(row.frames[0] if row.frames else None),
+                    frame_ids=list(row.frame_ids),
+                    frame_idxs=list(row.frame_idxs),
+                    timestamps_ms=list(row.timestamps_ms),
+                    fps=derive_fps(
+                        self.data.get_frame(row.frame_ids[0])
+                        if row.frame_ids
+                        else None
+                    ),
                 )
                 for rank, row in enumerate(rows, start=1)
             ],

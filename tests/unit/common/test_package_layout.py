@@ -16,7 +16,7 @@ import pytest
         "hcmai.data.enrichment.transcripts.pipeline",
         "hcmai.temporal.dp",
         "hcmai.temporal.planner",
-        "hcmai.temporal.service",
+        "hcmai.orchestration.temporal_search",
         "hcmai.orchestration.workflows.kis",
         "hcmai.orchestration.workflows.trake",
     ],
@@ -34,12 +34,19 @@ def test_canonical_grouped_import_paths_are_available(module_name: str) -> None:
         "hcmai.pipelines",
         "hcmai.temporal.aligners.monotonic_dp",
         "hcmai.temporal.settings",
+        "hcmai.temporal.service",
         "thundercompute.adapters.vqa",
     ],
 )
 def test_retired_package_paths_are_unavailable(module_name: str) -> None:
     """Keep retired modules outside the discoverable package boundary."""
 
-    assert find_spec(module_name) is None
+    try:
+        spec = find_spec(module_name)
+    except ModuleNotFoundError:
+        # Removing a whole legacy package makes its descendant unresolvable
+        # before ``find_spec`` can return the expected ``None``.
+        spec = None
+    assert spec is None
     with pytest.raises(ModuleNotFoundError):
         import_module(module_name)

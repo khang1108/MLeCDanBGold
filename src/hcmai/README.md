@@ -11,7 +11,7 @@ artifacts and never regenerates corpus-scale data.
 FastAPI router
   -> SearchService / PipelineRegistry
   -> KIS or TRAKE workflow
-  -> TemporalAlignmentService
+  -> TemporalSearchService
   -> RetrievalService.score_event_videos()
   -> pure monotonic DP
   -> DataService canonical materialization
@@ -29,7 +29,7 @@ flowchart TB
     API --> SERVICE[SearchService]
     SERVICE --> KIS[KIS workflow]
     SERVICE --> TRAKE[TRAKE workflow]
-    KIS --> ALIGN[TemporalAlignmentService]
+    KIS --> ALIGN[TemporalSearchService]
     TRAKE --> ALIGN
     ALIGN --> RET[RetrievalService]
     ALIGN --> DATA[DataService]
@@ -55,11 +55,12 @@ may rank candidates but cannot invent or alter these values.
 
 ## Shared temporal baseline
 
-`temporal/planner.py` converts a query or caller-provided events into an
-`AlignmentPlan`. `RetrievalService` builds a per-video event-by-frame score
-matrix, subject to requested video/time filters. `temporal/dp.py` returns
-strictly increasing paths, and `TemporalAlignmentService` validates each frame
-against `DataService` before constructing an `AlignmentPath`.
+`temporal/planner.py` deterministically splits a KIS query into a plain ordered
+tuple of strings. TRAKE supplies ordered events directly. `RetrievalService`
+builds a per-video event-by-frame score matrix, and `temporal/dp.py` returns
+strictly increasing decoder rows that `TemporalSearchService` validates and
+materializes into canonical `AlignedPath` values without wrapping them in
+another schema.
 
 The baseline deliberately does not keep mutable search sessions, cluster
 scenes, apply soft temporal-relation scoring, or run a default reranker. A
@@ -78,7 +79,7 @@ api/             HTTP validation and response shaping only
 common/          shared schemas, configuration, logging, observability
 data/            canonical frame metadata, specialist evidence, artifacts
 retrieval/       embeddings, indexes, modality retrieval, fusion
-temporal/        alignment planning, pure DP, canonical path service
+temporal/        query splitting and pure DP decoding
 orchestration/   service composition and thin KIS/TRAKE workflow heads
 thundercompute/  inference gateway adapters
 ```
@@ -99,9 +100,9 @@ provenance, not proof that the frame visually depicts the speech.
 
 ## Configuration and evaluation
 
-Alignment choices are explicit in `search.alignment`: score depth, video
-shortlist size, RRF constant, time-gap penalty, score transform, and decoder
-limits. These values are baselines, not scientific truths.
+Alignment choices are explicit in `search.alignment`: score depth, time-gap
+penalty, score transform, and decoder limits. These values are baselines, not
+scientific truths.
 
 Record a versioned query set, artifacts/indexes, model revision, configuration,
 code revision, metric or labelled proxy, P50/P95 stage latency, and failure

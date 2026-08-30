@@ -6,44 +6,32 @@ from types import SimpleNamespace
 
 import pytest
 
-from hcmai.common.schemas import AlignmentPath, FrameRecord, SearchFilters, SearchRequest
+from hcmai.common.schemas import FrameRecord, SearchFilters, SearchRequest
 from hcmai.orchestration.workflows.base import TaskPipelineRequestError
 from hcmai.orchestration.workflows.kis import KISPipeline
+from hcmai.temporal import AlignedPath
 
 
 class FakeAlignment:
-    """Return a fixed three-event path and retain the plan passed by KIS."""
+    """Return a fixed three-event path and retain KIS's event text."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[object, int]] = []
 
-    def align(self, plan, *, max_paths):
-        """Return one canonical path without reaching a model or index."""
+    def search(self, events, *, top_k):
+        """Return one canonical-ID path without reaching a model or index."""
 
-        self.calls.append((plan, max_paths))
-        frames = tuple(
-            FrameRecord(
-                frame_id=f"f{index}",
-                video_id="V01",
-                frame_idx=index,
-                timestamp_ms=index * 1_000,
-                image_path=f"f{index}.jpg",
-                width=640,
-                height=360,
-            )
-            for index in range(3)
-        )
+        self.calls.append((events, top_k))
         return SimpleNamespace(
             paths=(
-                AlignmentPath(
-                    path_id="path-1",
+                AlignedPath(
                     video_id="V01",
-                    frames=frames,
-                    event_ids=("e0", "e1", "e2"),
                     score=2.4,
+                    frame_ids=("f0", "f1", "f2"),
+                    frame_idxs=(0, 1, 2),
+                    timestamps_ms=(0, 1_000, 2_000),
                 ),
             ),
-            candidate_video_count=1,
         )
 
 
@@ -88,6 +76,7 @@ def test_kis_returns_middle_frame_and_preserves_alignment_path() -> None:
     assert response.results[0].frame_ids == ["f0", "f1", "f2"]
     assert response.results[0].scores.final == 2.4
     assert "rerank" not in response.trace.stages
+    assert alignment.calls[0][0] == ("first", "second", "third")
     assert alignment.calls[0][1] == 5
 
 

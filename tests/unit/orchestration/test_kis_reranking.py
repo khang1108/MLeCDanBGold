@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from hcmai.common.schemas import AlignmentPath, FrameRecord, SearchRequest
+from hcmai.common.schemas import FrameRecord, SearchRequest
 from hcmai.orchestration.workflows.kis import KISPipeline
+from hcmai.temporal import AlignedPath
 
 
 class _Data:
@@ -34,22 +35,21 @@ class _Data:
 class _Alignment:
     """Return a fixed path whose score differs from all frame-local scores."""
 
-    def align(self, plan, *, max_paths):
+    def search(self, events, *, top_k):
         """Expose a path result without invoking a reranker or model provider."""
 
-        del plan, max_paths
+        del events, top_k
         frame = _Data().get_frame("frame-a")
         return SimpleNamespace(
             paths=(
-                AlignmentPath(
-                    path_id="path-a",
+                AlignedPath(
                     video_id="video-1",
-                    frames=(frame,),
-                    event_ids=("e0",),
                     score=1.75,
+                    frame_ids=(frame.frame_id,),
+                    frame_idxs=(frame.frame_idx,),
+                    timestamps_ms=(frame.timestamp_ms,),
                 ),
             ),
-            candidate_video_count=1,
         )
 
 

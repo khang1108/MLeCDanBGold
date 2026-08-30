@@ -19,7 +19,7 @@ orchestration/
 FastAPI
     → SearchService
     → task workflow (KIS or TRAKE)
-    → TemporalAlignmentService + RetrievalService
+    → TemporalSearchService + RetrievalService
     → DataService-backed canonical materialization
 ```
 

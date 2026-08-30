@@ -62,16 +62,6 @@ that feature package. In particular, caption/OCR types belong under
   warning list. Sequence access remains available for compatibility, while
   production callers consume `.candidates` and `.trace` explicitly.
 
-### `alignment.py`
-
-- `AlignmentEvent`: one deterministic, non-empty semantic event with its
-  ordered position in an alignment request.
-- `AlignmentPlan`: task, ordered events, and optional search filters consumed
-  by the shared temporal alignment service.
-- `AlignmentPath`: a same-video, strictly chronological canonical frame path.
-  `frame_ids`, `frame_idxs`, and `timestamps_ms` are parallel immutable
-  sequences; `frame_idx` remains the competition coordinate.
-
 ### `telemetry.py`
 
 - `StageTrace`: one stage's monotonic start/end, duration, status, attempt

@@ -4,8 +4,6 @@ from .evidence import *
 
 from .catalog import FrameCatalogEntry
 
-from .alignment import AlignmentEvent, AlignmentPath, AlignmentPlan
-
 from .frame import FrameEnrichment, FrameRecord, validate_frame_enrichment
 from .inference import (
     AudioReferenceRequest,
@@ -67,9 +65,6 @@ __all__ = [
     "FrameRecord",
     "FrameCatalogEntry",
     "FrameEnrichment",
-    "AlignmentEvent",
-    "AlignmentPlan",
-    "AlignmentPath",
     "validate_frame_enrichment",
     "CaptionItem",
     "CaptionResponse",
