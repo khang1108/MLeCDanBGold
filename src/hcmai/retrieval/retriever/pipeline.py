@@ -31,7 +31,11 @@ from hcmai.retrieval.retriever.text.artifacts import (
     build_text_artifacts,
 )
 from hcmai.retrieval.retriever.text.retriever import ContextRetriever
-from hcmai.retrieval.retriever.video_scores import VideoEventScores, score_videos
+from hcmai.retrieval.retriever.video_scores import (
+    VideoEventScores,
+    score_all_videos,
+)
+
 
 class RetrievalService:
     """Quản lý các module tìm kiếm (retriever) cho hình ảnh và văn bản.
@@ -148,42 +152,24 @@ class RetrievalService:
     def score_event_videos(
         self,
         events: Sequence[str],
-        filters: SearchFilters | None = None,
-        top_k: int = 500,
-        max_videos: int = 200,
-        rrf_k: int = 60,
+        *,
         chunk_size: int = 65_536,
     ) -> list[VideoEventScores]:
-        """Score ordered event text against allowed frames of shortlist videos.
+        """Score every visual-index frame for each ordered event.
 
-        The service always uses the visual embedding family for the first
-        alignment baseline. Query filters are passed to both stages of dense
-        scoring instead of being applied only after a path is decoded.
+        The Phase A temporal baseline deliberately uses only the visual
+        retriever. It encodes all events in one batch and supplies full-corpus
+        scores to the monotonic decoder without shortlist or filter gating.
         """
 
         if not events:
             raise ValueError("events must not be empty")
         visual = self._retriever_for("visual")
         batch = visual.encode(list(events))
-        if filters is None:
-            # Preserve the pre-filter call shape while the legacy TRAKE wrapper
-            # remains live; this also avoids changing existing experiment fakes.
-            return score_videos(
-                visual.index,
-                batch.vectors,
-                top_k,
-                max_videos,
-                rrf_k,
-                chunk_size,
-            )
-        return score_videos(
+        return score_all_videos(
             visual.index,
             batch.vectors,
-            top_k,
-            max_videos,
-            rrf_k,
             chunk_size,
-            filters=filters,
         )
 
     @property

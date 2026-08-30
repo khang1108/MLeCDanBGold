@@ -2,18 +2,10 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-
-from hcmai.common.schemas.search import SearchFilters
-from hcmai.common.utils.logging import get_logger
-from hcmai.common.utils.timing import Timer
-
-logger = get_logger(__name__)
-
 
 @dataclass(frozen=True, slots=True)
 class VideoEventScores:
@@ -26,89 +18,32 @@ class VideoEventScores:
     scores: np.ndarray
 
 
-def score_videos(
+def score_all_videos(
     index: Any,
     query_vectors: np.ndarray,
-    top_k: int = 500,
-    max_videos: int = 200,
-    rrf_k: int = 60,
     chunk_size: int = 65_536,
-    filters: SearchFilters | None = None,
 ) -> list[VideoEventScores]:
-    """Shortlist videos by event coverage, then rescore allowed frame windows.
+    """Score every canonical visual-index frame and split scores by video.
 
-    ``filters`` must constrain both the event-wise shortlist and the dense
-    event-by-frame rescoring window. Otherwise a KIS video/time restriction
-    could select the correct video but return an out-of-range representative.
+    Temporal DP must receive the complete visual corpus so it can compare every
+    alignable video. This function deliberately does not perform nearest-
+    neighbor shortlisting, reciprocal-rank voting, or metadata filtering.
     """
 
-    timer = Timer()
-    _, positions = index.search_filtered(query_vectors, top_k, filters)
-
-    video_ids = index.video_ids
-    votes: defaultdict[str, float] = defaultdict(float)
-    coverage: defaultdict[str, int] = defaultdict(int)
-    for row in positions:
-        seen: set[str] = set()
-        for rank, position in enumerate(row):
-            if position < 0:
-                continue
-            video_id = str(video_ids[position])
-            if video_id in seen:
-                continue
-            seen.add(video_id)
-            coverage[video_id] += 1
-            votes[video_id] += 1.0 / (rrf_k + rank)
-    if not votes:
+    positions = np.arange(len(index.frame_ids), dtype=np.int64)
+    if len(positions) == 0:
         return []
 
-    ranked = sorted(
-        votes,
-        key=lambda video_id: (-coverage[video_id], -votes[video_id], video_id),
-    )
-    shortlist = sorted(ranked[:max_videos])
-    allowed_positions = index.filtered_positions(filters)
-    windows = []
-    kept_video_ids = []
-    for video_id in shortlist:
-        window = index.video_positions(video_id)
-        if allowed_positions is not None:
-            window = window[np.isin(window, allowed_positions)]
-        if len(window):
-            kept_video_ids.append(video_id)
-            windows.append(window)
-    if not windows:
-        return []
-
-    scored_positions = np.concatenate(windows)
-    shortlist_ms = timer.stop()
-
-    timer.start()
-    scores = index.score_subset(query_vectors, scored_positions, chunk_size)
-    rescore_ms = timer.stop()
-
-    results = []
-    start = 0
-    for video_id, window in zip(kept_video_ids, windows):
-        stop = start + len(window)
-        results.append(
-            VideoEventScores(
-                video_id=video_id,
-                frame_ids=index.frame_ids[window],
-                frame_idx=index.frame_idx[window],
-                timestamps_ms=index.timestamps[window],
-                scores=scores[:, start:stop],
-            )
+    scores = index.score_subset(query_vectors, positions, chunk_size)
+    video_ids = sorted({str(video_id) for video_id in index.video_ids})
+    return [
+        VideoEventScores(
+            video_id=video_id,
+            frame_ids=index.frame_ids[window],
+            frame_idx=index.frame_idx[window],
+            timestamps_ms=index.timestamps[window],
+            scores=scores[:, window],
         )
-        start = stop
-    logger.info(
-        "Video rescoring events=%d videos=%d/%d frames=%d "
-        "shortlist_ms=%.1f rescore_ms=%.1f",
-        len(scores),
-        len(results),
-        len(votes),
-        len(scored_positions),
-        shortlist_ms,
-        rescore_ms,
-    )
-    return results
+        for video_id in video_ids
+        if len(window := index.video_positions(video_id))
+    ]
