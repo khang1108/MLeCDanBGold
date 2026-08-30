@@ -50,6 +50,30 @@ PYTHONPATH=.:src pytest tests/test_config.py -v
 10 passed in 0.72s
 ```
 
+### Review fix 1
+
+The first version of `tests/orchestration/test_default_dependencies.py`
+installed a fake `faiss` module at module import time when `faiss` was absent
+from `sys.modules`. That approach could outlive the test itself and mask a real
+installed package for later tests in the same session.
+
+The test now:
+
+- checks actual availability with `importlib.util.find_spec("faiss")`;
+- only injects a fake `faiss` inside a `patch.dict(sys.modules, ...)` scope
+  around the `hcmai.orchestration.setup` import path when FAISS is truly
+  unavailable;
+- unloads the imported `setup` and retrieval/index modules in `finally` so the
+  temporary stub cannot leak into later tests.
+
+Re-run after the review fix:
+
+```text
+PYTHONPATH=.:src pytest tests/config tests/orchestration/test_default_dependencies.py -v
+
+6 passed in 0.64s
+```
+
 And the touched-file whitespace check:
 
 ```text
