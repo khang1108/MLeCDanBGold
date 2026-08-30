@@ -667,6 +667,7 @@ class DefaultPreparationOperations:
 
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
         from hcmai.retrieval.retriever.pipeline import RetrievalService
+        from offline.embeddings.pipeline import build_visual_artifacts
 
         pool = self._remote_pool("visual_embedding")
         encoder = (
@@ -676,7 +677,7 @@ class DefaultPreparationOperations:
             if pool is not None
             else None
         )
-        run = EmbeddingService.build_visual_artifacts(
+        run = build_visual_artifacts(
             self.paths.frames_path,
             self.paths.frame_store_root,
             self.paths.artifacts_root,
@@ -697,6 +698,7 @@ class DefaultPreparationOperations:
 
     def build_visual_artifacts(self) -> tuple[Path, Path]:
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
+        from offline.embeddings.pipeline import build_visual_artifacts
 
         pool = self._remote_pool("visual_embedding")
         encoder = (
@@ -706,7 +708,7 @@ class DefaultPreparationOperations:
             if pool is not None
             else None
         )
-        run = EmbeddingService.build_visual_artifacts(
+        run = build_visual_artifacts(
             self.paths.frames_path,
             self.paths.frame_store_root,
             self.paths.artifacts_root,

@@ -29,7 +29,7 @@ from hcmai.common.utils.io import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
 from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
-from hcmai.retrieval.embedding.models.metadata import EmbeddingMetadata
+from offline.embeddings.models.metadata import EmbeddingMetadata
 from hcmai.retrieval.embedding.models.stats import EncodingStats
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 

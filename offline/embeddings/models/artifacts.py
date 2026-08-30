@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from hcmai.retrieval.embedding.models.metadata import EmbeddingMetadata
+from offline.embeddings.models.metadata import EmbeddingMetadata
 
 
 @dataclass(frozen=True)

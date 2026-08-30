@@ -1,24 +1,25 @@
-"""Public service boundary for visual and text embeddings."""
+"""Runtime query encoding through configured visual and text adapters.
+
+This module owns adapter construction and query-time encoding for loaded
+retrieval indexes. Offline embedding artifact construction is owned by
+``offline.embeddings``.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import cast
 
 import numpy as np
 from PIL import Image
 
 from hcmai.common.config import EncoderConfig
-from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
 from hcmai.retrieval.embedding.models.contracts import (
     ImageEmbeddingAdapter,
     TextEmbeddingAdapter,
 )
-from hcmai.retrieval.embedding.models.artifacts import EmbeddingRun
 from hcmai.retrieval.embedding.models.stats import EncodingStats
 
 __all__ = [
-    "EmbeddingRun",
     "EmbeddingService",
     "EncodingStats",
     "ImageEmbeddingAdapter",
@@ -27,9 +28,9 @@ __all__ = [
 
 
 class EmbeddingService:
-    """Quản lý các adapter mã hóa (encoder) cho hình ảnh và văn bản.
-    Hỗ trợ cả adapter chạy local và remote (thông qua InferenceClientPool)
-    để phục vụ việc sinh embeddings cho pipeline chuẩn bị dữ liệu (Data Preparation).
+    """Create adapters and encode runtime visual or evidence queries.
+
+    The service does not build or publish corpus embedding artifacts.
     """
 
     def __init__(
@@ -38,6 +39,7 @@ class EmbeddingService:
         visual_query: TextEmbeddingAdapter | None = None,
         evidence_query: TextEmbeddingAdapter | None = None,
     ) -> None:
+        """Configure optional adapters for the loaded runtime indexes."""
         self.visual = visual
         self.visual_query = visual_query or (
             cast(TextEmbeddingAdapter, visual)
@@ -60,6 +62,7 @@ class EmbeddingService:
 
     @staticmethod
     def create_visual_adapter(config: EncoderConfig) -> ImageEmbeddingAdapter:
+        """Create the configured local visual adapter for image encoding."""
         from hcmai.retrieval.embedding.adapters.siglip import SigLIPAdapter
 
         return SigLIPAdapter(config)
@@ -71,7 +74,7 @@ class EmbeddingService:
         embedding_dim: int,
         source: str = "visual",
     ) -> TextEmbeddingAdapter:
-        """Khởi tạo remote adapter để mã hóa văn bản trên GPU worker."""
+        """Create a remote text adapter for evidence or visual queries."""
         from hcmai.retrieval.embedding.adapters.remote import (
             EmbeddingClient,
             RemoteEmbeddingAdapter,
@@ -90,7 +93,7 @@ class EmbeddingService:
         config: EncoderConfig,
         embedding_dim: int = 0,
     ) -> ImageEmbeddingAdapter:
-        """Khởi tạo remote adapter để mã hóa hình ảnh trên GPU worker."""
+        """Create a remote visual adapter for image encoding."""
         from hcmai.retrieval.embedding.adapters.remote import (
             ImageEmbeddingClient,
             RemoteImageEmbeddingAdapter,
@@ -107,6 +110,7 @@ class EmbeddingService:
         images: list[Image.Image],
         stats: EncodingStats | None = None,
     ) -> np.ndarray:
+        """Encode visual images without persisting vectors or mappings."""
         if self.visual is None:
             raise RuntimeError("Visual embedding adapter is not configured")
         return self.visual.encode_images(images, stats)
@@ -116,6 +120,7 @@ class EmbeddingService:
         texts: list[str],
         stats: EncodingStats | None = None,
     ) -> np.ndarray:
+        """Encode text into the visual index's query embedding space."""
         if self.visual_query is None:
             raise RuntimeError("Visual-query embedding adapter is not configured")
         return self.visual_query.encode_text(texts, stats)
@@ -125,31 +130,7 @@ class EmbeddingService:
         texts: list[str],
         stats: EncodingStats | None = None,
     ) -> np.ndarray:
+        """Encode text into an evidence index's query embedding space."""
         if self.evidence_query is None:
             raise RuntimeError("Evidence-query embedding adapter is not configured")
         return self.evidence_query.encode_text(texts, stats)
-
-    @staticmethod
-    def build_visual_artifacts(
-        frames_path: Path | str,
-        dataset_root: Path | str,
-        output_dir: Path | str,
-        encoder_config: EncoderConfig,
-        dataset_version: str = "hcmai2026",
-        encoder: ImageEmbeddingAdapter | None = None,
-    ) -> EmbeddingRun:
-        builder = EmbeddingArtifactBuilder(
-            frames_path,
-            dataset_root,
-            output_dir,
-            encoder_config,
-            dataset_version,
-            encoder,
-        )
-        metadata = builder.run()
-        return EmbeddingRun(
-            metadata=metadata,
-            embeddings_file=builder.embeddings_file,
-            mapping_file=builder.mapping_file,
-            generated_count=len(builder.frame_mapping),
-        )

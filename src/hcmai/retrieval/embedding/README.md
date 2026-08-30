@@ -1,17 +1,15 @@
 # Embedding
 
-`hcmai.retrieval.embedding` owns visual and text encoding. Other components use the
-public `EmbeddingService`; checkpoint- and provider-specific implementations
-remain private adapters.
+`hcmai.retrieval.embedding` owns runtime visual and text query encoding. Other
+runtime components use the public `EmbeddingService`; checkpoint- and
+provider-specific implementations remain private adapters. Offline embedding
+artifact construction belongs to `offline.embeddings`.
 
 ```text
 embedding/
 ├── pipeline.py                 # EmbeddingService public facade
-├── artifacts.py                # Offline visual artifact builder
 ├── models/
 │   ├── contracts.py            # Text/Image adapter protocols
-│   ├── artifacts.py            # EmbeddingRun result entity
-│   ├── metadata.py             # Artifact provenance
 │   └── stats.py                # Encoding measurements
 └── adapters/
     ├── siglip.py               # Local image and text encoder
@@ -36,7 +34,6 @@ evidence_vectors = embedding_service.encode_evidence_query(["biển số xe"])
 - `encode_visual_images` for canonical frame images;
 - `encode_visual_query` for queries against the visual index;
 - `encode_evidence_query` for caption, OCR, and ASR indexes;
-- `build_visual_artifacts` for the offline corpus job.
 
 Cross-component production code must not import an embedding adapter directly.
 Composition code creates adapters through the service factory methods; unit
@@ -48,9 +45,9 @@ tests may inject fake adapters through the constructor.
 from pathlib import Path
 
 from hcmai.common.config import EncoderConfig
-from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from offline.embeddings.pipeline import build_visual_artifacts
 
-run = EmbeddingService.build_visual_artifacts(
+run = build_visual_artifacts(
     frames_path=Path("artifacts/frame_store/frames.parquet"),
     dataset_root=Path("artifacts/frame_store"),
     output_dir=Path("artifacts"),
