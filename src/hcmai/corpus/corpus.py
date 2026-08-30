@@ -8,11 +8,12 @@ ingestion, enrichment, context construction, index building, or mutation.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from itertools import islice
 from pathlib import Path
 
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.io import read_json
-from hcmai.corpus.assets import FrameAssetResolver
+from hcmai.corpus.assets import FrameAssetResolver, FrameAssetStatus
 from hcmai.corpus.models import Frame, TranscriptSegment
 from hcmai.corpus.stores import (
     CaptionStore,
@@ -128,6 +129,22 @@ class Corpus:
         """Return the number of canonical frames loaded for runtime search."""
 
         return len(self._frames)
+
+    def frame_asset_status(self, *, sample_size: int = 100) -> FrameAssetStatus:
+        """Sample canonical frame assets without exposing the asset resolver."""
+
+        resolver = self._asset_resolver_or_error()
+        return resolver.sample_status(
+            tuple(islice(self._frames.iter_frames(), sample_size)),
+            sample_size=sample_size,
+        )
+
+    def has_evidence(self, source: RetrievalSource) -> bool:
+        """Report whether one configured runtime evidence view is available."""
+
+        if source is RetrievalSource.ASR:
+            return self._transcripts is not None
+        return source in self._evidence
 
     def frames(self, frame_ids: Sequence[str]) -> list[Frame]:
         """Return canonical frames in the requested order, including duplicates."""

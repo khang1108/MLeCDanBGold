@@ -460,6 +460,20 @@ def test_invalid_corpus_open_keeps_startup_degraded_with_diagnostic(
     assert any("Could not load metadata" in message for message in messages)
 
 
+def test_missing_canonical_frames_fail_fast(tmp_path: Path) -> None:
+    """Startup must not run search without its required frame authority."""
+
+    settings = AppConfig.model_validate({"dataset": {"root": tmp_path}})
+
+    with pytest.raises(FileNotFoundError, match="Metadata not available"):
+        setup._load_corpus(
+            settings,
+            tmp_path / "missing-frames.parquet",
+            tmp_path,
+            [],
+        )
+
+
 def test_removed_environment_profile_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

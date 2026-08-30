@@ -94,7 +94,7 @@ def test_health_reports_asset_readiness_separately_from_metadata(
     assert capabilities["frame_assets"] is False
     assert capabilities["frame_asset_status"] == {
         "ready": False,
-        "checked": 0,
+        "checked": 1,
         "available": 0,
-        "missing": 0,
+        "missing": 1,
     }

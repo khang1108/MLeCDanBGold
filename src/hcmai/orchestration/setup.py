@@ -121,8 +121,7 @@ def _load_corpus(
     messages: list[str],
 ) -> Corpus | None:
     if not metadata_path.is_file() or metadata_path.stat().st_size == 0:
-        messages.append(f"Metadata not available at {metadata_path}")
-        return None
+        raise FileNotFoundError(f"Metadata not available at {metadata_path}")
     try:
         evidence_paths, object_path, transcript_path, video_metadata_path = (
             _configured_corpus_artifacts(settings, messages)

@@ -21,3 +21,21 @@ def test_runtime_does_not_reference_legacy_data_facade() -> None:
     legacy_facade = "Data" + "Service"
     offenders = grep_python_sources("src/hcmai", legacy_facade)
     assert offenders == []
+
+
+def test_runtime_callers_do_not_import_corpus_implementations() -> None:
+    """Require API, orchestration, and temporal code to use only Corpus."""
+
+    roots = (
+        Path("src/hcmai/api"),
+        Path("src/hcmai/orchestration"),
+        Path("src/hcmai/temporal"),
+    )
+    needles = ("hcmai.corpus.assets", "hcmai.corpus.stores")
+    offenders = [
+        path
+        for root in roots
+        for needle in needles
+        for path in grep_python_sources(root, needle)
+    ]
+    assert sorted(set(offenders)) == []

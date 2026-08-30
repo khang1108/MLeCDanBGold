@@ -6,11 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
-from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from hcmai.common.schemas import SubmissionResult
-from hcmai.corpus.assets import FrameAssetError
 from hcmai.corpus.models import Frame
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.common.utils.logging import get_logger
@@ -75,7 +73,7 @@ def create_frames_router(
                 if thumbnail
                 else corpus.image_path(frame_id)
             )
-        except (FrameAssetError, RuntimeError) as error:
+        except (OSError, RuntimeError) as error:
             logger.warning(
                 "Frame asset unavailable frame_id=%s asset=%s thumbnail=%s "
                 "error_type=%s error=%s",

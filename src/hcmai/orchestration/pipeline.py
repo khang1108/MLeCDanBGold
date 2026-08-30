@@ -122,6 +122,18 @@ class SearchService:
             "frame_store_loaded": corpus_ready,
             "retriever_loaded": retrieval_ready,
             "total_frames": len(self.corpus) if self.corpus is not None else 0,
+            "evidence_stores": {
+                source.value: (
+                    self.corpus.has_evidence(source)
+                    if self.corpus is not None
+                    else False
+                )
+                for source in (
+                    RetrievalSource.CAPTION,
+                    RetrievalSource.OCR,
+                    RetrievalSource.ASR,
+                )
+            },
             "remote_inference": (
                 self.llm.gateway_health()
                 if self.llm is not None
@@ -151,9 +163,14 @@ class SearchService:
         }
 
     def _frame_asset_status(self) -> dict[str, int | bool]:
-        """Report that Corpus deliberately does not expose bulk asset sampling."""
+        """Sample frame assets through the public Corpus boundary."""
 
-        return {"ready": False, "checked": 0, "available": 0, "missing": 0}
+        if self.corpus is None:
+            return {"ready": False, "checked": 0, "available": 0, "missing": 0}
+        try:
+            return self.corpus.frame_asset_status().as_dict()
+        except (OSError, RuntimeError):
+            return {"ready": False, "checked": 0, "available": 0, "missing": 0}
 
     def close(self) -> None:
         """Close optional inference resources owned by the service."""

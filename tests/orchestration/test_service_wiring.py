@@ -15,6 +15,26 @@ class _Corpus:
 
         return 0
 
+    def frame_asset_status(self) -> Any:
+        """Provide the public diagnostic projection used by health checks."""
+
+        return _AssetStatus()
+
+    def has_evidence(self, source: Any) -> bool:
+        """Expose the public evidence-availability protocol."""
+
+        del source
+        return False
+
+
+class _AssetStatus:
+    """Minimal public asset-health projection for composition tests."""
+
+    def as_dict(self) -> dict[str, int | bool]:
+        """Return the diagnostic shape consumed by SearchService.health."""
+
+        return {"ready": False, "checked": 0, "available": 0, "missing": 0}
+
 
 class _Retrieval:
     """Placeholder retrieval dependency used only for composition."""
