@@ -1124,7 +1124,7 @@ def build_context(
     from hcmai.corpus.stores import FrameContextStore, FrameStore
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
     from hcmai.retrieval.retriever.dense.index import DenseIndex
-    from hcmai.retrieval.retriever.text.retriever import build_context_index
+    from offline.indexes.text import build_context_index
 
     selected = encoder or create_text_encoder(models)
     frames = FrameStore(projected_frames)
@@ -1162,7 +1162,7 @@ def build_asr(
 
     from hcmai.corpus.stores.transcript import TranscriptStore
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
-    from hcmai.retrieval.retriever.segment.artifacts import (
+    from offline.indexes.asr_segment import (
         build_asr_segment_index,
         transcript_lineage_files,
     )
@@ -1321,7 +1321,7 @@ def run_validate(config: OfflineIndexConfig, models: Any) -> Path:
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
     from hcmai.retrieval.retriever.dense.index import DenseIndex
     from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
-    from hcmai.retrieval.retriever.segment.artifacts import transcript_lineage_files
+    from offline.indexes.asr_segment import transcript_lineage_files
 
     inputs = _inspect_inputs(config)
     _validate_projected_frames(inputs.projected, config.projected_frames_path)

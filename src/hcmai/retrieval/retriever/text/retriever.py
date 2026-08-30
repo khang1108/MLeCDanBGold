@@ -1,39 +1,21 @@
-"""Build frame-native Context indexes for retrieval.
+"""Runtime retrieval binding for a loaded frame-native Context index.
 
-This module owns deterministic corpus-to-dense-index construction and dense
-retriever bindings. It does not create FrameContext or align ASR segments.
-Standalone Caption/OCR/frame-ASR retrievers are intentionally not part of the
-online runtime; their evidence stores remain available to offline builders.
+Offline corpus construction, embedding, and artifact publication live in
+``offline.indexes``. This module only binds an existing DenseIndex to query
+encoding and search behavior.
 """
 
 from __future__ import annotations
 
-import shutil
-from pathlib import Path
-from tempfile import mkdtemp
-from typing import Any
-
-import numpy as np
-import pandas as pd
-from tqdm.auto import tqdm
-
 from hcmai.common.schemas import RetrievalSource
-from hcmai.corpus.stores import ASRStore, CaptionStore, FrameContextStore, FrameStore, OCRStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
+from hcmai.retrieval.retriever.cache import EmbeddingCache
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
-from hcmai.retrieval.retriever.cache import EmbeddingCache
-from hcmai.retrieval.retriever.artifacts import publish_directory
-
-_TEXT_SOURCES = {
-    RetrievalSource.CAPTION,
-    RetrievalSource.OCR,
-    RetrievalSource.ASR,
-}
 
 
 class ContextRetriever(DenseRetriever):
-    """Retrieve canonical frames through deterministic multi-evidence context."""
+    """Retrieve canonical frames through an already-published Context index."""
 
     def __init__(
         self,
@@ -42,7 +24,7 @@ class ContextRetriever(DenseRetriever):
         embedding_cache: EmbeddingCache | None = None,
         prompt_version: str = "query-v1",
     ) -> None:
-        """Bind a BGE-compatible dense index to the Context evidence source."""
+        """Bind the BGE-compatible query encoder to a loaded Context index."""
 
         super().__init__(
             encoder,
@@ -51,266 +33,3 @@ class ContextRetriever(DenseRetriever):
             embedding_cache,
             prompt_version,
         )
-
-
-def _text_corpus(
-    frames: FrameStore,
-    evidence: CaptionStore | OCRStore | ASRStore,
-    source: RetrievalSource,
-) -> tuple[list[str], pd.DataFrame]:
-    """Join usable enrichment text to canonical frame identity."""
-
-    texts: list[str] = []
-    mapping: list[dict[str, Any]] = []
-    for row in evidence.iter_records():
-        frame_id = str(getattr(row, "frame_id"))
-        text = evidence.get_text(frame_id)
-        if text is None:
-            continue
-        frame = frames.get(frame_id)
-        mapping.append(
-            {
-                "frame_id": frame.frame_id,
-                "video_id": frame.video_id,
-                "frame_idx": frame.frame_idx,
-                "timestamp_ms": frame.timestamp_ms,
-                "embedding_index": len(texts),
-            }
-        )
-        texts.append(text)
-    if not texts:
-        raise ValueError(
-            f"{source.value} artifact contains no usable completed text"
-        )
-    return texts, pd.DataFrame(mapping)
-
-
-def _context_corpus(
-    frames: FrameStore,
-    contexts: FrameContextStore,
-) -> tuple[list[str], pd.DataFrame]:
-    """Join non-empty deterministic context text to canonical frame identity.
-
-    Context remains strictly frame-native. ASR is deliberately excluded because
-    it is timeline evidence and is not a deterministic input to FrameContext.
-    """
-
-    texts: list[str] = []
-    rows: list[dict[str, object]] = []
-    for context in contexts.iter_records():
-        text = contexts.get_text(context.frame_id)
-        if text is None:
-            continue
-        frame = frames.get(context.frame_id)
-        rows.append(
-            {
-                "frame_id": frame.frame_id,
-                "video_id": frame.video_id,
-                "frame_idx": frame.frame_idx,
-                "timestamp_ms": frame.timestamp_ms,
-                "embedding_index": len(texts),
-            }
-        )
-        texts.append(text)
-    if not texts:
-        raise ValueError("FrameContext artifact contains no usable context_text")
-    return texts, pd.DataFrame(rows)
-
-
-def _normalized(vectors: np.ndarray) -> np.ndarray:
-    """Return finite float32 unit vectors suitable for inner product."""
-
-    values = np.asarray(vectors, dtype=np.float32)
-    if values.ndim != 2 or not np.isfinite(values).all():
-        raise ValueError("Text encoder must return a finite 2D array")
-    norms = np.linalg.norm(values, axis=1, keepdims=True)
-    if np.any(norms <= 0):
-        raise ValueError("Text encoder returned a zero vector")
-    return values / norms
-
-
-def _encode_texts(
-    texts: list[str],
-    encoder: TextEmbeddingAdapter,
-    source: RetrievalSource,
-) -> np.ndarray:
-    """Encode one text channel in the configured batch size with progress.
-
-    Context and ASR share this helper, so neither source may silently use a
-    smaller legacy API limit than the configured encoder batch.
-    """
-
-    batch_size = encoder.config.batch_size
-    batches: list[np.ndarray] = []
-    with tqdm(
-        total=len(texts),
-        desc=f"Embedding {source.value}",
-        unit="text",
-        dynamic_ncols=True,
-    ) as progress:
-        for start in range(0, len(texts), batch_size):
-            batch = texts[start : start + batch_size]
-            batches.append(encoder.encode_text(batch))
-            progress.update(len(batch))
-    return np.vstack(batches)
-
-
-def build_text_index(
-    frames: FrameStore,
-    evidence: CaptionStore | OCRStore | ASRStore,
-    encoder: TextEmbeddingAdapter,
-    source: RetrievalSource,
-    output_dir: str | Path,
-    *,
-    embeddings_filename: str,
-    dataset_version: str,
-    index_type: str = "flat_ip",
-) -> DenseIndex:
-    """Build a text index from validated offline evidence and canonical frames."""
-
-    if source not in _TEXT_SOURCES:
-        raise ValueError(f"Unsupported text evidence source {source.value!r}")
-    artifact_name = Path(embeddings_filename)
-    if (
-        artifact_name.name != embeddings_filename
-        or artifact_name.suffix != ".npy"
-    ):
-        raise ValueError("embeddings_filename must be a plain .npy filename")
-    texts, mapping = _text_corpus(frames, evidence, source)
-    vectors = _normalized(_encode_texts(texts, encoder, source))
-    if len(vectors) != len(mapping):
-        raise ValueError(
-            f"Text encoder returned {len(vectors)} vectors "
-            f"for {len(mapping)} texts"
-        )
-    index = DenseIndex.build(
-        vectors,
-        mapping,
-        dataset_version=dataset_version,
-        model_name=encoder.config.model_name,
-        index_type=index_type,
-        show_progress=True,
-    )
-    _save_index_with_embeddings(index, output_dir, artifact_name, vectors)
-    return index
-
-
-def build_context_index(
-    frames: FrameStore,
-    contexts: FrameContextStore,
-    encoder: TextEmbeddingAdapter,
-    output_dir: str | Path,
-    *,
-    embeddings_filename: str,
-    dataset_version: str,
-    index_type: str = "flat_ip",
-    source_fingerprint: str | None = None,
-) -> DenseIndex:
-    """Build and safely publish the dedicated frame-native Context index."""
-
-    artifact_name = _embedding_artifact_name(embeddings_filename)
-    texts, mapping = _context_corpus(frames, contexts)
-    vectors = _normalized(_encode_texts(texts, encoder, RetrievalSource.CONTEXT))
-    if len(vectors) != len(mapping):
-        raise ValueError(
-            f"Text encoder returned {len(vectors)} vectors for {len(mapping)} contexts"
-        )
-    index = DenseIndex.build(
-        vectors,
-        mapping,
-        dataset_version=dataset_version,
-        model_name=encoder.config.model_name,
-        index_type=index_type,
-        show_progress=True,
-    )
-    index.metadata.retrieval_source = RetrievalSource.CONTEXT.value
-    index.metadata.entity_kind = "frame"
-    index.metadata.model_revision = _encoder_revision(encoder)
-    index.metadata.source_fingerprint = source_fingerprint
-    _save_index_with_embeddings(index, output_dir, artifact_name, vectors)
-    return index
-
-
-def _embedding_artifact_name(embeddings_filename: str) -> Path:
-    """Validate that a supplemental vector artifact cannot escape its bundle."""
-
-    artifact_name = Path(embeddings_filename)
-    if artifact_name.name != embeddings_filename or artifact_name.suffix != ".npy":
-        raise ValueError("embeddings_filename must be a plain .npy filename")
-    return artifact_name
-
-
-def _save_index_with_embeddings(
-    index: DenseIndex,
-    output_dir: str | Path,
-    embeddings_filename: Path,
-    vectors: np.ndarray,
-) -> Path:
-    """Publish an index and its supplemental embeddings as one outer bundle.
-
-    ``DenseIndex.save`` owns an atomic dense-only bundle. The supplemental
-    embedding file must therefore be added to a private sibling after that
-    inner save, then the complete directory is validated and atomically
-    published as the retrieval artifact.
-    """
-
-    output = Path(output_dir).resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    staged = Path(mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent))
-    try:
-        index.save(staged)
-        np.save(staged / embeddings_filename, vectors)
-        DenseIndex.load(staged)
-        publish_directory(staged, output)
-    except Exception:
-        if staged.exists():
-            shutil.rmtree(staged, ignore_errors=True)
-        raise
-    return output
-
-
-def _encoder_revision(encoder: TextEmbeddingAdapter) -> str | None:
-    """Extract optional pinned encoder revision for index provenance."""
-
-    value = getattr(encoder, "resolved_revision", None)
-    if value is None:
-        value = getattr(encoder.config, "revision", None)
-    return str(value) if value is not None else None
-
-
-def build_text_embedding_artifacts(
-    frames: FrameStore,
-    evidence: CaptionStore | OCRStore | ASRStore,
-    encoder: TextEmbeddingAdapter,
-    source: RetrievalSource,
-    output_dir: str | Path,
-    *,
-    embeddings_filename: str,
-) -> tuple[Path, Path]:
-    """Persist deterministic frame-aligned text vectors without an index."""
-
-    if source not in _TEXT_SOURCES:
-        raise ValueError(f"Unsupported text evidence source {source.value!r}")
-    artifact_name = Path(embeddings_filename)
-    if artifact_name.name != embeddings_filename or artifact_name.suffix != ".npy":
-        raise ValueError("embeddings_filename must be a plain .npy filename")
-    texts, mapping = _text_corpus(frames, evidence, source)
-    vectors = _normalized(_encode_texts(texts, encoder, source))
-    if len(vectors) != len(mapping):
-        raise ValueError("text embedding count does not match mapping rows")
-    output = Path(output_dir)
-    output.mkdir(parents=True, exist_ok=True)
-    vectors_path = output / artifact_name
-    mapping_path = output / "frame_mapping.parquet"
-    vectors_partial = vectors_path.with_suffix(f"{vectors_path.suffix}.partial")
-    mapping_partial = mapping_path.with_suffix(f"{mapping_path.suffix}.partial")
-    try:
-        with vectors_partial.open("wb") as handle:
-            np.save(handle, vectors)
-        mapping.to_parquet(mapping_partial, index=False)
-        vectors_partial.replace(vectors_path)
-        mapping_partial.replace(mapping_path)
-    finally:
-        vectors_partial.unlink(missing_ok=True)
-        mapping_partial.unlink(missing_ok=True)
-    return vectors_path, mapping_path

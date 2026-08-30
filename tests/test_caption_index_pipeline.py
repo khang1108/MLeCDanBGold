@@ -8,7 +8,7 @@ import pandas as pd
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.io import write_yaml
-from hcmai.retrieval.retriever.pipeline import RetrievalService
+from offline.indexes.text import build_text_artifacts
 
 
 class FakeCaptionEncoder:
@@ -76,7 +76,7 @@ def test_build_text_artifacts_from_two_configs(tmp_path: Path) -> None:
         model_config,
     )
 
-    index = RetrievalService.build_text_artifacts(
+    index = build_text_artifacts(
         pipeline_config,
         model_config,
         source=RetrievalSource.CAPTION,

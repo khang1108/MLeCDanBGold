@@ -666,8 +666,9 @@ class DefaultPreparationOperations:
         import pandas as pd
 
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
-        from hcmai.retrieval.retriever.pipeline import RetrievalService
+        from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME
         from offline.embeddings.pipeline import build_visual_artifacts
+        from offline.indexes.visual import build_index
 
         pool = self._remote_pool("visual_embedding")
         encoder = (
@@ -687,14 +688,14 @@ class DefaultPreparationOperations:
         )
         if not run.generated_count:
             raise RuntimeError("No visual embeddings were generated")
-        index = RetrievalService.build_index(
+        index = build_index(
             np.load(run.embeddings_file, mmap_mode="r"),
             pd.read_parquet(run.mapping_file),
             dataset_version=self.config.corpus_revision,
             model_name=self.model_config.visual_embedding.model_name,
         )
         index.save(self.paths.visual_index_root)
-        return self.paths.visual_index_root / RetrievalService.INDEX_FILENAME
+        return self.paths.visual_index_root / INDEX_FILENAME
 
     def build_visual_artifacts(self) -> tuple[Path, Path]:
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
@@ -722,7 +723,8 @@ class DefaultPreparationOperations:
 
     def build_text_index(self, source: RetrievalSource) -> Path:
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
-        from hcmai.retrieval.retriever.pipeline import RetrievalService
+        from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME
+        from offline.indexes.text import build_text_artifacts
 
         if self._text_encoder is None:
             pool = self._remote_pool("text_embedding")
@@ -738,7 +740,7 @@ class DefaultPreparationOperations:
                     self.model_config.caption_embedding
                 )
             )
-        RetrievalService.build_text_artifacts(
+        build_text_artifacts(
             self.retrieval_config,
             self.model_config_path,
             source=source,
@@ -747,7 +749,7 @@ class DefaultPreparationOperations:
             output_dir=self.paths.index_root(source),
             encoder=self._text_encoder,
         )
-        return self.paths.index_root(source) / RetrievalService.INDEX_FILENAME
+        return self.paths.index_root(source) / INDEX_FILENAME
 
     def build_text_embeddings(
         self, source: RetrievalSource
@@ -755,7 +757,7 @@ class DefaultPreparationOperations:
         from hcmai.common.config import AppConfig
         from hcmai.corpus.stores import ASRStore, CaptionStore, FrameStore, OCRStore
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
-        from hcmai.retrieval.retriever.pipeline import RetrievalService
+        from offline.indexes.text_embeddings import build_text_embedding_artifacts
 
         if self._text_encoder is None:
             pool = self._remote_pool("text_embedding")
@@ -779,7 +781,7 @@ class DefaultPreparationOperations:
         }
         frame_store = FrameStore(self.paths.frames_path)
         evidence = stores[source](self.paths.enrichment_path(source))
-        return RetrievalService.build_text_embedding_artifacts(
+        return build_text_embedding_artifacts(
             frame_store,
             evidence,
             self._text_encoder,

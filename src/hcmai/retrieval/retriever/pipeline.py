@@ -6,9 +6,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import pandas as pd
-
 from hcmai.common.config import FusionConfig, RetrievalCacheConfig
 from hcmai.common.schemas import RetrievalResult, RetrievalSource
 from hcmai.corpus import Corpus
@@ -20,15 +17,8 @@ from hcmai.retrieval.retriever.fusion.rrf import RRFFusionRetriever
 from hcmai.retrieval.retriever.models.contracts import Retriever, VectorRetriever
 from hcmai.retrieval.retriever.models.metadata import IndexMetadata
 from hcmai.retrieval.retriever.query_batch import SourceFamily
-from hcmai.retrieval.retriever.segment.artifacts import (
-    build_asr_segment_artifacts as build_segment_artifacts,
-)
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 from hcmai.retrieval.retriever.segment.retriever import ASRSegmentRetriever
-from hcmai.retrieval.retriever.text.artifacts import (
-    build_context_artifacts,
-    build_text_artifacts,
-)
 from hcmai.retrieval.retriever.text.retriever import ContextRetriever
 from hcmai.retrieval.retriever.video_scores import (
     VideoEventScores,
@@ -218,113 +208,6 @@ class RetrievalService:
         index_dir: str | Path,
     ) -> DenseIndex:
         return DenseIndex.load(index_dir)
-
-    @staticmethod
-    def build_index(
-        embeddings: np.ndarray,
-        mapping: pd.DataFrame,
-        *,
-        dataset_version: str,
-        model_name: str,
-        index_type: str = "flat_ip",
-        show_progress: bool = False,
-    ) -> DenseIndex:
-        return DenseIndex.build(
-            embeddings,
-            mapping,
-            dataset_version=dataset_version,
-            model_name=model_name,
-            index_type=index_type,
-            show_progress=show_progress,
-        )
-
-    @staticmethod
-    def build_text_artifacts(
-        config_path: str | Path = "configs/baseline.yaml",
-        model_config_path: str | Path = "thundercompute/config.yaml",
-        *,
-        source: RetrievalSource = RetrievalSource.CAPTION,
-        enrichment_path: str | Path | None = None,
-        frames_path: str | Path | None = None,
-        output_dir: str | Path | None = None,
-        encoder: TextEmbeddingAdapter | None = None,
-    ) -> DenseIndex:
-        return build_text_artifacts(
-            config_path,
-            model_config_path,
-            source=source,
-            enrichment_path=enrichment_path,
-            frames_path=frames_path,
-            output_dir=output_dir,
-            encoder=encoder,
-        )
-
-    @staticmethod
-    def build_context_artifacts(
-        config_path: str | Path = "configs/baseline.yaml",
-        model_config_path: str | Path = "thundercompute/config.yaml",
-        *,
-        context_path: str | Path | None = None,
-        frames_path: str | Path | None = None,
-        output_dir: str | Path | None = None,
-        encoder: TextEmbeddingAdapter | None = None,
-    ) -> DenseIndex:
-        """Build the dedicated deterministic FrameContext dense artifact."""
-
-        return build_context_artifacts(
-            config_path,
-            model_config_path,
-            context_path=context_path,
-            frames_path=frames_path,
-            output_dir=output_dir,
-            encoder=encoder,
-        )
-
-    @staticmethod
-    def build_asr_segment_artifacts(
-        config_path: str | Path = "configs/baseline.yaml",
-        model_config_path: str | Path = "thundercompute/config.yaml",
-        *,
-        transcripts_path: str | Path | None = None,
-        output_dir: str | Path | None = None,
-        encoder: TextEmbeddingAdapter | None = None,
-    ) -> SegmentDenseIndex:
-        """Build the segment-native ASR dense artifact without frame alignment."""
-
-        return build_segment_artifacts(
-            config_path,
-            model_config_path,
-            transcripts_path=transcripts_path,
-            output_dir=output_dir,
-            encoder=encoder,
-        )
-
-    @staticmethod
-    def build_text_embedding_artifacts(
-        frames: Any,
-        evidence: Any,
-        encoder: TextEmbeddingAdapter,
-        source: RetrievalSource,
-        output_dir: str | Path,
-        *,
-        embeddings_filename: str,
-    ) -> tuple[Path, Path]:
-        """Tiện ích giúp sinh vector nhúng (embedding) và file mapping
-        cho dữ liệu văn bản (như OCR, Caption, ASR) thông qua encoder.
-        """
-        from hcmai.retrieval.retriever.text.retriever import (
-            build_text_embedding_artifacts,
-        )
-
-        return build_text_embedding_artifacts(
-            frames,
-            evidence,
-            encoder,
-            source,
-            output_dir,
-            embeddings_filename=embeddings_filename,
-        )
-
 
 def _embedding_cache(
     config: RetrievalCacheConfig | None,

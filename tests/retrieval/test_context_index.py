@@ -168,7 +168,7 @@ def test_context_corpus_embeds_only_non_empty_context(
     """Empty derived text is omitted rather than replaced with synthetic evidence."""
 
     pytest.importorskip("faiss")
-    from hcmai.retrieval.retriever.text.retriever import _context_corpus
+    from offline.indexes.text import _context_corpus
 
     texts, mapping = _context_corpus(*context_stores)
 
@@ -186,7 +186,7 @@ def test_text_encoding_uses_configured_batch_size_without_legacy_cap(
 ) -> None:
     """Context and ASR builds must pass the configured large BGE batch through."""
 
-    from hcmai.retrieval.retriever.text.retriever import _encode_texts
+    from offline.indexes.text import _encode_texts
 
     class RecordingBGE:
         """Record input sizes while returning deterministic non-empty vectors."""
@@ -222,7 +222,11 @@ def test_context_index_is_frame_native_and_keeps_supplemental_vectors(
 
     pytest.importorskip("faiss")
     from hcmai.retrieval.retriever.dense.index import DenseIndex
-    from hcmai.retrieval.retriever.text.retriever import build_context_index
+    from hcmai.retrieval.retriever.dense.index import (
+        CHECKSUM_FILENAMES,
+        REQUIRED_INDEX_FILENAMES,
+    )
+    from offline.indexes.text import build_context_index
 
     output = tmp_path / "context-index"
     index = build_context_index(
@@ -238,6 +242,12 @@ def test_context_index_is_frame_native_and_keeps_supplemental_vectors(
     assert loaded.mapping["video_id"].tolist() == ["v1"]
     assert loaded.metadata.entity_kind == "frame"
     assert loaded.metadata.retrieval_source == "context"
+    assert {path.name for path in output.iterdir()} == {
+        *REQUIRED_INDEX_FILENAMES,
+        "context_embeddings.npy",
+    }
+    assert set(loaded.metadata.checksums) == set(CHECKSUM_FILENAMES)
+    assert loaded.metadata.schema_version == "dense-index-v2"
     assert (output / "context_embeddings.npy").is_file()
     np.testing.assert_allclose(
         np.load(output / "context_embeddings.npy"), loaded.vectors
@@ -252,7 +262,7 @@ def test_context_artifact_builder_uses_evidence_encoder_and_manifest_lineage(
 
     pytest.importorskip("faiss")
     from hcmai.retrieval.retriever.dense.index import DenseIndex
-    from hcmai.retrieval.retriever.pipeline import RetrievalService
+    from offline.indexes.text import build_context_artifacts
 
     _context_data(
         tmp_path,
@@ -272,7 +282,7 @@ def test_context_artifact_builder_uses_evidence_encoder_and_manifest_lineage(
     )
     pipeline_config, model_config, output = _context_build_configs(tmp_path)
 
-    index = RetrievalService.build_context_artifacts(
+    index = build_context_artifacts(
         pipeline_config, model_config, encoder=fake_bge
     )
 
@@ -289,7 +299,7 @@ def test_context_artifact_builder_requires_non_empty_adjacent_manifest(
 ) -> None:
     """Context lineage cannot be built from a parquet file alone or an empty manifest."""
 
-    from hcmai.retrieval.retriever.text.artifacts import build_context_artifacts
+    from offline.indexes.text import build_context_artifacts
 
     _context_data(
         tmp_path,
@@ -309,7 +319,7 @@ def test_remote_context_encoder_uses_text_source_family(
     """Hosted Context embeddings use the BGE text endpoint, not ``context``."""
 
     from thundercompute.pipeline import LLMService
-    from hcmai.retrieval.retriever.text import artifacts
+    from offline.indexes import text as artifacts
 
     captured: dict[str, object] = {}
     remote_encoder = FakeBGE()

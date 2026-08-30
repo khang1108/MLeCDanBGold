@@ -1,8 +1,8 @@
 """Build and publish segment-native ASR retrieval artifacts offline.
 
-This module embeds completed transcript text and preserves its timeline and ASR
-provenance in a ``SegmentDenseIndex`` mapping. It intentionally does not load
-canonical frames, materialize legacy frame-ASR evidence, or invent ``frame_id``.
+Completed transcript text is embedded while timeline and ASR provenance stay in
+the ``SegmentDenseIndex`` mapping.  This builder deliberately does not invent
+or materialize frame identity; runtime projection remains a separate concern.
 """
 
 from __future__ import annotations
@@ -18,18 +18,12 @@ import pandas as pd
 from hcmai.common.config import AppConfig
 from hcmai.common.schemas import ProcessingStatus, RetrievalSource, TranscriptSegment
 from hcmai.common.utils.logging import get_logger
-from hcmai.data.enrichment.transcripts.artifacts import (
-    load_transcript_artifact_records,
-)
-from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
 from hcmai.retrieval.retriever.artifacts import fingerprint_files, publish_directory
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
-from hcmai.retrieval.retriever.text.retriever import (
-    _encode_texts,
-    _encoder_revision,
-    _normalized,
-)
+from offline.enrichment.transcripts.artifacts import load_transcript_artifact_records
+from offline.indexes.text import _encode_texts, _encoder_revision, _normalized
+from thundercompute.config import LLMServiceConfig
 
 logger = get_logger(__name__)
 
@@ -40,9 +34,8 @@ def build_segment_corpus(
     """Serialize completed transcript speech into a segment-native text corpus.
 
     Whitespace is normalized without adding timestamps, speakers, or language
-    to the embedded text. Timeline and provider provenance remain structured in
-    the mapping, and non-completed segments are omitted rather than scored as
-    negative evidence.
+    to embedded text. Timeline and provider provenance stay structured in the
+    mapping, and incomplete segments are omitted rather than treated as zero.
     """
 
     texts: list[str] = []
@@ -73,18 +66,13 @@ def build_segment_corpus(
         texts.append(text)
     if not texts:
         raise ValueError("Transcript artifact contains no usable completed segments")
-    # Object dtype retains ``confidence=None`` as unknown evidence instead of
+    # Object dtype retains ``confidence=None`` as unknown evidence rather than
     # silently coercing it to a numeric zero.
     return texts, pd.DataFrame(rows, dtype=object)
 
 
 def transcript_lineage_files(transcripts_path: str | Path) -> tuple[Path, ...]:
-    """Return all transcript shards and present adjacent manifests in order.
-
-    Each ``video.parquet`` is followed by ``video.manifest.json`` when that
-    manifest exists. This captures the complete grouped transcript source while
-    remaining compatible with legacy standalone Parquet fixtures.
-    """
+    """Return transcript shards and present adjacent manifests in order."""
 
     path = Path(transcripts_path)
     parquet_files = sorted(path.rglob("*.parquet")) if path.is_dir() else [path]
@@ -116,7 +104,6 @@ def build_asr_segment_index(
         raise ValueError(
             f"Text encoder returned {len(vectors)} vectors for {len(mapping)} segments"
         )
-
     index = SegmentDenseIndex.build(
         vectors,
         mapping,
@@ -138,12 +125,7 @@ def build_asr_segment_artifacts(
     output_dir: str | Path | None = None,
     encoder: TextEmbeddingAdapter | None = None,
 ) -> SegmentDenseIndex:
-    """Build the configured segment-native ASR corpus and exact dense index.
-
-    The input fingerprint covers every transcript Parquet shard and each
-    present sibling ``.manifest.json`` file. Heavy embedding and publication
-    happen only when this explicit offline boundary is called.
-    """
+    """Build the configured segment-native ASR corpus and exact dense index."""
 
     settings = AppConfig.from_yaml(config_path)
     models = LLMServiceConfig.from_yaml(model_config_path)
@@ -151,7 +133,6 @@ def build_asr_segment_artifacts(
     source_path, lineage_files = _transcript_source(configured_transcripts)
     output = Path(output_dir or settings.index.asr_segment_path)
     selected_encoder = _segment_encoder(settings, models, encoder)
-
     index = build_asr_segment_index(
         load_transcript_artifact_records(source_path),
         selected_encoder,
@@ -171,9 +152,7 @@ def build_asr_segment_artifacts(
     return index
 
 
-def _transcript_source(
-    value: str | Path | None,
-) -> tuple[Path, tuple[Path, ...]]:
+def _transcript_source(value: str | Path | None) -> tuple[Path, tuple[Path, ...]]:
     """Resolve a non-empty transcript Parquet source before loading models."""
 
     if value is None:
@@ -208,10 +187,7 @@ def _segment_encoder(
         base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
         service = LLMService.remote(base_url, settings.inference)
         selected = EmbeddingService.create_remote_adapter(
-            service,
-            encoder_config,
-            embedding_dim=1024,
-            source="text",
+            service, encoder_config, embedding_dim=1024, source="text"
         )
     if selected is None:
         selected = EmbeddingService.create_text_adapter(encoder_config)

@@ -166,7 +166,7 @@ def test_asr_segment_corpus_preserves_timeline_identity_and_provenance(
     """Embed only completed normalized speech without inventing frame identity."""
 
     pytest.importorskip("pyarrow")
-    from hcmai.retrieval.retriever.segment.artifacts import build_segment_corpus
+    from offline.indexes.asr_segment import build_segment_corpus
 
     _write_transcripts(tmp_path / "transcripts")
     records = load_transcript_artifact_records(tmp_path / "transcripts")
@@ -197,7 +197,7 @@ def test_asr_segment_corpus_rejects_artifact_without_usable_segments(
     """Fail an offline build when every transcript segment is incomplete."""
 
     pytest.importorskip("pyarrow")
-    from hcmai.retrieval.retriever.segment.artifacts import build_segment_corpus
+    from offline.indexes.asr_segment import build_segment_corpus
 
     path = tmp_path / "failed.parquet"
     pd.DataFrame(
@@ -215,8 +215,12 @@ def test_asr_segment_artifact_builder_uses_evidence_encoder_and_lineage(
 
     pytest.importorskip("faiss")
     pytest.importorskip("pyarrow")
-    from hcmai.retrieval.retriever.pipeline import RetrievalService
+    from offline.indexes.asr_segment import build_asr_segment_artifacts
     from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+    from hcmai.retrieval.retriever.segment.index import (
+        CHECKSUM_FILENAMES,
+        REQUIRED_INDEX_FILENAMES,
+    )
 
     transcripts = tmp_path / "transcripts"
     parquet, manifest = _write_transcripts(transcripts)
@@ -224,7 +228,7 @@ def test_asr_segment_artifact_builder_uses_evidence_encoder_and_lineage(
     pipeline_config, model_config = _build_configs(tmp_path, transcripts, output)
     encoder = FakeBGE()
 
-    index = RetrievalService.build_asr_segment_artifacts(
+    index = build_asr_segment_artifacts(
         pipeline_config, model_config, encoder=encoder
     )
     loaded = SegmentDenseIndex.load(output)
@@ -236,6 +240,12 @@ def test_asr_segment_artifact_builder_uses_evidence_encoder_and_lineage(
     assert loaded.metadata.source_fingerprint == index.metadata.source_fingerprint
     assert loaded.metadata.entity_kind == "segment"
     assert loaded.metadata.retrieval_source == "asr"
+    assert {path.name for path in output.iterdir()} == {
+        *REQUIRED_INDEX_FILENAMES,
+        "asr_embeddings.npy",
+    }
+    assert set(loaded.metadata.checksums) == set(CHECKSUM_FILENAMES)
+    assert loaded.metadata.schema_version == "dense-index-v2"
     assert loaded.mapping["segment_id"].tolist() == ["v1:0", "v1:2"]
     assert "frame_id" not in loaded.mapping.columns
     np.testing.assert_allclose(
@@ -249,7 +259,7 @@ def test_asr_segment_lineage_fingerprints_every_shard_and_optional_manifest(
     """Include every Parquet shard and only present adjacent manifests."""
 
     pytest.importorskip("pyarrow")
-    from hcmai.retrieval.retriever.segment.artifacts import transcript_lineage_files
+    from offline.indexes.asr_segment import transcript_lineage_files
 
     root = tmp_path / "transcripts"
     first, manifest = _write_transcripts(root)
@@ -268,7 +278,7 @@ def test_asr_segment_artifact_builder_rejects_missing_transcript_data(
 ) -> None:
     """Require at least one non-empty transcript Parquet before model loading."""
 
-    from hcmai.retrieval.retriever.segment.artifacts import build_asr_segment_artifacts
+    from offline.indexes.asr_segment import build_asr_segment_artifacts
 
     transcripts = tmp_path / "transcripts"
     if transcript_kind == "empty_directory":
@@ -288,7 +298,7 @@ def test_remote_asr_segment_encoder_uses_text_source_family(
     """Hosted segment embeddings select the generic BGE text endpoint."""
 
     from thundercompute.pipeline import LLMService
-    from hcmai.retrieval.retriever.segment import artifacts
+    from offline.indexes import asr_segment as artifacts
 
     captured: dict[str, object] = {}
     remote_encoder = FakeBGE()
@@ -322,7 +332,7 @@ def test_asr_segment_builder_rejects_pathlike_embedding_filename(
     """Keep supplemental vector publication inside the index directory."""
 
     pytest.importorskip("pyarrow")
-    from hcmai.retrieval.retriever.segment.artifacts import build_asr_segment_index
+    from offline.indexes.asr_segment import build_asr_segment_index
 
     _write_transcripts(tmp_path / "transcripts")
 
