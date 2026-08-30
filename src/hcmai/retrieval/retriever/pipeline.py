@@ -145,21 +145,45 @@ class RetrievalService:
             )
         return index.metadata
 
-    def score_visual_videos(
+    def score_event_videos(
         self,
         events: Sequence[str],
+        filters: SearchFilters | None = None,
         top_k: int = 500,
         max_videos: int = 200,
         rrf_k: int = 60,
         chunk_size: int = 65_536,
     ) -> list[VideoEventScores]:
-        """Shortlist videos for ordered events and rescore only their frames."""
+        """Score ordered event text against allowed frames of shortlist videos.
+
+        The service always uses the visual embedding family for the first
+        alignment baseline. Query filters are passed to both stages of dense
+        scoring instead of being applied only after a path is decoded.
+        """
+
         if not events:
             raise ValueError("events must not be empty")
         visual = self._retriever_for("visual")
         batch = visual.encode(list(events))
+        if filters is None:
+            # Preserve the pre-filter call shape while the legacy TRAKE wrapper
+            # remains live; this also avoids changing existing experiment fakes.
+            return score_videos(
+                visual.index,
+                batch.vectors,
+                top_k,
+                max_videos,
+                rrf_k,
+                chunk_size,
+            )
         return score_videos(
-            visual.index, batch.vectors, top_k, max_videos, rrf_k, chunk_size
+            visual.index,
+            batch.vectors,
+            top_k,
+            max_videos,
+            rrf_k,
+            chunk_size,
+            filters=filters,
         )
 
     @property

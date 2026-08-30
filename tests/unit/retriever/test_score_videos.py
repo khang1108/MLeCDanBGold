@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from hcmai.common.schemas import SearchFilters
 from hcmai.retrieval.retriever.video_scores import score_videos
 
 _MAPPING = pd.DataFrame(
@@ -37,6 +38,23 @@ class _FakeIndex:
         del query_vectors
         order = np.argsort(-self._scores, axis=1)[:, :top_k]
         return np.take_along_axis(self._scores, order, axis=1), order
+
+    def search_filtered(
+        self,
+        query_vectors: np.ndarray,
+        top_k: int,
+        filters: SearchFilters | None,
+    ):
+        """Match the unrestricted DenseIndex protocol used by legacy tests."""
+
+        assert filters is None
+        return self.search(query_vectors, top_k)
+
+    def filtered_positions(self, filters: SearchFilters | None):
+        """Report that this fixture has no restricted candidate subset."""
+
+        assert filters is None
+        return None
 
     def video_positions(self, video_id: str) -> np.ndarray:
         positions = np.flatnonzero(self.video_ids == video_id)
@@ -100,3 +118,69 @@ def test_full_coverage_outranks_a_single_stronger_event() -> None:
 def test_top_k_zero_matches_shortlists_nothing() -> None:
     index = _FakeIndex(_MAPPING, _SCORES)
     assert score_videos(index, np.zeros((2, 4), dtype=np.float32), top_k=0) == []
+
+
+class _FilteredFakeIndex:
+    """Small index fixture proving the shortlist and rescore obey one filter."""
+
+    video_ids = np.array(["V01", "V01", "V02", "V02"], dtype=object)
+    frame_ids = np.array(["a", "b", "c", "d"], dtype=object)
+    frame_idx = np.array([0, 1, 0, 1])
+    timestamps = np.array([0, 1_000, 0, 1_000])
+
+    def search_filtered(
+        self,
+        query_vectors: np.ndarray,
+        top_k: int,
+        filters: SearchFilters | None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return only V02 positions after asserting caller filter propagation."""
+
+        del query_vectors, top_k
+        assert filters is not None
+        assert filters.video_ids == ["V02"]
+        return np.array([[0.9, 0.8]]), np.array([[2, 3]])
+
+    def filtered_positions(self, filters: SearchFilters | None) -> np.ndarray:
+        """Allow only the timestamp-qualified V02 frame to be rescored."""
+
+        assert filters is not None
+        assert filters.start_time_ms == 1_000
+        return np.array([3], dtype=np.int64)
+
+    def video_positions(self, video_id: str) -> np.ndarray:
+        """Return the canonical positions belonging to one fixture video."""
+
+        assert video_id == "V02"
+        return np.array([2, 3], dtype=np.int64)
+
+    def score_subset(
+        self,
+        query_vectors: np.ndarray,
+        positions: np.ndarray,
+        chunk_size: int,
+    ) -> np.ndarray:
+        """Return deterministic exact scores for the allowed frame subset."""
+
+        del chunk_size
+        assert positions.tolist() == [3]
+        return np.full(
+            (len(query_vectors), len(positions)),
+            0.75,
+            dtype=np.float32,
+        )
+
+
+def test_score_videos_respects_video_and_time_filters() -> None:
+    """Filter both shortlist evidence and full-video rescoring positions."""
+
+    results = score_videos(
+        _FilteredFakeIndex(),
+        np.array([[1.0, 0.0]], dtype=np.float32),
+        top_k=10,
+        max_videos=10,
+        filters=SearchFilters(video_ids=["V02"], start_time_ms=1_000),
+    )
+
+    assert [result.video_id for result in results] == ["V02"]
+    assert results[0].frame_ids.tolist() == ["d"]

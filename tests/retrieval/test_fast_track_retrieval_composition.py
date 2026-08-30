@@ -372,7 +372,7 @@ def test_fast_track_visual_scoring_uses_visual_family(
         "hcmai.retrieval.retriever.pipeline.score_videos", fake_score
     )
 
-    assert service.score_visual_videos(["red cable car"]) == []
+    assert service.score_event_videos(["red cable car"]) == []
     assert captured["index"] is visual_index
     assert visual_encoder.calls == [["red cable car"]]
 

@@ -4,6 +4,8 @@ from .evidence import *
 
 from .catalog import FrameCatalogEntry
 
+from .alignment import AlignmentEvent, AlignmentPath, AlignmentPlan
+
 from .frame import FrameEnrichment, FrameRecord, validate_frame_enrichment
 from .inference import (
     AudioReferenceRequest,
@@ -34,16 +36,6 @@ from .search import (
 from .submission import SubmissionResult
 from .task import TaskRequest, TaskResponse
 from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
-from .temporal import (
-    FrameEvidence,
-    OrderedPathCandidate,
-    QueryUnit,
-    SceneCandidate,
-    TemporalAlignmentMode,
-    TemporalConstraint,
-    TemporalQueryPlan,
-    TemporalRelation,
-)
 from .trake import (
     TRAKERequest,
     TRAKEResponse,
@@ -75,15 +67,10 @@ __all__ = [
     "FrameRecord",
     "FrameCatalogEntry",
     "FrameEnrichment",
+    "AlignmentEvent",
+    "AlignmentPlan",
+    "AlignmentPath",
     "validate_frame_enrichment",
-    "QueryUnit",
-    "FrameEvidence",
-    "OrderedPathCandidate",
-    "SceneCandidate",
-    "TemporalAlignmentMode",
-    "TemporalConstraint",
-    "TemporalQueryPlan",
-    "TemporalRelation",
     "CaptionItem",
     "CaptionResponse",
     "AudioReferenceRequest",

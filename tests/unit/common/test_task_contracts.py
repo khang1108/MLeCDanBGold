@@ -5,11 +5,8 @@ from pydantic import TypeAdapter, ValidationError
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import (
-    FrameEvidence,
     FrameRecord,
-    QueryUnit,
     RetrievalSource,
-    SceneCandidate,
     SearchRequest,
     TextEmbeddingRequest,
     TRAKERequest,
@@ -31,67 +28,6 @@ def _frame() -> FrameRecord:
         width=1920,
         height=1080,
     )
-
-
-def test_query_unit_validates_identity_text_order_and_round_trips() -> None:
-    unit = QueryUnit(unit_id="H1", text="A red bus arrives.", order=0)
-
-    assert QueryUnit.model_validate_json(unit.model_dump_json()) == unit
-    for values in (
-        {"unit_id": " ", "text": "event", "order": 0},
-        {"unit_id": "H1", "text": " ", "order": 0},
-        {"unit_id": "H1", "text": "event", "order": -1},
-    ):
-        with pytest.raises(ValidationError):
-            QueryUnit.model_validate(values)
-
-
-def test_frame_evidence_preserves_canonical_identity_and_provenance() -> None:
-    evidence = FrameEvidence(
-        frame=_frame(),
-        unit_scores={"H1": 0.9},
-        source_scores={RetrievalSource.VISUAL: 0.8},
-        source_ranks={RetrievalSource.VISUAL: 2},
-        score=0.9,
-        provenance=("event", "visual"),
-    )
-
-    restored = FrameEvidence.model_validate_json(evidence.model_dump_json())
-    assert restored == evidence
-    assert restored.frame == _frame()
-    assert restored.unit_scores == {"H1": 0.9}
-    assert restored.source_scores == {RetrievalSource.VISUAL: 0.8}
-    assert restored.source_ranks == {RetrievalSource.VISUAL: 2}
-    assert restored.provenance == ("event", "visual")
-
-
-def test_scene_candidate_validates_range_and_round_trips_evidence_scores() -> None:
-    evidence = FrameEvidence(frame=_frame(), score=0.9)
-    scene = SceneCandidate(
-        scene_id="video-1:1000-5000",
-        video_id="video-1",
-        start_ms=1_000,
-        end_ms=5_000,
-        evidence=(evidence,),
-        unit_scores={"H1": 0.9},
-        semantic_score=0.8,
-        coverage_score=0.7,
-        temporal_score=0.6,
-        relation_score=0.5,
-        final_score=0.75,
-        reason_labels=("retrieval_similarity",),
-    )
-
-    assert SceneCandidate.model_validate_json(scene.model_dump_json()) == scene
-    assert scene.evidence == (evidence,)
-    assert scene.reason_labels == ("retrieval_similarity",)
-    with pytest.raises(ValidationError, match="end_ms"):
-        SceneCandidate(
-            scene_id="invalid",
-            video_id="video-1",
-            start_ms=5_000,
-            end_ms=1_000,
-        )
 
 
 def _trake_submission(**updates) -> TRAKESubmission:

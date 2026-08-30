@@ -24,7 +24,7 @@ Local FastAPI backend (:8000)
 Remote GPU inference API (ThunderCompute + Cloudflare)
   ├─ SigLIP2 visual embedding
   ├─ BGE-M3 text embedding
-  ├─ Qwen3-VL reranker (optional)
+  ├─ Qwen3-VL reranker for explicit offline experiments
   └─ caption/OCR/ASR/diarization services (optional)
 ```
 
@@ -87,8 +87,8 @@ query
   -> query encoding
   -> visual/context/ASR retrieval
   -> RRF fusion, giữ provenance và canonical frame_id
-  -> temporal refinement / deduplication
-  -> optional bounded Qwen3-VL reranking trên representative candidates
+  -> deterministic ordered event-to-frame alignment
+  -> KIS path projection + canonical materialization
   -> SearchMaterializer
   -> SearchResponse (Top-K frame results)
 ```

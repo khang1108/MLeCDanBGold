@@ -304,12 +304,6 @@ class FusionConfig(BaseModel):
         return self
 
 
-class RerankerPolicyConfig(BaseModel):
-    """Online behavior when the optional reranker is unavailable."""
-
-    required: bool = False
-
-
 class RetrievalCacheConfig(BaseModel):
     """Bounds for process-local immutable retrieval caches."""
 
@@ -324,86 +318,30 @@ class RetrievalCacheConfig(BaseModel):
     disk_enabled: Literal[False] = False
 
 
-class ProgressiveSearchConfig(BaseModel):
-    """Transactional state, retrieval, and scene budgets for KIS."""
+class AlignmentConfig(BaseModel):
+    """Tunable budgets and scoring choices for ordered event alignment.
 
-    model_config = ConfigDict(extra="forbid")
+    These values are deliberately task-agnostic. KIS and TRAKE may consume the
+    same alignment service while projecting its canonical path differently.
+    """
 
-    progressive_state_ttl_seconds: float = Field(default=1800, gt=0)
-    progressive_state_max_entries: int = Field(default=256, gt=0)
-    progressive_max_hints: int = Field(default=10, gt=0)
-
-    candidate_pool_size: int = Field(default=50, gt=0)
-
-    global_quota: int = Field(default=100, gt=0)
-    local_quota: int = Field(default=50, gt=0)
-
-    top_m_evidence: int = Field(default=5, gt=0)
-
-    backfill_max_videos: int = Field(default=10, gt=0)
-    backfill_max_units_per_video: int = Field(default=5, gt=0)
-
-    candidate_semantic_weight: float = Field(default=0.45, ge=0)
-    candidate_match_weight: float = Field(default=0.25, ge=0)
-    candidate_evaluation_weight: float = Field(default=0.30, ge=0)
-
-    scene_max_gap_ms: int = Field(default=5_000, gt=0)
-    scene_max_span_ms: int = Field(default=30_000, gt=0)
-    scene_coherence_ms: int = Field(default=15_000, gt=0)
-    scene_top_b_per_video: int = Field(default=3, gt=0)
-    # Keep the temporal candidate pool at the public search ceiling so a
-    # request with top_k=100 is not silently capped before materialization.
-    scene_top_p_global: int = Field(default=100, gt=0)
-    scene_semantic_weight: float = Field(default=0.45, ge=0)
-    scene_coverage_weight: float = Field(default=0.30, ge=0)
-    scene_temporal_weight: float = Field(default=0.15, ge=0)
-    scene_relation_weight: float = Field(default=0.10, ge=0)
-
-    @model_validator(mode="after")
-    def validate_scene_weights(self) -> ProgressiveSearchConfig:
-        """Require nonnegative weights with at least one active component."""
-
-        weights = (
-            self.scene_semantic_weight,
-            self.scene_coverage_weight,
-            self.scene_temporal_weight,
-            self.scene_relation_weight,
-        )
-        if sum(weights) <= 0:
-            raise ValueError(
-                "at least one progressive scene weight must be positive"
-            )
-        if self.scene_max_gap_ms > self.scene_max_span_ms:
-            raise ValueError("scene_max_gap_ms must not exceed scene_max_span_ms")
-        candidate_weights = (
-            self.candidate_semantic_weight,
-            self.candidate_match_weight,
-            self.candidate_evaluation_weight,
-        )
-        if sum(candidate_weights) <= 0:
-            raise ValueError(
-                "at least one progressive candidate weight must be positive"
-            )
-        return self
-
-    def diagnostics(self) -> dict[str, int | float]:
-        """Return reproducible active budgets without state implementation details."""
-
-        return self.model_dump()
+    top_k: int = Field(default=500, ge=1)
+    max_videos: int = Field(default=200, ge=1)
+    rrf_k: int = Field(default=60, gt=0)
+    lambda_gap: float = Field(default=1e-5, ge=0.0)
+    event_power: float = Field(default=1.0, gt=0.0, le=1.0)
+    chunk_size: int = Field(default=65_536, ge=1)
+    cluster_delta: float = Field(default=0.0, ge=0.0)
 
 
 class SearchConfig(BaseModel):
     """Single search configuration selected for the competition pipeline."""
 
-    candidate_count: int = Field(default=500, ge=1)
-    rerank_count: int = Field(default=100, ge=0)
-    temporal_window_ms: int = Field(default=3000, ge=0)
+    model_config = ConfigDict(extra="forbid")
+
     fusion: FusionConfig = Field(default_factory=FusionConfig)
-    reranker: RerankerPolicyConfig = Field(default_factory=RerankerPolicyConfig)
     cache: RetrievalCacheConfig = Field(default_factory=RetrievalCacheConfig)
-    progressive: ProgressiveSearchConfig = Field(
-        default_factory=lambda: ProgressiveSearchConfig()
-    )
+    alignment: AlignmentConfig = Field(default_factory=AlignmentConfig)
 
 
 class ApiConfig(BaseModel):

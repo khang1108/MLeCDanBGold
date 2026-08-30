@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
-from hcmai.temporal.aligners.monotonic_dp import align_video
+from hcmai.temporal.dp import align_video
 
 
 def _video(scores: list[list[float]]) -> VideoEventScores:
@@ -38,3 +38,42 @@ def test_gap_penalty_prefers_the_closer_event_pair() -> None:
 
 def test_video_shorter_than_the_event_list_has_no_path() -> None:
     assert align_video(_video([[0.5], [0.4]])) == []
+
+
+def test_align_video_chooses_the_best_strictly_chronological_path() -> None:
+    """Prefer the highest-scoring path that does not reuse a keyframe."""
+
+    video = VideoEventScores(
+        video_id="V01",
+        frame_ids=np.array(["f0", "f1", "f2", "f3"], dtype=object),
+        frame_idx=np.array([0, 1, 2, 3]),
+        timestamps_ms=np.array([0, 1_000, 2_000, 3_000]),
+        scores=np.array(
+            [
+                [0.90, 0.20, 0.10, 0.05],
+                [0.10, 0.85, 0.30, 0.10],
+                [0.05, 0.10, 0.40, 0.95],
+            ]
+        ),
+    )
+
+    [path] = align_video(video, lambda_gap=0.0, paths=1)
+
+    assert path.frame_ids == ("f0", "f1", "f3")
+    assert path.frame_idx == (0, 1, 3)
+
+
+def test_align_video_gap_penalty_can_prefer_a_nearer_frame() -> None:
+    """Keep the current time-gap recurrence stable during later relocation."""
+
+    video = VideoEventScores(
+        video_id="V01",
+        frame_ids=np.array(["f0", "f1", "f2"], dtype=object),
+        frame_idx=np.array([0, 1, 2]),
+        timestamps_ms=np.array([0, 1_000, 100_000]),
+        scores=np.array([[0.90, 0.10, 0.10], [0.10, 0.80, 0.99]]),
+    )
+
+    [path] = align_video(video, lambda_gap=1e-5, paths=1)
+
+    assert path.frame_ids == ("f0", "f1")

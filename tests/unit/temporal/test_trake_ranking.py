@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
-from hcmai.temporal.aligners.monotonic_dp import rank_paths
+from hcmai.temporal.dp import rank_paths
 
 
 def _video(video_id: str, boost: float) -> VideoEventScores:

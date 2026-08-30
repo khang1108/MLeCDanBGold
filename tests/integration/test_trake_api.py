@@ -18,7 +18,7 @@ import pytest
 from fastapi import FastAPI
 
 from hcmai.app import create_app
-from hcmai.common.schemas import FrameRecord, RetrievalCandidate, RetrievalSource
+from hcmai.common.schemas import FrameRecord, RetrievalSource
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.task_router import PipelineRegistry
@@ -57,25 +57,29 @@ _FRAMES = {
 class _FakeRetrieval:
     """Shortlist video_001 only, so video_002 never reaches the aligner."""
 
-    def search(self, query: str, top_k: int, filters: Any, query_type: Any):
-        del query, top_k, filters, query_type
-        return [
-            RetrievalCandidate(
-                frame_id="frame_10",
-                source_scores={RetrievalSource.VISUAL: 0.9},
-                final_score=0.9,
-            )
-        ]
-
-    def score_visual_videos(
+    def score_event_videos(
         self,
         events: Sequence[str],
+        filters: Any = None,
         top_k: int = 500,
         max_videos: int = 200,
         rrf_k: int = 60,
         chunk_size: int = 65_536,
     ) -> list[VideoEventScores]:
+        """Return score rows matching every event passed by either task head."""
+
         del top_k, max_videos, rrf_k, chunk_size
+        assert filters is None
+        if len(events) == 1:
+            return [
+                VideoEventScores(
+                    video_id="video_001",
+                    frame_ids=np.array(["frame_10"], dtype=object),
+                    frame_idx=np.array([10]),
+                    timestamps_ms=np.array([1_000.0]),
+                    scores=np.array([[0.9]], dtype=np.float32),
+                )
+            ]
         assert len(events) == len(_SCORES)
         return [
             VideoEventScores(

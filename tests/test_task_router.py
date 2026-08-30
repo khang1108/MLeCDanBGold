@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import cast
 
+import numpy as np
 import pytest
 
 from hcmai.common.schemas import (
+    FrameRecord,
     RetrievalCandidate,
     RetrievalSource,
     SearchRequest,
@@ -22,6 +24,7 @@ from hcmai.orchestration.pipeline import (
 from hcmai.orchestration.workflows.base import TaskPipelineRequestError
 from hcmai.orchestration.task_router import PipelineRegistry
 from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
 @dataclass(frozen=True)
@@ -48,11 +51,14 @@ class Data:
     def get_frame(self, frame_id: str):
         if frame_id != "f1":
             raise KeyError(frame_id)
-        return SimpleNamespace(
+        return FrameRecord(
             frame_id="f1",
             video_id="official-video",
             frame_idx=42,
             timestamp_ms=1_000,
+            image_path="f1.jpg",
+            width=640,
+            height=360,
         )
 
     def get_evidence(self, frame_id, source):
@@ -65,20 +71,21 @@ class Data:
 
 
 class Retrieval:
-    last_query_encoding_ms = 1
-    last_index_search_ms = 2
-
     def __init__(self) -> None:
-        self.query_types: list[TaskType] = []
+        self.event_batches: list[list[str]] = []
 
-    def search(self, query, top_k, filters, query_type):
-        del query, top_k, filters
-        self.query_types.append(query_type)
+    def score_event_videos(self, events, filters=None, **kwargs):
+        """Return one canonical frame for each KIS event-scoring request."""
+
+        del filters, kwargs
+        self.event_batches.append(list(events))
         return [
-            RetrievalCandidate(
-                frame_id="f1",
-                source_scores={RetrievalSource.VISUAL: 0.5},
-                final_score=0.5,
+            VideoEventScores(
+                video_id="official-video",
+                frame_ids=np.array(["f1"], dtype=object),
+                frame_idx=np.array([42]),
+                timestamps_ms=np.array([1_000]),
+                scores=np.full((len(events), 1), 0.5),
             )
         ]
 
@@ -128,7 +135,7 @@ def test_kis_pipeline_preserves_search_response_behavior(
     assert response.results[0].frame_ids == ["f1"]
     assert response.results[0].video_id == "official-video"
     assert response.results[0].frame_idx == 42
-    assert retrieval.query_types == [TaskType.KIS]
+    assert retrieval.event_batches == [["red bus"]]
 
 
 def test_missing_pipeline_maps_to_typed_service_error() -> None:

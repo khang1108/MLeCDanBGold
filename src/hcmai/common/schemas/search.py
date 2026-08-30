@@ -45,6 +45,11 @@ class SearchRequest(ContractModel):
 
     query: NonEmptyString = Field(max_length=1_000)
     query_type: Literal[TaskType.KIS] = TaskType.KIS
+    events: list[NonEmptyString] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=10,
+    )
     top_k: int = Field(default=20, ge=1, le=100)
     filters: SearchFilters | None = None
     search_id: NonEmptyString | None = None

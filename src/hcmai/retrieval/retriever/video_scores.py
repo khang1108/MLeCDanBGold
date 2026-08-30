@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 
+from hcmai.common.schemas.search import SearchFilters
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer
 
@@ -32,10 +33,17 @@ def score_videos(
     max_videos: int = 200,
     rrf_k: int = 60,
     chunk_size: int = 65_536,
+    filters: SearchFilters | None = None,
 ) -> list[VideoEventScores]:
-    """Shortlist videos by event coverage then RRF vote, and rescore their frames."""
+    """Shortlist videos by event coverage, then rescore allowed frame windows.
+
+    ``filters`` must constrain both the event-wise shortlist and the dense
+    event-by-frame rescoring window. Otherwise a KIS video/time restriction
+    could select the correct video but return an out-of-range representative.
+    """
+
     timer = Timer()
-    _, positions = index.search(query_vectors, top_k)
+    _, positions = index.search_filtered(query_vectors, top_k, filters)
 
     video_ids = index.video_ids
     votes: defaultdict[str, float] = defaultdict(float)
@@ -59,7 +67,19 @@ def score_videos(
         key=lambda video_id: (-coverage[video_id], -votes[video_id], video_id),
     )
     shortlist = sorted(ranked[:max_videos])
-    windows = [index.video_positions(video_id) for video_id in shortlist]
+    allowed_positions = index.filtered_positions(filters)
+    windows = []
+    kept_video_ids = []
+    for video_id in shortlist:
+        window = index.video_positions(video_id)
+        if allowed_positions is not None:
+            window = window[np.isin(window, allowed_positions)]
+        if len(window):
+            kept_video_ids.append(video_id)
+            windows.append(window)
+    if not windows:
+        return []
+
     scored_positions = np.concatenate(windows)
     shortlist_ms = timer.stop()
 
@@ -69,7 +89,7 @@ def score_videos(
 
     results = []
     start = 0
-    for video_id, window in zip(shortlist, windows):
+    for video_id, window in zip(kept_video_ids, windows):
         stop = start + len(window)
         results.append(
             VideoEventScores(

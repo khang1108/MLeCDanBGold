@@ -1,8 +1,8 @@
 # Search orchestration
 
 `hcmai.orchestration` owns the online application flow. FastAPI routers call
-`SearchService` from `pipeline.py`; they do not wire retrieval or reranking
-internals themselves.
+`SearchService` from `pipeline.py`; they do not wire retrieval or temporal
+alignment internals themselves.
 
 ```text
 orchestration/
@@ -18,21 +18,22 @@ orchestration/
 ```text
 FastAPI
     → SearchService
-    → RetrievalService
-    → optional RerankingService
+    → task workflow (KIS or TRAKE)
+    → TemporalAlignmentService + RetrievalService
     → DataService-backed canonical materialization
 ```
 
 `SearchService` resolves each request through `PipelineRegistry`. The current
-registry exposes KIS and TRAKE. KIS uses progressive scene localization;
-TRAKE uses ordered temporal alignment.
+registry exposes KIS and TRAKE. Both consume one stateless ordered
+event-to-frame alignment service; KIS projects a path to its existing
+single-frame public response and TRAKE returns the full path.
 
 `setup.py` loads configuration and artifacts once, constructs the selected
 services, and injects them into `SearchService`. Cross-component imports in
 this package target only another component's `pipeline.py` or shared schemas.
 
-Canonical identity is immutable: retrieval and reranking may score or reorder
-`RetrievalCandidate` objects, while materialization alone resolves each exact
+Canonical identity is immutable: retrieval and alignment may score or order
+candidate frames, while materialization alone resolves each exact
 `frame_id` to its official `video_id` and integer `frame_idx` through
 `DataService`.
 

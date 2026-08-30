@@ -3,12 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import cast
 
+import numpy as np
 import pytest
 
 from hcmai.common.schemas import (
     FrameRecord,
-    RetrievalCandidate,
-    RetrievalSource,
     SearchRequest,
     TRAKERequest,
     TaskType,
@@ -19,6 +18,7 @@ from hcmai.orchestration.pipeline import (
     SearchServiceUnavailableError,
 )
 from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
 class Data:
@@ -43,18 +43,20 @@ class Data:
         return None
 
 class Retrieval:
-    last_query_encoding_ms = 1
-    last_index_search_ms = 2
-
     def __init__(self, frame_id: str = "f1") -> None:
         self.frame_id = frame_id
 
-    def search(self, query, top_k, filters, query_type):
+    def score_event_videos(self, events, filters=None, **kwargs):
+        """Return one score column whose identity comes from the fixture."""
+
+        del filters, kwargs
         return [
-            RetrievalCandidate(
-                frame_id=self.frame_id,
-                source_scores={RetrievalSource.VISUAL: 0.5},
-                final_score=0.5,
+            VideoEventScores(
+                video_id="official-video",
+                frame_ids=np.array([self.frame_id], dtype=object),
+                frame_idx=np.array([42]),
+                timestamps_ms=np.array([1_000]),
+                scores=np.full((len(events), 1), 0.5),
             )
         ]
 
@@ -88,7 +90,7 @@ def test_unknown_frame_fails_closed() -> None:
 def test_trake_is_registered_before_dependency_readiness() -> None:
     service = SearchService(None, None)
     with pytest.raises(
-        SearchServiceUnavailableError, match="Retriever not loaded"
+        SearchServiceUnavailableError, match="Alignment service not loaded"
     ):
         service.search(
             TRAKERequest(

@@ -1,5 +1,68 @@
 # HCMAI Research Knowledge
 
+## Unified ordered event-to-frame alignment baseline
+
+**Date:** 2026-08-30
+**Problem:** KIS currently uses progressive scene localization while TRAKE uses
+monotonic dynamic programming over dense event/frame scores. The two paths
+duplicate temporal ownership and make a clean baseline difficult to ablate.
+
+### Sources
+
+- [CrossTask: Cross-Task Learning for Instructional Videos](https://arxiv.org/abs/1903.08225)
+- [Drop-DTW: Aligning Common Signal Between Sequences While Dropping Outliers](https://arxiv.org/abs/2108.11996)
+- [A Survey on Temporal Sentence Grounding in Videos](https://arxiv.org/abs/2109.08043)
+- Repository source trace on 2026-08-30: `KISPipeline` calls
+  `TemporalEvidenceCore.localize()`; `TRAKEPipeline` calls
+  `TemporalEvidenceCore.align_ordered()`; the latter uses
+  `score_visual_videos()` and `monotonic_dp.py`.
+
+### Findings
+
+- **PAPER:** Ordered instructional-step alignment and monotonic temporal
+  sequence alignment are established problem formulations. CrossTask and
+  Drop-DTW are supporting precedents, but their models and datasets are not
+  the HCMAI task or current visual-only implementation.
+- **PAPER:** Temporal grounding requires semantic localization in time; the
+  survey supports treating localization as an explicit subsystem rather than
+  an HTTP/UI concern.
+- **SOURCE:** The current DP is a deterministic, strict-increasing keyframe
+  decoder. It scores a same-video event-by-frame matrix and materializes
+  returned `frame_id` values through `DataService`. The KIS pipeline instead
+  owns process-local progressive state, scene clustering, and a bounded
+  single-frame reranker.
+
+### Relevance to HCMAI
+
+- **PROPOSED:** One task-agnostic ordered-alignment service could eliminate the
+  duplicated temporal facade and expose KIS/TRAKE as thin output projections.
+  KIS would select a deterministic representative from the full path while
+  retaining every canonical `frame_id` for evidence inspection.
+- **PROPOSED:** This is a semantic migration, not a behavior-preserving
+  refactor. There is no measured evidence that visual-only monotonic alignment
+  improves KIS, and strict no-frame-reuse may not match the current organizer
+  scorer.
+
+### Status
+
+**PAPER-SUPPORTED** problem formulation; **PROPOSED** HCMAI architecture;
+no HCMAI accuracy result measured. The local 2026 preliminary-round document
+confirms complete KIS queries and ordered TRAKE event frames, but does not
+settle whether one frame may satisfy more than one event.
+
+### Decision or Experiment
+
+The user explicitly authorized the structural migration and removal of the
+progressive KIS path on 2026-08-30 before an evaluation record was available.
+Before treating that implementation as a competition cut-over, freeze a
+versioned development set and record the current/proposed outputs, relevant
+official metric or proxy, canonical identities, index/model/config versions,
+and P50/P95 latency. The record template and current no-release-claim decision
+are in `docs/research/2026-08-30-temporal-migration-gate.md`. The organizer
+contract or scorer must resolve whether strict chronological paths and
+non-reused frames are valid. Accept, revise, or reject the migration from that
+record; do not infer an improvement from literature alone.
+
 ## Segment-native ASR retrieval with canonical-frame fusion
 
 **Date:** 2026-08-21

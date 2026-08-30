@@ -1,30 +1,14 @@
-"""Shared temporal query, evidence, scene, and ordered-path facade."""
+"""Task-agnostic ordered event-to-frame alignment interfaces.
 
-from .core import (
-    OrderedAlignmentResult,
-    ProgressiveLocalizationResult,
-    TemporalEvidenceCore,
-)
-from .state.evidence import ProgressiveEvidenceState, retrieval_to_evidence
-from .query import SnapshotDiffMode, SnapshotDiffResult, diff_snapshot
-from .state.state import (
-    ProgressiveSearchState,
-    ProgressiveStateConflictError,
-    ProgressiveStateStore,
-    StaleProgressiveStateError,
-)
+This package owns deterministic planning, score-matrix alignment, and canonical
+path materialization. Task-specific output projection remains in workflows.
+"""
+
+from .planner import build_alignment_plan
+from .service import AlignmentResult, TemporalAlignmentService
 
 __all__ = [
-    "ProgressiveEvidenceState",
-    "OrderedAlignmentResult",
-    "ProgressiveLocalizationResult",
-    "ProgressiveSearchState",
-    "ProgressiveStateConflictError",
-    "ProgressiveStateStore",
-    "SnapshotDiffMode",
-    "SnapshotDiffResult",
-    "StaleProgressiveStateError",
-    "TemporalEvidenceCore",
-    "diff_snapshot",
-    "retrieval_to_evidence",
+    "AlignmentResult",
+    "TemporalAlignmentService",
+    "build_alignment_plan",
 ]

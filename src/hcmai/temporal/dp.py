@@ -1,8 +1,8 @@
-"""Pure monotonic TRAKE path alignment and ranking.
+"""Pure monotonic dynamic programming for ordered event-to-frame alignment.
 
-This module owns the dynamic-programming algorithm and path diversification.
-It does not resolve canonical frame records or format HTTP/submission
-responses; the temporal monotonic adapter owns canonical materialization.
+This module owns only numerical path decoding and per-video path ranking. It
+does not retrieve score matrices, resolve canonical frames, or format KIS and
+TRAKE responses; those responsibilities remain at higher boundaries.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
 @dataclass(frozen=True, slots=True)
-class TrakePath:
-    """One video's best chronological event path, one canonical frame per event."""
+class DPPath:
+    """One strict chronological event path through a single video's frames."""
 
     video_id: str
     score: float
@@ -27,7 +27,12 @@ class TrakePath:
 
 
 def cluster_starts(scores: np.ndarray, delta: float) -> np.ndarray:
-    """Map every frame to the first frame of its cluster, radius ``delta``."""
+    """Map each frame to its score-cluster start within a video.
+
+    A positive ``delta`` prevents multiple aligned events from landing in one
+    near-identical score cluster. The default of zero disables this optional
+    diversification constraint.
+    """
 
     columns = np.ascontiguousarray(scores.T)
     starts = np.zeros(len(columns), dtype=np.int64)
@@ -45,8 +50,13 @@ def align_video(
     paths: int = 1,
     event_power: float = 1.0,
     cluster_delta: float = 0.0,
-) -> list[TrakePath]:
-    """Return the ``paths`` best chronological event paths for one video."""
+) -> list[DPPath]:
+    """Return the highest-scoring strict chronological paths for one video.
+
+    ``VideoEventScores`` columns must already be in canonical frame order. The
+    recurrence selects one later column for every successive event and applies
+    the configured time-gap penalty without changing any supplied identity.
+    """
 
     scores = np.asarray(video.scores, dtype=np.float64)
     n_events, n_frames = scores.shape
@@ -57,8 +67,10 @@ def align_video(
 
     frames = np.arange(n_frames)
     starts = cluster_starts(scores, cluster_delta) if cluster_delta > 0.0 else frames
+
     if int(np.count_nonzero(starts == frames)) < n_events:
         return []
+    
     source = starts - 1
     reachable = source >= 0
     source = source.clip(0)
@@ -86,7 +98,7 @@ def align_video(
             path.append(position)
         ordered = tuple(reversed(path))
         results.append(
-            TrakePath(
+            DPPath(
                 video_id=video.video_id,
                 score=float(current[endpoint]),
                 frame_idx=tuple(int(video.frame_idx[position]) for position in ordered),
@@ -102,8 +114,13 @@ def rank_paths(
     max_rows: int = 100,
     event_power: float = 1.0,
     cluster_delta: float = 0.0,
-) -> list[TrakePath]:
-    """Rank at most ``max_rows`` paths, preferring video diversity before repeats."""
+) -> list[DPPath]:
+    """Rank bounded paths while preferring each video's best row first.
+
+    Diversifying the first ranking level across videos matches the current
+    TRAKE behavior and avoids consuming the whole result budget with one
+    video's closely related alternatives.
+    """
 
     if not videos:
         return []
@@ -112,7 +129,7 @@ def rank_paths(
         align_video(video, lambda_gap, depth, event_power, cluster_delta)
         for video in videos
     ]
-    rows: list[TrakePath] = []
+    rows: list[DPPath] = []
     for level in range(depth):
         rows.extend(
             sorted(

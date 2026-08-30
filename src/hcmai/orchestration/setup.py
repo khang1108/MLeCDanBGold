@@ -18,7 +18,6 @@ from hcmai.data.pipeline import DataService
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from thundercompute.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.retrieval.reranking.pipeline import RerankerConfig, RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
@@ -62,21 +61,9 @@ def load_search_service(messages: list[str]) -> SearchService:
         messages,
         data=data,
     )
-    reranking = None
-    if llm is not None and data is not None and settings.search.rerank_count > 0:
-        reranking = RerankingService.remote(
-            data,
-            RerankerConfig(
-                batch_size=models.reranker.batch_size,
-                required=settings.search.reranker.required,
-            ),
-            llm,
-            dataset_root=dataset_root,
-        )
     return SearchService(
         data=data,
         retrieval=retrieval,
-        reranking=reranking,
         config=settings.search,
         llm=llm,
     )

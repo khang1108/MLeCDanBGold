@@ -8,6 +8,7 @@ from hcmai.common.config import (
     FusionConfig,
     LEGACY_DATASET_ROOT,
     REPOSITORY_ROOT,
+    SearchConfig,
     TranscriptJobConfig,
     resolve_dataset_root,
     resolve_repository_path,
@@ -23,10 +24,10 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.dataset.root == Path("data")
     assert config.dataset.frames_path == Path("artifacts/frame_store/frames.parquet")
     assert config.dataset.enrichment.caption_path == Path(
-        "artifacts/enrichment/caption/frame_enrichment.parquet"
+        "artifacts/enrichment/captions/captions.parquet"
     )
     assert config.dataset.enrichment.ocr_path == Path(
-        "artifacts/enrichment/ocr/frame_enrichment.parquet"
+        "artifacts/enrichment/ocr/frames.parquet"
     )
     assert config.dataset.enrichment.asr_path == Path(
         "artifacts/enrichment/asr/frame_enrichment.parquet"
@@ -46,16 +47,26 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.search.fusion.task_weights[TaskType.KIS] == {
         source: 1.0 for source in RetrievalSource
     }
-    assert config.search.candidate_count == 500
-    assert config.search.rerank_count == 100
-    assert config.search.temporal_window_ms == 3000
-    assert config.search.progressive.scene_top_p_global == 100
+    assert config.search.alignment.top_k == 500
+    assert config.search.alignment.max_videos == 200
+    assert config.search.alignment.rrf_k == 60
+    assert config.search.alignment.lambda_gap == pytest.approx(1e-5)
+    assert config.search.alignment.event_power == 1.0
+    assert config.search.alignment.chunk_size == 65_536
+    assert config.search.alignment.cluster_delta == 0.0
     assert set(config.search.fusion.task_weights) == {
         TaskType.KIS,
         TaskType.TRAKE,
     }
     assert config.inference.enabled is True
     assert config.inference.base_url == "https://api.iamphuckhang.dev"
+
+
+def test_search_config_rejects_retired_progressive_options() -> None:
+    """Fail configuration loading instead of silently reviving removed state."""
+
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        SearchConfig.model_validate({"progressive": {}})
 
 
 def test_fusion_weights_require_every_remaining_task_type() -> None:

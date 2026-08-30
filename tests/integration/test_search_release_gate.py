@@ -1,17 +1,18 @@
 from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 
+import numpy as np
+
 from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
     FrameRecord,
-    RetrievalCandidate,
-    RetrievalResult,
     RetrievalSource,
     SearchRequest,
 )
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
 class TinyData:
@@ -31,20 +32,26 @@ class TinyData:
 class TinyRetrieval:
     active_sources = (RetrievalSource.VISUAL,)
 
-    def search(self, query, top_k, filters, query_type):
-        return RetrievalResult(candidates=[RetrievalCandidate(
-            frame_id="frame-1",
-            source_scores={RetrievalSource.VISUAL: 1.0},
-            source_ranks={RetrievalSource.VISUAL: 1},
-            final_score=1.0,
-        )])
+    def score_event_videos(self, events, filters=None, **kwargs):
+        """Return one immutable score matrix for every concurrent request."""
+
+        del filters, kwargs
+        return [
+            VideoEventScores(
+                video_id="video-1",
+                frame_ids=np.array(["frame-1"], dtype=object),
+                frame_idx=np.array([7]),
+                timestamps_ms=np.array([1_000]),
+                scores=np.ones((len(events), 1)),
+            )
+        ]
 
 
 def _service():
     return SearchService(
         cast(DataService, TinyData()),
         cast(RetrievalService, TinyRetrieval()),
-        config=SearchConfig(candidate_count=1, rerank_count=0),
+        config=SearchConfig(),
     )
 
 

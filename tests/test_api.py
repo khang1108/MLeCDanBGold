@@ -7,6 +7,7 @@ import logging
 from typing import cast
 
 import httpx
+import numpy as np
 import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -15,10 +16,10 @@ from hcmai.app import create_app
 from hcmai.common.schemas.frame import FrameRecord
 from hcmai.common.schemas.catalog import FrameCatalogEntry
 from hcmai.common.schemas.enum import RetrievalSource
-from hcmai.common.schemas.retrieval import RetrievalCandidate
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 pytestmark = pytest.mark.usefixtures("inline_router_threadpool")
 
@@ -73,17 +74,17 @@ class MockFrameStore:
 class MockRetriever:
     """Mock Retriever for testing API search."""
 
-    last_query_encoding_ms = 0.0
-    last_index_search_ms = 0.0
+    def score_event_videos(self, events, filters=None, **kwargs):
+        """Return the one canonical visual score column used by API tests."""
 
-    def search(
-        self, query: str, top_k: int = 10, filters=None, query_type=None
-    ) -> list[RetrievalCandidate]:
+        del filters, kwargs
         return [
-            RetrievalCandidate(
-                frame_id="L21_V001_00000090",
-                source_scores={RetrievalSource.VISUAL: 0.95},
-                final_score=0.95,
+            VideoEventScores(
+                video_id="L21_V001",
+                frame_ids=np.array(["L21_V001_00000090"], dtype=object),
+                frame_idx=np.array([90]),
+                timestamps_ms=np.array([3_600]),
+                scores=np.full((len(events), 1), 0.95),
             )
         ]
 
@@ -298,11 +299,8 @@ def test_search_endpoint_logs_every_pipeline_stage(
                            json={"query": "red bus", "top_k": 5})
     assert response.status_code == 200
     output = "\n".join(record.getMessage() for record in caplog.records)
-    stages = (
-        "search started", "materialization started",
-        "search completed results=1",
-    )
-    assert all(stage in output for stage in stages)
+    assert "KIS completed events=1" in output
+    assert '"backend": "monotonic_dp"' in output
 
 
 def test_get_frame_endpoint(api_app: FastAPI) -> None:

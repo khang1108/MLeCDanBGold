@@ -34,12 +34,14 @@ index:
     asr: "asr_embeddings.npy"
 
 search:
-  candidate_count: 500
-  rerank_count: 100
-  temporal_window_ms: 3000
-
-  reranker:
-    required: false
+  alignment:
+    top_k: 500
+    max_videos: 200
+    rrf_k: 60
+    lambda_gap: 0.00001
+    event_power: 1.0
+    chunk_size: 65536
+    cluster_delta: 0.0
 
   cache:
     enabled: true
@@ -55,35 +57,6 @@ search:
     thumbnail_max_bytes: 134217728
 
     disk_enabled: false
-
-  progressive:
-    progressive_state_ttl_seconds: 1800
-    progressive_state_max_entries: 256
-    progressive_max_hints: 10
-
-    candidate_pool_size: 50
-
-    global_quota: 100
-    local_quota: 50
-
-    top_m_evidence: 5
-
-    backfill_max_videos: 10
-    backfill_max_units_per_video: 5
-
-    candidate_semantic_weight: 0.45
-    candidate_match_weight: 0.25
-    candidate_evaluation_weight: 0.30
-
-    scene_max_gap_ms: 5000
-    scene_max_span_ms: 30000
-    scene_coherence_ms: 15000
-    scene_top_b_per_video: 3
-    scene_top_p_global: 100
-    scene_semantic_weight: 0.45
-    scene_coverage_weight: 0.30
-    scene_temporal_weight: 0.15
-    scene_relation_weight: 0.10
 
   fusion:
     method: "rrf"

@@ -25,12 +25,10 @@ from hcmai.orchestration.workflows.base import (
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.orchestration.task_router import PipelineRegistry
-from hcmai.retrieval.reranking.pipeline import RerankingService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.common.observability import METRICS
 from hcmai.common.utils.video import official_frame_idx
-from hcmai.temporal import TemporalEvidenceCore
-from hcmai.temporal.settings import TRAKESettings
+from hcmai.temporal import TemporalAlignmentService
 
 logger = get_logger(__name__)
 
@@ -54,7 +52,6 @@ class SearchService:
         self,
         data: DataService | None,
         retrieval: RetrievalService | None,
-        reranking: RerankingService | None = None,
         config: SearchConfig | None = None,
         llm: LLMService | None = None,
         pipeline_registry: PipelineRegistry | None = None,
@@ -63,7 +60,6 @@ class SearchService:
 
         self.data = data
         self.retrieval = retrieval
-        self.reranking = reranking
         self.config = config or SearchConfig()
         self.llm = llm
         self.pipeline_registry = (
@@ -228,25 +224,20 @@ class SearchService:
     def _default_registry(self) -> PipelineRegistry:
         """Build task heads and inject one temporal facade into every task."""
 
-        temporal_core = (
-            TemporalEvidenceCore(
+        alignment = (
+            TemporalAlignmentService(
                 self.data,
                 self.retrieval,
-                self.config,
-                trake_settings=TRAKESettings(),
+                self.config.alignment,
             )
             if self.data is not None and self.retrieval is not None
             else None
         )
         pipelines = [
             KISPipeline(
-                TaskType.KIS,
                 self.data,
-                self.retrieval,
-                self.config,
-                temporal_core,
-                reranking=self.reranking,
+                alignment,
             )
         ]
-        pipelines.append(cast(Any, TRAKEPipeline(temporal_core)))
+        pipelines.append(cast(Any, TRAKEPipeline(alignment)))
         return PipelineRegistry(pipelines)

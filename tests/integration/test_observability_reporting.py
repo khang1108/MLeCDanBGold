@@ -1,44 +1,32 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import cast
 
+import numpy as np
+
 from hcmai.common.schemas import (
-    RetrievalCandidate,
-    RetrievalResult,
     RetrievalSource,
-    RetrievalTrace,
+    FrameRecord,
     SearchRequest,
-    StageStatus,
-    StageTrace,
 )
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
-
-
-def _stage(stage: str, duration_ms: float) -> StageTrace:
-    return StageTrace(
-        stage=stage,
-        started_at=1,
-        ended_at=1 + duration_ms / 1_000,
-        duration_ms=duration_ms,
-        status=StageStatus.SUCCESS,
-        input_count=1,
-        output_count=1,
-        backend="fixture",
-    )
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
 class Data:
     record_count = 1
 
     def get_frame(self, frame_id: str):
-        return SimpleNamespace(
+        return FrameRecord(
             frame_id=frame_id,
             video_id="video-1",
             frame_idx=17,
             timestamp_ms=680,
+            image_path=f"{frame_id}.jpg",
+            width=640,
+            height=360,
         )
 
     def get_evidence(self, frame_id, source):
@@ -53,24 +41,19 @@ class Data:
 class Retrieval:
     active_sources = (RetrievalSource.VISUAL,)
 
-    def search(self, query, top_k, filters, query_type):
-        del query, top_k, filters, query_type
-        stages = {
-            "visual.encode": _stage("visual.encode", 2),
-            "visual.search": _stage("visual.search", 3),
-            "fusion": _stage("fusion", 1),
-        }
-        return RetrievalResult(
-            candidates=[
-                RetrievalCandidate(
-                    frame_id="frame-1",
-                    source_scores={RetrievalSource.VISUAL: 0.9},
-                    source_ranks={RetrievalSource.VISUAL: 1},
-                )
-            ],
-            trace=RetrievalTrace(stages=stages),
-            time_to_first_candidate_ms=4,
-        )
+    def score_event_videos(self, events, filters=None, **kwargs):
+        """Return one canonical score column for stateless KIS telemetry."""
+
+        del filters, kwargs
+        return [
+            VideoEventScores(
+                video_id="video-1",
+                frame_ids=np.array(["frame-1"], dtype=object),
+                frame_idx=np.array([17]),
+                timestamps_ms=np.array([680]),
+                scores=np.full((len(events), 1), 0.9),
+            )
+        ]
 
 
 def test_search_response_and_health_expose_canonical_observability() -> None:
@@ -86,11 +69,9 @@ def test_search_response_and_health_expose_canonical_observability() -> None:
         "parse",
         "localization",
         "materialization",
-        "global.visual.encode",
-        "global.visual.search",
-        "global.fusion",
     }
-    assert response.latency_ms.time_to_first_candidate == 4
+    assert response.trace.stages["localization"].backend == "monotonic_dp"
+    assert response.latency_ms.time_to_first_candidate >= 0
     assert response.latency_ms.time_to_first_submission >= 0
     assert health["capabilities"]["kis"] is True
     assert health["capabilities"]["trake"] is True

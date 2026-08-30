@@ -2,14 +2,16 @@ from __future__ import annotations
 import asyncio
 from typing import cast
 import httpx
+import numpy as np
 import pytest
 from hcmai.app import create_app
 from hcmai.common.schemas import (
-    FrameRecord, RetrievalCandidate, RetrievalSource,
+    FrameRecord, RetrievalSource,
 )
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.data.pipeline import DataService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 pytestmark = pytest.mark.usefixtures("inline_router_threadpool")
 
@@ -39,17 +41,16 @@ class Store:
         return None
 
 class Retriever:
-    last_query_encoding_ms = 0.0
-    last_index_search_ms = 0.0
+    def score_event_videos(self, events, filters=None, **kwargs):
+        """Return one canonical alignment column for the API contract fixture."""
 
-    def search(self, query, top_k=20, filters=None, query_type=None):
-        return [RetrievalCandidate(
-            frame_id=FRAME_ID,
-            source_scores={RetrievalSource.VISUAL: 0.9}, final_score=0.9,
-            metadata={"frame": {
-                "frame_id": FRAME_ID, "video_id": "TEST_V001",
-                "frame_idx": 0, "timestamp_ms": 0, "caption": query,
-            }},
+        del filters, kwargs
+        return [VideoEventScores(
+            video_id="TEST_V001",
+            frame_ids=np.array([FRAME_ID], dtype=object),
+            frame_idx=np.array([0]),
+            timestamps_ms=np.array([0]),
+            scores=np.full((len(events), 1), 0.9),
         )]
 
 def request(app, method, path, **kwargs):

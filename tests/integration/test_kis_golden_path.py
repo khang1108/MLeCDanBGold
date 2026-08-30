@@ -1,101 +1,102 @@
+"""Golden-path coverage for stateless KIS temporal alignment."""
+
+from __future__ import annotations
+
 from typing import cast
 
-from hcmai.common.config import ProgressiveSearchConfig, SearchConfig
-from hcmai.common.schemas import (
-    FrameRecord,
-    RetrievalCandidate,
-    RetrievalResult,
-    RetrievalSource,
-    SearchRequest,
-    TaskType,
-)
+import numpy as np
+import pytest
+
+from hcmai.common.schemas import FrameRecord, SearchRequest
 from hcmai.data.pipeline import DataService
-from hcmai.orchestration.workflows.kis import KISPipeline
+from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
-from hcmai.temporal import TemporalEvidenceCore
+from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
 class CanonicalData:
-    frames = {
-        "a1": ("video-a", 10, 1_000),
-        "a2": ("video-a", 11, 1_300),
-        "a3": ("video-a", 40, 8_000),
-        "b1": ("video-b", 20, 2_000),
-        "c1": ("video-c", 30, 3_000),
-    }
+    """Small canonical frame authority for a three-event KIS path."""
 
-    def get_frame(self, frame_id):
-        video_id, frame_idx, timestamp_ms = self.frames[frame_id]
-        return FrameRecord(
+    frames = {
+        frame_id: FrameRecord(
             frame_id=frame_id,
-            video_id=video_id,
+            video_id="video-a",
             frame_idx=frame_idx,
             timestamp_ms=timestamp_ms,
             image_path=f"{frame_id}.jpg",
             width=640,
             height=360,
         )
+        for frame_id, frame_idx, timestamp_ms in (
+            ("a1", 10, 1_000),
+            ("a2", 11, 1_300),
+            ("a3", 40, 8_000),
+        )
+    }
+
+    def get_frame(self, frame_id: str) -> FrameRecord:
+        """Resolve one frame only through the canonical fixture mapping."""
+
+        return self.frames[frame_id]
 
     def get_evidence(self, frame_id, source):
+        """Keep optional specialist evidence absent from this visual fixture."""
+
         del frame_id, source
         return None
 
-    def neighbors(self, frame_id, window_ms, include_self=True):
-        frame = self.get_frame(frame_id)
-        results = []
-        for fid, (vid, fidx, t_ms) in self.frames.items():
-            if vid == frame.video_id and abs(t_ms - frame.timestamp_ms) <= window_ms:
-                if include_self or fid != frame_id:
-                    results.append(self.get_frame(fid))
-        return results
-
 
 class BatchRetrieval:
-    def __init__(self):
-        self.calls = []
+    """Return an exact visual score matrix for the explicit event list."""
 
-    def search(self, query, top_k, filters=None, query_type=None):
-        self.calls.append((query, top_k, filters, query_type))
-        original = ["a1", "a2", "a3", "b1", "c1"]
-        return RetrievalResult(candidates=[
-            RetrievalCandidate(
-                frame_id=frame_id,
-                source_scores={RetrievalSource.VISUAL: 0.9},
-                final_score=0.9,
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], object]] = []
+
+    def score_event_videos(self, events, filters=None, **kwargs):
+        """Expose one score row per event and retain task-provided filters."""
+
+        del kwargs
+        self.calls.append((list(events), filters))
+        return [
+            VideoEventScores(
+                video_id="video-a",
+                frame_ids=np.array(["a1", "a2", "a3"], dtype=object),
+                frame_idx=np.array([10, 11, 40]),
+                timestamps_ms=np.array([1_000, 1_300, 8_000]),
+                scores=np.eye(len(events), 3, dtype=np.float32),
             )
-            for frame_id in original
-        ])
+        ]
 
 
-def test_golden_kis_path_searches_original_query_and_preserves_identity():
+def test_golden_kis_projects_middle_path_frame_and_preserves_identity() -> None:
+    """Return KIS's deterministic midpoint without discarding the path IDs."""
+
     retrieval = BatchRetrieval()
-    config = SearchConfig(candidate_count=10, rerank_count=0, temporal_window_ms=500)
-    data = cast(DataService, CanonicalData())
-    temporal_core = TemporalEvidenceCore(data, cast(RetrievalService, retrieval), config)
-    pipeline = KISPipeline(
-        TaskType.KIS,
-        data,
+    response = SearchService(
+        cast(DataService, CanonicalData()),
         cast(RetrievalService, retrieval),
-        config,
-        temporal_core,
+    ).search(
+        SearchRequest(
+            query="first. second. third.",
+            events=["first", "second", "third"],
+            top_k=4,
+        )
     )
 
-    first = pipeline.execute(SearchRequest(query="red bus 7", top_k=4))
-    second = pipeline.execute(SearchRequest(query="red bus 7", top_k=4))
-
-    assert len(first.results) > 0
-    assert first.results[0].video_id in {"video-a", "video-b", "video-c"}
-    assert [item.frame_ids for item in first.results] == [
-        item.frame_ids for item in second.results
-    ]
-    assert len(retrieval.calls) == 2
-    assert retrieval.calls[0][0] == "red bus 7"
+    assert response.results[0].frame_id == "a2"
+    assert response.results[0].frame_ids == ["a1", "a2", "a3"]
+    assert response.results[0].video_id == "video-a"
+    assert response.results[0].frame_idx == 11
+    assert response.results[0].scores.final == pytest.approx(2.93)
+    assert retrieval.calls == [(["first", "second", "third"], None)]
 
 
 class ManyFramesData:
-    """Canonical fixture with enough independent scenes to exercise top-k=100."""
+    """Canonical data fixture with one valid single-event path per video."""
 
-    def get_frame(self, frame_id):
+    def get_frame(self, frame_id: str) -> FrameRecord:
+        """Materialize the integer suffix as one video's canonical frame."""
+
         index = int(frame_id.removeprefix("frame-"))
         return FrameRecord(
             frame_id=frame_id,
@@ -108,60 +109,44 @@ class ManyFramesData:
         )
 
     def get_evidence(self, frame_id, source):
+        """Avoid specialist artifact requirements for the top-k fixture."""
+
         del frame_id, source
         return None
 
 
 class ManyFramesRetrieval:
-    """Return one relevant frame per video for the temporal fixture."""
+    """Produce 100 independently rankable one-event video candidates."""
 
-    def search(self, query, top_k, filters=None, query_type=None):
-        del query, filters, query_type
-        return RetrievalResult(
-            candidates=[
-                RetrievalCandidate(
-                    frame_id=f"frame-{index}",
-                    source_scores={RetrievalSource.VISUAL: 0.9},
-                    final_score=0.9,
-                )
-                for index in range(min(top_k, 100))
-            ]
-        )
+    def score_event_videos(self, events, filters=None, **kwargs):
+        """Keep fixture event count honest while returning deterministic paths."""
+
+        del filters, kwargs
+        assert len(events) == 1
+        return [
+            VideoEventScores(
+                video_id=f"video-{index}",
+                frame_ids=np.array([f"frame-{index}"], dtype=object),
+                frame_idx=np.array([index]),
+                timestamps_ms=np.array([index * 10_000]),
+                scores=np.array([[1.0 - index / 1_000]], dtype=np.float32),
+            )
+            for index in range(100)
+        ]
 
 
-def test_kis_top_k_controls_materialized_result_count() -> None:
-    """The public top-k controls output size after temporal preparation."""
+def test_kis_top_k_controls_materialized_path_count() -> None:
+    """Keep the public KIS result budget independent of candidate video count."""
 
-    data = cast(DataService, ManyFramesData())
-    retrieval = cast(RetrievalService, ManyFramesRetrieval())
-    config = SearchConfig(
-        candidate_count=100,
-        rerank_count=0,
-        progressive=ProgressiveSearchConfig(
-            candidate_pool_size=100,
-            global_quota=100,
-            scene_top_b_per_video=1,
-        ),
-    )
-    temporal_core = TemporalEvidenceCore(data, retrieval, config)
-    pipeline = KISPipeline(
-        TaskType.KIS,
-        data,
-        retrieval,
-        config,
-        temporal_core,
+    service = SearchService(
+        cast(DataService, ManyFramesData()),
+        cast(RetrievalService, ManyFramesRetrieval()),
     )
 
-    response_20 = pipeline.execute(SearchRequest(query="many frames", top_k=20))
-    response_100 = pipeline.execute(SearchRequest(
-        query="many frames",
-        top_k=100,
-        search_id=response_20.search_id,
-    ))
+    response_20 = service.search(SearchRequest(query="many frames", top_k=20))
+    response_100 = service.search(SearchRequest(query="many frames", top_k=100))
 
-    assert response_20.top_k == 20
     assert response_20.total_results == 20
     assert len(response_20.results) == 20
-    assert response_100.top_k == 100
     assert response_100.total_results == 100
     assert len(response_100.results) == 100

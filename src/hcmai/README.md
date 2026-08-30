@@ -1,66 +1,45 @@
-# Kiến trúc và thuật toán HCMAI
+# HCMAI runtime architecture
 
-Tài liệu này mô tả runtime đang hoạt động trong package `hcmai` cho hai bài
-toán của HCMAI 2026:
+`hcmai` is the online runtime for HCMAI 2026 multimodal video retrieval. BTC
+keyframes and their `FrameRecord` metadata are canonical. Caption, OCR,
+objects, and ASR remain specialist evidence; online serving reads completed
+artifacts and never regenerates corpus-scale data.
 
-- KIS — Known Item Search, trả về một competition frame hợp lệ;
-- TRAKE — tìm chuỗi frame theo thứ tự các sự kiện.
+## Runtime path
 
-BTC keyframes là input visual canonical. Caption, OCR, Object và ASR là bằng
-chứng chuyên biệt; `FrameContext` là view dẫn xuất và không thay thế evidence
-gốc. Online serving chỉ đọc artifact/index đã build, không tự sinh enrichment
-hay rebuild index.
+```text
+FastAPI router
+  -> SearchService / PipelineRegistry
+  -> KIS or TRAKE workflow
+  -> TemporalAlignmentService
+  -> RetrievalService.score_event_videos()
+  -> pure monotonic DP
+  -> DataService canonical materialization
+  -> competition-compatible response
+```
 
-## 1. Kiến trúc tổng thể
-
-FastAPI chỉ làm transport. `SearchService` là application facade,
-`PipelineRegistry` chọn KIS hoặc TRAKE workflow, còn các workflow dùng chung
-data, retrieval, temporal alignment và bounded reranking.
+KIS and TRAKE share a stateless ordered event-to-frame alignment baseline.
+KIS projects one deterministic representative from each aligned path into its
+existing `SearchResponse`; TRAKE returns the complete path in
+`TRAKEResponse`. Task heads do not rewrite retrieval scores or identity.
 
 ```mermaid
 flowchart TB
-    CLIENT["Client / React UI"] --> API["FastAPI routers"]
-    API --> SERVICE["SearchService"]
-    SERVICE --> REGISTRY["PipelineRegistry"]
-
-    REGISTRY -->|KIS| KIS["KIS workflow"]
-    REGISTRY -->|TRAKE| TRAKE["TRAKE workflow"]
-
-    DATA["DataService\ncanonical FrameRecord + evidence"] --> KIS
-    DATA --> TRAKE
-    RET["RetrievalService\nmultimodal indexes"] --> KIS
-    RET --> TRAKE
-    TEMP["TemporalEvidenceCore"] --> KIS
-    TEMP --> TRAKE
-
-    KIS --> KOUT["SearchResponse\nrepresentative frame results"]
-    TRAKE --> TOUT["TRAKEResponse\nordered frame paths"]
-
-    KOUT --> KHTTP["POST /api/v1/search"]
-    TOUT --> THTTP["POST /api/v1/trake"]
+    CLIENT[Client] --> API[FastAPI router]
+    API --> SERVICE[SearchService]
+    SERVICE --> KIS[KIS workflow]
+    SERVICE --> TRAKE[TRAKE workflow]
+    KIS --> ALIGN[TemporalAlignmentService]
+    TRAKE --> ALIGN
+    ALIGN --> RET[RetrievalService]
+    ALIGN --> DATA[DataService]
+    KIS --> KOUT[SearchResponse]
+    TRAKE --> TOUT[TRAKEResponse]
 ```
 
-```text
-query
-  -> KIS retrieval
-  -> progressive scene localization
-  -> canonical representative frame
-  -> frame submission
+## Canonical identity
 
-ordered events
-  -> TRAKE retrieval
-  -> ordered temporal alignment
-  -> canonical frame path
-  -> path submission
-```
-
-Routers validate request/response schemas and map application errors to HTTP.
-They do not perform retrieval, temporal alignment, model inference, or
-canonical materialization themselves.
-
-## 2. Canonical identity
-
-Mọi layer phải giữ ít nhất:
+Every stage preserves:
 
 ```text
 video_id
@@ -69,214 +48,77 @@ frame_idx
 timestamp_ms
 ```
 
-- `frame_id` là identity nội bộ cho join, evidence và retrieval candidates.
-- `frame_idx` là tọa độ BTC dùng cho submission.
-- `frame_idx` không phải keyframe order, filename number, decode position hay
-  array index.
-- Reranker/inference provider chỉ được score input đã cho; chúng không được
-  tạo hoặc thay identity.
+`frame_id` is the internal join identity. `frame_idx` is the BTC
+competition-facing coordinate and is never inferred from keyframe order,
+filename number, decode position, or an array index. Retrieval and alignment
+may rank candidates but cannot invent or alter these values.
 
-`DataService` là nơi resolve `frame_id` thành `video_id`, `frame_idx` và
-`timestamp_ms` canonical trước materialization.
+## Shared temporal baseline
 
-## 3. Shared multimodal retrieval
+`temporal/planner.py` converts a query or caller-provided events into an
+`AlignmentPlan`. `RetrievalService` builds a per-video event-by-frame score
+matrix, subject to requested video/time filters. `temporal/dp.py` returns
+strictly increasing paths, and `TemporalAlignmentService` validates each frame
+against `DataService` before constructing an `AlignmentPath`.
 
-Retrieval giữ provenance theo modality thay vì flatten và bỏ evidence gốc:
+The baseline deliberately does not keep mutable search sessions, cluster
+scenes, apply soft temporal-relation scoring, or run a default reranker. A
+standalone reranking package can still be used in explicitly designed offline
+experiments; it is not constructed by the default online registry.
 
-```text
-query
-  -> visual / FrameContext / ASR retrieval
-  -> modality-specific ranks and scores
-  -> task-aware reciprocal-rank fusion
-  -> RetrievalResult candidates + trace + warnings
-```
+The score definition, non-capabilities, and experiment convention are in
+[`docs/research/alignment-baseline.md`](../../docs/research/alignment-baseline.md).
+The current migration authority remains **PROPOSED** until a frozen HCMAI
+development set and compatible scorer establish the trade-off.
 
-Caption, normalized OCR, normalized objects và ASR vẫn có thể được inspect
-độc lập. ASR là timeline evidence, không tự động mô tả một frame.
-
-Fusion preserves source scores/ranks and canonical identity. Missing or
-unevaluated evidence remains distinct from a confirmed non-match; this is
-important when the temporal core decides whether a video needs backfill.
-
-### 3.1 RRF and task configuration
-
-`RetrievalService` produces candidates with one-based source ranks. The fusion
-configuration covers the active `kis` and `trake` task types. Tunable values
-such as candidate counts, modality weights, rerank depth and temporal budgets
-belong in configuration rather than business-logic constants.
-
-## 4. Shared temporal alignment
-
-`TemporalEvidenceCore` owns the common conversion from retrieval candidates to
-canonical `FrameEvidence` and supports two explicit alignment modes:
-
-| Mode | Consumer | Output |
-| --- | --- | --- |
-| `progressive_scene` | KIS | ranked `SceneCandidate[]` |
-| `ordered_path` | TRAKE | ranked `OrderedPathCandidate[]` |
-
-### 4.1 Progressive scene localization
-
-KIS can accumulate query hints through a request-owned progressive state. The
-core combines global retrieval with bounded retrieval in prior candidate
-videos, canonical-deduplicates evidence, backfills older query units when a
-video is rescued, then scores and prunes the active pool.
-
-The required ordering is:
+## Package boundaries
 
 ```text
-temporary video union
--> backfill rescued videos
--> multi-hint score
--> prune
+api/             HTTP validation and response shaping only
+common/          shared schemas, configuration, logging, observability
+data/            canonical frame metadata, specialist evidence, artifacts
+retrieval/       embeddings, indexes, modality retrieval, fusion
+temporal/        alignment planning, pure DP, canonical path service
+orchestration/   service composition and thin KIS/TRAKE workflow heads
+thundercompute/  inference gateway adapters
 ```
 
-Pruning earlier can discard a target that only matched the newest hint before
-older evidence is checked.
-
-Each video keeps the three meaningful evidence states:
+## Offline versus online work
 
 ```text
-not evaluated
-no useful evidence found
-evidence matched
-```
-
-They must not be collapsed into a single zero score when that changes ranking
-semantics.
-
-### 4.2 Scene assembly and scoring
-
-The core sorts evidence by timestamp and clusters it subject to both a maximum
-adjacent gap and maximum total span. A scene stores same-video canonical frame
-evidence, per-unit scores, modality provenance and explainable score
-components.
-
-The score combines normalized semantic evidence, match/evaluation coverage,
-temporal coherence and applicable temporal relations. If a relation cannot be
-evaluated, it is excluded and the active weights are renormalized; UNKNOWN is
-not treated as negative evidence.
-
-## 5. KIS workflow
-
-KIS uses `progressive_scene` and materializes at most one representative frame
-from each ranked scene.
-
-```mermaid
-flowchart TB
-    REQ["SearchRequest\nquery + filters + optional search_id"] --> CORE["TemporalEvidenceCore"]
-    CORE --> SCENES["ranked SceneCandidate[]"]
-    SCENES --> SELECT["representative-frame selection"]
-    SELECT --> RERANK["optional bounded image-query reranking"]
-    RERANK --> MATERIALIZE["SearchMaterializer + DataService"]
-    MATERIALIZE --> RESPONSE["SearchResponse"]
-```
-
-Representative selection prefers the strongest evidence, then the frame nearest
-the scene midpoint, then lower `frame_idx` as the deterministic tie-break.
-Reranking can reorder only this bounded candidate set and must preserve every
-canonical identity field and provenance value.
-
-Public route:
-
-```text
-POST /api/v1/search
-```
-
-## 6. TRAKE workflow
-
-TRAKE takes ordered events, retrieves evidence for each event, shortlists
-videos, rescoring a dense event-by-frame matrix and runs the stable monotonic
-aligner. It does not use progressive KIS state.
-
-```mermaid
-flowchart TB
-    REQ["TRAKERequest\nordered events"] --> PLAN["TemporalQueryPlan\nordered_path"]
-    PLAN --> CORE["TemporalEvidenceCore.align_ordered()"]
-    CORE --> RET["top-K frame retrieval per event"]
-    RET --> SHORT["same-video shortlist"]
-    SHORT --> MATRIX["dense event x ordered-frame scores"]
-    MATRIX --> DP["MonotonicOrderedPathAligner"]
-    DP --> PATHS["OrderedPathCandidate[]"]
-    PATHS --> OUT["TRAKEResponse"]
-```
-
-For a same-video ordered path, the aligner selects positions:
-
-```math
-p_1 < p_2 < ... < p_n
-```
-
-and maximizes event evidence while applying the configured temporal-gap
-penalty. It uses prefix maxima so each dynamic-programming layer is linear in
-the number of frames. `frame_ids`, `frame_idxs` and timestamps are resolved
-canonically before creating a submission.
-
-Public route:
-
-```text
-POST /api/v1/trake
-```
-
-TRAKE is a stable task-specific path. Changes to alignment semantics, gap
-penalty or submission materialization require a dedicated regression benchmark.
-
-## 7. Offline artifacts and serving boundary
-
-```text
-BTC keyframes -> canonical FrameRecord -> Caption/OCR/Object evidence
+BTC keyframes -> FrameRecord -> caption / OCR / imported objects
 videos -> timestamped ASR segments
 specialist evidence -> FrameContext
-visual/context/ASR embeddings -> versioned indexes
-versioned artifacts -> read-only online services
+embeddings -> versioned indexes
+completed artifacts -> read-only online services
 ```
 
-Serving verifies artifact/model compatibility and reports an unavailable
-capability when a required bundle is missing or inconsistent. It does not
-silently reconstruct artifacts. Hosted inference is used only for model work;
-local services retain frame assets, canonical metadata, retrieval indexes and
-final competition outputs.
+Serving reports unavailable dependencies rather than rebuilding artifacts.
+ASR remains timeline evidence, so its association with a returned frame is
+provenance, not proof that the frame visually depicts the speech.
 
-## 8. Observability, configuration and evaluation
+## Configuration and evaluation
 
-Each request has a `request_id`; progressive KIS sessions also have a
-`search_id`. `RetrievalResult` and pipeline traces report stage duration,
-status, counts, cache/fallback state and safe warnings. Logs must not include
-credentials, image payloads or private prompt contents.
+Alignment choices are explicit in `search.alignment`: score depth, video
+shortlist size, RRF constant, time-gap penalty, score transform, and decoder
+limits. These values are baselines, not scientific truths.
 
-Measure the stage that matches the failure mode:
+Record a versioned query set, artifacts/indexes, model revision, configuration,
+code revision, metric or labelled proxy, P50/P95 stage latency, and failure
+cases before claiming an improvement. A retrieval/localization change should
+be evaluated with appropriate recall/path or official task metrics, not only a
+passing unit test.
 
-| Concern | Primary measurements |
-| --- | --- |
-| KIS retrieval/localization | correct-video recall, scene/window recall, official frame metric, ranking and latency |
-| TRAKE alignment | ordered-path correctness, official submission score, per-stage latency |
-| Hosted inference | readiness, model/index compatibility, bounded remote-call latency |
+## Running and verification
 
-Experiments record query-set and artifact versions, model revision,
-configuration, code revision, hardware/provider, metrics, latency and failure
-cases. A paper or implementation motivates a hypothesis; only a controlled
-HCMAI experiment verifies an improvement.
-
-## 9. Package map and running
-
-```text
-src/hcmai/
-├── api/                         thin HTTP routers
-├── common/                      shared contracts, config and observability
-├── data/                        canonical frame/evidence stores
-├── orchestration/               SearchService and task workflows
-├── retrieval/                   embedding, indexes, fusion and reranking
-├── temporal/                    shared plans, evidence and aligners
-└── thundercompute/              model gateways and inference adapters
-```
-
-Run the local backend after the required artifacts and configuration are
-available:
+Run the backend only after the required artifacts are present:
 
 ```bash
 PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000
 ```
 
-The main public routes are `GET /health`, `POST /api/v1/search`,
+The principal public routes are `GET /health`, `POST /api/v1/search`,
 `POST /api/v1/trake`, frame asset/neighbor routes, and `POST /api/v1/submit`.
+Use small hand-checkable score matrices for temporal tests and full task
+workflow tests for filter and identity preservation.

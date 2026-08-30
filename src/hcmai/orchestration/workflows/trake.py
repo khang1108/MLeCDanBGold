@@ -17,21 +17,23 @@ from hcmai.orchestration.workflows.base import (
     TaskPipelineDependencyError,
     TaskPipelineRequestError,
 )
-from hcmai.temporal import TemporalEvidenceCore
+from hcmai.temporal import TemporalAlignmentService, build_alignment_plan
 
 logger = get_logger(__name__)
 
 
 class TRAKEPipeline:
-    """Shortlist videos, align events monotonically, and rank the rows."""
+    """Project shared ordered alignment paths into TRAKE submissions."""
 
     task_type = TaskType.TRAKE
 
     def __init__(
         self,
-        temporal_core: TemporalEvidenceCore | None,
+        alignment: TemporalAlignmentService | None,
     ) -> None:
-        self.temporal_core = temporal_core
+        """Initialize the TRAKE task head with the shared alignment facade."""
+
+        self.alignment = alignment
 
     def execute(self, request: TaskRequest) -> TRAKEResponse:
         if not isinstance(request, TRAKERequest):
@@ -39,8 +41,8 @@ class TRAKEPipeline:
                 "TRAKEPipeline requires a TRAKE request"
             )
 
-        if self.temporal_core is None:
-            raise TaskPipelineDependencyError("Retriever not loaded")
+        if self.alignment is None:
+            raise TaskPipelineDependencyError("Alignment service not loaded")
 
         events = request.events
         if events is None:
@@ -52,11 +54,8 @@ class TRAKEPipeline:
 
         request_id = f"trake-{digest.hexdigest()[:12]}"
 
-        plan = self.temporal_core.ordered_plan(events)
-        aligned = self.temporal_core.align_ordered(
-            plan,
-            max_paths=request.top_k,
-        )
+        plan = build_alignment_plan(request.query, events)
+        aligned = self.alignment.align(plan, max_paths=request.top_k)
 
         rows = aligned.paths
         logger.info(

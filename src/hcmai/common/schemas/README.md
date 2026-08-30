@@ -62,25 +62,15 @@ that feature package. In particular, caption/OCR types belong under
   warning list. Sequence access remains available for compatibility, while
   production callers consume `.candidates` and `.trace` explicitly.
 
-### `temporal.py`
+### `alignment.py`
 
-- `QueryUnit`: stable identity, text, and order for one semantic query unit.
-- `FrameEvidence`: canonical `FrameRecord` plus per-unit scores, retrieval
-  source scores/ranks, overall score, and provenance.
-- `SceneCandidate`: bounded video interval containing frame evidence and
-  explicit semantic, coverage, temporal, relation, and final scene scores.
-  Task-specific frame selection remains outside this shared contract.
-- `TemporalAlignmentMode`: explicit `progressive_scene` or `ordered_path`
-  behavior selected by the task adapter.
-- `TemporalQueryPlan`: task, ordered query units, constraints, filters, and
-  alignment mode, with task/mode and constraint-reference validation.
-- `TemporalConstraint`: explainable soft relation between query units.
-- `OrderedPathCandidate`: one canonical same-video chronological `FrameRecord`
-  per unique ordered query-unit ID. It is distinct from `SceneCandidate`.
-
-Progressive evidence evaluation state is an internal runtime contract under
-`hcmai.temporal`; it preserves UNKNOWN separately from evaluated-no-match and
-matched evidence without exposing mutable search state as a public API schema.
+- `AlignmentEvent`: one deterministic, non-empty semantic event with its
+  ordered position in an alignment request.
+- `AlignmentPlan`: task, ordered events, and optional search filters consumed
+  by the shared temporal alignment service.
+- `AlignmentPath`: a same-video, strictly chronological canonical frame path.
+  `frame_ids`, `frame_idxs`, and `timestamps_ms` are parallel immutable
+  sequences; `frame_idx` remains the competition coordinate.
 
 ### `telemetry.py`
 
@@ -96,7 +86,7 @@ matched evidence without exposing mutable search state as a public API schema.
   deduplicated, and `end_time_ms` cannot precede `start_time_ms`.
 - `SearchRequest`: public standalone-search request containing a typed
   `query_type`, a non-empty query, bounded `top_k`, optional filters, and an
-  optional progressive `search_id`.
+  optional compatibility `search_id`. Alignment execution is stateless.
 - `SearchLatency`: non-negative latency measurements for each search stage and
   the total request, in milliseconds.
 - `SearchResult`: one ranked result with required singular canonical
