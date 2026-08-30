@@ -34,9 +34,6 @@ index:
 
 search:
   alignment:
-    top_k: 500
-    max_videos: 200
-    rrf_k: 60
     lambda_gap: 0.00001
     event_power: 1.0
     chunk_size: 65536

@@ -312,15 +312,15 @@ class RetrievalCacheConfig(BaseModel):
 
 
 class AlignmentConfig(BaseModel):
-    """Tunable budgets and scoring choices for ordered event alignment.
+    """Task-agnostic numerical settings for ordered event alignment.
 
-    These values are deliberately task-agnostic. KIS and TRAKE may consume the
-    same alignment service while projecting its canonical path differently.
+    The Phase A temporal baseline scores the full visual corpus for every
+    event, so this config retains only the DP inputs still consumed by the
+    shared scorer and decoder.
     """
 
-    top_k: int = Field(default=500, ge=1)
-    max_videos: int = Field(default=200, ge=1)
-    rrf_k: int = Field(default=60, gt=0)
+    model_config = ConfigDict(extra="forbid")
+
     lambda_gap: float = Field(default=1e-5, ge=0.0)
     event_power: float = Field(default=1.0, gt=0.0, le=1.0)
     chunk_size: int = Field(default=65_536, ge=1)

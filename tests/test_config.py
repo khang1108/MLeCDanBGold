@@ -47,9 +47,6 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.search.fusion.source_weights == {
         source: 1.0 for source in RetrievalSource
     }
-    assert config.search.alignment.top_k == 500
-    assert config.search.alignment.max_videos == 200
-    assert config.search.alignment.rrf_k == 60
     assert config.search.alignment.lambda_gap == pytest.approx(1e-5)
     assert config.search.alignment.event_power == 1.0
     assert config.search.alignment.chunk_size == 65_536

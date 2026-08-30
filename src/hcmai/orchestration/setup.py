@@ -350,7 +350,11 @@ def _load_fast_track_retrieval(
     data: DataService | None,
     messages: list[str],
 ) -> RetrievalService | None:
-    """Load validated Context/ASR bundles and compose the Task 9 factory."""
+    """Load validated retrieval indexes without default reranker wiring.
+
+    The online KIS/TRAKE baseline requires only the visual index. Context and
+    segment-ASR indexes remain optional detached retrieval capabilities.
+    """
 
     if data is None or data.frame_store is None:
         messages.append(

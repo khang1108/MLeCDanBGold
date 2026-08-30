@@ -97,7 +97,7 @@ For models that are defined in a module but are not re-exported by
 
 ```python
 from hcmai.common.schemas.frame import FrameRecord
-from hcmai.common.schemas.search import SearchRequest, SearchResponse
+from hcmai.api.contracts import SearchRequest, SearchResponse
 ```
 
 `__all__` in `__init__.py` documents the symbols intentionally re-exported

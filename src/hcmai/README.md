@@ -9,7 +9,7 @@ artifacts and never regenerates corpus-scale data.
 
 ```text
 FastAPI router
-  -> SearchService / PipelineRegistry
+  -> SearchService
   -> KIS or TRAKE workflow
   -> TemporalSearchService
   -> RetrievalService.score_event_videos()
@@ -65,7 +65,7 @@ another schema.
 The baseline deliberately does not keep mutable search sessions, cluster
 scenes, apply soft temporal-relation scoring, or run a default reranker. A
 standalone reranking package can still be used in explicitly designed offline
-experiments; it is not constructed by the default online registry.
+experiments; it is not constructed by the default online service.
 
 The score definition, non-capabilities, and experiment convention are in
 [`docs/research/alignment-baseline.md`](../../docs/research/alignment-baseline.md).
@@ -100,9 +100,9 @@ provenance, not proof that the frame visually depicts the speech.
 
 ## Configuration and evaluation
 
-Alignment choices are explicit in `search.alignment`: score depth, time-gap
-penalty, score transform, and decoder limits. These values are baselines, not
-scientific truths.
+Alignment choices are explicit in `search.alignment`: `lambda_gap`,
+`event_power`, `chunk_size`, and `cluster_delta`. These values are baselines,
+not scientific truths.
 
 Record a versioned query set, artifacts/indexes, model revision, configuration,
 code revision, metric or labelled proxy, P50/P95 stage latency, and failure
