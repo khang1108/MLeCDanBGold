@@ -1,8 +1,4 @@
-import {
-  frameAssetUrl,
-  searchFrames,
-  searchTrake,
-} from './search';
+import { searchFrames, searchTrake } from './search';
 
 const response = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -12,101 +8,54 @@ const response = (payload, status = 200) => ({
 
 afterEach(() => jest.restoreAllMocks());
 
-test('builds canonical frame asset URLs for materialized TRAKE cards', () => {
-  expect(frameAssetUrl('folder/frame 1', 'thumbnail')).toBe(
-    'http://127.0.0.1:8000/api/v1/frames/folder%2Fframe%201/thumbnail',
-  );
-  expect(frameAssetUrl('folder/frame 1', 'image')).toBe(
-    'http://127.0.0.1:8000/api/v1/frames/folder%2Fframe%201/image',
-  );
-});
-
-test('posts the canonical standalone search request', async () => {
-  const payload = { results: [], latency_ms: { total: 1 } };
-  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload));
-
-  await expect(searchFrames({
-    query: ' red boat ',
-    topK: 20,
-    queryType: 'kis',
-  })).resolves.toEqual(payload);
-
-  expect(global.fetch).toHaveBeenCalledWith(
-    'http://127.0.0.1:8000/api/v1/search',
-    expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({
-        query: 'red boat',
-        top_k: 20,
-        query_type: 'kis',
-      }),
-    }),
-  );
-});
-
-test('resolves API-relative frame asset URLs', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+test('posts the standalone search request with only query and top_k', async () => {
+  const payload = {
+    query: 'chef cooks',
+    events: ['chef cooks'],
     results: [{
       frame_id: 'f1',
       video_id: 'L21_a_b.folder2.L21_V001',
       frame_idx: 125,
-      fps: 25,
-      thumbnail_url: '/api/v1/frames/f1/thumbnail',
+      timestamp_ms: 5000,
+      score: 0.91,
+      frame_ids: ['f0', 'f1'],
+      timestamps_ms: [4000, 5000],
+      thumbnail_urls: ['/thumbs/f0.jpg', 'https://cdn.example/f1.jpg'],
       frame_url: '/api/v1/frames/f1/image',
+      thumbnail_url: 'https://cdn.example/f1-thumb.jpg',
+      metadata: { title: 'Kitchen scene' },
     }],
-    latency_ms: { total: 1 },
-  }));
+    latency: {
+      query_ms: 1,
+      retrieval_ms: 2,
+      alignment_ms: 3,
+      materialization_ms: 4,
+      total_ms: 10,
+    },
+  };
+  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload));
 
-  const payload = await searchFrames({
-    query: 'red car',
-    topK: 1,
-  });
+  await expect(searchFrames({
+    query: ' chef cooks ',
+    topK: 20,
+  })).resolves.toEqual(payload);
 
-  expect(payload.results[0].thumbnail_url).toBe(
-    'http://127.0.0.1:8000/api/v1/frames/f1/thumbnail',
+  expect(global.fetch).toHaveBeenCalledWith(
+    expect.stringContaining('/api/v1/search'),
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        query: 'chef cooks',
+        top_k: 20,
+      }),
+    }),
   );
-  expect(payload.results[0].frame_url).toBe(
-    'http://127.0.0.1:8000/api/v1/frames/f1/image',
-  );
-  expect(payload.results[0]).toEqual(expect.objectContaining({
-    video_id: 'L21_a_b.folder2.L21_V001',
-    frame_idx: 125,
-    fps: 25,
-  }));
-});
-
-test('builds thumbnail identity from frame_id instead of frame_idx or server URL', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
-    results: [{
-      frame_id: 'internal-frame-7',
-      video_id: 'L21_V001',
-      frame_idx: 900,
-      fps: 30,
-      timestamp_ms: 30_000,
-      thumbnail_url: '/api/v1/frames/900/thumbnail',
-      frame_url: '/api/v1/frames/900/image',
-    }],
-    latency_ms: { total: 1 },
-  }));
-
-  const payload = await searchFrames({ query: 'frame identity', topK: 1 });
-
-  expect(payload.results[0].thumbnail_url).toBe(
-    'http://127.0.0.1:8000/api/v1/frames/internal-frame-7/thumbnail',
-  );
-  expect(payload.results[0].frame_url).toBe(
-    'http://127.0.0.1:8000/api/v1/frames/internal-frame-7/image',
-  );
-});
-
-test('rejects a successful frame response without internal frame_id', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
-    results: [{ video_id: 'L21_V001', frame_idx: 12 }],
-    latency_ms: { total: 1 },
-  }));
-
-  await expect(searchFrames({ query: 'missing identity', topK: 1 }))
-    .rejects.toThrow('missing canonical frame_id');
+  expect(payload.results[0].frame_url).toBe('/api/v1/frames/f1/image');
+  expect(payload.results[0].thumbnail_url).toBe('https://cdn.example/f1-thumb.jpg');
+  expect(payload.results[0].thumbnail_urls).toEqual([
+    '/thumbs/f0.jpg',
+    'https://cdn.example/f1.jpg',
+  ]);
 });
 
 test('surfaces the backend error message', async () => {
@@ -122,7 +71,7 @@ test('surfaces the backend error message', async () => {
 
 test('rejects a malformed successful search response', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(
-    response({ latency_ms: { total: 1 } }),
+    response({ events: ['boat'], results: [] }),
   );
 
   await expect(searchFrames({
@@ -131,47 +80,47 @@ test('rejects a malformed successful search response', async () => {
   })).rejects.toThrow('invalid response contract');
 });
 
-test('sends a progressive search ID when resuming', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
-    results: [], latency_ms: { total: 1 }, search_id: 'search-1',
-  }));
-  await searchFrames({
-    query: 'H1 H2', topK: 20, queryType: 'kis', searchId: 'search-1',
-  });
-  expect(global.fetch).toHaveBeenCalledWith(
-    'http://127.0.0.1:8000/api/v1/search',
-    expect.objectContaining({
-      body: JSON.stringify({
-        query: 'H1 H2', top_k: 20, query_type: 'kis', search_id: 'search-1',
-      }),
-    }),
-  );
-});
-
 test('posts explicit ordered events to the dedicated TRAKE route', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+  const payload = {
     events: ['person enters', 'person leaves'],
-    submissions: [],
-    total_results: 0,
+    paths: [{
+      video_id: 'L21_V001',
+      score: 2.3,
+      frame_ids: ['f0', 'f1'],
+      frame_idxs: [100, 140],
+      timestamps_ms: [4000, 5600],
+      thumbnail_urls: ['/thumbs/f0.jpg', '/thumbs/f1.jpg'],
+    }],
+    latency: {
+      query_ms: 1,
+      retrieval_ms: 2,
+      alignment_ms: 3,
+      materialization_ms: 4,
+      total_ms: 10,
+    },
+  };
+  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+    ...payload,
   }));
 
-  await searchTrake({
+  await expect(searchTrake({
     events: [' person enters ', ' person leaves '],
     topK: 20,
-  });
+  })).resolves.toEqual(payload);
 
   expect(global.fetch).toHaveBeenCalledWith(
     'http://127.0.0.1:8000/api/v1/trake',
     expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({
-        query_type: 'trake',
-        query: 'E1: person enters\nE2: person leaves',
         events: ['person enters', 'person leaves'],
         top_k: 20,
       }),
     }),
   );
+  expect(payload.paths).toHaveLength(1);
+  expect(payload.events).toEqual(['person enters', 'person leaves']);
+  expect(payload.latency.total_ms).toBe(10);
 });
 
 test('rejects fewer than two TRAKE events before contacting the backend', async () => {
@@ -197,4 +146,13 @@ test('malformed TRAKE requests are not retried', async () => {
   await expect(searchTrake({ events: ['one', 'two'], topK: 20 }))
     .rejects.toThrow('events must contain at least 2 items');
   expect(global.fetch).toHaveBeenCalledTimes(1);
+});
+
+test('rejects a malformed successful TRAKE response', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(
+    response({ events: ['e1', 'e2'], submissions: [] }),
+  );
+
+  await expect(searchTrake({ events: ['e1', 'e2'], topK: 20 }))
+    .rejects.toThrow('invalid response contract');
 });
