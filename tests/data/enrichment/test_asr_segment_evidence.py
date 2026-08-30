@@ -16,7 +16,11 @@ from hcmai.common.schemas import (
     ProcessingStatus,
     TranscriptSegment,
 )
+from hcmai.corpus.models import TranscriptSegment as RuntimeTranscriptSegment
 from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
+from hcmai.data.enrichment.transcripts.artifacts import (
+    load_transcript_artifact_records,
+)
 from hcmai.data.enrichment.transcripts.manifest import (
     SourceFingerprint,
     TranscriptManifest,
@@ -57,8 +61,15 @@ def test_legacy_segment_defaults_and_round_trips_through_store(
     assert list(pd.read_parquet(path)) == list(_legacy_segment())
 
     loaded = TranscriptStore(path).get(legacy.segment_id)
-    assert loaded == legacy
-    assert TranscriptSegment.model_validate_json(loaded.model_dump_json()) == legacy
+    assert loaded == RuntimeTranscriptSegment(
+        segment_id="v1_segment_000000",
+        video_id="v1",
+        segment_index=0,
+        start_ms=1_000,
+        end_ms=2_000,
+        text="hello",
+    )
+    assert load_transcript_artifact_records(path) == (legacy,)
 
 
 def test_transcript_segment_validates_duration_and_confidence() -> None:

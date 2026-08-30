@@ -1,8 +1,9 @@
 """Load specialist evidence artifacts into deterministic typed indexes.
 
 Caption, OCR, object, and frame-context stores expose their authoritative
-public contracts. ASR intentionally retains the temporary frame-aligned
-``FrameEnrichment`` view until text retrieval migrates to timeline evidence.
+public contracts. The legacy frame-aligned ASR artifact is projected to a
+compact runtime value so its Pydantic compatibility contract does not escape
+through corpus reads.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import json
 import math
 from collections import defaultdict
 from collections.abc import Hashable, Iterable, Iterator
+from dataclasses import dataclass
 from numbers import Integral, Real
 from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar, cast
@@ -488,6 +490,14 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
         return detections
 
 
+@dataclass(frozen=True, slots=True)
+class _ASRText:
+    """Usable legacy ASR text for one frame without artifact provenance."""
+
+    frame_id: str
+    text: str | None
+
+
 class ASRStore:
     """Indexed access to the temporary frame-aligned ASR compatibility view."""
 
@@ -506,9 +516,9 @@ class ASRStore:
                 f"{self.artifact_path} is missing columns: {', '.join(missing)}"
             )
         records = tuple(
-            _materialize(row) for row in table.to_dict(orient="records")
+            _asr_runtime_value(row) for row in table.to_dict(orient="records")
         )
-        self._by_frame_id: dict[str, FrameEnrichment] = {}
+        self._by_frame_id: dict[str, _ASRText] = {}
         for record in records:
             if record.frame_id in self._by_frame_id:
                 raise ValueError(
@@ -522,8 +532,8 @@ class ASRStore:
 
         return len(self._records)
 
-    def get(self, frame_id: str) -> FrameEnrichment:
-        """Return the compatibility row for an exact frame ID."""
+    def get(self, frame_id: str) -> _ASRText:
+        """Return compact usable ASR text for an exact frame ID."""
 
         try:
             return self._by_frame_id[frame_id]
@@ -532,7 +542,7 @@ class ASRStore:
                 f"Unknown frame_id {frame_id!r} in {self.artifact_path}"
             ) from None
 
-    def get_many(self, frame_ids: Iterable[str]) -> list[FrameEnrichment]:
+    def get_many(self, frame_ids: Iterable[str]) -> list[_ASRText]:
         """Return rows in requested order while preserving duplicates."""
 
         return [self.get(frame_id) for frame_id in frame_ids]
@@ -540,16 +550,10 @@ class ASRStore:
     def get_text(self, frame_id: str) -> str | None:
         """Return usable ASR text, excluding failed compatibility rows."""
 
-        record = self.get(frame_id)
-        if (
-            record.status != ProcessingStatus.COMPLETED
-            or record.error_message is not None
-        ):
-            return None
-        return record.asr_text
+        return self.get(frame_id).text
 
-    def iter_records(self) -> Iterator[FrameEnrichment]:
-        """Iterate compatibility rows in deterministic artifact order."""
+    def iter_records(self) -> Iterator[_ASRText]:
+        """Iterate compact ASR values in deterministic artifact order."""
 
         return iter(self._records)
 
@@ -562,8 +566,8 @@ def _is_null(value: object) -> bool:
     return isinstance(value, Real) and math.isnan(float(value))
 
 
-def _materialize(data: dict[Hashable, Any]) -> FrameEnrichment:
-    """Validate one legacy frame-aligned enrichment row."""
+def _asr_runtime_value(data: dict[Hashable, Any]) -> _ASRText:
+    """Validate one legacy row and project its usable text for runtime reads."""
 
     values: dict[str, object] = {}
     for key, value in data.items():
@@ -579,7 +583,14 @@ def _materialize(data: dict[Hashable, Any]) -> FrameEnrichment:
     for field in _NULLABLE_FIELDS:
         if _is_null(values.get(field)):
             values[field] = None
-    return FrameEnrichment.model_validate(values)
+    artifact = FrameEnrichment.model_validate(values)
+    usable_text = (
+        artifact.asr_text
+        if artifact.status is ProcessingStatus.COMPLETED
+        and artifact.error_message is None
+        else None
+    )
+    return _ASRText(frame_id=artifact.frame_id, text=usable_text)
 
 
 __all__ = [

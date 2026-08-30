@@ -110,20 +110,25 @@ def evidence_paths(tmp_path: Path) -> dict[RetrievalSource, Path]:
             "A cook holds a pan.",
         ),
         (OCRStore, RetrievalSource.OCR, OCREvidence, "BƠ"),
-        (ASRStore, RetrievalSource.ASR, FrameEnrichment, "Cho bơ vào chảo."),
+        (ASRStore, RetrievalSource.ASR, None, "Cho bơ vào chảo."),
     ],
 )
 def test_source_stores_return_validated_text(
     evidence_paths: dict[RetrievalSource, Path],
     store_type: type[CaptionStore | OCRStore | ASRStore],
     source: RetrievalSource,
-    contract: type[CaptionEvidence | OCREvidence | FrameEnrichment],
+    contract: type[CaptionEvidence | OCREvidence] | None,
     expected: str,
 ) -> None:
     store = store_type(evidence_paths[source])
 
     assert store.source == source
-    assert isinstance(store.get("L01_V001_00000010"), contract)
+    record = store.get("L01_V001_00000010")
+    if contract is not None:
+        assert isinstance(record, contract)
+    else:
+        assert record.frame_id == "L01_V001_00000010"
+        assert not isinstance(record, FrameEnrichment)
     assert store.get_text("L01_V001_00000010") == expected
     assert store.get_text("L01_V001_00000020") is None
 
