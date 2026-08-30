@@ -67,11 +67,11 @@ Build and run the native test suite from the repository root:
 
 ```bash
 cmake -S offline/keyframes/keyframes_extraction \
-  -B build/keyframes_extraction -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/keyframes_extraction --parallel
-ctest --test-dir build/keyframes_extraction --output-on-failure
+  -B build/keyframes-extraction -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/keyframes-extraction --parallel
+ctest --test-dir build/keyframes-extraction --output-on-failure
 ```
 
-The CMake project exports `build/keyframes_extraction/compile_commands.json`.
+The CMake project exports `build/keyframes-extraction/compile_commands.json`.
 Use that file for C++ editor tooling so local include resolution matches the
 actual `keyframes_core` build.
