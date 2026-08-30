@@ -1,18 +1,18 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { frameAssetUrl, searchFrames, searchTrake } from '../../../api/search';
+import { searchFrames, searchTrake } from '../../../api/search';
 import SearchWorkspace, {
   parseRetrievalDescription,
   parseTrakeEvents,
   progressiveSearchIdKey,
 } from './SearchWorkspace';
+import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
 
 jest.mock('../../../api/search');
 
 beforeEach(() => {
   searchFrames.mockReset();
   searchTrake.mockReset();
-  frameAssetUrl.mockImplementation((frameId, asset) => `http://example.test/${frameId}/${asset}`);
   window.sessionStorage.clear();
 });
 
@@ -54,61 +54,48 @@ test.each([
   expect(searchTrake).not.toHaveBeenCalled();
 });
 
-test('TRAKE groups clickable event frame cards by video and orders them by frame index', async () => {
-  const onFrameClick = jest.fn();
+test('TRAKE renders same-video backend paths independently and submits only the selected path', async () => {
   searchTrake.mockResolvedValueOnce({
-    events: ['person enters', 'person leaves'],
-    submissions: [
+    events: ['first event', 'second event'],
+    paths: [
       {
-        rank: 2,
-        video_id: 'L21_a_b.folder2.video-8',
-        frame_ids: ['f40', 'f20'],
-        frame_idxs: [40, 20],
-        timestamps_ms: [4000, 2000],
-        fps: 29.97,
+        video_id: 'V01',
+        score: 3.0,
+        frame_ids: ['a1', 'a2'],
+        frame_idxs: [10, 20],
+        timestamps_ms: [1000, 2000],
+        thumbnail_urls: ['/a1', '/a2'],
       },
       {
-        rank: 1,
-        video_id: 'L21_a_b.folder2.video-7',
-        frame_ids: ['f30', 'f10'],
-        frame_idxs: [30, 10],
-        timestamps_ms: [3000, 1000],
-        fps: 25,
-      },
-      {
-        rank: 3,
-        video_id: 'L21_a_b.folder2.video-7',
-        frame_ids: ['f25', 'f5'],
-        frame_idxs: [25, 5],
-        timestamps_ms: [2500, 500],
-        fps: 25,
+        video_id: 'V01',
+        score: 2.8,
+        frame_ids: ['b1', 'b2'],
+        frame_idxs: [30, 40],
+        timestamps_ms: [3000, 4000],
+        thumbnail_urls: ['/b1', '/b2'],
       },
     ],
     total_results: 3,
     warnings: [],
   });
-  render(<SearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
-  submit('Person enters and leaves.\nE1: person enters\nE2: person leaves');
+  render(
+    <SubmissionProvider>
+      <SearchWorkspace topK={20} setTopK={jest.fn()} />
+    </SubmissionProvider>,
+  );
+  submit('Person enters and leaves.\nE1: first event\nE2: second event');
 
   await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
-    expect.objectContaining({ events: ['person enters', 'person leaves'], topK: 20 }),
+    expect.objectContaining({ events: ['first event', 'second event'], topK: 20 }),
   ));
   expect(searchFrames).not.toHaveBeenCalled();
-  expect(await screen.findByRole('heading', { name: /video-7/ })).toBeTruthy();
-  expect(screen.getByRole('heading', { name: /video-8/ })).toBeTruthy();
-  expect(Array.from(document.querySelectorAll('.trake-video-group h3')).map((heading) => heading.textContent.replace('⬆', '')))
-    .toEqual(['video-7', 'video-8']);
-  expect(screen.getAllByAltText(/Frame f5|Frame f10|Frame f25|Frame f30/).map((item) => item.alt)).toEqual([
-    'Frame f5', 'Frame f10', 'Frame f25', 'Frame f30',
-  ]);
-  fireEvent.click(screen.getByAltText('Frame f20'));
-  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
-    frame_id: 'f20',
-    video_id: 'L21_a_b.folder2.video-8',
-    frame_idx: 20,
-    timestamp_ms: 2000,
-    fps: 29.97,
-  }));
+  expect(await screen.findAllByText(/V01/)).toHaveLength(2);
+  expect(screen.getByAltText('Frame a1')).toBeTruthy();
+  expect(screen.getByAltText('Frame b1')).toBeTruthy();
+
+  fireEvent.click(screen.getAllByRole('button', { name: /submit this path/i })[1]);
+  expect(await screen.findByText('V01,30,40')).toBeTruthy();
+  expect(screen.queryByText('V01,10,20,30,40')).toBeNull();
 });
 
 test('TRAKE requires at least two events without making a request', () => {

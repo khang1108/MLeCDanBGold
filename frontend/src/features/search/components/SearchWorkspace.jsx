@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { frameAssetUrl, searchFrames, searchTrake, suggestQueries } from "../../../api/search";
+import { searchFrames, searchTrake, suggestQueries } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
-import FrameCard from "../../frames/components/FrameCard";
 import ToolBox from "../../search-controls/components/ToolBox";
 import QuerySuggestionsPanel from "../../search-controls/components/QuerySuggestionsPanel";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 import { displayVideoId } from "../../frames/videoSource";
 import { useSubmission } from "../../submission/contexts/SubmissionContext";
+import TrakePathCard from "./TrakePathCard";
 
 const TRAKE_EVENT_MARKER = /\bE(\d+)\b\s*:?\s*/gi;
 const SESSION_FINGERPRINT_KEY = "hcmai.session.fingerprint";
@@ -49,43 +49,7 @@ export const progressiveSearchIdKey = (task) => (
   `${SEARCH_ID_PREFIX}.${task}.${sessionFingerprint()}`
 );
 
-export const materializeTrakeFrames = (submission, events) => (
-  submission.frame_ids
-    .map((frameId, eventIndex) => ({
-      frame_id: frameId,
-      video_id: submission.video_id,
-      frame_idx: submission.frame_idxs[eventIndex],
-      timestamp_ms: submission.timestamps_ms?.[eventIndex],
-      fps: submission.fps,
-      caption: events[eventIndex] || `TRAKE event ${eventIndex + 1}`,
-      thumbnail_url: frameAssetUrl(frameId, 'thumbnail'),
-      frame_url: frameAssetUrl(frameId, 'image'),
-      submission_rank: submission.rank,
-      event_index: eventIndex,
-    }))
-);
-
-export const groupTrakeFramesByVideo = (submissions, events) => {
-  const groups = new Map();
-  submissions.forEach((submission) => {
-    const frames = groups.get(submission.video_id) || [];
-    frames.push(...materializeTrakeFrames(submission, events));
-    groups.set(submission.video_id, frames);
-  });
-  return Array.from(groups, ([videoId, frames]) => ({
-    video_id: videoId,
-    best_rank: Math.min(...frames.map((frame) => frame.submission_rank)),
-    frames: frames.sort((left, right) => (
-      (left.timestamp_ms ?? Number.MAX_SAFE_INTEGER)
-        - (right.timestamp_ms ?? Number.MAX_SAFE_INTEGER)
-      || left.frame_idx - right.frame_idx
-      || left.submission_rank - right.submission_rank
-      || left.event_index - right.event_index
-    )),
-  })).sort((left, right) => left.best_rank - right.best_rank || left.video_id.localeCompare(right.video_id));
-};
-
-const TrakeResults = ({ events, submissions, warnings, error, hasSearched, onFrameClick, onTrakeSubmit, onFrameSubmit }) => (
+export const TrakeResults = ({ events, paths, warnings, error, hasSearched, onFrameClick, onTrakeSubmit }) => (
   <section className="frames-container" aria-label="TRAKE ordered paths">
     {error && (
       <div className="error-alert" role="alert">
@@ -101,37 +65,20 @@ const TrakeResults = ({ events, submissions, warnings, error, hasSearched, onFra
         <ul>{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
       </div>
     )}
-    {!error && submissions.length > 0 && (
+    {!error && paths.length > 0 && (
       <div className="frames-scroll-region">
-        {groupTrakeFramesByVideo(submissions, events).map((group) => (
-          <article className="trake-video-group" key={group.video_id} aria-label={`TRAKE frames for ${displayVideoId(group.video_id)}`}>
-            <h3 className="trake-video-heading">
-              {displayVideoId(group.video_id)}
-              <button
-                type="button"
-                className="btn-secondary trake-path-submit-btn"
-                onClick={() => onTrakeSubmit(group)}
-                title="Submit this TRAKE path"
-                aria-label={'Submit TRAKE path for ' + displayVideoId(group.video_id)}
-              >
-                ⬆
-              </button>
-            </h3>
-            <div className="frames-grid">
-              {group.frames.map((frame) => (
-                <FrameCard
-                  key={`${frame.frame_id}-${frame.submission_rank}-${frame.event_index}`}
-                  frame={frame}
-                  onClick={() => onFrameClick?.(frame)}
-                  onSubmit={onFrameSubmit}
-                />
-              ))}
-            </div>
-          </article>
+        {paths.map((path, index) => (
+          <TrakePathCard
+            key={`${path.video_id}-${index}`}
+            events={events}
+            path={path}
+            onFrameClick={onFrameClick}
+            onSubmit={onTrakeSubmit}
+          />
         ))}
       </div>
     )}
-    {!error && hasSearched && submissions.length === 0 && (
+    {!error && hasSearched && paths.length === 0 && (
       <div className="frames-empty-state">
         <p className="body-md frames-empty-text">No ordered TRAKE paths found</p>
       </div>
@@ -152,7 +99,7 @@ const SearchWorkspace = ({
   const [resultType, setResultType] = useState(null);
   const [frames, setFrames] = useState([]);
   const [kisEvents, setKisEvents] = useState([]);
-  const [submissions, setSubmissions] = useState([]);
+  const [paths, setPaths] = useState([]);
   const [trakeEvents, setTrakeEvents] = useState([]);
   const [warnings, setWarnings] = useState([]);
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
@@ -216,9 +163,9 @@ const SearchWorkspace = ({
     }
   }, [queryInputRef]);
 
-  const handleTrakeSubmit = (group) => {
-    const vid = displayVideoId(group.video_id);
-    const framesStr = group.frames.map((frame) => frame.frame_idx).join(',');
+  const handleTrakeSubmit = (path) => {
+    const vid = displayVideoId(path.video_id);
+    const framesStr = path.frame_idxs.join(',');
     requestSubmission({
       line: `${vid},${framesStr}`,
       source: "TRAKE path",
@@ -267,7 +214,7 @@ const SearchWorkspace = ({
     setWarnings([]);
     setFrames([]);
     setKisEvents([]);
-    setSubmissions([]);
+    setPaths([]);
     setTrakeEvents([]);
     setSearchLatencyMs(null);
 
@@ -290,7 +237,7 @@ const SearchWorkspace = ({
       }
       if (isTrakeMode) {
         setResultType("trake");
-        setSubmissions(response.submissions || []);
+        setPaths(response.paths || []);
         setTrakeEvents(response.events || events);
       } else {
         setResultType("retrieval");
@@ -324,7 +271,7 @@ const SearchWorkspace = ({
     setEventDescription("");
     setFrames([]);
     setKisEvents([]);
-    setSubmissions([]);
+    setPaths([]);
     setTrakeEvents([]);
     setWarnings([]);
     setResultType(null);
@@ -411,13 +358,12 @@ const SearchWorkspace = ({
           {!isSearching && resultType === "trake" && (
             <TrakeResults
               events={trakeEvents}
-              submissions={submissions}
+              paths={paths}
               warnings={warnings}
               error={error}
               hasSearched
               onFrameClick={onFrameClick}
               onTrakeSubmit={handleTrakeSubmit}
-              onFrameSubmit={handleFrameSubmit}
             />
           )}
           {!isSearching && resultType === "retrieval" && (
