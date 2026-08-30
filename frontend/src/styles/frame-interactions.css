@@ -31,3 +31,24 @@
   border-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
 }
+
+.alignment-accordion-toggle {
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.alignment-accordion-toggle::after {
+  content: "⌄";
+  float: right;
+}
+
+.alignment-accordion-toggle[aria-expanded="true"]::after {
+  transform: rotate(180deg);
+}

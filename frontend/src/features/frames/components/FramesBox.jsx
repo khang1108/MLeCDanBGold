@@ -8,6 +8,7 @@ const FramesBox = ({
   error,
   latencyMs,
   warnings = [],
+  events = [],
   onFrameClick,
   onSubmit,
 }) => {
@@ -81,6 +82,7 @@ const FramesBox = ({
                 <FrameCard
                   key={frame.frame_id}
                   frame={frame}
+                  events={events}
                   onClick={() => onFrameClick(frame)}
                   onSubmit={onSubmit}
                 />

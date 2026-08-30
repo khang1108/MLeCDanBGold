@@ -211,3 +211,45 @@
 .frame-tooltip-arrow {
   display: none;
 }
+
+/* Ordered alignment remains attached to the representative card it explains. */
+.alignment-accordion {
+  border-top: 1px solid var(--color-hairline);
+  background: var(--color-canvas-soft);
+}
+
+.alignment-accordion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px 12px;
+  list-style: none;
+}
+
+.alignment-accordion-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 48px;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.alignment-event-label,
+.alignment-timestamp {
+  color: var(--color-ink-muted);
+  font-family: monospace;
+}
+
+.alignment-event-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alignment-thumbnail {
+  width: 48px;
+  height: 32px;
+  border-radius: var(--rounded-sm);
+  object-fit: cover;
+}

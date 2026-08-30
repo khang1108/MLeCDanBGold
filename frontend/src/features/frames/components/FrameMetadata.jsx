@@ -1,8 +1,11 @@
 import React from "react";
 import { displayVideoId } from "../videoSource";
 
+const metadataValue = (value) => (Array.isArray(value) ? value.join(", ") : value);
+
 // Keep internal asset identity separate from BTC submission coordinates.
 const FrameMetadata = ({ frame, playbackTime }) => {
+  const metadata = frame.metadata || {};
   const liveFrameIdx = Number.isFinite(playbackTime) && Number.isFinite(frame.fps)
     ? Math.round(playbackTime * frame.fps)
     : frame.frame_idx;
@@ -34,12 +37,31 @@ const FrameMetadata = ({ frame, playbackTime }) => {
         {Math.abs(frame.fps - 25) <= Math.abs(frame.fps - 30) ? 25 : 30}
       </span>
     </div>}
-    {Number.isFinite(frame.scores?.final) && <div className="inspector-meta-item">
-      <span className="meta-lbl">Final Relevance</span>
+    {Number.isFinite(frame.score) && <div className="inspector-meta-item">
+      <span className="meta-lbl">Alignment score</span>
       <span className="meta-val highlight">
-        {Math.round(frame.scores.final * 100)}% ({frame.scores.final.toFixed(2)}
-        )
+        {frame.score.toFixed(3)}
       </span>
+    </div>}
+    {metadata.title && <div className="inspector-meta-item">
+      <span className="meta-lbl">Title</span>
+      <span className="meta-val">{metadataValue(metadata.title)}</span>
+    </div>}
+    {metadata.caption && <div className="inspector-meta-item">
+      <span className="meta-lbl">Caption</span>
+      <span className="meta-val">{metadataValue(metadata.caption)}</span>
+    </div>}
+    {metadata.ocr && <div className="inspector-meta-item">
+      <span className="meta-lbl">OCR</span>
+      <span className="meta-val">{metadataValue(metadata.ocr)}</span>
+    </div>}
+    {metadata.objects?.length > 0 && <div className="inspector-meta-item">
+      <span className="meta-lbl">Objects</span>
+      <span className="meta-val">{metadataValue(metadata.objects)}</span>
+    </div>}
+    {metadata.asr && <div className="inspector-meta-item">
+      <span className="meta-lbl">ASR</span>
+      <span className="meta-val">{metadataValue(metadata.asr)}</span>
     </div>}
   </div>
   );

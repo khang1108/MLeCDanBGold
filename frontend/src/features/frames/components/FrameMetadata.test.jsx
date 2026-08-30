@@ -23,3 +23,29 @@ test('falls back to canonical metadata before playback time is available', () =>
   expect(screen.getByText('125')).toBeTruthy();
   expect(screen.getByText('5000 ms')).toBeTruthy();
 });
+
+test('renders the representative metadata without score-stage details', () => {
+  render(
+    <FrameMetadata
+      frame={{
+        ...frame,
+        score: 1.23456,
+        metadata: {
+          title: 'Kitchen scene',
+          caption: 'A chef coats food',
+          ocr: 'FLOUR',
+          objects: ['bowl', 'person'],
+          asr: 'Coat it with flour',
+        },
+      }}
+    />,
+  );
+
+  expect(screen.getByText('Kitchen scene')).toBeTruthy();
+  expect(screen.getByText('A chef coats food')).toBeTruthy();
+  expect(screen.getByText('FLOUR')).toBeTruthy();
+  expect(screen.getByText('bowl, person')).toBeTruthy();
+  expect(screen.getByText('Coat it with flour')).toBeTruthy();
+  expect(screen.getByText('1.235')).toBeTruthy();
+  expect(screen.queryByText(/final relevance/i)).toBeNull();
+});

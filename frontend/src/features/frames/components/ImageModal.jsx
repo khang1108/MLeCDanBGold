@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import FrameMetadata from "./FrameMetadata";
-import ScoreBreakdown from "./ScoreBreakdown";
 import YouTubePlayer from "./YouTubePlayer";
 import {
   displayVideoId,
@@ -181,21 +180,13 @@ const ImageModal = ({ frame, query, onSubmit, onClose }) => {
             <div className="inspector-section">
               <span className="inspector-section-label">Caption</span>
               <p className="inspector-caption-text">
-                {frame.caption || "No caption available"}
+                {frame.metadata?.caption ?? frame.caption ?? "No caption available"}
               </p>
             </div>
             <div className="inspector-section">
               <span className="inspector-section-label">Metadata</span>
               <FrameMetadata frame={frame} playbackTime={playbackTime} />
             </div>
-            {Number.isFinite(frame.scores?.final) && <div className="inspector-section">
-              <span className="inspector-section-label">
-                Retrieval Stage Scores
-              </span>
-              <div className="inspector-scores-grid">
-                <ScoreBreakdown scores={frame.scores} asRows />
-              </div>
-            </div>}
           </div>
         </div>
         </div>

@@ -151,6 +151,7 @@ const SearchWorkspace = ({
   const [eventDescription, setEventDescription] = useState("");
   const [resultType, setResultType] = useState(null);
   const [frames, setFrames] = useState([]);
+  const [kisEvents, setKisEvents] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [trakeEvents, setTrakeEvents] = useState([]);
   const [warnings, setWarnings] = useState([]);
@@ -265,6 +266,7 @@ const SearchWorkspace = ({
     setError(null);
     setWarnings([]);
     setFrames([]);
+    setKisEvents([]);
     setSubmissions([]);
     setTrakeEvents([]);
     setSearchLatencyMs(null);
@@ -293,6 +295,7 @@ const SearchWorkspace = ({
       } else {
         setResultType("retrieval");
         setFrames(response.results || []);
+        setKisEvents(response.events || []);
         setSearchLatencyMs(response.latency_ms);
       }
       setWarnings(response.warnings || []);
@@ -320,6 +323,7 @@ const SearchWorkspace = ({
     });
     setEventDescription("");
     setFrames([]);
+    setKisEvents([]);
     setSubmissions([]);
     setTrakeEvents([]);
     setWarnings([]);
@@ -423,6 +427,7 @@ const SearchWorkspace = ({
               error={error}
               latencyMs={searchLatencyMs}
               warnings={warnings}
+              events={kisEvents}
               onFrameClick={onFrameClick}
               onSubmit={handleFrameSubmit}
             />
@@ -434,6 +439,7 @@ const SearchWorkspace = ({
               error={error}
               latencyMs={searchLatencyMs}
               warnings={warnings}
+              events={kisEvents}
               onFrameClick={onFrameClick}
               onSubmit={handleFrameSubmit}
             />
