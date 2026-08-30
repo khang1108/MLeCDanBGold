@@ -10,12 +10,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from time import perf_counter
+from typing import TYPE_CHECKING
 
 from hcmai.common.config import AlignmentConfig
 from hcmai.data.pipeline import DataService
-from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.dp import AlignedPath, DPPath, rank_paths
+
+if TYPE_CHECKING:
+    from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
 @dataclass(frozen=True, slots=True)
