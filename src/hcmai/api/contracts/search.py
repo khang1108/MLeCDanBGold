@@ -6,31 +6,26 @@ query splitting, temporal alignment, or evidence retrieval logic.
 
 from __future__ import annotations
 
-from typing import Annotated, Self
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .latency import SearchLatency
-
-NonEmptyString = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1),
-]
 
 
 class SearchRequest(BaseModel):
     """Public KIS request with only the raw query and desired path count."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    query: NonEmptyString = Field(max_length=1_000)
-    top_k: int = Field(default=20, ge=1)
+    query: str
+    top_k: int = 20
 
 
 class SearchResultMetadata(BaseModel):
     """Representative-frame metadata duplicated for frontend simplicity."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
     caption: str | None = None
@@ -42,18 +37,18 @@ class SearchResultMetadata(BaseModel):
 class SearchResult(BaseModel):
     """One ranked KIS result with its retained aligned path evidence."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    frame_id: NonEmptyString
-    video_id: NonEmptyString
-    frame_idx: int = Field(ge=0)
-    timestamp_ms: int = Field(ge=0)
+    frame_id: str
+    video_id: str
+    frame_idx: int
+    timestamp_ms: int
     score: float
-    frame_ids: list[NonEmptyString] = Field(min_length=1)
-    timestamps_ms: list[int] = Field(min_length=1)
-    thumbnail_urls: list[NonEmptyString] = Field(min_length=1)
-    frame_url: NonEmptyString
-    thumbnail_url: NonEmptyString
+    frame_ids: list[str]
+    timestamps_ms: list[int]
+    thumbnail_urls: list[str]
+    frame_url: str
+    thumbnail_url: str
     metadata: SearchResultMetadata
 
     @model_validator(mode="after")
@@ -73,10 +68,10 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     """Complete KIS response with deterministic event alignment paths."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    query: NonEmptyString
-    events: list[NonEmptyString] = Field(min_length=1)
+    query: str
+    events: list[str]
     results: list[SearchResult] = Field(default_factory=list)
     latency: SearchLatency
 

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class SearchLatency(BaseModel):
     """Public latency breakdown for one temporal search request."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
     query_ms: float = Field(default=0, ge=0)
     retrieval_ms: float = Field(default=0, ge=0)

@@ -6,38 +6,33 @@ does not own event parsing, temporal search, or corpus materialization.
 
 from __future__ import annotations
 
-from typing import Annotated, Self
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .latency import SearchLatency
-
-NonEmptyString = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1),
-]
 
 
 class TRAKERequest(BaseModel):
     """Public TRAKE request with explicit ordered events."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    events: list[NonEmptyString] = Field(min_length=1)
-    top_k: int = Field(default=20, ge=1)
+    events: list[str]
+    top_k: int = 20
 
 
 class TRAKEPath(BaseModel):
     """One ranked ordered frame path for a single video."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    video_id: NonEmptyString
+    video_id: str
     score: float
-    frame_ids: list[NonEmptyString] = Field(min_length=1)
-    frame_idxs: list[int] = Field(min_length=1)
-    timestamps_ms: list[int] = Field(min_length=1)
-    thumbnail_urls: list[NonEmptyString] = Field(min_length=1)
+    frame_ids: list[str]
+    frame_idxs: list[int]
+    timestamps_ms: list[int]
+    thumbnail_urls: list[str]
 
     @model_validator(mode="after")
     def validate_alignment_arrays(self) -> Self:
@@ -57,9 +52,9 @@ class TRAKEPath(BaseModel):
 class TRAKEResponse(BaseModel):
     """Complete TRAKE response with independent ranked paths."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    events: list[NonEmptyString] = Field(min_length=1)
+    events: list[str]
     paths: list[TRAKEPath] = Field(default_factory=list)
     latency: SearchLatency
 

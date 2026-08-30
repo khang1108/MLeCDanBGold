@@ -79,6 +79,17 @@ def test_kis_request_has_only_query_and_top_k() -> None:
         SearchRequest.model_validate({"query": "x", "query_type": "kis"})
 
 
+def test_kis_request_does_not_apply_extra_value_constraints() -> None:
+    request = SearchRequest(query="  chef cooks  ", top_k=0)
+
+    assert request.query == "  chef cooks  "
+    assert request.top_k == 0
+    assert SearchRequest(query="", top_k=-5).model_dump() == {
+        "query": "",
+        "top_k": -5,
+    }
+
+
 def test_trake_requires_explicit_events() -> None:
     request = TRAKERequest(events=["e1", "e2"], top_k=5)
 
@@ -91,6 +102,14 @@ def test_trake_requires_explicit_events() -> None:
         TRAKERequest.model_validate(
             {"events": ["e1"], "query_type": "trake"}
         )
+
+
+def test_trake_request_does_not_apply_extra_value_constraints() -> None:
+    request = TRAKERequest(events=["", "  spaced  "], top_k=-1)
+
+    assert request.events == ["", "  spaced  "]
+    assert request.top_k == -1
+    assert TRAKERequest(events=[]).model_dump() == {"events": [], "top_k": 20}
 
 
 def test_latency_contract_uses_new_stage_names() -> None:
@@ -128,6 +147,25 @@ def test_kis_result_requires_aligned_path_arrays() -> None:
         _kis_result(timestamps_ms=[1_000])
 
 
+def test_kis_result_does_not_apply_extra_value_constraints() -> None:
+    result = _kis_result(
+        frame_id="",
+        video_id="",
+        frame_idx=-20,
+        timestamp_ms=-2_000,
+        frame_ids=["", "frame-20"],
+        frame_url="",
+        thumbnail_url="",
+    )
+
+    assert result.frame_id == ""
+    assert result.video_id == ""
+    assert result.frame_idx == -20
+    assert result.timestamp_ms == -2_000
+    assert result.frame_url == ""
+    assert result.thumbnail_url == ""
+
+
 def test_kis_response_requires_every_result_to_match_event_count() -> None:
     response = SearchResponse(
         query="chef cooks. chef plates.",
@@ -150,6 +188,24 @@ def test_kis_response_requires_every_result_to_match_event_count() -> None:
         )
 
 
+def test_kis_response_allows_empty_event_lists_when_paths_match() -> None:
+    response = SearchResponse(
+        query="",
+        events=[],
+        results=[
+            _kis_result(
+                frame_ids=[],
+                timestamps_ms=[],
+                thumbnail_urls=[],
+            )
+        ],
+        latency=SearchLatency(total_ms=0),
+    )
+
+    assert response.events == []
+    assert response.results[0].frame_ids == []
+
+
 def test_trake_path_requires_full_alignment_arrays() -> None:
     path = _trake_path()
 
@@ -157,6 +213,20 @@ def test_trake_path_requires_full_alignment_arrays() -> None:
 
     with pytest.raises(ValidationError, match="alignment arrays must have equal lengths"):
         _trake_path(frame_idxs=[10])
+
+
+def test_trake_path_does_not_apply_extra_value_constraints() -> None:
+    path = _trake_path(
+        video_id="",
+        frame_ids=["", "frame-20"],
+        frame_idxs=[-10, 20],
+        timestamps_ms=[-1_000, 2_000],
+        thumbnail_urls=["", "/api/v1/frames/frame-20/thumbnail"],
+    )
+
+    assert path.video_id == ""
+    assert path.frame_idxs == [-10, 20]
+    assert path.timestamps_ms == [-1_000, 2_000]
 
 
 def test_trake_response_requires_every_path_to_match_event_count() -> None:
@@ -174,3 +244,21 @@ def test_trake_response_requires_every_path_to_match_event_count() -> None:
             paths=[_trake_path()],
             latency=SearchLatency(total_ms=9.5),
         )
+
+
+def test_trake_response_allows_empty_event_lists_when_paths_match() -> None:
+    response = TRAKEResponse(
+        events=[],
+        paths=[
+            _trake_path(
+                frame_ids=[],
+                frame_idxs=[],
+                timestamps_ms=[],
+                thumbnail_urls=[],
+            )
+        ],
+        latency=SearchLatency(total_ms=0),
+    )
+
+    assert response.events == []
+    assert response.paths[0].frame_ids == []
