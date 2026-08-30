@@ -208,6 +208,7 @@ def test_each_predict_call_sees_only_its_own_batch(tmp_path: Path) -> None:
     )
 
     assert [len(cast(list[str], call["images"])) for call in model.calls] == [2, 2]
+    assert [call["batch"] for call in model.calls] == [2, 2]
 
 
 def test_artifacts_span_more_than_one_parquet_batch_without_duplicates(

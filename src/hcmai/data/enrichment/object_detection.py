@@ -469,6 +469,7 @@ def run_yoloe(
 
             results = detector.predict(
                 [str(image) for _, image in batch],
+                batch=len(batch),
                 conf=config.min_confidence,
                 max_det=config.top_k,
                 device=config.device,

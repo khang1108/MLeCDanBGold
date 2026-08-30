@@ -39,7 +39,7 @@ enrichment:
     vocab_path: "configs/yoloe_vocab.txt"
     min_confidence: 0.20
     top_k: 30
-    batch_size: 16
+    batch_size: 64
     device: "cuda"
     artifact_version: "object-yoloe-v1"
     summary_min_confidence: 0.25

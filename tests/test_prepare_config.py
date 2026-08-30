@@ -80,7 +80,7 @@ def test_prepare_yaml_routes_every_offline_stage_from_one_file() -> None:
     assert transcript.frame_store_id == enrichment.frame_store_id
     assert indexing.dataset.context_path.name == "frame_context_v1.parquet"
     assert storage.bucket == "mlecdanbgold-hcmai-hk"
-    assert enrichment.objects.batch_size == 16
+    assert enrichment.objects.batch_size == 64
     assert models.visual_embedding.batch_size == 128
     assert models.resolved_evidence_embedding.batch_size == 128
 
