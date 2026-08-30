@@ -1,21 +1,17 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { searchFrames, searchTrake, suggestQueries } from "../../../api/search";
+import { searchFrames, searchTrake } from "../../../api/search";
 import FramesBox from "../../frames/components/FramesBox";
 import ToolBox from "../../search-controls/components/ToolBox";
-import QuerySuggestionsPanel from "../../search-controls/components/QuerySuggestionsPanel";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 import { displayVideoId } from "../../frames/videoSource";
 import { useSubmission } from "../../submission/contexts/SubmissionContext";
 import TrakePathCard from "./TrakePathCard";
 
 const TRAKE_EVENT_MARKER = /\bE(\d+)\b\s*:?\s*/gi;
-const SESSION_FINGERPRINT_KEY = "hcmai.session.fingerprint";
-const SEARCH_ID_PREFIX = "hcmai.progressive.search_id";
-const PROGRESSIVE_TASKS = ["kis"];
 
 export const parseRetrievalDescription = (description) => {
   const query = description.trim();
-  return query ? { queryType: "kis", query } : null;
+  return query ? { query } : null;
 };
 
 export const parseTrakeEvents = (description) => {
@@ -34,20 +30,6 @@ export const parseTrakeEvents = (description) => {
 
   return events.some((event) => !event) ? [] : events;
 };
-
-const sessionFingerprint = () => {
-  let fingerprint = window.sessionStorage.getItem(SESSION_FINGERPRINT_KEY);
-  if (!fingerprint) {
-    fingerprint = window.crypto?.randomUUID?.()
-      || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    window.sessionStorage.setItem(SESSION_FINGERPRINT_KEY, fingerprint);
-  }
-  return fingerprint;
-};
-
-export const progressiveSearchIdKey = (task) => (
-  `${SEARCH_ID_PREFIX}.${task}.${sessionFingerprint()}`
-);
 
 export const TrakeResults = ({ events, paths, warnings, error, hasSearched, onFrameClick, onTrakeSubmit }) => (
   <section className="frames-container" aria-label="TRAKE ordered paths">
@@ -104,9 +86,6 @@ const SearchWorkspace = ({
   const [warnings, setWarnings] = useState([]);
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
   const [error, setError] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
-  const [isSuggesting, setIsSuggesting] = useState(false);
-  const [suggestError, setSuggestError] = useState(null);
   const queryTextareaRef = useRef(null);
   const { requestSubmission } = useSubmission();
 
@@ -140,28 +119,6 @@ const SearchWorkspace = ({
   useEffect(() => {
     onQueryChange?.(eventDescription);
   }, [eventDescription, onQueryChange]);
-
-  const handleSuggestQuery = useCallback(async () => {
-    if (isSuggesting) return;
-    setIsSuggesting(true);
-    setSuggestError(null);
-    try {
-      const list = await suggestQueries({ count: 5, query: eventDescription });
-      setSuggestions(list || []);
-    } catch (err) {
-      setSuggestError(err.message || 'Failed to fetch query suggestions');
-    } finally {
-      setIsSuggesting(false);
-    }
-  }, [eventDescription, isSuggesting]);
-
-  const handleSelectSuggestion = useCallback((suggestionText) => {
-    const trimmed = (suggestionText || "").trim();
-    setEventDescription(trimmed);
-    if (queryInputRef?.current) {
-      queryInputRef.current.focus();
-    }
-  }, [queryInputRef]);
 
   const handleTrakeSubmit = (path) => {
     const vid = displayVideoId(path.video_id);
@@ -203,9 +160,6 @@ const SearchWorkspace = ({
       retrieval = parseRetrievalDescription(rawEventText);
     }
 
-    const task = isTrakeMode ? "trake" : "kis";
-    const searchKey = task === "trake" ? null : progressiveSearchIdKey(task);
-    const searchId = searchKey ? window.sessionStorage.getItem(searchKey) : null;
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
@@ -225,16 +179,11 @@ const SearchWorkspace = ({
       } else {
         response = await searchFrames({
           query: retrieval.query,
-          queryType: retrieval.queryType,
           topK,
-          searchId,
           signal: controller.signal,
         });
       }
 
-      if (searchKey && response.search_id) {
-        window.sessionStorage.setItem(searchKey, response.search_id);
-      }
       if (isTrakeMode) {
         setResultType("trake");
         setPaths(response.paths || []);
@@ -248,14 +197,8 @@ const SearchWorkspace = ({
       setWarnings(response.warnings || []);
     } catch (requestError) {
       if (requestError.name === "AbortError") return;
-      if (requestError?.status === 410 && searchKey) {
-        window.sessionStorage.removeItem(searchKey);
-      }
-      const resetInstruction = requestError?.status === 409
-        ? " Reset this task with New Search before continuing."
-        : "";
       setResultType(isTrakeMode ? "trake" : "retrieval");
-      setError(`${requestError.message || "Failed to contact search API"}${resetInstruction}`);
+      setError(requestError.message || "Failed to contact search API");
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null;
@@ -265,9 +208,9 @@ const SearchWorkspace = ({
   }, [eventDescription, isSearching, topK]);
 
   const handleNewSearch = useCallback(() => {
-    PROGRESSIVE_TASKS.forEach((task) => {
-      window.sessionStorage.removeItem(progressiveSearchIdKey(task));
-    });
+    requestRef.current?.abort();
+    requestRef.current = null;
+    setIsSearching(false);
     setEventDescription("");
     setFrames([]);
     setKisEvents([]);
@@ -331,15 +274,6 @@ const SearchWorkspace = ({
             <button type="button" className="btn-secondary search-action-btn" onClick={handleNewSearch} title="Shortcut: N">
               New Search
             </button>
-            <button
-              type="button"
-              className="btn-secondary query-suggest-btn"
-              onClick={handleSuggestQuery}
-              disabled={isSuggesting}
-              title="Suggest 5 Queries"
-            >
-              {isSuggesting ? "Suggesting..." : "Suggest Query"}
-            </button>
           </div>
         </div>
       </form>
@@ -391,13 +325,6 @@ const SearchWorkspace = ({
             />
           )}
       </div>
-      <QuerySuggestionsPanel
-          suggestions={suggestions}
-          isLoading={isSuggesting}
-          error={suggestError}
-          onSelectSuggestion={handleSelectSuggestion}
-        onRefresh={handleSuggestQuery}
-      />
       </div>
     </div>
   );

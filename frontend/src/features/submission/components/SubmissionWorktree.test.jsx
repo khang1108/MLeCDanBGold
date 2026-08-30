@@ -2,10 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SubmissionWorktree from './SubmissionWorktree';
 import { SubmissionProvider } from '../contexts/SubmissionContext';
-import * as searchApi from '../../../api/search';
 import * as submissionArchive from '../submissionArchive';
-
-jest.mock('../../../api/search');
 
 const renderWorktree = (props = {}) => render(
   <SubmissionProvider>
@@ -19,86 +16,17 @@ describe('SubmissionWorktree component', () => {
     jest.clearAllMocks();
   });
 
-  test('renders upload state when no submission files are loaded', () => {
+  test('creates locally named CSV files without query-file controls', () => {
     renderWorktree();
 
     expect(screen.getByText('Submission Files')).toBeTruthy();
-    expect(screen.getByText('No Query Files')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /upload query files/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /select folder/i })).toBeTruthy();
-  });
+    expect(screen.queryByRole('button', { name: /upload query files/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /select folder/i })).toBeNull();
 
-  test('handles uploading query files and displays CSV files in tree', async () => {
-    searchApi.uploadQueryFiles.mockResolvedValueOnce([
-      { id: 'query_1.csv', name: 'query_1.csv', originalName: 'query_1.txt', content: '' },
-      { id: 'query_2.csv', name: 'query_2.csv', originalName: 'query_2.txt', content: '' },
-    ]);
-
-    renderWorktree();
-    const fileInput = screen.getByTestId('query-file-input');
-    fireEvent.change(fileInput, {
-      target: {
-        files: [
-          new File(['sample query 1'], 'query_1.txt', { type: 'text/plain' }),
-          new File(['sample query 2'], 'query_2.txt', { type: 'text/plain' }),
-        ],
-      },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('query_1.csv')).toBeTruthy();
-      expect(screen.getByText('query_2.csv')).toBeTruthy();
-    });
-
-    expect(screen.getByText('submissions/')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /download csv zip \(0\)/i }).disabled).toBe(true);
-  });
-
-  test('uses the browser file picker API without the bulk-upload confirmation', async () => {
-    const originalPicker = window.showOpenFilePicker;
-    const pickedFile = new File(['query'], 'query.txt', { type: 'text/plain' });
-    window.showOpenFilePicker = jest.fn().mockResolvedValue([
-      { getFile: jest.fn().mockResolvedValue(pickedFile) },
-    ]);
-    searchApi.uploadQueryFiles.mockResolvedValueOnce([
-      { id: 'query.csv', name: 'query.csv', content: '' },
-    ]);
-
-    try {
-      renderWorktree();
-      fireEvent.click(screen.getByRole('button', { name: /upload query files/i }));
-
-      await waitFor(() => expect(searchApi.uploadQueryFiles).toHaveBeenCalledWith([pickedFile]));
-      expect(screen.getByText('query.csv')).toBeTruthy();
-    } finally {
-      if (originalPicker) window.showOpenFilePicker = originalPicker;
-      else delete window.showOpenFilePicker;
-    }
-  });
-
-  test('uses the browser directory picker API and reads nested files', async () => {
-    const originalPicker = window.showDirectoryPicker;
-    const pickedFile = new File(['query'], 'nested-query.txt', { type: 'text/plain' });
-    const directoryHandle = {
-      values: async function* values() {
-        yield { kind: 'file', getFile: jest.fn().mockResolvedValue(pickedFile) };
-      },
-    };
-    window.showDirectoryPicker = jest.fn().mockResolvedValue(directoryHandle);
-    searchApi.uploadQueryFiles.mockResolvedValueOnce([
-      { id: 'nested-query.csv', name: 'nested-query.csv', content: '' },
-    ]);
-
-    try {
-      renderWorktree();
-      fireEvent.click(screen.getByRole('button', { name: /select folder/i }));
-
-      await waitFor(() => expect(searchApi.uploadQueryFiles).toHaveBeenCalledWith([pickedFile]));
-      expect(screen.getByText('nested-query.csv')).toBeTruthy();
-    } finally {
-      if (originalPicker) window.showDirectoryPicker = originalPicker;
-      else delete window.showDirectoryPicker;
-    }
+    fireEvent.click(screen.getByRole('button', { name: /new csv/i }));
+    expect(screen.getByText('submission.csv')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /new csv/i }));
+    expect(screen.getByText('submission-2.csv')).toBeTruthy();
   });
 
   test('submit request opens the picker, appends the BTC row, and opens the editor', async () => {

@@ -4,7 +4,6 @@ import { searchFrames, searchTrake } from '../../../api/search';
 import SearchWorkspace, {
   parseRetrievalDescription,
   parseTrakeEvents,
-  progressiveSearchIdKey,
 } from './SearchWorkspace';
 import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
 
@@ -13,7 +12,6 @@ jest.mock('../../../api/search');
 beforeEach(() => {
   searchFrames.mockReset();
   searchTrake.mockReset();
-  window.sessionStorage.clear();
 });
 
 const EVENT_PLACEHOLDER = 'Describe the event, or add E1, E2, ... for TRAKE';
@@ -36,10 +34,9 @@ test('parses sequentially labeled TRAKE events and rejects invalid numbering', (
 });
 
 test.each([
-  ['a red vehicle passes', 'kis', 'a red vehicle passes'],
+  ['a red vehicle passes', 'a red vehicle passes'],
 ])('routes %s through frame search', async (
   description,
-  queryType,
   query,
 ) => {
   searchFrames.mockResolvedValueOnce({
@@ -49,7 +46,7 @@ test.each([
   submit(description);
 
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
-    expect.objectContaining({ query, queryType, topK: 20 }),
+    expect.objectContaining({ query, topK: 20 }),
   ));
   expect(searchTrake).not.toHaveBeenCalled();
 });
@@ -107,7 +104,6 @@ test('TRAKE requires at least two events without making a request', () => {
 
 test('defaults plain descriptions to KIS', () => {
   expect(parseRetrievalDescription('a red vehicle passes')).toEqual({
-    queryType: 'kis',
     query: 'a red vehicle passes',
   });
 });
@@ -142,10 +138,7 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   }));
 });
 
-test('New Search clears the KIS progressive ID', () => {
-  const keys = ['kis'].map(progressiveSearchIdKey);
-  keys.forEach((key, index) => window.sessionStorage.setItem(key, `search-${index}`));
+test('does not render the legacy Suggest Query control', () => {
   render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: 'New Search' }));
-  keys.forEach((key) => expect(window.sessionStorage.getItem(key)).toBeNull());
+  expect(screen.queryByRole('button', { name: /suggest query/i })).toBeNull();
 });
