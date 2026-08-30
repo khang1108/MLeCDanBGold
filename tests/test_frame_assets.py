@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from hcmai.common.schemas import FrameRecord
-from hcmai.data.assets import (
+from hcmai.corpus.assets import (
     FrameAssetMissingError,
     FrameAssetOutsideRootError,
     FrameAssetResolver,

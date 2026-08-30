@@ -20,7 +20,7 @@ from typing import Any
 
 import pyarrow.parquet as pq
 from hcmai.common.schemas import FrameRecord, ObjectDetection, ObjectEvidence, ProcessingStatus
-from hcmai.data.assets import FrameAssetError, FrameAssetResolver
+from hcmai.corpus.assets import FrameAssetError, FrameAssetResolver
 from hcmai.data.enrichment.object_artifacts import write_object_artifacts_streaming
 from tqdm.auto import tqdm
 

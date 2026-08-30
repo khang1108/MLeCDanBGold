@@ -34,7 +34,9 @@ from hcmai.data.enrichment.transcripts.manifest import (
 )
 
 from hcmai.data.enrichment.transcripts.publication import publish_staged, staging_path
-from hcmai.data.enrichment.transcripts.store import load_transcript_records
+from hcmai.data.enrichment.transcripts.artifacts import (
+    load_transcript_artifact_records,
+)
 from hcmai.data.s3 import VIDEO_EXTENSIONS
 from tqdm import tqdm
 
@@ -112,7 +114,7 @@ def _failure_path(output: Path) -> Path:
 
 
 def _load_one(output: Path) -> list[TranscriptSegment]:
-    return list(load_transcript_records(output))
+    return list(load_transcript_artifact_records(output))
 
 
 def _write_validated_pair(

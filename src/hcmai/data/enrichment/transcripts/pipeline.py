@@ -26,7 +26,7 @@ from hcmai.data.enrichment.transcripts.prepare import (
     prepare_transcript_video,
     prepare_transcripts,
 )
-from hcmai.data.enrichment.transcripts.store import TranscriptStore
+from hcmai.corpus.stores.transcript import TranscriptStore
 
 
 class TranscriptService:

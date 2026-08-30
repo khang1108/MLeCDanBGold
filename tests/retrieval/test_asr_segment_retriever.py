@@ -15,7 +15,10 @@ import pytest
 from hcmai.common.config import AppConfig, EncoderConfig, InferenceConfig
 from hcmai.common.schemas import ProcessingStatus
 from hcmai.common.utils.io import write_json, write_yaml
-from hcmai.data.enrichment.transcripts.store import TranscriptStore
+from hcmai.corpus.stores.transcript import TranscriptStore
+from hcmai.data.enrichment.transcripts.artifacts import (
+    load_transcript_artifact_records,
+)
 from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 
@@ -166,9 +169,9 @@ def test_asr_segment_corpus_preserves_timeline_identity_and_provenance(
     from hcmai.retrieval.retriever.segment.artifacts import build_segment_corpus
 
     _write_transcripts(tmp_path / "transcripts")
-    store = TranscriptStore(tmp_path / "transcripts")
+    records = load_transcript_artifact_records(tmp_path / "transcripts")
 
-    texts, mapping = build_segment_corpus(store)
+    texts, mapping = build_segment_corpus(records)
 
     assert texts == ["hello world", "night market"]
     assert mapping["embedding_index"].tolist() == [0, 1]
@@ -202,7 +205,7 @@ def test_asr_segment_corpus_rejects_artifact_without_usable_segments(
     ).to_parquet(path, index=False)
 
     with pytest.raises(ValueError, match="no usable completed segments"):
-        build_segment_corpus(TranscriptStore(path))
+        build_segment_corpus(load_transcript_artifact_records(path))
 
 
 def test_asr_segment_artifact_builder_uses_evidence_encoder_and_lineage(
@@ -338,7 +341,7 @@ def _online_retrieval_fixture(tmp_path: Path):
 
     pytest.importorskip("faiss")
     pytest.importorskip("pyarrow")
-    from hcmai.data.stores.frame import FrameStore
+    from hcmai.corpus.stores.frame import FrameStore
     from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
     frames_path = tmp_path / "frames.parquet"

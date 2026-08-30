@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from hcmai.common.schemas.enum import ProcessingStatus
+from hcmai.corpus.models import VideoMetadata
 
 
 @dataclass(frozen=True)
@@ -27,15 +28,6 @@ class ObjectCountsRecord:
     timestamp_ms: int
     counts: dict[str, int]
     status: ProcessingStatus
-
-
-@dataclass(frozen=True)
-class VideoMetadata:
-    """The title and source watch URL attached to one organizer video."""
-
-    video_id: str
-    title: str | None
-    video_url: str | None
 
 
 def _non_blank_text(value: object) -> str | None:

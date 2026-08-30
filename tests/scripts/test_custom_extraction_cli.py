@@ -35,7 +35,7 @@ from hcmai.data.ingestion.custom_state import (
     mark_video_enriched,
     mark_video_published,
 )
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 from scripts import (
     extract_custom_keyframes,
     materialize_custom_frames,

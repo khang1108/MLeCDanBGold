@@ -25,7 +25,7 @@ from hcmai.common.schemas import (
     ModelStatus,
     RetrievalSource,
 )
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex

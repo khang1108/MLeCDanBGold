@@ -15,7 +15,7 @@ from hcmai.data.ingestion.custom_frames import (
     materialize_custom_frame_store,
     validate_native_video_bundle,
 )
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 
 
 def _write_json(path: Path, value: object) -> None:

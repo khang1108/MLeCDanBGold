@@ -22,7 +22,7 @@ import pandas as pd
 from hcmai.common.schemas import FrameRecord
 from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
 from hcmai.data.enrichment.bundle import publish_staged_bundle
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 
 
 _NATIVE_EXTRACTOR_VERSION = "hcmai-keyframes-extractor/0.1.0"

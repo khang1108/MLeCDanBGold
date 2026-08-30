@@ -19,7 +19,10 @@ from hcmai.data.enrichment.transcripts.prepare import (
     prepare_transcript_video,
     prepare_transcripts,
 )
-from hcmai.data.enrichment.transcripts.store import TranscriptStore
+from hcmai.corpus.stores.transcript import TranscriptStore
+from hcmai.data.enrichment.transcripts.artifacts import (
+    load_transcript_artifact_records,
+)
 
 
 def test_qwen_segments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -178,4 +181,7 @@ def test_prepare_resume_and_stores(tmp_path: Path) -> None:
     assert asr.calls.count("L21_V001") == 1
     output = transcripts / "L21/L21_V001.parquet"
     assert list(pd.read_parquet(output)) == list(TranscriptSegment.model_fields)
-    assert TranscriptStore(transcripts).get_by_video("L21_V001")[0].speaker_id == "SPEAKER_00"
+    assert (
+        load_transcript_artifact_records(transcripts)[0].speaker_id
+        == "SPEAKER_00"
+    )

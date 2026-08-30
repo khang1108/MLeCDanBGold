@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 from hcmai.retrieval.retriever.segment.projector import SegmentFrameProjector
 
 

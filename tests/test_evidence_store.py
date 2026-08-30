@@ -11,8 +11,8 @@ from hcmai.common.schemas import (
     OCREvidence,
     RetrievalSource,
 )
-from hcmai.data.stores.evidence import ASRStore, CaptionStore, OCRStore
-from hcmai.data.stores import evidence
+from hcmai.corpus.stores.evidence import ASRStore, CaptionStore, OCRStore
+from hcmai.corpus.stores import evidence
 
 
 @pytest.fixture

@@ -11,7 +11,7 @@ import pandas as pd
 
 from hcmai.common.config import FusionConfig, RetrievalCacheConfig
 from hcmai.common.schemas import RetrievalResult, RetrievalSource
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME, DenseIndex
 from hcmai.retrieval.retriever.cache import EmbeddingCache

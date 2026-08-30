@@ -32,7 +32,7 @@ from hcmai.data.enrichment.caption.resume import guard_resume, resume_rows
 from hcmai.data.enrichment.caption.runner import run_batches
 from hcmai.data.enrichment.caption.models.contracts import CaptionAdapter
 from hcmai.data.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 from thundercompute.pipeline import LLMService
 
 

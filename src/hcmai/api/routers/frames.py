@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from hcmai.common.schemas import FrameCatalogEntry, FrameRecord, SubmissionResult
-from hcmai.data.assets import FrameAssetError, FrameAssetResolver
+from hcmai.corpus.assets import FrameAssetError, FrameAssetResolver
 from hcmai.data.pipeline import DataService
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.common.utils.logging import get_logger

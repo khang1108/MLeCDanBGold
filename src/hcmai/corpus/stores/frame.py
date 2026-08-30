@@ -7,7 +7,7 @@ entire process lifetime.
 
 Typical usage::
 
-    from hcmai.data.stores.frame import FrameStore
+    from hcmai.corpus.stores.frame import FrameStore
 
     store = FrameStore("artifacts/frame_store/frames.parquet")
 
@@ -37,6 +37,7 @@ from typing import cast
 import pandas as pd
 
 from hcmai.common.schemas.frame import FrameRecord
+from hcmai.corpus.models import Frame
 
 
 class FrameStore:
@@ -45,12 +46,12 @@ class FrameStore:
     Loads ``frames.parquet`` once at construction time and builds three
     internal indexes for fast lookup:
 
-    * ``_records_by_id`` – ``dict[frame_id, FrameRecord]`` for O(1)
+    * ``_records_by_id`` – ``dict[frame_id, Frame]`` for O(1)
         point lookups.
-    * ``_records_by_video`` – ``dict[video_id, tuple[FrameRecord]]``
+    * ``_records_by_video`` – ``dict[video_id, tuple[Frame]]``
         sorted by ``(timestamp_ms, frame_idx, frame_id)`` for temporal
         neighbour queries.
-    * ``_records`` – ``tuple[FrameRecord]`` in the original Parquet
+    * ``_records`` – ``tuple[Frame]`` in the original Parquet
         row order, used for deterministic whole-corpus iteration.
 
     Attributes:
@@ -73,7 +74,7 @@ class FrameStore:
             ValueError: If the Parquet file contains duplicate
                 ``frame_id`` values.
             pydantic.ValidationError: If any row in the file fails
-                ``FrameRecord`` validation inside ``_record_from_row``.
+                artifact ``FrameRecord`` validation inside ``_record_from_row``.
         """
 
         self.metadata_path = Path(metadata_path)
@@ -95,7 +96,7 @@ class FrameStore:
                 f"Duplicate frame_id values in {self.metadata_path}"
             )
 
-        records_by_video: defaultdict[str, list[FrameRecord]] = defaultdict(
+        records_by_video: defaultdict[str, list[Frame]] = defaultdict(
             list
         )
         for record in self._records:
@@ -123,7 +124,7 @@ class FrameStore:
 
         return cls(metadata_path)
 
-    def iter_frames(self) -> Iterator[FrameRecord]:
+    def iter_frames(self) -> Iterator[Frame]:
         """Iterate canonical records in deterministic Parquet order."""
 
         return iter(self._records)
@@ -139,8 +140,8 @@ class FrameStore:
         return (video_id, frame_idx) in self._submission_pairs
 
     @staticmethod
-    def _record_from_row(row: dict[str, object]) -> FrameRecord:
-        """Validate one Parquet row and return a ``FrameRecord``.
+    def _record_from_row(row: dict[str, object]) -> Frame:
+        """Validate one Parquet row and materialize its runtime frame view.
 
         Extracts only the fields declared in ``FrameRecord.model_fields``
         from ``row``, converts pandas ``NA`` / ``NaN`` values for
@@ -153,7 +154,7 @@ class FrameStore:
                 Keys may include additional columns that are ignored.
 
         Returns:
-            Validated ``FrameRecord`` instance.
+            Six-field runtime ``Frame`` preserving canonical identity and paths.
 
         Raises:
             pydantic.ValidationError: If any required field is missing or
@@ -174,17 +175,25 @@ class FrameStore:
                 and math.isnan(value)
             ):
                 values[name] = None
-        return FrameRecord.model_validate(values)
+        artifact_record = FrameRecord.model_validate(values)
+        return Frame(
+            frame_id=artifact_record.frame_id,
+            video_id=artifact_record.video_id,
+            frame_idx=artifact_record.frame_idx,
+            timestamp_ms=artifact_record.timestamp_ms,
+            image_path=artifact_record.image_path,
+            thumbnail_path=artifact_record.thumbnail_path,
+        )
 
-    def get(self, frame_id: str) -> FrameRecord:
-        """Return the ``FrameRecord`` for a given ``frame_id``.
+    def get(self, frame_id: str) -> Frame:
+        """Return the runtime ``Frame`` for a given ``frame_id``.
 
         Args:
             frame_id: Globally unique internal key stored in the canonical
                 Parquet file. Its text is never parsed for official IDs.
 
         Returns:
-            The ``FrameRecord`` associated with ``frame_id``.
+            The runtime ``Frame`` associated with ``frame_id``.
 
         Raises:
             KeyError: If ``frame_id`` is not present in the loaded
@@ -199,8 +208,8 @@ class FrameStore:
                 f"Unknown frame_id {frame_id!r} in {self.metadata_path}"
             ) from None
 
-    def get_many(self, frame_ids: Sequence[str]) -> list[FrameRecord]:
-        """Return ``FrameRecord`` objects for a sequence of frame IDs.
+    def get_many(self, frame_ids: Sequence[str]) -> list[Frame]:
+        """Return runtime ``Frame`` objects for a sequence of frame IDs.
 
         Preserves the order of ``frame_ids`` and allows duplicate IDs
         (the same record is returned for each occurrence).
@@ -210,7 +219,7 @@ class FrameStore:
                 up.  May contain duplicates.
 
         Returns:
-            List of ``FrameRecord`` objects in the same order as
+            List of runtime ``Frame`` objects in the same order as
             ``frame_ids``.
 
         Raises:
@@ -220,7 +229,7 @@ class FrameStore:
 
         return [self.get(frame_id) for frame_id in frame_ids]
 
-    def get_by_video(self, video_id: str) -> tuple[FrameRecord, ...]:
+    def get_by_video(self, video_id: str) -> tuple[Frame, ...]:
         """Return a video's canonical frames in deterministic temporal order.
 
         The returned tuple is the immutable object built at store startup and
@@ -237,7 +246,7 @@ class FrameStore:
         *,
         window_ms: int,
         include_self: bool = False,
-    ) -> list[FrameRecord]:
+    ) -> list[Frame]:
         """Return same-video frames within a symmetric temporal window.
 
         Finds all frames in the same video whose ``timestamp_ms`` falls
@@ -253,7 +262,7 @@ class FrameStore:
                 in the result.  Defaults to ``False``.
 
         Returns:
-            List of ``FrameRecord`` objects for neighbour frames, sorted
+            List of runtime ``Frame`` objects for neighbour frames, sorted
             by ``(timestamp_ms, frame_idx, frame_id)`` as stored in the
             per-video index.
 

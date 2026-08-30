@@ -16,17 +16,14 @@ from pathlib import Path
 from hcmai.common.schemas import (
     FrameCatalogEntry,
     FrameContext,
-    FrameRecord,
     ObjectEvidence,
     RetrievalSource,
-    TranscriptSegment,
+    TranscriptSegment as TranscriptSegmentArtifact,
 )
 from hcmai.common.utils.io import read_json, read_yaml_section
-from hcmai.data.assets import FrameAssetResolver, FrameAssetStatus
-from hcmai.data.enrichment.dataset_cli import merge_dataset_values
-from hcmai.data.enrichment.transcripts.store import TranscriptStore
-from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
-from hcmai.data.stores import (
+from hcmai.corpus.assets import FrameAssetResolver, FrameAssetStatus
+from hcmai.corpus.models import Frame, TranscriptSegment
+from hcmai.corpus.stores import (
     ASRStore,
     CaptionStore,
     FrameContextStore,
@@ -34,8 +31,14 @@ from hcmai.data.stores import (
     ObjectCountsStore,
     ObjectStore,
     OCRStore,
+    TranscriptStore,
     VideoMetadataStore,
 )
+from hcmai.data.enrichment.dataset_cli import merge_dataset_values
+from hcmai.data.enrichment.transcripts.artifacts import (
+    load_transcript_artifact_records,
+)
+from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
 
 EvidenceStore = CaptionStore | OCRStore | ASRStore
 _EVIDENCE_STORES = {
@@ -65,6 +68,7 @@ class DataService:
         object_counts_store: ObjectCountsStore | None = None,
         context_store: FrameContextStore | None = None,
         transcript_store: TranscriptStore | None = None,
+        catalog_transcript_segments: Sequence[TranscriptSegmentArtifact] = (),
         video_metadata_store: VideoMetadataStore | None = None,
     ) -> None:
         """Initialize the facade from already loaded specialist stores."""
@@ -76,6 +80,7 @@ class DataService:
         self.object_counts_store = object_counts_store
         self.context_store = context_store
         self.transcript_store = transcript_store
+        self._catalog_transcript_segments = tuple(catalog_transcript_segments)
         self.video_metadata_store = video_metadata_store
 
     @classmethod
@@ -108,6 +113,7 @@ class DataService:
             FrameContextStore(context_path) if context_path is not None else None
         )
         transcripts = None
+        catalog_transcripts: tuple[TranscriptSegmentArtifact, ...] = ()
         if transcript_path is not None:
             transcript_artifact = Path(transcript_path)
             if not transcript_artifact.exists():
@@ -116,6 +122,13 @@ class DataService:
                     f"{transcript_artifact}"
                 )
             transcripts = TranscriptStore(transcript_artifact)
+            # FrameCatalogEntry is still a legacy Pydantic API projection at
+            # this migration point. Keep its complete transcript evidence
+            # separate from the compact runtime timeline values returned by
+            # TranscriptStore; Task 5 removes this transitional facade.
+            catalog_transcripts = load_transcript_artifact_records(
+                transcript_artifact
+            )
         video_metadata = (
             VideoMetadataStore(video_metadata_path)
             if video_metadata_path is not None
@@ -141,6 +154,7 @@ class DataService:
             object_counts,
             contexts,
             transcripts,
+            catalog_transcripts,
             video_metadata,
         )
 
@@ -227,10 +241,10 @@ class DataService:
             )
         )
 
-    def get_frame(self, frame_id: str) -> FrameRecord:
+    def get_frame(self, frame_id: str) -> Frame:
         return self._frames().get(frame_id)
 
-    def get_frames(self, frame_ids: Sequence[str]) -> list[FrameRecord]:
+    def get_frames(self, frame_ids: Sequence[str]) -> list[Frame]:
         return self._frames().get_many(frame_ids)
 
     def neighbors(
@@ -239,12 +253,12 @@ class DataService:
         *,
         window_ms: int,
         include_self: bool = False,
-    ) -> list[FrameRecord]:
+    ) -> list[Frame]:
         return self._frames().get_neighbors(
             frame_id, window_ms=window_ms, include_self=include_self
         )
 
-    def iter_frames(self) -> Iterator[FrameRecord]:
+    def iter_frames(self) -> Iterator[Frame]:
         return self._frames().iter_frames()
 
     def contains_submission(self, video_id: str, frame_idx: int) -> bool:
@@ -252,7 +266,7 @@ class DataService:
 
     def resolve_frame_asset(
         self,
-        frame: FrameRecord | str,
+        frame: Frame | str,
         *,
         thumbnail: bool = False,
         require_file: bool = True,
@@ -344,7 +358,7 @@ class DataService:
                 ocr=self.get_evidence(frame.frame_id, RetrievalSource.OCR),
                 objects=self.get_object_counts(frame.frame_id),
                 title=video_metadata.title if video_metadata is not None else None,
-                asr_segments=self.get_transcript_segments_at_time(
+                asr_segments=self._catalog_transcript_segments_at_time(
                     frame.video_id, frame.timestamp_ms
                 ),
                 video_url=(
@@ -431,6 +445,33 @@ class DataService:
         """Report whether one text-evidence artifact is loaded."""
 
         return source in self.evidence_stores
+
+    def _catalog_transcript_segments_at_time(
+        self,
+        video_id: str,
+        timestamp_ms: int,
+    ) -> list[TranscriptSegmentArtifact]:
+        """Return legacy Pydantic segments for the temporary catalog DTO.
+
+        Runtime callers use ``get_transcript_segments_at_time`` and receive
+        corpus dataclasses. This adapter exists only while DataService still
+        materializes the old Pydantic FrameCatalogEntry contract.
+        """
+
+        return sorted(
+            (
+                segment
+                for segment in self._catalog_transcript_segments
+                if segment.video_id == video_id
+                and segment.start_ms <= timestamp_ms < segment.end_ms
+            ),
+            key=lambda segment: (
+                segment.start_ms,
+                segment.end_ms,
+                segment.segment_index,
+                segment.segment_id,
+            ),
+        )
 
     def iter_evidence(self, source: RetrievalSource) -> Iterator[object]:
         store = self.evidence_stores.get(source)

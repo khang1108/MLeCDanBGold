@@ -17,8 +17,9 @@ from hcmai.common.schemas import (
     RetrievalSource,
     TranscriptSegment,
 )
+from hcmai.corpus.models import TranscriptSegment as RuntimeTranscriptSegment
 from hcmai.data.pipeline import DataService
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 
 
 def _write_frame(path: Path) -> None:
@@ -175,7 +176,11 @@ def test_evidence_and_transcript_loaders_preserve_nullable_fields(
     assert objects.counts == {}
     assert objects.summary is None
     assert objects.detection_count == 0
-    assert transcript.speaker_id is None
-    assert transcript.confidence is None
-    assert transcript.model_name is None
-    assert transcript.model_revision is None
+    assert transcript == RuntimeTranscriptSegment(
+        segment_id="video-001-segment-000",
+        video_id="video-001",
+        segment_index=0,
+        start_ms=1_000,
+        end_ms=1_500,
+        text="A brief utterance.",
+    )

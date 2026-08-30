@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from hcmai.common.schemas import TranscriptSegment
+from hcmai.common.schemas import TranscriptSegment as TranscriptSegmentArtifact
+from hcmai.corpus.models import TranscriptSegment
 
 
 def load_transcript_records(
@@ -30,7 +31,18 @@ def load_transcript_records(
     for path in paths:
         table = pd.read_parquet(path).astype(object)
         rows = table.where(table.notna(), None).to_dict(orient="records")
-        records.extend(TranscriptSegment.model_validate(row) for row in rows)
+        for row in rows:
+            artifact_record = TranscriptSegmentArtifact.model_validate(row)
+            records.append(
+                TranscriptSegment(
+                    segment_id=artifact_record.segment_id,
+                    video_id=artifact_record.video_id,
+                    segment_index=artifact_record.segment_index,
+                    start_ms=artifact_record.start_ms,
+                    end_ms=artifact_record.end_ms,
+                    text=artifact_record.text,
+                )
+            )
 
     identifiers = [record.segment_id for record in records]
     if len(set(identifiers)) != len(identifiers):

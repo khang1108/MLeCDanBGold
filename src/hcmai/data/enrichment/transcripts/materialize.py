@@ -24,9 +24,11 @@ from hcmai.common.schemas import (
     validate_frame_enrichment,
 )
 from hcmai.common.utils.io import atomic_write
+from hcmai.data.enrichment.transcripts.artifacts import (
+    load_transcript_artifact_records,
+)
 from hcmai.data.enrichment.transcripts.manifest import load_manifest
-from hcmai.data.enrichment.transcripts.store import TranscriptStore
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 
 
 def _normalize(text: str) -> str:
@@ -194,11 +196,10 @@ def materialize_transcript_artifact(
 
     frame_store = FrameStore(frames_path)
     transcript_path = Path(transcript_root)
-    transcript_store = TranscriptStore(transcript_path)
     frames = list(frame_store.iter_frames())
     rows = materialize_asr_enrichment(
         frames,
-        list(transcript_store.iter_records()),
+        load_transcript_artifact_records(transcript_path),
         evaluated_video_ids=completed_video_ids(transcript_path),
         window_ms=window_ms,
         enrichment_version=enrichment_version,

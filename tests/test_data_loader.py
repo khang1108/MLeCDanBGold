@@ -6,8 +6,9 @@ import pandas as pd
 import pytest
 
 from hcmai.common.schemas.frame import FrameRecord
-from hcmai.data.stores import frame as frame_module
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.models import Frame
+from hcmai.corpus.stores import frame as frame_module
+from hcmai.corpus.stores.frame import FrameStore
 
 
 @pytest.fixture
@@ -106,14 +107,14 @@ def test_store_loads_parquet_once(
     assert calls == 1
 
 
-def test_get_returns_frame_record_with_nullable_values(
+def test_get_returns_runtime_frame_with_nullable_values(
     metadata_path: Path,
 ) -> None:
-    """Materialize Parquet rows as validated frame contracts."""
+    """Validate artifact rows while exposing the compact runtime frame."""
 
     frame = FrameStore(metadata_path).get("L21_V001_00000010")
 
-    assert isinstance(frame, FrameRecord)
+    assert isinstance(frame, Frame)
     assert frame.frame_idx == 10
     assert frame.thumbnail_path is None
 

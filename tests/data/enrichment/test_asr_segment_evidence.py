@@ -22,7 +22,7 @@ from hcmai.data.enrichment.transcripts.manifest import (
     TranscriptManifest,
 )
 from hcmai.data.enrichment.transcripts.materialize import materialize_asr_enrichment
-from hcmai.data.enrichment.transcripts.store import TranscriptStore
+from hcmai.corpus.stores.transcript import TranscriptStore
 
 
 def _legacy_segment() -> dict[str, object]:
@@ -208,7 +208,7 @@ def test_import_reference_scan_catches_alias_and_qualified_imports() -> None:
     """Keep the dependency boundary effective for common import spellings."""
 
     tree = ast.parse(
-        "import hcmai.data.stores.evidence as stores\n"
+        "import hcmai.corpus.stores.evidence as stores\n"
         "import hcmai.data.enrichment.transcripts.materialize as aligned\n"
         "store = stores.ASRStore\n"
         "build = aligned.materialize_asr_enrichment\n"
@@ -217,7 +217,7 @@ def test_import_reference_scan_catches_alias_and_qualified_imports() -> None:
     references = _import_references(tree)
     assert "ASRStore" in references
     assert "materialize_asr_enrichment" in references
-    assert "hcmai.data.stores.evidence" in references
+    assert "hcmai.corpus.stores.evidence" in references
 
 
 def test_frame_context_modules_do_not_depend_on_asr_compatibility_view() -> None:

@@ -21,7 +21,7 @@ from hcmai.common.schemas import (
 )
 from hcmai.data.enrichment.object_artifacts import write_object_artifacts
 from hcmai.data.pipeline import DataService
-from hcmai.data.stores import CaptionStore, FrameContextStore, ObjectStore
+from hcmai.corpus.stores import CaptionStore, FrameContextStore, ObjectStore
 
 
 def _write_frames(root: Path) -> Path:

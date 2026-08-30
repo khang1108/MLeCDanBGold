@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from hcmai.common.schemas import FrameRecord
+from hcmai.corpus.models import Frame
 
 
 class FrameAssetError(OSError):
@@ -97,7 +97,7 @@ class FrameAssetResolver:
 
     def resolve_frame(
         self,
-        frame: FrameRecord,
+        frame: Frame,
         *,
         thumbnail: bool = False,
         require_file: bool = True,
@@ -109,7 +109,7 @@ class FrameAssetResolver:
 
     def sample_status(
         self,
-        frames: Sequence[FrameRecord],
+        frames: Sequence[Frame],
         *,
         sample_size: int = 100,
     ) -> FrameAssetStatus:

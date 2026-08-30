@@ -21,7 +21,7 @@ from hcmai.common.schemas import (
     RetrievalSource,
     RetrievalTrace,
 )
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.cache import EmbeddingCache
 from hcmai.retrieval.retriever.query_batch import (

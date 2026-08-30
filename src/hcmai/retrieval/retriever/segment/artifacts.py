@@ -16,9 +16,11 @@ import numpy as np
 import pandas as pd
 
 from hcmai.common.config import AppConfig
-from hcmai.common.schemas import ProcessingStatus, RetrievalSource
+from hcmai.common.schemas import ProcessingStatus, RetrievalSource, TranscriptSegment
 from hcmai.common.utils.logging import get_logger
-from hcmai.data.enrichment.transcripts.store import TranscriptStore
+from hcmai.data.enrichment.transcripts.artifacts import (
+    load_transcript_artifact_records,
+)
 from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
 from hcmai.retrieval.retriever.artifacts import fingerprint_files, publish_directory
@@ -32,7 +34,9 @@ from hcmai.retrieval.retriever.text.retriever import (
 logger = get_logger(__name__)
 
 
-def build_segment_corpus(store: TranscriptStore) -> tuple[list[str], pd.DataFrame]:
+def build_segment_corpus(
+    records: tuple[TranscriptSegment, ...],
+) -> tuple[list[str], pd.DataFrame]:
     """Serialize completed transcript speech into a segment-native text corpus.
 
     Whitespace is normalized without adding timestamps, speakers, or language
@@ -43,7 +47,7 @@ def build_segment_corpus(store: TranscriptStore) -> tuple[list[str], pd.DataFram
 
     texts: list[str] = []
     rows: list[dict[str, object]] = []
-    for segment in store.iter_records():
+    for segment in records:
         if segment.status is not ProcessingStatus.COMPLETED:
             continue
         text = " ".join(segment.text.split())
@@ -94,7 +98,7 @@ def transcript_lineage_files(transcripts_path: str | Path) -> tuple[Path, ...]:
 
 
 def build_asr_segment_index(
-    store: TranscriptStore,
+    records: tuple[TranscriptSegment, ...],
     encoder: TextEmbeddingAdapter,
     output_dir: str | Path,
     *,
@@ -106,7 +110,7 @@ def build_asr_segment_index(
     """Embed completed transcript text and publish one validated segment bundle."""
 
     artifact_name = _embedding_artifact_name(embeddings_filename)
-    texts, mapping = build_segment_corpus(store)
+    texts, mapping = build_segment_corpus(records)
     vectors = _normalized(_encode_texts(texts, encoder, RetrievalSource.ASR))
     if len(vectors) != len(mapping):
         raise ValueError(
@@ -149,7 +153,7 @@ def build_asr_segment_artifacts(
     selected_encoder = _segment_encoder(settings, models, encoder)
 
     index = build_asr_segment_index(
-        TranscriptStore(source_path),
+        load_transcript_artifact_records(source_path),
         selected_encoder,
         output,
         embeddings_filename=settings.index.asr_segment_embedding_filename,

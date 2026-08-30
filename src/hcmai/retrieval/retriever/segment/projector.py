@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from numbers import Integral
 from typing import Literal, Mapping
 
-from hcmai.common.schemas.frame import FrameRecord
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.models import Frame
+from hcmai.corpus.stores.frame import FrameStore
 
 ProjectionKind = Literal["inside_segment", "nearest_midpoint"]
 
@@ -126,7 +126,7 @@ def _validated_interval(start_ms: object, end_ms: object) -> tuple[int, int]:
 
 
 def _selection_key(
-    frame: FrameRecord,
+    frame: Frame,
     midpoint_ms: int,
 ) -> tuple[int, int, int, str]:
     """Return the stable midpoint-distance ordering required for projection."""
@@ -140,7 +140,7 @@ def _selection_key(
 
 
 def _projection(
-    frame: FrameRecord,
+    frame: Frame,
     midpoint_ms: int,
     kind: ProjectionKind,
 ) -> SegmentFrameProjection:

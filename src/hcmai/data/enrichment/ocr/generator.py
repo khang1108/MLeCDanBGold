@@ -21,7 +21,7 @@ from tqdm import tqdm
 from hcmai.common.schemas import OCREvidence, OCRRegion
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.io import read_json
-from hcmai.data.stores.frame import FrameStore
+from hcmai.corpus.stores.frame import FrameStore
 
 from .adapters.florence import FlorenceAdapter
 from .artifacts import failure_row, parsed_row, valid_ocr, write_ocr_artifacts
