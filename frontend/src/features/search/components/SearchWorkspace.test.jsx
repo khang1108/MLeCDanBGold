@@ -15,6 +15,13 @@ beforeEach(() => {
 });
 
 const EVENT_PLACEHOLDER = 'Describe the event, or add E1, E2, ... for TRAKE';
+const SEARCH_LATENCY = {
+  query_ms: 1,
+  retrieval_ms: 2,
+  alignment_ms: 3,
+  materialization_ms: 1,
+  total_ms: 7,
+};
 const submit = (eventDescription) => {
   fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
     target: { value: eventDescription },
@@ -40,7 +47,7 @@ test.each([
   query,
 ) => {
   searchFrames.mockResolvedValueOnce({
-    results: [], warnings: [], latency_ms: { total: 4 },
+    results: [], warnings: [], latency: SEARCH_LATENCY,
   });
   render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
   submit(description);
@@ -49,6 +56,7 @@ test.each([
     expect.objectContaining({ query, topK: 20 }),
   ));
   expect(searchTrake).not.toHaveBeenCalled();
+  expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
 });
 
 test('TRAKE renders same-video backend paths independently and submits only the selected path', async () => {
@@ -123,7 +131,7 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
       scores: { final: 0.91 },
     }],
     warnings: [],
-    latency_ms: { total: 4 },
+    latency: SEARCH_LATENCY,
   });
   render(<SearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
   submit('red boat');
@@ -138,7 +146,7 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   }));
 });
 
-test('does not render the legacy Suggest Query control', () => {
+test('does not render the retired query-helper control', () => {
   render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
   expect(screen.queryByRole('button', { name: /suggest query/i })).toBeNull();
 });

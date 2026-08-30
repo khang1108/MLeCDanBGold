@@ -19,10 +19,12 @@ order.
 event strings. TRAKE provides ordered events directly. Planning does not
 retrieve data, call models, or decide task-specific response formatting.
 
-## 3. Candidate video scoring
+## 3. Full-corpus visual scoring
 
 `TemporalSearchService` calls `RetrievalService.score_event_videos()` once per
-request and scores the full canonical visual corpus for each ordered event.
+request. Retrieval scores every configured canonical visual-index frame for
+each ordered event, then partitions the dense scores into per-video matrices
+for decoding. There is no candidate-video shortlisting in this baseline.
 
 ## 4. Event x frame score matrix
 
@@ -42,8 +44,9 @@ sum_i transform(score(event_i, frame[p_i]))
   - lambda_gap * sum_{i>1} max(0, timestamp[p_i] - timestamp[p_(i-1)])
 ```
 
-`event_power`, `lambda_gap`, score depth, shortlist size, and decoder limits
-are explicit `search.alignment` configuration, not hidden constants.
+`event_power`, `lambda_gap`, `chunk_size`, and `cluster_delta` are explicit
+`search.alignment` configuration, not hidden constants. Request `top_k` is the
+maximum number of ranked paths returned by the shared search.
 
 ## 6. KIS projection
 
@@ -87,5 +90,5 @@ record are in
 Run small hand-checkable fixtures with:
 
 ```bash
-PYTHONPATH=src aic/bin/python -m pytest tests/unit/temporal -q
+PYTHONPATH=.:src aic/bin/python -m pytest tests/unit/temporal -q
 ```

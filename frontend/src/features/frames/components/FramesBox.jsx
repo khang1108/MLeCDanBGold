@@ -15,7 +15,7 @@ const FramesBox = ({
   const hasSearched = latencyMs !== null || error !== null;
   const hasLatency = latencyMs !== null && latencyMs !== undefined;
   const structuredLatency = typeof latencyMs === "object" && latencyMs !== null;
-  const totalLatencyMs = structuredLatency ? latencyMs.total : latencyMs;
+  const totalLatencyMs = structuredLatency ? latencyMs.total_ms : latencyMs;
   if (isLoading) return null;
 
   return (
@@ -38,27 +38,19 @@ const FramesBox = ({
           {structuredLatency && (
             <div className="latency-stages">
               <span className="latency-stage-item">
-                Query: {latencyMs.query_processing + latencyMs.query_encoding}ms
+                Query: {latencyMs.query_ms}ms
               </span>
               <span className="latency-stage-divider">|</span>
               <span className="latency-stage-item">
-                Retrieval: {latencyMs.candidate_retrieval}ms
+                Retrieval: {latencyMs.retrieval_ms}ms
               </span>
               <span className="latency-stage-divider">|</span>
               <span className="latency-stage-item">
-                Fusion: {latencyMs.fusion}ms
+                Alignment: {latencyMs.alignment_ms}ms
               </span>
-              {latencyMs.reranking > 0 && (
-                <>
-                  <span className="latency-stage-divider">|</span>
-                  <span className="latency-stage-item">
-                    Rerank: {latencyMs.reranking}ms
-                  </span>
-                </>
-              )}
               <span className="latency-stage-divider">|</span>
               <span className="latency-stage-item">
-                Materialize: {latencyMs.materialization}ms
+                Materialize: {latencyMs.materialization_ms}ms
               </span>
             </div>
           )}

@@ -1,16 +1,16 @@
 # Search orchestration
 
 `hcmai.orchestration` owns the online application flow. FastAPI routers call
-`SearchService` from `pipeline.py`; they do not wire retrieval or temporal
-alignment internals themselves.
+the explicit KIS or TRAKE method on `SearchService`; routers do not wire
+retrieval, alignment, or materialization internals themselves.
 
 ```text
 orchestration/
-├── pipeline.py              # SearchService public facade
-├── task_router.py           # Task-pipeline registry
-├── workflows/               # Executable task-specific orchestration
+├── pipeline.py              # Explicit SearchService public facade
+├── temporal_search.py       # Shared scoring and aligned-path materialization
+├── workflows/               # Thin KIS and TRAKE projections
 ├── setup.py                 # Single application composition root
-└── materializer.py          # Canonical SearchResponse construction
+└── materializer.py          # Representative evidence and asset URLs
 ```
 
 ## Runtime path
@@ -18,34 +18,34 @@ orchestration/
 ```text
 FastAPI
     → SearchService
-    → task workflow (KIS or TRAKE)
+    → explicit KISPipeline or TRAKEPipeline
     → TemporalSearchService + RetrievalService
     → DataService-backed canonical materialization
 ```
 
-`SearchService` resolves each request through `PipelineRegistry`. The current
-registry exposes KIS and TRAKE. Both consume one stateless ordered
-event-to-frame alignment service; KIS projects a path to its existing
-single-frame public response and TRAKE returns the full path.
+Both workflows consume one stateless ordered event-to-frame alignment service.
+KIS deterministically splits raw query text and projects each ranked path to
+its upper-middle frame while retaining the full alignment. TRAKE accepts
+ordered events directly and returns every ranked path independently, including
+multiple paths from the same video.
 
 `setup.py` loads configuration and artifacts once, constructs the selected
-services, and injects them into `SearchService`. Cross-component imports in
-this package target only another component's `pipeline.py` or shared schemas.
+services, and injects them into `SearchService`. Request handling does not
+create or modify offline artifacts.
 
-Canonical identity is immutable: retrieval and alignment may score or order
-candidate frames, while materialization alone resolves each exact
-`frame_id` to its official `video_id` and integer `frame_idx` through
-`DataService`.
+Canonical identity is immutable. `TemporalSearchService` validates every
+retrieval-owned `frame_id`, `video_id`, `frame_idx`, and timestamp against
+`DataService` before exposing an `AlignedPath`. Workflow projection preserves
+those parallel arrays, and the backend supplies all frame and thumbnail URLs.
 
-Retrieval latency and warnings are returned in a request-scoped
-`RetrievalResult`. KIS derives query-encoding, index-search, and fusion latency
-from that trace; no timing is read from a mutable singleton service field.
-Completed stages also emit a JSON record containing `request_id`, `task_type`,
-`stage`, `duration_ms`, and `status`.
+KIS and TRAKE return the same public latency stages: `query_ms`,
+`retrieval_ms`, `alignment_ms`, `materialization_ms`, and `total_ms`. Scores
+are raw DP scores. Context/ASR retrieval, reciprocal-rank fusion, and VLM
+reranking remain detached research capabilities and are not called by these
+Phase A workflows.
 
 ## Verification
 
 ```bash
-PYTHONPATH=.:src aic/bin/pytest tests/test_search_service.py
-pyright src/hcmai/orchestration
+PYTHONPATH=src python -m pytest tests/orchestration tests/api -q
 ```

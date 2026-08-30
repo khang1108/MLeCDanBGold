@@ -20,11 +20,11 @@ const ENDPOINTS = [
       {
         method: 'POST',
         path: '/api/v1/search',
-        title: 'Standalone KIS / Frame Search',
-        desc: 'Retrieves top-K candidate keyframes matching natural language or structured queries with multimodal fusion and reranking.',
+        title: 'KIS Temporal Search',
+        desc: 'Splits a natural-language query into ordered events, aligns them against canonical visual keyframes, and returns representative frames with full alignment evidence.',
         curl: `curl -X POST "${API_BASE_URL}/api/v1/search" \\
   -H "Content-Type: application/json" \\
-  -d '{"query": "a red car turning left", "query_type": "kis", "top_k": 20}'`,
+  -d '{"query": "a red car approaches. It turns left.", "top_k": 20}'`,
       },
       {
         method: 'POST',
@@ -64,24 +64,8 @@ const ENDPOINTS = [
     ],
   },
   {
-    category: 'Query & Submissions',
+    category: 'Submissions',
     items: [
-      {
-        method: 'POST',
-        path: '/api/v1/suggest-query',
-        title: 'Query Suggestions',
-        desc: 'Generates 5 recommended search queries for multimodal video retrieval exploration.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/suggest-query" \\
-  -H "Content-Type: application/json" \\
-  -d '{"count": 5}'`,
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/parse-query-files',
-        title: 'Parse Query Files to CSV',
-        desc: 'Parses uploaded .txt query files and maps them to competition .csv submission targets.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/parse-query-files" -F "files=@query_1.txt"`,
-      },
       {
         method: 'POST',
         path: '/api/v1/submission',

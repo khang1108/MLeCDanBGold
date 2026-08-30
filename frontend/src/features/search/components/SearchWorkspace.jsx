@@ -192,7 +192,7 @@ const SearchWorkspace = ({
         setResultType("retrieval");
         setFrames(response.results || []);
         setKisEvents(response.events || []);
-        setSearchLatencyMs(response.latency_ms);
+        setSearchLatencyMs(response.latency);
       }
       setWarnings(response.warnings || []);
     } catch (requestError) {

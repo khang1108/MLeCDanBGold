@@ -18,6 +18,8 @@ pytestmark = pytest.mark.usefixtures("inline_router_threadpool")
 FRAME_ID = "TEST_V001_keyframe_000001"
 
 class Store:
+    video_metadata_store = None
+
     def __init__(self):
         self._records = (FrameRecord(
             frame_id=FRAME_ID, video_id="TEST_V001", frame_idx=0,
@@ -39,6 +41,12 @@ class Store:
 
     def get_evidence(self, frame_id, source):
         return None
+
+    def get_object_counts(self, frame_id):
+        return None
+
+    def get_transcript_segments_at_time(self, video_id, timestamp_ms):
+        return []
 
 class Retriever:
     def score_event_videos(self, events, filters=None, **kwargs):
@@ -80,10 +88,7 @@ def test_app_exposes_only_standalone_search_contract() -> None:
     assert capabilities["shared_retrieval"] is True
     assert "query_suggestions" not in capabilities
     assert capabilities["frame_assets"] is False
-    assert capabilities["query_types"] == {
-        "kis": True,
-        "trake": True,
-    }
+    assert "query_types" not in capabilities
     assert "vqa" not in capabilities
     assert "vkis" not in capabilities
     assert capabilities["remote_inference"] == {

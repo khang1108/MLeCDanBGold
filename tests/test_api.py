@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from types import SimpleNamespace
 from typing import cast
 
 import httpx
@@ -26,6 +26,8 @@ pytestmark = pytest.mark.usefixtures("inline_router_threadpool")
 
 class MockFrameStore:
     """Mock FrameStore for testing API endpoints."""
+
+    video_metadata_store = None
 
     def __init__(self, evidence=None) -> None:
         self.record = FrameRecord(
@@ -60,6 +62,24 @@ class MockFrameStore:
         if store is None:
             return None
         return store.get_text(frame_id)
+
+    def get_object_counts(self, frame_id):
+        """Return no optional object evidence for the API fixture."""
+
+        assert frame_id == self.record.frame_id
+        return None
+
+    def get_transcript_segments_at_time(self, video_id, timestamp_ms):
+        """Project configured ASR text as timestamped timeline evidence."""
+
+        assert (video_id, timestamp_ms) == (
+            self.record.video_id,
+            self.record.timestamp_ms,
+        )
+        store = self.evidence.get(RetrievalSource.ASR)
+        if store is None:
+            return []
+        return [SimpleNamespace(text=store.get_text(self.record.frame_id))]
 
     def iter_frame_catalog_entries(self):
         """Expose one minimal catalog row for the list-frames API fixture."""
@@ -190,10 +210,9 @@ def test_health_check_endpoint(api_app: FastAPI) -> None:
     assert data["ready"] is True
     assert data["frame_store_loaded"] is True
     assert data["total_frames"] == 1
-    assert data["capabilities"]["query_types"] == {
-        "kis": True,
-        "trake": True,
-    }
+    assert data["capabilities"]["kis"] is True
+    assert data["capabilities"]["trake"] is True
+    assert "query_types" not in data["capabilities"]
 
 
 def test_uninitialized_health_exposes_only_kis_and_trake() -> None:
@@ -206,10 +225,7 @@ def test_uninitialized_health_exposes_only_kis_and_trake() -> None:
     assert capabilities["search"] is False
     assert capabilities["kis"] is False
     assert capabilities["trake"] is False
-    assert capabilities["query_types"] == {
-        "kis": False,
-        "trake": False,
-    }
+    assert "query_types" not in capabilities
     assert "vqa" not in capabilities
     assert "vkis" not in capabilities
 
@@ -234,7 +250,8 @@ def test_search_materializes_configured_text_evidence() -> None:
     assert health["evidence_stores"] == {
         "caption": True, "ocr": True, "asr": True
     }
-    assert (result["caption"], result["ocr_text"], result["asr_text"]) == (
+    metadata = result["metadata"]
+    assert (metadata["caption"], metadata["ocr"], metadata["asr"]) == (
         "A person cooking.", "BƠ", "Cho bơ vào chảo."
     )
 
@@ -243,18 +260,24 @@ def test_search_endpoint(api_app: FastAPI) -> None:
     """Test the POST /api/v1/search endpoint."""
     payload = {
         "query": "một người đang đi bộ",
-        "query_type": "kis",
         "top_k": 5,
     }
     response = request(api_app, "POST", "/api/v1/search", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["query"] == "một người đang đi bộ"
-    assert data["query_type"] == "kis"
-    assert data["total_results"] == 1
+    assert data["events"] == ["một người đang đi bộ"]
+    assert len(data["results"]) == 1
+    assert set(data["latency"]) == {
+        "query_ms",
+        "retrieval_ms",
+        "alignment_ms",
+        "materialization_ms",
+        "total_ms",
+    }
     assert data["results"][0]["frame_ids"] == ["L21_V001_00000090"]
     assert data["results"][0]["video_id"] == "L21_V001"
-    assert data["results"][0]["scores"]["final"] >= 0.95
+    assert data["results"][0]["score"] == pytest.approx(0.95)
 
 
 def test_vqa_payload_is_rejected_by_kis_search_schema(api_app: FastAPI) -> None:
@@ -290,17 +313,24 @@ def test_degraded_service_preserves_unavailable_statuses() -> None:
     assert frame.status_code == 503
 
 
-def test_search_endpoint_logs_every_pipeline_stage(
-    api_app: FastAPI, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Operators can see progress before and after every online search stage."""
-    with caplog.at_level(logging.INFO, logger="hcmai"):
-        response = request(api_app, "POST", "/api/v1/search",
-                           json={"query": "red bus", "top_k": 5})
+def test_search_endpoint_exposes_frozen_latency_stages(api_app: FastAPI) -> None:
+    """Expose only the five public Phase A timing stages."""
+
+    response = request(
+        api_app,
+        "POST",
+        "/api/v1/search",
+        json={"query": "red bus", "top_k": 5},
+    )
+
     assert response.status_code == 200
-    output = "\n".join(record.getMessage() for record in caplog.records)
-    assert "KIS completed events=1" in output
-    assert '"backend": "monotonic_dp"' in output
+    assert set(response.json()["latency"]) == {
+        "query_ms",
+        "retrieval_ms",
+        "alignment_ms",
+        "materialization_ms",
+        "total_ms",
+    }
 
 
 def test_get_frame_endpoint(api_app: FastAPI) -> None:

@@ -369,7 +369,7 @@ def test_fast_track_visual_scoring_uses_visual_family(
         return []
 
     monkeypatch.setattr(
-        "hcmai.retrieval.retriever.pipeline.score_videos", fake_score
+        "hcmai.retrieval.retriever.pipeline.score_all_videos", fake_score
     )
 
     assert service.score_event_videos(["red cable car"]) == []
