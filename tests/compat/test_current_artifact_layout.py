@@ -24,6 +24,9 @@ def test_default_artifact_paths_remain_current_layout() -> None:
     assert settings.dataset.enrichment.object_path.as_posix() == (
         "artifacts/enrichment/objects/frames.parquet"
     )
+    assert settings.dataset.enrichment.asr_path.as_posix() == (
+        "artifacts/enrichment/asr/frame_enrichment.parquet"
+    )
     assert settings.dataset.enrichment.context_path.as_posix() == (
         "artifacts/enrichment/context/frame_context_v1.parquet"
     )
