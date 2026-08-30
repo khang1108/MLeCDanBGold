@@ -6,10 +6,10 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-import hcmai.retrieval.embedding.artifacts as embedding_artifacts
 from hcmai.common.config import EncoderConfig
-from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
-from hcmai.retrieval.embedding.models.metadata import EmbeddingMetadata
+import offline.embeddings.artifacts as embedding_artifacts
+from offline.embeddings.artifacts import EmbeddingArtifactBuilder
+from offline.embeddings.models.metadata import EmbeddingMetadata
 
 
 class FakeEncoder:

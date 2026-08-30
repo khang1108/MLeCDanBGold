@@ -210,17 +210,17 @@ def test_four_aligned_indexes_exactly_match_canonical_frame_identities(
     mock_text_encoder = FakeTextEncoder(text_config)
     ops._text_encoder = mock_text_encoder
     
-    # Mock the visual encoder 
-    # DefaultPreparationOperations uses EmbeddingService.build_visual_artifacts which instantiates SigLIPAdapter by default if encoder is None
-    # Let's mock EmbeddingService.build_visual_artifacts to use our FakeVisualEncoder
-    from hcmai.retrieval.embedding.pipeline import EmbeddingService
-    original_build_visual = EmbeddingService.build_visual_artifacts
+    # The offline builder owns artifact creation; patch that entry point so the
+    # corpus-build workflow still exercises its normal adapter wiring.
+    from offline.embeddings import pipeline as embedding_pipeline
+
+    original_build_visual = embedding_pipeline.build_visual_artifacts
     
     def mock_build_visual(*args, **kwargs):
         kwargs["encoder"] = FakeVisualEncoder(EncoderConfig(model_name="fixture/visual"))
         return original_build_visual(*args, **kwargs)
         
-    monkeypatch.setattr(EmbeddingService, "build_visual_artifacts", staticmethod(mock_build_visual))
+    monkeypatch.setattr(embedding_pipeline, "build_visual_artifacts", mock_build_visual)
 
     # Build all 4 indexes
     visual_index_path = ops.build_visual_index()

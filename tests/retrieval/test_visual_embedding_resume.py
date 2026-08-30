@@ -11,7 +11,7 @@ import pytest
 from PIL import Image
 
 from hcmai.common.config import EncoderConfig
-from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
+from offline.embeddings.artifacts import EmbeddingArtifactBuilder
 
 
 class CountingEncoder:

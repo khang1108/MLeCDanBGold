@@ -812,7 +812,7 @@ def test_offline_projection_resolves_relative_keyframe_root_once(
     """Keep a config-relative keyframe path directly readable by the builder."""
 
     from scripts import build_retrieval_indexes as workflow
-    from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
+    from offline.embeddings.artifacts import EmbeddingArtifactBuilder
 
     monkeypatch.chdir(tmp_path)
     keyframes_root = Path("data/keyframes")

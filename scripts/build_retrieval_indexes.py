@@ -1031,7 +1031,7 @@ def build_visual(
 ) -> Any:
     """Build strict SigLIP2 vectors with a local or injected remote encoder."""
 
-    from hcmai.retrieval.embedding.artifacts import EmbeddingArtifactBuilder
+    from offline.embeddings.artifacts import EmbeddingArtifactBuilder
     from hcmai.retrieval.retriever.dense.index import DenseIndex
 
     output = config.indexes.visual.resolve()
