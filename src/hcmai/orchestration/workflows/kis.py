@@ -22,12 +22,12 @@ class KISPipeline:
     def __init__(
         self,
         data: DataService | None,
-        alignment: TemporalSearchService | None,
+        temporal: TemporalSearchService | None,
     ) -> None:
         """Bind canonical materialization and the shared temporal service."""
 
         self.data = data
-        self.alignment = alignment
+        self.temporal = temporal
         self.materializer = SearchMaterializer(data) if data is not None else None
 
     def execute(self, request: SearchRequest) -> SearchResponse:
@@ -58,13 +58,13 @@ class KISPipeline:
 
         if self.data is None or self.materializer is None:
             raise RuntimeError("canonical frame data is not loaded")
-        if self.alignment is None:
+        if self.temporal is None:
             raise RuntimeError("temporal search service is not loaded")
 
         events = split_query_events(request.query)
         query_ms = (perf_counter() - query_started) * 1_000
 
-        search = self.alignment.search(events, top_k=request.top_k)
+        search = self.temporal.search(events, top_k=request.top_k)
 
         materialization_started = perf_counter()
         results = [

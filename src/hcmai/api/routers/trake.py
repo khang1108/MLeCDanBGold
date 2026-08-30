@@ -7,13 +7,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
-from hcmai.common.schemas import TRAKERequest, TRAKEResponse
+from hcmai.api.contracts import TRAKERequest, TRAKEResponse
 from hcmai.common.utils.logging import get_logger
-from hcmai.orchestration.pipeline import (
-    SearchPipelineUnavailableError,
-    SearchServiceUnavailableError,
-    UnsupportedSearchTaskError,
-)
+from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 
 logger = get_logger(__name__)
 
@@ -32,17 +28,7 @@ def create_trake_router(service_container: dict[str, Any]) -> APIRouter:
                 detail="Search service not initialized",
             )
         try:
-            return await run_in_threadpool(service.search, request)
-        except UnsupportedSearchTaskError as error:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=str(error),
-            ) from error
-        except SearchPipelineUnavailableError as error:
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail=str(error),
-            ) from error
+            return await run_in_threadpool(service.search_trake, request)
         except SearchServiceUnavailableError as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

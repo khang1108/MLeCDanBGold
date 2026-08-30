@@ -38,10 +38,6 @@ def create_system_router(service_container: dict[str, Any]) -> APIRouter:
                         "available": 0,
                         "missing": 0,
                     },
-                    "query_types": {
-                        "kis": False,
-                        "trake": False,
-                    },
                 },
                 "startup_messages": [],
             }

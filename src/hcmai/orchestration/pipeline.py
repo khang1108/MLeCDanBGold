@@ -3,42 +3,34 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
 
+from hcmai.api.contracts import (
+    SearchRequest,
+    SearchResponse,
+    TRAKERequest,
+    TRAKEResponse,
+)
 from hcmai.common.config import SearchConfig
 from hcmai.common.schemas import (
     FrameCatalogEntry,
     FrameRecord,
     RetrievalSource,
     SubmissionResult,
-    TaskRequest,
-    TaskResponse,
-    TaskType,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.data.pipeline import DataService
-from thundercompute.pipeline import LLMService
-from hcmai.orchestration.workflows.base import (
-    TaskPipelineDependencyError,
-    TaskPipelineRequestError,
-)
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
-from hcmai.orchestration.task_router import PipelineRegistry
-from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.common.observability import METRICS
 from hcmai.common.utils.video import official_frame_idx
 from hcmai.orchestration.temporal_search import TemporalSearchService
 
+if TYPE_CHECKING:
+    from hcmai.retrieval.retriever.pipeline import RetrievalService
+    from thundercompute.pipeline import LLMService
+
 logger = get_logger(__name__)
-
-
-class UnsupportedSearchTaskError(ValueError):
-    """A request cannot be handled by the search application boundary."""
-
-
-class SearchPipelineUnavailableError(RuntimeError):
-    """A known competition task has no executable pipeline yet."""
 
 
 class SearchServiceUnavailableError(RuntimeError):
@@ -46,7 +38,7 @@ class SearchServiceUnavailableError(RuntimeError):
 
 
 class SearchService:
-    """Route task requests through the configured capability services."""
+    """Expose explicit KIS and TRAKE workflows over shared runtime services."""
 
     def __init__(
         self,
@@ -54,19 +46,25 @@ class SearchService:
         retrieval: RetrievalService | None,
         config: SearchConfig | None = None,
         llm: LLMService | None = None,
-        pipeline_registry: PipelineRegistry | None = None,
     ) -> None:
-        """Initialize task pipelines from configured capability services."""
+        """Initialize explicit task workflows over one temporal service."""
 
         self.data = data
         self.retrieval = retrieval
         self.config = config or SearchConfig()
         self.llm = llm
-        self.pipeline_registry = (
-            pipeline_registry
-            if pipeline_registry is not None
-            else self._default_registry()
+
+        temporal = (
+            TemporalSearchService(
+                self.data,
+                self.retrieval,
+                self.config.alignment,
+            )
+            if self.data is not None and self.retrieval is not None
+            else None
         )
+        self.kis = KISPipeline(self.data, temporal)
+        self.trake = TRAKEPipeline(temporal)
 
     @classmethod
     def load(cls, messages: list[str]) -> SearchService:
@@ -124,14 +122,7 @@ class SearchService:
             if self.retrieval is not None
             else set()
         )
-        task_capabilities = self.pipeline_registry.capability_report(
-            (TaskType.KIS, TaskType.TRAKE)
-        )
-        task_capabilities = {
-            task_type: registered and data_ready and retrieval_ready
-            for task_type, registered in task_capabilities.items()
-        }
-        search_ready = any(task_capabilities.values())
+        search_ready = data_ready and retrieval_ready
         default_remote_capabilities = {
             "embedding": False,
             "reranking": False,
@@ -179,13 +170,12 @@ class SearchService:
             "observability": METRICS.snapshot(),
             "capabilities": {
                 "search": search_ready,
-                "kis": task_capabilities.get(TaskType.KIS.value, False),
-                "trake": task_capabilities.get(TaskType.TRAKE.value, False),
+                "kis": search_ready,
+                "trake": search_ready,
                 "shared_retrieval": retrieval_ready,
                 "remote_inference": remote_capabilities,
                 "frame_assets": asset_status["ready"],
                 "frame_asset_status": asset_status,
-                "query_types": task_capabilities,
             },
             "startup_messages": list(startup_messages),
         }
@@ -203,41 +193,27 @@ class SearchService:
         if self.llm is not None:
             self.llm.close()
 
-    def search(self, request: TaskRequest) -> TaskResponse:
-        """Dispatch a validated task request through its registered pipeline."""
+    def search_kis(self, request: SearchRequest) -> SearchResponse:
+        """Execute a validated KIS request through the explicit KIS workflow."""
 
-        try:
-            pipeline = self.pipeline_registry.get(request.query_type)
-        except KeyError as error:
-            raise SearchPipelineUnavailableError(
-                f"pipeline for query_type {request.query_type.value!r} "
-                "is not available"
-            ) from error
+        self._ensure_search_ready()
+        return self.kis.execute(request)
 
-        try:
-            return cast(Any, pipeline).execute(request)
-        except TaskPipelineDependencyError as error:
-            raise SearchServiceUnavailableError(str(error)) from error
-        except TaskPipelineRequestError as error:
-            raise UnsupportedSearchTaskError(str(error)) from error
+    def search_trake(self, request: TRAKERequest) -> TRAKEResponse:
+        """Execute a validated TRAKE request through the explicit TRAKE workflow."""
 
-    def _default_registry(self) -> PipelineRegistry:
-        """Build task heads and inject one temporal facade into every task."""
+        self._ensure_search_ready()
+        return self.trake.execute(request)
 
-        alignment = (
-            TemporalSearchService(
-                self.data,
-                self.retrieval,
-                self.config.alignment,
+    def _ensure_search_ready(self) -> None:
+        """Reject online search when canonical data or retrieval is unavailable."""
+
+        missing: list[str] = []
+        if self.data is None:
+            missing.append("canonical frame data")
+        if self.retrieval is None:
+            missing.append("retrieval service")
+        if missing:
+            raise SearchServiceUnavailableError(
+                f"Search dependencies not loaded: {', '.join(missing)}"
             )
-            if self.data is not None and self.retrieval is not None
-            else None
-        )
-        pipelines = [
-            KISPipeline(
-                self.data,
-                alignment,
-            )
-        ]
-        pipelines.append(cast(Any, TRAKEPipeline(self.data, alignment)))
-        return PipelineRegistry(pipelines)

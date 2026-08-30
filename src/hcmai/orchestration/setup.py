@@ -23,8 +23,10 @@ from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
 logger = get_logger(__name__)
 
+
 def load_search_service(messages: list[str]) -> SearchService:
-    """Build the single configured pipeline, preserving degraded startup."""
+    """Build explicit KIS/TRAKE workflows while preserving degraded startup."""
+
     settings = _load_app_config()
     models = _load_model_config()
     if os.getenv("HCMAI_RETRIEVAL_PROFILE") is not None:

@@ -32,7 +32,6 @@ from .search import (
     SearchResult,
 )
 from .submission import SubmissionResult
-from .task import TaskRequest, TaskResponse
 from .telemetry import PipelineTrace, RetrievalTrace, StageStatus, StageTrace
 from .trake import (
     TRAKERequest,
@@ -85,8 +84,6 @@ __all__ = [
     "TRAKERequest",
     "TRAKEResponse",
     "TRAKESubmission",
-    "TaskRequest",
-    "TaskResponse",
     "TranscriptSegment",
     "CaptionEvidence",
     "OCRRegion",

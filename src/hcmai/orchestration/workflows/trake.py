@@ -29,11 +29,11 @@ class TRAKEPipeline:
 
     def __init__(
         self,
-        alignment: TemporalSearchService | None,
+        temporal: TemporalSearchService | None,
     ) -> None:
         """Bind the shared temporal-search service used by this task head."""
 
-        self.alignment = alignment
+        self.temporal = temporal
 
     def execute(self, request: TRAKERequest) -> TRAKEResponse:
         """Align explicit events and project paths without video-level merging.
@@ -43,7 +43,7 @@ class TRAKEPipeline:
         frame IDs, so the frontend does not infer asset locations.
         """
 
-        if self.alignment is None:
+        if self.temporal is None:
             raise RuntimeError("temporal search service is not loaded")
 
         started = perf_counter()
@@ -52,7 +52,7 @@ class TRAKEPipeline:
         events = request.events
         query_ms = (perf_counter() - query_started) * 1_000
 
-        search = self.alignment.search(events, top_k=request.top_k)
+        search = self.temporal.search(events, top_k=request.top_k)
 
         materialization_started = perf_counter()
         paths = [self._build_path(path) for path in search.paths]
