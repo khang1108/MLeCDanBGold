@@ -29,3 +29,31 @@ A scoped FAISS-stub setup test reloads retrieval modules. The visual-scoring
 test now patches the concrete service method's globals, preventing it from
 patching a later reloaded module instance. This was a deterministic test-order
 issue, not a runtime behavior change.
+
+### Review-fix round
+
+- Kept API and orchestration on the public `Corpus` boundary: frame asset
+  errors are now handled through the standard `OSError` base class, while
+  asset sampling and evidence availability are explicit `Corpus` methods.
+- Made a missing or empty canonical frame artifact fail startup immediately;
+  optional artifacts and invalid optional evidence still produce diagnostics.
+- Restored sample-based frame-asset health and made `evidence_stores`
+  consistent between initialized and unavailable services.
+- Added architecture coverage preventing API, orchestration, and temporal code
+  from importing private `corpus.assets` or `corpus.stores` modules.
+- Regression: `PYTHONPATH=.:src aic/bin/pytest tests/api tests/orchestration
+  tests/temporal tests/retrieval tests/corpus tests/architecture
+  tests/test_frame_assets.py -v` — **163 passed**.
+
+### Review-fix round 2
+
+- Added `CorpusFrameLoadError` to distinguish failures opening required
+  canonical frame metadata from optional artifact failures.
+- `_load_corpus` now re-raises required frame failures, while retaining its
+  existing diagnostic-and-degrade path for optional artifact errors surfaced by
+  `Corpus.open`.
+- Added a regression for a present but malformed `frames.parquet` artifact.
+- Validation: `PYTHONPATH=.:src aic/bin/pytest
+  tests/orchestration/test_fast_track_setup.py tests/corpus/test_corpus.py -v`
+  — **21 passed**; `python -m compileall -q src tests` and `git diff --check`
+  also passed.

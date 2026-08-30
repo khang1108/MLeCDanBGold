@@ -31,6 +31,14 @@ _TEXT_STORES = {
 }
 
 
+class CorpusFrameLoadError(FileNotFoundError):
+    """Report a failure while opening required canonical frame metadata.
+
+    Optional evidence may be unavailable during degraded startup, but this
+    error marks an unreadable or invalid frame authority that must stop it.
+    """
+
+
 class Corpus:
     """Read canonical frames and explicitly configured runtime evidence.
 
@@ -78,11 +86,16 @@ class Corpus:
         """
 
         frame_artifact = Path(frames_path)
-        if not frame_artifact.is_file():
-            raise FileNotFoundError(
-                f"Frame artifact is not a file: {frame_artifact}"
-            )
-        frames = FrameStore(frame_artifact)
+        try:
+            if not frame_artifact.is_file():
+                raise FileNotFoundError(
+                    f"Frame artifact is not a file: {frame_artifact}"
+                )
+            frames = FrameStore(frame_artifact)
+        except Exception as error:
+            raise CorpusFrameLoadError(
+                f"Could not load canonical frame artifact: {frame_artifact}"
+            ) from error
         evidence = cls._open_text_evidence(evidence_paths)
         object_counts = (
             ObjectCountsStore(object_counts_path)

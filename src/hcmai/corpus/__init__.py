@@ -5,7 +5,13 @@ Offline artifact-validation schemas remain under :mod:`hcmai.common.schemas`
 until the later corpus migration phases.
 """
 
-from .corpus import Corpus
+from .corpus import Corpus, CorpusFrameLoadError
 from .models import Frame, TranscriptSegment, VideoMetadata
 
-__all__ = ["Corpus", "Frame", "TranscriptSegment", "VideoMetadata"]
+__all__ = [
+    "Corpus",
+    "CorpusFrameLoadError",
+    "Frame",
+    "TranscriptSegment",
+    "VideoMetadata",
+]

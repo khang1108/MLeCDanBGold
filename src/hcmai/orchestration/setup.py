@@ -14,7 +14,7 @@ from hcmai.common.config import (
 )
 from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.logging import get_logger
-from hcmai.corpus import Corpus
+from hcmai.corpus import Corpus, CorpusFrameLoadError
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from thundercompute.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
@@ -134,6 +134,11 @@ def _load_corpus(
             transcript_path=transcript_path,
             video_metadata_path=video_metadata_path,
         )
+    except CorpusFrameLoadError:
+        # Canonical frames are required for identity-preserving retrieval.
+        # Unlike optional evidence, malformed or unreadable frame metadata
+        # must prevent startup rather than silently disabling search.
+        raise
     except Exception as error:
         messages.append(
             f"Could not load metadata {metadata_path}: "

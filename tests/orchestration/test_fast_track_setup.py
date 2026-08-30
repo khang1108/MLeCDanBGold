@@ -19,6 +19,7 @@ from hcmai.common.config import (
     IndexConfig,
     SearchConfig,
 )
+from hcmai.corpus import CorpusFrameLoadError
 from hcmai.common.schemas import RetrievalSource
 from thundercompute.config import LLMServiceConfig
 from hcmai.orchestration import setup
@@ -472,6 +473,31 @@ def test_missing_canonical_frames_fail_fast(tmp_path: Path) -> None:
             tmp_path,
             [],
         )
+
+
+def test_malformed_canonical_frames_fail_fast(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A present but unreadable frame artifact remains a startup error."""
+
+    frames = tmp_path / "frames.parquet"
+    frames.write_bytes(b"invalid parquet")
+    settings = AppConfig.model_validate({"dataset": {"root": tmp_path}})
+
+    def open_invalid_frames(*_args: object, **_kwargs: object) -> None:
+        """Simulate Corpus rejecting a malformed required frame artifact."""
+
+        raise CorpusFrameLoadError("invalid frame schema")
+
+    monkeypatch.setattr(
+        setup.Corpus,
+        "open",
+        staticmethod(open_invalid_frames),
+    )
+
+    with pytest.raises(CorpusFrameLoadError, match="invalid frame schema"):
+        setup._load_corpus(settings, frames, tmp_path, [])
 
 
 def test_removed_environment_profile_is_rejected(
