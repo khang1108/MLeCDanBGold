@@ -31,4 +31,5 @@ describe('useHealthCheck', () => {
 
     expect(result.current.isHealthy).toBe(false);
   });
+
 });

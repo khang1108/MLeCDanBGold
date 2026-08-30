@@ -8,8 +8,6 @@ import VimModeBadge from "./features/vim/components/VimModeBadge";
 import TopKPromptModal from "./features/vim/components/TopKPromptModal";
 import VimHelpModal from "./features/vim/components/VimHelpModal";
 import ApiDocsModal from "./features/docs/components/ApiDocsModal";
-import "./styles/gif-loader.css";
-import "./styles/vim.css";
 import { SubmissionProvider, useSubmission } from "./features/submission/contexts/SubmissionContext";
 
 function AppContent() {

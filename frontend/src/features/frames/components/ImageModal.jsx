@@ -1,39 +1,47 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import FrameMetadata from "./FrameMetadata";
-import YouTubePlayer from "./YouTubePlayer";
+import VideoTimeline from "./VideoTimeline";
 import {
   displayVideoId,
-  getYouTubeEmbedUrl,
-  getYouTubeWatchUrl,
-  timestampSeconds,
+  getStreamVideoUrl,
+  normalizeSubmissionFps,
 } from "../videoSource";
 
-// Inspector uses the official YouTube player and seeks by canonical timestamp.
-// The selected frame index stays fixed in the header; live playback coordinates
-// are shown in metadata and used for submission.
+// The player page endpoint returns HTML, so the inspector uses the raw MP4
+// stream and seeks native media time to the selected canonical timestamp.
 const ImageModal = ({ frame, query, onSubmit, onClose }) => {
   const modalCardRef = React.useRef(null);
-  const [videoUrl, setVideoUrl] = useState(null);
+  const videoRef = React.useRef(null);
   const [videoError, setVideoError] = useState(null);
-  const playerControlsRef = React.useRef(null);
+  const [videoDuration, setVideoDuration] = useState(0);
   const targetTime = useMemo(
-    () => timestampSeconds(frame.timestamp_ms),
+    () => {
+      const timestampMs = Number(frame.timestamp_ms);
+      return Number.isInteger(timestampMs) && timestampMs >= 0
+        ? timestampMs / 1000
+        : null;
+    },
     [frame.timestamp_ms],
+  );
+  const streamUrl = useMemo(
+    () => getStreamVideoUrl(frame.video_id, frame.timestamp_ms),
+    [frame.timestamp_ms, frame.video_id],
   );
   const [playbackTime, setPlaybackTime] = useState(targetTime);
   const [submitted, setSubmitted] = useState(false);
   const liveFrameIdx = useMemo(() => {
-    const fps = Number(frame.fps);
-    return Number.isFinite(playbackTime) && Number.isFinite(fps)
-      ? Math.round(playbackTime * fps)
+    const submissionFps = normalizeSubmissionFps(frame.fps);
+    return Number.isFinite(playbackTime) && submissionFps !== null
+      ? Math.round(playbackTime * submissionFps)
       : frame.frame_idx;
   }, [frame.frame_idx, frame.fps, playbackTime]);
   const videoLabel = displayVideoId(frame.video_id);
-  const watchUrl = getYouTubeWatchUrl(frame.video_id);
 
   useEffect(() => {
     setPlaybackTime(targetTime);
-  }, [targetTime]);
+    setVideoError(null);
+    setVideoDuration(0);
+  }, [streamUrl, targetTime]);
 
   useEffect(() => {
     const closeOnEscape = (event) => {
@@ -47,30 +55,57 @@ const ImageModal = ({ frame, query, onSubmit, onClose }) => {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
 
-  useEffect(() => {
-    const embedUrl = getYouTubeEmbedUrl(frame.video_id);
-    setVideoUrl(embedUrl);
-    setVideoError(embedUrl ? null : 'No YouTube URL is mapped for this video.');
-  }, [frame.video_id]);
-
-  const updatePlaybackTime = useCallback((currentTime) => {
-    const value = Number(currentTime);
-    if (Number.isFinite(value) && value >= 0) setPlaybackTime(value);
+  const updatePlaybackTime = useCallback((sourceTime) => {
+    const value = Number(sourceTime);
+    if (Number.isFinite(value) && value >= 0) {
+      setPlaybackTime(value);
+    }
   }, []);
 
-  const keepModalFocused = useCallback(() => {
-    // The API-created YouTube iframe is cross-origin. Move focus back after
-    // the mouse action so Escape and modal keyboard shortcuts remain usable.
-    window.setTimeout(() => modalCardRef.current?.focus(), 50);
+  const handleVideoLoadedMetadata = useCallback((event) => {
+    const video = event.currentTarget;
+    const duration = Number(video.duration);
+    setVideoDuration(Number.isFinite(duration) && duration > 0 ? duration : 0);
+    if (targetTime === null) return;
+
+    const seekTime = Number.isFinite(duration) && duration >= 0
+      ? Math.min(targetTime, duration)
+      : targetTime;
+    video.currentTime = seekTime;
+    updatePlaybackTime(seekTime);
+  }, [targetTime, updatePlaybackTime]);
+
+  const handleVideoTimeUpdate = useCallback((event) => {
+    updatePlaybackTime(event.currentTarget.currentTime);
+  }, [updatePlaybackTime]);
+
+  const handleVideoSeek = useCallback((nextTime) => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(nextTime)) return;
+    video.currentTime = nextTime;
+    updatePlaybackTime(nextTime);
+  }, [updatePlaybackTime]);
+
+  const togglePlayback = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused || video.ended) {
+      video.play?.().catch?.(() => undefined);
+    } else {
+      video.pause?.();
+    }
   }, []);
 
-  const handlePlayerFocus = useCallback(() => {
-    keepModalFocused();
-  }, [keepModalFocused]);
-
-  const handlePlayerReady = useCallback((controls) => {
-    playerControlsRef.current = controls;
-  }, []);
+  const seekBy = useCallback((offsetSeconds) => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.currentTime)) return;
+    const duration = Number(video.duration);
+    const maximum = Number.isFinite(duration) && duration >= 0 ? duration : Infinity;
+    const nextTime = Math.min(Math.max(video.currentTime + offsetSeconds, 0), maximum);
+    video.currentTime = nextTime;
+    updatePlaybackTime(nextTime);
+  }, [updatePlaybackTime]);
 
   const handleSubmit = useCallback(() => {
     if (!onSubmit) return;
@@ -89,20 +124,21 @@ const ImageModal = ({ frame, query, onSubmit, onClose }) => {
       return;
     }
 
-    const controls = playerControlsRef.current;
-    if (!controls) return;
-
     const targetTag = event.target?.tagName;
-    if (targetTag && ['BUTTON', 'A', 'INPUT', 'TEXTAREA', 'SELECT'].includes(targetTag)) return;
+    if (['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(targetTag)) return;
 
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    if (event.key === ' ' || event.key === 'Spacebar' || event.key.toLowerCase() === 'k') {
       event.preventDefault();
-      controls.seekBy(event.key === 'ArrowLeft' ? -5 : 5);
-    } else if (event.key === ' ' || event.key.toLowerCase() === 'k') {
+      togglePlayback();
+    } else if (event.key === 'ArrowLeft') {
       event.preventDefault();
-      controls.togglePlayPause();
+      seekBy(-5);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      seekBy(5);
     }
-  }, [onClose]);
+
+  }, [onClose, seekBy, togglePlayback]);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -119,35 +155,40 @@ const ImageModal = ({ frame, query, onSubmit, onClose }) => {
           tabIndex={-1}
         >
         <div className="modal-viewer-column">
-          {videoUrl && targetTime !== null && !videoError ? (
+          {streamUrl && targetTime !== null && !videoError ? (
             <div className="modal-video-shell">
-              <YouTubePlayer
-                embedUrl={videoUrl}
-                targetTime={targetTime}
-                title={`Video for ${videoLabel}`}
-                onTimeUpdate={updatePlaybackTime}
-                onIframeFocus={handlePlayerFocus}
-                onPlayerReady={handlePlayerReady}
+              <video
+                ref={videoRef}
+                className="modal-viewer-video"
+                src={streamUrl}
+                autoPlay
+                muted
+                preload="metadata"
+                playsInline
+                aria-label={`Video for ${videoLabel}`}
+                onLoadedMetadata={handleVideoLoadedMetadata}
+                onTimeUpdate={handleVideoTimeUpdate}
+                onError={() => setVideoError('The MP4 stream could not be loaded or decoded.')}
+              />
+              <VideoTimeline
+                videoId={frame.video_id}
+                videoRef={videoRef}
+                currentTime={playbackTime}
+                duration={videoDuration}
+                onSeek={handleVideoSeek}
+                onTogglePlayback={togglePlayback}
               />
             </div>
-          ) : videoError || targetTime === null ? (
+          ) : (
             <div className="frame-image-placeholder">
               <p>
-                Video playback is unavailable. {videoError || 'The backend response is missing timestamp_ms.'}
+                Video playback is unavailable. {videoError || (
+                  targetTime === null
+                    ? 'The backend response is missing timestamp_ms.'
+                    : 'The backend response is missing a canonical video_id.'
+                )}
               </p>
-              {watchUrl && (
-                <a
-                  className="youtube-fallback-link"
-                  href={watchUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open on YouTube
-                </a>
-              )}
             </div>
-          ) : (
-            <div className="frame-image-placeholder">Preparing YouTube playback…</div>
           )}
         </div>
         <div className="modal-inspector-column">

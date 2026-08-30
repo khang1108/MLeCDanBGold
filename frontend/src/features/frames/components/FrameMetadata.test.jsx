@@ -17,6 +17,14 @@ test('uses the real playback time for frame index and timestamp metadata', () =>
   expect(screen.getByText('6240 ms')).toBeTruthy();
 });
 
+test('uses normalized fps for the live BTC frame index', () => {
+  render(<FrameMetadata frame={{ ...frame, fps: 29.97 }} playbackTime={5.25} />);
+
+  expect(screen.getByText('158')).toBeTruthy();
+  expect(screen.getByText('5250 ms')).toBeTruthy();
+  expect(screen.getByText('30')).toBeTruthy();
+});
+
 test('falls back to canonical metadata before playback time is available', () => {
   render(<FrameMetadata frame={frame} />);
 

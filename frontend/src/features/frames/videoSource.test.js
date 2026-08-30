@@ -1,41 +1,31 @@
-import {
-  displayVideoId,
-  getYouTubeEmbedUrl,
-  getYouTubeVideoId,
-  getYouTubeWatchUrl,
-  timestampSeconds,
-} from './videoSource';
+import { getRaw1FpsFrameId, normalizeSubmissionFps } from './videoSource';
 
-test('looks up the YouTube URL using the canonical leaf video ID', () => {
-  expect(getYouTubeWatchUrl('folder_1.folder2.L21_V001')).toBe(
-    'https://youtube.com/watch?v=Rzpw5WR7nAY',
+test('normalizes source fps to the nearest BTC submission fps', () => {
+  expect(normalizeSubmissionFps(24.98)).toBe(25);
+  expect(normalizeSubmissionFps(29.97)).toBe(30);
+  expect(normalizeSubmissionFps(27.5)).toBe(25);
+});
+
+test('rejects invalid source fps', () => {
+  expect(normalizeSubmissionFps(undefined)).toBeNull();
+  expect(normalizeSubmissionFps(0)).toBeNull();
+  expect(normalizeSubmissionFps('not-a-number')).toBeNull();
+});
+
+test('maps a timestamp to the deterministic 1fps frame id', () => {
+  expect(getRaw1FpsFrameId('L28_V001', 5_000)).toBe(
+    'L28_V001_raw1fps_000000005',
   );
 });
 
-test('extracts video IDs from watch and embed URLs', () => {
-  expect(getYouTubeVideoId('https://youtube.com/watch?v=Rzpw5WR7nAY')).toBe('Rzpw5WR7nAY');
-  expect(getYouTubeVideoId('https://www.youtube.com/embed/Rzpw5WR7nAY')).toBe('Rzpw5WR7nAY');
+test('uses the same keyframe for timestamps within one second', () => {
+  expect(getRaw1FpsFrameId('L28_V001', 5_999)).toBe(
+    'L28_V001_raw1fps_000000005',
+  );
 });
 
-test('builds an API-enabled embed URL', () => {
-  const embedUrl = getYouTubeEmbedUrl('L21_V001');
-  expect(embedUrl).toContain('https://www.youtube.com/embed/Rzpw5WR7nAY?');
-  expect(embedUrl).toContain('autoplay=0');
-  expect(embedUrl).toContain('enablejsapi=1');
-  expect(embedUrl).toContain('origin=');
-});
-
-test('returns null for unknown video metadata', () => {
-  expect(getYouTubeWatchUrl('unknown-video')).toBeNull();
-  expect(getYouTubeVideoId('unknown-video')).toBeNull();
-  expect(getYouTubeEmbedUrl('unknown-video')).toBeNull();
-});
-
-test('uses only the canonical timestamp for exact source seeking', () => {
-  expect(timestampSeconds(5_000)).toBe(5);
-  expect(timestampSeconds(undefined)).toBeNull();
-});
-
-test('only displays the leaf video ID', () => {
-  expect(displayVideoId('folder_1.folder2.L21_V001')).toBe('L21_V001');
+test('rejects missing, negative, and non-integer timestamps', () => {
+  expect(getRaw1FpsFrameId('', 0)).toBeNull();
+  expect(getRaw1FpsFrameId('L28_V001', -1)).toBeNull();
+  expect(getRaw1FpsFrameId('L28_V001', 1.5)).toBeNull();
 });

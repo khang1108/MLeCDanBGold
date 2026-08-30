@@ -1,13 +1,14 @@
 import React from "react";
-import { displayVideoId } from "../videoSource";
+import { displayVideoId, normalizeSubmissionFps } from "../videoSource";
 
 const metadataValue = (value) => (Array.isArray(value) ? value.join(", ") : value);
 
 // Keep internal asset identity separate from BTC submission coordinates.
 const FrameMetadata = ({ frame, playbackTime }) => {
   const metadata = frame.metadata || {};
-  const liveFrameIdx = Number.isFinite(playbackTime) && Number.isFinite(frame.fps)
-    ? Math.round(playbackTime * frame.fps)
+  const submissionFps = normalizeSubmissionFps(frame.fps);
+  const liveFrameIdx = Number.isFinite(playbackTime) && submissionFps !== null
+    ? Math.round(playbackTime * submissionFps)
     : frame.frame_idx;
   const liveTimestampMs = Number.isFinite(playbackTime)
     ? Math.round(playbackTime * 1000)
@@ -31,10 +32,10 @@ const FrameMetadata = ({ frame, playbackTime }) => {
       <span className="meta-lbl">Timestamp</span>
       <span className="meta-val">{liveTimestampMs} ms</span>
     </div>}
-    {Number.isFinite(frame.fps) && <div className="inspector-meta-item">
+    {submissionFps !== null && <div className="inspector-meta-item">
       <span className="meta-lbl">FPS</span>
       <span className="meta-val">
-        {Math.abs(frame.fps - 25) <= Math.abs(frame.fps - 30) ? 25 : 30}
+        {submissionFps}
       </span>
     </div>}
     {Number.isFinite(frame.score) && <div className="inspector-meta-item">

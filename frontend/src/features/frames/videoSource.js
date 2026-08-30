@@ -1,57 +1,38 @@
-import mediaInfo from './mediaInfo.generated';
+const STREAM_API_BASE_URL = 'https://stream.iamphuckhang.dev/api/v1';
 
 export const displayVideoId = (videoId) => {
   const parts = String(videoId || '').split('.').filter(Boolean);
   return parts[parts.length - 1] || 'Unknown video';
 };
 
-const youtubeVideoId = (url) => {
-  if (!url) return null;
-
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname === 'youtu.be') return parsed.pathname.slice(1) || null;
-    if (parsed.hostname.endsWith('youtube.com')) {
-      if (parsed.pathname === '/watch') return parsed.searchParams.get('v');
-      const embedMatch = parsed.pathname.match(/^\/(?:embed|shorts|live)\/([^/?]+)/);
-      return embedMatch?.[1] || null;
-    }
-  } catch {
+export const normalizeSubmissionFps = (fps) => {
+  const numericFps = Number(fps);
+  if (!Number.isFinite(numericFps) || numericFps <= 0) {
     return null;
   }
 
-  return null;
+  return Math.abs(numericFps - 25) <= Math.abs(numericFps - 30) ? 25 : 30;
 };
 
-export const getYouTubeWatchUrl = (videoId) => {
-  const canonicalId = String(videoId || '').trim();
-  const leafId = displayVideoId(canonicalId);
-  return mediaInfo[canonicalId] || mediaInfo[leafId] || null;
-};
-
-export const getYouTubeVideoId = (videoIdOrUrl) => youtubeVideoId(
-  String(videoIdOrUrl || '').includes('://')
-    ? videoIdOrUrl
-    : getYouTubeWatchUrl(videoIdOrUrl),
-);
-
-export const getYouTubeEmbedUrl = (videoIdOrUrl) => {
-  const id = getYouTubeVideoId(videoIdOrUrl);
-  if (!id) return null;
-
-  const params = new URLSearchParams({
-    autoplay: '0',
-    enablejsapi: '1',
-    playsinline: '1',
-    rel: '0',
-    origin: window.location.origin,
-  });
-  return `https://www.youtube.com/embed/${encodeURIComponent(id)}?${params.toString()}`;
-};
-
-export const timestampSeconds = (timestampMs) => {
+export const getRaw1FpsFrameId = (videoId, timestampMs) => {
+  const canonicalVideoId = String(videoId || '').trim();
   const timestamp = Number(timestampMs);
-  return Number.isFinite(timestamp) && timestamp >= 0
-    ? timestamp / 1000
-    : null;
+  if (!canonicalVideoId || !Number.isInteger(timestamp) || timestamp < 0) {
+    return null;
+  }
+
+  const second = Math.floor(timestamp / 1000);
+  return `${canonicalVideoId}_raw1fps_${String(second).padStart(9, '0')}`;
+};
+
+export const getStreamVideoUrl = (videoId, timestampMs) => {
+  const canonicalVideoId = String(videoId || '').trim();
+  const timestamp = Number(timestampMs);
+  if (!canonicalVideoId || !Number.isInteger(timestamp) || timestamp < 0) {
+    return null;
+  }
+
+  // `/play` is an HTML player page. Native <video> needs the raw MP4 stream;
+  // the inspector applies timestampMs after that stream reports metadata.
+  return `${STREAM_API_BASE_URL}/videos/${encodeURIComponent(canonicalVideoId)}/stream`;
 };
