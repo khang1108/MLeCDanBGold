@@ -76,7 +76,7 @@ URLS=(
   https://aic-data.ledo.io.vn/Videos_L30_a.zip
 )
 
-# --- 1. System build dependencies for src/hcmai/data/cpp/keyframes_extraction ---
+# --- 1. System build dependencies for offline/keyframes/keyframes_extraction ---
 if [[ "$SKIP_APT" != "1" ]]; then
   echo "==> installing C++ build dependencies (sudo required)"
   sudo apt-get update
@@ -91,7 +91,7 @@ fi
 # --- 2. Configure and build the native extractor ---
 if [[ "$SKIP_BUILD" != "1" ]]; then
   echo "==> configuring and building keyframe_extractor"
-  cmake -S src/hcmai/data/cpp/keyframes_extraction -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+  cmake -S offline/keyframes/keyframes_extraction -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
   cmake --build "$BUILD_DIR" --parallel
   ctest --test-dir "$BUILD_DIR" --output-on-failure
 else

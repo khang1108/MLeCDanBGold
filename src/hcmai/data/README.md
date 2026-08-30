@@ -26,7 +26,7 @@ text.
 
 `offline/preprocessing/**` remains available for non-BTC experiments.
 The custom raw-video corpus instead uses the isolated C++17/FFmpeg package at
-`src/hcmai/data/cpp/keyframes_extraction/` and the validation boundary under
+`offline/keyframes/keyframes_extraction/` and the validation boundary under
 `offline.ingestion`.
 
 ## Artifact ownership

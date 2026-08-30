@@ -66,7 +66,7 @@ their purpose, arguments, return value, and failure conditions.
 Build and run the native test suite from the repository root:
 
 ```bash
-cmake -S src/hcmai/data/cpp/keyframes_extraction \
+cmake -S offline/keyframes/keyframes_extraction \
   -B build/keyframes_extraction -DCMAKE_BUILD_TYPE=Debug
 cmake --build build/keyframes_extraction --parallel
 ctest --test-dir build/keyframes_extraction --output-on-failure
