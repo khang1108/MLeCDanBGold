@@ -20,7 +20,7 @@ from hcmai.common.schemas import (
 )
 from hcmai.corpus import Corpus
 from hcmai.corpus.stores import CaptionStore, FrameContextStore, ObjectStore
-from hcmai.data.enrichment.object_artifacts import write_object_artifacts
+from offline.enrichment.object_artifacts import write_object_artifacts
 
 
 def _write_frames(root: Path) -> Path:

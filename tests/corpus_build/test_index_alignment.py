@@ -9,11 +9,11 @@ from PIL import Image
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.schemas import RetrievalSource
-from hcmai.data.corpus_build import (
+from offline.ingestion.corpus_build import (
     PreparationPaths,
     S3CorpusPreparationConfig,
 )
-from hcmai.data.corpus_build.pipeline import DefaultPreparationOperations
+from offline.ingestion.corpus_build.pipeline import DefaultPreparationOperations
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 
 
@@ -142,7 +142,7 @@ def test_four_aligned_indexes_exactly_match_canonical_frame_identities(
     
     # Mock AppConfig and LLMServiceConfig to avoid FileNotFoundError reading non-existent YAMLs
     from hcmai.common.config import AppConfig, TranscriptJobConfig
-    from hcmai.data.enrichment.caption.config import CaptionJobConfig
+    from offline.enrichment.caption.config import CaptionJobConfig
     from thundercompute.pipeline import LLMServiceConfig
     
     # Wait, instead of guessing AppConfig shape, let's just mock `AppConfig.from_yaml` to return a mocked object

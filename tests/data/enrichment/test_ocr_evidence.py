@@ -13,12 +13,12 @@ from PIL import Image
 
 from hcmai.common.schemas import OCRItem, OCRResponse
 from hcmai.common.schemas.inference import OCRRegionItem
-from hcmai.data.enrichment.ocr.adapters.remote import RemoteOCRAdapter
-from hcmai.data.enrichment.ocr.adapters.florence import _parse_regions
-from hcmai.data.enrichment.ocr.artifacts import normalize_regions
-from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.ocr.generator import generate_ocr
-from hcmai.data.enrichment.ocr.models.entities import (
+from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
+from offline.enrichment.ocr.adapters.florence import _parse_regions
+from offline.enrichment.ocr.artifacts import normalize_regions
+from offline.enrichment.ocr.config import OCRConfig
+from offline.enrichment.ocr.generator import generate_ocr
+from offline.enrichment.ocr.models.entities import (
     OCRRegionResult,
     OCRResult,
     json_safe_ocr_raw,

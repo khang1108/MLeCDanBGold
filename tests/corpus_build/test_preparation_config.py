@@ -9,7 +9,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from hcmai.data.corpus_build import S3CorpusPreparationConfig
+from offline.ingestion.corpus_build import S3CorpusPreparationConfig
 
 
 SHA = "a" * 40

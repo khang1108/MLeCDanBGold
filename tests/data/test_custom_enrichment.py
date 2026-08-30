@@ -8,11 +8,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.data.ingestion.custom_enrichment import (
+from offline.ingestion.custom_enrichment import (
     materialize_video_enrichment_frames,
     write_enrichment_handoff,
 )
-from hcmai.data.ingestion.custom_frames import iter_native_frame_records
+from offline.ingestion.custom_frames import iter_native_frame_records
 from tests.data.test_custom_frames import write_valid_native_bundle
 
 

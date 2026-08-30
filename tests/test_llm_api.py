@@ -21,10 +21,10 @@ from hcmai.common.schemas import (
 from thundercompute.adapters.http import InferenceClient
 from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.embedding.adapters.remote import RemoteEmbeddingAdapter
-from hcmai.data.enrichment.caption.adapters.remote import RemoteCaptionAdapter
-from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
-from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
+from offline.enrichment.caption.adapters.remote import RemoteCaptionAdapter
+from offline.enrichment.ocr.adapters.florence import FlorenceAdapter
+from offline.enrichment.ocr.config import OCRConfig
+from offline.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 from thundercompute.adapters.local import LocalAdapter
 from thundercompute.pipeline import LLMService
 from thundercompute.server.api import create_llm_app

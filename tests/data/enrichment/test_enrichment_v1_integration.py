@@ -15,9 +15,9 @@ from types import SimpleNamespace
 import pandas as pd
 from PIL import Image
 
-from hcmai.data.enrichment.caption import generator as caption_generator
-from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
-from hcmai.data.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
+from offline.enrichment.caption import generator as caption_generator
+from offline.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
+from offline.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 
 
 class _CaptionAdapter:
@@ -369,8 +369,8 @@ def test_default_operations_keep_btc_specialist_lineage_for_context(
 ) -> None:
     """Run BTC specialists through the active operations before context assembly."""
 
-    from hcmai.data.corpus_build.pipeline import DefaultPreparationOperations
-    from hcmai.data.enrichment.object_detection import materialize_object_artifacts
+    from offline.ingestion.corpus_build.pipeline import DefaultPreparationOperations
+    from offline.enrichment.object_detection import materialize_object_artifacts
 
     frames = _write_fixture(tmp_path)
     job = EnrichmentJobConfig.from_yaml(_write_config(tmp_path, frames))

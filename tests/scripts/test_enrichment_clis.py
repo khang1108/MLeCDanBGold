@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.object_detection import ObjectDetectionConfig
+from offline.enrichment.ocr.config import OCRConfig
+from offline.enrichment.object_detection import ObjectDetectionConfig
 from scripts import detect_objects as object_cli
 from scripts import generate_ocr_enrichment as ocr_cli
 

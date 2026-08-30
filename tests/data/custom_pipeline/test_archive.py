@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from hcmai.data.custom_pipeline.archive import (
+from offline.ingestion.custom_pipeline.archive import (
     ArchiveInventory,
     ArchiveMember,
     ArchiveSafetyError,
@@ -24,8 +24,8 @@ from hcmai.data.custom_pipeline.archive import (
     plan_archive_batches,
     stage_archive_source_links,
 )
-from hcmai.data.custom_pipeline.config import DiskBudgetConfig
-from hcmai.data.custom_pipeline.disk import DiskAdmissionError
+from offline.ingestion.custom_pipeline.config import DiskBudgetConfig
+from offline.ingestion.custom_pipeline.disk import DiskAdmissionError
 
 
 def _write_zip(path: Path, members: dict[str, bytes], *, symlink: str | None = None) -> None:

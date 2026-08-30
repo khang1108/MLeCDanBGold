@@ -9,7 +9,7 @@ from PIL import Image
 
 from hcmai.common.utils.io import write_yaml
 from hcmai.corpus import Corpus
-from hcmai.data.corpus_build.btc import prepare_btc_frame_store
+from offline.ingestion.corpus_build.btc import prepare_btc_frame_store
 
 
 def _valid_btc_row(**updates: object) -> dict[str, object]:
@@ -54,7 +54,7 @@ def _write_btc_metadata(
 
 
 def test_btc_import_does_not_require_preprocessing_fields(tmp_path):
-    from hcmai.data.ingestion.btc import (
+    from offline.ingestion.btc import (
         BTCIngestionConfig,
         import_btc_frame_store,
     )
@@ -205,7 +205,7 @@ def test_btc_preparation_resolves_btc_paths_from_project_root(
         return config.output_root / "frames.parquet"
 
     monkeypatch.setattr(
-        "hcmai.data.corpus_build.btc.import_btc_frame_store", fake_import
+        "offline.ingestion.corpus_build.btc.import_btc_frame_store", fake_import
     )
     monkeypatch.chdir(tmp_path)
 
@@ -255,7 +255,7 @@ def test_btc_preparation_rejects_non_btc_source(tmp_path):
 def test_btc_import_rejects_invalid_canonical_rows(
     tmp_path, updates, message
 ):
-    from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+    from offline.ingestion import BTCIngestionConfig, import_btc_frame_store
 
     source = tmp_path / "btc"
     _write_btc_metadata(source, [_valid_btc_row(**updates)])
@@ -273,7 +273,7 @@ def test_btc_import_rejects_invalid_canonical_rows(
 
 
 def test_btc_import_rejects_duplicate_frame_id(tmp_path):
-    from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+    from offline.ingestion import BTCIngestionConfig, import_btc_frame_store
 
     source = tmp_path / "btc"
     _write_btc_metadata(
@@ -299,7 +299,7 @@ def test_btc_import_rejects_duplicate_frame_id(tmp_path):
 def test_btc_import_preserves_distinct_frames_at_one_submission_coordinate(
     tmp_path,
 ):
-    from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+    from offline.ingestion import BTCIngestionConfig, import_btc_frame_store
 
     source = tmp_path / "btc"
     _write_btc_metadata(
@@ -335,7 +335,7 @@ def test_btc_import_preserves_distinct_frames_at_one_submission_coordinate(
 
 
 def test_btc_import_rejects_empty_metadata(tmp_path):
-    from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+    from offline.ingestion import BTCIngestionConfig, import_btc_frame_store
 
     source = tmp_path / "btc"
     _write_btc_metadata(
@@ -358,7 +358,7 @@ def test_btc_import_rejects_empty_metadata(tmp_path):
 def test_manifest_staging_failure_preserves_published_bundle(
     tmp_path, monkeypatch
 ):
-    import hcmai.data.ingestion.btc as btc
+    import offline.ingestion.btc as btc
 
     source = tmp_path / "btc"
     _write_btc_metadata(source, [_valid_btc_row()])
@@ -394,7 +394,7 @@ def test_manifest_staging_failure_preserves_published_bundle(
 def test_manifest_publish_failure_restores_previous_bundle(
     tmp_path, monkeypatch
 ):
-    import hcmai.data.ingestion.btc as btc
+    import offline.ingestion.btc as btc
 
     source = tmp_path / "btc"
     _write_btc_metadata(source, [_valid_btc_row()])

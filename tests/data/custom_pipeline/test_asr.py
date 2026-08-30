@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from hcmai.common.utils.io import write_json
-from hcmai.data.custom_pipeline.asr import (
+from offline.ingestion.custom_pipeline.asr import (
     require_asr_video_coverage,
     validate_asr_source,
 )

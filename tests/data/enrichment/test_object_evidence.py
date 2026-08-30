@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from hcmai.common.schemas import ObjectDetection, ObjectEvidence, ProcessingStatus
-from hcmai.data.enrichment.object_detection import (
+from offline.enrichment.object_detection import (
     ObjectDetectionConfig,
     materialize_object_artifacts,
 )

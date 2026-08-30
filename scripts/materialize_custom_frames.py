@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from hcmai.data.ingestion.custom_frames import (
+from offline.ingestion.custom_frames import (
     CustomFrameStoreConfig,
     materialize_custom_frame_store,
 )

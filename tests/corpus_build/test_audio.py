@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from hcmai.data.corpus_build import audio
+from offline.ingestion.corpus_build import audio
 
 
 def test_extract_flac_reports_ffmpeg_stderr(

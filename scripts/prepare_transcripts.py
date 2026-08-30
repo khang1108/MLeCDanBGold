@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Sequence
 
 from hcmai.common.config import TranscriptJobConfig
-from hcmai.data.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
-from hcmai.data.enrichment.transcripts.materialize import (
+from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
+from offline.enrichment.transcripts.materialize import (
     materialize_transcript_artifact,
 )
-from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
+from offline.enrichment.transcripts.pipeline import TranscriptService
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/prepare.yaml"
 

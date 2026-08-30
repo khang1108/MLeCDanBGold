@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from hcmai.common.schemas import RetrievalSource
-from hcmai.data.corpus_build import (
+from offline.ingestion.corpus_build import (
     DefaultPreparationOperations,
     PreparationPaths,
     S3CorpusPreparationConfig,
@@ -304,9 +304,9 @@ def test_default_operations_use_public_object_and_context_services_in_order(
 ) -> None:
     """Keep object detection and derived context behind public boundaries."""
 
-    from hcmai.data.enrichment.context.config import FrameContextConfig
-    from hcmai.data.enrichment.object_detection import ObjectDetectionConfig
-    from hcmai.data.enrichment.pipeline import EnrichmentService
+    from offline.enrichment.context.config import FrameContextConfig
+    from offline.enrichment.object_detection import ObjectDetectionConfig
+    from offline.enrichment.pipeline import EnrichmentService
 
     paths = SimpleNamespace(
         frames_path=tmp_path / "frames.parquet",
@@ -347,8 +347,8 @@ def test_default_operations_preserve_configured_ocr_policy(
 ) -> None:
     """Override runtime placement and pins without discarding OCR policy."""
 
-    from hcmai.data.enrichment.ocr.config import OCRConfig
-    from hcmai.data.enrichment.pipeline import EnrichmentService
+    from offline.enrichment.ocr.config import OCRConfig
+    from offline.enrichment.pipeline import EnrichmentService
 
     configured = OCRConfig(
         enabled=False,
@@ -428,10 +428,10 @@ def test_default_context_stage_identity_depends_on_ocr_policy(
 ) -> None:
     """Changing OCR derivation policy must also invalidate FrameContext."""
 
-    from hcmai.data.enrichment.caption.config import CaptionConfig
-    from hcmai.data.enrichment.context.config import FrameContextConfig
-    from hcmai.data.enrichment.ocr.config import OCRConfig
-    from hcmai.data.enrichment.object_detection import ObjectDetectionConfig
+    from offline.enrichment.caption.config import CaptionConfig
+    from offline.enrichment.context.config import FrameContextConfig
+    from offline.enrichment.ocr.config import OCRConfig
+    from offline.enrichment.object_detection import ObjectDetectionConfig
 
     operations = object.__new__(DefaultPreparationOperations)
     operations.config = SimpleNamespace(

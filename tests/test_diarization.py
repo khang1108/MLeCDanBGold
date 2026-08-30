@@ -4,13 +4,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-import hcmai.data.enrichment.transcripts.adapters.diarization as diarization_module
+import offline.enrichment.transcripts.adapters.diarization as diarization_module
 from hcmai.common.config import DiarizationConfig
 from hcmai.common.schemas import TranscriptSegment
-from hcmai.data.enrichment.transcripts.adapters.diarization import (
+from offline.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,
 )
-from hcmai.data.enrichment.transcripts.adapters.asr import DecodedAudio
+from offline.enrichment.transcripts.adapters.asr import DecodedAudio
 
 
 def test_diarization_lazy_load_and_overlap(

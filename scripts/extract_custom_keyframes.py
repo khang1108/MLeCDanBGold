@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from typing import Any, Sequence
 
-from hcmai.data.ingestion import (
+from offline.ingestion import (
     build_native_input_manifest,
     materialize_video_enrichment_frames,
     validate_native_video_bundle,

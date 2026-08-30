@@ -83,7 +83,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src", "."]
-include = ["hcmai*", "thundercompute*"]
+include = ["hcmai*", "thundercompute*", "offline*"]
 
 [dependency-groups]
 dev = [

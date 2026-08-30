@@ -10,9 +10,9 @@ import pytest
 from PIL import Image
 
 from hcmai.common.utils.io import atomic_write
-from hcmai.data.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
-from hcmai.data.enrichment.caption.config import CaptionConfig
-from hcmai.data.enrichment.caption.generator import generate_captions
+from offline.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
+from offline.enrichment.caption.config import CaptionConfig
+from offline.enrichment.caption.generator import generate_captions
 
 
 class Backend:
@@ -197,7 +197,7 @@ def test_resume_survives_a_throughput_change_but_not_a_decoding_change(tmp_path:
 
     from dataclasses import asdict
 
-    from hcmai.data.enrichment.caption.resume import guard_resume
+    from offline.enrichment.caption.resume import guard_resume
 
     cfg = config()
     captions = tmp_path / "captions.parquet"
@@ -218,7 +218,7 @@ def test_resume_survives_a_throughput_change_but_not_a_decoding_change(tmp_path:
 def test_cli_rejects_non_positive_batch_size_and_image_workers() -> None:
     """The CLI must reject bad worker/batch overrides before loading any job."""
 
-    from hcmai.data.enrichment.caption.generator import main as caption_main
+    from offline.enrichment.caption.generator import main as caption_main
 
     with pytest.raises(SystemExit):
         caption_main(["--batch-size", "0"])
@@ -229,7 +229,7 @@ def test_cli_rejects_non_positive_batch_size_and_image_workers() -> None:
 def test_cli_accepts_local_and_remote_execution_backend_choices() -> None:
     """``--execution-backend`` must only accept the two supported values."""
 
-    from hcmai.data.enrichment.caption.generator import main as caption_main
+    from offline.enrichment.caption.generator import main as caption_main
 
     with pytest.raises(SystemExit):
         caption_main(["--execution-backend", "gpu-cluster"])

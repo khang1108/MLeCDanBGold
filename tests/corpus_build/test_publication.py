@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from hcmai.data.corpus_build.config import S3CorpusPreparationConfig
-from hcmai.data.corpus_build.pipeline import PreparationPaths
-from hcmai.data.corpus_build.publish import inventory_artifacts
+from offline.ingestion.corpus_build.config import S3CorpusPreparationConfig
+from offline.ingestion.corpus_build.pipeline import PreparationPaths
+from offline.ingestion.corpus_build.publish import inventory_artifacts
 
 
 def _setup_fixture(tmp_path: Path) -> tuple[Path, PreparationPaths, S3CorpusPreparationConfig]:

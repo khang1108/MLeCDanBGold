@@ -12,12 +12,12 @@ import pandas as pd
 import pytest
 
 from hcmai.common.schemas import CaptionEvidence, OCREvidence
-from hcmai.data.enrichment.context import (
+from offline.enrichment.context import (
     FrameContextConfig,
     build_frame_context,
     serialize_frame_context,
 )
-from hcmai.data.enrichment.pipeline import EnrichmentService
+from offline.enrichment.pipeline import EnrichmentService
 
 
 def test_context_section_order_and_missing_omission() -> None:
@@ -254,7 +254,7 @@ def test_builder_publishes_multiple_bounded_batches(
     """Write a fixture larger than one builder batch without changing output order."""
 
     monkeypatch.setattr(
-        "hcmai.data.enrichment.context.builder._BATCH_SIZE", 2
+        "offline.enrichment.context.builder._BATCH_SIZE", 2
     )
     frames, caption, ocr, objects = _artifacts(tmp_path, count=5)
 
@@ -354,7 +354,7 @@ def test_matching_identity_reuses_and_policy_or_upstream_version_rebuilds(
         raise AssertionError("matching bundle should not be republished")
 
     monkeypatch.setattr(
-        "hcmai.data.enrichment.context.builder._publish_staged_bundle",
+        "offline.enrichment.context.builder._publish_staged_bundle",
         unexpected_write,
     )
     frames = tmp_path / "frames.parquet"
@@ -776,7 +776,7 @@ def test_context_modules_have_no_speech_or_model_dependencies() -> None:
 
     package = (
         Path(__file__).resolve().parents[3]
-        / "src/hcmai/data/enrichment/context"
+        / "offline/enrichment/context"
     )
     forbidden = ("asr", "speech", "transcript", "transformer", "llm", "vlm")
     imports: list[str] = []

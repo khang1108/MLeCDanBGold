@@ -17,15 +17,15 @@ from hcmai.common.schemas import (
     TranscriptSegment,
 )
 from hcmai.corpus.models import TranscriptSegment as RuntimeTranscriptSegment
-from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
-from hcmai.data.enrichment.transcripts.artifacts import (
+from offline.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
+from offline.enrichment.transcripts.artifacts import (
     load_transcript_artifact_records,
 )
-from hcmai.data.enrichment.transcripts.manifest import (
+from offline.enrichment.transcripts.manifest import (
     SourceFingerprint,
     TranscriptManifest,
 )
-from hcmai.data.enrichment.transcripts.materialize import materialize_asr_enrichment
+from offline.enrichment.transcripts.materialize import materialize_asr_enrichment
 from hcmai.corpus.stores.transcript import TranscriptStore
 
 
@@ -220,7 +220,7 @@ def test_import_reference_scan_catches_alias_and_qualified_imports() -> None:
 
     tree = ast.parse(
         "import hcmai.corpus.stores.evidence as stores\n"
-        "import hcmai.data.enrichment.transcripts.materialize as aligned\n"
+        "import offline.enrichment.transcripts.materialize as aligned\n"
         "store = stores.ASRStore\n"
         "build = aligned.materialize_asr_enrichment\n"
     )

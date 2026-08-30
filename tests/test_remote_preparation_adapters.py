@@ -16,9 +16,9 @@ from hcmai.common.schemas import (
     TranscriptInferenceResponse,
     TranscriptSegment,
 )
-from hcmai.data.enrichment.ocr.adapters.remote import RemoteOCRAdapter
-from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.transcripts.adapters.remote import (
+from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
+from offline.enrichment.ocr.config import OCRConfig
+from offline.enrichment.transcripts.adapters.remote import (
     RemoteASRAdapter,
     RemoteDiarizationAdapter,
 )

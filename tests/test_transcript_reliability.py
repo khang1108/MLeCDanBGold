@@ -20,24 +20,24 @@ from hcmai.common.schemas import (
     RetrievalSource,
     TranscriptSegment,
 )
-from hcmai.data.enrichment.transcripts.adapters.asr import (
+from offline.enrichment.transcripts.adapters.asr import (
     ASRAdapter,
     _validate_segments,
     read_audio,
 )
-from hcmai.data.enrichment.transcripts.adapters.diarization import _speaker_id
-from hcmai.data.enrichment.transcripts.manifest import (
+from offline.enrichment.transcripts.adapters.diarization import _speaker_id
+from offline.enrichment.transcripts.manifest import (
     SourceFingerprint,
     TranscriptManifest,
     reusable_transcript,
 )
-from hcmai.data.enrichment.transcripts.materialize import (
+from offline.enrichment.transcripts.materialize import (
     materialize_asr_enrichment,
     materialize_transcript_artifact,
     write_asr_enrichment,
 )
-from hcmai.data.enrichment.transcripts.prepare import prepare_transcripts
-from hcmai.data.enrichment.transcripts.publication import publish_staged
+from offline.enrichment.transcripts.prepare import prepare_transcripts
+from offline.enrichment.transcripts.publication import publish_staged
 from hcmai.corpus.stores import ASRStore, FrameStore
 
 
@@ -415,7 +415,7 @@ def test_completed_manifests_materialize_speech_and_no_speech_videos(
 def test_materialization_validation_failure_preserves_previous_artifact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import hcmai.data.enrichment.transcripts.materialize as module
+    import offline.enrichment.transcripts.materialize as module
 
     target = tmp_path / "asr.parquet"
     target.write_bytes(b"old-valid-artifact")

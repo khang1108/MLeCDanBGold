@@ -12,8 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from hcmai.data.custom_pipeline.config import DiskBudgetConfig
-from hcmai.data.custom_pipeline.disk import (
+from offline.ingestion.custom_pipeline.config import DiskBudgetConfig
+from offline.ingestion.custom_pipeline.disk import (
     DiskAdmissionError,
     measure_tree_bytes,
     require_write_capacity,
@@ -60,7 +60,7 @@ def test_measure_tree_bytes_returns_zero_for_missing_path(tmp_path: Path) -> Non
 
 
 def _patch_disk_usage(monkeypatch: pytest.MonkeyPatch, free_bytes: int) -> None:
-    import hcmai.data.custom_pipeline.disk as disk_module
+    import offline.ingestion.custom_pipeline.disk as disk_module
 
     monkeypatch.setattr(
         disk_module.shutil,

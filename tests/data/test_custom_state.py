@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from hcmai.data.ingestion.custom_state import (
+from offline.ingestion.custom_state import (
     cleanup_video,
     mark_video_enriched,
     mark_video_published,

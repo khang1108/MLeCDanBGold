@@ -16,9 +16,9 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from hcmai.data.custom_pipeline.asr import ASRReuseBundle
-from hcmai.data.custom_pipeline.commit import build_batch_inventory, commit_local_batch
-from hcmai.data.custom_pipeline.finalize import (
+from offline.ingestion.custom_pipeline.asr import ASRReuseBundle
+from offline.ingestion.custom_pipeline.commit import build_batch_inventory, commit_local_batch
+from offline.ingestion.custom_pipeline.finalize import (
     FinalizeError,
     compact_batch_embeddings,
     compact_frame_metadata,
@@ -26,12 +26,12 @@ from hcmai.data.custom_pipeline.finalize import (
     finalize_corpus,
     require_full_plan_cleaned,
 )
-from hcmai.data.custom_pipeline.shards import (
+from offline.ingestion.custom_pipeline.shards import (
     build_batch_index_bundle,
     split_batch_artifacts_by_video,
     write_video_shard,
 )
-from hcmai.data.custom_pipeline.state import ArchiveStage, PipelineStateStore
+from offline.ingestion.custom_pipeline.state import ArchiveStage, PipelineStateStore
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 

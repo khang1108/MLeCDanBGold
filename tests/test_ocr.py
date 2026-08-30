@@ -6,9 +6,9 @@ import pandas as pd
 import pytest
 from PIL import Image
 from hcmai.common.schemas import FrameEnrichment
-from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.ocr.generator import generate_ocr
-from hcmai.data.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
+from offline.enrichment.ocr.config import OCRConfig
+from offline.enrichment.ocr.generator import generate_ocr
+from offline.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 
 
 def region(text: str, confidence: float | None = 0.9) -> OCRRegionResult:

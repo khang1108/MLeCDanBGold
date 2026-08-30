@@ -29,7 +29,7 @@ from hcmai.common.schemas import (
     TranscriptInferenceResponse,
 )
 from hcmai.common.schemas.inference import OCRRegionItem
-from hcmai.data.enrichment.ocr.models.entities import json_safe_ocr_raw
+from offline.enrichment.ocr.models.entities import json_safe_ocr_raw
 from thundercompute.pipeline import LLMService
 
 

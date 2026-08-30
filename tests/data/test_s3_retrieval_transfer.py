@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from hcmai.data.s3 import (
+from offline.ingestion.s3 import (
     download_prefix,
     load_s3_config,
     publish_retrieval_bundle,

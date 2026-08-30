@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from hcmai.data.enrichment.dataset_cli import (
+from offline.enrichment.dataset_cli import (
     add_dataset_arguments,
     dataset_overrides,
     merge_dataset_values,
@@ -436,7 +436,7 @@ def load_model_config(path: str | Path) -> Any:
 def _load_s3_transport(config_path: str | Path) -> tuple[Any, str]:
     """Create an S3 client from the preparation config's storage section."""
 
-    from hcmai.data.s3 import create_s3_client, load_s3_config
+    from offline.ingestion.s3 import create_s3_client, load_s3_config
 
     storage = load_s3_config(config_path)
     return create_s3_client(storage), storage.bucket
@@ -455,7 +455,7 @@ def _download_s3_inputs(
     stopped ThunderCompute job to be restarted without deleting its cache.
     """
 
-    from hcmai.data.s3 import download_prefix
+    from offline.ingestion.s3 import download_prefix
 
     inputs = (
         (
@@ -512,7 +512,7 @@ def _publish_s3_bundle(
 ) -> None:
     """Publish a passed local bundle and advance its S3 latest pointer."""
 
-    from hcmai.data.s3 import publish_retrieval_bundle
+    from offline.ingestion.s3 import publish_retrieval_bundle
 
     publication = publish_retrieval_bundle(
         client,
@@ -703,7 +703,7 @@ def project_staged_keyframes(
     configured root such as ``data/keyframes`` from being prepended twice.
     """
 
-    from hcmai.data.ingestion.keyframe_map import project_keyframe_paths
+    from offline.ingestion.keyframe_map import project_keyframe_paths
 
     root = Path(keyframes_root).expanduser().resolve()
     projected = project_keyframe_paths(frames, root)
@@ -779,7 +779,7 @@ def _apply_btc_mapping_authority(
     downloaded source artifact remains untouched and the mismatch is logged.
     """
 
-    from hcmai.data.ingestion.keyframe_map import join_btc_mapping
+    from offline.ingestion.keyframe_map import join_btc_mapping
 
     mapped = join_btc_mapping(frames, mapping)
     comparison = frames[
@@ -816,11 +816,11 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     """Validate canonical identity, mapping, Context lineage, and transcripts."""
 
     from hcmai.common.utils.io import read_json
-    from hcmai.data.ingestion.keyframe_map import (
+    from offline.ingestion.keyframe_map import (
         load_btc_keyframe_map,
     )
     from hcmai.corpus.stores import FrameContextStore
-    from hcmai.data.enrichment.transcripts.store import TranscriptStore
+    from hcmai.corpus.stores.transcript import TranscriptStore
 
     dataset = config.dataset
     frames_path = _require_file(dataset.frames_path, "Canonical frames")
@@ -1160,7 +1160,7 @@ def build_asr(
 ) -> Any:
     """Build the segment-native ASR index without inventing frame identity."""
 
-    from hcmai.data.enrichment.transcripts.store import TranscriptStore
+    from hcmai.corpus.stores.transcript import TranscriptStore
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
     from hcmai.retrieval.retriever.segment.artifacts import (
         build_asr_segment_index,
@@ -1293,7 +1293,7 @@ def _validate_segment_identity(index: Any, transcripts_path: Path) -> None:
     """Match every indexed segment to its typed transcript timeline identity."""
 
     from hcmai.common.schemas import ProcessingStatus
-    from hcmai.data.enrichment.transcripts.store import TranscriptStore
+    from hcmai.corpus.stores.transcript import TranscriptStore
 
     records = {
         segment.segment_id: segment

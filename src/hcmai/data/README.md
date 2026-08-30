@@ -1,7 +1,7 @@
 # HCMAI 2026 BTC-native data preparation
 
-`hcmai.data` owns canonical frame ingestion, specialist evidence artifacts,
-derived frame context, and typed data access. The active competition baseline
+`offline` owns canonical frame ingestion and specialist evidence artifact
+production. Runtime typed data access lives under `hcmai.corpus`. The active competition baseline
 uses organizer-provided BTC keyframes and offline YOLOE object enrichment. The
 custom raw-video path is
 a separately invoked offline corpus with its own run root and frame_store_id;
@@ -24,10 +24,10 @@ OCR, and the object summary, in that order. ASR remains timestamped timeline
 evidence and is intentionally absent from FrameContext dependency identity and
 text.
 
-`src/hcmai/data/preprocessing/**` remains available for non-BTC experiments.
+`offline/preprocessing/**` remains available for non-BTC experiments.
 The custom raw-video corpus instead uses the isolated C++17/FFmpeg package at
 `src/hcmai/data/cpp/keyframes_extraction/` and the validation boundary under
-`hcmai.data.ingestion`.
+`offline.ingestion`.
 
 ## Artifact ownership
 
@@ -192,7 +192,7 @@ PYTHONPATH=.:src aic/bin/python -m pytest -q \
   tests/data/test_custom_enrichment.py \
   tests/data/test_custom_state.py \
   tests/scripts/test_custom_extraction_cli.py
-PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai/data/ingestion scripts
+PYTHONPATH=.:src aic/bin/python -m compileall -q offline/ingestion scripts
 ```
 
 Passing this gate is a code-correctness prerequisite, not an approval for an
@@ -215,14 +215,14 @@ downstream image consumers must configure that run root as their dataset root.
 
 ## Public boundaries
 
-- `src/hcmai/data/corpus_build/btc.py` imports the configured BTC frame
+- `offline/ingestion/corpus_build/btc.py` imports the configured BTC frame
   store and exposes typed frame/evidence stores.
-- `src/hcmai/data/enrichment/pipeline.py`: `EnrichmentService` runs Caption,
+- `offline/enrichment/pipeline.py`: `EnrichmentService` runs Caption,
   OCR, YOLOE Object Detection, and FrameContext through independent stage boundaries.
-- `src/hcmai/data/enrichment/transcripts/pipeline.py`: `TranscriptService`
+- `offline/enrichment/transcripts/pipeline.py`: `TranscriptService`
   owns video-level ASR and diarization.
-- `src/hcmai/data/stores/`: typed readers for specialist and derived artifacts.
-- `src/hcmai/data/ingestion/custom_state.py`: safe Python argv wrappers for the
+- `src/hcmai/corpus/stores/`: typed readers for specialist and derived artifacts.
+- `offline/ingestion/custom_state.py`: safe Python argv wrappers for the
   native `mark-enriched`, `mark-published`, and `cleanup` lifecycle commands.
 
 Serving code reads prepared artifacts. It must not regenerate captions, OCR,

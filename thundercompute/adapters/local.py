@@ -15,10 +15,10 @@ from hcmai.common.schemas import (
     ModelStatus,
 )
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
-from hcmai.data.enrichment.ocr.adapters.florence import FlorenceAdapter
-from hcmai.data.enrichment.ocr.config import OCRConfig
-from hcmai.data.enrichment.ocr.models.entities import OCRResult
-from hcmai.data.enrichment.pipeline import EnrichmentService
+from offline.enrichment.ocr.adapters.florence import FlorenceAdapter
+from offline.enrichment.ocr.config import OCRConfig
+from offline.enrichment.ocr.models.entities import OCRResult
+from offline.enrichment.pipeline import EnrichmentService
 from hcmai.common.config import TranscriptJobConfig
 from thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.reranking.pipeline import QwenRerankerConfig, RerankingService
@@ -137,12 +137,12 @@ class LocalAdapter:
             self.ocr_adapter._load()
 
         if self.enable_asr and self.transcript_config:
-            from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
+            from offline.enrichment.transcripts.adapters.asr import ASRAdapter
             self.asr = ASRAdapter(self.transcript_config.asr)
             self.asr._load_asr()
 
         if self.enable_diarization and self.transcript_config:
-            from hcmai.data.enrichment.transcripts.adapters.diarization import DiarizationAdapter
+            from offline.enrichment.transcripts.adapters.diarization import DiarizationAdapter
             self.diarization = DiarizationAdapter(self.transcript_config.diarization)
             self.diarization._load_pipeline()
 

@@ -8,8 +8,8 @@ import pytest
 from PIL import Image
 
 from hcmai.common.schemas import CaptionEvidence, FrameEnrichment
-from hcmai.data.enrichment.caption.config import CaptionConfig
-from hcmai.data.enrichment.caption.generator import generate_captions
+from offline.enrichment.caption.config import CaptionConfig
+from offline.enrichment.caption.generator import generate_captions
 
 
 class FakeCaptionAdapter:

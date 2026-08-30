@@ -7,8 +7,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
-from hcmai.data.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
-from hcmai.data.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
+from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
+from offline.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/prepare.yaml"

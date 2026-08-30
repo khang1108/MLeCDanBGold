@@ -7,20 +7,20 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import hcmai.data.enrichment.transcripts.adapters.asr as asr_module
-import hcmai.data.enrichment.transcripts.prepare as prepare_module
+import offline.enrichment.transcripts.adapters.asr as asr_module
+import offline.enrichment.transcripts.prepare as prepare_module
 from hcmai.common.config import ASRConfig, DiarizationConfig
 from hcmai.common.schemas import TranscriptSegment
-from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
-from hcmai.data.enrichment.transcripts.adapters.diarization import (
+from offline.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
+from offline.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,
 )
-from hcmai.data.enrichment.transcripts.prepare import (
+from offline.enrichment.transcripts.prepare import (
     prepare_transcript_video,
     prepare_transcripts,
 )
 from hcmai.corpus.stores.transcript import TranscriptStore
-from hcmai.data.enrichment.transcripts.artifacts import (
+from offline.enrichment.transcripts.artifacts import (
     load_transcript_artifact_records,
 )
 

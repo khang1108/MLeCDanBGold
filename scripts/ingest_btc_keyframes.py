@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
-from hcmai.data.ingestion import BTCIngestionConfig, import_btc_frame_store
+from offline.ingestion import BTCIngestionConfig, import_btc_frame_store
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

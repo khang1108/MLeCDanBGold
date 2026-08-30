@@ -14,10 +14,10 @@ import pytest
 
 from hcmai.common.config import TranscriptJobConfig
 from hcmai.common.utils.io import read_yaml
-from hcmai.data.enrichment.caption.config import CaptionJobConfig
-from hcmai.data.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
-from hcmai.data.enrichment.pipeline import EnrichmentJobConfig
-from hcmai.data.s3 import load_s3_config
+from offline.enrichment.caption.config import CaptionJobConfig
+from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
+from offline.enrichment.pipeline import EnrichmentJobConfig
+from offline.ingestion.s3 import load_s3_config
 from scripts.build_retrieval_indexes import (
     _index_dataset_overrides,
     load_model_config,

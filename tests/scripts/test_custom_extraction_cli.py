@@ -16,21 +16,21 @@ import pandas as pd
 from PIL import Image
 import pytest
 
-from hcmai.data.ingestion.custom_enrichment import (
+from offline.ingestion.custom_enrichment import (
     materialize_video_enrichment_frames,
     write_enrichment_handoff,
 )
-from hcmai.data.ingestion.custom_frames import (
+from offline.ingestion.custom_frames import (
     CustomFrameStoreConfig,
     iter_native_frame_records,
     materialize_custom_frame_store,
     validate_native_video_bundle,
 )
-from hcmai.data.ingestion.custom_manifest import (
+from offline.ingestion.custom_manifest import (
     build_native_input_manifest,
     write_extraction_config,
 )
-from hcmai.data.ingestion.custom_state import (
+from offline.ingestion.custom_state import (
     cleanup_video,
     mark_video_enriched,
     mark_video_published,

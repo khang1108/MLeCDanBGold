@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.data.enrichment.object_detection import (
+from offline.enrichment.object_detection import (
     ObjectDetectionConfig,
     load_vocab,
     run_yoloe,

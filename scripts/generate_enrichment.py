@@ -1,4 +1,4 @@
-from hcmai.data.enrichment.pipeline import EnrichmentService
+from offline.enrichment.pipeline import EnrichmentService
 
 
 if __name__ == "__main__":

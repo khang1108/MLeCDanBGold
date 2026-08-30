@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hcmai.data.ingestion.keyframe_map import (
+from offline.ingestion.keyframe_map import (
     join_btc_mapping,
     load_btc_keyframe_map,
     project_keyframe_paths,

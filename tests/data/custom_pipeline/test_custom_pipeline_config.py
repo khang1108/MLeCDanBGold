@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from hcmai.data.custom_pipeline.config import (
+from offline.ingestion.custom_pipeline.config import (
     ArchivePlan,
     ArchiveWorkWindow,
     CustomPipelineConfig,
@@ -18,7 +18,7 @@ from hcmai.data.custom_pipeline.config import (
     SchedulingConfig,
     StageBatchConfig,
 )
-from hcmai.data.custom_pipeline.contracts import RunIdentity
+from offline.ingestion.custom_pipeline.contracts import RunIdentity
 
 
 # ---------------------------------------------------------------------------

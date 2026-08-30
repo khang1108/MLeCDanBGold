@@ -40,14 +40,14 @@ import pandas as pd
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.io import atomic_write, read_json, read_yaml_section, write_json, write_parquet
-from hcmai.data.custom_pipeline.asr import ASRReuseBundle, validate_asr_source
-from hcmai.data.custom_pipeline.config import (
+from offline.ingestion.custom_pipeline.asr import ASRReuseBundle, validate_asr_source
+from offline.ingestion.custom_pipeline.config import (
     ArchivePlan,
     ArchiveWorkWindow,
     CustomPipelineConfig,
 )
-from hcmai.data.custom_pipeline.contracts import RunIdentity
-from hcmai.data.custom_pipeline.runner import (
+from offline.ingestion.custom_pipeline.contracts import RunIdentity
+from offline.ingestion.custom_pipeline.runner import (
     BatchArtifacts,
     RunnerContext,
     finalize_pipeline,
@@ -55,8 +55,8 @@ from hcmai.data.custom_pipeline.runner import (
     preflight_pipeline,
     process_archive,
 )
-from hcmai.data.custom_pipeline.state import PipelineStateStore, VideoStage
-from hcmai.data.ingestion import (
+from offline.ingestion.custom_pipeline.state import PipelineStateStore, VideoStage
+from offline.ingestion import (
     cleanup_video,
     iter_native_frame_records,
     mark_video_enriched,

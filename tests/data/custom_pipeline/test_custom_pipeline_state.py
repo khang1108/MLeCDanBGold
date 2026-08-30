@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from hcmai.data.custom_pipeline.config import ArchiveWorkWindow
-from hcmai.data.custom_pipeline.contracts import RunIdentity
-from hcmai.data.custom_pipeline.state import (
+from offline.ingestion.custom_pipeline.config import ArchiveWorkWindow
+from offline.ingestion.custom_pipeline.contracts import RunIdentity
+from offline.ingestion.custom_pipeline.state import (
     ArchiveStage,
     BatchStage,
     PipelineStateStore,

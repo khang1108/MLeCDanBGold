@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from hcmai.data.ingestion.custom_manifest import (
+from offline.ingestion.custom_manifest import (
     build_native_input_manifest,
     write_extraction_config,
 )

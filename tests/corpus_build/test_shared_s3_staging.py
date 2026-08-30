@@ -10,10 +10,10 @@ import pandas as pd
 
 from hcmai.common.config import ASRConfig
 from hcmai.common.schemas import FrameRecord, TranscriptSegment
-from hcmai.data.enrichment.transcripts.adapters.asr import ASRAdapter
-from hcmai.data.enrichment.transcripts.pipeline import TranscriptService
-from hcmai.data.corpus_build.config import S3PreparationConfig
-from hcmai.data.s3 import list_video_objects, staged_video
+from offline.enrichment.transcripts.adapters.asr import ASRAdapter
+from offline.enrichment.transcripts.pipeline import TranscriptService
+from offline.ingestion.corpus_build.config import S3PreparationConfig
+from offline.ingestion.s3 import list_video_objects, staged_video
 
 
 class _Paginator:

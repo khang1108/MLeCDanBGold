@@ -9,8 +9,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.data.ingestion.custom_frames import CustomFrameStoreConfig
-from hcmai.data.ingestion.custom_frames import (
+from offline.ingestion.custom_frames import CustomFrameStoreConfig
+from offline.ingestion.custom_frames import (
     iter_native_frame_records,
     materialize_custom_frame_store,
     validate_native_video_bundle,
