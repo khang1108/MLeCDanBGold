@@ -37,14 +37,30 @@ class KISPipeline:
         timestamp arrays are preserved for frontend inspection of the path.
         """
 
+        started = perf_counter()
+
+        query_started = perf_counter()
+        if not request.query.strip():
+            query_ms = (perf_counter() - query_started) * 1_000
+            total_ms = (perf_counter() - started) * 1_000
+            return SearchResponse(
+                query=request.query,
+                events=[],
+                results=[],
+                latency=SearchLatency(
+                    query_ms=query_ms,
+                    retrieval_ms=0,
+                    alignment_ms=0,
+                    materialization_ms=0,
+                    total_ms=total_ms,
+                ),
+            )
+
         if self.data is None or self.materializer is None:
             raise RuntimeError("canonical frame data is not loaded")
         if self.alignment is None:
             raise RuntimeError("temporal search service is not loaded")
 
-        started = perf_counter()
-
-        query_started = perf_counter()
         events = split_query_events(request.query)
         query_ms = (perf_counter() - query_started) * 1_000
 

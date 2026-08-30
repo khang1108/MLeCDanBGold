@@ -116,3 +116,26 @@ def test_kis_projects_middle_frame_and_materializes_representative_metadata() ->
     assert response.latency.retrieval_ms == pytest.approx(12.5)
     assert response.latency.alignment_ms == pytest.approx(7.25)
     assert alignment.calls == [(("e1", "e2", "e3", "e4", "e5"), 1)]
+
+
+def test_kis_returns_empty_response_without_searching_for_whitespace_query() -> None:
+    """Treat a valid raw query with no event text as no alignable path."""
+
+    alignment = FakeAlignment()
+
+    response = KISPipeline(FakeData(), alignment).execute(
+        SearchRequest(query=" \n\t ", top_k=1)
+    )
+
+    assert response.query == " \n\t "
+    assert response.events == []
+    assert response.results == []
+    assert response.latency.model_dump().keys() == {
+        "query_ms",
+        "retrieval_ms",
+        "alignment_ms",
+        "materialization_ms",
+        "total_ms",
+    }
+    assert all(value >= 0 for value in response.latency.model_dump().values())
+    assert alignment.calls == []
