@@ -1,103 +1,99 @@
-"""TRAKE key-event alignment exposed as an executable task pipeline."""
+"""Project shared temporal-search paths into the TRAKE HTTP response.
+
+This workflow receives caller-provided ordered events and delegates their
+retrieval and monotonic alignment to ``TemporalSearchService``. It does not
+split KIS queries, create submissions, merge equal-video paths, or alter
+canonical alignment identity.
+"""
 
 from __future__ import annotations
 
-from hashlib import sha1
+from time import perf_counter
+from urllib.parse import quote
 
-from hcmai.common.schemas import (
-    TaskRequest,
-    TaskType,
+from hcmai.api.contracts import (
+    SearchLatency,
+    TRAKEPath,
     TRAKERequest,
     TRAKEResponse,
-    TRAKESubmission,
 )
 from hcmai.common.utils.logging import get_logger
-from hcmai.common.utils.video import derive_fps, format_video_id
-from hcmai.data.pipeline import DataService
 from hcmai.orchestration.temporal_search import TemporalSearchService
-from hcmai.orchestration.workflows.base import (
-    TaskPipelineDependencyError,
-    TaskPipelineRequestError,
-)
+from hcmai.temporal import AlignedPath
 
 logger = get_logger(__name__)
 
 
 class TRAKEPipeline:
-    """Project shared ordered alignment paths into TRAKE submissions."""
-
-    task_type = TaskType.TRAKE
+    """Expose every ranked temporal path as an independent TRAKE result."""
 
     def __init__(
         self,
-        data: DataService | None,
         alignment: TemporalSearchService | None,
     ) -> None:
-        """Initialize canonical data access and the shared alignment facade."""
+        """Bind the shared temporal-search service used by this task head."""
 
-        self.data = data
         self.alignment = alignment
 
-    def execute(self, request: TaskRequest) -> TRAKEResponse:
-        """Align ordered events and project canonical IDs into a TRAKE response."""
+    def execute(self, request: TRAKERequest) -> TRAKEResponse:
+        """Align explicit events and project paths without video-level merging.
 
-        if not isinstance(request, TRAKERequest):
-            raise TaskPipelineRequestError(
-                "TRAKEPipeline requires a TRAKE request"
-            )
+        Each aligned path retains its raw DP score and canonical frame arrays.
+        Thumbnail URLs are backend-owned routes derived solely from canonical
+        frame IDs, so the frontend does not infer asset locations.
+        """
 
         if self.alignment is None:
-            raise TaskPipelineDependencyError("Alignment service not loaded")
-        if self.data is None:
-            raise TaskPipelineDependencyError("Frame store not loaded")
+            raise RuntimeError("temporal search service is not loaded")
 
+        started = perf_counter()
+
+        query_started = perf_counter()
         events = request.events
-        if events is None:
-            raise TaskPipelineRequestError(
-                "TRAKE needs 'events' with at least two ordered events"
-            )
-
-        digest = sha1(f"trake\0{request.query}\0{request.top_k}".encode())
-
-        request_id = f"trake-{digest.hexdigest()[:12]}"
+        query_ms = (perf_counter() - query_started) * 1_000
 
         search = self.alignment.search(events, top_k=request.top_k)
-        rows = search.paths
+
+        materialization_started = perf_counter()
+        paths = [self._build_path(path) for path in search.paths]
+        materialization_ms = (perf_counter() - materialization_started) * 1_000
+        total_ms = (perf_counter() - started) * 1_000
 
         logger.info(
-            "[%s] trake completed events=%d videos=%d rows=%d",
-            request_id,
+            "TRAKE completed events=%d paths=%d videos=%d",
             len(events),
-            len({row.video_id for row in rows}),
-            len(rows),
+            len(paths),
+            len({path.video_id for path in paths}),
         )
 
         return TRAKEResponse(
-            request_id=request_id,
-            query=request.query,
-            events=events,
-            top_k=request.top_k,
-            total_results=len(rows),
-            submissions=[
-                TRAKESubmission(
-                    rank=rank,
-                    video_id=format_video_id(
-                        row.video_id,
-                        fallback_path=(
-                            self.data.get_frame(row.frame_ids[0]).image_path
-                            if row.frame_ids
-                            else None
-                        ),
-                    ),
-                    frame_ids=list(row.frame_ids),
-                    frame_idxs=list(row.frame_idxs),
-                    timestamps_ms=list(row.timestamps_ms),
-                    fps=derive_fps(
-                        self.data.get_frame(row.frame_ids[0])
-                        if row.frame_ids
-                        else None
-                    ),
-                )
-                for rank, row in enumerate(rows, start=1)
-            ],
+            events=list(events),
+            paths=paths,
+            latency=SearchLatency(
+                query_ms=query_ms,
+                retrieval_ms=search.retrieval_ms,
+                alignment_ms=search.alignment_ms,
+                materialization_ms=materialization_ms,
+                total_ms=total_ms,
+            ),
         )
+
+    @classmethod
+    def _build_path(cls, path: AlignedPath) -> TRAKEPath:
+        """Convert one canonical aligned path without changing its coordinates."""
+
+        frame_ids = list(path.frame_ids)
+        return TRAKEPath(
+            video_id=path.video_id,
+            score=path.score,
+            frame_ids=frame_ids,
+            frame_idxs=list(path.frame_idxs),
+            timestamps_ms=list(path.timestamps_ms),
+            thumbnail_urls=[cls._thumbnail_url(frame_id) for frame_id in frame_ids],
+        )
+
+    @staticmethod
+    def _thumbnail_url(frame_id: str) -> str:
+        """Return the backend-owned thumbnail route for one canonical frame."""
+
+        return f"/api/v1/frames/{quote(frame_id, safe='')}/thumbnail"
