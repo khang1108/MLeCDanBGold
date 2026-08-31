@@ -19,7 +19,7 @@ from hcmai.common.config import (
     IndexConfig,
     SearchConfig,
 )
-from hcmai.corpus import CorpusFrameLoadError
+from hcmai.corpus.corpus import _CorpusFrameLoadError
 from hcmai.retrieval.models import RetrievalSource
 from thundercompute.config import LLMServiceConfig
 from hcmai.orchestration import setup
@@ -488,7 +488,7 @@ def test_malformed_canonical_frames_fail_fast(
     def open_invalid_frames(*_args: object, **_kwargs: object) -> None:
         """Simulate Corpus rejecting a malformed required frame artifact."""
 
-        raise CorpusFrameLoadError("invalid frame schema")
+        raise _CorpusFrameLoadError("invalid frame schema")
 
     monkeypatch.setattr(
         setup.Corpus,
@@ -496,7 +496,7 @@ def test_malformed_canonical_frames_fail_fast(
         staticmethod(open_invalid_frames),
     )
 
-    with pytest.raises(CorpusFrameLoadError, match="invalid frame schema"):
+    with pytest.raises(_CorpusFrameLoadError, match="invalid frame schema"):
         setup._load_corpus(settings, frames, tmp_path, [])
 
 
