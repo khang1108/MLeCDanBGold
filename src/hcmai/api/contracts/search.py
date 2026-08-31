@@ -6,11 +6,17 @@ query splitting, temporal alignment, or evidence retrieval logic.
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from .latency import SearchLatency
+
+
+_NonBlankString = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1),
+]
 
 
 class SearchRequest(BaseModel):
@@ -18,8 +24,8 @@ class SearchRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    query: str
-    top_k: int = 20
+    query: _NonBlankString
+    top_k: int = Field(default=20, ge=1)
 
 
 class SearchResultMetadata(BaseModel):

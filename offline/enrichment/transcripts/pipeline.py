@@ -26,7 +26,7 @@ from offline.enrichment.transcripts.prepare import (
     prepare_transcript_video,
     prepare_transcripts,
 )
-from hcmai.corpus.stores.transcript import TranscriptStore
+from offline.artifact_readers import OfflineTranscriptStore
 
 
 class TranscriptService:
@@ -104,5 +104,7 @@ class TranscriptService:
         )
 
     @staticmethod
-    def load_store(metadata_path: str | Path) -> TranscriptStore:
-        return TranscriptStore(metadata_path)
+    def load_store(metadata_path: str | Path) -> OfflineTranscriptStore:
+        """Open transcript artifacts for offline timeline inspection."""
+
+        return OfflineTranscriptStore(metadata_path)

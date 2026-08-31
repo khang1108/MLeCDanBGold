@@ -123,24 +123,8 @@ def test_kis_projects_middle_frame_and_materializes_representative_metadata() ->
     assert alignment.calls == [(("e1", "e2", "e3", "e4", "e5"), 1)]
 
 
-def test_kis_returns_empty_response_without_searching_for_whitespace_query() -> None:
-    """Treat a valid raw query with no event text as no alignable path."""
+def test_kis_rejects_whitespace_query_before_pipeline_execution() -> None:
+    """Keep invalid public requests out of KIS workflow and alignment logic."""
 
-    alignment = FakeAlignment()
-
-    response = KISPipeline(FakeCorpus(), alignment).execute(
+    with pytest.raises(ValueError):
         SearchRequest(query=" \n\t ", top_k=1)
-    )
-
-    assert response.query == " \n\t "
-    assert response.events == []
-    assert response.results == []
-    assert response.latency.model_dump().keys() == {
-        "query_ms",
-        "retrieval_ms",
-        "alignment_ms",
-        "materialization_ms",
-        "total_ms",
-    }
-    assert all(value >= 0 for value in response.latency.model_dump().values())
-    assert alignment.calls == []

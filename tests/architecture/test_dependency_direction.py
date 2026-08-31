@@ -80,12 +80,12 @@ def test_runtime_packages_do_not_depend_on_forbidden_boundaries() -> None:
     ) == []
 
 
-def test_offline_package_does_not_depend_on_orchestration_or_api() -> None:
-    """Keep offline builders independent of serving orchestration and HTTP."""
+def test_offline_package_does_not_depend_on_runtime_serving_or_corpus() -> None:
+    """Keep offline construction independent of runtime serving and corpus readers."""
 
     assert _violations(
         REPOSITORY_ROOT / "offline",
-        ("hcmai.orchestration", "hcmai.api"),
+        ("hcmai.orchestration", "hcmai.api", "hcmai.corpus"),
     ) == []
 
 

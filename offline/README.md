@@ -2,7 +2,7 @@
 
 `offline` owns canonical frame ingestion and specialist evidence artifact
 production. Runtime typed data access lives under `hcmai.corpus`. The active competition baseline
-uses organizer-provided BTC keyframes and offline specialist enrichment. The
+uses the organizer-provided BTC Keyframes artifact and offline specialist enrichment. The
 custom raw-video path is a separately invoked offline corpus with its own run
 root and `frame_store_id`;
 it does not overwrite or replace BTC preparation.

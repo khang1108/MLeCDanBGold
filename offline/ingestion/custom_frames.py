@@ -22,7 +22,7 @@ import pandas as pd
 from offline.ingestion.models import FrameArtifact
 from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
 from offline.enrichment.bundle import publish_staged_bundle
-from hcmai.corpus.stores.frame import FrameStore
+from offline.artifact_readers import FrameArtifactReader
 
 
 _NATIVE_EXTRACTOR_VERSION = "hcmai-keyframes-extractor/0.1.0"
@@ -783,7 +783,7 @@ def _validate_staged_frame_store(
     *,
     expected_frame_ids: list[str],
 ) -> None:
-    """Re-read staged Parquet through shared FrameArtifact and FrameStore contracts.
+    """Re-read staged Parquet through offline frame contracts before publication.
 
     Args:
         frames_path: Staged Parquet file before global publication.
@@ -801,7 +801,7 @@ def _validate_staged_frame_store(
     records = [FrameArtifact.model_validate(row) for row in rows]
     if [record.frame_id for record in records] != expected_frame_ids:
         raise ValueError("staged custom FrameStore changed canonical frame order")
-    store = FrameStore(frames_path)
+    store = FrameArtifactReader(frames_path)
     if [record.frame_id for record in store.iter_frames()] != expected_frame_ids:
         raise ValueError("staged custom FrameStore failed runtime order validation")
 

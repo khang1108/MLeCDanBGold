@@ -755,8 +755,13 @@ class DefaultPreparationOperations:
         self, source: RetrievalSource
     ) -> tuple[Path, Path]:
         from hcmai.common.config import AppConfig
-        from hcmai.corpus.stores import ASRStore, CaptionStore, FrameStore, OCRStore
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
+        from offline.artifact_readers import (
+            ASRArtifactReader,
+            CaptionArtifactReader,
+            FrameArtifactReader,
+            OCRArtifactReader,
+        )
         from offline.indexes.text_embeddings import build_text_embedding_artifacts
 
         if self._text_encoder is None:
@@ -775,11 +780,11 @@ class DefaultPreparationOperations:
             )
         settings = AppConfig.from_yaml(self.retrieval_config)
         stores = {
-            RetrievalSource.CAPTION: CaptionStore,
-            RetrievalSource.OCR: OCRStore,
-            RetrievalSource.ASR: ASRStore,
+            RetrievalSource.CAPTION: CaptionArtifactReader,
+            RetrievalSource.OCR: OCRArtifactReader,
+            RetrievalSource.ASR: ASRArtifactReader,
         }
-        frame_store = FrameStore(self.paths.frames_path)
+        frame_store = FrameArtifactReader(self.paths.frames_path)
         evidence = stores[source](self.paths.enrichment_path(source))
         return build_text_embedding_artifacts(
             frame_store,

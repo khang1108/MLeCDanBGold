@@ -75,6 +75,25 @@ def test_trake_route_keeps_pydantic_validation() -> None:
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"events": [], "top_k": 1},
+        {"events": ["e1", " \t "], "top_k": 1},
+        {"events": ["e1"], "top_k": 0},
+    ],
+)
+def test_trake_route_rejects_invalid_values_at_http_boundary(
+    payload: dict[str, object],
+) -> None:
+    """Return FastAPI validation responses instead of letting workflows raise."""
+
+    app = FastAPI()
+    app.include_router(create_trake_router({"service": _Service()}))
+
+    assert _post(app, payload).status_code == 422
+
+
 def test_trake_route_reports_missing_service() -> None:
     """Keep degraded startup visible as an HTTP 503 response."""
 

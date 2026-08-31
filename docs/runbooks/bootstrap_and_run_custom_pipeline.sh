@@ -156,7 +156,7 @@ fi
 
 # --- 6. Run the local resumable pipeline through its four subcommands ---
 # The pipeline itself downloads, safely extracts, and cleans up each archive
-# ZIP (see hcmai.data.custom_pipeline.archive); there is no manual curl/unzip
+# ZIP (see offline.ingestion.custom_pipeline.archive); there is no manual curl/unzip
 # step or --source-root/--yt-dlp-binary flag anymore.
 PIPELINE_ARGS=(
   --run-root "$RUN_ROOT"

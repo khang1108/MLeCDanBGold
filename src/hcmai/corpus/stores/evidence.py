@@ -1,9 +1,9 @@
-"""Load specialist evidence artifacts into deterministic typed indexes.
+"""Load published specialist evidence into deterministic runtime indexes.
 
-Caption, OCR, object, and frame-context stores expose their authoritative
-public contracts. The legacy frame-aligned ASR artifact is projected to a
-compact runtime value so its Pydantic compatibility contract does not escape
-through corpus reads.
+Caption, OCR, object, and frame-context stores validate runtime projections of
+the offline-owned artifact layouts. The legacy frame-aligned ASR artifact is
+projected to a compact runtime value so its compatibility contract does not
+escape through corpus reads.
 """
 
 from __future__ import annotations

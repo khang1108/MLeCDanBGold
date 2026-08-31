@@ -22,7 +22,7 @@ from tqdm import tqdm
 from offline.enrichment.ocr.models import OCREvidence, OCRRegion
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.io import read_json
-from hcmai.corpus.stores.frame import FrameStore
+from offline.artifact_readers import FrameArtifactReader
 
 from .adapters.florence import FlorenceAdapter
 from .artifacts import failure_row, parsed_row, valid_ocr, write_ocr_artifacts
@@ -260,7 +260,7 @@ def generate_ocr(
     path, root = Path(frames_path), Path(dataset_root).expanduser().resolve()
     frames = [
         asdict(frame)
-        for frame in FrameStore.load(path).iter_frames()
+        for frame in FrameArtifactReader.load(path).iter_frames()
     ]
     order = [str(frame["frame_id"]) for frame in frames]
     if len(order) != len(set(order)):

@@ -75,6 +75,24 @@ def test_search_route_keeps_pydantic_validation() -> None:
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"query": " \n\t ", "top_k": 1},
+        {"query": "chef cooks", "top_k": 0},
+    ],
+)
+def test_search_route_rejects_invalid_values_at_http_boundary(
+    payload: dict[str, object],
+) -> None:
+    """Return FastAPI validation responses instead of letting workflows raise."""
+
+    app = FastAPI()
+    app.include_router(create_search_router({"service": _Service()}))
+
+    assert _post(app, payload).status_code == 422
+
+
 def test_search_route_reports_missing_service() -> None:
     """Keep degraded startup visible as an HTTP 503 response."""
 

@@ -1,4 +1,8 @@
-"""Pydantic primitives shared only by offline artifact boundaries."""
+"""Pydantic primitives shared by offline artifact producers and readers.
+
+These contracts deliberately stay outside ``hcmai.corpus`` so offline stages
+can validate published artifacts without importing runtime-private modules.
+"""
 
 from __future__ import annotations
 

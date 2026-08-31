@@ -11,7 +11,8 @@ import os
 import shutil
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import Any
+from collections.abc import Iterator
+from typing import Any, Protocol
 
 import numpy as np
 import pandas as pd
@@ -20,12 +21,14 @@ from tqdm.auto import tqdm
 from hcmai.common.config import AppConfig
 from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.logging import get_logger
-from hcmai.corpus.stores import (
-    ASRStore,
-    CaptionStore,
-    FrameContextStore,
-    FrameStore,
-    OCRStore,
+from offline.artifact_readers import (
+    ASRArtifactReader,
+    CaptionArtifactReader,
+    FrameArtifactReader,
+    FrameContextArtifactReader,
+    OCRArtifactReader,
+    assert_frame_identity,
+    assert_matching_lineage,
 )
 from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
 from hcmai.retrieval.retriever.artifacts import fingerprint_files, publish_directory
@@ -38,6 +41,32 @@ _TEXT_SOURCES = {
     RetrievalSource.OCR,
     RetrievalSource.ASR,
 }
+
+
+class _FrameIdentity(Protocol):
+    """Canonical identity retained by frame and specialist artifact rows."""
+
+    frame_id: str
+    video_id: str
+    frame_idx: int
+    timestamp_ms: int
+
+
+class _FrameLookup(Protocol):
+    """Canonical frame lookup needed by an offline frame-native index join."""
+
+    def get(self, frame_id: str) -> _FrameIdentity:
+        """Return one canonical frame for an exact internal identity."""
+
+
+class _TextEvidenceLookup(Protocol):
+    """Completed text and row iteration required by one specialist index join."""
+
+    def get_text(self, frame_id: str) -> str | None:
+        """Return usable text for one exact canonical frame identity."""
+
+    def iter_records(self) -> Iterator[_FrameIdentity]:
+        """Iterate every persisted specialist row in deterministic order."""
 
 
 def build_text_artifacts(
@@ -60,7 +89,7 @@ def build_text_artifacts(
         settings, source, enrichment_path, frames_path, output_dir
     )
     selected_encoder = _text_encoder(settings, models, encoder, source=source)
-    frame_store = FrameStore(frames)
+    frame_store = FrameArtifactReader(frames)
     evidence = _text_store(source, enrichment)
     index = build_text_index(
         frame_store,
@@ -102,8 +131,8 @@ def build_context_artifacts(
     manifest = _input_file(context.with_name("manifest.json"), "CONTEXT manifest")
     selected_encoder = _context_encoder(settings, models, encoder)
     index = build_context_index(
-        FrameStore(frames),
-        FrameContextStore(context),
+        FrameArtifactReader(frames),
+        FrameContextArtifactReader(context),
         selected_encoder,
         output,
         embeddings_filename=settings.index.context_embedding_filename,
@@ -122,8 +151,8 @@ def build_context_artifacts(
 
 
 def build_text_index(
-    frames: FrameStore,
-    evidence: CaptionStore | OCRStore | ASRStore,
+    frames: _FrameLookup,
+    evidence: _TextEvidenceLookup,
     encoder: TextEmbeddingAdapter,
     source: RetrievalSource,
     output_dir: str | Path,
@@ -156,8 +185,8 @@ def build_text_index(
 
 
 def build_context_index(
-    frames: FrameStore,
-    contexts: FrameContextStore,
+    frames: _FrameLookup,
+    contexts: _TextEvidenceLookup,
     encoder: TextEmbeddingAdapter,
     output_dir: str | Path,
     *,
@@ -266,13 +295,13 @@ def _context_artifact_paths(
 def _text_store(
     source: RetrievalSource,
     artifact_path: Path,
-) -> CaptionStore | OCRStore | ASRStore:
+) -> CaptionArtifactReader | OCRArtifactReader | ASRArtifactReader:
     """Open the offline specialist store required by one text index build."""
 
     stores = {
-        RetrievalSource.CAPTION: CaptionStore,
-        RetrievalSource.OCR: OCRStore,
-        RetrievalSource.ASR: ASRStore,
+        RetrievalSource.CAPTION: CaptionArtifactReader,
+        RetrievalSource.OCR: OCRArtifactReader,
+        RetrievalSource.ASR: ASRArtifactReader,
     }
     try:
         return stores[source](artifact_path)
@@ -308,20 +337,27 @@ def _context_encoder(
 
 
 def _text_corpus(
-    frames: FrameStore,
-    evidence: CaptionStore | OCRStore | ASRStore,
+    frames: _FrameLookup,
+    evidence: _TextEvidenceLookup,
     source: RetrievalSource,
 ) -> tuple[list[str], pd.DataFrame]:
     """Join usable enrichment text to canonical frame identity."""
+
+    if source in {RetrievalSource.CAPTION, RetrievalSource.OCR}:
+        assert_matching_lineage(frames, evidence, source.value.upper())
 
     texts: list[str] = []
     mapping: list[dict[str, Any]] = []
     for row in evidence.iter_records():
         frame_id = str(getattr(row, "frame_id"))
+        frame = frames.get(frame_id)
+        if source in {RetrievalSource.CAPTION, RetrievalSource.OCR}:
+            # Validate every row before omitting no-text or failed evidence. A
+            # malformed row must not be able to disappear from the index build.
+            assert_frame_identity(row, frame, source.value.upper())
         text = evidence.get_text(frame_id)
         if text is None:
             continue
-        frame = frames.get(frame_id)
         mapping.append(
             {
                 "frame_id": frame.frame_id,
@@ -338,18 +374,22 @@ def _text_corpus(
 
 
 def _context_corpus(
-    frames: FrameStore,
-    contexts: FrameContextStore,
+    frames: _FrameLookup,
+    contexts: _TextEvidenceLookup,
 ) -> tuple[list[str], pd.DataFrame]:
     """Join non-empty deterministic context text to canonical frame identity."""
 
+    assert_matching_lineage(frames, contexts, "CONTEXT")
     texts: list[str] = []
     rows: list[dict[str, object]] = []
     for context in contexts.iter_records():
+        frame = frames.get(context.frame_id)
+        # Context is a derived artifact but still carries the same canonical
+        # frame identity. Validate it before excluding empty context text.
+        assert_frame_identity(context, frame, "CONTEXT")
         text = contexts.get_text(context.frame_id)
         if text is None:
             continue
-        frame = frames.get(context.frame_id)
         rows.append(
             {
                 "frame_id": frame.frame_id,

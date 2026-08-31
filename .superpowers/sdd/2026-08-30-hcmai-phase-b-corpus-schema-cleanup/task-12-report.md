@@ -221,7 +221,8 @@ Results:
 - No live `DataService`, `hcmai.data`, or `hcmai.common.schemas` import remains.
   The two `hcmai.common.schemas` matches are package-absence assertions in
   tests.
-- No runtime Python or documentation import of `offline` remains.
+- No `src/hcmai` runtime import of `offline` remains; offline construction
+  owns its artifact readers independently of the runtime corpus.
 - No offline dependency on `hcmai.orchestration` remains.
 - `src/hcmai/data` no longer exists.
 - No `.pyc` or `__pycache__` remains under `src` or `offline` after cleanup.

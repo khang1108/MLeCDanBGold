@@ -6,11 +6,17 @@ does not own event parsing, temporal search, or corpus materialization.
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from .latency import SearchLatency
+
+
+_NonBlankString = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1),
+]
 
 
 class TRAKERequest(BaseModel):
@@ -18,8 +24,8 @@ class TRAKERequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    events: list[str]
-    top_k: int = 20
+    events: list[_NonBlankString] = Field(min_length=1)
+    top_k: int = Field(default=20, ge=1)
 
 
 class TRAKEPath(BaseModel):

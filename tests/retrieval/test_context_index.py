@@ -21,6 +21,12 @@ from hcmai.common.utils.io import read_yaml, write_json, write_yaml
 from hcmai.corpus.stores import FrameContextStore, FrameStore
 from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
+from offline.artifact_readers import (
+    CaptionArtifactReader,
+    FrameArtifactReader,
+    FrameContextArtifactReader,
+    OCRArtifactReader,
+)
 
 
 class FakeBGE:
@@ -175,6 +181,124 @@ def test_context_corpus_embeds_only_non_empty_context(
     assert texts == ["[CAPTION]\nA red cable car."]
     assert mapping["frame_id"].tolist() == ["f1"]
     assert mapping["timestamp_ms"].tolist() == [1000]
+
+
+def _offline_specialist_inputs(
+    tmp_path: Path,
+    source: RetrievalSource,
+    *,
+    evidence_video_id: str = "v1",
+    frame_store_id: str = "canonical-v1",
+) -> tuple[FrameArtifactReader, object]:
+    """Write minimal offline-owned frame and specialist artifacts for joins."""
+
+    pytest.importorskip("pyarrow")
+    frame_root = tmp_path / "frames"
+    evidence_root = tmp_path / source.value
+    frame_root.mkdir()
+    evidence_root.mkdir()
+    frames_path = frame_root / "frames.parquet"
+    evidence_path = evidence_root / f"{source.value}.parquet"
+    pd.DataFrame([
+        {
+            "frame_id": "f1",
+            "video_id": "v1",
+            "frame_idx": 10,
+            "timestamp_ms": 1_000,
+            "image_path": "keyframes/f1.jpg",
+        }
+    ]).to_parquet(frames_path, index=False)
+    write_json({"frame_store_id": "canonical-v1"}, frame_root / "manifest.json")
+
+    identity = {
+        "frame_id": "f1",
+        "video_id": evidence_video_id,
+        "frame_idx": 10,
+        "timestamp_ms": 1_000,
+        "frame_store_id": frame_store_id,
+    }
+    if source is RetrievalSource.CAPTION:
+        row = identity | {
+            "text": None,
+            "artifact_version": "caption-v1",
+            "model_name": "fixture/caption",
+        }
+        manifest = {"frame_store_id": frame_store_id, "artifact_version": "caption-v1"}
+    elif source is RetrievalSource.OCR:
+        row = identity | {
+            "normalized_text": None,
+            "artifact_version": "ocr-v1",
+            "model_name": "fixture/ocr",
+        }
+        manifest = {"frame_store_id": frame_store_id, "artifact_version": "ocr-v1"}
+    else:
+        row = identity | {
+            "context_version": "context-v1",
+            "caption_version": "caption-v1",
+            "ocr_version": "ocr-v1",
+            "object_version": "objects-v1",
+            "context_text": None,
+        }
+        manifest = {
+            "frame_store_id": frame_store_id,
+            "context_version": "context-v1",
+            "caption_version": "caption-v1",
+            "ocr_version": "ocr-v1",
+            "object_version": "objects-v1",
+        }
+    pd.DataFrame([row]).to_parquet(evidence_path, index=False)
+    write_json(manifest, evidence_root / "manifest.json")
+    if source is RetrievalSource.CAPTION:
+        reader = CaptionArtifactReader(evidence_path)
+    elif source is RetrievalSource.OCR:
+        reader = OCRArtifactReader(evidence_path)
+    else:
+        reader = FrameContextArtifactReader(evidence_path)
+    return FrameArtifactReader(frames_path), reader
+
+
+@pytest.mark.parametrize(
+    "source",
+    [RetrievalSource.CAPTION, RetrievalSource.OCR, RetrievalSource.CONTEXT],
+)
+def test_offline_indexes_reject_identity_mismatch_even_for_empty_text(
+    tmp_path: Path,
+    source: RetrievalSource,
+) -> None:
+    """Do not let unusable text hide a wrong canonical evidence identity."""
+
+    frames, evidence = _offline_specialist_inputs(
+        tmp_path, source, evidence_video_id="wrong-video"
+    )
+    from offline.indexes.text import _context_corpus, _text_corpus
+
+    with pytest.raises(ValueError, match="canonical identity mismatch"):
+        if source is RetrievalSource.CONTEXT:
+            _context_corpus(frames, evidence)
+        else:
+            _text_corpus(frames, evidence, source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [RetrievalSource.CAPTION, RetrievalSource.OCR, RetrievalSource.CONTEXT],
+)
+def test_offline_indexes_reject_specialist_frame_store_lineage_mismatch(
+    tmp_path: Path,
+    source: RetrievalSource,
+) -> None:
+    """Prevent artifacts from another canonical frame store entering an index."""
+
+    frames, evidence = _offline_specialist_inputs(
+        tmp_path, source, frame_store_id="different-store-v1"
+    )
+    from offline.indexes.text import _context_corpus, _text_corpus
+
+    with pytest.raises(ValueError, match="frame_store_id lineage mismatch"):
+        if source is RetrievalSource.CONTEXT:
+            _context_corpus(frames, evidence)
+        else:
+            _text_corpus(frames, evidence, source)
 
 
 @pytest.mark.parametrize(

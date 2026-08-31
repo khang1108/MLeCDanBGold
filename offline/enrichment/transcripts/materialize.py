@@ -21,8 +21,7 @@ from offline.enrichment.transcripts.artifacts import (
     load_transcript_artifact_records,
 )
 from offline.enrichment.transcripts.manifest import load_manifest
-from hcmai.corpus.stores.frame import FrameStore
-from hcmai.corpus.models import Frame
+from offline.artifact_readers import CanonicalFrame, FrameArtifactReader
 from offline.enrichment.models import (
     FrameEnrichment,
     ProcessingStatus,
@@ -48,7 +47,7 @@ def _deduplicated_text(segments: Iterable[TranscriptSegment]) -> str | None:
 
 
 def materialize_asr_enrichment(
-    frames: Sequence[Frame],
+    frames: Sequence[CanonicalFrame],
     segments: Sequence[TranscriptSegment],
     *,
     evaluated_video_ids: set[str],
@@ -194,7 +193,7 @@ def materialize_transcript_artifact(
 ) -> Path:
     """Publish a derived frame-aligned view from canonical transcript segments."""
 
-    frame_store = FrameStore(frames_path)
+    frame_store = FrameArtifactReader(frames_path)
     transcript_path = Path(transcript_root)
     frames = list(frame_store.iter_frames())
     rows = materialize_asr_enrichment(

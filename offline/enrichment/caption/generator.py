@@ -32,7 +32,7 @@ from offline.enrichment.caption.resume import guard_resume, resume_rows
 from offline.enrichment.caption.runner import run_batches
 from offline.enrichment.caption.models.contracts import CaptionAdapter
 from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
-from hcmai.corpus.stores.frame import FrameStore
+from offline.artifact_readers import FrameArtifactReader
 from thundercompute.pipeline import LLMService
 
 
@@ -52,7 +52,7 @@ def generate_captions(
 
     frames = [
         asdict(frame)
-        for frame in FrameStore.load(frames_path).iter_frames()
+        for frame in FrameArtifactReader.load(frames_path).iter_frames()
     ]
     order = [str(frame["frame_id"]) for frame in frames]
 

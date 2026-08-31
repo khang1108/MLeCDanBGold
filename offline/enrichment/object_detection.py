@@ -18,9 +18,9 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-from hcmai.corpus.assets import FrameAssetError, FrameAssetResolver
 from tqdm.auto import tqdm
 
+from offline.artifact_readers import FrameAssetError, OfflineFrameAssetResolver
 from offline.enrichment.models import ProcessingStatus
 from offline.enrichment.objects.models import ObjectDetection, ObjectEvidence
 from offline.ingestion.models import FrameArtifact
@@ -440,7 +440,7 @@ def run_yoloe(
     frame_store_id: str | None = None,
     limit: int | None = None,
     model: Any | None = None,
-    resolver: FrameAssetResolver | None = None,
+    resolver: OfflineFrameAssetResolver | None = None,
 ) -> dict[str, Any]:
     """Detect pending frames, then commit one complete canonical artifact bundle."""
 
@@ -465,7 +465,7 @@ def run_yoloe(
                 len(names),
                 config.vocab_path,
             )
-        active_resolver = resolver or FrameAssetResolver(dataset_root)
+        active_resolver = resolver or OfflineFrameAssetResolver(dataset_root)
         batch_starts = range(0, len(pending), config.batch_size)
 
         batch: list[tuple[str, Path]] = []

@@ -11,10 +11,11 @@ from pathlib import Path
 import numpy as np
 
 from hcmai.retrieval.models import RetrievalSource
-from hcmai.corpus.stores import ASRStore, CaptionStore, FrameStore, OCRStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from offline.indexes.text import (
     _TEXT_SOURCES,
+    _FrameLookup,
+    _TextEvidenceLookup,
     _embedding_artifact_name,
     _encode_texts,
     _normalized,
@@ -23,8 +24,8 @@ from offline.indexes.text import (
 
 
 def build_text_embedding_artifacts(
-    frames: FrameStore,
-    evidence: CaptionStore | OCRStore | ASRStore,
+    frames: _FrameLookup,
+    evidence: _TextEvidenceLookup,
     encoder: TextEmbeddingAdapter,
     source: RetrievalSource,
     output_dir: str | Path,

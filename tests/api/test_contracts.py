@@ -77,15 +77,17 @@ def test_kis_request_has_only_query_and_top_k() -> None:
         SearchRequest.model_validate({"query": "x", "query_type": "kis"})
 
 
-def test_kis_request_does_not_apply_extra_value_constraints() -> None:
-    request = SearchRequest(query="  chef cooks  ", top_k=0)
+def test_kis_request_rejects_blank_queries_and_non_positive_top_k() -> None:
+    """Keep invalid KIS inputs at the Pydantic boundary, before workflows run."""
 
-    assert request.query == "  chef cooks  "
-    assert request.top_k == 0
-    assert SearchRequest(query="", top_k=-5).model_dump() == {
-        "query": "",
-        "top_k": -5,
-    }
+    request = SearchRequest(query="  chef cooks  ", top_k=1)
+
+    assert request.query == "chef cooks"
+    assert request.top_k == 1
+    with pytest.raises(ValidationError):
+        SearchRequest(query=" \n\t ", top_k=1)
+    with pytest.raises(ValidationError):
+        SearchRequest(query="chef cooks", top_k=0)
 
 
 def test_trake_requires_explicit_events() -> None:
@@ -102,12 +104,20 @@ def test_trake_requires_explicit_events() -> None:
         )
 
 
-def test_trake_request_does_not_apply_extra_value_constraints() -> None:
-    request = TRAKERequest(events=["", "  spaced  "], top_k=-1)
+def test_trake_request_rejects_empty_or_blank_events_and_non_positive_top_k() -> None:
+    """Require an ordered nonblank event sequence at the HTTP boundary."""
 
-    assert request.events == ["", "  spaced  "]
-    assert request.top_k == -1
-    assert TRAKERequest(events=[]).model_dump() == {"events": [], "top_k": 20}
+    request = TRAKERequest(events=[" e1 ", "  spaced  "], top_k=1)
+
+    assert request.events == ["e1", "spaced"]
+    assert request.top_k == 1
+    for payload in (
+        {"events": [], "top_k": 1},
+        {"events": ["e1", " \t "], "top_k": 1},
+        {"events": ["e1"], "top_k": 0},
+    ):
+        with pytest.raises(ValidationError):
+            TRAKERequest.model_validate(payload)
 
 
 def test_latency_contract_uses_new_stage_names() -> None:
