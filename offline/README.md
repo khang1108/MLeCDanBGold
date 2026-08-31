@@ -1,10 +1,10 @@
-# HCMAI 2026 BTC-native data preparation
+# HCMAI 2026 offline artifact construction
 
 `offline` owns canonical frame ingestion and specialist evidence artifact
 production. Runtime typed data access lives under `hcmai.corpus`. The active competition baseline
-uses organizer-provided BTC keyframes and offline YOLOE object enrichment. The
-custom raw-video path is
-a separately invoked offline corpus with its own run root and frame_store_id;
+uses organizer-provided BTC keyframes and offline specialist enrichment. The
+custom raw-video path is a separately invoked offline corpus with its own run
+root and `frame_store_id`;
 it does not overwrite or replace BTC preparation.
 
 ## Competition flow
@@ -128,13 +128,13 @@ extract_custom_keyframes.py
   -> native state mark-enriched
   -> native state mark-published
   -> native cleanup
-  -> materialize corpus/frames.parquet
+  -> materialize the configured canonical frame artifact
   -> build FrameContext, embeddings, and indexes
 ```
 
 For the normal bounded operator path, prepare metadata, download each selected
 source, extract 1-FPS frames, validate its native bundle, and create the
-durable/OCR FrameRecord tables in one resumable command:
+durable/OCR frame-artifact tables in one resumable command:
 
 ```bash
 PYTHONPATH=.:src aic/bin/python scripts/extract_custom_keyframes.py \
@@ -210,7 +210,7 @@ PYTHONPATH=.:src aic/bin/python scripts/materialize_custom_frames.py \
   --video-id L01_V001
 ```
 
-Custom `FrameRecord.image_path` values are relative to the custom run root, so
+Custom frame `image_path` values are relative to the custom run root, so
 downstream image consumers must configure that run root as their dataset root.
 
 ## Public boundaries
@@ -221,7 +221,11 @@ downstream image consumers must configure that run root as their dataset root.
   OCR, YOLOE Object Detection, and FrameContext through independent stage boundaries.
 - `offline/enrichment/transcripts/pipeline.py`: `TranscriptService`
   owns video-level ASR and diarization.
-- `src/hcmai/corpus/stores/`: typed readers for specialist and derived artifacts.
+- `hcmai.corpus.Corpus`: read-only runtime access to existing canonical and
+  specialist artifacts.
+- `hcmai.retrieval.RetrievalService`: runtime loading and search of existing
+  indexes; construction remains under `offline.embeddings` and
+  `offline.indexes`.
 - `offline/ingestion/custom_state.py`: safe Python argv wrappers for the
   native `mark-enriched`, `mark-published`, and `cleanup` lifecycle commands.
 

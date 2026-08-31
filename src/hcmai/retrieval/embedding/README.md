@@ -39,24 +39,14 @@ Cross-component production code must not import an embedding adapter directly.
 Composition code creates adapters through the service factory methods; unit
 tests may inject fake adapters through the constructor.
 
-## Offline artifacts
+## Offline construction
 
-```python
-from pathlib import Path
+The `offline.embeddings.pipeline.build_visual_artifacts` entry point constructs
+visual vectors and their canonical mapping. Runtime embedding code does not
+call it.
 
-from hcmai.common.config import EncoderConfig
-from offline.embeddings.pipeline import build_visual_artifacts
-
-run = build_visual_artifacts(
-    frames_path=Path("artifacts/frame_store/frames.parquet"),
-    dataset_root=Path("artifacts/frame_store"),
-    output_dir=Path("artifacts"),
-    encoder_config=EncoderConfig(device="cuda"),
-    dataset_version="hcmai2026",
-)
-```
-
-The builder writes these versioned files under `<output_dir>/embeddings/`:
+The offline builder preserves the established files under
+`<output_dir>/embeddings/`:
 
 | File | Purpose |
 |---|---|

@@ -109,8 +109,7 @@ triggers upstream model inference. Index building is outside Enrichment V1.
 ## Verification
 
 ```bash
-pyright src/hcmai/common/schemas offline/enrichment \
-  src/hcmai/corpus/stores
+pyright offline/enrichment src/hcmai/corpus
 PYTHONPATH=.:src aic/bin/python -m pytest tests/data tests/data/enrichment -q
 ```
 

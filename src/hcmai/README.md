@@ -1,9 +1,10 @@
 # HCMAI runtime architecture
 
-`hcmai` is the online runtime for HCMAI 2026 multimodal video retrieval. BTC
-keyframes and their `FrameRecord` metadata are canonical. Caption, OCR,
-objects, and ASR remain specialist evidence; online serving reads completed
-artifacts and never regenerates corpus-scale data.
+`hcmai` is the online runtime for HCMAI 2026 multimodal video retrieval. It
+opens already-built corpus and index artifacts, searches them, aligns temporal
+evidence, and shapes competition responses. Corpus-scale ingestion,
+enrichment, embedding, and index construction belong to `offline` and the
+repository scripts; they never run during application startup or a request.
 
 ## Runtime path
 
@@ -12,34 +13,37 @@ FastAPI router
   -> SearchService
   -> KIS or TRAKE workflow
   -> TemporalSearchService
-  -> RetrievalService.score_event_videos()
-  -> pure monotonic DP
+  -> RetrievalService load/search
   -> Corpus canonical materialization
   -> competition-compatible response
 ```
 
-KIS and TRAKE share a stateless ordered event-to-frame alignment baseline.
-KIS projects one deterministic representative from each aligned path into its
-existing `SearchResponse`; TRAKE returns the complete path in
-`TRAKEResponse`. Task heads do not rewrite retrieval scores or identity.
+`Corpus.open(...)` is the read-only boundary for existing canonical frames,
+Caption, OCR, object-count, transcript, and media-metadata artifacts. It does
+not create, migrate, or republish artifacts. `RetrievalService` similarly owns
+runtime index loading and search; builders live under `offline.embeddings` and
+`offline.indexes` and are invoked by offline commands.
 
-```mermaid
-flowchart TB
-    CLIENT[Client] --> API[FastAPI router]
-    API --> SERVICE[SearchService]
-    SERVICE --> KIS[KIS workflow]
-    SERVICE --> TRAKE[TRAKE workflow]
-    KIS --> ALIGN[TemporalSearchService]
-    TRAKE --> ALIGN
-    ALIGN --> RET[RetrievalService]
-    ALIGN --> DATA[Corpus]
-    KIS --> KOUT[SearchResponse]
-    TRAKE --> TOUT[TRAKEResponse]
+## Package owners
+
+```text
+api/             HTTP validation and response shaping
+common/          configuration, logging, and cross-cutting utilities
+corpus/          read-only canonical frames, evidence, and asset resolution
+retrieval/       query encoding, index loading/search, fusion, and ranking
+temporal/        query planning and ordered temporal alignment
+orchestration/   application composition and thin KIS/TRAKE workflows
+thundercompute/  model gateway contracts and adapters
 ```
+
+Offline construction ownership is documented in
+[`offline/README.md`](../../offline/README.md). Runtime code must not import
+offline producers, and offline code must not import API or orchestration
+packages.
 
 ## Canonical identity
 
-Every stage preserves:
+Every runtime stage preserves:
 
 ```text
 video_id
@@ -51,75 +55,26 @@ timestamp_ms
 `frame_id` is the internal join identity. `frame_idx` is the BTC
 competition-facing coordinate and is never inferred from keyframe order,
 filename number, decode position, or an array index. Retrieval and alignment
-may rank candidates but cannot invent or alter these values.
+may rank candidates but cannot invent or alter canonical identity.
 
-## Shared temporal baseline
+Specialist evidence remains independently traceable. Missing or unevaluated
+evidence is not converted into a negative score, object multiplicity remains
+available in the offline artifact, and ASR remains timestamped timeline
+evidence rather than frame-native truth.
 
-`temporal/planner.py` deterministically splits a KIS query into a plain ordered
-tuple of strings. TRAKE supplies ordered events directly. `RetrievalService`
-builds a per-video event-by-frame score matrix, and `temporal/dp.py` returns
-strictly increasing decoder rows that `TemporalSearchService` validates and
-materializes into canonical `AlignedPath` values without wrapping them in
-another schema.
+## Startup and verification
 
-The baseline deliberately does not keep mutable search sessions, cluster
-scenes, apply soft temporal-relation scoring, or run a default reranker. A
-standalone reranking package can still be used in explicitly designed offline
-experiments; it is not constructed by the default online service.
-
-The score definition, non-capabilities, and experiment convention are in
-[`docs/research/alignment-baseline.md`](../../docs/research/alignment-baseline.md).
-The current migration authority remains **PROPOSED** until a frozen HCMAI
-development set and compatible scorer establish the trade-off.
-
-## Package boundaries
-
-```text
-api/             HTTP validation and response shaping only
-common/          shared schemas, configuration, logging, observability
-data/            canonical frame metadata, specialist evidence, artifacts
-retrieval/       embeddings, indexes, modality retrieval, fusion
-temporal/        query splitting and pure DP decoding
-orchestration/   service composition and thin KIS/TRAKE workflow heads
-thundercompute/  inference gateway adapters
-```
-
-## Offline versus online work
-
-```text
-BTC keyframes -> FrameRecord -> caption / OCR / imported objects
-videos -> timestamped ASR segments
-specialist evidence -> FrameContext
-embeddings -> versioned indexes
-completed artifacts -> read-only online services
-```
-
-Serving reports unavailable dependencies rather than rebuilding artifacts.
-ASR remains timeline evidence, so its association with a returned frame is
-provenance, not proof that the frame visually depicts the speech.
-
-## Configuration and evaluation
-
-Alignment choices are explicit in `search.alignment`: `lambda_gap`,
-`event_power`, `chunk_size`, and `cluster_delta`. These values are baselines,
-not scientific truths.
-
-Record a versioned query set, artifacts/indexes, model revision, configuration,
-code revision, metric or labelled proxy, P50/P95 stage latency, and failure
-cases before claiming an improvement. A retrieval/localization change should
-be evaluated with appropriate recall/path or official task metrics, not only a
-passing unit test.
-
-## Running and verification
-
-Run the backend only after the required artifacts are present:
+The existing artifact paths remain controlled by `configs/baseline.yaml` and
+environment overrides. Phase B does not introduce another artifact layout.
+Start the backend only after the configured frame store and required visual
+index are present:
 
 ```bash
 PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000
 ```
 
-The principal public routes are `GET /health`, `POST /api/v1/search`,
-`POST /api/v1/trake`, frame asset/neighbor routes, and `POST /api/v1/submit`.
-Use small hand-checkable score matrices for temporal tests and full task
-workflow tests for filter and identity preservation.
+`GET /health` reports frame-store, retrieval, evidence, and frame-asset
+readiness. The principal task routes are `POST /api/v1/search` and
+`POST /api/v1/trake`; frame and submission routes materialize identity through
+the same `Corpus` instance.
