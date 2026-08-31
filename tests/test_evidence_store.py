@@ -5,14 +5,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.common.schemas import (
-    CaptionEvidence,
-    FrameEnrichment,
-    OCREvidence,
-    RetrievalSource,
-)
 from hcmai.corpus.stores.evidence import ASRStore, CaptionStore, OCRStore
 from hcmai.corpus.stores import evidence
+from hcmai.retrieval.models import RetrievalSource
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.models import FrameEnrichment
+from offline.enrichment.ocr.models import OCREvidence
 
 
 @pytest.fixture
@@ -125,7 +123,10 @@ def test_source_stores_return_validated_text(
     assert store.source == source
     record = store.get("L01_V001_00000010")
     if contract is not None:
-        assert isinstance(record, contract)
+        # Runtime readers validate at their own private boundary and must not
+        # expose offline producer contracts through corpus APIs.
+        assert not isinstance(record, contract)
+        assert record.frame_id == "L01_V001_00000010"
     else:
         assert record.frame_id == "L01_V001_00000010"
         assert not isinstance(record, FrameEnrichment)

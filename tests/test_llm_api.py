@@ -11,13 +11,12 @@ import pytest
 from PIL import Image
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas import (
+from offline.enrichment.inference_contracts import (
     AudioReferenceRequest,
     DiarizationRequest,
     InferenceReadiness,
-    ModelStatus,
-    TranscriptSegment,
 )
+from offline.enrichment.transcripts.models import TranscriptSegment
 from thundercompute.adapters.http import InferenceClient
 from thundercompute.config import LLMServiceConfig
 from hcmai.retrieval.embedding.adapters.remote import RemoteEmbeddingAdapter
@@ -28,6 +27,14 @@ from offline.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 from thundercompute.adapters.local import LocalAdapter
 from thundercompute.pipeline import LLMService
 from thundercompute.server.api import create_llm_app
+
+
+def _model_status(**values: object) -> dict[str, object]:
+    """Build one readiness fixture row for boundary validation."""
+
+    return values
+
+
 class FakeRuntime:
     config = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
     reranker = SimpleNamespace(resolved_revision="test")
@@ -40,25 +47,25 @@ class FakeRuntime:
         return InferenceReadiness(
             ready=True,
             models={
-                "visual_embedding": ModelStatus(
+                "visual_embedding": _model_status(
                     loaded=True, checkpoint="visual/model", revision="visual-sha"
                 ),
-                "dino": ModelStatus(
+                "dino": _model_status(
                     loaded=True, checkpoint="dino/model", revision="dino-sha"
                 ),
-                "ocr": ModelStatus(
+                "ocr": _model_status(
                     loaded=True, checkpoint="ocr/model", revision="ocr-sha"
                 ),
-                "transnet": ModelStatus(
+                "transnet": _model_status(
                     loaded=True, checkpoint="transnet", revision="transnet-sha"
                 ),
-                "efficientgebd": ModelStatus(
+                "efficientgebd": _model_status(
                     loaded=True, checkpoint="gebd", revision="gebd-sha"
                 ),
-                "asr": ModelStatus(
+                "asr": _model_status(
                     loaded=True, checkpoint="asr/model", revision="asr-sha"
                 ),
-                "diarization": ModelStatus(
+                "diarization": _model_status(
                     loaded=True, checkpoint="diar/model", revision="diar-sha"
                 ),
             },

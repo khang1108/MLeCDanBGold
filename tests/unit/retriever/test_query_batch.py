@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("faiss")
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
 from hcmai.retrieval.retriever.query_batch import encode_query_batch

@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hcmai.common.schemas import OCREvidence, OCRRegion, ProcessingStatus
+from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.ocr.models import OCREvidence, OCRRegion
 
 from .artifacts import normalize_regions
 from .config import OCRConfig

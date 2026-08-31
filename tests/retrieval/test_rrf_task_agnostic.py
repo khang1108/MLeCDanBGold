@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from hcmai.common.config import EncoderConfig, FusionConfig
-from hcmai.common.schemas import (
+from hcmai.retrieval.models import (
     RetrievalCandidate,
     RetrievalResult,
     RetrievalSource,

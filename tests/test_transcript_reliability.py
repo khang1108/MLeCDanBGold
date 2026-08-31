@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import asdict
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,13 +14,10 @@ import pandas as pd
 import pytest
 
 from hcmai.common.config import ASRConfig
-from hcmai.common.schemas import (
-    FrameEnrichment,
-    FrameRecord,
-    ProcessingStatus,
-    RetrievalSource,
-    TranscriptSegment,
-)
+from hcmai.corpus import Frame
+from hcmai.retrieval.models import RetrievalSource
+from offline.enrichment.models import FrameEnrichment, ProcessingStatus
+from offline.enrichment.transcripts.models import TranscriptSegment
 from offline.enrichment.transcripts.adapters.asr import (
     ASRAdapter,
     _validate_segments,
@@ -264,15 +262,13 @@ def test_duplicate_video_id_with_same_size_different_content_fails(
         prepare_transcripts(root, tmp_path / "output", cast(ASRAdapter, _ASR()))
 
 
-def _frame(frame_id: str, video_id: str, timestamp_ms: int) -> FrameRecord:
-    return FrameRecord(
+def _frame(frame_id: str, video_id: str, timestamp_ms: int) -> Frame:
+    return Frame(
         frame_id=frame_id,
         video_id=video_id,
         frame_idx=timestamp_ms,
         timestamp_ms=timestamp_ms,
         image_path=f"{frame_id}.jpg",
-        width=8,
-        height=6,
     )
 
 
@@ -355,7 +351,7 @@ def test_materialization_rejects_unknown_frame_foreign_key(tmp_path: Path) -> No
 def test_materialized_rows_validate_with_offline_stores(tmp_path: Path) -> None:
     frame = _frame("f1", "v1", 1_500)
     frames_path = tmp_path / "frames.parquet"
-    pd.DataFrame([frame.model_dump(mode="json")]).to_parquet(frames_path, index=False)
+    pd.DataFrame([asdict(frame)]).to_parquet(frames_path, index=False)
     output = tmp_path / "asr.parquet"
     rows = materialize_asr_enrichment(
         [frame],
@@ -390,7 +386,7 @@ def test_completed_manifests_materialize_speech_and_no_speech_videos(
     frames = [_frame("f1", "v1", 1_500), _frame("f2", "v2", 1_500)]
     frames_path = tmp_path / "frames.parquet"
     pd.DataFrame(
-        [frame.model_dump(mode="json") for frame in frames]
+        [asdict(frame) for frame in frames]
     ).to_parquet(frames_path, index=False)
     output = tmp_path / "asr.parquet"
 

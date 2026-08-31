@@ -5,11 +5,8 @@ import numpy as np
 
 from hcmai.api.contracts import SearchRequest
 from hcmai.common.config import SearchConfig
-from hcmai.common.schemas import (
-    FrameRecord,
-    RetrievalSource,
-)
-from hcmai.corpus import Corpus
+from hcmai.corpus import Corpus, Frame
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
@@ -21,9 +18,9 @@ class TinyCorpus:
 
     def frame(self, frame_id):
         assert frame_id == "frame-1"
-        return FrameRecord(
+        return Frame(
             frame_id="frame-1", video_id="video-1", frame_idx=7,
-            timestamp_ms=1_000, image_path="unused.jpg", width=4, height=4,
+            timestamp_ms=1_000, image_path="unused.jpg",
         )
 
     def caption(self, frame_id):

@@ -9,7 +9,8 @@ from typing import Any
 
 from tqdm.auto import tqdm
 
-from hcmai.common.schemas import CaptionEvidence, ProcessingStatus
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.models import ProcessingStatus
 from hcmai.common.utils.image import load_image
 from offline.enrichment.caption.artifacts import write_caption_artifacts
 from offline.enrichment.caption.config import CaptionConfig

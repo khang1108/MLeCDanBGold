@@ -275,7 +275,7 @@ def _materialize_frames_for_videos(
 ) -> Path:
     """Publish a deterministic per-batch FrameStore slice over selected bundles."""
 
-    from hcmai.common.schemas import FrameRecord
+    from offline.ingestion.models import FrameArtifact
 
     records = [
         record
@@ -286,7 +286,7 @@ def _materialize_frames_for_videos(
     ]
     table = pd.DataFrame(
         [record.model_dump(mode="python") for record in records],
-        columns=list(FrameRecord.model_fields),
+        columns=list(FrameArtifact.model_fields),
     )
     atomic_write(output, lambda path: write_parquet(table, path, index=False))
     return output

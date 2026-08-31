@@ -35,9 +35,22 @@ from pathlib import Path
 from typing import cast
 
 import pandas as pd
+from pydantic import BaseModel, ConfigDict, Field
 
-from hcmai.common.schemas.frame import FrameRecord
 from hcmai.corpus.models import Frame
+
+
+class _FrameArtifact(BaseModel):
+    """Validate only the canonical fields exposed by the runtime corpus."""
+
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+    frame_id: str = Field(min_length=1)
+    video_id: str = Field(min_length=1)
+    frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
+    image_path: str = Field(min_length=1)
+    thumbnail_path: str | None = None
 
 
 class FrameStore:
@@ -73,8 +86,7 @@ class FrameStore:
                 (raised by ``pd.read_parquet`` internally).
             ValueError: If the Parquet file contains duplicate
                 ``frame_id`` values.
-            pydantic.ValidationError: If any row in the file fails
-                artifact ``FrameRecord`` validation inside ``_record_from_row``.
+            pydantic.ValidationError: If a row has invalid runtime frame fields.
         """
 
         self.metadata_path = Path(metadata_path)
@@ -143,10 +155,9 @@ class FrameStore:
     def _record_from_row(row: dict[str, object]) -> Frame:
         """Validate one Parquet row and materialize its runtime frame view.
 
-        Extracts only the fields declared in ``FrameRecord.model_fields``
-        from ``row``, converts pandas ``NA`` / ``NaN`` values for
-        nullable string columns (``thumbnail_path``, ``shot_id``) to
-        ``None``, and validates the result with Pydantic.
+        Extracts only the six runtime fields, converts pandas ``NA`` / ``NaN``
+        for ``thumbnail_path`` to ``None``, and validates the artifact boundary
+        before constructing the frozen runtime dataclass.
 
         Args:
             row: Plain ``dict`` produced by
@@ -163,19 +174,18 @@ class FrameStore:
 
         values = {
             name: row[name]
-            for name in FrameRecord.model_fields
+            for name in _FrameArtifact.model_fields
             if name in row
         }
-        for name in ("keyframe_order", "thumbnail_path", "shot_id"):
-            value = values.get(name)
-            if (
-                value is None
-                or value is pd.NA
-                or isinstance(value, float)
-                and math.isnan(value)
-            ):
-                values[name] = None
-        artifact_record = FrameRecord.model_validate(values)
+        value = values.get("thumbnail_path")
+        if (
+            value is None
+            or value is pd.NA
+            or isinstance(value, float)
+            and math.isnan(value)
+        ):
+            values["thumbnail_path"] = None
+        artifact_record = _FrameArtifact.model_validate(values)
         return Frame(
             frame_id=artifact_record.frame_id,
             video_id=artifact_record.video_id,

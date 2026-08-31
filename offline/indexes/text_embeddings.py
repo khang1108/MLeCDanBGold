@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.corpus.stores import ASRStore, CaptionStore, FrameStore, OCRStore
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from offline.indexes.text import (

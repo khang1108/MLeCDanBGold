@@ -16,14 +16,16 @@ import numpy as np
 import pandas as pd
 
 from hcmai.common.config import AppConfig
-from hcmai.common.schemas import ProcessingStatus, RetrievalSource, TranscriptSegment
 from hcmai.common.utils.logging import get_logger
 from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
 from hcmai.retrieval.retriever.artifacts import fingerprint_files, publish_directory
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 from offline.enrichment.transcripts.artifacts import load_transcript_artifact_records
+from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.transcripts.models import TranscriptSegment
 from offline.indexes.text import _encode_texts, _encoder_revision, _normalized
 from thundercompute.config import LLMServiceConfig
+from hcmai.retrieval.models import RetrievalSource
 
 logger = get_logger(__name__)
 

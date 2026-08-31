@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from hcmai.app import create_app
-from hcmai.common.schemas.enum import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.corpus import Corpus, Frame
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -39,7 +39,7 @@ class MockFrameStore:
         self._records = [self.record]
         self.evidence = evidence or {}
 
-    def get(self, frame_id: str) -> FrameRecord:
+    def get(self, frame_id: str) -> Frame:
         if frame_id == self.record.frame_id:
             return self.record
         raise KeyError(f"Frame ID {frame_id!r} not found")
@@ -48,6 +48,23 @@ class MockFrameStore:
 
     def __len__(self) -> int:
         return len(self._records)
+
+    def frame_asset_status(self) -> SimpleNamespace:
+        """Report that this in-memory fixture has no local asset resolver."""
+
+        return SimpleNamespace(
+            as_dict=lambda: {
+                "ready": False,
+                "checked": 0,
+                "available": 0,
+                "missing": 0,
+            }
+        )
+
+    def has_evidence(self, source: RetrievalSource) -> bool:
+        """Mirror Corpus evidence availability for health responses."""
+
+        return source in self.evidence
 
     def _evidence(self, frame_id, source):
         store = self.evidence.get(source)

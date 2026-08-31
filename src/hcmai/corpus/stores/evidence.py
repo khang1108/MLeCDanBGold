@@ -10,28 +10,191 @@ from __future__ import annotations
 
 import json
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Hashable, Iterable, Iterator
 from dataclasses import dataclass
+from enum import Enum
 from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, ClassVar, Generic, TypeVar, cast
+from typing import Annotated, Any, ClassVar, Generic, Self, TypeVar, cast
 
 import pandas as pd
-from pydantic import BaseModel
-
-from hcmai.common.schemas import (
-    CaptionEvidence,
-    FrameContext,
-    FrameEnrichment,
-    ObjectDetection,
-    ObjectEvidence,
-    OCREvidence,
-    ProcessingStatus,
-    RetrievalSource,
-    usable_completed_text,
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
 )
 from hcmai.common.utils.io import read_json
+from hcmai.retrieval.models import RetrievalSource
+
+
+_NonEmptyString = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1),
+]
+
+
+class _ArtifactModel(BaseModel):
+    """Strict base for runtime validation of published evidence artifacts."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class _ProcessingStatus(str, Enum):
+    """Artifact status values understood by runtime readers."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class _SpecialistArtifact(_ArtifactModel):
+    """Shared failure diagnostics on specialist evidence artifacts."""
+
+    status: _ProcessingStatus = _ProcessingStatus.COMPLETED
+    error_code: _NonEmptyString | None = None
+    error_message: _NonEmptyString | None = None
+
+    @model_validator(mode="after")
+    def validate_failure_details(self) -> Self:
+        """Require diagnostics when an offline producer recorded failure."""
+
+        if self.status is _ProcessingStatus.FAILED and (
+            self.error_code is None or self.error_message is None
+        ):
+            raise ValueError("failed evidence requires error_code and error_message")
+        return self
+
+
+class _CaptionArtifact(_SpecialistArtifact):
+    """Runtime reader view of one published caption artifact row."""
+
+    frame_id: _NonEmptyString
+    video_id: _NonEmptyString
+    frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
+    text: str | None = None
+    frame_store_id: _NonEmptyString | None = None
+    artifact_version: _NonEmptyString
+    model_name: _NonEmptyString
+    model_revision: _NonEmptyString | None = None
+
+
+class _OCRArtifact(_SpecialistArtifact):
+    """Runtime reader view of one published OCR artifact row."""
+
+    frame_id: _NonEmptyString
+    video_id: _NonEmptyString
+    frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
+    raw_text: str | None = None
+    normalized_text: str | None = None
+    quality_score: float = Field(default=0.0, ge=0, le=1)
+    region_count: int = Field(default=0, ge=0)
+    frame_store_id: _NonEmptyString | None = None
+    artifact_version: _NonEmptyString
+    model_name: _NonEmptyString
+    model_revision: _NonEmptyString | None = None
+
+
+class _FrameContextArtifact(_ArtifactModel):
+    """Runtime reader view of deterministic frame context."""
+
+    frame_id: _NonEmptyString
+    video_id: _NonEmptyString
+    frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
+    caption_text: str | None = None
+    ocr_text: str | None = None
+    object_summary: str | None = None
+    context_text: str | None = None
+    caption_available: bool = False
+    ocr_quality: float = Field(default=0.0, ge=0, le=1)
+    object_count: int = Field(default=0, ge=0)
+    context_version: _NonEmptyString
+    caption_version: _NonEmptyString
+    ocr_version: _NonEmptyString
+    object_version: _NonEmptyString
+    frame_store_id: _NonEmptyString | None = None
+
+
+class _ObjectDetectionArtifact(_ArtifactModel):
+    """Runtime reader view of one normalized object detection."""
+
+    label: _NonEmptyString
+    confidence: float = Field(ge=0, le=1)
+    x_min: float = Field(ge=0, le=1)
+    y_min: float = Field(ge=0, le=1)
+    x_max: float = Field(ge=0, le=1)
+    y_max: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_box(self) -> Self:
+        """Reject inverted normalized object boxes."""
+
+        if self.x_max < self.x_min or self.y_max < self.y_min:
+            raise ValueError("object maximum coordinates must not precede minimums")
+        return self
+
+
+class _ObjectArtifact(_SpecialistArtifact):
+    """Runtime reader view of one frame's object evidence."""
+
+    frame_id: _NonEmptyString
+    video_id: _NonEmptyString
+    frame_idx: int = Field(ge=0)
+    timestamp_ms: int = Field(ge=0)
+    detections: list[_ObjectDetectionArtifact] = Field(default_factory=list)
+    counts: dict[_NonEmptyString, int] = Field(default_factory=dict)
+    summary: str | None = None
+    detection_count: int = Field(default=0, ge=0)
+    frame_store_id: _NonEmptyString | None = None
+    artifact_version: _NonEmptyString
+
+    @model_validator(mode="after")
+    def validate_detections(self) -> Self:
+        """Preserve raw detection multiplicity and count consistency."""
+
+        raw_counts = Counter(detection.label for detection in self.detections)
+        if self.detection_count != len(self.detections):
+            raise ValueError("detection_count must equal the number of detections")
+        if any(
+            count < 0 or count > raw_counts.get(label, 0)
+            for label, count in self.counts.items()
+        ):
+            raise ValueError("counts must not exceed raw detection multiplicity")
+        return self
+
+
+class _FrameEnrichmentArtifact(_ArtifactModel):
+    """Runtime reader for the deprecated frame-aligned ASR artifact."""
+
+    frame_id: _NonEmptyString
+    frame_store_id: _NonEmptyString | None = None
+    caption: _NonEmptyString | None = None
+    detailed_caption: _NonEmptyString | None = None
+    ocr_text: _NonEmptyString | None = None
+    asr_text: _NonEmptyString | None = None
+    source_segment_ids: list[_NonEmptyString] = Field(default_factory=list)
+    enrichment_version: _NonEmptyString | None = None
+    objects: list[_NonEmptyString] = Field(default_factory=list)
+    model_name: _NonEmptyString
+    status: _ProcessingStatus = _ProcessingStatus.COMPLETED
+    error_message: _NonEmptyString | None = None
+
+
+def _usable_completed_text(
+    row: _CaptionArtifact | _OCRArtifact,
+) -> str | None:
+    """Return usable completed specialist text from a runtime artifact view."""
+
+    if row.status is not _ProcessingStatus.COMPLETED:
+        return None
+    value = row.text if isinstance(row, _CaptionArtifact) else row.normalized_text
+    return value if value is not None and value.strip() else None
 
 
 _EvidenceT = TypeVar("_EvidenceT", bound=BaseModel)
@@ -259,7 +422,7 @@ class _TypedEvidenceStore(Generic[_EvidenceT]):
         return iter(self._records)
 
 
-class CaptionStore(_TypedEvidenceStore[CaptionEvidence]):
+class CaptionStore(_TypedEvidenceStore[_CaptionArtifact]):
     """Provide typed, indexed access to authoritative caption evidence."""
 
     source = RetrievalSource.CAPTION
@@ -267,15 +430,15 @@ class CaptionStore(_TypedEvidenceStore[CaptionEvidence]):
     def __init__(self, artifact_path: str | Path) -> None:
         """Load and validate a ``CaptionEvidence`` Parquet artifact."""
 
-        super().__init__(artifact_path, CaptionEvidence, ("artifact_version",))
+        super().__init__(artifact_path, _CaptionArtifact, ("artifact_version",))
 
     def get_text(self, frame_id: str) -> str | None:
         """Return non-empty text from completed caption evidence."""
 
-        return usable_completed_text(self.get(frame_id))
+        return _usable_completed_text(self.get(frame_id))
 
 
-class OCRStore(_TypedEvidenceStore[OCREvidence]):
+class OCRStore(_TypedEvidenceStore[_OCRArtifact]):
     """Provide typed, indexed access to authoritative OCR evidence."""
 
     source = RetrievalSource.OCR
@@ -283,15 +446,15 @@ class OCRStore(_TypedEvidenceStore[OCREvidence]):
     def __init__(self, artifact_path: str | Path) -> None:
         """Load and validate an ``OCREvidence`` Parquet artifact."""
 
-        super().__init__(artifact_path, OCREvidence, ("artifact_version",))
+        super().__init__(artifact_path, _OCRArtifact, ("artifact_version",))
 
     def get_text(self, frame_id: str) -> str | None:
         """Return non-empty normalized text from completed OCR evidence."""
 
-        return usable_completed_text(self.get(frame_id))
+        return _usable_completed_text(self.get(frame_id))
 
 
-class FrameContextStore(_TypedEvidenceStore[FrameContext]):
+class FrameContextStore(_TypedEvidenceStore[_FrameContextArtifact]):
     """Provide typed access to deterministic derived frame context."""
 
     def __init__(self, artifact_path: str | Path) -> None:
@@ -299,7 +462,7 @@ class FrameContextStore(_TypedEvidenceStore[FrameContext]):
 
         super().__init__(
             artifact_path,
-            FrameContext,
+            _FrameContextArtifact,
             (
                 "context_version",
                 "caption_version",
@@ -334,7 +497,7 @@ def _object_counts(value: object) -> dict[str, int]:
     return counts
 
 
-class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
+class ObjectStore(_TypedEvidenceStore[_ObjectArtifact]):
     """Reconstruct strict object evidence from frame and detection artifacts.
 
     The public frame artifact stores counts and summaries, while its sibling
@@ -364,7 +527,7 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
         frame_rows = _nullable_rows(frame_table)
         identities = [_frame_identity(row) for row in frame_rows]
         detections = self._load_detections(frame_rows)
-        records: list[ObjectEvidence] = []
+        records: list[_ObjectArtifact] = []
         for index, (row, identity) in enumerate(
             zip(frame_rows, identities, strict=True)
         ):
@@ -376,7 +539,7 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
             )
             values["detections"] = detections.get(frame_id, [])
             try:
-                record = ObjectEvidence.model_validate(values)
+                record = _ObjectArtifact.model_validate(values)
             except Exception as error:
                 raise ValueError(
                     f"Malformed ObjectEvidence row {index} in {self.artifact_path}"
@@ -424,7 +587,7 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
             "frame_idx",
             "timestamp_ms",
             "detection_index",
-            *ObjectDetection.model_fields,
+            *_ObjectDetectionArtifact.model_fields,
         }
         missing = sorted(required.difference(table.columns))
         if missing:
@@ -468,10 +631,11 @@ class ObjectStore(_TypedEvidenceStore[ObjectEvidence]):
                 )
             order = _strict_int(row.get("detection_index"), "detection_index")
             detection = {
-                field: row.get(field) for field in ObjectDetection.model_fields
+                field: row.get(field)
+                for field in _ObjectDetectionArtifact.model_fields
             }
             try:
-                ObjectDetection.model_validate(detection)
+                _ObjectDetectionArtifact.model_validate(detection)
             except Exception as error:
                 raise ValueError(
                     f"Malformed object detection for frame_id {frame_id!r}"
@@ -583,10 +747,10 @@ def _asr_runtime_value(data: dict[Hashable, Any]) -> _ASRText:
     for field in _NULLABLE_FIELDS:
         if _is_null(values.get(field)):
             values[field] = None
-    artifact = FrameEnrichment.model_validate(values)
+    artifact = _FrameEnrichmentArtifact.model_validate(values)
     usable_text = (
         artifact.asr_text
-        if artifact.status is ProcessingStatus.COMPLETED
+        if artifact.status is _ProcessingStatus.COMPLETED
         and artifact.error_message is None
         else None
     )

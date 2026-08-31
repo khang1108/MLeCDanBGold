@@ -18,7 +18,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 from hcmai.common.config import AppConfig
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus.stores import (
     ASRStore,

@@ -1,7 +1,7 @@
-"""Validate native custom-frame bundles before exposing canonical FrameRecord rows.
+"""Validate native custom-frame bundles before exposing canonical FrameArtifact rows.
 
 This module owns the Python safety boundary between C++ JSONL/image artifacts
-and the shared FrameRecord/Parquet contracts. It validates native identity,
+and the shared FrameArtifact/Parquet contracts. It validates native identity,
 timestamps, image coverage, and the submission coordinate formula; it does not
 decode media, regenerate images, or alter BTC frame stores.
 """
@@ -19,7 +19,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
-from hcmai.common.schemas import FrameRecord
+from offline.ingestion.models import FrameArtifact
 from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
 from offline.enrichment.bundle import publish_staged_bundle
 from hcmai.corpus.stores.frame import FrameStore
@@ -429,7 +429,7 @@ def _validated_native_bundle(
     expected_status: Literal["enrichment_pending", "published"],
     image_variant: Literal["durable", "enrichment"],
 ) -> _ValidatedBundle:
-    """Validate a bundle once and retain rows for report and FrameRecord conversion.
+    """Validate a bundle once and retain rows for report and FrameArtifact conversion.
 
     Args:
         bundle_root: Native staging or published per-video bundle directory.
@@ -670,7 +670,7 @@ def _record_from_native_row(
     run_root: Path,
     bundle_root: Path,
     image_variant: Literal["durable", "enrichment"],
-) -> FrameRecord:
+) -> FrameArtifact:
     """Map one previously validated native row to the shared frame contract.
 
     Args:
@@ -680,12 +680,12 @@ def _record_from_native_row(
         image_variant: Durable retrieval or temporary OCR image representation.
 
     Returns:
-        Validated ``FrameRecord`` retaining native identity and temporal metadata.
+        Validated ``FrameArtifact`` retaining native identity and temporal metadata.
     """
 
     path_key = "image_path" if image_variant == "durable" else "enrichment_image_path"
     image_path = (bundle_root / str(row[path_key])).resolve()
-    return FrameRecord(
+    return FrameArtifact(
         frame_id=str(row["frame_id"]),
         video_id=str(row["video_id"]),
         frame_idx=int(row["frame_idx"]),
@@ -713,7 +713,7 @@ def iter_native_frame_records(
     *,
     run_root: str | Path,
     image_variant: Literal["durable", "enrichment"] = "durable",
-) -> Iterator[FrameRecord]:
+) -> Iterator[FrameArtifact]:
     """Yield fully validated custom frames in native sample-index order.
 
     Args:
@@ -723,7 +723,7 @@ def iter_native_frame_records(
             image for OCR-only per-video work.
 
     Yields:
-        ``FrameRecord`` values with native internal IDs, actual timestamps, and
+        ``FrameArtifact`` values with native internal IDs, actual timestamps, and
         competition-facing ``frame_idx`` values preserved exactly.
 
     Raises:
@@ -758,7 +758,7 @@ def iter_native_frame_records(
 
 
 def _submission_coordinate_diagnostics(
-    records: list[FrameRecord],
+    records: list[FrameArtifact],
 ) -> dict[str, int]:
     """Summarize allowed non-unique competition coordinates for observability.
 
@@ -783,7 +783,7 @@ def _validate_staged_frame_store(
     *,
     expected_frame_ids: list[str],
 ) -> None:
-    """Re-read staged Parquet through shared FrameRecord and FrameStore contracts.
+    """Re-read staged Parquet through shared FrameArtifact and FrameStore contracts.
 
     Args:
         frames_path: Staged Parquet file before global publication.
@@ -798,7 +798,7 @@ def _validate_staged_frame_store(
 
     table = pd.read_parquet(frames_path)
     rows = table.astype(object).where(table.notna(), None).to_dict(orient="records")
-    records = [FrameRecord.model_validate(row) for row in rows]
+    records = [FrameArtifact.model_validate(row) for row in rows]
     if [record.frame_id for record in records] != expected_frame_ids:
         raise ValueError("staged custom FrameStore changed canonical frame order")
     store = FrameStore(frames_path)
@@ -826,7 +826,7 @@ def materialize_custom_frame_store(config: CustomFrameStoreConfig) -> Path:
         raise ValueError(f"run_root must be an existing directory: {run_root}")
 
     selected_video_ids = tuple(sorted(config.selected_video_ids))
-    records: list[FrameRecord] = []
+    records: list[FrameArtifact] = []
     reports: list[NativeValidationReport] = []
     per_video_frame_counts: dict[str, int] = {}
     for video_id in selected_video_ids:
@@ -890,7 +890,7 @@ def materialize_custom_frame_store(config: CustomFrameStoreConfig) -> Path:
             lambda path: write_parquet(
                 pd.DataFrame(
                     table_rows,
-                    columns=list(FrameRecord.model_fields),
+                    columns=list(FrameArtifact.model_fields),
                 ),
                 path,
                 index=False,

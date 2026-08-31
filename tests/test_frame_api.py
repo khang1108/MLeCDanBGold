@@ -8,8 +8,7 @@ from fastapi import HTTPException
 from fastapi.routing import APIRoute
 
 from hcmai.app import create_app
-from hcmai.common.schemas import FrameRecord
-from hcmai.corpus import Corpus
+from hcmai.corpus import Corpus, Frame
 from hcmai.corpus.assets import FrameAssetResolver
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -26,9 +25,9 @@ def test_frame_asset_is_served_only_from_dataset_root(
         _records = ()
         def get(self, frame_id):
             path = "frames/safe.jpg" if frame_id == "safe" else "../outside.jpg"
-            return FrameRecord(
+            return Frame(
                 frame_id=frame_id, video_id="v1", frame_idx=0,
-                timestamp_ms=0, image_path=path, width=1, height=1,
+                timestamp_ms=0, image_path=path,
             )
         frame = get
 

@@ -6,16 +6,15 @@ import pytest
 from PIL import Image
 
 from hcmai.common.config import ASRConfig, DiarizationConfig, EncoderConfig
-from hcmai.common.schemas import (
+from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse
+from offline.enrichment.inference_contracts import (
     AudioReferenceRequest,
-    EmbeddingResponse,
     InferenceReadiness,
-    ModelStatus,
     OCRItem,
     OCRResponse,
     TranscriptInferenceResponse,
-    TranscriptSegment,
 )
+from offline.enrichment.transcripts.models import TranscriptSegment
 from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
 from offline.enrichment.ocr.config import OCRConfig
 from offline.enrichment.transcripts.adapters.remote import (
@@ -28,6 +27,12 @@ from hcmai.retrieval.embedding.adapters.remote import (
 )
 
 SHA = "a" * 40
+
+
+def _model_status(**values: object) -> dict[str, object]:
+    """Build one readiness fixture row for boundary validation."""
+
+    return values
 
 
 def _segment(speaker_id: str | None = None) -> TranscriptSegment:
@@ -68,7 +73,7 @@ class FakeClient:
         return InferenceReadiness(
             ready=True,
             models={
-                name: ModelStatus(loaded=True, checkpoint=model, revision=SHA)
+                name: _model_status(loaded=True, checkpoint=model, revision=SHA)
                 for name, model in {
                     "ocr": "ocr",
                     "asr": "asr",

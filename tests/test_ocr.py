@@ -5,7 +5,7 @@ from typing import cast
 import pandas as pd
 import pytest
 from PIL import Image
-from hcmai.common.schemas import FrameEnrichment
+from offline.enrichment.models import FrameEnrichment
 from offline.enrichment.ocr.config import OCRConfig
 from offline.enrichment.ocr.generator import generate_ocr
 from offline.enrichment.ocr.models.entities import OCRRegionResult, OCRResult

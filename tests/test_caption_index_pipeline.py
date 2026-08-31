@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.io import write_yaml
 from offline.indexes.text import build_text_artifacts
 

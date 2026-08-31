@@ -19,16 +19,24 @@ from hcmai.common.config import (
     FusionConfig,
     RetrievalCacheConfig,
 )
-from hcmai.common.schemas import (
-    InferenceCapabilities,
-    InferenceReadiness,
-    ModelStatus,
-    RetrievalSource,
-)
+from hcmai.retrieval.models import RetrievalSource
+from offline.enrichment.inference_contracts import InferenceReadiness
 from hcmai.corpus import Corpus
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+
+
+def _model_status(**values: object) -> dict[str, object]:
+    """Build one readiness fixture row for boundary validation."""
+
+    return values
+
+
+def _capabilities(**values: bool) -> dict[str, bool]:
+    """Build readiness capability flags for boundary validation."""
+
+    return values
 
 
 class FakeEncoder:
@@ -109,18 +117,18 @@ def _remote_readiness(models: SimpleNamespace) -> InferenceReadiness:
     return InferenceReadiness(
         ready=True,
         models={
-            "visual_embedding": ModelStatus(
+            "visual_embedding": _model_status(
                 loaded=True,
                 checkpoint=models.visual_embedding.model_name,
                 revision=models.visual_embedding.revision,
             ),
-            "caption_embedding": ModelStatus(
+            "caption_embedding": _model_status(
                 loaded=True,
                 checkpoint=models.resolved_evidence_embedding.model_name,
                 revision=models.resolved_evidence_embedding.revision,
             ),
         },
-        capabilities=InferenceCapabilities(
+        capabilities=_capabilities(
             embedding=True,
             image_embedding=True,
         ),
@@ -746,15 +754,16 @@ def test_remote_embedding_readiness_stops_before_preflight(
     events: list[str] = []
     config = SimpleNamespace(projected_frames_path=tmp_path / "projected.parquet")
     models = _remote_models()
-    readiness = _remote_readiness(models).model_copy(
-        update={
+    readiness = InferenceReadiness.model_validate(
+        {
+            **_remote_readiness(models).model_dump(),
             "models": {
-                "visual_embedding": ModelStatus(
+                "visual_embedding": _model_status(
                     loaded=True,
                     checkpoint=models.visual_embedding.model_name,
                     revision=models.visual_embedding.revision,
                 )
-            }
+            },
         }
     )
     service = FakeRemoteService(readiness, events)
@@ -905,7 +914,7 @@ def test_offline_preflight_rejects_evidence_with_no_usable_corpus() -> None:
     """Stop before model loading when Context and transcript builders would fail."""
 
     from scripts import build_retrieval_indexes as workflow
-    from hcmai.common.schemas import ProcessingStatus
+    from offline.enrichment.models import ProcessingStatus
 
     context = SimpleNamespace(frame_id="f1")
     contexts = SimpleNamespace(

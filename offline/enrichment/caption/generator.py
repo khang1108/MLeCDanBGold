@@ -51,7 +51,7 @@ def generate_captions(
     root = Path(dataset_root).expanduser().resolve()
 
     frames = [
-        frame.model_dump(mode="python")
+        asdict(frame)
         for frame in FrameStore.load(frames_path).iter_frames()
     ]
     order = [str(frame["frame_id"]) for frame in frames]

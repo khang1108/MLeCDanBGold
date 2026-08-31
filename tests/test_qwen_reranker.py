@@ -4,7 +4,7 @@ from typing import Literal, cast
 import pytest
 import torch
 from PIL import Image
-from hcmai.common.schemas import RetrievalCandidate
+from hcmai.retrieval.models import RetrievalCandidate
 from hcmai.corpus import Corpus
 from hcmai.retrieval.reranking.adapters import qwen
 from hcmai.retrieval.reranking.adapters.qwen import QwenAdapter, QwenRerankerError

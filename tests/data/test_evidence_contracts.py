@@ -3,17 +3,21 @@
 import pytest
 from pydantic import ValidationError
 
-from hcmai.common.schemas import (
-    CaptionEvidence,
-    FrameContext,
-    FrameEnrichment,
-    ObjectDetection,
-    ObjectEvidence,
-    OCREvidence,
-    OCRRegion,
-    ProcessingStatus,
-    usable_completed_text,
-)
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.caption.models import usable_completed_text as usable_caption_text
+from offline.enrichment.context.models import FrameContext
+from offline.enrichment.models import FrameEnrichment, ProcessingStatus
+from offline.enrichment.objects.models import ObjectDetection, ObjectEvidence
+from offline.enrichment.ocr.models import OCREvidence, OCRRegion
+from offline.enrichment.ocr.models import usable_completed_text as usable_ocr_text
+
+
+def usable_completed_text(row: CaptionEvidence | OCREvidence) -> str | None:
+    """Dispatch to the specialist owner's completed-text helper."""
+
+    if isinstance(row, CaptionEvidence):
+        return usable_caption_text(row)
+    return usable_ocr_text(row)
 
 
 @pytest.mark.parametrize(

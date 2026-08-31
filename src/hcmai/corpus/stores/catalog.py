@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from hcmai.common.schemas.enum import ProcessingStatus
 from hcmai.corpus.models import VideoMetadata
 
 
@@ -27,7 +26,7 @@ class ObjectCountsRecord:
     frame_idx: int
     timestamp_ms: int
     counts: dict[str, int]
-    status: ProcessingStatus
+    status: str
 
 
 def _non_blank_text(value: object) -> str | None:
@@ -111,12 +110,11 @@ class ObjectCountsStore:
                 raise ValueError(
                     f"Object counts coordinate is invalid in {self.artifact_path}"
                 )
-            try:
-                status = ProcessingStatus(row["status"])
-            except (TypeError, ValueError) as error:
+            status = row["status"]
+            if status not in {"pending", "processing", "completed", "failed"}:
                 raise ValueError(
                     f"Object counts status is invalid in {self.artifact_path}"
-                ) from error
+                )
             if frame_id in self._records_by_frame_id:
                 raise ValueError(
                     f"Duplicate frame_id {frame_id!r} in {self.artifact_path}"
@@ -143,7 +141,7 @@ class ObjectCountsStore:
         """Return completed counts, preserving empty results and missing status."""
 
         record = self._records_by_frame_id.get(frame_id)
-        if record is None or record.status is not ProcessingStatus.COMPLETED:
+        if record is None or record.status != "completed":
             return None
         return dict(record.counts)
 

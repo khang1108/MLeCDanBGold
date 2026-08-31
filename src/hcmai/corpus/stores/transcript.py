@@ -10,11 +10,34 @@ from collections import defaultdict
 from collections.abc import Sequence
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Self
 
 import pandas as pd
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from hcmai.common.schemas import TranscriptSegment as TranscriptSegmentArtifact
 from hcmai.corpus.models import TranscriptSegment
+
+
+class _TranscriptArtifact(BaseModel):
+    """Validate canonical timeline fields at the runtime artifact boundary."""
+
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+    segment_id: str = Field(min_length=1)
+    video_id: str = Field(min_length=1)
+    segment_index: int = Field(ge=0)
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+    text: str = Field(min_length=1)
+    language: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> Self:
+        """Require every transcript artifact segment to have positive duration."""
+
+        if self.end_ms <= self.start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        return self
 
 
 def load_transcript_records(
@@ -32,7 +55,7 @@ def load_transcript_records(
         table = pd.read_parquet(path).astype(object)
         rows = table.where(table.notna(), None).to_dict(orient="records")
         for row in rows:
-            artifact_record = TranscriptSegmentArtifact.model_validate(row)
+            artifact_record = _TranscriptArtifact.model_validate(row)
             records.append(
                 TranscriptSegment(
                     segment_id=artifact_record.segment_id,

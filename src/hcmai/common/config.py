@@ -8,7 +8,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
-from hcmai.common.schemas.enum import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 
 # Recall cut-offs frozen for baseline comparison
 RECALL_CUTOFFS: tuple[int, ...] = (1, 5, 20, 50, 100)

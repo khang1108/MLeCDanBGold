@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from hcmai.api.contracts import SearchRequest
-from hcmai.common.schemas import FrameRecord
+from hcmai.corpus import Frame
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.temporal import AlignedPath
 
@@ -15,36 +15,42 @@ class _Data:
 
     video_metadata_store = None
 
-    def get_frame(self, frame_id: str) -> FrameRecord:
+    def frame(self, frame_id: str) -> Frame:
         """Resolve a canonical frame without adding specialist evidence."""
 
-        return FrameRecord(
+        return Frame(
             frame_id=frame_id,
             video_id="video-1",
             frame_idx=1,
             timestamp_ms=1_000,
             image_path=f"{frame_id}.jpg",
-            width=640,
-            height=360,
         )
 
-    def get_evidence(self, frame_id, source):
-        """Keep optional evidence absent in the visual alignment baseline."""
+    def title(self, video_id: str) -> None:
+        """Keep organizer metadata absent in the visual alignment baseline."""
 
-        del frame_id, source
+        del video_id
         return None
 
-    def get_object_counts(self, frame_id):
-        """Keep object evidence absent in the visual alignment baseline."""
+    def caption(self, frame_id: str) -> None:
+        """Keep caption evidence absent in the visual alignment baseline."""
 
         del frame_id
         return None
 
-    def get_transcript_segments_at_time(self, video_id, timestamp_ms):
+    ocr = caption
+
+    def objects(self, frame_id: str) -> tuple[str, ...]:
+        """Keep object evidence absent in the visual alignment baseline."""
+
+        del frame_id
+        return ()
+
+    def transcript(self, video_id: str, start_ms: int, end_ms: int) -> None:
         """Keep transcript evidence absent in the visual alignment baseline."""
 
-        del video_id, timestamp_ms
-        return []
+        del video_id, start_ms, end_ms
+        return None
 
 
 class _Alignment:
@@ -54,7 +60,7 @@ class _Alignment:
         """Expose a path result without invoking a reranker or model provider."""
 
         del events, top_k
-        frame = _Data().get_frame("frame-a")
+        frame = _Data().frame("frame-a")
         return SimpleNamespace(
             paths=(
                 AlignedPath(

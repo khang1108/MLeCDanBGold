@@ -9,11 +9,7 @@ from typing import Any, Sequence, cast
 import numpy as np
 from PIL import Image
 
-from hcmai.common.schemas import (
-    InferenceCapabilities,
-    InferenceReadiness,
-    ModelStatus,
-)
+from offline.enrichment.inference_contracts import InferenceReadiness
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from offline.enrichment.ocr.adapters.florence import FlorenceAdapter
 from offline.enrichment.ocr.config import OCRConfig
@@ -22,6 +18,18 @@ from offline.enrichment.pipeline import EnrichmentService
 from hcmai.common.config import TranscriptJobConfig
 from thundercompute.pipeline import LLMServiceConfig
 from hcmai.retrieval.reranking.pipeline import QwenRerankerConfig, RerankingService
+
+
+def _model_status(**values: object) -> dict[str, object]:
+    """Build one readiness row for validation by ``InferenceReadiness``."""
+
+    return values
+
+
+def _capabilities(**values: bool) -> dict[str, bool]:
+    """Build capability flags without exporting a standalone common model."""
+
+    return values
 
 
 class LocalAdapter:
@@ -201,7 +209,7 @@ class LocalAdapter:
             and (not self.enable_asr or asr_loaded)
             and (not self.enable_diarization or diarization_loaded),
             models={
-                "caption_generation": ModelStatus(
+                "caption_generation": _model_status(
                     enabled=self.enable_caption,
                     loaded=generator_loaded,
                     checkpoint=self.config.caption_generation.model_checkpoint,
@@ -211,19 +219,19 @@ class LocalAdapter:
                         else None
                     ),
                 ),
-                "visual_embedding": ModelStatus(
+                "visual_embedding": _model_status(
                     enabled=self.enable_visual_embedding,
                     loaded=visual_loaded,
                     checkpoint=self.config.visual_embedding.model_name,
                     revision=self.config.visual_embedding.revision,
                 ),
-                "caption_embedding": ModelStatus(
+                "caption_embedding": _model_status(
                     enabled=self.enable_caption_embedding,
                     loaded=caption_loaded,
                     checkpoint=self.config.caption_embedding.model_name,
                     revision=self.config.caption_embedding.revision,
                 ),
-                "reranker": ModelStatus(
+                "reranker": _model_status(
                     enabled=self.enable_reranker,
                     loaded=reranker_loaded,
                     checkpoint=self.config.reranker.checkpoint,
@@ -233,7 +241,7 @@ class LocalAdapter:
                         else None
                     ),
                 ),
-                "ocr": ModelStatus(
+                "ocr": _model_status(
                     enabled=self.enable_ocr,
                     loaded=ocr_loaded,
                     checkpoint=(
@@ -247,20 +255,20 @@ class LocalAdapter:
                         else None
                     ),
                 ),
-                "asr": ModelStatus(
+                "asr": _model_status(
                     enabled=self.enable_asr,
                     loaded=asr_loaded,
                     checkpoint=self.transcript_config.asr.model_name if self.transcript_config else None,
                     revision=self.transcript_config.asr.revision if self.transcript_config else None,
                 ),
-                "diarization": ModelStatus(
+                "diarization": _model_status(
                     enabled=self.enable_diarization,
                     loaded=diarization_loaded,
                     checkpoint=self.transcript_config.diarization.model_name if self.transcript_config else None,
                     revision=self.transcript_config.diarization.revision if self.transcript_config else None,
                 ),
             },
-            capabilities=InferenceCapabilities(
+            capabilities=_capabilities(
                 embedding=visual_loaded or caption_loaded,
                 reranking=reranker_loaded,
                 structured_parsing=False,

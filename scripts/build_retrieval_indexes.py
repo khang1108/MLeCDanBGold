@@ -754,7 +754,7 @@ def _require_usable_context_ids(contexts: Any) -> set[str]:
 def _require_usable_completed_segments(segments: tuple[Any, ...]) -> list[Any]:
     """Return ASR segments accepted by the segment corpus builder."""
 
-    from hcmai.common.schemas import ProcessingStatus
+    from offline.enrichment.models import ProcessingStatus
 
     usable = [
         segment
@@ -1292,7 +1292,7 @@ def _validate_frame_identity(
 def _validate_segment_identity(index: Any, transcripts_path: Path) -> None:
     """Match every indexed segment to its typed transcript timeline identity."""
 
-    from hcmai.common.schemas import ProcessingStatus
+    from offline.enrichment.models import ProcessingStatus
     from hcmai.corpus.stores.transcript import TranscriptStore
 
     records = {

@@ -3,7 +3,7 @@
 from pydantic import ValidationError
 import pytest
 
-from hcmai.common.schemas import SubmissionResult
+from hcmai.api.contracts import SubmissionResult
 
 
 def test_submission_contract_preserves_competition_identity() -> None:

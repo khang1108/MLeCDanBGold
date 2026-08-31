@@ -13,7 +13,7 @@ from hcmai.common.config import (
     resolve_dataset_root,
     resolve_repository_path,
 )
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from offline.enrichment.caption.config import CaptionJobConfig
 from thundercompute.config import LLMServiceConfig
 

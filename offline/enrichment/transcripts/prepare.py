@@ -16,7 +16,7 @@ from time import perf_counter
 from typing import cast
 
 import pandas as pd
-from hcmai.common.schemas import TranscriptSegment
+from offline.enrichment.transcripts.models import TranscriptSegment
 from hcmai.common.utils.io import atomic_write, write_json
 from offline.enrichment.transcripts.adapters.asr import ASRAdapter, read_audio
 from offline.enrichment.transcripts.adapters.diarization import DiarizationAdapter

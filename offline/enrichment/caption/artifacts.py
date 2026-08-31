@@ -9,7 +9,8 @@ from typing import Any
 
 import pandas as pd
 
-from hcmai.common.schemas import CaptionEvidence, FrameEnrichment, ProcessingStatus
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.models import FrameEnrichment, ProcessingStatus
 from hcmai.common.utils.io import (
     atomic_write,
     read_json,

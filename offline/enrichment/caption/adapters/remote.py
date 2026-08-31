@@ -13,7 +13,7 @@ from typing import Any, Protocol, Sequence
 
 from PIL import Image
 
-from hcmai.common.schemas import CaptionResponse, InferenceReadiness
+from offline.enrichment.inference_contracts import CaptionResponse, InferenceReadiness
 
 
 class CaptionClient(Protocol):

@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
-from hcmai.common.schemas import SubmissionResult
+from hcmai.api.contracts import SubmissionResult
 from hcmai.corpus.models import Frame
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.common.utils.logging import get_logger

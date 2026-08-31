@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict
 from datetime import datetime, timezone
 from numbers import Integral
 from pathlib import Path
@@ -18,7 +19,7 @@ import pandas as pd
 from PIL import Image
 from tqdm import tqdm
 
-from hcmai.common.schemas import OCREvidence, OCRRegion
+from offline.enrichment.ocr.models import OCREvidence, OCRRegion
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.io import read_json
 from hcmai.corpus.stores.frame import FrameStore
@@ -258,7 +259,7 @@ def generate_ocr(
     started, began = datetime.now(timezone.utc), perf_counter()
     path, root = Path(frames_path), Path(dataset_root).expanduser().resolve()
     frames = [
-        frame.model_dump(mode="python")
+        asdict(frame)
         for frame in FrameStore.load(path).iter_frames()
     ]
     order = [str(frame["frame_id"]) for frame in frames]

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from hcmai.common.config import DiarizationConfig
-from hcmai.common.schemas import TranscriptSegment
+from offline.enrichment.transcripts.models import TranscriptSegment
 from offline.enrichment.transcripts.adapters.asr import DecodedAudio, read_audio
 
 

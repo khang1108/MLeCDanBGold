@@ -168,7 +168,7 @@ def _assert_readable_jpegs(run_root: Path, image_paths: list[str]) -> None:
 
     Args:
         run_root: Native lifecycle root that owns the image paths.
-        image_paths: Portable paths emitted through canonical FrameRecord rows.
+        image_paths: Portable paths emitted through canonical FrameArtifact rows.
 
     Returns:
         None; returns only if every JPEG header and byte stream is readable.

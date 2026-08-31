@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from hcmai.common.schemas import TranscriptSegment
+from offline.enrichment.transcripts.models import TranscriptSegment
 
 
 def load_transcript_artifact_records(

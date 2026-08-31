@@ -18,7 +18,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from hcmai.common.schemas import ObjectEvidence
+from offline.enrichment.objects.models import ObjectEvidence
 from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
 from offline.enrichment.bundle import publish_staged_bundle
 

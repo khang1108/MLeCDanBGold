@@ -12,7 +12,7 @@ from hcmai.common.config import (
     resolve_dataset_root,
     resolve_repository_path,
 )
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus, CorpusFrameLoadError
 from hcmai.retrieval.embedding.pipeline import EmbeddingService

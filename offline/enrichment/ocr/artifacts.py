@@ -14,12 +14,6 @@ import unicodedata
 
 import pandas as pd
 
-from hcmai.common.schemas import (
-    FrameEnrichment,
-    OCREvidence,
-    OCRRegion,
-    ProcessingStatus,
-)
 from hcmai.common.utils.io import (
     atomic_write,
     read_json,
@@ -27,6 +21,8 @@ from hcmai.common.utils.io import (
     write_parquet,
 )
 from offline.enrichment.bundle import publish_staged_bundle
+from offline.enrichment.models import FrameEnrichment, ProcessingStatus
+from offline.enrichment.ocr.models import OCREvidence, OCRRegion
 
 from .config import OCRConfig
 from .models.entities import (

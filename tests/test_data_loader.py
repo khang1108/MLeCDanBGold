@@ -5,7 +5,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.common.schemas.frame import FrameRecord
 from hcmai.corpus.models import Frame
 from hcmai.corpus.stores import frame as frame_module
 from hcmai.corpus.stores.frame import FrameStore

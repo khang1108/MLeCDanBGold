@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from hcmai.common.config import FusionConfig, RetrievalCacheConfig
-from hcmai.common.schemas import RetrievalResult, RetrievalSource
+from hcmai.retrieval.models import RetrievalResult, RetrievalSource
 from hcmai.corpus import Corpus
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME, DenseIndex

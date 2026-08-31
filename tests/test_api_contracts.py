@@ -1,13 +1,13 @@
 from __future__ import annotations
 import asyncio
+from types import SimpleNamespace
 from typing import cast
 import httpx
 import numpy as np
 import pytest
 from hcmai.app import create_app
-from hcmai.common.schemas import (
-    FrameRecord, RetrievalSource,
-)
+from hcmai.corpus import Frame
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.corpus import Corpus
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -21,9 +21,9 @@ class Store:
     video_metadata_store = None
 
     def __init__(self):
-        self._records = (FrameRecord(
+        self._records = (Frame(
             frame_id=FRAME_ID, video_id="TEST_V001", frame_idx=0,
-            timestamp_ms=0, image_path="missing.jpg", width=640, height=360,
+            timestamp_ms=0, image_path="missing.jpg",
         ),)
     def get(self, frame_id):
         if frame_id == FRAME_ID:
@@ -34,6 +34,20 @@ class Store:
 
     def __len__(self):
         return len(self._records)
+
+    def frame_asset_status(self):
+        return SimpleNamespace(
+            as_dict=lambda: {
+                "ready": False,
+                "checked": 0,
+                "available": 0,
+                "missing": 0,
+            }
+        )
+
+    def has_evidence(self, source):
+        del source
+        return False
 
     def caption(self, frame_id):
         del frame_id

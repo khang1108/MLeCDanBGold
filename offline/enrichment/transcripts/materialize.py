@@ -16,19 +16,19 @@ from typing import Any
 import pandas as pd
 from tqdm import tqdm
 
-from hcmai.common.schemas import (
-    FrameEnrichment,
-    FrameRecord,
-    ProcessingStatus,
-    TranscriptSegment,
-    validate_frame_enrichment,
-)
 from hcmai.common.utils.io import atomic_write
 from offline.enrichment.transcripts.artifacts import (
     load_transcript_artifact_records,
 )
 from offline.enrichment.transcripts.manifest import load_manifest
 from hcmai.corpus.stores.frame import FrameStore
+from hcmai.corpus.models import Frame
+from offline.enrichment.models import (
+    FrameEnrichment,
+    ProcessingStatus,
+    validate_frame_enrichment,
+)
+from offline.enrichment.transcripts.models import TranscriptSegment
 
 
 def _normalize(text: str) -> str:
@@ -48,7 +48,7 @@ def _deduplicated_text(segments: Iterable[TranscriptSegment]) -> str | None:
 
 
 def materialize_asr_enrichment(
-    frames: Sequence[FrameRecord],
+    frames: Sequence[Frame],
     segments: Sequence[TranscriptSegment],
     *,
     evaluated_video_ids: set[str],

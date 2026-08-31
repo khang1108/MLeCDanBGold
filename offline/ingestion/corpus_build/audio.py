@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable
 
-from hcmai.common.schemas import AudioReferenceRequest
+from offline.enrichment.inference_contracts import AudioReferenceRequest
 
 
 def _sha256(path: Path) -> str:

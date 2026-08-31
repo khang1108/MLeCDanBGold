@@ -12,25 +12,29 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 import numpy as np
 from PIL import Image
 
-from hcmai.common.schemas import (
+from hcmai.retrieval.embedding.inference_contracts import (
+    EmbeddingResponse,
+    TextEmbeddingResponse,
+)
+from offline.enrichment.inference_contracts import (
     AudioReferenceRequest,
-    BoundaryScoreResponse,
     CaptionItem,
     CaptionResponse,
     DiarizationRequest,
-    EmbeddingResponse,
     InferenceReadiness,
     OCRItem,
+    OCRRegionItem,
     OCRResponse,
+    TranscriptInferenceResponse,
+)
+from offline.enrichment.ocr.models.entities import json_safe_ocr_raw
+from thundercompute.pipeline import LLMService
+from thundercompute.contracts import (
+    BoundaryScoreResponse,
     RerankItem,
     RerankResponse,
     TextEmbeddingRequest,
-    TextEmbeddingResponse,
-    TranscriptInferenceResponse,
 )
-from hcmai.common.schemas.inference import OCRRegionItem
-from offline.enrichment.ocr.models.entities import json_safe_ocr_raw
-from thundercompute.pipeline import LLMService
 
 
 def create_llm_app(runtime: LLMService | None = None) -> FastAPI:

@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas import TextEmbeddingRequest
+from thundercompute.contracts import TextEmbeddingRequest
 
 
 def test_text_embedding_contract_uses_shared_text_source_name() -> None:

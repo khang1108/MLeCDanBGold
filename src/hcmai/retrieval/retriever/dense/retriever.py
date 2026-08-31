@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from time import perf_counter
 
 import numpy as np
 
-from hcmai.common.schemas import (
+from hcmai.common.observability import PipelineStage, RetrievalTrace
+from hcmai.retrieval.models import (
     RetrievalCandidate,
     RetrievalResult,
     RetrievalSource,
-    RetrievalTrace,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
-from hcmai.common.observability import PipelineStage
 from hcmai.common.observability.tracing import StageTimer
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.cache import EmbeddingCache
@@ -121,16 +121,15 @@ class DenseRetriever:
         results = self.search_vectors(batch, top_k)
         first_candidate_ms = (perf_counter() - started) * 1_000
         return [
-            result.model_copy(
-                update={
-                    "trace": RetrievalTrace(
-                        stages={
-                            batch.encoding_trace.stage: batch.encoding_trace,
-                            **result.trace.stages,
-                        }
-                    ),
-                    "time_to_first_candidate_ms": first_candidate_ms,
-                }
+            replace(
+                result,
+                trace=RetrievalTrace(
+                    stages={
+                        batch.encoding_trace.stage: batch.encoding_trace,
+                        **result.trace.stages,
+                    }
+                ),
+                time_to_first_candidate_ms=first_candidate_ms,
             )
             for result in results
         ]

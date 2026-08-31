@@ -1,3 +1,13 @@
-"""Data models, contracts và entities cho hệ thống OCR."""
+"""OCR enrichment contracts, artifacts, and adapter result values."""
 
-__all__: list[str] = []
+from .evidence import OCREvidence, OCRRegion, usable_completed_text
+from .entities import OCRRegionResult, OCRResult, json_safe_ocr_raw
+
+__all__ = [
+    "OCREvidence",
+    "OCRRegion",
+    "OCRRegionResult",
+    "OCRResult",
+    "json_safe_ocr_raw",
+    "usable_completed_text",
+]

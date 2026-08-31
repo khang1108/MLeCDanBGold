@@ -1,13 +1,15 @@
-"""Request-scoped pipeline telemetry contracts."""
+"""Request-scoped observability values.
+
+The models are immutable runtime dataclasses. They validate stage outcomes but
+do not own persistence, metrics emission, or log serialization.
+"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Self
 
-from pydantic import Field, model_validator
-
-from .base import ContractModel, NonEmptyString
 
 _LEGACY_STAGE_ALIASES = {
     "query_encoding": "encode",
@@ -25,26 +27,38 @@ class StageStatus(str, Enum):
     PARTIAL = "partial"
 
 
-class StageTrace(ContractModel):
+@dataclass(frozen=True, slots=True)
+class StageTrace:
     """Timing and outcome recorded for one request-local stage execution."""
 
-    stage: NonEmptyString
-    started_at: float = Field(ge=0)
-    ended_at: float = Field(ge=0)
-    duration_ms: float = Field(ge=0)
+    stage: str
+    started_at: float
+    ended_at: float
+    duration_ms: float
     status: StageStatus
-    attempt_count: int = Field(default=1, ge=0)
+    attempt_count: int = 1
     cache_hit: bool = False
-    error_category: NonEmptyString | None = None
-    input_count: int | None = Field(default=None, ge=0)
-    output_count: int | None = Field(default=None, ge=0)
-    backend: NonEmptyString | None = None
+    error_category: str | None = None
+    input_count: int | None = None
+    output_count: int | None = None
+    backend: str | None = None
     fallback_used: bool = False
 
-    @model_validator(mode="after")
-    def validate_outcome(self) -> Self:
+    def __post_init__(self) -> None:
+        """Validate timing, counts, and status-specific diagnostics."""
+
+        if not self.stage.strip():
+            raise ValueError("stage must be non-empty")
+        if min(self.started_at, self.ended_at, self.duration_ms) < 0:
+            raise ValueError("trace timing values must be non-negative")
         if self.ended_at < self.started_at:
             raise ValueError("ended_at must not precede started_at")
+        if self.attempt_count < 0:
+            raise ValueError("attempt_count must be non-negative")
+        if self.input_count is not None and self.input_count < 0:
+            raise ValueError("input_count must be non-negative")
+        if self.output_count is not None and self.output_count < 0:
+            raise ValueError("output_count must be non-negative")
         if self.status is StageStatus.FAILED and self.error_category is None:
             raise ValueError("failed stages require an error_category")
         if (
@@ -54,23 +68,23 @@ class StageTrace(ContractModel):
             raise ValueError(
                 "successful or skipped stages cannot define an error_category"
             )
-        return self
 
 
-class PipelineTrace(ContractModel):
+@dataclass(frozen=True, slots=True)
+class PipelineTrace:
     """Named request-local stages with deterministic aggregate helpers."""
 
-    stages: dict[str, StageTrace] = Field(default_factory=dict)
+    stages: dict[str, StageTrace] = field(default_factory=dict)
 
-    @model_validator(mode="after")
-    def validate_stage_names(self) -> Self:
+    def __post_init__(self) -> None:
+        """Require every mapping key to match its stored stage name."""
+
         mismatches = [
             name for name, trace in self.stages.items() if name != trace.stage
         ]
         if mismatches:
             names = ", ".join(sorted(mismatches))
             raise ValueError(f"trace keys must match stage names: {names}")
-        return self
 
     @property
     def total_duration_ms(self) -> float:
@@ -106,8 +120,9 @@ class PipelineTrace(ContractModel):
         """Return a new trace containing every uniquely named stage."""
 
         additions = {
-            f"{prefix}.{name}" if prefix else name: trace.model_copy(
-                update={"stage": f"{prefix}.{name}" if prefix else name}
+            f"{prefix}.{name}" if prefix else name: replace(
+                trace,
+                stage=f"{prefix}.{name}" if prefix else name,
             )
             for name, trace in other.stages.items()
         }
@@ -115,8 +130,17 @@ class PipelineTrace(ContractModel):
         if duplicates:
             names = ", ".join(sorted(duplicates))
             raise ValueError(f"duplicate pipeline trace stages: {names}")
-        return self.model_copy(update={"stages": {**self.stages, **additions}})
+        return type(self)(stages={**self.stages, **additions})
 
 
+@dataclass(frozen=True, slots=True)
 class RetrievalTrace(PipelineTrace):
     """Pipeline trace produced by one retrieval call."""
+
+
+__all__ = [
+    "PipelineTrace",
+    "RetrievalTrace",
+    "StageStatus",
+    "StageTrace",
+]

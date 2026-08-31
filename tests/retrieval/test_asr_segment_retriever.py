@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from hcmai.common.config import AppConfig, EncoderConfig, InferenceConfig
-from hcmai.common.schemas import ProcessingStatus
+from offline.enrichment.models import ProcessingStatus
 from hcmai.common.utils.io import write_json, write_yaml
 from hcmai.corpus.stores.transcript import TranscriptStore
 from offline.enrichment.transcripts.artifacts import (
@@ -406,7 +406,7 @@ def test_asr_segment_retriever_projects_deduplicates_and_preserves_provenance(
 ) -> None:
     """Emit ranked canonical frames while retaining the strongest ASR segment."""
 
-    from hcmai.common.schemas import RetrievalSource
+    from hcmai.retrieval.models import RetrievalSource
     from hcmai.retrieval.retriever.segment.retriever import ASRSegmentRetriever
 
     frames, index = _online_retrieval_fixture(tmp_path)
@@ -470,7 +470,7 @@ def test_context_and_asr_segment_fusion_encode_text_batch_once(
     """Reuse one BGE text-family batch across Context and projected ASR indexes."""
 
     from hcmai.common.config import FusionConfig
-    from hcmai.common.schemas import RetrievalSource
+    from hcmai.retrieval.models import RetrievalSource
     from hcmai.retrieval.retriever.dense.index import DenseIndex
     from hcmai.retrieval.retriever.fusion import RRFFusionRetriever
     from hcmai.retrieval.retriever.segment.retriever import ASRSegmentRetriever

@@ -14,7 +14,7 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from hcmai.common.config import AppConfig
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 
 
 _STUBBED_IMPORT_MODULES = (

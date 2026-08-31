@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from hcmai.common.schemas import RetrievalResult, RetrievalSource
+from hcmai.retrieval.models import RetrievalResult, RetrievalSource
 from hcmai.retrieval.retriever.query_batch import (
     QueryEmbeddingBatch,
     SourceFamily,

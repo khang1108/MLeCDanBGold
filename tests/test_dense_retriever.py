@@ -9,8 +9,7 @@ import pytest
 faiss = pytest.importorskip("faiss")
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas import RetrievalSource
-from hcmai.common.schemas.retrieval import RetrievalCandidate
+from hcmai.retrieval.models import RetrievalCandidate, RetrievalSource
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
 

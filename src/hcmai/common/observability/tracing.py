@@ -7,7 +7,7 @@ import logging
 from time import perf_counter
 
 from hcmai.common.observability.metrics import METRICS
-from hcmai.common.schemas import StageStatus, StageTrace
+from hcmai.common.observability.models import StageStatus, StageTrace
 
 
 class StageTimer:

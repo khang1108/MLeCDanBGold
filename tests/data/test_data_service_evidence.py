@@ -8,19 +8,16 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.common.schemas import (
-    CaptionEvidence,
-    FrameContext,
-    ObjectDetection,
-    ObjectEvidence,
-    OCREvidence,
-    ProcessingStatus,
-    RetrievalSource,
-    TranscriptSegment,
-)
 from hcmai.corpus import Corpus
 from hcmai.corpus.stores import CaptionStore, FrameContextStore, ObjectStore
 from offline.enrichment.object_artifacts import write_object_artifacts
+from hcmai.retrieval.models import RetrievalSource
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.context.models import FrameContext
+from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.objects.models import ObjectDetection, ObjectEvidence
+from offline.enrichment.ocr.models import OCREvidence
+from offline.enrichment.transcripts.models import TranscriptSegment
 
 
 def _write_frames(root: Path) -> Path:
@@ -162,7 +159,7 @@ def test_corpus_projects_runtime_evidence_without_hiding_specialist_stores(
     assert corpus.objects("f1") == ("person",)
 
     context = FrameContextStore(context_path).get("f1")
-    assert isinstance(context, FrameContext)
+    assert not isinstance(context, FrameContext)
     assert context.context_version == "frame-context-v1"
 
 
@@ -784,6 +781,8 @@ def test_object_store_loads_real_producer_bundle(tmp_path: Path) -> None:
 
     store = ObjectStore(output / "frames.parquet")
 
-    assert store.get("f1").detections == [detection]
+    assert [
+        item.model_dump(mode="json") for item in store.get("f1").detections
+    ] == [detection.model_dump(mode="json")]
     assert store.get("f2").detection_count == 0
     assert store.get("f3").status == ProcessingStatus.FAILED

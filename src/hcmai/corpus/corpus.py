@@ -11,7 +11,6 @@ from collections.abc import Mapping, Sequence
 from itertools import islice
 from pathlib import Path
 
-from hcmai.common.schemas import RetrievalSource
 from hcmai.common.utils.io import read_json
 from hcmai.corpus.assets import FrameAssetResolver, FrameAssetStatus
 from hcmai.corpus.models import Frame, TranscriptSegment
@@ -23,6 +22,7 @@ from hcmai.corpus.stores import (
     TranscriptStore,
     VideoMetadataStore,
 )
+from hcmai.retrieval.models import RetrievalSource
 
 
 _TEXT_STORES = {

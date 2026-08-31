@@ -14,13 +14,11 @@ import pytest
 pytest.importorskip("faiss")
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas import (
+from hcmai.common.observability import RetrievalTrace, StageStatus, StageTrace
+from hcmai.retrieval.models import (
     RetrievalCandidate,
     RetrievalResult,
     RetrievalSource,
-    RetrievalTrace,
-    StageStatus,
-    StageTrace,
 )
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever

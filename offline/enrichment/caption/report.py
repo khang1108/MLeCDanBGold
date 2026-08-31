@@ -15,7 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hcmai.common.schemas import CaptionEvidence, ProcessingStatus
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.models import ProcessingStatus
 from offline.enrichment.caption.models.contracts import CaptionAdapter
 from offline.enrichment.caption.config import CaptionConfig, ENRICHMENT_VERSION
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 
-from hcmai.common.schemas import StageStatus, StageTrace
+from hcmai.common.observability import StageStatus, StageTrace
 from hcmai.common.observability import MetricsRegistry, REDACTED, safe_content
 from hcmai.common.observability.tracing import log_stage
 

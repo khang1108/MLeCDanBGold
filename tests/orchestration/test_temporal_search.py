@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from hcmai.common.config import AlignmentConfig
-from hcmai.common.schemas import FrameRecord
+from hcmai.corpus import Frame
 from hcmai.orchestration.temporal_search import TemporalSearchService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
@@ -31,27 +31,23 @@ class FakeData:
     """Expose canonical frame records for path materialization."""
 
     frames = {
-        "v1-f0": FrameRecord(
+        "v1-f0": Frame(
             frame_id="v1-f0",
             video_id="v1",
             frame_idx=0,
             timestamp_ms=0,
             image_path="v1-f0.jpg",
-            width=640,
-            height=360,
         ),
-        "v1-f1": FrameRecord(
+        "v1-f1": Frame(
             frame_id="v1-f1",
             video_id="v1",
             frame_idx=1,
             timestamp_ms=1_000,
             image_path="v1-f1.jpg",
-            width=640,
-            height=360,
         ),
     }
 
-    def frame(self, frame_id: str) -> FrameRecord:
+    def frame(self, frame_id: str) -> Frame:
         """Return the canonical frame identified by a ranked path entry."""
 
         return self.frames[frame_id]

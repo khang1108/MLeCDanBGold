@@ -5,7 +5,7 @@ This command composes the existing metadata and native extraction contracts. It
 does not implement downloading or decoding itself: the native extractor invokes
 yt-dlp without a shell, retains each source for ASR, and writes resumable
 per-video state. Successful staging bundles are validated and projected into
-durable and OCR-specific FrameRecord tables for downstream enrichment.
+durable and OCR-specific FrameArtifact tables for downstream enrichment.
 """
 
 from __future__ import annotations

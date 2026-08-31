@@ -6,7 +6,7 @@ from threading import Lock
 from typing import Any, Callable, Protocol, Sequence
 
 from hcmai.common.config import InferenceConfig
-from hcmai.common.schemas import InferenceReadiness
+from offline.enrichment.inference_contracts import InferenceReadiness
 from thundercompute.adapters.http import InferenceClient
 
 

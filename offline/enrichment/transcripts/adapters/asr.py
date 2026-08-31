@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 
 from hcmai.common.config import ASRConfig
-from hcmai.common.schemas import TranscriptSegment
+from offline.enrichment.transcripts.models import TranscriptSegment
 
 
 def _clean_text(text: str) -> str:

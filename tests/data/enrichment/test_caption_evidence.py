@@ -7,7 +7,8 @@ import pandas as pd
 import pytest
 from PIL import Image
 
-from hcmai.common.schemas import CaptionEvidence, FrameEnrichment
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.models import FrameEnrichment
 from offline.enrichment.caption.config import CaptionConfig
 from offline.enrichment.caption.generator import generate_captions
 

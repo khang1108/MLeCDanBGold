@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hcmai.common.schemas import FrameRecord
+from hcmai.corpus import Frame
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.temporal import AlignedPath
 
@@ -10,17 +10,15 @@ from hcmai.temporal import AlignedPath
 class _Data:
     """Expose the minimal canonical data surface used by the materializer."""
 
-    def frame(self, frame_id: str) -> FrameRecord:
+    def frame(self, frame_id: str) -> Frame:
         """Return one canonical representative frame."""
 
-        return FrameRecord(
+        return Frame(
             frame_id=frame_id,
             video_id="V01",
             frame_idx=10,
             timestamp_ms=1_000,
             image_path="frame-1.jpg",
-            width=640,
-            height=360,
         )
 
     def caption(self, frame_id: str) -> str | None:

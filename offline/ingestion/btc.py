@@ -10,7 +10,7 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
-from hcmai.common.schemas import FrameRecord
+from offline.ingestion.models import FrameArtifact
 from hcmai.common.utils.io import (
     atomic_write,
     read_json,
@@ -83,7 +83,7 @@ def _resolve_image_path(data_root: Path, image_path: object) -> str:
     return resolved.relative_to(root).as_posix()
 
 
-def _validated_record(values: dict[str, object]) -> FrameRecord:
+def _validated_record(values: dict[str, object]) -> FrameArtifact:
     """Validate one normalized canonical row through the shared contract."""
 
     for name in ("thumbnail_path", "shot_id", "event_id", "pts", "time_base"):
@@ -92,10 +92,10 @@ def _validated_record(values: dict[str, object]) -> FrameRecord:
             values[name] = None
         elif isinstance(value, float) and np.isnan(value):
             values[name] = None
-    return FrameRecord.model_validate(values)
+    return FrameArtifact.model_validate(values)
 
 
-def _validate_unique_frame_ids(records: list[FrameRecord]) -> None:
+def _validate_unique_frame_ids(records: list[FrameArtifact]) -> None:
     """Reject ambiguous internal identities without rewriting BTC coordinates.
 
     Multiple BTC keyframes may legitimately map to the same competition-facing
@@ -110,7 +110,7 @@ def _validate_unique_frame_ids(records: list[FrameRecord]) -> None:
         seen_frame_ids.add(record.frame_id)
 
 
-def _validate_canonical_table(frames: pd.DataFrame) -> list[FrameRecord]:
+def _validate_canonical_table(frames: pd.DataFrame) -> list[FrameArtifact]:
     records = [
         _validated_record(dict(row))
         for row in cast(
@@ -145,7 +145,7 @@ def _build_canonical_rows(
     data_root: Path,
 ) -> pd.DataFrame:
     records = cast(list[dict[str, Any]], source_frames.to_dict(orient="records"))
-    canonical_records: list[FrameRecord] = []
+    canonical_records: list[FrameArtifact] = []
     for row in records:
         video_id = row["video_id"]
         canonical_records.append(
@@ -181,7 +181,7 @@ def _build_canonical_rows(
     _validate_unique_frame_ids(canonical_records)
     return pd.DataFrame(
         [record.model_dump() for record in canonical_records],
-        columns=list(FrameRecord.model_fields),
+        columns=list(FrameArtifact.model_fields),
     )
 
 

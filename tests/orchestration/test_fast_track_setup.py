@@ -20,7 +20,7 @@ from hcmai.common.config import (
     SearchConfig,
 )
 from hcmai.corpus import CorpusFrameLoadError
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from thundercompute.config import LLMServiceConfig
 from hcmai.orchestration import setup
 from hcmai.retrieval.retriever.pipeline import RetrievalService

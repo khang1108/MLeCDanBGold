@@ -1,24 +1,17 @@
-"""Canonical segment-native transcript evidence contracts.
-
-Transcript timing and ASR provenance live on segments. Frame alignment remains
-a derived compatibility concern owned outside this schema module.
-"""
+"""Canonical segment-native transcript artifact contract."""
 
 from __future__ import annotations
 
+from typing import Self
+
 from pydantic import Field, model_validator
 
-from hcmai.common.schemas.base import ContractModel, NonEmptyString
-from hcmai.common.schemas.enum import ProcessingStatus
+from offline.contracts import ContractModel, NonEmptyString
+from offline.enrichment.models import ProcessingStatus
 
 
 class TranscriptSegment(ContractModel):
-    """Canonical timeline evidence for one spoken segment.
-
-    Model lineage is optional so artifacts written before provenance fields were
-    introduced remain readable. ``confidence=None`` means the ASR backend did
-    not provide a calibrated segment score; it must not be treated as zero.
-    """
+    """Timestamped ASR artifact segment with optional model provenance."""
 
     segment_id: NonEmptyString
     video_id: NonEmptyString
@@ -37,15 +30,16 @@ class TranscriptSegment(ContractModel):
     error_message: NonEmptyString | None = None
 
     @model_validator(mode="after")
-    def validate_time_range(self) -> TranscriptSegment:
+    def validate_time_range(self) -> Self:
         """Require positive duration and diagnostics for failed segments."""
 
         if self.end_ms <= self.start_ms:
             raise ValueError("end_ms must be greater than start_ms")
-        if self.status == ProcessingStatus.FAILED and (
+        if self.status is ProcessingStatus.FAILED and (
             self.error_code is None or self.error_message is None
         ):
-            raise ValueError(
-                "failed segments require error_code and error_message"
-            )
+            raise ValueError("failed segments require error_code and error_message")
         return self
+
+
+__all__ = ["TranscriptSegment"]

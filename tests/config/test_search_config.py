@@ -3,7 +3,7 @@
 import pytest
 
 from hcmai.common.config import AlignmentConfig, FusionConfig, SearchConfig
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 
 
 def test_fusion_config_has_source_weights_not_task_weights() -> None:

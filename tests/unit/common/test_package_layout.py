@@ -30,9 +30,7 @@ def test_canonical_grouped_import_paths_are_available(module_name: str) -> None:
 @pytest.mark.parametrize(
     "module_name",
     [
-        "hcmai.common.schemas.vqa",
-        "hcmai.common.schemas.search",
-        "hcmai.common.schemas.trake",
+        "hcmai.common.schemas",
         "hcmai.pipelines",
         "hcmai.retrieval.retriever.filtered",
         "hcmai.temporal.aligners.monotonic_dp",

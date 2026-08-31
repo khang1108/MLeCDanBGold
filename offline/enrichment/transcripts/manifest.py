@@ -17,7 +17,8 @@ from typing import Literal, Self
 from pydantic import Field, model_validator
 
 from hcmai.common.config import ASRConfig, DiarizationConfig
-from hcmai.common.schemas import ContractModel, NonEmptyString, TranscriptSegment
+from offline.contracts import ContractModel, NonEmptyString
+from offline.enrichment.transcripts.models import TranscriptSegment
 from hcmai.common.utils.io import read_json
 
 

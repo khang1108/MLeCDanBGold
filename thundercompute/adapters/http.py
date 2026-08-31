@@ -12,20 +12,21 @@ import numpy as np
 from PIL import Image
 
 from hcmai.common.config import InferenceConfig
-from hcmai.common.schemas import (
+from hcmai.retrieval.embedding.inference_contracts import (
+    EmbeddingResponse,
+    TextEmbeddingResponse,
+)
+from offline.enrichment.inference_contracts import (
     AudioReferenceRequest,
-    BoundaryScoreResponse,
     CaptionResponse,
     DiarizationRequest,
-    EmbeddingResponse,
     InferenceReadiness,
     OCRResponse,
-    RerankResponse,
-    TextEmbeddingResponse,
     TranscriptInferenceResponse,
 )
 from hcmai.common.utils.logging import get_logger
 from thundercompute.gateway import InferenceGateway, InferenceGatewayError
+from thundercompute.contracts import BoundaryScoreResponse, RerankResponse
 from thundercompute.resilience import FailureCategory
 
 logger = get_logger(__name__)

@@ -1,10 +1,12 @@
 from __future__ import annotations
+
+from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, Sequence, cast
 import pytest
 from PIL import Image
-from hcmai.common.schemas import RetrievalCandidate, RetrievalSource
+from hcmai.retrieval.models import RetrievalCandidate, RetrievalSource
 from hcmai.corpus import Corpus
 from hcmai.retrieval.reranking.config import RerankerConfig
 from hcmai.retrieval.reranking.pipeline import (
@@ -57,7 +59,7 @@ def candidate(index: int) -> RetrievalCandidate:
 def test_success_identity_batches_scores_order_and_lifecycle(tmp_path):
     Backend.instances = 0
     store, inputs = make_store(tmp_path, 20), [candidate(i) for i in range(20)]
-    before = [item.model_dump() for item in inputs]
+    before = [asdict(item) for item in inputs]
     backend = Backend(lambda images: [image.getpixel((0, 0))[0] for image in images])
     reranker = RerankingService(
         cast(Corpus, store), RerankerConfig(batch_size=6), backend
@@ -70,14 +72,14 @@ def test_success_identity_batches_scores_order_and_lifecycle(tmp_path):
     assert {item.frame_id: item.reranker_score for item in output} == {f"f{i}": float(i) for i in range(20)}
     assert all(item.final_score == item.reranker_score for item in output)
     assert output[-1].frame_id == "f0"
-    assert before == [item.model_dump() for item in inputs] and Backend.instances == 1
+    assert before == [asdict(item) for item in inputs] and Backend.instances == 1
     assert reranker.rerank("query", []) == [] and len(reranker.rerank("query", [inputs[0]])) == 1
     tied = RerankingService(
         cast(Corpus, store), RerankerConfig(batch_size=20),
         Backend(lambda images: [1] * len(images)),
     )
     assert [item.frame_id for item in tied.rerank("q", inputs)] == [item.frame_id for item in inputs]
-    assert all(RetrievalCandidate.model_validate(item.model_dump()) for item in output)
+    assert all(isinstance(item, RetrievalCandidate) for item in output)
 
 def test_candidate_image_failure_aborts_reranking(tmp_path):
     store, inputs = make_store(tmp_path, 8), [candidate(i) for i in range(8)]

@@ -18,9 +18,12 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-from hcmai.common.schemas import FrameRecord, ObjectDetection, ObjectEvidence, ProcessingStatus
 from hcmai.corpus.assets import FrameAssetError, FrameAssetResolver
 from tqdm.auto import tqdm
+
+from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.objects.models import ObjectDetection, ObjectEvidence
+from offline.ingestion.models import FrameArtifact
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +251,7 @@ def load_vocab(path: str | Path) -> list[str]:
 
 
 def _failure_evidence(
-    frame: FrameRecord,
+    frame: FrameArtifact,
     config: ObjectDetectionConfig,
     error: Exception,
     *,
@@ -270,7 +273,7 @@ def _failure_evidence(
     )
 
 
-def _object_path(frame: FrameRecord, raw_output_root: Path) -> Path:
+def _object_path(frame: FrameArtifact, raw_output_root: Path) -> Path:
     """Map one canonical frame to its resumable raw JSON output."""
 
     stem = Path(frame.image_path).stem
@@ -279,11 +282,11 @@ def _object_path(frame: FrameRecord, raw_output_root: Path) -> Path:
     return raw_output_root / frame.video_id / f"{stem}.json"
 
 
-def _frame_from_row(row: dict[str, object]) -> FrameRecord:
+def _frame_from_row(row: dict[str, object]) -> FrameArtifact:
     """Validate one streamed canonical frame row without retaining the store."""
 
-    values = {name: row[name] for name in FrameRecord.model_fields if name in row}
-    return FrameRecord.model_validate(values)
+    values = {name: row[name] for name in FrameArtifact.model_fields if name in row}
+    return FrameArtifact.model_validate(values)
 
 
 def _frame_batches(path: Path, batch_size: int = 512):

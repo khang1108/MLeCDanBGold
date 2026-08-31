@@ -7,7 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from hcmai.api.contracts import SearchRequest
-from hcmai.common.schemas import FrameRecord, RetrievalSource
+from hcmai.corpus import Frame
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.orchestration.temporal_search import TemporalSearchResult
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.temporal import AlignedPath
@@ -48,18 +49,16 @@ class FakeAlignment:
 class FakeCorpus:
     """Expose only the canonical data reads KIS materialization needs."""
 
-    def frame(self, frame_id: str) -> FrameRecord:
+    def frame(self, frame_id: str) -> Frame:
         """Resolve a synthetic canonical frame record."""
 
         index = int(frame_id[1:])
-        return FrameRecord(
+        return Frame(
             frame_id=frame_id,
             video_id="V01",
             frame_idx=index,
             timestamp_ms=index * 1_000,
             image_path=f"{frame_id}.jpg",
-            width=640,
-            height=360,
         )
 
     def caption(self, frame_id: str) -> str | None:

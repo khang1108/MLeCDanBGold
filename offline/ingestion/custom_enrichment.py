@@ -1,6 +1,6 @@
 """Prepare per-video enrichment inputs and validate specialist handoff lineage.
 
-This module materializes temporary FrameRecord tables from an already validated
+This module materializes temporary FrameArtifact tables from an already validated
 native staging bundle and writes a compact handoff after Caption, OCR, Objects,
 and ASR artifacts preserve canonical identity. It does not run any model,
 flatten specialist evidence, alter native state JSON, or publish a global frame
@@ -19,7 +19,7 @@ from typing import Literal
 
 import pandas as pd
 
-from hcmai.common.schemas import FrameRecord
+from offline.ingestion.models import FrameArtifact
 from hcmai.common.utils.io import atomic_write, read_json, write_json, write_parquet
 from offline.ingestion.custom_frames import (
     NativeValidationReport,
@@ -61,19 +61,19 @@ def _infer_staging_context(bundle_root: str | Path) -> tuple[Path, Path]:
     return run_root, bundle
 
 
-def _frame_table(records: list[FrameRecord]) -> pd.DataFrame:
+def _frame_table(records: list[FrameArtifact]) -> pd.DataFrame:
     """Convert already validated frame contracts into stable Parquet columns.
 
     Args:
         records: Canonical frame records in native sample-index order.
 
     Returns:
-        DataFrame with every declared FrameRecord column in contract order.
+        DataFrame with every declared FrameArtifact column in contract order.
     """
 
     return pd.DataFrame(
         [record.model_dump(mode="python") for record in records],
-        columns=list(FrameRecord.model_fields),
+        columns=list(FrameArtifact.model_fields),
     )
 
 
@@ -83,7 +83,7 @@ def materialize_video_enrichment_frames(
     *,
     image_variant: Literal["durable", "enrichment"],
 ) -> Path:
-    """Write a per-video FrameRecord table for durable or OCR image enrichment.
+    """Write a per-video FrameArtifact table for durable or OCR image enrichment.
 
     Args:
         bundle_root: Existing ``staging/{video_id}`` native bundle.
@@ -96,7 +96,7 @@ def materialize_video_enrichment_frames(
 
     Raises:
         ValueError: If the native bundle, requested image variant, or staged table
-            violates canonical FrameRecord identity.
+            violates canonical FrameArtifact identity.
     """
 
     run_root, bundle = _infer_staging_context(bundle_root)
@@ -116,7 +116,7 @@ def materialize_video_enrichment_frames(
             temporary_path: Sibling temporary file supplied by ``atomic_write``.
 
         Returns:
-            None; writes a complete FrameRecord Parquet table.
+            None; writes a complete FrameArtifact Parquet table.
         """
 
         write_parquet(_frame_table(records), temporary_path, index=False)
@@ -124,7 +124,7 @@ def materialize_video_enrichment_frames(
     atomic_write(destination, write_table)
     table = pd.read_parquet(destination)
     loaded_rows = table.astype(object).where(table.notna(), None).to_dict(orient="records")
-    loaded_records = [FrameRecord.model_validate(row) for row in loaded_rows]
+    loaded_records = [FrameArtifact.model_validate(row) for row in loaded_rows]
     if [record.frame_id for record in loaded_records] != [record.frame_id for record in records]:
         raise ValueError("staged enrichment frame table changed canonical identity order")
     if [record.image_path for record in loaded_records] != [record.image_path for record in records]:
@@ -200,7 +200,7 @@ def _validate_frame_native_artifact(
     path: Path,
     *,
     kind: str,
-    records: list[FrameRecord],
+    records: list[FrameArtifact],
     frame_store_id: str,
 ) -> _ArtifactEntry:
     """Require exact ordered frame identity in one specialist artifact table.

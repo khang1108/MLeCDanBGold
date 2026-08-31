@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from dataclasses import replace
 from numbers import Real
 from typing import Any
 
-from hcmai.common.schemas import RetrievalCandidate
+from hcmai.retrieval.models import RetrievalCandidate
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
@@ -193,9 +194,9 @@ def _finite(value: Any) -> bool:
 
 
 def _replace(candidate: RetrievalCandidate, **updates: Any) -> RetrievalCandidate:
-    values = candidate.model_dump(mode="python")
-    values.update(updates)
-    return RetrievalCandidate.model_validate(values)
+    """Return an immutable candidate with explicitly updated ranking fields."""
+
+    return replace(candidate, **updates)
 
 
 def _classified_backend_error(error: Exception) -> RerankingError:

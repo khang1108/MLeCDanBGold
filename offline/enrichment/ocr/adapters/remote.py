@@ -6,7 +6,7 @@ from typing import Protocol, Sequence
 
 from PIL import Image
 
-from hcmai.common.schemas import InferenceReadiness, OCRResponse
+from offline.enrichment.inference_contracts import InferenceReadiness, OCRResponse
 from offline.enrichment.ocr.config import OCRConfig
 from offline.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
 

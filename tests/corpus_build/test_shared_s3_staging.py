@@ -9,7 +9,8 @@ from typing import cast
 import pandas as pd
 
 from hcmai.common.config import ASRConfig
-from hcmai.common.schemas import FrameRecord, TranscriptSegment
+from offline.enrichment.transcripts.models import TranscriptSegment
+from offline.ingestion.models import FrameArtifact
 from offline.enrichment.transcripts.adapters.asr import ASRAdapter
 from offline.enrichment.transcripts.pipeline import TranscriptService
 from offline.ingestion.corpus_build.config import S3PreparationConfig
@@ -92,7 +93,7 @@ def test_one_download_serves_frames_and_transcript_before_cleanup(
 
     with staged_video(client, storage, source) as staged:
         staged_path = staged
-        frame = FrameRecord(
+        frame = FrameArtifact(
             frame_id="L21_V001_frame_000000000",
             video_id="L21_V001",
             frame_idx=0,

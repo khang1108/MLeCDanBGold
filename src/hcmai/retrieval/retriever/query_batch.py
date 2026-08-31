@@ -7,7 +7,7 @@ from typing import Literal
 
 import numpy as np
 
-from hcmai.common.schemas import StageTrace
+from hcmai.common.observability import StageTrace
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.common.observability import PipelineStage
 from hcmai.common.observability.tracing import StageTimer

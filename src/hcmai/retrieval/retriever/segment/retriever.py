@@ -8,18 +8,18 @@ after projection.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from time import perf_counter
 from typing import Any
 
 import numpy as np
 
-from hcmai.common.observability import PipelineStage
+from hcmai.common.observability import PipelineStage, RetrievalTrace
 from hcmai.common.observability.tracing import StageTimer
-from hcmai.common.schemas import (
+from hcmai.retrieval.models import (
     RetrievalCandidate,
     RetrievalResult,
     RetrievalSource,
-    RetrievalTrace,
 )
 from hcmai.corpus.models import Frame
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
@@ -127,16 +127,15 @@ class ASRSegmentRetriever:
         results = self.search_vectors(batch, top_k)
         first_candidate_ms = (perf_counter() - started) * 1_000
         return [
-            result.model_copy(
-                update={
-                    "trace": RetrievalTrace(
-                        stages={
-                            batch.encoding_trace.stage: batch.encoding_trace,
-                            **result.trace.stages,
-                        }
-                    ),
-                    "time_to_first_candidate_ms": first_candidate_ms,
-                }
+            replace(
+                result,
+                trace=RetrievalTrace(
+                    stages={
+                        batch.encoding_trace.stage: batch.encoding_trace,
+                        **result.trace.stages,
+                    }
+                ),
+                time_to_first_candidate_ms=first_candidate_ms,
             )
             for result in results
         ]
@@ -212,9 +211,7 @@ class ASRSegmentRetriever:
             ),
         )[:top_k]
         return [
-            candidate.model_copy(
-                update={"source_ranks": {RetrievalSource.ASR: rank}}
-            )
+            replace(candidate, source_ranks={RetrievalSource.ASR: rank})
             for rank, candidate in enumerate(ordered, start=1)
         ]
 

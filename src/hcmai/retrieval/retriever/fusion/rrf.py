@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from copy import deepcopy
+from dataclasses import replace
 from time import perf_counter
 from typing import Any
 
 from hcmai.common.config import FusionConfig
-from hcmai.common.schemas import (
+from hcmai.common.observability import PipelineStage, RetrievalTrace
+from hcmai.common.observability.tracing import StageTimer
+from hcmai.retrieval.models import (
+    RetrievalCandidate,
     RetrievalResult,
     RetrievalSource,
-    RetrievalTrace,
 )
-from hcmai.common.schemas.retrieval import RetrievalCandidate
-from hcmai.common.observability import PipelineStage
-from hcmai.common.observability.tracing import StageTimer
 from hcmai.retrieval.retriever.concurrent import (
     ModalitySearchExecutor,
     ModalitySearchJob,
@@ -148,9 +149,7 @@ class RRFFusionRetriever:
             )
         first_candidate_ms = (perf_counter() - started) * 1_000
         return [
-            result.model_copy(
-                update={"time_to_first_candidate_ms": first_candidate_ms}
-            )
+            replace(result, time_to_first_candidate_ms=first_candidate_ms)
             for result in results
         ]
 
@@ -177,7 +176,7 @@ class RRFFusionRetriever:
             for candidate in result.candidates:
                 existing = pool.get(candidate.frame_id)
                 pool[candidate.frame_id] = (
-                    candidate.model_copy(deep=True)
+                    deepcopy(candidate)
                     if existing is None
                     else _merge(existing, candidate)
                 )
@@ -186,13 +185,12 @@ class RRFFusionRetriever:
             active_sources or _result_sources(child_results),
         )
         fused = [
-            candidate.model_copy(
-                update={
-                    "fusion_score": sum(
-                        weights[source] / (self.config.rrf_k + rank)
-                        for source, rank in candidate.source_ranks.items()
-                    )
-                }
+            replace(
+                candidate,
+                fusion_score=sum(
+                    weights[source] / (self.config.rrf_k + rank)
+                    for source, rank in candidate.source_ranks.items()
+                ),
             )
             for candidate in pool.values()
         ]
@@ -254,24 +252,22 @@ def _merge(
         raise ValueError(
             f"Duplicate retrieval sources for frame {existing.frame_id!r}: {names}"
         )
-    return existing.model_copy(
-        update={
-            "source_scores": {
-                **existing.source_scores,
-                **incoming.source_scores,
-            },
-            "source_ranks": {
-                **existing.source_ranks,
-                **incoming.source_ranks,
-            },
-            # The first candidate owns canonical frame metadata. Preserve it
-            # while retaining distinct source provenance such as ASR segments.
-            "metadata": {
-                **incoming.metadata,
-                **existing.metadata,
-            },
-        },
-        deep=True,
+    return replace(
+        existing,
+        source_scores=deepcopy({
+            **existing.source_scores,
+            **incoming.source_scores,
+        }),
+        source_ranks=deepcopy({
+            **existing.source_ranks,
+            **incoming.source_ranks,
+        }),
+        # The first candidate owns canonical frame metadata. Preserve it while
+        # retaining distinct source provenance such as ASR segments.
+        metadata=deepcopy({
+            **incoming.metadata,
+            **existing.metadata,
+        }),
     )
 
 

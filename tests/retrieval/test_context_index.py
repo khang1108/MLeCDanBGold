@@ -16,7 +16,7 @@ from hcmai.common.config import (
     InferenceConfig,
     IndexConfig,
 )
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.io import read_yaml, write_json, write_yaml
 from hcmai.corpus.stores import FrameContextStore, FrameStore
 from thundercompute.config import LLMServiceConfig

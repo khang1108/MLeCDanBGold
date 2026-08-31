@@ -11,7 +11,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.common.schemas import CaptionEvidence, OCREvidence
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.ocr.models import OCREvidence
 from offline.enrichment.context import (
     FrameContextConfig,
     build_frame_context,

@@ -1,3 +1,5 @@
-"""Các Data Models và Contracts cho Caption Enrichment."""
+"""Caption enrichment contracts and artifact models."""
 
-__all__: list[str] = []
+from .evidence import CaptionEvidence, usable_completed_text
+
+__all__ = ["CaptionEvidence", "usable_completed_text"]

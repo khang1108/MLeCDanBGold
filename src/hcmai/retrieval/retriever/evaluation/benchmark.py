@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Any
 
-from hcmai.common.schemas.evaluation import EvaluationQuery
+from hcmai.retrieval.retriever.evaluation.models import EvaluationQuery
 from hcmai.common.utils.io import write_json, write_yaml
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.timing import Timer

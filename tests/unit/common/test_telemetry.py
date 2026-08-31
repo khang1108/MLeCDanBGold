@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
+from dataclasses import asdict
 
-from hcmai.common.schemas import (
-    RetrievalTrace,
-    StageStatus,
-    StageTrace,
-)
+import pytest
+
+from hcmai.common.observability import RetrievalTrace, StageStatus, StageTrace
 
 
 def _stage(stage: str, duration_ms: float) -> StageTrace:
@@ -31,18 +28,20 @@ def test_pipeline_trace_aggregates_prefixed_stages_without_mutation() -> None:
     assert list(visual.stages) == ["query_encoding"]
     assert merged.duration_for("query_encoding") == 7
     assert merged.total_duration_ms == 7
-    assert RetrievalTrace.model_validate_json(merged.model_dump_json()) == merged
+    assert asdict(merged)["stages"]["caption.query_encoding"]["stage"] == (
+        "caption.query_encoding"
+    )
     with pytest.raises(ValueError, match="duplicate"):
         visual.merged(caption)
 
 
 def test_pipeline_trace_rejects_mismatched_stage_key() -> None:
-    with pytest.raises(ValidationError, match="must match"):
+    with pytest.raises(ValueError, match="must match"):
         RetrievalTrace(stages={"wrong": _stage("query_encoding", 2)})
 
 
 def test_failed_stage_requires_an_error_category() -> None:
-    with pytest.raises(ValidationError, match="error_category"):
+    with pytest.raises(ValueError, match="error_category"):
         StageTrace(
             stage="index_search",
             started_at=1,

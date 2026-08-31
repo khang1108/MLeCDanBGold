@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 
 from hcmai.common.config import EncoderConfig, FusionConfig
-from hcmai.common.schemas import (
+from hcmai.common.observability import RetrievalTrace
+from hcmai.retrieval.models import (
     RetrievalCandidate,
     RetrievalResult,
     RetrievalSource,
-    RetrievalTrace,
 )
 from hcmai.retrieval.retriever.concurrent import (
     ModalitySearchExecutor,

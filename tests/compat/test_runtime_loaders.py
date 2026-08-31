@@ -10,16 +10,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from hcmai.common.schemas import (
-    CaptionEvidence,
-    OCREvidence,
-    ProcessingStatus,
-    RetrievalSource,
-    TranscriptSegment,
-)
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import TranscriptSegment as RuntimeTranscriptSegment
 from hcmai.corpus.stores.frame import FrameStore
+from hcmai.retrieval.models import RetrievalSource
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.ocr.models import OCREvidence
+from offline.enrichment.transcripts.models import TranscriptSegment
 
 
 def _write_frame(path: Path) -> None:

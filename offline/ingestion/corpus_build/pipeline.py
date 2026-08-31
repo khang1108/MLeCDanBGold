@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.io import atomic_write, read_json, write_json
 from offline.ingestion.corpus_build.config import S3CorpusPreparationConfig
 from offline.ingestion.corpus_build.publish import S3Publication

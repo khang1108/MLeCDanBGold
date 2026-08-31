@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from threading import Lock
 from typing import Any
 
-from hcmai.common.schemas import StageStatus, StageTrace
+from hcmai.common.observability.models import StageStatus, StageTrace
 
 _BUCKETS_MS = (1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000)
 

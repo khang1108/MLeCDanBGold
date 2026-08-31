@@ -6,7 +6,7 @@ import pytest
 
 import offline.enrichment.transcripts.adapters.diarization as diarization_module
 from hcmai.common.config import DiarizationConfig
-from hcmai.common.schemas import TranscriptSegment
+from offline.enrichment.transcripts.models import TranscriptSegment
 from offline.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,
 )

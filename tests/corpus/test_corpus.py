@@ -9,14 +9,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.common.schemas import (
-    CaptionEvidence,
-    OCREvidence,
-    ProcessingStatus,
-    RetrievalSource,
-    TranscriptSegment,
-)
 from hcmai.corpus import Corpus
+from hcmai.retrieval.models import RetrievalSource
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.ocr.models import OCREvidence
+from offline.enrichment.transcripts.models import TranscriptSegment
 
 
 def _write_corpus_artifacts(root: Path) -> dict[str, Path]:

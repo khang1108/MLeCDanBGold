@@ -8,7 +8,7 @@ import pandas as pd
 from PIL import Image
 
 from hcmai.common.config import EncoderConfig
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from offline.ingestion.corpus_build import (
     PreparationPaths,
     S3CorpusPreparationConfig,

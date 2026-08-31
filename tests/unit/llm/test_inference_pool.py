@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from hcmai.common.schemas import InferenceReadiness
+from offline.enrichment.inference_contracts import InferenceReadiness
 from thundercompute.adapters.pool import InferenceClientPool
 
 

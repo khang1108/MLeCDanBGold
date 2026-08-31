@@ -22,17 +22,14 @@ import pyarrow.parquet as pq
 import pandas as pd
 from tqdm.auto import tqdm
 
-from hcmai.common.schemas import (
-    CaptionEvidence,
-    FrameContext,
-    FrameRecord,
-    ObjectDetection,
-    ObjectEvidence,
-    OCREvidence,
-    ProcessingStatus,
-)
 from hcmai.common.utils.io import atomic_write, read_json, write_json
 from offline.enrichment.bundle import publish_staged_bundle
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.context.models import FrameContext
+from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.objects.models import ObjectDetection, ObjectEvidence
+from offline.enrichment.ocr.models import OCREvidence
+from offline.ingestion.models import FrameArtifact
 
 from .config import FrameContextConfig
 from .serializer import serialize_frame_context
@@ -278,11 +275,11 @@ def _iter_parquet_rows(
         raise ValueError(f"malformed {name} artifact: {path}") from error
 
 
-def _read_canonical_frames(path: Path) -> list[FrameRecord]:
+def _read_canonical_frames(path: Path) -> list[FrameArtifact]:
     """Validate canonical frames while avoiding FrameStore's extra indexes."""
 
-    columns = list(FrameRecord.model_fields)
-    frames: list[FrameRecord] = []
+    columns = list(FrameArtifact.model_fields)
+    frames: list[FrameArtifact] = []
     seen: set[str] = set()
     for raw in _iter_parquet_rows(
         path,
@@ -296,7 +293,7 @@ def _read_canonical_frames(path: Path) -> list[FrameRecord]:
             if name in raw
         }
         try:
-            frame = FrameRecord.model_validate(values)
+            frame = FrameArtifact.model_validate(values)
         except Exception as error:
             raise ValueError("malformed canonical frame row") from error
         if frame.frame_id in seen:
@@ -480,7 +477,7 @@ def _serializer_identity(config: FrameContextConfig) -> dict[str, int | float]:
 
 
 def _build_context_rows(
-    frames: list[FrameRecord],
+    frames: list[FrameArtifact],
     caption_rows: _EvidenceStore,
     ocr_rows: _EvidenceStore,
     object_rows: _EvidenceStore,
@@ -543,7 +540,7 @@ def _build_context_rows(
 
 
 def _context_batches(
-    frames: list[FrameRecord],
+    frames: list[FrameArtifact],
     caption_rows: _EvidenceStore,
     ocr_rows: _EvidenceStore,
     object_rows: _EvidenceStore,

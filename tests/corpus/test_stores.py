@@ -8,7 +8,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from hcmai.common.schemas import TranscriptSegment as TranscriptSegmentArtifact
 from hcmai.corpus.assets import (
     FrameAssetMissingError,
     FrameAssetOutsideRootError,
@@ -16,6 +15,9 @@ from hcmai.corpus.assets import (
 )
 from hcmai.corpus.models import Frame, TranscriptSegment, VideoMetadata
 from hcmai.corpus.stores import FrameStore, TranscriptStore, VideoMetadataStore
+from offline.enrichment.transcripts.models import (
+    TranscriptSegment as TranscriptSegmentArtifact,
+)
 
 
 def _write_frame_artifact(path: Path) -> None:

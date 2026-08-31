@@ -1,10 +1,11 @@
 from pathlib import Path
+from dataclasses import asdict
 from typing import cast
 
 import pandas as pd
 import pytest
 
-from hcmai.common.schemas import FrameRecord
+from hcmai.corpus import Frame
 from hcmai.corpus.assets import (
     FrameAssetMissingError,
     FrameAssetOutsideRootError,
@@ -15,15 +16,13 @@ from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
-def frame(frame_id: str, image_path: str) -> FrameRecord:
-    return FrameRecord(
+def frame(frame_id: str, image_path: str) -> Frame:
+    return Frame(
         frame_id=frame_id,
         video_id="video-1",
         frame_idx=1,
         timestamp_ms=0,
         image_path=image_path,
-        width=4,
-        height=4,
     )
 
 
@@ -65,8 +64,8 @@ def test_corpus_resolves_canonical_assets(tmp_path: Path) -> None:
     image.parent.mkdir(parents=True)
     image.write_bytes(b"image")
     rows = [
-        frame("f1", "keyframes/video-1/1.jpg").model_dump(mode="python"),
-        frame("f2", "keyframes/video-1/missing.jpg").model_dump(mode="python"),
+        asdict(frame("f1", "keyframes/video-1/1.jpg")),
+        asdict(frame("f2", "keyframes/video-1/missing.jpg")),
     ]
     metadata = tmp_path / "frames.parquet"
     pd.DataFrame(rows).to_parquet(metadata, index=False)
@@ -83,7 +82,7 @@ def test_health_reports_asset_readiness_separately_from_metadata(
 ) -> None:
     metadata = tmp_path / "frames.parquet"
     pd.DataFrame([
-        frame("f1", "keyframes/video-1/missing.jpg").model_dump(mode="python")
+        asdict(frame("f1", "keyframes/video-1/missing.jpg"))
     ]).to_parquet(metadata, index=False)
     corpus = Corpus.open(metadata, dataset_root=tmp_path)
     service = SearchService(corpus, cast(RetrievalService, object()))

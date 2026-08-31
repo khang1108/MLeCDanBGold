@@ -10,7 +10,7 @@ import pytest
 import offline.enrichment.transcripts.adapters.asr as asr_module
 import offline.enrichment.transcripts.prepare as prepare_module
 from hcmai.common.config import ASRConfig, DiarizationConfig
-from hcmai.common.schemas import TranscriptSegment
+from offline.enrichment.transcripts.models import TranscriptSegment
 from offline.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
 from offline.enrichment.transcripts.adapters.diarization import (
     DiarizationAdapter,

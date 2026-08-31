@@ -11,8 +11,7 @@ import pandas as pd
 import pytest
 from PIL import Image
 
-from hcmai.common.schemas import OCRItem, OCRResponse
-from hcmai.common.schemas.inference import OCRRegionItem
+from offline.enrichment.inference_contracts import OCRItem, OCRRegionItem, OCRResponse
 from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
 from offline.enrichment.ocr.adapters.florence import _parse_regions
 from offline.enrichment.ocr.artifacts import normalize_regions

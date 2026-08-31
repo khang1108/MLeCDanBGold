@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from offline.ingestion.corpus_build import (
     DefaultPreparationOperations,
     PreparationPaths,

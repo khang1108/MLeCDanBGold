@@ -6,13 +6,11 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Protocol
 
-from hcmai.common.schemas import (
+from hcmai.common.observability import PipelineStage, RetrievalTrace, StageStatus
+from hcmai.retrieval.models import (
     RetrievalResult,
     RetrievalSource,
-    RetrievalTrace,
-    StageStatus,
 )
-from hcmai.common.observability import PipelineStage
 from hcmai.common.observability.tracing import StageTimer
 from hcmai.retrieval.retriever.query_batch import QueryEmbeddingBatch
 

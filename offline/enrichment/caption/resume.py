@@ -8,7 +8,8 @@ from typing import Any, cast
 
 import pandas as pd
 
-from hcmai.common.schemas import CaptionEvidence, ProcessingStatus
+from offline.enrichment.caption.models import CaptionEvidence
+from offline.enrichment.models import ProcessingStatus
 from offline.enrichment.caption.artifacts import valid_caption
 from offline.enrichment.caption.config import CaptionConfig, ENRICHMENT_VERSION
 

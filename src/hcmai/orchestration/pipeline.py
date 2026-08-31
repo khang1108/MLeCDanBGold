@@ -10,9 +10,9 @@ from hcmai.api.contracts import (
     SearchResponse,
     TRAKERequest,
     TRAKEResponse,
+    SubmissionResult,
 )
 from hcmai.common.config import SearchConfig
-from hcmai.common.schemas import RetrievalSource, SubmissionResult
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
@@ -21,6 +21,7 @@ from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.common.observability import METRICS
 from hcmai.common.utils.video import official_frame_idx
 from hcmai.orchestration.temporal_search import TemporalSearchService
+from hcmai.retrieval.models import RetrievalSource
 
 if TYPE_CHECKING:
     from hcmai.retrieval.retriever.pipeline import RetrievalService

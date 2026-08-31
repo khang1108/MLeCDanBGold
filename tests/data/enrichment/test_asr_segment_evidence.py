@@ -11,11 +11,9 @@ import pytest
 from pydantic import ValidationError
 
 from hcmai.common.config import ASRConfig
-from hcmai.common.schemas import (
-    FrameRecord,
-    ProcessingStatus,
-    TranscriptSegment,
-)
+from hcmai.corpus.models import Frame
+from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.transcripts.models import TranscriptSegment
 from hcmai.corpus.models import TranscriptSegment as RuntimeTranscriptSegment
 from offline.enrichment.transcripts.adapters.asr import ASRAdapter, DecodedAudio
 from offline.enrichment.transcripts.artifacts import (
@@ -103,14 +101,12 @@ def test_frame_alignment_ignores_non_completed_segments(
 ) -> None:
     """Prevent incomplete speech from becoming completed frame evidence."""
 
-    frame = FrameRecord(
+    frame = Frame(
         frame_id="f1",
         video_id="v1",
         frame_idx=10,
         timestamp_ms=1_500,
         image_path="f1.jpg",
-        width=8,
-        height=6,
     )
     updates: dict[str, object] = {"status": status}
     if status is ProcessingStatus.FAILED:
@@ -234,16 +230,21 @@ def test_import_reference_scan_catches_alias_and_qualified_imports() -> None:
 def test_frame_context_modules_do_not_depend_on_asr_compatibility_view() -> None:
     """Prevent deterministic FrameContext from acquiring frame-aligned ASR inputs."""
 
-    source_root = Path(__file__).resolve().parents[3] / "src" / "hcmai"
+    repository_root = Path(__file__).resolve().parents[3]
+    source_root = repository_root / "src" / "hcmai"
     forbidden = {
         "materialize_asr_enrichment",
         "ASRStore",
     }
 
     context_imports: set[str] = set()
-    for path in sorted(source_root.rglob("*.py")):
+    context_paths = sorted(source_root.rglob("*.py"))
+    context_paths.extend(
+        sorted((repository_root / "offline/enrichment/context").rglob("*.py"))
+    )
+    for path in context_paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        relative_parts = path.relative_to(source_root).parts
+        relative_parts = path.parts
         owns_context = any("context" in part.casefold() for part in relative_parts)
         owns_frame_context = any(
             isinstance(node, ast.ClassDef) and node.name == "FrameContext"
@@ -255,9 +256,8 @@ def test_frame_context_modules_do_not_depend_on_asr_compatibility_view() -> None
         context_imports.update(_import_references(tree))
 
     transcript_imports: set[str] = set()
-    transcript_paths = [source_root / "common/schemas/transcript.py"]
-    transcript_paths.extend(
-        sorted((source_root / "data/enrichment/transcripts").rglob("*.py"))
+    transcript_paths = sorted(
+        (repository_root / "offline/enrichment/transcripts").rglob("*.py")
     )
     for path in transcript_paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

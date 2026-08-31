@@ -7,7 +7,7 @@ encoding and search behavior.
 
 from __future__ import annotations
 
-from hcmai.common.schemas import RetrievalSource
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
 from hcmai.retrieval.retriever.cache import EmbeddingCache
 from hcmai.retrieval.retriever.dense.index import DenseIndex

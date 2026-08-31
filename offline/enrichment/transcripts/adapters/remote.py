@@ -6,13 +6,13 @@ from pathlib import Path
 from typing import Protocol
 
 from hcmai.common.config import ASRConfig, DiarizationConfig
-from hcmai.common.schemas import (
+from offline.enrichment.inference_contracts import (
     AudioReferenceRequest,
     DiarizationRequest,
     InferenceReadiness,
     TranscriptInferenceResponse,
-    TranscriptSegment,
 )
+from offline.enrichment.transcripts.models import TranscriptSegment
 
 ASR_SEGMENT_ARTIFACT_VERSION = "asr-segment-v1"
 
