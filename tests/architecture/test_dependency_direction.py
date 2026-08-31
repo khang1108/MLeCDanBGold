@@ -21,19 +21,38 @@ def _python_files(root: Path) -> list[Path]:
     )
 
 
+def _package_name(path: Path) -> str:
+    """Return the dotted package containing a Python source file."""
+
+    for root_name in ("src", "offline"):
+        root = REPOSITORY_ROOT / root_name
+        try:
+            relative = path.relative_to(root).with_suffix("")
+        except ValueError:
+            continue
+        return ".".join(relative.parts[:-1])
+    return ""
+
+
 def _imports(path: Path) -> list[str]:
-    """Return absolute module names named by import statements in ``path``."""
+    """Return canonical modules named by absolute and relative imports."""
 
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     modules: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             modules.extend(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            # Relative imports have no bearing on the absolute package
-            # boundaries enforced here.
-            if node.level == 0:
-                modules.append(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            package = _package_name(path)
+            if node.level:
+                parent = package.split(".")[: len(package.split(".")) - node.level + 1]
+                base = ".".join(parent)
+            else:
+                base = node.module or ""
+            for alias in node.names:
+                imported = ".".join(part for part in (base, alias.name) if part)
+                if imported:
+                    modules.append(imported)
     return modules
 
 
@@ -119,9 +138,15 @@ def test_package_exports_are_minimal_and_one_way() -> None:
         "split_query_events",
     }
 
-    retrieval = _declared_exports(REPOSITORY_ROOT / "src/hcmai/retrieval/__init__.py")
-    assert {"RetrievalService", "RetrievalCandidate", "RetrievalResult", "RetrievalSource"} <= retrieval
-    assert not any("offline" in name.lower() for name in retrieval)
+    retrieval_path = REPOSITORY_ROOT / "src/hcmai/retrieval/__init__.py"
+    retrieval = _declared_exports(retrieval_path)
+    assert retrieval == {
+        "RetrievalService",
+        "RetrievalCandidate",
+        "RetrievalResult",
+        "RetrievalSource",
+    }
+    assert _violations(retrieval_path.parent, ("offline",)) == []
 
     offline = REPOSITORY_ROOT / "offline/__init__.py"
     assert _imports(offline) == []

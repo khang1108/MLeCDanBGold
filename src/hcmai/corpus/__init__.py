@@ -4,7 +4,7 @@ Specialist artifact stores and asset resolution remain implementation details.
 Offline artifact-validation models live with their enrichment owners.
 """
 
-from .corpus import Corpus, CorpusFrameLoadError
+from .corpus import Corpus
 from .models import Frame, TranscriptSegment, VideoMetadata
 
 __all__ = [

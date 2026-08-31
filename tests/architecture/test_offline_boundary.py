@@ -29,7 +29,9 @@ def test_offline_directories_are_python_packages() -> None:
     package_dirs = sorted(
         path
         for path in offline_root.rglob("*")
-        if path.is_dir() and "__pycache__" not in path.parts
+        if path.is_dir()
+        and "__pycache__" not in path.parts
+        and any(path.glob("*.py"))
     )
     assert (offline_root / "__init__.py").is_file()
     missing = [path for path in package_dirs if not (path / "__init__.py").is_file()]
