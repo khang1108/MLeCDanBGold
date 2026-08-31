@@ -4,10 +4,14 @@ This package owns deterministic event splitting and the numerical DP decoder.
 Timed search orchestration lives in ``hcmai.orchestration.temporal_search``.
 """
 
-from .dp import AlignedPath
+from .dp import DPPath, AlignedPath, align_video, cluster_starts, rank_paths
 from .planner import split_query_events
 
 __all__ = [
     "AlignedPath",
+    "DPPath",
+    "align_video",
+    "cluster_starts",
+    "rank_paths",
     "split_query_events",
 ]

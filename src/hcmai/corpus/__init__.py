@@ -9,7 +9,6 @@ from .models import Frame, TranscriptSegment, VideoMetadata
 
 __all__ = [
     "Corpus",
-    "CorpusFrameLoadError",
     "Frame",
     "TranscriptSegment",
     "VideoMetadata",
