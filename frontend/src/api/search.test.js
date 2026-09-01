@@ -20,9 +20,6 @@ test('posts the standalone search request with only query and top_k', async () =
       score: 0.91,
       frame_ids: ['f0', 'f1'],
       timestamps_ms: [4000, 5000],
-      thumbnail_urls: ['/thumbs/f0.jpg', 'https://cdn.example/f1.jpg'],
-      frame_url: '/api/v1/frames/f1/image',
-      thumbnail_url: 'https://cdn.example/f1-thumb.jpg',
       metadata: { title: 'Kitchen scene' },
     }],
     latency: {
@@ -50,12 +47,7 @@ test('posts the standalone search request with only query and top_k', async () =
       }),
     }),
   );
-  expect(payload.results[0].frame_url).toBe('/api/v1/frames/f1/image');
-  expect(payload.results[0].thumbnail_url).toBe('https://cdn.example/f1-thumb.jpg');
-  expect(payload.results[0].thumbnail_urls).toEqual([
-    '/thumbs/f0.jpg',
-    'https://cdn.example/f1.jpg',
-  ]);
+  expect(payload.results[0].frame_id).toBe('f1');
 });
 
 test('surfaces the backend error message', async () => {
@@ -89,7 +81,6 @@ test('posts explicit ordered events to the dedicated TRAKE route', async () => {
       frame_ids: ['f0', 'f1'],
       frame_idxs: [100, 140],
       timestamps_ms: [4000, 5600],
-      thumbnail_urls: ['/thumbs/f0.jpg', '/thumbs/f1.jpg'],
     }],
     latency: {
       query_ms: 1,

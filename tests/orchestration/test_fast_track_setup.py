@@ -26,6 +26,23 @@ from hcmai.orchestration import setup
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 
+_CORPUS_PATH_ENVIRONMENT_NAMES = (
+    "HCMAI_CAPTION_PATH",
+    "HCMAI_OCR_PATH",
+    "HCMAI_OBJECT_PATH",
+    "HCMAI_TRANSCRIPTS_PATH",
+    "HCMAI_VIDEO_METADATA_PATH",
+)
+
+
+@pytest.fixture(autouse=True)
+def clear_corpus_path_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep developer .env paths from leaking into isolated startup tests."""
+
+    for name in _CORPUS_PATH_ENVIRONMENT_NAMES:
+        monkeypatch.delenv(name, raising=False)
+
+
 class _LoadedService:
     """Small observable stand-in for a composed retrieval service."""
 
@@ -461,6 +478,47 @@ def test_invalid_corpus_open_keeps_startup_degraded_with_diagnostic(
     assert any("Could not load metadata" in message for message in messages)
 
 
+def test_corpus_artifact_paths_use_explicit_environment_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Resolve every runtime specialist artifact from its HCMAI env key."""
+
+    caption = tmp_path / "caption.parquet"
+    ocr = tmp_path / "ocr.parquet"
+    objects = tmp_path / "objects.parquet"
+    transcripts = tmp_path / "transcripts"
+    video_metadata = tmp_path / "media-info"
+    for artifact in (caption, ocr, objects):
+        artifact.write_bytes(b"artifact")
+    transcripts.mkdir()
+    (transcripts / "video.parquet").write_bytes(b"segments")
+    video_metadata.mkdir()
+    (video_metadata / "video.json").write_text("{}")
+
+    overrides = {
+        "HCMAI_CAPTION_PATH": caption,
+        "HCMAI_OCR_PATH": ocr,
+        "HCMAI_OBJECT_PATH": objects,
+        "HCMAI_TRANSCRIPTS_PATH": transcripts,
+        "HCMAI_VIDEO_METADATA_PATH": video_metadata,
+    }
+    for name, path in overrides.items():
+        monkeypatch.setenv(name, str(path))
+
+    evidence, object_path, transcript_path, metadata_path = (
+        setup._configured_corpus_artifacts(AppConfig(), [])
+    )
+
+    assert evidence == {
+        RetrievalSource.CAPTION: caption,
+        RetrievalSource.OCR: ocr,
+    }
+    assert object_path == objects
+    assert transcript_path == transcripts
+    assert metadata_path == video_metadata
+
+
 def test_missing_canonical_frames_fail_fast(tmp_path: Path) -> None:
     """Startup must not run search without its required frame authority."""
 
@@ -517,7 +575,22 @@ def test_public_startup_selects_fast_track_once(
 ) -> None:
     """Default startup reaches the sole supported fast-track composer."""
 
+    for name in (
+        "HCMAI_DATASET_ROOT",
+        "HCMAI_METADATA_PATH",
+        "HCMAI_INDEX_PATH",
+        "HCMAI_CONTEXT_INDEX_PATH",
+        "HCMAI_ASR_SEGMENT_INDEX_PATH",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
     settings = _modern_settings(tmp_path)
+    dotenv_calls: list[tuple[Path, bool]] = []
+    monkeypatch.setattr(
+        setup,
+        "load_dotenv",
+        lambda path, *, override: dotenv_calls.append((path, override)),
+    )
     monkeypatch.setattr(setup, "_load_app_config", lambda: settings)
     monkeypatch.setattr(setup, "_load_model_config", _models)
     monkeypatch.setattr(setup, "_load_remote_llm", lambda *_: None)
@@ -559,3 +632,4 @@ def test_public_startup_selects_fast_track_once(
         RetrievalSource.ASR,
     )
     assert loaded_index_paths == [settings.index.path]
+    assert dotenv_calls == [(setup.REPOSITORY_ROOT / ".env", False)]

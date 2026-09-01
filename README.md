@@ -123,8 +123,7 @@ POST /api/v1/trake
 | `GET /health` | Kiểm tra backend, FrameStore, index và inference |
 | `POST /api/v1/search` | KIS search |
 | `POST /api/v1/trake` | TRAKE ordered-event alignment |
-| `GET /api/v1/frames/{frame_id}/image` | Lấy keyframe gốc |
-| `GET /api/v1/frames/{frame_id}/thumbnail` | Lấy thumbnail; nếu BTC không có thumbnail thì fallback về keyframe |
+| `GET /api/v1/keyframes/{frame_id}` | Lấy canonical keyframe theo internal `frame_id` |
 | `GET /api/v1/frames/{frame_id}/neighbors` | Lấy frame lân cận theo thời gian |
 | `POST /api/v1/submit` | Tạo identity submission cho một frame |
 
@@ -159,7 +158,10 @@ Các path quan trọng khi chạy backend:
 | Visual index | `artifacts/indexes/visual` |
 | Context index | `artifacts/indexes/context` |
 | ASR segment index | `artifacts/indexes/asr_segments` |
-| Context artifact | `artifacts/enrichment/context/frame_context_v1.parquet` |
+| Caption artifact | `artifacts/corpus/caption.parquet` |
+| OCR artifact | `artifacts/corpus/ocr_frames.parquet` |
+| Object artifact | `artifacts/corpus/object_frames.parquet` |
+| Context artifact | `artifacts/corpus/context.parquet` |
 | Transcript artifact | `artifacts/enrichment/transcripts/` |
 
 Lưu ý: `HCMAI_DATASET_ROOT` là root để resolve ảnh. Với canonical
@@ -290,7 +292,7 @@ INDEX_DATASET_ARGS=(
   --frame-manifest artifacts/frame_store/manifest.json
   --keyframes-root data/keyframes
   --map-keyframes-root data/map_keyframes
-  --context artifacts/enrichment/context/frame_context_v1.parquet
+  --context artifacts/corpus/context.parquet
   --transcripts artifacts/enrichment/transcripts
   --expected-video-count 873
   --expected-frame-count 177321
@@ -385,22 +387,11 @@ aic/bin/python -m pip install --upgrade pip
 aic/bin/python -m pip install -e ".[embedding,reranking,dev]"
 ```
 
-Tạo environment riêng cho shell backend. Root `.env` không được FastAPI tự
-động load:
+Tạo root `.env` cho backend. Runtime tự load file này; biến đã export từ môi
+trường triển khai vẫn có độ ưu tiên cao hơn:
 
 ```bash
 cp .env.example .env
-set -a
-source .env
-set +a
-
-# Asset root phải chứa data/keyframes.
-export HCMAI_DATASET_ROOT="$PWD/data"
-export HCMAI_METADATA_PATH="$PWD/artifacts/frame_store/frames.parquet"
-export HCMAI_INDEX_PATH="$PWD/artifacts/indexes/visual"
-
-# GPU inference remote; nếu API chạy trên cùng máy thì dùng http://127.0.0.1:8100.
-export HCMAI_INFERENCE_BASE_URL="https://api.iamphuckhang.dev"
 ```
 
 Khởi động backend:
@@ -414,12 +405,13 @@ Kiểm tra:
 
 ```bash
 curl -sS http://127.0.0.1:8000/health
-curl -I http://127.0.0.1:8000/api/v1/frames/L28_V021_keyframe_000343/thumbnail
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  http://127.0.0.1:8000/api/v1/keyframes/L28_V021_keyframe_000343
 ```
 
-Request thumbnail sẽ phục vụ trực tiếp keyframe nếu `thumbnail_path` trong
-FrameStore là `None`. Nếu health báo `remote inference` unavailable, kiểm tra
-GPU VM/tunnel và endpoint `/ready` của inference service.
+Frontend dựng URL keyframe từ canonical `frame_id` và `REACT_APP_API_BASE_URL`.
+Nếu health báo `remote inference` unavailable, kiểm tra GPU VM/tunnel và
+endpoint `/ready` của inference service.
 
 ### 5.2. Windows PowerShell
 
@@ -454,8 +446,8 @@ Mở PowerShell khác:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
-Invoke-WebRequest -Method Head `
-  http://127.0.0.1:8000/api/v1/frames/L28_V021_keyframe_000343/thumbnail
+Invoke-WebRequest -Method Get `
+  http://127.0.0.1:8000/api/v1/keyframes/L28_V021_keyframe_000343
 ```
 
 Các biến `$env:*` chỉ tồn tại trong terminal hiện tại. Nếu muốn lưu lâu dài,
@@ -545,9 +537,6 @@ Mở terminal thứ nhất tại repository root:
 
 ```bash
 [ -f .env ] || cp .env.example .env
-set -a
-source .env
-set +a
 PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000 --reload
 ```
@@ -609,7 +598,7 @@ curl -i "$HCMAI_INFERENCE_BASE_URL/ready"
 
 Sau khi sửa biến môi trường phải restart uvicorn.
 
-### `/api/v1/frames/.../thumbnail` trả `404`
+### `/api/v1/keyframes/...` trả `404`
 
 Kiểm tra `HCMAI_DATASET_ROOT`:
 
@@ -617,8 +606,8 @@ Kiểm tra `HCMAI_DATASET_ROOT`:
 export HCMAI_DATASET_ROOT="$PWD/data"
 ```
 
-Canonical image phải tồn tại dưới `data/keyframes`. Không cần tạo thumbnail
-riêng khi `thumbnail_path` là `None`; route sẽ fallback về ảnh keyframe.
+Canonical image phải tồn tại dưới `HCMAI_DATASET_ROOT` và `image_path` trong
+FrameStore phải resolve đến file đó.
 
 ### `reranker.batch_size` vượt quá 16
 

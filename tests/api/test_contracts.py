@@ -31,12 +31,6 @@ def _kis_result(**updates) -> SearchResult:
         "score": 1.5,
         "frame_ids": ["frame-10", "frame-20"],
         "timestamps_ms": [1_000, 2_000],
-        "thumbnail_urls": [
-            "/api/v1/frames/frame-10/thumbnail",
-            "/api/v1/frames/frame-20/thumbnail",
-        ],
-        "frame_url": "/api/v1/frames/frame-20/image",
-        "thumbnail_url": "/api/v1/frames/frame-20/thumbnail",
         "metadata": {
             "title": "Video 1",
             "caption": "chef adds butter",
@@ -56,10 +50,6 @@ def _trake_path(**updates) -> TRAKEPath:
         "frame_ids": ["frame-10", "frame-20"],
         "frame_idxs": [10, 20],
         "timestamps_ms": [1_000, 2_000],
-        "thumbnail_urls": [
-            "/api/v1/frames/frame-10/thumbnail",
-            "/api/v1/frames/frame-20/thumbnail",
-        ],
     }
     payload.update(updates)
     return TRAKEPath.model_validate(payload)
@@ -164,16 +154,12 @@ def test_kis_result_does_not_apply_extra_value_constraints() -> None:
         frame_idx=-20,
         timestamp_ms=-2_000,
         frame_ids=["", "frame-20"],
-        frame_url="",
-        thumbnail_url="",
     )
 
     assert result.frame_id == ""
     assert result.video_id == ""
     assert result.frame_idx == -20
     assert result.timestamp_ms == -2_000
-    assert result.frame_url == ""
-    assert result.thumbnail_url == ""
 
 
 def test_kis_response_requires_every_result_to_match_event_count() -> None:
@@ -206,7 +192,6 @@ def test_kis_response_allows_empty_event_lists_when_paths_match() -> None:
             _kis_result(
                 frame_ids=[],
                 timestamps_ms=[],
-                thumbnail_urls=[],
             )
         ],
         latency=SearchLatency(total_ms=0),
@@ -231,7 +216,6 @@ def test_trake_path_does_not_apply_extra_value_constraints() -> None:
         frame_ids=["", "frame-20"],
         frame_idxs=[-10, 20],
         timestamps_ms=[-1_000, 2_000],
-        thumbnail_urls=["", "/api/v1/frames/frame-20/thumbnail"],
     )
 
     assert path.video_id == ""
@@ -264,7 +248,6 @@ def test_trake_response_allows_empty_event_lists_when_paths_match() -> None:
                 frame_ids=[],
                 frame_idxs=[],
                 timestamps_ms=[],
-                thumbnail_urls=[],
             )
         ],
         latency=SearchLatency(total_ms=0),

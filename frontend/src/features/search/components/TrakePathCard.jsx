@@ -1,4 +1,5 @@
 import React from 'react';
+import { keyframeUrl } from '../../../api/keyframes';
 import { displayVideoId } from '../../frames/videoSource';
 
 /** Render one backend-provided ordered TRAKE alignment path without reordering it. */
@@ -27,7 +28,6 @@ const TrakePathCard = ({ events, path, onSubmit, onFrameClick }) => (
           video_id: path.video_id,
           frame_idx: path.frame_idxs[index],
           timestamp_ms: path.timestamps_ms[index],
-          thumbnail_url: path.thumbnail_urls[index],
           caption: events[index],
         };
 
@@ -44,7 +44,7 @@ const TrakePathCard = ({ events, path, onSubmit, onFrameClick }) => (
               <time className="trake-path-timestamp">{path.timestamps_ms[index]} ms</time>
               <img
                 className="trake-path-thumbnail"
-                src={path.thumbnail_urls[index]}
+                src={keyframeUrl(frameId)}
                 alt={`Frame ${frameId}`}
                 loading="lazy"
               />

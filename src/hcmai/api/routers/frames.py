@@ -1,8 +1,7 @@
-"""Canonical frame metadata, asset, neighbor, and submission routes."""
+"""Canonical frame metadata, keyframe asset, and submission routes."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -27,14 +26,10 @@ def _search_service(container: dict[str, Any]) -> Any:
     return service
 
 
-def create_frames_router(
-    service_container: dict[str, Any],
-    dataset_root: Path,
-) -> APIRouter:
-    """Create routes that materialize only canonical frame identities."""
+def create_frames_router(service_container: dict[str, Any]) -> APIRouter:
+    """Create metadata, keyframe asset, and submission routes."""
 
     router = APIRouter()
-    del dataset_root
 
     @router.get("/api/v1/frames/{frame_id}", response_model=Frame)
     async def get_frame(frame_id: str) -> Frame:
@@ -51,7 +46,9 @@ def create_frames_router(
                 detail=str(error),
             ) from error
 
-    def frame_asset(frame_id: str, *, thumbnail: bool) -> FileResponse:
+    def keyframe_asset(frame_id: str) -> FileResponse:
+        """Resolve one canonical image without exposing its filesystem path."""
+
         try:
             frame = _search_service(service_container).get_frame(frame_id)
         except SearchServiceUnavailableError as error:
@@ -68,18 +65,13 @@ def create_frames_router(
         try:
             if corpus is None:
                 raise RuntimeError("Frame store not loaded")
-            resolved = (
-                corpus.thumbnail_path(frame_id)
-                if thumbnail
-                else corpus.image_path(frame_id)
-            )
+            resolved = corpus.image_path(frame_id)
         except (OSError, RuntimeError) as error:
             logger.warning(
-                "Frame asset unavailable frame_id=%s asset=%s thumbnail=%s "
+                "Keyframe asset unavailable frame_id=%s asset=%s "
                 "error_type=%s error=%s",
                 frame_id,
                 getattr(frame, "image_path", "<unknown>"),
-                thumbnail,
                 type(error).__name__,
                 error,
             )
@@ -89,13 +81,11 @@ def create_frames_router(
             ) from None
         return FileResponse(resolved)
 
-    @router.get("/api/v1/frames/{frame_id}/thumbnail")
-    async def get_frame_thumbnail(frame_id: str) -> FileResponse:
-        return frame_asset(frame_id, thumbnail=True)
+    @router.get("/api/v1/keyframes/{frame_id}")
+    async def get_keyframe(frame_id: str) -> FileResponse:
+        """Serve the canonical keyframe image for one internal frame ID."""
 
-    @router.get("/api/v1/frames/{frame_id}/image")
-    async def get_frame_image(frame_id: str) -> FileResponse:
-        return frame_asset(frame_id, thumbnail=False)
+        return keyframe_asset(frame_id)
 
     @router.post("/api/v1/submit", response_model=SubmissionResult)
     async def submit_frame(frame_id: str) -> SubmissionResult:

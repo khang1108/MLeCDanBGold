@@ -114,6 +114,16 @@ def test_app_exposes_only_standalone_search_contract() -> None:
     search = request(app, "POST", "/api/v1/search", json={"query": "red car"})
     assert search.status_code == 200
     result = search.json()["results"][0]
-    assert result["frame_url"] == f"/api/v1/frames/{FRAME_ID}/image"
-    paths = {getattr(route, "path", None) for route in app.routes}
+    assert "frame_url" not in result
+    assert "thumbnail_url" not in result
+    assert "thumbnail_urls" not in result
+    paths = {
+        getattr(route, "path", None)
+        for mounted in app.routes
+        if hasattr(mounted, "original_router")
+        for route in mounted.original_router.routes
+    }
+    assert "/api/v1/keyframes/{frame_id}" in paths
+    assert "/api/v1/frames/{frame_id}/image" not in paths
+    assert "/api/v1/frames/{frame_id}/thumbnail" not in paths
     assert "/api/v1/vqa" not in paths

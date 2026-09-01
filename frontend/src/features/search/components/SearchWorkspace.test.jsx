@@ -70,7 +70,6 @@ test('TRAKE renders same-video backend paths independently and submits only the 
         frame_ids: ['a1', 'a2'],
         frame_idxs: [10, 20],
         timestamps_ms: [1000, 2000],
-        thumbnail_urls: ['/a1', '/a2'],
       },
       {
         video_id: 'V01',
@@ -78,7 +77,6 @@ test('TRAKE renders same-video backend paths independently and submits only the 
         frame_ids: ['b1', 'b2'],
         frame_idxs: [30, 40],
         timestamps_ms: [3000, 4000],
-        thumbnail_urls: ['/b1', '/b2'],
       },
     ],
     total_results: 3,
@@ -114,7 +112,6 @@ test('TRAKE accepts one labeled event and opens its frame as read-only', async (
       frame_ids: ['f1'],
       frame_idxs: [10],
       timestamps_ms: [1000],
-      thumbnail_urls: ['/f1'],
     }],
     warnings: [],
   });
@@ -158,7 +155,6 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
       fps: 29.97,
       timestamp_ms: 10_010,
       caption: 'A red boat',
-      thumbnail_url: 'http://example.test/frame-kis.jpg',
       scores: { final: 0.91 },
     }],
     warnings: [],

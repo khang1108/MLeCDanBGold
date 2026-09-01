@@ -9,8 +9,6 @@ canonical alignment identity.
 from __future__ import annotations
 
 from time import perf_counter
-from urllib.parse import quote
-
 from hcmai.api.contracts import (
     SearchLatency,
     TRAKEPath,
@@ -39,8 +37,8 @@ class TRAKEPipeline:
         """Align explicit events and project paths without video-level merging.
 
         Each aligned path retains its raw DP score and canonical frame arrays.
-        Thumbnail URLs are backend-owned routes derived solely from canonical
-        frame IDs, so the frontend does not infer asset locations.
+        Asset URLs are intentionally omitted because clients fetch images from
+        the single keyframe endpoint using the returned canonical frame IDs.
         """
 
         if self.temporal is None:
@@ -89,11 +87,4 @@ class TRAKEPipeline:
             frame_ids=frame_ids,
             frame_idxs=list(path.frame_idxs),
             timestamps_ms=list(path.timestamps_ms),
-            thumbnail_urls=[cls._thumbnail_url(frame_id) for frame_id in frame_ids],
         )
-
-    @staticmethod
-    def _thumbnail_url(frame_id: str) -> str:
-        """Return the backend-owned thumbnail route for one canonical frame."""
-
-        return f"/api/v1/frames/{quote(frame_id, safe='')}/thumbnail"

@@ -42,7 +42,7 @@ def test_frame_asset_is_served_only_from_dataset_root(
         for mounted in app.routes
         if hasattr(mounted, "original_router")
         for route in cast(Any, mounted).original_router.routes
-        if getattr(route, "path", "").endswith("/{frame_id}/image")
+        if getattr(route, "path", "").endswith("/keyframes/{frame_id}")
     )
     assert isinstance(route, APIRoute)
     response = asyncio.run(route.endpoint("safe"))

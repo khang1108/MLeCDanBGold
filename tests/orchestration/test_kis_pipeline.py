@@ -111,7 +111,6 @@ def test_kis_projects_middle_frame_and_materializes_representative_metadata() ->
     assert result.frame_idx == 2
     assert result.frame_ids == ["f0", "f1", "f2", "f3", "f4"]
     assert result.timestamps_ms == [0, 1_000, 2_000, 3_000, 4_000]
-    assert len(result.thumbnail_urls) == 5
     assert result.score == pytest.approx(2.73)
     assert result.metadata.title == "Cooking Episode"
     assert result.metadata.caption == "chef coats ingredient"

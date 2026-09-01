@@ -42,17 +42,10 @@ const ENDPOINTS = [
     items: [
       {
         method: 'GET',
-        path: '/api/v1/frames/{frame_id}/image',
-        title: 'Full Frame Image',
-        desc: 'Fetches high-resolution video keyframe image asset.',
-        curl: `curl -X GET "${API_BASE_URL}/api/v1/frames/FRAME_ID_HERE/image"`,
-      },
-      {
-        method: 'GET',
-        path: '/api/v1/frames/{frame_id}/thumbnail',
-        title: 'Frame Thumbnail',
-        desc: 'Fetches lightweight optimized frame thumbnail for grid view.',
-        curl: `curl -X GET "${API_BASE_URL}/api/v1/frames/FRAME_ID_HERE/thumbnail"`,
+        path: '/api/v1/keyframes/{frame_id}',
+        title: 'Canonical Keyframe',
+        desc: 'Fetches the canonical keyframe image for an internal frame ID.',
+        curl: `curl -X GET "${API_BASE_URL}/api/v1/keyframes/FRAME_ID_HERE"`,
       },
       {
         method: 'GET',

@@ -7,7 +7,6 @@ test('renders one submit button without changing to a checkmark', () => {
     frame_id: 'internal-frame-1',
     video_id: 'L21_V001',
     frame_idx: 17794,
-    thumbnail_url: 'https://example.test/frame.jpg',
     caption: 'A sample frame',
   };
   const onSubmit = jest.fn();
@@ -26,11 +25,9 @@ test('shows the raw alignment score and representative alignment path', () => {
     frame_id: 'representative-frame',
     video_id: 'L21_V001',
     frame_idx: 17794,
-    thumbnail_url: 'https://example.test/frame.jpg',
     score: 2.34567,
     frame_ids: ['f1', 'f2'],
     timestamps_ms: [1200, 2400],
-    thumbnail_urls: ['/t/f1', '/t/f2'],
     metadata: { caption: 'A sample frame' },
   };
   render(

@@ -52,20 +52,13 @@ class SearchResult(BaseModel):
     score: float
     frame_ids: list[str]
     timestamps_ms: list[int]
-    thumbnail_urls: list[str]
-    frame_url: str
-    thumbnail_url: str
     metadata: SearchResultMetadata
 
     @model_validator(mode="after")
     def validate_alignment_arrays(self) -> Self:
         """Keep aligned path arrays indexed by the same event position."""
 
-        if not (
-            len(self.frame_ids)
-            == len(self.timestamps_ms)
-            == len(self.thumbnail_urls)
-        ):
+        if len(self.frame_ids) != len(self.timestamps_ms):
             raise ValueError("alignment arrays must have equal lengths")
 
         return self

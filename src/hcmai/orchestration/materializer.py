@@ -1,13 +1,11 @@
 """Materialize KIS HTTP results from canonical aligned paths.
 
-This module resolves representative-frame metadata and backend-owned asset
-URLs from loaded data stores. It does not retrieve, rerank, or alter temporal
-alignment paths.
+This module resolves representative-frame metadata from loaded data stores.
+It does not retrieve, rerank, alter temporal alignment paths, or construct
+client-facing keyframe URLs.
 """
 
 from __future__ import annotations
-
-from urllib.parse import quote
 
 from hcmai.api.contracts import SearchResult, SearchResultMetadata
 from hcmai.corpus import Corpus
@@ -52,9 +50,6 @@ class SearchMaterializer:
         if frame.timestamp_ms != path.timestamps_ms[representative]:
             raise ValueError("aligned timestamp disagrees with canonical frame")
 
-        thumbnail_urls = [
-            self._thumbnail_url(aligned_id) for aligned_id in path.frame_ids
-        ]
         # A one-millisecond half-open range retains Phase A's point-containment
         # semantics without treating nearby timeline speech as frame evidence.
         title = self.corpus.title(frame.video_id)
@@ -75,9 +70,6 @@ class SearchMaterializer:
             score=path.score,
             frame_ids=list(path.frame_ids),
             timestamps_ms=list(path.timestamps_ms),
-            thumbnail_urls=thumbnail_urls,
-            frame_url=self._frame_url(frame.frame_id),
-            thumbnail_url=self._thumbnail_url(frame.frame_id),
             metadata=SearchResultMetadata(
                 title=title,
                 caption=caption,
@@ -86,17 +78,3 @@ class SearchMaterializer:
                 asr=asr,
             ),
         )
-
-    @staticmethod
-    def _thumbnail_url(frame_id: str) -> str:
-        """Return the backend-owned thumbnail route for one canonical ID."""
-
-        encoded = quote(frame_id, safe="")
-        return f"/api/v1/frames/{encoded}/thumbnail"
-
-    @staticmethod
-    def _frame_url(frame_id: str) -> str:
-        """Return the backend-owned full-image route for one canonical ID."""
-
-        encoded = quote(frame_id, safe="")
-        return f"/api/v1/frames/{encoded}/image"

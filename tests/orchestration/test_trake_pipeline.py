@@ -64,8 +64,8 @@ def test_trake_keeps_same_video_paths_independent() -> None:
     assert alignment.calls == [(("e1", "e2"), 2)]
 
 
-def test_trake_preserves_ordered_arrays_raw_scores_and_thumbnail_urls() -> None:
-    """Expose canonical path values and backend-owned assets without rewriting."""
+def test_trake_preserves_ordered_arrays_and_raw_scores() -> None:
+    """Expose canonical path values without rewriting their identity."""
 
     response = TRAKEPipeline(FakeAlignment()).execute(
         TRAKERequest(events=["e1", "e2"], top_k=2)
@@ -76,14 +76,9 @@ def test_trake_preserves_ordered_arrays_raw_scores_and_thumbnail_urls() -> None:
     assert path.frame_ids == ["f 0", "f1"]
     assert path.frame_idxs == [10, 20]
     assert path.timestamps_ms == [1_000, 2_000]
-    assert path.thumbnail_urls == [
-        "/api/v1/frames/f%200/thumbnail",
-        "/api/v1/frames/f1/thumbnail",
-    ]
     assert len(path.frame_ids) == len(response.events)
     assert len(path.frame_idxs) == len(response.events)
     assert len(path.timestamps_ms) == len(response.events)
-    assert len(path.thumbnail_urls) == len(response.events)
     assert response.latency.retrieval_ms == 12.5
     assert response.latency.alignment_ms == 7.25
     assert response.latency.materialization_ms >= 0

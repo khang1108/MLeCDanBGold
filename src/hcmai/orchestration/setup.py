@@ -7,8 +7,11 @@ from pathlib import Path
 from time import monotonic
 from typing import Any
 
+from dotenv import load_dotenv
+
 from hcmai.common.config import (
     AppConfig,
+    REPOSITORY_ROOT,
     resolve_dataset_root,
     resolve_repository_path,
 )
@@ -27,6 +30,10 @@ logger = get_logger(__name__)
 
 def load_search_service(messages: list[str]) -> SearchService:
     """Build explicit KIS/TRAKE workflows while preserving degraded startup."""
+
+    # Runtime paths and credentials live in the repository root .env for local
+    # launches. Existing process variables keep precedence for deployments.
+    load_dotenv(REPOSITORY_ROOT / ".env", override=False)
 
     settings = _load_app_config()
     models = _load_model_config()
@@ -177,10 +184,9 @@ def _configured_corpus_artifacts(
         (RetrievalSource.CAPTION, enrichment.caption_path),
         (RetrievalSource.OCR, enrichment.ocr_path),
     ):
-        path = (
-            resolve_repository_path(configured_path)
-            if configured_path is not None
-            else None
+        path = _runtime_optional_path(
+            f"HCMAI_{source.value.upper()}_PATH",
+            configured_path,
         )
         if not _typed_artifact_available(path, allow_directory=False):
             messages.append(f"{source.value.upper()} artifact not available at {path}")
@@ -189,20 +195,18 @@ def _configured_corpus_artifacts(
         evidence_paths[source] = path
 
     configured_object_path = enrichment.object_path
-    object_path = (
-        resolve_repository_path(configured_object_path)
-        if configured_object_path is not None
-        else None
+    object_path = _runtime_optional_path(
+        "HCMAI_OBJECT_PATH",
+        configured_object_path,
     )
     if not _typed_artifact_available(object_path, allow_directory=False):
         messages.append(f"OBJECTS artifact not available at {object_path}")
         object_path = None
 
     configured_transcript_path = enrichment.transcripts_path
-    transcript_path = (
-        resolve_repository_path(configured_transcript_path)
-        if configured_transcript_path is not None
-        else None
+    transcript_path = _runtime_optional_path(
+        "HCMAI_TRANSCRIPTS_PATH",
+        configured_transcript_path,
     )
     if not _typed_artifact_available(transcript_path, allow_directory=True):
         messages.append(
@@ -211,10 +215,9 @@ def _configured_corpus_artifacts(
         transcript_path = None
 
     configured_video_metadata_path = settings.dataset.media_info_path
-    video_metadata_path = (
-        resolve_repository_path(configured_video_metadata_path)
-        if configured_video_metadata_path is not None
-        else None
+    video_metadata_path = _runtime_optional_path(
+        "HCMAI_VIDEO_METADATA_PATH",
+        configured_video_metadata_path,
     )
     if not _metadata_directory_available(video_metadata_path):
         messages.append(
@@ -223,6 +226,18 @@ def _configured_corpus_artifacts(
         video_metadata_path = None
 
     return evidence_paths, object_path, transcript_path, video_metadata_path
+
+
+def _runtime_optional_path(
+    environment_name: str,
+    default: str | Path | None,
+) -> Path | None:
+    """Resolve an optional artifact path with an explicit env override."""
+
+    configured = os.getenv(environment_name)
+    if configured is not None:
+        return resolve_repository_path(configured) if configured.strip() else None
+    return resolve_repository_path(default) if default is not None else None
 
 
 def _typed_artifact_available(

@@ -16,7 +16,6 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from hcmai.common.config import resolve_dataset_root
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.api.routers import (
@@ -52,10 +51,6 @@ def create_app(
         "service": search_service,
         "startup_messages": [],
     }
-    dataset_root = resolve_dataset_root(
-        os.getenv("HCMAI_DATASET_ROOT", "data")
-    )
-
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         _configure_backend_logging()
@@ -129,7 +124,7 @@ def create_app(
     )
     app.include_router(create_search_router(service_container))
     app.include_router(create_trake_router(service_container))
-    app.include_router(create_frames_router(service_container, dataset_root))
+    app.include_router(create_frames_router(service_container))
 
     return app
 

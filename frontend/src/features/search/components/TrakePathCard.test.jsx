@@ -2,14 +2,13 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import TrakePathCard from './TrakePathCard';
 
-test('renders one backend path in event order with its raw score and thumbnails', () => {
+test('renders one backend path in event order with its raw score and keyframes', () => {
   const path = {
     video_id: 'L21_a_b.folder2.video-8',
     score: 2.875,
     frame_ids: ['late-frame', 'early-frame'],
     frame_idxs: [40, 20],
     timestamps_ms: [4000, 2000],
-    thumbnail_urls: ['/late-frame', '/early-frame'],
   };
 
   render(
@@ -26,8 +25,10 @@ test('renders one backend path in event order with its raw score and thumbnails'
   expect(screen.getByText('person leaves')).toBeTruthy();
   expect(screen.getByText('person enters')).toBeTruthy();
   expect(screen.getAllByText(/ms/).map((item) => item.textContent)).toEqual(['4000 ms', '2000 ms']);
-  expect(screen.getByAltText('Frame late-frame').getAttribute('src')).toBe('/late-frame');
-  expect(screen.getByAltText('Frame early-frame').getAttribute('src')).toBe('/early-frame');
+  expect(screen.getByAltText('Frame late-frame').getAttribute('src'))
+    .toBe('http://127.0.0.1:8000/api/v1/keyframes/late-frame');
+  expect(screen.getByAltText('Frame early-frame').getAttribute('src'))
+    .toBe('http://127.0.0.1:8000/api/v1/keyframes/early-frame');
 });
 
 test('submits only this path', () => {
@@ -37,7 +38,6 @@ test('submits only this path', () => {
     frame_ids: ['a1', 'a2'],
     frame_idxs: [10, 20],
     timestamps_ms: [1000, 2000],
-    thumbnail_urls: ['/a1', '/a2'],
   };
   const onSubmit = jest.fn();
 

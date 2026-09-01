@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { keyframeUrl } from "../../../api/keyframes";
 
 export const formatTimestampMs = (timestampMs) => {
   const totalMilliseconds = Math.max(0, Math.round(timestampMs));
@@ -16,14 +17,13 @@ export const formatTimestampMs = (timestampMs) => {
     : `${twoDigits(minutes)}:${twoDigits(seconds)}.${millisecondsText}`;
 };
 
-const AlignmentAccordion = ({ events, frameIds, timestampsMs, thumbnailUrls }) => {
+const AlignmentAccordion = ({ events, frameIds, timestampsMs }) => {
   const [isOpen, setIsOpen] = useState(false);
   const hasAlignment = (
     Array.isArray(events)
     && events.length > 0
     && events.length === frameIds?.length
     && events.length === timestampsMs?.length
-    && events.length === thumbnailUrls?.length
   );
 
   if (!hasAlignment) return null;
@@ -56,7 +56,7 @@ const AlignmentAccordion = ({ events, frameIds, timestampsMs, thumbnailUrls }) =
               </time>
               <img
                 className="alignment-thumbnail"
-                src={thumbnailUrls[index]}
+                src={keyframeUrl(frameIds[index])}
                 alt={`Aligned frame ${frameIds[index]}`}
                 loading="lazy"
               />

@@ -18,6 +18,7 @@ dependencies = [
     "numpy>=1.24",
     "faiss-cpu>=1.7.3",
     "pydantic-settings>=2.14.2",
+    "python-dotenv>=1.0",
     "fastapi>=0.139.2",
     "uvicorn>=0.51.0",
     "httpx>=0.28.1",

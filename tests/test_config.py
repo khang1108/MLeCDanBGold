@@ -24,11 +24,18 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.dataset.root == Path("data")
     assert config.dataset.frames_path == Path("artifacts/frame_store/frames.parquet")
     assert config.dataset.enrichment.caption_path == Path(
-        "artifacts/enrichment/captions/captions.parquet"
+        "artifacts/corpus/caption.parquet"
     )
     assert config.dataset.enrichment.ocr_path == Path(
-        "artifacts/enrichment/ocr/frames.parquet"
+        "artifacts/corpus/ocr_frames.parquet"
     )
+    assert config.dataset.enrichment.object_path == Path(
+        "artifacts/corpus/object_frames.parquet"
+    )
+    assert config.dataset.enrichment.context_path == Path(
+        "artifacts/corpus/context.parquet"
+    )
+    assert config.dataset.media_info_path == Path("data/media-info")
     assert config.dataset.enrichment.asr_path == Path(
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )

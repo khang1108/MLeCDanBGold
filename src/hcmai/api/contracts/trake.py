@@ -38,7 +38,6 @@ class TRAKEPath(BaseModel):
     frame_ids: list[str]
     frame_idxs: list[int]
     timestamps_ms: list[int]
-    thumbnail_urls: list[str]
 
     @model_validator(mode="after")
     def validate_alignment_arrays(self) -> Self:
@@ -48,7 +47,6 @@ class TRAKEPath(BaseModel):
             len(self.frame_ids)
             == len(self.frame_idxs)
             == len(self.timestamps_ms)
-            == len(self.thumbnail_urls)
         ):
             raise ValueError("alignment arrays must have equal lengths")
 
