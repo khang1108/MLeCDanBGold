@@ -1,4 +1,8 @@
-import { getRaw1FpsFrameId, normalizeSubmissionFps } from './videoSource';
+import {
+  getRaw1FpsFrameId,
+  getStreamVideoUrl,
+  normalizeSubmissionFps,
+} from './videoSource';
 
 test('normalizes source fps to the nearest BTC submission fps', () => {
   expect(normalizeSubmissionFps(24.98)).toBe(25);
@@ -28,4 +32,10 @@ test('rejects missing, negative, and non-integer timestamps', () => {
   expect(getRaw1FpsFrameId('', 0)).toBeNull();
   expect(getRaw1FpsFrameId('L28_V001', -1)).toBeNull();
   expect(getRaw1FpsFrameId('L28_V001', 1.5)).toBeNull();
+});
+
+test('maps canonical video identity to the stream service leaf ID', () => {
+  expect(getStreamVideoUrl('L21_a_b.folder2.L21_V001', 5_000)).toBe(
+    'https://stream.iamphuckhang.dev/api/v1/videos/L21_V001/stream',
+  );
 });

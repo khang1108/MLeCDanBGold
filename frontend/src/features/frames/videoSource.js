@@ -32,7 +32,11 @@ export const getStreamVideoUrl = (videoId, timestampMs) => {
     return null;
   }
 
+  // The stream service stores videos by organizer leaf ID. Keep the full
+  // canonical ID everywhere else and translate only at this external boundary.
+  const streamVideoId = displayVideoId(canonicalVideoId);
+
   // `/play` is an HTML player page. Native <video> needs the raw MP4 stream;
   // the inspector applies timestampMs after that stream reports metadata.
-  return `${STREAM_API_BASE_URL}/videos/${encodeURIComponent(canonicalVideoId)}/stream`;
+  return `${STREAM_API_BASE_URL}/videos/${encodeURIComponent(streamVideoId)}/stream`;
 };
