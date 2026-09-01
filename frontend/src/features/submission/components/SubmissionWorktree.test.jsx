@@ -16,17 +16,75 @@ describe('SubmissionWorktree component', () => {
     jest.clearAllMocks();
   });
 
-  test('creates locally named CSV files without query-file controls', () => {
+  test('renders upload state when no submission files are loaded', () => {
     renderWorktree();
 
     expect(screen.getByText('Submission Files')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /upload query files/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /select folder/i })).toBeNull();
+    expect(screen.getByText('No Query Files')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /upload query files/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /select folder/i })).toBeTruthy();
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: /new csv/i }));
-    expect(screen.getByText('submission.csv')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /new csv/i }));
-    expect(screen.getByText('submission-2.csv')).toBeTruthy();
+  test('creates local CSV targets from uploaded query files', async () => {
+    renderWorktree();
+    const fileInput = screen.getByTestId('query-file-input');
+    fireEvent.change(fileInput, {
+      target: {
+        files: [
+          new File(['sample query 1'], 'query_1.txt', { type: 'text/plain' }),
+          new File(['sample query 2'], 'query_2.txt', { type: 'text/plain' }),
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('query_1.csv')).toBeTruthy();
+      expect(screen.getByText('query_2.csv')).toBeTruthy();
+    });
+
+    expect(screen.getByText('submissions/')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /download csv zip \(0\)/i }).disabled).toBe(true);
+  });
+
+  test('uses the browser file picker API without a backend request', async () => {
+    const originalPicker = window.showOpenFilePicker;
+    const pickedFile = new File(['query'], 'query.txt', { type: 'text/plain' });
+    window.showOpenFilePicker = jest.fn().mockResolvedValue([
+      { getFile: jest.fn().mockResolvedValue(pickedFile) },
+    ]);
+
+    try {
+      renderWorktree();
+      fireEvent.click(screen.getByRole('button', { name: /upload query files/i }));
+
+      expect(await screen.findByText('query.csv')).toBeTruthy();
+      expect(window.showOpenFilePicker).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalPicker) window.showOpenFilePicker = originalPicker;
+      else delete window.showOpenFilePicker;
+    }
+  });
+
+  test('reads nested files selected through the browser directory picker', async () => {
+    const originalPicker = window.showDirectoryPicker;
+    const pickedFile = new File(['query'], 'nested-query.txt', { type: 'text/plain' });
+    const directoryHandle = {
+      values: async function* values() {
+        yield { kind: 'file', getFile: jest.fn().mockResolvedValue(pickedFile) };
+      },
+    };
+    window.showDirectoryPicker = jest.fn().mockResolvedValue(directoryHandle);
+
+    try {
+      renderWorktree();
+      fireEvent.click(screen.getByRole('button', { name: /select folder/i }));
+
+      expect(await screen.findByText('nested-query.csv')).toBeTruthy();
+      expect(window.showDirectoryPicker).toHaveBeenCalledWith({ mode: 'read' });
+    } finally {
+      if (originalPicker) window.showDirectoryPicker = originalPicker;
+      else delete window.showDirectoryPicker;
+    }
   });
 
   test('submit request opens the picker, appends the BTC row, and opens the editor', async () => {

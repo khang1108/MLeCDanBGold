@@ -1,11 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSubmission } from '../contexts/SubmissionContext';
 import SubmissionFileModal from './SubmissionFileModal';
 import { downloadCsvArchive, getNonEmptyCsvFiles } from '../submissionArchive';
 
+const collectDirectoryFiles = async (directoryHandle) => {
+  const files = [];
+  for await (const entry of directoryHandle.values()) {
+    if (entry.kind === 'file') {
+      files.push(await entry.getFile());
+    } else if (entry.kind === 'directory') {
+      files.push(...await collectDirectoryFiles(entry));
+    }
+  }
+  return files;
+};
+
+const createSubmissionTargets = (selectedFiles) => selectedFiles.map((file) => {
+  const originalName = file.name;
+  const csvName = originalName.endsWith('.csv')
+    ? originalName
+    : `${originalName.replace(/\.[^/.]+$/, '')}.csv`;
+
+  return {
+    id: csvName,
+    name: csvName,
+    originalName,
+    content: '',
+  };
+});
+
 /**
- * Manage locally created submission CSV files without making the focused tree
- * item a hidden submission destination.
+ * Manage uploaded BTC query targets without making the focused tree item a
+ * hidden submission destination.
  */
 const SubmissionWorktree = ({
   submissionRequest: externalSubmissionRequest,
@@ -22,6 +48,9 @@ const SubmissionWorktree = ({
   } = useSubmission();
   const activeSubmissionRequest = externalSubmissionRequest || submissionRequest;
 
+  const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [status, setStatus] = useState(null);
   const [modalMode, setModalMode] = useState(null);
   const [pendingSubmission, setPendingSubmission] = useState(null);
@@ -44,18 +73,68 @@ const SubmissionWorktree = ({
     onSubmissionRequestHandled,
   ]);
 
-  const handleNewCsv = () => {
-    const existingNames = new Set(files.map((file) => file.name));
-    let suffix = 1;
-    let name = 'submission.csv';
+  const processSelectedFiles = async (selectedFiles) => {
+    if (!selectedFiles || selectedFiles.length === 0) return;
 
-    while (existingNames.has(name)) {
-      suffix += 1;
-      name = `submission-${suffix}.csv`;
+    setIsUploading(true);
+    setStatus(null);
+
+    try {
+      setFiles(createSubmissionTargets(selectedFiles));
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message || 'Failed to load query files.' });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFilesSelected = async (event) => {
+    await processSelectedFiles(Array.from(event.target.files || []));
+    event.target.value = '';
+  };
+
+  const handleChooseFiles = async () => {
+    if (typeof window.showOpenFilePicker !== 'function') {
+      fileInputRef.current?.click();
+      return;
     }
 
-    const newFile = { id: name, name, content: '' };
-    setFiles([...files, newFile]);
+    try {
+      const handles = await window.showOpenFilePicker({
+        multiple: true,
+        types: [{
+          description: 'Query and CSV files',
+          accept: {
+            'text/plain': ['.txt'],
+            'text/csv': ['.csv'],
+            'application/json': ['.json'],
+          },
+        }],
+      });
+      const selectedFiles = await Promise.all(handles.map((handle) => handle.getFile()));
+      await processSelectedFiles(selectedFiles);
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        setStatus({ type: 'error', message: error.message || 'Failed to choose files.' });
+      }
+    }
+  };
+
+  const handleChooseFolder = async () => {
+    if (typeof window.showDirectoryPicker !== 'function') {
+      folderInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+      const selectedFiles = await collectDirectoryFiles(directoryHandle);
+      await processSelectedFiles(selectedFiles);
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        setStatus({ type: 'error', message: error.message || 'Failed to choose folder.' });
+      }
+    }
   };
 
   const handleSelectFile = (fileId) => {
@@ -120,19 +199,40 @@ const SubmissionWorktree = ({
 
   return (
     <div className="toolbox-section submission-worktree">
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".txt,.csv,.json,*"
+        onChange={handleFilesSelected}
+        style={{ display: 'none' }}
+        data-testid="query-file-input"
+      />
+      <input
+        ref={folderInputRef}
+        type="file"
+        webkitdirectory=""
+        directory=""
+        multiple
+        onChange={handleFilesSelected}
+        style={{ display: 'none' }}
+        data-testid="query-folder-input"
+      />
+
       <div className="toolbox-label-row submission-header-row">
         <label className="toolbox-label">Submission Files</label>
-        <div className="submission-actions-group">
-          <button
-            type="button"
-            className="btn-utility"
-            onClick={handleNewCsv}
-          >
-            New CSV
-          </button>
-          {files.length > 0 && (
-            <>
+        {files.length > 0 && (
+          <div className="submission-actions-group">
             <span className="submission-count-badge">{files.length}</span>
+            <button
+              type="button"
+              className="submission-icon-btn"
+              onClick={handleChooseFiles}
+              title="Add more query files"
+              aria-label="Add files"
+            >
+              +
+            </button>
             <button
               type="button"
               className="submission-icon-btn"
@@ -142,18 +242,35 @@ const SubmissionWorktree = ({
             >
               ✕
             </button>
-            </>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {files.length === 0 ? (
         <div className="submission-upload-card">
-          <div className="submission-upload-icon">📄</div>
-          <p className="submission-upload-title">No Submission Files</p>
+          <div className="submission-upload-icon">📁</div>
+          <p className="submission-upload-title">No Query Files</p>
           <p className="submission-upload-desc">
-            Create a CSV file to start collecting submission rows.
+            Upload query files (.txt) or folder to generate .csv targets.
           </p>
+          <div className="submission-upload-btn-group">
+            <button
+              type="button"
+              className="btn-primary submission-upload-btn"
+              onClick={handleChooseFiles}
+              disabled={isUploading}
+            >
+              {isUploading ? 'Parsing Files...' : 'Upload Query Files'}
+            </button>
+            <button
+              type="button"
+              className="btn-utility submission-folder-btn"
+              onClick={handleChooseFolder}
+              disabled={isUploading}
+            >
+              Select Folder
+            </button>
+          </div>
         </div>
       ) : (
         <div className="submission-tree-container">
