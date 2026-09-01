@@ -1,0 +1,292 @@
+import React from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import FilterWorkspace from './FilterWorkspace';
+import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
+import { filterFrames } from '../../../api/filter';
+import { getFrameDetail } from '../../../api/frames';
+
+jest.mock('../../../api/filter');
+jest.mock('../../../api/frames');
+
+const renderWorkspace = (props = {}) => render(
+  <SubmissionProvider>
+    <FilterWorkspace {...props} />
+  </SubmissionProvider>,
+);
+
+beforeEach(() => {
+  filterFrames.mockReset();
+  getFrameDetail.mockReset();
+  getFrameDetail.mockImplementation(async ({ frameId }) => ({
+    frame_id: frameId,
+    frame_url: `http://example.test/${frameId}.jpg`,
+  }));
+});
+
+test('renders every available folder', () => {
+  renderWorkspace({ isActive: false });
+
+  expect(screen.getByLabelText('Folder')).toBeTruthy();
+  fireEvent.focus(screen.getByLabelText('Folder'));
+  expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+    'L21', 'L22', 'L23', 'L24', 'L25',
+    'L26', 'L27', 'L28', 'L29', 'L30',
+  ]);
+});
+
+test('filters folder options as the user types', () => {
+  renderWorkspace({ isActive: false });
+
+  const folderInput = screen.getByLabelText('Folder');
+  fireEvent.change(folderInput, { target: { value: 'L26' } });
+
+  expect(screen.getByRole('option', { name: 'L26' })).toBeTruthy();
+  expect(screen.queryByRole('option', { name: 'L21' })).toBeNull();
+});
+
+test('switches video scope to result-backed typeahead options after filtering', async () => {
+  filterFrames.mockResolvedValueOnce({
+    total_pages: 1,
+    results: [
+      {
+        frame_id: 'frame-a',
+        video_id: 'L26_topic.video-1',
+        folder_id: 'L26',
+        frame_idx: 10,
+        timestamp_ms: 1000,
+      },
+      {
+        frame_id: 'frame-b',
+        video_id: 'L26_topic.video-2',
+        folder_id: 'L26',
+        frame_idx: 20,
+        timestamp_ms: 2000,
+      },
+    ],
+  });
+  renderWorkspace({ isActive: false });
+
+  expect(screen.getByLabelText('Video').getAttribute('role')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  await waitFor(() => expect(screen.getByLabelText('Video').getAttribute('role'))
+    .toBe('combobox'));
+
+  const videoInput = screen.getByLabelText('Video');
+  fireEvent.change(videoInput, { target: { value: 'video-2' } });
+  expect(screen.getByRole('option', { name: 'L26_topic.video-2' })).toBeTruthy();
+  expect(screen.queryByRole('option', { name: 'L26_topic.video-1' })).toBeNull();
+});
+
+test('shows the same welcome copy as the query page before filtering', () => {
+  renderWorkspace({ isActive: false });
+
+  expect(screen.getByText('Welcome to HCMAI Frame Search')).toBeTruthy();
+  expect(screen.getByText(
+    'Enter a natural language question or keywords above to query the video corpus.',
+  )).toBeTruthy();
+});
+
+test('keeps object controls compact and supports adding rows', () => {
+  renderWorkspace({ isActive: false });
+
+  const objectInput = screen.getByLabelText('Object 1, format name colon count');
+  fireEvent.change(objectInput, { target: { value: 'chair: 4' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add object filter' }));
+
+  expect(screen.getByDisplayValue('chair: 4')).toBeTruthy();
+  expect(screen.getByLabelText('Object 2, format name colon count')).toBeTruthy();
+});
+
+test('uses vertically growing text fields for long filter values', () => {
+  renderWorkspace({ isActive: false });
+
+  expect(screen.getByLabelText('Title').tagName).toBe('TEXTAREA');
+  expect(screen.getByLabelText('ASR / Transcript').tagName).toBe('TEXTAREA');
+});
+
+test('sends one filter request and scopes the returned response by folder and video', async () => {
+  filterFrames.mockResolvedValueOnce({
+    total_pages: 1,
+    results: [
+      {
+        rank: 1,
+        frame_id: 'frame-a',
+        video_id: 'L26_topic.video-1',
+        folder_id: 'L26',
+        frame_idx: 10,
+        timestamp_ms: 1000,
+        caption: 'Topic A',
+      },
+      {
+        rank: 2,
+        frame_id: 'frame-b',
+        video_id: 'L27_topic.video-1',
+        folder_id: 'L27',
+        frame_idx: 20,
+        timestamp_ms: 2000,
+        caption: 'Topic B',
+      },
+    ],
+  });
+  renderWorkspace({ isActive: false });
+
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Boat' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(1));
+  expect(filterFrames).toHaveBeenCalledWith(expect.objectContaining({
+    filters: expect.objectContaining({ title: 'Boat' }),
+    pageId: 1,
+    framesPerPage: expect.any(Number),
+  }));
+  expect((await screen.findAllByText('Topic A')).length).toBeGreaterThan(0);
+  expect((screen.getAllByText('Topic B')).length).toBeGreaterThan(0);
+  expect(document.querySelectorAll('.filter-video-group')).toHaveLength(0);
+
+  fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'L26' } });
+  expect(await screen.findByAltText('Frame frame-a')).toBeTruthy();
+  expect(screen.queryByAltText('Frame frame-b')).toBeNull();
+
+  fireEvent.change(screen.getByLabelText('Video'), {
+    target: { value: 'L26_topic.video-1' },
+  });
+  expect(await screen.findByAltText('Frame frame-a')).toBeTruthy();
+  expect(filterFrames).toHaveBeenCalledTimes(1);
+});
+
+test('includes the current folder and video scope in the Filter request', async () => {
+  filterFrames.mockResolvedValueOnce({ results: [] });
+  renderWorkspace({ isActive: false });
+
+  fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'L26' } });
+  fireEvent.change(screen.getByLabelText('Video'), {
+    target: { value: '' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(1));
+  const [request] = filterFrames.mock.calls[0];
+  expect(request).toEqual(expect.objectContaining({
+    folderId: 'L26',
+    videoId: '',
+  }));
+});
+
+test('uses applied scope for pagination while draft scope filters visible cards', async () => {
+  filterFrames
+    .mockResolvedValueOnce({
+      total_pages: 2,
+      results: [
+        {
+          frame_id: 'frame-a',
+          video_id: 'L26_topic.video-1',
+          folder_id: 'L26',
+          frame_idx: 1,
+          timestamp_ms: 40,
+        },
+        {
+          frame_id: 'frame-b',
+          video_id: 'L27_topic.video-1',
+          folder_id: 'L27',
+          frame_idx: 2,
+          timestamp_ms: 80,
+        },
+      ],
+    })
+    .mockResolvedValueOnce({
+      total_pages: 2,
+      results: [
+        {
+          frame_id: 'frame-c',
+          video_id: 'L26_topic.video-2',
+          folder_id: 'L26',
+          frame_idx: 3,
+          timestamp_ms: 120,
+        },
+        {
+          frame_id: 'frame-d',
+          video_id: 'L27_topic.video-2',
+          folder_id: 'L27',
+          frame_idx: 4,
+          timestamp_ms: 160,
+        },
+      ],
+    });
+
+  renderWorkspace({ isActive: false });
+  fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'L26' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(1));
+  expect(filterFrames.mock.calls[0][0]).toEqual(expect.objectContaining({
+    folderId: 'L26',
+    pageId: 1,
+  }));
+  expect(await screen.findByAltText('Frame frame-a')).toBeTruthy();
+  expect(screen.queryByAltText('Frame frame-b')).toBeNull();
+
+  // This scope is a draft until Filter is pressed again, but it can still
+  // narrow the currently loaded page immediately in the FE.
+  fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'L27' } });
+  expect(await screen.findByAltText('Frame frame-b')).toBeTruthy();
+  expect(screen.queryByAltText('Frame frame-a')).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Page 2' }));
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(2));
+  expect(filterFrames.mock.calls[1][0]).toEqual(expect.objectContaining({
+    folderId: 'L26',
+    pageId: 2,
+  }));
+  expect(await screen.findByAltText('Frame frame-d')).toBeTruthy();
+  expect(screen.queryByAltText('Frame frame-c')).toBeNull();
+});
+
+test('requests page 1 for a new filter after navigating to another page', async () => {
+  filterFrames
+    .mockResolvedValueOnce({
+      total_pages: 5,
+      results: [{
+        frame_id: 'frame-page-1',
+        video_id: 'L24_topic.video-1',
+        frame_idx: 1,
+        timestamp_ms: 40,
+      }],
+    })
+    .mockResolvedValueOnce({
+      total_pages: 5,
+      results: [{
+        frame_id: 'frame-page-4',
+        video_id: 'L24_topic.video-1',
+        frame_idx: 4,
+        timestamp_ms: 160,
+      }],
+    })
+    .mockResolvedValueOnce({
+      total_pages: 3,
+      results: [{
+        frame_id: 'frame-new-filter',
+        video_id: 'L25_topic.video-1',
+        frame_idx: 2,
+        timestamp_ms: 80,
+      }],
+    });
+
+  renderWorkspace({ isActive: false });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Page 4' })).toBeTruthy());
+
+  fireEvent.click(screen.getByRole('button', { name: 'Page 4' }));
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(2));
+  expect(filterFrames.mock.calls[1][0]).toEqual(expect.objectContaining({
+    pageId: 4,
+    framesPerPage: expect.any(Number),
+  }));
+
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'new filter' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(3));
+
+  expect(filterFrames.mock.calls[2][0]).toEqual(expect.objectContaining({
+    pageId: 1,
+    filters: expect.objectContaining({ title: 'new filter' }),
+  }));
+});

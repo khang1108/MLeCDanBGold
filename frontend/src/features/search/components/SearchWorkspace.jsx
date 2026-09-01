@@ -68,6 +68,7 @@ export const TrakeResults = ({ events, paths, warnings, error, hasSearched, onFr
 );
 
 const SearchWorkspace = ({
+  isActive = true,
   topK,
   setTopK,
   onFrameClick,
@@ -286,6 +287,7 @@ const SearchWorkspace = ({
             topK={topK}
             setTopK={setTopK}
             onReset={() => setTopK(20)}
+            includeSubmissionWorktree={isActive}
           />
         </aside>
         <div className="adhoc-results">

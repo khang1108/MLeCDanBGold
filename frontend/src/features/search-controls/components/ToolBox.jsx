@@ -8,7 +8,7 @@ const TOP_K_PRESETS = [10, 20, 50, 100];
 /**
  * User-tunable search controls with direct numeric input and quick presets.
  */
-const ToolBox = ({ topK, setTopK, onReset }) => {
+const ToolBox = ({ topK, setTopK, onReset, includeSubmissionWorktree = true }) => {
   const topKInputId = useId();
   const [topKText, setTopKText] = useState(String(topK));
 
@@ -118,7 +118,7 @@ const ToolBox = ({ topK, setTopK, onReset }) => {
         Reset Parameters
       </button>
 
-      <SubmissionWorktree />
+      {includeSubmissionWorktree && <SubmissionWorktree />}
     </aside>
   );
 };

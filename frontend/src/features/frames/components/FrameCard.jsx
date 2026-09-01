@@ -4,22 +4,31 @@ import AlignmentAccordion from "../../alignment/components/AlignmentAccordion";
 import { displayVideoId } from "../videoSource";
 
 // Compact result card; clicking opens the inspector while controls stop propagation.
-const FrameCard = ({ frame, events = [], onClick, onSubmit }) => {
-  const frameId = frame.frame_id;
+const FrameCard = ({
+  frame,
+  events = [],
+  detail = null,
+  detailStatus = 'idle',
+  imageLoading = 'lazy',
+  onClick,
+  onSubmit,
+}) => {
+  const displayFrame = detail ? { ...frame, ...detail } : frame;
+  const frameId = displayFrame.frame_id;
   const previewUrl = frameId ? keyframeUrl(frameId) : null;
-  const caption = frame.metadata?.caption ?? frame.caption;
-  const hasScore = Number.isFinite(frame.score);
-  const hasTimestamp = Number.isFinite(frame.timestamp_ms);
+  const caption = displayFrame.metadata?.caption ?? displayFrame.caption;
+  const hasScore = Number.isFinite(displayFrame.score);
+  const hasTimestamp = Number.isFinite(displayFrame.timestamp_ms);
   const submitFrame = (event) => {
     event.stopPropagation();
-    onSubmit?.(frame);
+    onSubmit?.(displayFrame);
   };
 
   return (
       <div className="frame-card" onClick={onClick}>
       <div className="frame-card-header">
         <span className="frame-index-text">
-          {displayVideoId(frame.video_id)}, {frame.frame_idx}
+          {displayVideoId(displayFrame.video_id)}, {displayFrame.frame_idx}
         </span>
         {onSubmit && (
           <div className="frame-card-actions">
@@ -42,15 +51,19 @@ const FrameCard = ({ frame, events = [], onClick, onSubmit }) => {
             <div className="frame-tooltip-arrow" />
           </div>
         )}
-        {previewUrl ? (
+        {previewUrl && detailStatus !== 'loading' ? (
           <img
             src={previewUrl}
             alt={`Frame ${frameId}`}
             className="frame-image"
-            loading="lazy"
+            loading={imageLoading}
           />
         ) : (
-          <div className="frame-image-placeholder">Preview unavailable</div>
+          <div className="frame-image-placeholder">
+            {detailStatus === 'loading'
+              ? 'Loading frame…'
+              : 'Preview unavailable'}
+          </div>
         )}
       </div>
       <div className="frame-caption-container">
@@ -62,18 +75,18 @@ const FrameCard = ({ frame, events = [], onClick, onSubmit }) => {
         <div className="frame-card-footer">
           {hasScore && (
             <span className="frame-score-badge">
-              Alignment score: {frame.score.toFixed(3)}
+              Alignment score: {displayFrame.score.toFixed(3)}
             </span>
           )}
           {hasTimestamp && (
-            <span className="frame-time-badge">{frame.timestamp_ms} ms</span>
+            <span className="frame-time-badge">{displayFrame.timestamp_ms} ms</span>
           )}
         </div>
       )}
       <AlignmentAccordion
         events={events}
-        frameIds={frame.frame_ids}
-        timestampsMs={frame.timestamps_ms}
+        frameIds={displayFrame.frame_ids}
+        timestampsMs={displayFrame.timestamps_ms}
       />
     </div>
   );

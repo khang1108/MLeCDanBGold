@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 export const useVimMode = ({
   onCloseAllModals,
   queryInputRef,
+  enableTopK = true,
 }) => {
   const [mode, setMode] = useState("NORMAL"); // 'NORMAL' | 'INSERT'
   const [isTopKOpen, setIsTopKOpen] = useState(false);
@@ -57,7 +58,7 @@ export const useVimMode = ({
       }
 
       // 4. t -> Open Top-K quick edit dialog
-      if (event.key.toLowerCase() === "t") {
+      if (enableTopK && event.key.toLowerCase() === "t") {
         event.preventDefault();
         setIsTopKOpen(true);
         return;
@@ -79,6 +80,7 @@ export const useVimMode = ({
     isHelpOpen,
     isTopKOpen,
     mode,
+    enableTopK,
     onCloseAllModals,
   ]);
 

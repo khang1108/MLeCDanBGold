@@ -43,3 +43,19 @@ test('shows the raw alignment score and representative alignment path', () => {
   fireEvent.click(screen.getByRole('button', { name: /alignment/i }));
   expect(screen.getByText('roll')).toBeTruthy();
 });
+
+test('shows a loading placeholder while page details are fetched', () => {
+  render(
+    <FrameCard
+      frame={{
+        frame_id: 'page-frame',
+        video_id: 'L21_a_topic.video-1',
+        frame_idx: 1,
+        timestamp_ms: 100,
+      }}
+      detailStatus="loading"
+    />,
+  );
+
+  expect(screen.getByText('Loading frame…')).toBeTruthy();
+});

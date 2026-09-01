@@ -5,6 +5,12 @@ export const API_BASE_URL = (
   process.env.REACT_APP_API_BASE_URL || DEFAULT_API_BASE_URL
 ).replace(/\/+$/, '');
 
+/** Resolve an API-relative asset path without rewriting absolute URLs. */
+export const resolveApiUrl = (value) => {
+  if (!value || /^(?:https?:|data:)/i.test(value)) return value;
+  return `${API_BASE_URL}/${value.replace(/^\/+/, '')}`;
+};
+
 const errorMessage = (payload, status) => {
   if (typeof payload?.detail === 'string') return payload.detail;
   if (Array.isArray(payload?.detail)) {
