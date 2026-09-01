@@ -25,8 +25,10 @@ The local organizer document, [`Thông tin vòng Sơ tuyển AIC 2026`](../Thôn
 
 ## Frozen-baseline availability
 
-No versioned development-query manifest, ground-truth intervals, or prior
-KIS/TRAKE prediction report is present under the tracked repository paths.
+The repository contains 55 public query text files under
+`data/SOTUYEN1-bo-de-thi/` and `data/SOTUYEN2-bo-de-thi/`, including KIS and
+TRAKE inputs. They are not a frozen versioned manifest and provide no
+ground-truth intervals, answer labels, or prior KIS/TRAKE prediction report.
 The local `artifacts/` directory contains frame/enrichment/index bundles only;
 it is intentionally ignored and contains no `evaluation/` report. A measured
 old-versus-new comparison cannot be produced from the current workspace.
@@ -55,11 +57,13 @@ Each report must record:
 
 ## Decision
 
-Tasks 1–5 added characterization, task-agnostic contracts, deterministic
+Tasks 1–5 added characterization, an initial contract draft, deterministic
 planning, filter-aware scoring, and a duplicate pure DP module without
-changing KIS execution. The user subsequently explicitly authorized Tasks
-6–12, including the structural deletion of the prior progressive/scene path.
-That authorization permits repository cleanup; it is not evidence of a
-measured competition cut-over. Do not describe the new KIS/TRAKE behavior as
-release-accepted or improved until the evaluation record exists and the
-resulting trade-off is explicitly accepted.
+changing KIS execution. The post-review implementation collapses that draft
+into the minimal `AlignedPath(video_id, frame_ids, score)` value. The user
+subsequently explicitly authorized Tasks 6–12, including the structural
+deletion of the prior progressive/scene path. That authorization permits
+repository cleanup; it is not evidence of a measured competition cut-over.
+Do not describe the new KIS/TRAKE behavior as release-accepted or improved
+until the evaluation record exists and the resulting trade-off is explicitly
+accepted.

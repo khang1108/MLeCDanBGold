@@ -36,6 +36,7 @@ test('parses sequentially labeled TRAKE events and rejects invalid numbering', (
   expect(parseTrakeEvents(
     'A video description.\nE1 first event\nE2 second event',
   )).toEqual(['first event', 'second event']);
+  expect(parseTrakeEvents('A video description. E1: only one event')).toEqual(['only one event']);
   expect(parseTrakeEvents('A video description. E1: first event E3: third event')).toEqual([]);
   expect(parseTrakeEvents('A normal KIS description')).toBeNull();
 });
@@ -103,11 +104,40 @@ test('TRAKE renders same-video backend paths independently and submits only the 
   expect(screen.queryByText('V01,10,20,30,40')).toBeNull();
 });
 
-test('TRAKE requires at least two events without making a request', () => {
-  render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
+test('TRAKE accepts one labeled event and opens its frame as read-only', async () => {
+  const onFrameClick = jest.fn();
+  searchTrake.mockResolvedValueOnce({
+    events: ['only one event'],
+    paths: [{
+      video_id: 'V01',
+      score: 1.0,
+      frame_ids: ['f1'],
+      frame_idxs: [10],
+      timestamps_ms: [1000],
+      thumbnail_urls: ['/f1'],
+    }],
+    warnings: [],
+  });
+  render(
+    <SubmissionProvider>
+      <SearchWorkspace
+        topK={20}
+        setTopK={jest.fn()}
+        onFrameClick={onFrameClick}
+      />
+    </SubmissionProvider>,
+  );
   submit('A short video. E1: only one event');
-  expect(screen.getByRole('alert').textContent).toContain('at least two');
-  expect(searchTrake).not.toHaveBeenCalled();
+
+  await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
+    expect.objectContaining({ events: ['only one event'], topK: 20 }),
+  ));
+  fireEvent.click(await screen.findByRole('button', { name: /view event E1/i }));
+
+  expect(onFrameClick).toHaveBeenCalledWith({
+    frame: expect.objectContaining({ frame_id: 'f1', frame_idx: 10 }),
+    submissionMode: 'none',
+  });
 });
 
 test('defaults plain descriptions to KIS', () => {
@@ -124,6 +154,7 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
       frame_id: 'frame-kis',
       video_id: 'L21_a_b.folder2.L21_V001',
       frame_idx: 300,
+      frame_ids: ['frame-kis'],
       fps: 29.97,
       timestamp_ms: 10_010,
       caption: 'A red boat',
@@ -139,11 +170,14 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   const frameImage = await screen.findByAltText('Frame frame-kis');
   fireEvent.click(frameImage);
 
-  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
-    video_id: 'L21_a_b.folder2.L21_V001',
-    frame_idx: 300,
-    fps: 29.97,
-  }));
+  expect(onFrameClick).toHaveBeenCalledWith({
+    frame: expect.objectContaining({
+      video_id: 'L21_a_b.folder2.L21_V001',
+      frame_idx: 300,
+      fps: 29.97,
+    }),
+    submissionMode: 'kis',
+  });
 });
 
 test('does not render the retired query-helper control', () => {

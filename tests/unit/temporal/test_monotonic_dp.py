@@ -25,15 +25,15 @@ def test_path_stays_chronological_when_events_peak_on_one_frame() -> None:
     best, second = align_video(
         _video([[0.1, 0.9, 0.2, 0.2], [0.0, 0.8, 0.5, 0.3]]), 0.0, 2
     )
-    assert best.frame_idx == (20, 30)
+    assert best.frame_ids == ("v1_1", "v1_2")
     assert best.score == pytest.approx(1.4)
-    assert second.frame_idx == (20, 40)
+    assert second.frame_ids == ("v1_1", "v1_3")
 
 
 def test_gap_penalty_prefers_the_closer_event_pair() -> None:
     video = _video([[0.5, 0.0, 0.0, 0.0], [0.0, 0.4, 0.0, 0.45]])
-    assert align_video(video, 0.0)[0].frame_idx == (10, 40)
-    assert align_video(video, 1e-4)[0].frame_idx == (10, 20)
+    assert align_video(video, 0.0)[0].frame_ids == ("v1_0", "v1_3")
+    assert align_video(video, 1e-4)[0].frame_ids == ("v1_0", "v1_1")
 
 
 def test_video_shorter_than_the_event_list_has_no_path() -> None:
@@ -60,7 +60,6 @@ def test_align_video_chooses_the_best_strictly_chronological_path() -> None:
     [path] = align_video(video, lambda_gap=0.0, paths=1)
 
     assert path.frame_ids == ("f0", "f1", "f3")
-    assert path.frame_idx == (0, 1, 3)
 
 
 def test_align_video_gap_penalty_can_prefer_a_nearer_frame() -> None:

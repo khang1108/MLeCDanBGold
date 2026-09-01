@@ -70,9 +70,9 @@ const FramesBox = ({
         {!error &&
           (results.length ? (
             <div className="frames-grid">
-              {results.map((frame) => (
+              {results.map((frame, index) => (
                 <FrameCard
-                  key={frame.frame_id}
+                  key={`${frame.video_id}:${frame.frame_ids.join("|")}:${index}`}
                   frame={frame}
                   events={events}
                   onClick={() => onFrameClick(frame)}

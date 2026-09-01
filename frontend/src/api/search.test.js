@@ -123,10 +123,35 @@ test('posts explicit ordered events to the dedicated TRAKE route', async () => {
   expect(payload.latency.total_ms).toBe(10);
 });
 
-test('rejects fewer than two TRAKE events before contacting the backend', async () => {
+test('posts a single TRAKE event accepted by the backend contract', async () => {
+  const payload = {
+    events: ['only one'],
+    paths: [],
+    latency: {
+      query_ms: 1,
+      retrieval_ms: 2,
+      alignment_ms: 3,
+      materialization_ms: 4,
+      total_ms: 10,
+    },
+  };
+  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload));
+
+  await expect(searchTrake({ events: [' only one '], topK: 20 }))
+    .resolves.toEqual(payload);
+  expect(global.fetch).toHaveBeenCalledWith(
+    'http://127.0.0.1:8000/api/v1/trake',
+    expect.objectContaining({
+      body: JSON.stringify({ events: ['only one'], top_k: 20 }),
+    }),
+  );
+});
+
+test('rejects TRAKE input with no non-empty events before contacting the backend', async () => {
   const fetchSpy = jest.spyOn(global, 'fetch');
-  await expect(searchTrake({ events: ['only one'], topK: 20 }))
-    .rejects.toThrow('at least two');
+
+  await expect(searchTrake({ events: ['  '], topK: 20 }))
+    .rejects.toThrow('at least one');
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 

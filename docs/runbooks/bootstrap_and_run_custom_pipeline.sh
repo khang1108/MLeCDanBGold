@@ -45,6 +45,7 @@ ZIP_LIMIT="${ZIP_LIMIT:-}"
 ALLOW_OFFSET_GAP="${ALLOW_OFFSET_GAP:-0}"
 BATCH_OFFSET="${BATCH_OFFSET:-0}"
 BATCH_LIMIT="${BATCH_LIMIT:-}"
+FINALIZE_BATCH_CHUNK_SIZE="${FINALIZE_BATCH_CHUNK_SIZE:-16}"
 SKIP_APT="${SKIP_APT:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_INFERENCE_SERVER="${SKIP_INFERENCE_SERVER:-0}"
@@ -176,6 +177,7 @@ done
 [[ "$ALLOW_OFFSET_GAP" != "1" ]] || PIPELINE_ARGS+=(--allow-offset-gap)
 PIPELINE_ARGS+=(--batch-offset "$BATCH_OFFSET")
 [[ -z "$BATCH_LIMIT" ]] || PIPELINE_ARGS+=(--batch-limit "$BATCH_LIMIT")
+PIPELINE_ARGS+=(--finalize-batch-chunk-size "$FINALIZE_BATCH_CHUNK_SIZE")
 
 echo "==> preflight"
 PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py preflight "${PIPELINE_ARGS[@]}"

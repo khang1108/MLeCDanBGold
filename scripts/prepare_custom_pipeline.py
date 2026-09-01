@@ -612,6 +612,15 @@ def _make_asr_bundle_factory(args: argparse.Namespace) -> Callable[[list[str]], 
 # ---------------------------------------------------------------------------
 
 
+def _positive_int(value: str) -> int:
+    """Parse one strictly positive CLI integer with an actionable error."""
+
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return parsed
+
+
 def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     """Add options common to every subcommand."""
 
@@ -643,6 +652,15 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--allow-offset-gap", action="store_true")
     parser.add_argument("--batch-offset", type=int, default=0)
     parser.add_argument("--batch-limit", type=int, default=None)
+    parser.add_argument(
+        "--finalize-batch-chunk-size",
+        type=_positive_int,
+        default=16,
+        help=(
+            "Maximum committed batches read per finalization chunk "
+            "(default: 16; use 32 on hosts with more RAM)."
+        ),
+    )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -776,6 +794,7 @@ def _cmd_finalize(args: argparse.Namespace) -> dict[str, Any]:
         args.run_root,
         context.artifacts_root,
         dataset_version=args.version,
+        batch_chunk_size=args.finalize_batch_chunk_size,
     )
     return {"command": "finalize", **report}
 

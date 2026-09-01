@@ -68,9 +68,9 @@ function AppContent() {
 
       {selectedFrame && (
         <ImageModal
-          frame={selectedFrame}
+          frame={selectedFrame.frame}
           query={activeQuery}
-          onSubmit={requestSubmission}
+          onSubmit={selectedFrame.submissionMode === "kis" ? requestSubmission : undefined}
           onClose={() => setSelectedFrame(null)}
         />
       )}

@@ -389,6 +389,7 @@ def finalize_pipeline(
     output_root: str | Path,
     *,
     dataset_version: str,
+    batch_chunk_size: int = 16,
 ) -> dict[str, object]:
     """Finalize the corpus once every archive in ``plan`` is cleaned.
 
@@ -403,6 +404,7 @@ def finalize_pipeline(
         dataset_root,
         output_root,
         dataset_version=dataset_version,
+        batch_chunk_size=batch_chunk_size,
     )
 
 

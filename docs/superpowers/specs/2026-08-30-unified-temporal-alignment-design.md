@@ -2,19 +2,22 @@
 
 **Date:** 2026-08-30
 
-**Status:** PROPOSED semantic migration. This is not a claim of an HCMAI
-accuracy improvement. The implementation plan requires a frozen baseline,
-task-contract review, and an explicit cut-over decision before legacy KIS
-behavior is removed.
+**Status:** STRUCTURAL implementation complete; competition cut-over remains
+PROPOSED. This is not a claim of an HCMAI accuracy improvement. The migration
+still requires a frozen baseline, task-contract review, and an explicit
+cut-over decision before the new KIS behavior is accepted for competition.
 
 ## Evidence and decision boundary
 
-- **SOURCE:** The active runtime has two temporal implementations:
+- **SOURCE (pre-migration):** The runtime had two temporal implementations:
   `KISPipeline -> TemporalEvidenceCore.localize()` uses process-local
   progressive state and scene candidates, while
   `TRAKEPipeline -> TemporalEvidenceCore.align_ordered()` uses dense visual
   event/frame scores and monotonic DP. The current DP is strict by keyframe
   position and preserves canonical identity through `DataService`.
+- **SOURCE (current implementation):** KIS and TRAKE now call one stateless
+  `TemporalAlignmentService`; its DP output is the minimal
+  `AlignedPath(video_id, frame_ids, score)` value.
 - **PAPER:** Ordered temporal grounding and constrained alignment are established
   problem settings. [CrossTask](https://arxiv.org/abs/1903.08225) uses ordered
   step constraints for instructional-video alignment; [Drop-DTW](https://arxiv.org/abs/2108.11996)
@@ -29,11 +32,22 @@ behavior is removed.
 
 The 2026 organizer contract and scorer remain higher-priority sources. If they
 require progressive interaction or non-strict frame reuse, this design must be
-revised before implementation.
+revised before the competition cut-over is accepted.
+
+## Post-review contract simplification
+
+The current implementation intentionally collapses the path contract described
+in the original proposal. `AlignedPath` is the only temporal path value and
+contains `video_id`, `frame_ids`, and `score`. Query planning returns normalized
+event strings, and `TemporalAlignmentService.align()` returns aligned paths
+directly. `DataService` resolution of full `FrameRecord` values belongs to the
+KIS/TRAKE output adapters, not to a second temporal schema. Any older
+`AlignmentEvent`, `AlignmentPlan`, `AlignmentPath`, or `AlignmentResult`
+examples in this historical design are superseded by this section.
 
 ## Problem
 
-The current codebase has two different temporal semantics:
+The pre-migration codebase had two different temporal semantics:
 
 - KIS uses progressive hint state, `UNKNOWN/MATCHED/EVALUATED_NO_MATCH`, video-level scoring, scene clustering, soft temporal relations, representative-frame selection, then single-frame reranking.
 - TRAKE uses a dense event-by-frame matrix and monotonic dynamic programming.
@@ -93,7 +107,7 @@ TemporalAlignmentService
    +--> monotonic DP
    |
    v
-AlignmentPath[]
+AlignedPath[]
    |
    +--> KIS head: choose one representative frame, retain path frame_ids
    |
@@ -184,7 +198,7 @@ The clean core should make these future experiments isolated:
 3. Add state-transition scores for changing object appearance.
 4. Add top-B path generation and multi-frame VLM path verification.
 5. Add incremental DP state for progressive UI latency.
-6. Add a VQA head consuming `AlignmentPath` without changing the core.
+6. Add a VQA head consuming `AlignedPath` without changing the core.
 
 Each experiment must be independently switchable and benchmarkable against the visual-only monotonic baseline.
 
@@ -198,8 +212,9 @@ Each experiment must be independently switchable and benchmarkable against the v
 6. Default KIS ranking is the DP path score, not a single-frame reranker score.
 7. Python tests cover DP ordering, gap penalty, query planning, filters, KIS path projection, and TRAKE materialization.
 8. Dense-score metadata is validated against `DataService` before an
-   `AlignmentPath` is materialized: every `frame_id`, `video_id`, `frame_idx`,
-   and `timestamp_ms` must agree with canonical data.
+   `AlignedPath` is returned: every `frame_id`, `video_id`, `frame_idx`, and
+   `timestamp_ms` must agree with canonical data. Full `FrameRecord` values
+   are resolved only by the KIS/TRAKE response adapters.
 9. The legacy progressive/scene files and their config fields are deleted only
    after migration tests pass and the recorded cut-over decision accepts the
    measured KIS/TRAKE trade-off.

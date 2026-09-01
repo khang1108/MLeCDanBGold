@@ -15,6 +15,61 @@ from scripts import prepare_custom_pipeline as pipeline
 from tests.data.test_custom_frames import write_valid_native_bundle
 
 
+def test_finalize_batch_chunk_size_is_configurable_from_cli(tmp_path: Path) -> None:
+    """Expose a positive committed-batch ceiling for RAM-bounded finalize."""
+
+    args = pipeline.parse_args(
+        [
+            "finalize",
+            "--run-root",
+            str(tmp_path / "run"),
+            "--output-root",
+            str(tmp_path / "output"),
+            "--version",
+            "custom-dataset-v1",
+            "--frame-store-id",
+            "custom-v1",
+            "--transcripts-root",
+            str(tmp_path / "transcripts"),
+            "--asr-index-root",
+            str(tmp_path / "asr-index"),
+            "--archive-url",
+            "https://example.com/Videos_L01_a.zip",
+            "--finalize-batch-chunk-size",
+            "32",
+        ]
+    )
+
+    assert args.finalize_batch_chunk_size == 32
+
+
+def test_finalize_batch_chunk_size_rejects_zero(tmp_path: Path) -> None:
+    """Reject a zero-sized chunk before finalization touches artifacts."""
+
+    with pytest.raises(SystemExit):
+        pipeline.parse_args(
+            [
+                "finalize",
+                "--run-root",
+                str(tmp_path / "run"),
+                "--output-root",
+                str(tmp_path / "output"),
+                "--version",
+                "custom-dataset-v1",
+                "--frame-store-id",
+                "custom-v1",
+                "--transcripts-root",
+                str(tmp_path / "transcripts"),
+                "--asr-index-root",
+                str(tmp_path / "asr-index"),
+                "--archive-url",
+                "https://example.com/Videos_L01_a.zip",
+                "--finalize-batch-chunk-size",
+                "0",
+            ]
+        )
+
+
 def _argument_value(arguments: list[str], name: str) -> Path:
     """Return one path argument captured from a stage command."""
 

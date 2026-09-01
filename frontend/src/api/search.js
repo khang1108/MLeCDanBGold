@@ -29,8 +29,8 @@ export const searchFrames = async ({ query, topK, signal }) => {
 
 export const searchTrake = async ({ events, topK, signal }) => {
   const orderedEvents = events.map((event) => event.trim()).filter(Boolean);
-  if (orderedEvents.length < 2) {
-    throw new Error('TRAKE requires at least two non-empty ordered events');
+  if (orderedEvents.length < 1) {
+    throw new Error('TRAKE requires at least one non-empty ordered event');
   }
 
   const payload = await requestJson('/api/v1/trake', {

@@ -19,7 +19,9 @@ sum_i transform(s(e_i, f[p_i]))
 `event_power` controls `transform`; `lambda_gap`, `top_k`, video shortlist
 size, and decoder limits are explicit `search.alignment` configuration. The
 implementation keeps the highest-scoring paths per video and then ranks them
-globally. Canonical identity is materialized only from `DataService`.
+globally. `AlignedPath` carries only canonical `frame_ids`; score metadata is
+validated against `DataService`, and full frame records are resolved by the
+task output adapters.
 
 ## What this baseline does not do
 

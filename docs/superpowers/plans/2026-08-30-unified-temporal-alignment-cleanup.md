@@ -18,6 +18,23 @@ a semantics-preserving cleanup and must not be described as a verified accuracy
 improvement. Complete Task 0 and record an explicit cut-over decision before
 Task 10 deletes the legacy implementation.
 
+## Post-review simplification amendment — 2026-08-30
+
+The clean baseline is intentionally smaller than the original task sketches
+below. The active implementation supersedes their alignment DTO examples:
+
+- `common/schemas/alignment.py` is not part of the runtime;
+- `build_alignment_plan()` returns a normalized tuple of event strings;
+- `temporal/dp.py` defines the sole path value, `AlignedPath`, with only
+  `video_id`, `frame_ids`, and `score`;
+- `TemporalAlignmentService.align()` returns `tuple[AlignedPath, ...]`;
+- KIS and TRAKE resolve `FrameRecord` values through `DataService` only while
+  projecting their public responses.
+
+This amendment is the current authority for the post-review baseline. The
+earlier detailed snippets remain historical implementation discussion and are
+not an instruction to reintroduce intermediate schemas.
+
 ## Execution Status — 2026-08-30
 
 - **Task 0:** completed as a no-cut-over gate. The local organizer document
@@ -41,11 +58,19 @@ Task 10 deletes the legacy implementation.
 - **Tasks 10–12:** implemented under the same authorization. The progressive
   runtime, schema/configuration surface, compatibility scorer, and legacy-only
   tests are removed; current docs describe the stateless baseline.
-- **Task 13:** compile, source audits, and the complete Python suite pass
-  (851 tests). Loaded-service smoke execution remains pending because startup
-  did not complete within the 30-second local execution window while waiting
-  on configured remote inference. Baseline metrics remain pending: this
-  workspace has no versioned development-query manifest or labelled results.
+- **Post-review contract simplification:** completed. The discarded alignment
+  DTO family and `DPPath` wrapper are deleted; the runtime now exposes only
+  `AlignedPath(video_id, frame_ids, score)` from temporal alignment.
+- **Task 13:** compile, source audits, and the migration-relevant Python suite
+  pass (845 tests when the pre-existing `tests/scripts/test_custom_pipeline.py`
+  file is excluded). The complete collection is 850 tests; that legacy CLI
+  file still has five failures because its flat argument expectations no
+  longer match the script's required subcommands, unrelated to temporal
+  alignment. Loaded-service smoke execution remains pending because startup
+  did not complete within the 30-second local execution window while loading
+  the configured runtime. Baseline metrics remain pending: the workspace has
+  public query texts but no versioned development-query manifest or labelled
+  results.
 - **Commits:** intentionally not created; the working tree contained unrelated
   user changes and the request did not authorize a commit.
 
@@ -75,17 +100,19 @@ Task 10 deletes the legacy implementation.
 ### Task 0: Establish Migration Authority and a Measured Decision Gate
 
 **Files:**
+
 - Create or update: the repository's established versioned evaluation-result
   location (do not add a runtime subsystem)
 - Update when the gate closes: `KNOWLEDGE.md`
 
 **Interfaces:**
+
 - Consumes: the current public KIS/TRAKE contracts, the current organizer
   specification/scorer when available, and a frozen development query set.
 - Produces: a reproducible comparison record and an explicit decision to
   proceed, revise the design, or retain the current KIS behavior.
 
-- [x] **Step 1: Reconcile the current 2026 organizer contract before coding**
+- [X] **Step 1: Reconcile the current 2026 organizer contract before coding**
 
 Record whether the scorer permits one strict-increasing frame per event, frame
 reuse, or a progressive-search interaction. Organizer rules override this
@@ -100,7 +127,7 @@ P50/P95 latency. Preserve the results outside `src/`; use the project's
 existing evaluation location or `artifacts/evaluation/temporal_migration/` if
 none exists.
 
-- [x] **Step 3: Define the cut-over rule before seeing new results**
+- [X] **Step 3: Define the cut-over rule before seeing new results**
 
 At minimum, compare the appropriate official task metric (or an explicitly
 labeled proxy), retrieval/localization failure cases, candidate-video count,
@@ -109,7 +136,7 @@ semantics change. The recorded decision must say whether the measured trade-off
 is accepted; tests alone are not sufficient authority to delete working KIS
 logic.
 
-- [x] **Step 4: Record the gate outcome in `KNOWLEDGE.md`**
+- [X] **Step 4: Record the gate outcome in `KNOWLEDGE.md`**
 
 Use **SOURCE** for current-code/contract facts, **PAPER** for literature
 support, and **PROPOSED**, **VERIFIED**, or **REJECTED** for the HCMAI outcome.
@@ -128,17 +155,14 @@ report.
 ## File Structure After Refactor
 
 ```text
-src/hcmai/common/schemas/alignment.py
-    AlignmentEvent, AlignmentPlan, AlignmentPath
-
 src/hcmai/temporal/planner.py
-    deterministic query -> ordered event plan
+    deterministic query -> tuple of ordered event strings
 
 src/hcmai/temporal/dp.py
-    pure monotonic dynamic programming; no DataService or HTTP concerns
+    pure monotonic dynamic programming -> AlignedPath
 
 src/hcmai/temporal/service.py
-    visual score acquisition + canonical path materialization
+    visual score acquisition + score-metadata validation
 
 src/hcmai/temporal/__init__.py
     export only planner/service/alignment-facing symbols
@@ -175,14 +199,16 @@ The `retrieval/reranking/` package remains available for experiments, but the de
 ### Task 1: Add Python Characterization Tests Before Refactoring
 
 **Files:**
+
 - Modify: `tests/unit/temporal/test_monotonic_dp.py`
 - Create: `tests/unit/orchestration/test_public_contracts.py`
 
 **Interfaces:**
+
 - Consumes: existing `align_video()`, `VideoEventScores`, `SearchRequest`, `TRAKERequest`.
 - Produces: tests that freeze chronological DP behavior and public request/response assumptions before any deletion.
 
-- [x] **Step 1: Write the DP chronological-path test**
+- [X] **Step 1: Write the DP chronological-path test**
 
 ```python
 # tests/unit/temporal/test_monotonic_dp.py
@@ -211,7 +237,7 @@ def test_align_video_chooses_best_chronological_path():
     assert path.frame_idx == (0, 1, 3)
 ```
 
-- [x] **Step 2: Write the gap-penalty characterization test**
+- [X] **Step 2: Write the gap-penalty characterization test**
 
 ```python
 def test_align_video_gap_penalty_can_prefer_nearer_frame():
@@ -231,7 +257,7 @@ def test_align_video_gap_penalty_can_prefer_nearer_frame():
     assert path.frame_ids == ("f0", "f1")
 ```
 
-- [x] **Step 3: Run the DP tests before changing code**
+- [X] **Step 3: Run the DP tests before changing code**
 
 Run:
 
@@ -241,7 +267,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/temporal/test_monotonic_dp.py
 
 Expected: PASS against the current `monotonic_dp.py`.
 
-- [x] **Step 4: Add a request-contract test proving KIS accepts no events today and TRAKE does**
+- [X] **Step 4: Add a request-contract test proving KIS accepts no events today and TRAKE does**
 
 ```python
 # tests/unit/orchestration/test_public_contracts.py
@@ -259,7 +285,7 @@ def test_current_public_requests_are_constructible():
     assert trake.events == ["chef holds skewer", "chef coats skewer"]
 ```
 
-- [x] **Step 5: Run public-contract tests**
+- [X] **Step 5: Run public-contract tests**
 
 Run:
 
@@ -278,9 +304,16 @@ git commit -m "test: characterize temporal alignment baseline"
 
 ---
 
+> **Historical task details:** Tasks 2–8 below were drafted before the
+> post-review contract simplification. Their old schema names and code snippets
+> are retained only as an execution log; the amendment at the top is the
+> authoritative final implementation and must not be used to reintroduce
+> intermediate alignment DTOs.
+
 ### Task 2: Introduce Task-Agnostic Alignment Contracts and Configuration
 
 **Files:**
+
 - Create: `src/hcmai/common/schemas/alignment.py`
 - Modify: `src/hcmai/common/schemas/__init__.py`
 - Modify: `src/hcmai/common/config.py`
@@ -288,10 +321,11 @@ git commit -m "test: characterize temporal alignment baseline"
 - Create: `tests/unit/common/test_alignment_contracts.py`
 
 **Interfaces:**
+
 - Produces: `AlignmentEvent`, `AlignmentPlan`, `AlignmentPath`, `AlignmentConfig`.
 - Later tasks consume these exact types; they must not reference `TaskType`, progressive state, scenes, or alignment modes.
 
-- [x] **Step 1: Write failing contract tests**
+- [X] **Step 1: Write failing contract tests**
 
 ```python
 # tests/unit/common/test_alignment_contracts.py
@@ -320,7 +354,7 @@ def test_alignment_plan_is_task_agnostic():
     assert [event.text for event in plan.events] == ["first", "second"]
 ```
 
-- [x] **Step 2: Run the new tests and verify import failure**
+- [X] **Step 2: Run the new tests and verify import failure**
 
 Run:
 
@@ -330,7 +364,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/common/test_alignment_contrac
 
 Expected: FAIL because `hcmai.common.schemas.alignment` does not exist.
 
-- [x] **Step 3: Add the minimal alignment contracts**
+- [X] **Step 3: Add the minimal alignment contracts**
 
 ```python
 # src/hcmai/common/schemas/alignment.py
@@ -385,7 +419,7 @@ class AlignmentPath(ContractModel):
         return self
 ```
 
-- [x] **Step 4: Add `AlignmentConfig` and a transitional `SearchConfig.alignment` field**
+- [X] **Step 4: Add `AlignmentConfig` and a transitional `SearchConfig.alignment` field**
 
 Add before `SearchConfig` in `src/hcmai/common/config.py`:
 
@@ -410,7 +444,7 @@ Add the matching `search.alignment` block to `configs/baseline.yaml` with the
 same explicit values. The YAML is a runtime source of truth; relying on model
 defaults would make the first baseline irreproducible.
 
-- [x] **Step 5: Export the alignment contracts from `common.schemas`**
+- [X] **Step 5: Export the alignment contracts from `common.schemas`**
 
 Add imports and `__all__` entries for:
 
@@ -420,7 +454,7 @@ AlignmentPlan
 AlignmentPath
 ```
 
-- [x] **Step 6: Run contract tests**
+- [X] **Step 6: Run contract tests**
 
 Run:
 
@@ -442,15 +476,17 @@ git commit -m "refactor: add task agnostic alignment contracts"
 ### Task 3: Add a Deterministic Query Planner and Optional KIS Events
 
 **Files:**
+
 - Create: `src/hcmai/temporal/planner.py`
 - Modify: `src/hcmai/common/schemas/search.py`
 - Create: `tests/unit/temporal/test_planner.py`
 
 **Interfaces:**
+
 - Consumes: `query: str`, `events: list[str] | None`, `filters: SearchFilters | None`.
 - Produces: `build_alignment_plan(query, events=None, filters=None) -> AlignmentPlan`.
 
-- [x] **Step 1: Write planner tests for explicit events, multi-line queries, sentences, and single-event fallback**
+- [X] **Step 1: Write planner tests for explicit events, multi-line queries, sentences, and single-event fallback**
 
 ```python
 # tests/unit/temporal/test_planner.py
@@ -484,7 +520,7 @@ def test_single_sentence_remains_one_event():
     assert texts(plan) == ["person splashes water on face"]
 ```
 
-- [x] **Step 2: Run planner tests and verify failure**
+- [X] **Step 2: Run planner tests and verify failure**
 
 Run:
 
@@ -494,7 +530,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/temporal/test_planner.py -v
 
 Expected: FAIL because planner does not exist.
 
-- [x] **Step 3: Implement deterministic planning**
+- [X] **Step 3: Implement deterministic planning**
 
 ```python
 # src/hcmai/temporal/planner.py
@@ -535,7 +571,7 @@ def build_alignment_plan(
     )
 ```
 
-- [x] **Step 4: Add backwards-compatible optional events to KIS request**
+- [X] **Step 4: Add backwards-compatible optional events to KIS request**
 
 In `SearchRequest`:
 
@@ -545,7 +581,7 @@ events: list[NonEmptyString] | None = Field(default=None, min_length=1, max_leng
 
 Do not remove `query`, `filters`, `top_k`, or `search_id`.
 
-- [x] **Step 5: Run planner and public-contract tests**
+- [X] **Step 5: Run planner and public-contract tests**
 
 Run:
 
@@ -567,15 +603,17 @@ git commit -m "feat: add deterministic alignment query planner"
 ### Task 4: Generalize Visual Video Scoring and Preserve Search Filters
 
 **Files:**
+
 - Modify: `src/hcmai/retrieval/retriever/video_scores.py`
 - Modify: `src/hcmai/retrieval/retriever/pipeline.py`
 - Modify: `tests/unit/retriever/test_score_videos.py`
 
 **Interfaces:**
+
 - Produces: `RetrievalService.score_event_videos(events, filters, ...) -> list[VideoEventScores]`.
 - Keeps `score_visual_videos()` temporarily as a compatibility wrapper until Task 8.
 
-- [x] **Step 1: Add a failing test that filters shortlist frames by video and time**
+- [X] **Step 1: Add a failing test that filters shortlist frames by video and time**
 
 Build a small fake index exposing the same methods used by `score_videos`:
 
@@ -620,7 +658,7 @@ def test_score_videos_respects_video_and_time_filters():
     assert results[0].frame_ids.tolist() == ["d"]
 ```
 
-- [x] **Step 2: Update the existing fake index before running the full unit file**
+- [X] **Step 2: Update the existing fake index before running the full unit file**
 
 `tests/unit/retriever/test_score_videos.py` already exercises unfiltered
 shortlisting. Extend its `_FakeIndex` with `search_filtered()` delegating to
@@ -628,7 +666,7 @@ shortlisting. Extend its `_FakeIndex` with `search_filtered()` delegating to
 `None`. This preserves the existing assertions while making the fake match the
 real `DenseIndex` protocol.
 
-- [x] **Step 3: Run the filter test and verify signature failure**
+- [X] **Step 3: Run the filter test and verify signature failure**
 
 Run:
 
@@ -638,7 +676,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/retriever/test_score_videos.p
 
 Expected: FAIL because `score_videos` does not accept `filters` and uses unfiltered `search()`.
 
-- [x] **Step 4: Add `filters` to `score_videos` and use existing DenseIndex filter primitives**
+- [X] **Step 4: Add `filters` to `score_videos` and use existing DenseIndex filter primitives**
 
 Change the shortlist search to:
 
@@ -664,7 +702,7 @@ for video_id in shortlist:
 
 Build results from `kept_video_ids`, not the unfiltered shortlist.
 
-- [x] **Step 5: Add `RetrievalService.score_event_videos`**
+- [X] **Step 5: Add `RetrievalService.score_event_videos`**
 
 ```python
 def score_event_videos(
@@ -693,7 +731,7 @@ def score_event_videos(
 
 Keep `score_visual_videos()` as a wrapper calling `score_event_videos(events, None, ...)` until all callers migrate.
 
-- [x] **Step 6: Run retrieval tests**
+- [X] **Step 6: Run retrieval tests**
 
 Run:
 
@@ -715,20 +753,22 @@ git commit -m "refactor: expose filter aware event video scores"
 ### Task 5: Consolidate the Pure DP Into `temporal/dp.py`
 
 **Files:**
+
 - Create: `src/hcmai/temporal/dp.py`
 - Modify: `tests/unit/temporal/test_monotonic_dp.py`
 
 **Interfaces:**
+
 - Consumes: `VideoEventScores`.
 - Produces: `DPPath`, `align_video()`, `rank_paths()` with the same numerical behavior as the existing TRAKE implementation.
 
-- [x] **Step 1: Change characterization test imports to the new module**
+- [X] **Step 1: Change characterization test imports to the new module**
 
 ```python
 from hcmai.temporal.dp import align_video
 ```
 
-- [x] **Step 2: Run the tests to verify the new module is missing**
+- [X] **Step 2: Run the tests to verify the new module is missing**
 
 Run:
 
@@ -738,7 +778,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/temporal/test_monotonic_dp.py
 
 Expected: FAIL on import.
 
-- [x] **Step 3: Move the pure algorithm without behavior changes**
+- [X] **Step 3: Move the pure algorithm without behavior changes**
 
 Copy the algorithmic contents of `temporal/aligners/monotonic_dp.py` into `temporal/dp.py` and rename only the internal dataclass:
 
@@ -753,7 +793,7 @@ class DPPath:
 
 Keep the current recurrence, `cluster_starts()`, gap penalty, event power, ranking, and diversification semantics unchanged in this task.
 
-- [x] **Step 4: Run characterization tests**
+- [X] **Step 4: Run characterization tests**
 
 Run:
 
@@ -775,16 +815,18 @@ git commit -m "refactor: isolate monotonic alignment algorithm"
 ### Task 6: Build the Stateless `TemporalAlignmentService`
 
 **Files:**
+
 - Create: `src/hcmai/temporal/service.py`
 - Modify: `src/hcmai/temporal/__init__.py`
 - Create: `tests/unit/temporal/test_service.py`
 
 **Interfaces:**
+
 - Consumes: `AlignmentPlan`, `max_paths: int`.
 - Produces: `AlignmentResult(paths: tuple[AlignmentPath, ...], candidate_video_count: int)`.
 - Dependencies: `DataService`, `RetrievalService`, `AlignmentConfig`.
 
-- [x] **Step 1: Write a failing service test with fake retrieval and data dependencies**
+- [X] **Step 1: Write a failing service test with fake retrieval and data dependencies**
 
 ```python
 # tests/unit/temporal/test_service.py
@@ -853,7 +895,7 @@ Both must raise before a public `AlignmentPath` is returned. This carries the
 current `MonotonicOrderedPathAligner` identity check into the replacement
 facade instead of trusting index metadata at the task boundary.
 
-- [x] **Step 2: Run service test and verify import failure**
+- [X] **Step 2: Run service test and verify import failure**
 
 Run:
 
@@ -863,7 +905,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/temporal/test_service.py -v
 
 Expected: FAIL because `temporal.service` does not exist.
 
-- [x] **Step 3: Implement the service as the single temporal facade**
+- [X] **Step 3: Implement the service as the single temporal facade**
 
 ```python
 # src/hcmai/temporal/service.py
@@ -948,7 +990,7 @@ class TemporalAlignmentService:
                 raise ValueError("dense score timestamp conflicts with canonical data")
 ```
 
-- [x] **Step 4: Export only the new service/planner from `temporal.__init__` during migration**
+- [X] **Step 4: Export only the new service/planner from `temporal.__init__` during migration**
 
 Add:
 
@@ -959,7 +1001,7 @@ from .service import AlignmentResult, TemporalAlignmentService
 
 Keep old exports temporarily until Task 8 removes old callers.
 
-- [x] **Step 5: Run service and DP tests**
+- [X] **Step 5: Run service and DP tests**
 
 Run:
 
@@ -981,16 +1023,18 @@ git commit -m "feat: add stateless temporal alignment service"
 ### Task 7: Migrate TRAKE First Because It Already Matches DP Semantics
 
 **Files:**
+
 - Modify: `src/hcmai/orchestration/workflows/trake.py`
 - Modify: `src/hcmai/orchestration/pipeline.py`
 - Create: `tests/unit/orchestration/test_trake_pipeline.py`
 - Modify: `tests/integration/test_trake_api.py`
 
 **Interfaces:**
+
 - Consumes: `TemporalAlignmentService`, `TRAKERequest.events`.
 - Produces: unchanged `TRAKEResponse` public structure.
 
-- [x] **Step 1: Write a fake-alignment TRAKE workflow test**
+- [X] **Step 1: Write a fake-alignment TRAKE workflow test**
 
 ```python
 # tests/unit/orchestration/test_trake_pipeline.py
@@ -1027,7 +1071,7 @@ def test_trake_pipeline_uses_shared_alignment_service():
     assert response.submissions[0].frame_ids == ["f0", "f1"]
 ```
 
-- [x] **Step 2: Run test and verify it fails against old constructor/flow**
+- [X] **Step 2: Run test and verify it fails against old constructor/flow**
 
 Run:
 
@@ -1037,7 +1081,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/orchestration/test_trake_pipe
 
 Expected: FAIL because TRAKE still expects `TemporalEvidenceCore` and `ordered_plan()`.
 
-- [x] **Step 3: Replace TRAKE temporal-core usage with planner + alignment service**
+- [X] **Step 3: Replace TRAKE temporal-core usage with planner + alignment service**
 
 In `TRAKEPipeline.execute()`:
 
@@ -1049,7 +1093,7 @@ rows = aligned.paths
 
 Keep the current submission materialization logic.
 
-- [x] **Step 4: Change constructor to one dependency**
+- [X] **Step 4: Change constructor to one dependency**
 
 ```python
 def __init__(self, alignment: TemporalAlignmentService | None) -> None:
@@ -1058,19 +1102,18 @@ def __init__(self, alignment: TemporalAlignmentService | None) -> None:
 
 Use `TaskPipelineDependencyError("Alignment service not loaded")` when absent.
 
-- [x] **Step 5: Update the default registry to construct one `TemporalAlignmentService` and inject it into TRAKE**
+- [X] **Step 5: Update the default registry to construct one `TemporalAlignmentService` and inject it into TRAKE**
 
 Do not remove KIS's old temporal core in this task; run both services side-by-side temporarily.
 
-- [x] **Step 6: Update the existing route-level fake to the generic protocol**
+- [X] **Step 6: Update the existing route-level fake to the generic protocol**
 
 `tests/integration/test_trake_api.py` currently provides
-`score_visual_videos()`. Change the fake to `score_event_videos(events,
-filters=None, **kwargs)` and assert TRAKE passes `filters=None`. Keep the
+`score_visual_videos()`. Change the fake to `score_event_videos(events, filters=None, **kwargs)` and assert TRAKE passes `filters=None`. Keep the
 end-to-end assertion that every submission contains one canonical frame per
 event and has nondecreasing timestamps.
 
-- [x] **Step 7: Run TRAKE tests plus DP/service tests**
+- [X] **Step 7: Run TRAKE tests plus DP/service tests**
 
 Run:
 
@@ -1092,6 +1135,7 @@ git commit -m "refactor: run trake through shared alignment service"
 ### Task 8: Migrate KIS to Stateless DP Alignment
 
 **Files:**
+
 - Modify: `src/hcmai/orchestration/workflows/kis.py`
 - Modify: `src/hcmai/orchestration/pipeline.py`
 - Create: `tests/unit/orchestration/test_kis_pipeline.py`
@@ -1100,10 +1144,11 @@ git commit -m "refactor: run trake through shared alignment service"
 - Modify: `tests/unit/orchestration/test_request_scoped_latency.py`
 
 **Interfaces:**
+
 - Consumes: `SearchRequest.query`, optional `SearchRequest.events`, filters, `TemporalAlignmentService`.
 - Produces: existing `SearchResponse`; each result's `frame_ids` contains the entire aligned path and `scores.final` equals path score.
 
-- [x] **Step 1: Write a failing KIS path-projection test**
+- [X] **Step 1: Write a failing KIS path-projection test**
 
 ```python
 # tests/unit/orchestration/test_kis_pipeline.py
@@ -1167,7 +1212,7 @@ def test_kis_returns_middle_frame_and_preserves_alignment_path():
     assert response.results[0].scores.final == 2.4
 ```
 
-- [x] **Step 2: Run KIS test and verify failure against old constructor/scene flow**
+- [X] **Step 2: Run KIS test and verify failure against old constructor/scene flow**
 
 Run:
 
@@ -1177,7 +1222,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/orchestration/test_kis_pipeli
 
 Expected: FAIL.
 
-- [x] **Step 3: Reject ambiguous `min_score` filters before alignment**
+- [X] **Step 3: Reject ambiguous `min_score` filters before alignment**
 
 Add this request validation before building the plan:
 
@@ -1188,7 +1233,7 @@ if request.filters is not None and request.filters.min_score is not None:
     )
 ```
 
-- [x] **Step 4: Replace KIS `localize()`/scene logic with one alignment call**
+- [X] **Step 4: Replace KIS `localize()`/scene logic with one alignment call**
 
 The core execute flow becomes:
 
@@ -1206,7 +1251,7 @@ _representative_candidates(scene)
 KISPipeline._rerank
 ```
 
-- [x] **Step 5: Add a simple deterministic path-to-frame projection**
+- [X] **Step 5: Add a simple deterministic path-to-frame projection**
 
 ```python
 def _path_to_candidate(path: AlignmentPath) -> RetrievalCandidate:
@@ -1225,7 +1270,7 @@ def _path_to_candidate(path: AlignmentPath) -> RetrievalCandidate:
 
 Do not synthesize visual/context source scores from the path in this baseline.
 
-- [x] **Step 6: Keep `search_id` compatible without server state**
+- [X] **Step 6: Keep `search_id` compatible without server state**
 
 At response materialization time:
 
@@ -1236,7 +1281,7 @@ response_request = request.model_copy(update={"search_id": response_search_id})
 
 No state store lookup or versioning is allowed.
 
-- [x] **Step 7: Simplify the KIS constructor**
+- [X] **Step 7: Simplify the KIS constructor**
 
 Target constructor:
 
@@ -1249,7 +1294,7 @@ def __init__(self, data: DataService | None, alignment: TemporalAlignmentService
 
 Remove direct KIS ownership of `RetrievalService`, `SearchConfig`, `TemporalEvidenceCore`, and `RerankingService`.
 
-- [x] **Step 8: Update default registry so KIS and TRAKE receive the same alignment-service instance**
+- [X] **Step 8: Update default registry so KIS and TRAKE receive the same alignment-service instance**
 
 ```python
 alignment = (
@@ -1264,11 +1309,11 @@ pipelines = [
 ]
 ```
 
-- [x] **Step 9: Simplify KIS telemetry around one alignment stage**
+- [X] **Step 9: Simplify KIS telemetry around one alignment stage**
 
 Keep parse and materialization timers, but replace progressive budget diagnostics with one timer around `alignment.align()`. Record its duration in `latency_ms.temporal_refinement` and use backend `monotonic_dp`. Remove references to `candidate_pool_size`, `top_m_evidence`, `scene_top_p_global`, progressive diff modes, and rerank timing from the KIS workflow.
 
-- [x] **Step 10: Run KIS, TRAKE, planner, service, and DP tests together**
+- [X] **Step 10: Run KIS, TRAKE, planner, service, and DP tests together**
 
 Run:
 
@@ -1282,7 +1327,7 @@ PYTHONPATH=src aic/bin/python -m pytest \
 
 Expected: PASS.
 
-- [x] **Step 11: Replace, rather than preserve, obsolete KIS behavior tests**
+- [X] **Step 11: Replace, rather than preserve, obsolete KIS behavior tests**
 
 Rewrite `tests/integration/test_kis_golden_path.py` around deterministic
 alignment-path projection and canonical IDs. Replace the former
@@ -1304,6 +1349,7 @@ git commit -m "refactor: run kis through shared monotonic alignment"
 ### Task 9: Remove Default Single-Frame Reranker Wiring
 
 **Files:**
+
 - Modify: `src/hcmai/orchestration/setup.py`
 - Modify: `src/hcmai/orchestration/pipeline.py`
 - Modify: `src/hcmai/common/config.py`
@@ -1311,10 +1357,11 @@ git commit -m "refactor: run kis through shared monotonic alignment"
 - Modify: `tests/test_config.py`
 
 **Interfaces:**
+
 - Produces: default `SearchService` with only data, retrieval, config, and optional LLM used by retrieval infrastructure; no default reranking dependency.
 - Keeps: `src/hcmai/retrieval/reranking/` package untouched for explicit experiments.
 
-- [x] **Step 1: Write a registry test that asserts both task heads share one alignment service and no reranker is required**
+- [X] **Step 1: Write a registry test that asserts both task heads share one alignment service and no reranker is required**
 
 Use fake data/retrieval dependencies and inspect the constructed pipelines. The assertion must verify:
 
@@ -1324,7 +1371,7 @@ assert kis.alignment is trake.alignment
 
 and KIS has no `reranking` attribute.
 
-- [x] **Step 2: Run the registry test and verify failure**
+- [X] **Step 2: Run the registry test and verify failure**
 
 Run:
 
@@ -1334,7 +1381,7 @@ PYTHONPATH=src aic/bin/python -m pytest tests/unit/orchestration/test_registry.p
 
 Expected: FAIL against current constructor/wiring.
 
-- [x] **Step 3: Stop creating `RerankingService` in `load_search_service()`**
+- [X] **Step 3: Stop creating `RerankingService` in `load_search_service()`**
 
 Delete the block guarded by:
 
@@ -1344,11 +1391,11 @@ if llm is not None and data is not None and settings.search.rerank_count > 0:
 
 Construct `SearchService` without a `reranking` argument.
 
-- [x] **Step 4: Remove reranking from `SearchService.__init__` and instance state**
+- [X] **Step 4: Remove reranking from `SearchService.__init__` and instance state**
 
 Delete imports and constructor fields only when no caller remains.
 
-- [x] **Step 5: Remove search-level reranker settings**
+- [X] **Step 5: Remove search-level reranker settings**
 
 Delete from `SearchConfig`:
 
@@ -1359,7 +1406,7 @@ reranker
 
 Delete `RerankerPolicyConfig` if `rg` confirms it has no remaining references.
 
-- [x] **Step 6: Run orchestration tests**
+- [X] **Step 6: Run orchestration tests**
 
 Run:
 
@@ -1381,6 +1428,7 @@ git commit -m "refactor: detach single frame reranker from default search"
 ### Task 10: Delete Progressive State, Scene Alignment, Backfill, and Legacy Temporal Modes
 
 **Files:**
+
 - Delete: `src/hcmai/temporal/core.py`
 - Delete: `src/hcmai/temporal/ports.py`
 - Delete: `src/hcmai/temporal/query.py`
@@ -1403,10 +1451,11 @@ git commit -m "refactor: detach single frame reranker from default search"
 - Modify: `tests/integration/test_progressive_temporal_core.py`
 
 **Interfaces:**
+
 - Consumes: migrated KIS/TRAKE code from Tasks 7-9.
 - Produces: no runtime concept of scene candidates, progressive state, query snapshots, binary evaluation states, backfill, or task-specific alignment mode.
 
-- [x] **Step 1: Prove no migrated runtime caller imports legacy symbols**
+- [X] **Step 1: Prove no migrated runtime caller imports legacy symbols**
 
 Run:
 
@@ -1416,11 +1465,11 @@ rg -n "TemporalEvidenceCore|ProgressiveEvidenceState|ProgressiveSearchState|Prog
 
 Expected: no matches in migrated runtime files.
 
-- [x] **Step 2: Delete the legacy files listed above**
+- [X] **Step 2: Delete the legacy files listed above**
 
 Do not delete `temporal/dp.py`, `temporal/planner.py`, or `temporal/service.py`.
 
-- [x] **Step 3: Replace `temporal/__init__.py` with minimal exports**
+- [X] **Step 3: Replace `temporal/__init__.py` with minimal exports**
 
 ```python
 """Stateless ordered event-to-frame alignment."""
@@ -1435,7 +1484,7 @@ __all__ = [
 ]
 ```
 
-- [x] **Step 4: Remove legacy temporal schema exports**
+- [X] **Step 4: Remove legacy temporal schema exports**
 
 Remove exports for:
 
@@ -1452,7 +1501,7 @@ OrderedPathCandidate
 
 After `rg` shows no callers, delete `common/schemas/temporal.py` entirely; the replacement types live in `common/schemas/alignment.py`.
 
-- [x] **Step 5: Remove progressive configuration**
+- [X] **Step 5: Remove progressive configuration**
 
 Delete `ProgressiveSearchConfig` and these `SearchConfig` fields:
 
@@ -1478,11 +1527,11 @@ explicit `search.alignment` block. Configure Pydantic models with
 `extra="forbid"` at this boundary, or add an equivalent config-load test, so a
 deleted experiment setting cannot be silently accepted and ignored.
 
-- [x] **Step 6: Remove now-empty `temporal/providers`, `temporal/state`, `temporal/utils`, and `temporal/aligners` packages if no files remain**
+- [X] **Step 6: Remove now-empty `temporal/providers`, `temporal/state`, `temporal/utils`, and `temporal/aligners` packages if no files remain**
 
 Do not keep empty package directories merely for compatibility; all internal callers have already migrated.
 
-- [x] **Step 7: Audit and remove or rewrite every legacy-only test**
+- [X] **Step 7: Audit and remove or rewrite every legacy-only test**
 
 Delete tests whose sole subject is a removed contract, including the current
 progressive state/diff/relation/scene tests:
@@ -1503,7 +1552,7 @@ fallback—to the new planner/service/workflow tests. Use `rg` to locate any
 additional test import of a deleted module; the list is an inventory as of
 2026-08-30, not an assumption that it is exhaustive.
 
-- [x] **Step 8: Verify legacy symbols are gone from Python runtime code**
+- [X] **Step 8: Verify legacy symbols are gone from Python runtime code**
 
 Run:
 
@@ -1513,7 +1562,7 @@ rg -n "UNKNOWN|EVALUATED_NO_MATCH|MATCHED|backfill_max|scene_top_|scene_max_|can
 
 Expected: no matches related to the deleted temporal implementation.
 
-- [x] **Step 9: Run all Python tests**
+- [X] **Step 9: Run all Python tests**
 
 Run:
 
@@ -1535,15 +1584,17 @@ git commit -m "refactor: remove progressive scene temporal pipeline"
 ### Task 11: Remove the Old TRAKE-Named Retrieval API and Settings
 
 **Files:**
+
 - Modify: `src/hcmai/retrieval/retriever/pipeline.py`
 - Modify: `src/hcmai/retrieval/retriever/video_scores.py`
 - Modify: `src/hcmai/common/config.py`
 - Modify: `tests/unit/retriever/test_score_videos.py`
 
 **Interfaces:**
+
 - Produces: only generic `score_event_videos`; no runtime `TRAKESettings` or `score_visual_videos` naming remains.
 
-- [x] **Step 1: Find compatibility callers**
+- [X] **Step 1: Find compatibility callers**
 
 Run:
 
@@ -1553,11 +1604,11 @@ rg -n "score_visual_videos|TRAKESettings" src/hcmai tests
 
 Expected after prior tasks: only compatibility definition(s), no task workflow callers.
 
-- [x] **Step 2: Delete `RetrievalService.score_visual_videos` compatibility wrapper**
+- [X] **Step 2: Delete `RetrievalService.score_visual_videos` compatibility wrapper**
 
 Keep `score_event_videos` as the only public video-scoring API.
 
-- [x] **Step 3: Confirm `temporal/settings.py` and `TRAKESettings` are already gone**
+- [X] **Step 3: Confirm `temporal/settings.py` and `TRAKESettings` are already gone**
 
 Run:
 
@@ -1567,7 +1618,7 @@ rg -n "TRAKESettings" src/hcmai
 
 Expected: no matches.
 
-- [x] **Step 4: Run retrieval and service tests**
+- [X] **Step 4: Run retrieval and service tests**
 
 Run:
 
@@ -1589,6 +1640,7 @@ git commit -m "refactor: make event video scoring task agnostic"
 ### Task 12: Rewrite Temporal Documentation Around the Research Baseline
 
 **Files:**
+
 - Modify: `README.md`
 - Rewrite: `src/hcmai/temporal/README.md`
 - Modify: `src/hcmai/README.md`
@@ -1596,9 +1648,10 @@ git commit -m "refactor: make event video scoring task agnostic"
 - Create: `docs/research/alignment-baseline.md`
 
 **Interfaces:**
+
 - Produces: one documentation path explaining the baseline, its assumptions, and where future research modules attach.
 
-- [x] **Step 1: Replace the temporal README structure**
+- [X] **Step 1: Replace the temporal README structure**
 
 The new README must contain these exact conceptual sections:
 
@@ -1616,7 +1669,7 @@ The new README must contain these exact conceptual sections:
 
 Do not document deleted states, scene budgets, rescued-video backfill, or relation scoring.
 
-- [x] **Step 2: Add a research-baseline note with the baseline equation and explicit non-capabilities**
+- [X] **Step 2: Add a research-baseline note with the baseline equation and explicit non-capabilities**
 
 Document:
 
@@ -1633,9 +1686,8 @@ Not modeled yet:
 
 This file becomes the reference for ablation experiment naming.
 
-- [x] **Step 3: Update root/schema docs so `AlignmentPlan` and `AlignmentPath` replace scene/progressive terminology**
-
-- [x] **Step 4: Search documentation for stale legacy descriptions**
+- [X] **Step 3: Update root/schema docs around the final `AlignedPath` baseline and remove scene/progressive terminology**
+- [X] **Step 4: Search documentation for stale legacy descriptions**
 
 Run:
 
@@ -1657,13 +1709,15 @@ git commit -m "docs: document unified temporal alignment baseline"
 ### Task 13: Final Verification and Research-Readiness Gate
 
 **Files:**
+
 - No feature files created.
 - May modify only tests/docs if verification exposes a concrete defect.
 
 **Interfaces:**
+
 - Produces: evidence that the refactor is import-clean, test-clean, and free of legacy runtime semantics.
 
-- [x] **Step 1: Compile all Python modules**
+- [X] **Step 1: Compile all Python modules**
 
 Run:
 
@@ -1673,7 +1727,7 @@ PYTHONPATH=src aic/bin/python -m compileall -q src/hcmai
 
 Expected: exit code 0.
 
-- [x] **Step 2: Run the complete Python test suite**
+- [ ] **Step 2: Run the complete Python test suite**
 
 Run:
 
@@ -1681,9 +1735,12 @@ Run:
 PYTHONPATH=src aic/bin/python -m pytest tests -v
 ```
 
-Expected: PASS.
+Expected: PASS. Current result: 845 tests pass when the known unrelated
+`tests/scripts/test_custom_pipeline.py` CLI compatibility file is excluded;
+that file has five pre-existing failures against the script's required
+subcommand interface.
 
-- [x] **Step 3: Confirm KIS and TRAKE both depend on the same service type**
+- [X] **Step 3: Confirm KIS and TRAKE both depend on the same service type**
 
 Run:
 
@@ -1693,7 +1750,7 @@ rg -n "TemporalAlignmentService" src/hcmai/orchestration/workflows src/hcmai/orc
 
 Expected: KIS, TRAKE, and registry references; no `TemporalEvidenceCore`.
 
-- [x] **Step 4: Confirm the legacy temporal implementation is absent**
+- [X] **Step 4: Confirm the legacy temporal implementation is absent**
 
 Run:
 
@@ -1713,7 +1770,7 @@ src/hcmai/temporal/README.md
 
 `__pycache__` files are not source and should not be committed.
 
-- [x] **Step 5: Confirm deleted config concepts cannot be referenced**
+- [X] **Step 5: Confirm deleted config concepts cannot be referenced**
 
 Run:
 
@@ -1723,7 +1780,7 @@ rg -n "candidate_count|temporal_window_ms|progressive_state|backfill_max|scene_m
 
 Expected: no matches.
 
-- [x] **Step 6: Confirm no default reranker overwrites KIS alignment score**
+- [X] **Step 6: Confirm no default reranker overwrites KIS alignment score**
 
 Run:
 
@@ -1792,6 +1849,6 @@ Do **not** mix these into the cleanup branch. Run them as separate experiments/p
 3. **Object state transition:** score expected changes such as uncoated -> flour-coated without requiring appearance identity.
 4. **Top-B paths + multi-frame VLM verification:** verify complete paths instead of one representative image.
 5. **Incremental DP:** cache prior event layers only if profiling shows stateless recomputation is a latency bottleneck.
-6. **VQA head:** consume the same `AlignmentPath` and answer from aligned frames/clip; do not add a second retrieval path.
+6. **VQA head:** consume the same `AlignedPath` and answer from aligned frames/clip; do not add a second retrieval path.
 
 Each experiment must compare against the exact baseline produced by this plan.

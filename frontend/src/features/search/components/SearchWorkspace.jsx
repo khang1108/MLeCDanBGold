@@ -18,7 +18,6 @@ export const parseTrakeEvents = (description) => {
   const text = description.trim();
   const markers = Array.from(text.matchAll(TRAKE_EVENT_MARKER));
   if (!markers.length || Number(markers[0][1]) !== 1) return null;
-  if (markers.length < 2) return [];
 
   const events = markers.map((marker, index) => {
     if (Number(marker[1]) !== index + 1) return null;
@@ -89,6 +88,14 @@ const SearchWorkspace = ({
   const queryTextareaRef = useRef(null);
   const { requestSubmission } = useSubmission();
 
+  const openKisFrame = useCallback((frame) => {
+    onFrameClick?.({ frame, submissionMode: "kis" });
+  }, [onFrameClick]);
+
+  const openTrakeFrame = useCallback((frame) => {
+    onFrameClick?.({ frame, submissionMode: "none" });
+  }, [onFrameClick]);
+
   const setQueryTextareaRef = useCallback((node) => {
     queryTextareaRef.current = node;
     if (queryInputRef) queryInputRef.current = node;
@@ -150,13 +157,7 @@ const SearchWorkspace = ({
     const isTrakeMode = events !== null;
     let retrieval = null;
 
-    if (isTrakeMode) {
-      if (events.length < 2) {
-        setResultType("trake");
-        setError("TRAKE requires at least two ordered events labeled E1, E2, ... .");
-        return;
-      }
-    } else {
+    if (!isTrakeMode) {
       retrieval = parseRetrievalDescription(rawEventText);
     }
 
@@ -296,7 +297,7 @@ const SearchWorkspace = ({
               warnings={warnings}
               error={error}
               hasSearched
-              onFrameClick={onFrameClick}
+              onFrameClick={openTrakeFrame}
               onTrakeSubmit={handleTrakeSubmit}
             />
           )}
@@ -308,7 +309,7 @@ const SearchWorkspace = ({
               latencyMs={searchLatencyMs}
               warnings={warnings}
               events={kisEvents}
-              onFrameClick={onFrameClick}
+              onFrameClick={openKisFrame}
               onSubmit={handleFrameSubmit}
             />
           )}
@@ -320,7 +321,7 @@ const SearchWorkspace = ({
               latencyMs={searchLatencyMs}
               warnings={warnings}
               events={kisEvents}
-              onFrameClick={onFrameClick}
+              onFrameClick={openKisFrame}
               onSubmit={handleFrameSubmit}
             />
           )}

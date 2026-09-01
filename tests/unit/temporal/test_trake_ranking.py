@@ -29,8 +29,8 @@ def test_best_paths_of_every_video_outrank_any_second_best() -> None:
         "L02_V002",
         "L01_V001",
     ]
-    assert rows[0].frame_idx == (100, 200)
-    assert rows[2].frame_idx == (100, 300)
+    assert rows[0].frame_ids == ("L02_V002_0", "L02_V002_1")
+    assert rows[2].frame_ids == ("L02_V002_0", "L02_V002_2")
 
 
 def _diagonal(video_id: str, *event_peaks: float) -> VideoEventScores:

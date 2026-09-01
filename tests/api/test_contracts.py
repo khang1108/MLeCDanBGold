@@ -92,8 +92,10 @@ def test_kis_request_rejects_blank_queries_and_non_positive_top_k() -> None:
 
 def test_trake_requires_explicit_events() -> None:
     request = TRAKERequest(events=["e1", "e2"], top_k=5)
+    single_event_request = TRAKERequest(events=["only one"], top_k=5)
 
     assert request.events == ["e1", "e2"]
+    assert single_event_request.events == ["only one"]
     assert request.top_k == 5
 
     with pytest.raises(ValidationError):
