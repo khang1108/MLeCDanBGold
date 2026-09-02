@@ -8,24 +8,29 @@ from time import monotonic
 from typing import Any
 
 from dotenv import load_dotenv
-
 from hcmai.common.config import (
     AppConfig,
     REPOSITORY_ROOT,
     resolve_dataset_root,
     resolve_repository_path,
 )
-from hcmai.retrieval.models import RetrievalSource
+
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
 from hcmai.corpus.corpus import _CorpusFrameLoadError
-from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.orchestration.pipeline import SearchService
 from hcmai.query_preparation.adapters.qwen import QwenQueryPreparationAdapter
 from hcmai.query_preparation.service import QueryPreparationService
-from thundercompute.pipeline import LLMService, LLMServiceConfig
-from hcmai.orchestration.pipeline import SearchService
+from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.retrieval.evidence.asr_projected import SegmentProjectedASRIndex
+from hcmai.retrieval.evidence.bm25 import BM25TemporalScorer
+from hcmai.retrieval.evidence.dense import DenseTemporalScorer
+from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+from thundercompute.config import LLMServiceConfig
+from thundercompute.pipeline import LLMService
 
 logger = get_logger(__name__)
 
@@ -44,12 +49,8 @@ def load_search_service(messages: list[str]) -> SearchService:
             "HCMAI_RETRIEVAL_PROFILE is no longer supported; "
             "use the context/asr-segment runtime artifacts"
         )
-    metadata_path = _runtime_path(
-        "HCMAI_METADATA_PATH", settings.dataset.frames_path
-    )
-    configured_dataset_root = os.getenv(
-        "HCMAI_DATASET_ROOT", str(settings.dataset.root)
-    )
+    metadata_path = _runtime_path("HCMAI_METADATA_PATH", settings.dataset.frames_path)
+    configured_dataset_root = os.getenv("HCMAI_DATASET_ROOT", str(settings.dataset.root))
     dataset_root = resolve_dataset_root(configured_dataset_root)
     configured_dataset_path = resolve_repository_path(configured_dataset_root)
     if dataset_root != configured_dataset_path:
@@ -74,28 +75,149 @@ def load_search_service(messages: list[str]) -> SearchService:
         messages,
         corpus=corpus,
     )
+    temporal_evidence = _load_temporal_evidence(settings, retrieval, messages)
     return SearchService(
         corpus=corpus,
         retrieval=retrieval,
         config=settings.search,
         llm=llm,
         query_preparation=query_preparation,
+        temporal_evidence=temporal_evidence,
     )
+
+
+def _load_temporal_evidence(
+    settings: AppConfig,
+    retrieval: RetrievalService | None,
+    messages: list[str],
+) -> TemporalEvidenceScorer | None:
+    """Load independent full-corpus Dense and BM25 temporal capabilities."""
+
+    if retrieval is None:
+        return None
+    source_retriever = getattr(retrieval, "source_retriever", None)
+    if source_retriever is None:
+        messages.append("Temporal evidence unavailable: source bindings missing")
+        return None
+    visual = source_retriever(RetrievalSource.VISUAL)
+    if visual is None:
+        messages.append("Temporal evidence unavailable: visual Dense index missing")
+        return None
+
+    dense, context_ready, asr_ready = _load_dense_temporal(settings, retrieval, visual, messages)
+    bm25 = _load_bm25_temporal(settings, visual, messages)
+    if dense is None and bm25 is None:
+        return None
+    return TemporalEvidenceScorer(
+        visual_index=visual.index,
+        dense=dense,
+        bm25=bm25,
+        config=settings.search.hybrid_temporal,
+        visual_dense_ready=True,
+        context_dense_ready=context_ready,
+        asr_dense_ready=asr_ready,
+    )
+
+
+def _load_dense_temporal(
+    settings: AppConfig,
+    retrieval: RetrievalService,
+    visual: Any,
+    messages: list[str],
+) -> tuple[DenseTemporalScorer | None, bool, bool]:
+    """Load Dense scoring from visual, Context, and projected segment-ASR.
+
+    Segment ASR is loaded by fast-track retrieval. This startup boundary only
+    projects its existing index onto the canonical visual frame identities.
+    """
+
+    context = retrieval.source_retriever(RetrievalSource.CONTEXT)
+    asr_retriever = retrieval.source_retriever(RetrievalSource.ASR)
+    context_ready = context is not None
+    asr_ready = asr_retriever is not None
+
+    if context is None:
+        messages.append("Dense temporal evidence unavailable: Context retriever missing")
+    if asr_retriever is None:
+        messages.append("Dense temporal evidence unavailable: ASR segment retriever missing")
+    if not context_ready or not asr_ready:
+        return None, context_ready, asr_ready
+
+    assert context is not None
+    assert asr_retriever is not None
+    try:
+        if context.index.metadata.embedding_dim != asr_retriever.index.metadata.embedding_dim:
+            raise ValueError("Context and ASR segment index dimensions differ")
+    except Exception as error:
+        messages.append(
+            "Dense temporal evidence identity validation failed: "
+            f"{type(error).__name__}: {error}"
+        )
+        return None, context_ready, asr_ready
+
+    try:
+        projected_asr = SegmentProjectedASRIndex(
+            segment_index=asr_retriever.index,
+            canonical_index=visual.index,
+            projector=asr_retriever.projector,
+        )
+    except Exception as error:
+        messages.append(
+            "Dense temporal ASR projection failed: "
+            f"{type(error).__name__}: {error}"
+        )
+        return None, context_ready, False
+
+    try:
+        scorer = DenseTemporalScorer(
+            visual_index=visual.index,
+            context_index=context.index,
+            asr_index=projected_asr,
+            visual_encoder=visual.encoder,
+            text_encoder=context.encoder,
+            weights=settings.search.hybrid_temporal.dense,
+            chunk_size=settings.search.alignment.chunk_size,
+        )
+    except Exception as error:
+        messages.append(
+            "Dense temporal evidence identity validation failed: "
+            f"{type(error).__name__}: {error}"
+        )
+        return None, context_ready, asr_ready
+    return scorer, context_ready, asr_ready
+
+
+def _load_bm25_temporal(
+    settings: AppConfig,
+    visual: Any,
+    messages: list[str],
+) -> BM25TemporalScorer | None:
+    """Load BM25 against the canonical visual-index identity mapping."""
+
+    bm25_path = _runtime_path("HCMAI_BM25_INDEX_PATH", settings.index.bm25_path)
+    try:
+        return BM25TemporalScorer.load(
+            bm25_path,
+            visual.index.mapping,
+            settings.search.hybrid_temporal.bm25_fields,
+        )
+    except Exception as error:
+        messages.append(
+            f"BM25 temporal evidence unavailable at {bm25_path}: "
+            f"{type(error).__name__}: {error}"
+        )
+        return None
 
 
 def _load_app_config() -> AppConfig:
-    path = resolve_repository_path(
-        os.getenv("HCMAI_CONFIG_PATH", "configs/baseline.yaml")
-    )
+    path = resolve_repository_path(os.getenv("HCMAI_CONFIG_PATH", "configs/baseline.yaml"))
     if not path.is_file():
         raise FileNotFoundError(f"Config not found at {path}")
     return AppConfig.from_yaml(path)
 
 
 def _load_model_config() -> LLMServiceConfig:
-    path = resolve_repository_path(
-        os.getenv("HCMAI_LLM_CONFIG", "thundercompute/config.yaml")
-    )
+    path = resolve_repository_path(os.getenv("HCMAI_LLM_CONFIG", "thundercompute/config.yaml"))
     if not path.is_file():
         raise FileNotFoundError(f"Model config not found at {path}")
     return LLMServiceConfig.from_yaml(path)
@@ -120,8 +242,7 @@ def _load_remote_llm(
     except Exception as error:
         category = getattr(getattr(error, "category", None), "value", None)
         messages.append(
-            "Remote inference readiness unavailable: "
-            f"{category or type(error).__name__}"
+            "Remote inference readiness unavailable: " f"{category or type(error).__name__}"
         )
     return service
 
@@ -135,9 +256,7 @@ def _load_query_preparation(
 
     capabilities = llm.capability_health() if llm is not None else {}
     if not capabilities.get("query_preparation", False):
-        messages.append(
-            "Query preparation unavailable; Dense search remains available"
-        )
+        messages.append("Query preparation unavailable; Dense search remains available")
         return None
     return QueryPreparationService(
         QwenQueryPreparationAdapter(llm),
@@ -172,8 +291,7 @@ def _load_corpus(
         raise
     except Exception as error:
         messages.append(
-            f"Could not load metadata {metadata_path}: "
-            f"{type(error).__name__}: {error}"
+            f"Could not load metadata {metadata_path}: " f"{type(error).__name__}: {error}"
         )
         return None
     logger.info(
@@ -232,9 +350,7 @@ def _configured_corpus_artifacts(
         configured_transcript_path,
     )
     if not _typed_artifact_available(transcript_path, allow_directory=True):
-        messages.append(
-            f"ASR transcript artifact not available at {transcript_path}"
-        )
+        messages.append(f"ASR transcript artifact not available at {transcript_path}")
         transcript_path = None
 
     configured_video_metadata_path = settings.dataset.media_info_path
@@ -243,9 +359,7 @@ def _configured_corpus_artifacts(
         configured_video_metadata_path,
     )
     if not _metadata_directory_available(video_metadata_path):
-        messages.append(
-            f"VIDEO metadata artifact not available at {video_metadata_path}"
-        )
+        messages.append(f"VIDEO metadata artifact not available at {video_metadata_path}")
         video_metadata_path = None
 
     return evidence_paths, object_path, transcript_path, video_metadata_path
@@ -300,13 +414,10 @@ def _load_retrieval(
         return None
     try:
         visual = RetrievalService.load_index(index_dir)
-        visual_encoder = _query_encoder(
-            models.visual_embedding, visual, llm, "visual"
-        )
+        visual_encoder = _query_encoder(models.visual_embedding, visual, llm, "visual")
     except Exception as error:
         messages.append(
-            f"Could not load required visual index {index_dir}: "
-            f"{type(error).__name__}: {error}"
+            f"Could not load required visual index {index_dir}: " f"{type(error).__name__}: {error}"
         )
         return None
     return _load_fast_track_retrieval(
@@ -336,14 +447,10 @@ def _load_fast_track_retrieval(
     """
 
     if corpus is None:
-        messages.append(
-            "Canonical frame store unavailable for fast-track retrieval"
-        )
+        messages.append("Canonical frame store unavailable for fast-track retrieval")
         return None
 
-    context_path = _runtime_path(
-        "HCMAI_CONTEXT_INDEX_PATH", settings.index.context_path
-    )
+    context_path = _runtime_path("HCMAI_CONTEXT_INDEX_PATH", settings.index.context_path)
     asr_segment_path = _runtime_path(
         "HCMAI_ASR_SEGMENT_INDEX_PATH", settings.index.asr_segment_path
     )
@@ -357,10 +464,7 @@ def _load_fast_track_retrieval(
         settings=settings,
         messages=messages,
     )
-    if (
-        context is None
-        and RetrievalSource.CONTEXT in settings.search.fusion.required_sources
-    ):
+    if context is None and RetrievalSource.CONTEXT in settings.search.fusion.required_sources:
         return None
 
     asr_segment = _load_fast_track_index(
@@ -371,10 +475,7 @@ def _load_fast_track_retrieval(
         settings=settings,
         messages=messages,
     )
-    if (
-        asr_segment is None
-        and RetrievalSource.ASR in settings.search.fusion.required_sources
-    ):
+    if asr_segment is None and RetrievalSource.ASR in settings.search.fusion.required_sources:
         return None
 
     if (
@@ -458,13 +559,9 @@ def _load_fast_track_index(
         if metadata.schema_version != "dense-index-v2":
             raise ValueError("metadata must use dense-index-v2")
         if metadata.entity_kind != expected_entity_kind:
-            raise ValueError(
-                f"entity_kind must be {expected_entity_kind!r}"
-            )
+            raise ValueError(f"entity_kind must be {expected_entity_kind!r}")
         if metadata.retrieval_source != source.value:
-            raise ValueError(
-                f"retrieval_source must be {source.value!r}"
-            )
+            raise ValueError(f"retrieval_source must be {source.value!r}")
         if metadata.dataset_version != visual.metadata.dataset_version:
             raise ValueError("dataset version differs from visual index")
         if metadata.model_name != encoder_config.model_name:
@@ -474,16 +571,11 @@ def _load_fast_track_index(
         return index
     except Exception as error:
         label = "asr segment" if source is RetrievalSource.ASR else source.value
-        messages.append(
-            f"Could not load {label} index {path}: "
-            f"{type(error).__name__}: {error}"
-        )
+        messages.append(f"Could not load {label} index {path}: " f"{type(error).__name__}: {error}")
         return None
 
 
-def _query_encoder(
-    config: Any, index: Any, llm: LLMService | None, source: str
-) -> Any:
+def _query_encoder(config: Any, index: Any, llm: LLMService | None, source: str) -> Any:
     if index.metadata.model_name != config.model_name:
         raise ValueError(
             f"{source} index model {index.metadata.model_name!r} does not "
@@ -491,6 +583,4 @@ def _query_encoder(
         )
     if llm is None:
         return EmbeddingService.create_text_adapter(config)
-    return EmbeddingService.create_remote_adapter(
-        llm, config, index.metadata.embedding_dim, source
-    )
+    return EmbeddingService.create_remote_adapter(llm, config, index.metadata.embedding_dim, source)
