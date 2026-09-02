@@ -104,7 +104,7 @@ test('uses vertically growing text fields for long filter values', () => {
   expect(screen.getByLabelText('ASR / Transcript').tagName).toBe('TEXTAREA');
 });
 
-test('sends one filter request and scopes the returned response by folder and video', async () => {
+test('renders the backend page without client-side rescoping', async () => {
   filterFrames.mockResolvedValueOnce({
     total_pages: 1,
     results: [
@@ -145,7 +145,7 @@ test('sends one filter request and scopes the returned response by folder and vi
 
   fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'L26' } });
   expect(await screen.findByAltText('Frame frame-a')).toBeTruthy();
-  expect(screen.queryByAltText('Frame frame-b')).toBeNull();
+  expect(await screen.findByAltText('Frame frame-b')).toBeTruthy();
 
   fireEvent.change(screen.getByLabelText('Video'), {
     target: { value: 'L26_topic.video-1' },
@@ -172,7 +172,7 @@ test('includes the current folder and video scope in the Filter request', async 
   }));
 });
 
-test('uses applied scope for pagination while draft scope filters visible cards', async () => {
+test('uses applied scope for pagination without filtering the backend page again', async () => {
   filterFrames
     .mockResolvedValueOnce({
       total_pages: 2,
@@ -222,13 +222,12 @@ test('uses applied scope for pagination while draft scope filters visible cards'
     pageId: 1,
   }));
   expect(await screen.findByAltText('Frame frame-a')).toBeTruthy();
-  expect(screen.queryByAltText('Frame frame-b')).toBeNull();
+  expect(await screen.findByAltText('Frame frame-b')).toBeTruthy();
 
-  // This scope is a draft until Filter is pressed again, but it can still
-  // narrow the currently loaded page immediately in the FE.
+  // This scope remains a draft until Filter is pressed again.
   fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'L27' } });
   expect(await screen.findByAltText('Frame frame-b')).toBeTruthy();
-  expect(screen.queryByAltText('Frame frame-a')).toBeNull();
+  expect(await screen.findByAltText('Frame frame-a')).toBeTruthy();
 
   fireEvent.click(screen.getByRole('button', { name: 'Page 2' }));
   await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(2));
@@ -237,7 +236,40 @@ test('uses applied scope for pagination while draft scope filters visible cards'
     pageId: 2,
   }));
   expect(await screen.findByAltText('Frame frame-d')).toBeTruthy();
-  expect(screen.queryByAltText('Frame frame-c')).toBeNull();
+  expect(await screen.findByAltText('Frame frame-c')).toBeTruthy();
+});
+
+test('uses complete Filter rows without requesting per-frame details', async () => {
+  const onFrameClick = jest.fn();
+  filterFrames.mockResolvedValueOnce({
+    total_pages: 1,
+    results: Array.from({ length: 12 }, (_, index) => ({
+      frame_id: `frame-${index}`,
+      video_id: 'L21_V001',
+      folder_id: 'L21',
+      frame_idx: index,
+      timestamp_ms: index * 40,
+      title: 'Episode',
+      caption: `Complete caption ${index}`,
+      ocr: null,
+      objects: { person: 3 },
+      asr: 'Xin chào',
+    })),
+  });
+  renderWorkspace({ isActive: false, onFrameClick });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  const firstFrame = await screen.findByAltText('Frame frame-0');
+  await waitFor(() => expect(document.querySelectorAll('.frame-card')).toHaveLength(12));
+  expect(getFrameDetail).not.toHaveBeenCalled();
+
+  fireEvent.click(firstFrame);
+  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
+    frame_id: 'frame-0',
+    caption: 'Complete caption 0',
+    objects: { person: 3 },
+    asr: 'Xin chào',
+  }));
 });
 
 test('requests page 1 for a new filter after navigating to another page', async () => {

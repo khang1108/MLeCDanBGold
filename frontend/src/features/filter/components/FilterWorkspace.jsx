@@ -6,7 +6,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { getFrameDetail } from '../../../api/frames';
 import { filterFrames } from '../../../api/filter';
 import FrameCard from '../../frames/components/FrameCard';
 import SubmissionWorktree from '../../submission/components/SubmissionWorktree';
@@ -42,7 +41,6 @@ const FilterResults = ({
   selectedVideoId,
   onFrameClick,
   onSubmit,
-  detailCache,
   containerRef,
   currentPage,
   totalPages,
@@ -59,17 +57,12 @@ const FilterResults = ({
   );
 
   const renderFrame = (frame) => {
-    const detailEntry = detailCache[frame.frame_id];
-    const detail = detailEntry?.detail;
-    const displayFrame = detail ? { ...frame, ...detail } : frame;
     return (
       <FrameCard
         key={frame.frame_id}
         frame={frame}
-        detail={detail}
-        detailStatus={detailEntry?.status || 'idle'}
         imageLoading="eager"
-        onClick={() => onFrameClick?.(displayFrame)}
+        onClick={() => onFrameClick?.(frame)}
         onSubmit={onSubmit}
       />
     );
@@ -162,20 +155,10 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
   const [pageId, setPageId] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [framesPerPage, setFramesPerPage] = useState(DEFAULT_FRAMES_PER_PAGE);
-  const [detailCache, setDetailCache] = useState({});
   const requestRef = useRef(null);
   const resultsViewportRef = useRef(null);
-  const detailCacheRef = useRef(new Map());
-  const detailControllersRef = useRef(new Map());
   const { requestSubmission } = useSubmission();
 
-  const scopeResults = useMemo(
-    () => filterResultsByScope(results, {
-      folderId: activeFolder,
-      videoId: selectedVideoId,
-    }),
-    [activeFolder, results, selectedVideoId],
-  );
   const folderIds = FILTER_FOLDER_IDS;
   const videoIds = useMemo(() => {
     const scopedResults = filterResultsByScope(results, { folderId: activeFolder });
@@ -186,12 +169,6 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
 
   useEffect(() => () => {
     requestRef.current?.abort();
-    detailControllersRef.current.forEach((controller) => controller.abort());
-  }, []);
-
-  const abortDetailRequests = useCallback(() => {
-    detailControllersRef.current.forEach((controller) => controller.abort());
-    detailControllersRef.current.clear();
   }, []);
 
   useLayoutEffect(() => {
@@ -231,7 +208,6 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     resetPagination = false,
   }) => {
     requestRef.current?.abort();
-    abortDetailRequests();
     const controller = new AbortController();
     requestRef.current = controller;
     setIsFiltering(true);
@@ -261,7 +237,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
         setIsFiltering(false);
       }
     }
-  }, [abortDetailRequests]);
+  }, []);
 
   const handleFilter = useCallback((event) => {
     event.preventDefault();
@@ -308,40 +284,6 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     }
     setActiveFolder(nextFolder || null);
   }, [results, selectedVideoId]);
-
-  const loadFrameDetail = useCallback((frame) => {
-    const frameId = frame.frame_id;
-    const existing = detailCacheRef.current.get(frameId);
-    if (existing) return;
-
-    const controller = new AbortController();
-    detailControllersRef.current.set(frameId, controller);
-    const loadingEntry = { status: 'loading', detail: null };
-    detailCacheRef.current.set(frameId, loadingEntry);
-    setDetailCache((current) => ({ ...current, [frameId]: loadingEntry }));
-
-    getFrameDetail({ frameId, signal: controller.signal })
-      .then((detail) => {
-        const entry = { status: 'loaded', detail };
-        detailCacheRef.current.set(frameId, entry);
-        setDetailCache((current) => ({ ...current, [frameId]: entry }));
-      })
-      .catch((detailError) => {
-        if (detailError.name === 'AbortError') return;
-        const entry = { status: 'error', detail: null };
-        detailCacheRef.current.set(frameId, entry);
-        setDetailCache((current) => ({ ...current, [frameId]: entry }));
-      })
-      .finally(() => {
-        detailControllersRef.current.delete(frameId);
-      });
-  }, []);
-
-  useEffect(() => {
-    // Pagination keeps this page small, so all currently visible cards can
-    // load their detail contract immediately without viewport observers.
-    scopeResults.forEach(loadFrameDetail);
-  }, [loadFrameDetail, scopeResults]);
 
   const handleFrameSubmit = useCallback((frame) => {
     const videoId = displayVideoId(frame.video_id);
@@ -402,14 +344,13 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
           <div className="filter-results-shell">
             {isFiltering && <div className="filter-loading" role="status">Loading filter results…</div>}
             <FilterResults
-              results={scopeResults}
+              results={results}
               hasFiltered={hasFiltered}
               error={error}
               folderId={activeFolder}
               selectedVideoId={selectedVideoId}
               onFrameClick={onFrameClick}
               onSubmit={handleFrameSubmit}
-              detailCache={detailCache}
               containerRef={resultsViewportRef}
               currentPage={pageId}
               totalPages={totalPages}

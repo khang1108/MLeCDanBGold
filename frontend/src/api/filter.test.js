@@ -8,6 +8,20 @@ const response = (payload, status = 200) => ({
 
 afterEach(() => jest.restoreAllMocks());
 
+const completeFrame = (overrides = {}) => ({
+  frame_id: 'frame-1',
+  video_id: 'L21_V001',
+  folder_id: 'L21',
+  frame_idx: 12,
+  timestamp_ms: 480,
+  title: null,
+  caption: null,
+  ocr: null,
+  objects: {},
+  asr: null,
+  ...overrides,
+});
+
 test('normalizes Vietnamese text without changing the input object', () => {
   const filters = {
     title: '  CẢNH   có ÁO ĐỎ  ',
@@ -58,18 +72,12 @@ test('parses compact object inputs in the name colon count format', () => {
 test('posts one metadata filter request with empty scope values', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     page_id: 1,
+    frames_per_pages: 12,
     total_pages: 3,
     total_results: 1,
-    results: [{
-      rank: 1,
-      frame_id: 'frame-1',
-      video_id: 'L21_topic.video-1',
-      folder_id: 'L21',
-      frame_idx: 12,
-      timestamp_ms: 480,
-      fps: 25,
+    results: [completeFrame({
       objects: { chair: 4 },
-    }],
+    })],
   }));
 
   await filterFrames({
@@ -107,15 +115,14 @@ test('posts one metadata filter request with empty scope values', async () => {
 test('sends the requested page and accepts a global total_results count', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     page_id: 4,
+    frames_per_pages: 24,
     total_pages: 9,
     total_results: 201,
-    results: [{
-      rank: 25,
+    results: [completeFrame({
       frame_id: 'frame-25',
-      video_id: 'L24_topic.video-1',
-      frame_idx: 12,
-      timestamp_ms: 480,
-    }],
+      video_id: 'L24_V001',
+      folder_id: 'L24',
+    })],
   }));
 
   const payload = await filterFrames({
@@ -148,20 +155,22 @@ test('sends the requested page and accepts a global total_results count', async 
 test('sends folder and video scope at the top level', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     page_id: 1,
+    frames_per_pages: 12,
     total_pages: 1,
     total_results: 1,
-    results: [{
+    results: [completeFrame({
       frame_id: 'scoped-frame',
-      video_id: 'L26_topic.video-1',
+      video_id: 'L26_V001',
+      folder_id: 'L26',
       frame_idx: 1,
       timestamp_ms: 40,
-    }],
+    })],
   }));
 
   await filterFrames({
     filters: {},
     folderId: 'l26',
-    videoId: 'L26_topic.video-1',
+    videoId: 'L26_V001',
     framesPerPage: 12,
     pageId: 1,
   });
@@ -172,15 +181,16 @@ test('sends folder and video scope at the top level', async () => {
       body: expect.stringContaining('"folder_id":"L26"'),
     }),
   );
-  expect(global.fetch.mock.calls[0][1].body).toContain('"video_id":"L26_topic.video-1"');
+  expect(global.fetch.mock.calls[0][1].body).toContain('"video_id":"L26_V001"');
 });
 
 test('rejects filter results that do not preserve canonical identity', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     page_id: 1,
+    frames_per_pages: 12,
     total_pages: 1,
     total_results: 1,
-    results: [{ video_id: 'L21_topic.video-1', frame_idx: 12, timestamp_ms: 480 }],
+    results: [{ video_id: 'L21_V001', frame_idx: 12, timestamp_ms: 480 }],
   }));
 
   await expect(filterFrames({ filters: {} }))
@@ -190,6 +200,7 @@ test('rejects filter results that do not preserve canonical identity', async () 
 test('rejects a filter response for a different page than requested', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(response({
     page_id: 3,
+    frames_per_pages: 12,
     total_pages: 9,
     total_results: 201,
     results: [],
@@ -197,4 +208,70 @@ test('rejects a filter response for a different page than requested', async () =
 
   await expect(filterFrames({ filters: {}, pageId: 4 }))
     .rejects.toThrow('page_id 3 for requested page 4');
+});
+
+test('requires echoed page size, totals, and complete display metadata', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+    page_id: 1,
+    frames_per_pages: 12,
+    total_pages: 1,
+    total_results: 1,
+    results: [completeFrame({
+      title: 'Episode',
+      caption: 'A red shirt',
+      ocr: 'STOP',
+      objects: { person: 3 },
+      asr: 'Xin chào',
+    })],
+  }));
+
+  const payload = await filterFrames({ filters: {} });
+
+  expect(payload.results[0]).toEqual(expect.objectContaining({
+    title: 'Episode',
+    caption: 'A red shirt',
+    ocr: 'STOP',
+    objects: { person: 3 },
+    asr: 'Xin chào',
+  }));
+});
+
+test.each([
+  { page_id: 1, total_pages: 0, total_results: 0, results: [] },
+  {
+    page_id: 1,
+    frames_per_pages: 12,
+    total_pages: 1,
+    results: [completeFrame()],
+  },
+  {
+    page_id: 1,
+    frames_per_pages: 24,
+    total_pages: 1,
+    total_results: 1,
+    results: [completeFrame()],
+  },
+  {
+    page_id: 1,
+    frames_per_pages: 12,
+    total_pages: 1,
+    total_results: 1,
+    results: [completeFrame({ caption: undefined })],
+  },
+])('rejects incomplete or mismatched complete-page responses', async (payload) => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload));
+
+  await expect(filterFrames({ filters: {} })).rejects.toThrow();
+});
+
+test('rejects filesystem paths in Filter result rows', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(response({
+    page_id: 1,
+    frames_per_pages: 12,
+    total_pages: 1,
+    total_results: 1,
+    results: [completeFrame({ image_path: '/private/keyframes/frame.jpg' })],
+  }));
+
+  await expect(filterFrames({ filters: {} })).rejects.toThrow('filesystem path');
 });

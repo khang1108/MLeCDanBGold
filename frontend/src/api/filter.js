@@ -91,6 +91,25 @@ const normalizeFilterResult = (frame) => {
   if (!Number.isInteger(timestampMs) || timestampMs < 0) {
     throw new Error('Filter server returned an invalid canonical timestamp');
   }
+  if (typeof frame.folder_id !== 'string' || !frame.folder_id.trim()) {
+    throw new Error('Filter server returned an invalid folder_id');
+  }
+  if ('image_path' in frame || 'thumbnail_path' in frame || 'database_path' in frame) {
+    throw new Error('Filter server returned a forbidden filesystem path');
+  }
+
+  ['title', 'caption', 'ocr', 'asr'].forEach((field) => {
+    if (!Object.prototype.hasOwnProperty.call(frame, field)
+        || (frame[field] !== null && typeof frame[field] !== 'string')) {
+      throw new Error(`Filter server returned invalid ${field} metadata`);
+    }
+  });
+  if (!frame.objects || Array.isArray(frame.objects) || typeof frame.objects !== 'object'
+      || Object.entries(frame.objects).some(([label, count]) => (
+        !label.trim() || !Number.isInteger(count) || count < 0
+      ))) {
+    throw new Error('Filter server returned invalid object metadata');
+  }
 
   return {
     ...frame,
@@ -137,14 +156,23 @@ export const filterFrames = async ({
       `Filter server returned page_id ${payload.page_id} for requested page ${pageId}`,
     );
   }
+  if (!Number.isInteger(payload?.frames_per_pages)
+      || payload.frames_per_pages < 1 || payload.frames_per_pages > 48) {
+    throw new Error('Filter server returned an invalid frames_per_pages value');
+  }
+  if (payload.frames_per_pages !== framesPerPage) {
+    throw new Error(
+      `Filter server returned frames_per_pages ${payload.frames_per_pages} `
+      + `for requested size ${framesPerPage}`,
+    );
+  }
   if (!Number.isInteger(payload?.total_pages) || payload.total_pages < 0) {
     throw new Error('Filter server returned an invalid total_pages value');
   }
   if (!Array.isArray(payload?.results)) {
     throw new Error('Filter server returned an invalid response contract');
   }
-  if (payload.total_results !== undefined
-      && (!Number.isInteger(payload.total_results) || payload.total_results < 0)) {
+  if (!Number.isInteger(payload?.total_results) || payload.total_results < 0) {
     throw new Error('Filter server returned an invalid result count');
   }
 
