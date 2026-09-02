@@ -322,3 +322,53 @@ test('requests page 1 for a new filter after navigating to another page', async 
     filters: expect.objectContaining({ title: 'new filter' }),
   }));
 });
+
+test('changing page size reapplies the current session at page 1', async () => {
+  filterFrames
+    .mockResolvedValueOnce({ total_pages: 3, results: [] })
+    .mockResolvedValueOnce({ total_pages: 2, results: [] });
+  renderWorkspace({ isActive: false });
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Boat' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(1));
+
+  fireEvent.change(screen.getByLabelText('Frames per page'), {
+    target: { value: '24' },
+  });
+
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(2));
+  expect(filterFrames.mock.calls[1][0]).toEqual(expect.objectContaining({
+    pageId: 1,
+    framesPerPage: 24,
+    filters: expect.objectContaining({ title: 'Boat' }),
+  }));
+});
+
+test('freezes an Auto size for pagination and recalculates only a new filter', async () => {
+  filterFrames
+    .mockResolvedValueOnce({ total_pages: 2, results: [] })
+    .mockResolvedValueOnce({ total_pages: 2, results: [] })
+    .mockResolvedValueOnce({ total_pages: 2, results: [] });
+  renderWorkspace({ isActive: false });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(1));
+  const firstSize = filterFrames.mock.calls[0][0].framesPerPage;
+
+  const viewport = document.querySelector('.filter-results');
+  Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 1600 });
+  Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 900 });
+  fireEvent(window, new Event('resize'));
+  expect(filterFrames).toHaveBeenCalledTimes(1);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Page 2' }));
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(2));
+  expect(filterFrames.mock.calls[1][0].framesPerPage).toBe(firstSize);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(3));
+  expect(filterFrames.mock.calls[2][0]).toEqual(expect.objectContaining({
+    pageId: 1,
+    framesPerPage: expect.any(Number),
+  }));
+  expect(filterFrames.mock.calls[2][0].framesPerPage).toBeGreaterThan(firstSize);
+});

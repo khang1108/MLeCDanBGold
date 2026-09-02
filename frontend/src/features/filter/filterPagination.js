@@ -1,4 +1,5 @@
 export const DEFAULT_FRAMES_PER_PAGE = 12;
+export const FILTER_PAGE_SIZE_OPTIONS = Object.freeze(['auto', 12, 24, 48]);
 
 const MIN_CARD_WIDTH = 170;
 const GRID_GAP = 6;
@@ -39,6 +40,13 @@ export const calculateFramesPerPage = ({ width, height } = {}) => {
 
   return Math.min(columns * rows, MAX_FRAMES_PER_PAGE);
 };
+
+/** Resolve one supported page-size mode into the integer sent to the backend. */
+export const resolveFramesPerPage = (mode, viewport = {}) => (
+  FILTER_PAGE_SIZE_OPTIONS.includes(mode) && mode !== 'auto'
+    ? mode
+    : calculateFramesPerPage(viewport)
+);
 
 /**
  * Build a compact page control model with first/last and nearby pages.

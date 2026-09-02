@@ -396,13 +396,47 @@
 }
 
 .filter-result-summary {
-  margin-bottom: 8px;
+  margin: 0;
   color: var(--color-ink-muted);
   font-size: 12px;
 }
 
 .filter-result-summary strong {
   color: var(--color-primary);
+}
+
+.filter-result-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.filter-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.filter-page-size select {
+  min-height: 28px;
+  padding: 3px 24px 3px 7px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  outline: none;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+}
+
+.filter-page-size select:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 
 .filter-pagination {

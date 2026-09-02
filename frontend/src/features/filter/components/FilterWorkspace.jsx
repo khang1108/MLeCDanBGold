@@ -1,7 +1,6 @@
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -13,11 +12,9 @@ import { useSubmission } from '../../submission/contexts/SubmissionContext';
 import { displayVideoId } from '../../frames/videoSource';
 import FilterForm from './FilterForm';
 import FilterPagination from './FilterPagination';
+import FilterPageSize from './FilterPageSize';
 import FolderScopeCombobox from './FolderScopeCombobox';
-import {
-  calculateFramesPerPage,
-  DEFAULT_FRAMES_PER_PAGE,
-} from '../filterPagination';
+import { DEFAULT_FRAMES_PER_PAGE, resolveFramesPerPage } from '../filterPagination';
 import {
   FILTER_FOLDER_IDS,
   filterResultsByScope,
@@ -46,6 +43,8 @@ const FilterResults = ({
   totalPages,
   isLoading,
   onPageChange,
+  pageSizeMode,
+  onPageSizeChange,
 }) => {
   const pagination = (
     <FilterPagination
@@ -53,6 +52,13 @@ const FilterResults = ({
       totalPages={totalPages}
       isLoading={isLoading}
       onPageChange={onPageChange}
+    />
+  );
+  const pageSizeControl = (
+    <FilterPageSize
+      value={pageSizeMode}
+      onChange={onPageSizeChange}
+      disabled={isLoading}
     />
   );
 
@@ -109,7 +115,10 @@ const FilterResults = ({
         className="frames-container filter-results"
         aria-label="Filter results"
       >
-        <div className="filter-result-summary">No frames match the current scope.</div>
+        <div className="filter-result-toolbar">
+          <div className="filter-result-summary">No frames match the current scope.</div>
+          {pageSizeControl}
+        </div>
         <div className="frames-empty-state filter-empty-state">
           <p className="body-md frames-empty-text">No matching frames</p>
         </div>
@@ -124,10 +133,13 @@ const FilterResults = ({
       className="frames-container filter-results"
       aria-label="Filter results"
     >
-      <div className="filter-result-summary">
-        <strong>{results.length}</strong> frame{results.length === 1 ? '' : 's'}
-        {folderId ? ` · ${folderId}` : ''}
-        {selectedVideoId ? ` · ${displayVideoId(selectedVideoId)}` : ''}
+      <div className="filter-result-toolbar">
+        <div className="filter-result-summary">
+          <strong>{results.length}</strong> frame{results.length === 1 ? '' : 's'}
+          {folderId ? ` · ${folderId}` : ''}
+          {selectedVideoId ? ` · ${displayVideoId(selectedVideoId)}` : ''}
+        </div>
+        {pageSizeControl}
       </div>
       <div className="frames-scroll-region">
         <div className="frames-grid">{results.map(renderFrame)}</div>
@@ -154,7 +166,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
   const [error, setError] = useState(null);
   const [pageId, setPageId] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [framesPerPage, setFramesPerPage] = useState(DEFAULT_FRAMES_PER_PAGE);
+  const [pageSizeMode, setPageSizeMode] = useState('auto');
   const requestRef = useRef(null);
   const resultsViewportRef = useRef(null);
   const { requestSubmission } = useSubmission();
@@ -171,33 +183,13 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     requestRef.current?.abort();
   }, []);
 
-  useLayoutEffect(() => {
+  const resolveCurrentPageSize = useCallback((mode) => {
     const element = resultsViewportRef.current;
-    if (!element) return undefined;
-
-    const updateFramesPerPage = () => {
-      const nextValue = calculateFramesPerPage({
-        width: element.clientWidth,
-        height: element.clientHeight,
-      });
-      setFramesPerPage((currentValue) => (
-        currentValue === nextValue ? currentValue : nextValue
-      ));
-    };
-
-    updateFramesPerPage();
-    window.addEventListener('resize', updateFramesPerPage);
-    let observer;
-    if (typeof ResizeObserver === 'function') {
-      observer = new ResizeObserver(updateFramesPerPage);
-      observer.observe(element);
-    }
-
-    return () => {
-      window.removeEventListener('resize', updateFramesPerPage);
-      observer?.disconnect();
-    };
-  }, [isActive]);
+    return resolveFramesPerPage(mode, {
+      width: element?.clientWidth,
+      height: element?.clientHeight,
+    });
+  }, []);
 
   const requestFilterPage = useCallback(async ({
     requestedFilters,
@@ -244,18 +236,35 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     if (isFiltering) return;
 
     // A new filter is a new result set, so it must always start on page 1.
+    const nextFramesPerPage = resolveCurrentPageSize(pageSizeMode);
     setAppliedFilters(filters);
     setAppliedScope({ folderId: activeFolder, videoId: selectedVideoId });
-    setAppliedFramesPerPage(framesPerPage);
+    setAppliedFramesPerPage(nextFramesPerPage);
     requestFilterPage({
       requestedFilters: filters,
       requestedFolderId: activeFolder,
       requestedVideoId: selectedVideoId,
       requestedPage: 1,
-      requestedFramesPerPage: framesPerPage,
+      requestedFramesPerPage: nextFramesPerPage,
       resetPagination: true,
     });
-  }, [activeFolder, filters, framesPerPage, isFiltering, requestFilterPage, selectedVideoId]);
+  }, [activeFolder, filters, isFiltering, pageSizeMode, requestFilterPage, resolveCurrentPageSize, selectedVideoId]);
+
+  const handlePageSizeChange = useCallback((nextMode) => {
+    setPageSizeMode(nextMode);
+    const nextFramesPerPage = resolveCurrentPageSize(nextMode);
+    if (!hasFiltered || isFiltering) return;
+
+    setAppliedFramesPerPage(nextFramesPerPage);
+    requestFilterPage({
+      requestedFilters: appliedFilters,
+      requestedFolderId: appliedScope.folderId,
+      requestedVideoId: appliedScope.videoId,
+      requestedPage: 1,
+      requestedFramesPerPage: nextFramesPerPage,
+      resetPagination: true,
+    });
+  }, [appliedFilters, appliedScope, hasFiltered, isFiltering, requestFilterPage, resolveCurrentPageSize]);
 
   const handlePageChange = useCallback((nextPage) => {
     if (isFiltering || nextPage === pageId
@@ -356,6 +365,8 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
               totalPages={totalPages}
               isLoading={isFiltering}
               onPageChange={handlePageChange}
+              pageSizeMode={pageSizeMode}
+              onPageSizeChange={handlePageSizeChange}
             />
           </div>
         </div>
