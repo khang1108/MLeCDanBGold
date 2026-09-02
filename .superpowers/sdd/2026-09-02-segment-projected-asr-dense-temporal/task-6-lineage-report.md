@@ -26,9 +26,9 @@ scoring, BM25, Hybrid, or DP behavior was changed.
   mismatches against the configured evidence encoder before batch publication.
 - The active disk-backed finalizer already validated and preserved revisions;
   focused regression coverage now protects that behavior. The legacy
-  in-memory compactor now validates a shared revision and returns it alongside
-  the model name. Its two precomputed-vector builders accept and propagate an
-  optional revision.
+  in-memory compactor validates a shared revision while retaining its original
+  three-value public result. Its two precomputed-vector builders accept and
+  propagate an optional revision.
 
 ## TDD evidence
 
@@ -85,8 +85,7 @@ for unrelated baseline issues:
 - `tests/data/custom_pipeline/test_shards.py` has a statement before its
   `from __future__ import annotations` line, producing a syntax error.
 - `tests/data/custom_pipeline/test_finalize.py` imports the nonexistent
-  `hcmai.data.custom_pipeline` package. Its only Task 6 update is the expected
-  fourth return value (`model_revision`) from the legacy compactor.
+  `hcmai.data.custom_pipeline` package.
 
 These paths were already invalid at `HEAD`; no compatibility package or test
 layout migration was added because it is outside this lineage remediation.
@@ -99,3 +98,58 @@ artifacts retain the old lineage and this task must not edit or migrate them.
 No scholarly research or `KNOWLEDGE.md` update was needed: this is a
 deterministic provenance propagation and validation correction, not an
 algorithmic design decision.
+
+## Fix Round 1
+
+### Reviewer findings addressed
+
+- Restored `compact_batch_embeddings` to its original public
+  `(vectors, mapping, model_name)` result. It still rejects model-revision
+  drift internally.
+- Batch ASR indexes now preserve the source `SegmentDenseIndex`
+  `source_fingerprint` and `config_fingerprint`. Active global compaction
+  validates both fields across batch metadata and writes the shared values to
+  the final ASR index metadata.
+- `ASRReuseBundle.transcript_fingerprint` and `index_fingerprint` remain on
+  their existing validation/batch-scope contract. They are deliberately not
+  copied into `IndexMetadata.source_fingerprint` or `config_fingerprint`:
+  those fields retain the actual source-index metadata semantics.
+- Added runnable regression coverage for source/config fingerprint propagation,
+  fingerprint drift rejection, CLI factory validation, runner forwarding, and
+  process-command encoder revision forwarding. The stale, uncollectable
+  `test_finalize.py` assertion change was reverted.
+- Updated the ASR factory type annotation to match the runner's
+  `Callable[[Sequence[str]], ASRReuseBundle]` contract.
+
+### RED
+
+Before the round-1 implementation:
+
+```text
+PYTHONPATH=.:src aic/bin/python -m pytest -q \
+  tests/data/custom_pipeline/test_lineage.py
+5 failed, 4 passed in 1.81s
+```
+
+The product failures showed the incompatible public four-tuple result, dropped
+batch/global fingerprints, and missing fingerprint-drift validation. The
+initial runner-test mock also omitted its synthetic video shard; that test seam
+was corrected before the production fix.
+
+### GREEN
+
+```text
+PYTHONPATH=.:src aic/bin/python -m pytest -q \
+  tests/data/custom_pipeline/test_lineage.py
+10 passed in 1.54s
+
+PYTHONPATH=.:src aic/bin/python -m pytest -q \
+  tests/retrieval/test_segment_dense_index.py \
+  tests/unit/retriever/test_dense_index_score_subset.py \
+  tests/data/custom_pipeline/test_asr.py \
+  tests/data/custom_pipeline/test_lineage.py
+45 passed in 2.36s
+```
+
+`compileall` passed for all remediation production modules and `git diff
+--check` was clean.

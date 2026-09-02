@@ -65,6 +65,8 @@ class ChunkedEmbeddings:
     mapping: pd.DataFrame
     model_name: str
     model_revision: str | None
+    source_fingerprint: str | None
+    config_fingerprint: str | None
     batch_spans: tuple[tuple[int, int], ...]
 
 
@@ -320,13 +322,14 @@ def compact_frame_metadata(
 
 def compact_batch_embeddings(
     batch_manifests: Sequence[BatchManifest], kind: str
-) -> tuple[np.ndarray, pd.DataFrame, str, str | None]:
+) -> tuple[np.ndarray, pd.DataFrame, str]:
     """Concatenate one embedding ``kind`` ('visual', 'context', 'asr_segments')
     across every committed batch's already-validated index.
 
     Returns:
-        A ``(vectors, mapping, model_name, model_revision)`` tuple, where the
-        encoder name and revision are shared by every compacted batch.
+        A ``(vectors, mapping, model_name)`` tuple, preserving this legacy
+        public helper's result shape. Model revision is still validated across
+        every batch before vectors are returned.
 
     Raises:
         FinalizeError: If a batch's video_ids overlap another batch's, its
@@ -384,7 +387,7 @@ def compact_batch_embeddings(
 
     logger.info("compacted %s embeddings: %d vector(s), dim=%s", kind, len(vectors), expected_dim)
     assert expected_model is not None
-    return vectors, mapping, expected_model, expected_revision
+    return vectors, mapping, expected_model
 
 
 def compact_batch_embeddings_to_memmap(
@@ -411,6 +414,8 @@ def compact_batch_embeddings_to_memmap(
     expected_dim: int | None = None
     expected_model: str | None = None
     expected_revision: str | None = None
+    expected_source_fingerprint: str | None = None
+    expected_config_fingerprint: str | None = None
     expected_batch_version: str | None = None
     for manifest in batch_manifests:
         metadata_path = manifest.root / kind / "metadata.json"
@@ -429,6 +434,8 @@ def compact_batch_embeddings_to_memmap(
             expected_dim = metadata.embedding_dim
             expected_model = metadata.model_name
             expected_revision = metadata.model_revision
+            expected_source_fingerprint = metadata.source_fingerprint
+            expected_config_fingerprint = metadata.config_fingerprint
         elif metadata.embedding_dim != expected_dim:
             raise FinalizeError(
                 f"batch {manifest.batch_id} {kind} embedding_dim "
@@ -442,6 +449,14 @@ def compact_batch_embeddings_to_memmap(
         elif metadata.model_revision != expected_revision:
             raise FinalizeError(
                 f"batch {manifest.batch_id} {kind} model_revision differs"
+            )
+        elif metadata.source_fingerprint != expected_source_fingerprint:
+            raise FinalizeError(
+                f"batch {manifest.batch_id} {kind} source_fingerprint differs"
+            )
+        elif metadata.config_fingerprint != expected_config_fingerprint:
+            raise FinalizeError(
+                f"batch {manifest.batch_id} {kind} config_fingerprint differs"
             )
         total_vectors += metadata.vector_count
 
@@ -472,6 +487,8 @@ def compact_batch_embeddings_to_memmap(
                 metadata.embedding_dim != expected_dim
                 or metadata.model_name != expected_model
                 or metadata.model_revision != expected_revision
+                or metadata.source_fingerprint != expected_source_fingerprint
+                or metadata.config_fingerprint != expected_config_fingerprint
             ):
                 raise FinalizeError(
                     f"batch {manifest.batch_id} {kind} changed after metadata scan"
@@ -553,6 +570,8 @@ def compact_batch_embeddings_to_memmap(
         mapping=mapping,
         model_name=expected_model,
         model_revision=expected_revision,
+        source_fingerprint=expected_source_fingerprint,
+        config_fingerprint=expected_config_fingerprint,
         batch_spans=tuple(batch_spans),
     )
 
@@ -600,6 +619,8 @@ def build_index_from_chunked_embeddings(
         dataset_version=dataset_version,
         model_name=compacted.model_name,
         model_revision=compacted.model_revision,
+        source_fingerprint=compacted.source_fingerprint,
+        config_fingerprint=compacted.config_fingerprint,
         index_type="flat_ip",
         metric="inner_product",
         normalization="l2",

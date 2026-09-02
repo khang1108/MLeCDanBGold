@@ -592,12 +592,12 @@ def _make_produce_batch_artifacts(
     return _produce
 
 
-def _make_asr_bundle_factory(args: argparse.Namespace) -> Callable[[list[str]], ASRReuseBundle]:
+def _make_asr_bundle_factory(args: argparse.Namespace) -> Callable[[Sequence[str]], ASRReuseBundle]:
     """Validate and return reusable ASR evidence for exactly one batch's videos."""
 
     evidence_encoder = _load_encoder_config(args.config, "evidence_embedding")
 
-    def _factory(video_ids: list[str]) -> ASRReuseBundle:
+    def _factory(video_ids: Sequence[str]) -> ASRReuseBundle:
         return validate_asr_source(
             args.transcripts_root,
             args.asr_index_root,

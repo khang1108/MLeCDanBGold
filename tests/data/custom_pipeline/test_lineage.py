@@ -7,6 +7,7 @@ the encoder model name and revision without changing vectors or identity.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -24,6 +25,7 @@ from offline.ingestion.custom_pipeline.finalize import (
     BatchManifest,
     FinalizeError,
     build_dense_index_from_precomputed,
+    build_index_from_chunked_embeddings,
     build_segment_index_from_precomputed,
     compact_batch_embeddings,
     compact_batch_embeddings_to_memmap,
@@ -32,6 +34,8 @@ from offline.ingestion.custom_pipeline.shards import (
     build_batch_index_bundle,
     split_batch_artifacts_by_video,
 )
+from offline.ingestion.custom_pipeline import runner
+from scripts import prepare_custom_pipeline as prepare_pipeline
 
 
 _VIDEO_ID = "L01_V001"
@@ -75,17 +79,22 @@ def _asr_bundle(
     *,
     model_name: str = "test/evidence-encoder",
     model_revision: str | None = "evidence-revision",
+    source_fingerprint: str | None = "c" * 64,
+    config_fingerprint: str | None = "d" * 64,
 ) -> ASRReuseBundle:
     """Persist a reusable ASR source whose lineage is known to the test."""
 
     index_root = tmp_path / "asr-source-index"
-    SegmentDenseIndex.build(
+    source_index = SegmentDenseIndex.build(
         np.asarray([[1.0, 0.0]], dtype=np.float32),
         _segment_mapping(),
         dataset_version="source-v1",
         model_name=model_name,
         model_revision=model_revision,
-    ).save(index_root)
+    )
+    source_index.metadata.source_fingerprint = source_fingerprint
+    source_index.metadata.config_fingerprint = config_fingerprint
+    source_index.save(index_root)
     return ASRReuseBundle(
         transcripts_root=str(tmp_path / "transcripts"),
         index_root=str(index_root),
@@ -211,11 +220,12 @@ def test_batch_bundle_preserves_configured_and_reused_embedding_lineage(
 ) -> None:
     """Batch indexes retain Visual/Context config and source ASR lineage."""
 
+    asr_bundle = _asr_bundle(tmp_path)
     build_batch_index_bundle(
         "L01-batch000",
         [_VIDEO_ID],
         _video_shards(),
-        _asr_bundle(tmp_path),
+        asr_bundle,
         tmp_path / "batch",
         dataset_version="batch-v1",
         visual_model_name="test/visual-encoder",
@@ -239,6 +249,10 @@ def test_batch_bundle_preserves_configured_and_reused_embedding_lineage(
         "test/evidence-encoder",
         "evidence-revision",
     )
+    assert asr.metadata.source_fingerprint == "c" * 64
+    assert asr.metadata.config_fingerprint == "d" * 64
+    assert asr.metadata.source_fingerprint != asr_bundle.transcript_fingerprint
+    assert asr.metadata.config_fingerprint != asr_bundle.index_fingerprint
 
 
 @pytest.mark.parametrize(
@@ -272,8 +286,10 @@ def test_validate_asr_source_rejects_evidence_encoder_lineage_mismatch(
         )
 
 
-def test_legacy_compaction_preserves_and_validates_model_revision(tmp_path: Path) -> None:
-    """The legacy in-memory compactor returns a common revision and rejects drift."""
+def test_legacy_compaction_keeps_its_public_result_shape_and_validates_revision(
+    tmp_path: Path,
+) -> None:
+    """Legacy callers keep a three-tuple while revision drift remains rejected."""
 
     first = _batch_manifest(
         tmp_path,
@@ -288,11 +304,9 @@ def test_legacy_compaction_preserves_and_validates_model_revision(tmp_path: Path
         model_revision="visual-revision",
     )
 
-    vectors, mapping, model_name, model_revision = compact_batch_embeddings(
-        [first, second], "visual"
-    )
+    vectors, mapping, model_name = compact_batch_embeddings([first, second], "visual")
     assert len(vectors) == len(mapping) == 2
-    assert (model_name, model_revision) == ("test/visual-encoder", "visual-revision")
+    assert model_name == "test/visual-encoder"
 
     mismatched = _batch_manifest(
         tmp_path,
@@ -333,3 +347,248 @@ def test_legacy_finalize_builders_persist_model_revision(tmp_path: Path) -> None
 
     assert dense.metadata.model_revision == "visual-revision"
     assert segment.metadata.model_revision == "evidence-revision"
+
+
+def test_active_finalization_preserves_source_and_config_fingerprints(
+    tmp_path: Path,
+) -> None:
+    """Global ASR output preserves the source index's semantic fingerprints."""
+
+    batch_root = tmp_path / "batch"
+    build_batch_index_bundle(
+        "L01-batch000",
+        [_VIDEO_ID],
+        _video_shards(),
+        _asr_bundle(tmp_path / "source"),
+        batch_root,
+        dataset_version="batch-v1",
+        visual_model_name="test/visual-encoder",
+        visual_model_revision="visual-revision",
+        context_model_name="test/evidence-encoder",
+        context_model_revision="evidence-revision",
+    )
+    manifest = BatchManifest(
+        batch_id="L01-batch000",
+        root=batch_root,
+        video_ids=(_VIDEO_ID,),
+        canonical_frame_digest="unused-by-compaction",
+    )
+
+    compacted = compact_batch_embeddings_to_memmap(
+        [manifest],
+        "asr_segments",
+        tmp_path / "asr-vectors.npy",
+        batch_chunk_size=1,
+    )
+    build_index_from_chunked_embeddings(
+        compacted,
+        tmp_path / "global-asr",
+        dataset_version="global-v1",
+        retrieval_source="asr",
+    )
+
+    global_asr = SegmentDenseIndex.load(tmp_path / "global-asr")
+    assert global_asr.metadata.model_revision == "evidence-revision"
+    assert global_asr.metadata.source_fingerprint == "c" * 64
+    assert global_asr.metadata.config_fingerprint == "d" * 64
+
+
+def test_active_finalization_rejects_asr_fingerprint_drift(tmp_path: Path) -> None:
+    """Batch ASR metadata must agree before global compaction can proceed."""
+
+    first_root = tmp_path / "first-batch"
+    second_root = tmp_path / "second-batch"
+    common = {
+        "dataset_version": "batch-v1",
+        "visual_model_name": "test/visual-encoder",
+        "visual_model_revision": "visual-revision",
+        "context_model_name": "test/evidence-encoder",
+        "context_model_revision": "evidence-revision",
+    }
+    build_batch_index_bundle(
+        "L01-batch000",
+        [_VIDEO_ID],
+        _video_shards(),
+        _asr_bundle(tmp_path / "first-source", config_fingerprint="b" * 64),
+        first_root,
+        **common,
+    )
+    build_batch_index_bundle(
+        "L02-batch000",
+        [_VIDEO_ID],
+        _video_shards(),
+        _asr_bundle(tmp_path / "second-source", config_fingerprint="c" * 64),
+        second_root,
+        **common,
+    )
+
+    manifests = [
+        BatchManifest("L01-batch000", first_root, (_VIDEO_ID,), "unused"),
+        BatchManifest("L02-batch000", second_root, (_VIDEO_ID,), "unused"),
+    ]
+    with pytest.raises(FinalizeError, match="config_fingerprint"):
+        compact_batch_embeddings_to_memmap(
+            manifests,
+            "asr_segments",
+            tmp_path / "asr-vectors.npy",
+            batch_chunk_size=1,
+        )
+
+
+def test_factory_and_runner_thread_configured_revisions_to_batch_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI factory and runner preserve config lineage at the batch boundary."""
+
+    evidence_encoder = EncoderConfig(
+        backend="bge_m3",
+        model_name="test/evidence-encoder",
+        revision="evidence-revision",
+    )
+    captured_factory: dict[str, object] = {}
+    bundle = _asr_bundle(tmp_path / "factory-source")
+    monkeypatch.setattr(prepare_pipeline, "_load_encoder_config", lambda *_: evidence_encoder)
+    monkeypatch.setattr(
+        prepare_pipeline,
+        "validate_asr_source",
+        lambda *args, **kwargs: captured_factory.update(kwargs) or bundle,
+    )
+    factory = prepare_pipeline._make_asr_bundle_factory(
+        SimpleNamespace(
+            config=tmp_path / "prepare.yaml",
+            transcripts_root=tmp_path / "transcripts",
+            asr_index_root=tmp_path / "asr-index",
+        )
+    )
+    assert factory((_VIDEO_ID,)) is bundle
+    assert captured_factory["evidence_encoder"] == evidence_encoder
+
+    captured_build: dict[str, object] = {}
+    monkeypatch.setattr(runner, "stage_archive_source_links", lambda *_: [tmp_path / "video.mp4"])
+    monkeypatch.setattr(runner, "split_batch_artifacts_by_video", lambda *_: {_VIDEO_ID: object()})
+    monkeypatch.setattr(runner, "write_video_shard", lambda *_: None)
+    monkeypatch.setattr(runner, "require_asr_video_coverage", lambda *_: None)
+    monkeypatch.setattr(
+        runner,
+        "build_batch_index_bundle",
+        lambda *args, **kwargs: captured_build.update(kwargs),
+    )
+    monkeypatch.setattr(runner, "build_batch_inventory", lambda *_: object())
+    monkeypatch.setattr(runner, "validate_local_batch", lambda *_: None)
+    monkeypatch.setattr(runner, "commit_local_batch", lambda *_: None)
+    monkeypatch.setattr(runner, "cleanup_ephemeral_batch", lambda *_args, **_kwargs: None)
+
+    state = _RunnerState()
+    context = SimpleNamespace(active_root=tmp_path / "active", artifacts_root=tmp_path / "artifacts")
+    artifacts = runner.BatchArtifacts(
+        frames_table=pd.DataFrame(),
+        frame_native_tables={},
+        child_tables={},
+        visual_vectors=np.empty((0, 2), dtype=np.float32),
+        visual_mapping=pd.DataFrame(),
+        context_vectors=np.empty((0, 2), dtype=np.float32),
+        context_mapping=pd.DataFrame(),
+    )
+    runner._process_one_batch(
+        context,
+        state,
+        "L01",
+        tmp_path / "archive",
+        "L01-batch000",
+        [_VIDEO_ID],
+        lambda *_: artifacts,
+        lambda _: bundle,
+        dataset_version="batch-v1",
+        visual_model_name="test/visual-encoder",
+        visual_model_revision="visual-revision",
+        context_model_name="test/evidence-encoder",
+        context_model_revision="evidence-revision",
+    )
+    assert captured_build["visual_model_revision"] == "visual-revision"
+    assert captured_build["context_model_revision"] == "evidence-revision"
+
+
+def test_process_command_threads_encoder_revisions_to_runner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The process command forwards both configured revisions to the runner."""
+
+    entry = SimpleNamespace(archive_id="L01")
+    plan = SimpleNamespace(entries=(entry,))
+    window = SimpleNamespace(select=lambda _: (entry,))
+    state_store = SimpleNamespace(create_or_resume_run=lambda *_args, **_kwargs: None)
+    context = SimpleNamespace(run_root=tmp_path / "run")
+    visual_encoder = EncoderConfig(
+        backend="siglip",
+        model_name="test/visual-encoder",
+        revision="visual-revision",
+    )
+    evidence_encoder = EncoderConfig(
+        backend="bge_m3",
+        model_name="test/evidence-encoder",
+        revision="evidence-revision",
+    )
+    encoders = {
+        "visual_embedding": visual_encoder,
+        "evidence_embedding": evidence_encoder,
+    }
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(prepare_pipeline.CustomPipelineConfig, "from_yaml", lambda _: object())
+    monkeypatch.setattr(prepare_pipeline, "_build_runner_context", lambda *_: context)
+    monkeypatch.setattr(prepare_pipeline.ArchivePlan, "from_urls", lambda _: plan)
+    monkeypatch.setattr(prepare_pipeline, "ArchiveWorkWindow", lambda **_: window)
+    monkeypatch.setattr(prepare_pipeline, "PipelineStateStore", lambda _: state_store)
+    monkeypatch.setattr(prepare_pipeline, "_build_run_identity", lambda *_: object())
+    monkeypatch.setattr(prepare_pipeline, "_make_produce_batch_artifacts", lambda *_: object())
+    monkeypatch.setattr(prepare_pipeline, "_make_asr_bundle_factory", lambda *_: object())
+    monkeypatch.setattr(
+        prepare_pipeline,
+        "_load_encoder_config",
+        lambda _path, section: encoders[section],
+    )
+    monkeypatch.setattr(
+        prepare_pipeline,
+        "process_archive",
+        lambda *_args, **kwargs: captured.update(kwargs) or ["L01-batch000"],
+    )
+
+    result = prepare_pipeline._cmd_process_archive(
+        SimpleNamespace(
+            config=tmp_path / "prepare.yaml",
+            archive_urls=["https://example.test/L01.zip"],
+            offset=0,
+            limit=None,
+            allow_offset_gap=False,
+            version="batch-v1",
+            batch_offset=0,
+            batch_limit=None,
+        )
+    )
+
+    assert result["committed_batches"] == {"L01": ["L01-batch000"]}
+    assert captured["visual_model_revision"] == "visual-revision"
+    assert captured["context_model_revision"] == "evidence-revision"
+
+
+class _RunnerState:
+    """Minimal state-store spy for the runner's batch-boundary unit test."""
+
+    def get_batch(self, batch_id: str) -> None:
+        """Report that the synthetic batch is not already committed."""
+
+        return None
+
+    def ensure_batch(self, batch_id: str, archive_id: str, video_ids: list[str]) -> None:
+        """Accept creation of the synthetic batch."""
+
+    def ensure_video(self, video_id: str, batch_id: str) -> None:
+        """Accept creation of the synthetic video state."""
+
+    def advance_batch(self, batch_id: str, stage: object) -> None:
+        """Accept the runner's normal batch-stage transitions."""
+
+    def advance_video(self, video_id: str, stage: object) -> None:
+        """Accept the runner's normal video-stage transitions."""

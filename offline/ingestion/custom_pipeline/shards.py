@@ -357,13 +357,16 @@ def build_batch_index_bundle(
         raise ValueError("reusable ASR source revision differs from configured evidence encoder")
 
     asr_dir = output_root / "asr_segments"
-    SegmentDenseIndex.build(
+    asr_index = SegmentDenseIndex.build(
         asr_vectors,
         asr_mapping,
         dataset_version=dataset_version,
         model_name=asr_metadata.model_name,
         model_revision=asr_metadata.model_revision,
-    ).save(asr_dir)
+    )
+    asr_index.metadata.source_fingerprint = asr_metadata.source_fingerprint
+    asr_index.metadata.config_fingerprint = asr_metadata.config_fingerprint
+    asr_index.save(asr_dir)
     loaded_asr = SegmentDenseIndex.load(asr_dir)
 
     inventory = BatchIndexInventory(
