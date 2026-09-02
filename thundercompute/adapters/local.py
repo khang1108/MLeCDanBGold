@@ -2,31 +2,39 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import tempfile
 from pathlib import Path
 from typing import Any, Sequence, cast
 
 import numpy as np
 from PIL import Image
-
-from offline.enrichment.inference_contracts import InferenceReadiness
+from hcmai.common.config import TranscriptJobConfig
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.retrieval.reranking.config import QwenRerankerConfig
+from hcmai.retrieval.reranking.pipeline import RerankingService
+from offline.enrichment.inference_contracts import InferenceReadiness
 from offline.enrichment.ocr.adapters.florence import FlorenceAdapter
 from offline.enrichment.ocr.config import OCRConfig
 from offline.enrichment.ocr.models.entities import OCRResult
+
+
+
+# Return Any because pydantic validates these rows into ``_ReadinessModel``.
+
 from offline.enrichment.pipeline import EnrichmentService
-from hcmai.common.config import TranscriptJobConfig
-from thundercompute.pipeline import LLMServiceConfig
-from hcmai.retrieval.reranking.pipeline import QwenRerankerConfig, RerankingService
+from thundercompute.config import LLMServiceConfig
 
 
-def _model_status(**values: object) -> dict[str, object]:
+def _model_status(**values: object) -> Any:
     """Build one readiness row for validation by ``InferenceReadiness``."""
 
     return values
 
 
-def _capabilities(**values: bool) -> dict[str, bool]:
+# Return Any because pydantic validates these flags into ``_ReadinessCapabilities``.
+def _capabilities(**values: bool) -> Any:
     """Build capability flags without exporting a standalone common model."""
 
     return values
@@ -44,12 +52,14 @@ class LocalAdapter:
         caption_encoder: Any | None = None,
         captioner: Any | None = None,
         reranker: Any | None = None,
+        query_preparer: Any | None = None,
         ocr_adapter: Any | None = None,
         *,
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
         enable_caption_embedding: bool = True,
         enable_reranker: bool = True,
+        enable_query_preparation: bool = False,
         enable_ocr: bool = False,
         enable_asr: bool = False,
         enable_diarization: bool = False,
@@ -61,6 +71,7 @@ class LocalAdapter:
         self.enable_visual_embedding = enable_visual_embedding
         self.enable_caption_embedding = enable_caption_embedding
         self.enable_reranker = enable_reranker
+        self.enable_query_preparation = enable_query_preparation
         self.enable_ocr = enable_ocr
         self.enable_asr = enable_asr
         self.enable_diarization = enable_diarization
@@ -79,9 +90,9 @@ class LocalAdapter:
             else None
         )
         self.captioner = captioner or (
-            cast(Any, EnrichmentService.create_caption_adapter(
-                cast(Any, config.caption_generation)
-            ))
+            cast(
+                Any, EnrichmentService.create_caption_adapter(cast(Any, config.caption_generation))
+            )
             if enable_caption
             else None
         )
@@ -90,10 +101,19 @@ class LocalAdapter:
             if enable_reranker
             else None
         )
+        if query_preparer is not None:
+            self.query_preparer = query_preparer
+        elif enable_query_preparation:
+            from thundercompute.query_preparation import QwenQueryPreparer
+
+            self.query_preparer = QwenQueryPreparer(config.query_preparation)
+        else:
+            self.query_preparer = None
         self.ocr_adapter: Any = ocr_adapter or (
-            FlorenceAdapter(OCRConfig(
-                device=config.caption_generation.device,
-                dtype=config.caption_generation.dtype,
+            FlorenceAdapter(
+                OCRConfig(
+                    device=config.caption_generation.device,
+                    dtype=config.caption_generation.dtype,
             ))
             if enable_ocr
             else None
@@ -103,22 +123,19 @@ class LocalAdapter:
     def from_environment(cls) -> LocalAdapter:
         path = Path(os.getenv("HCMAI_LLM_CONFIG", "thundercompute/config.yaml"))
         config = LLMServiceConfig.from_yaml(path)
-        
-        enrichment_path = Path(
-            os.getenv("HCMAI_ENRICHMENT_CONFIG", "configs/prepare.yaml")
+
+        enrichment_path = Path(os.getenv("HCMAI_ENRICHMENT_CONFIG", "configs/prepare.yaml"))
+        transcript_config = (
+            TranscriptJobConfig.from_yaml(enrichment_path) if enrichment_path.exists() else None
         )
-        transcript_config = TranscriptJobConfig.from_yaml(enrichment_path) if enrichment_path.exists() else None
 
         return cls(
             config,
             enable_caption=_env_bool("HCMAI_ENABLE_CAPTION"),
-            enable_visual_embedding=_env_bool(
-                "HCMAI_ENABLE_VISUAL_EMBEDDING"
-            ),
-            enable_caption_embedding=_env_bool(
-                "HCMAI_ENABLE_CAPTION_EMBEDDING"
-            ),
+            enable_visual_embedding=_env_bool("HCMAI_ENABLE_VISUAL_EMBEDDING"),
+            enable_caption_embedding=_env_bool("HCMAI_ENABLE_CAPTION_EMBEDDING"),
             enable_reranker=_env_bool("HCMAI_ENABLE_RERANKER"),
+            enable_query_preparation=_env_bool("HCMAI_ENABLE_QUERY_PREPARATION", default=False),
             enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
             enable_asr=_env_bool("HCMAI_ENABLE_ASR", default=False),
             enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", default=False),
@@ -134,30 +151,29 @@ class LocalAdapter:
             self.captioner.resolve_revision()
         if self.visual_encoder is not None:
             self.visual_encoder._load_model()
-        if (
-            self.caption_encoder is not None
-            and self.caption_encoder is not self.visual_encoder
-        ):
+        if self.caption_encoder is not None and self.caption_encoder is not self.visual_encoder:
             self.caption_encoder._load_model()
         if self.reranker is not None:
             self.reranker._ensure_loaded()
+        if self.query_preparer is not None:
+            self.query_preparer._ensure_loaded()
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
 
         if self.enable_asr and self.transcript_config:
             from offline.enrichment.transcripts.adapters.asr import ASRAdapter
+
             self.asr = ASRAdapter(self.transcript_config.asr)
             self.asr._load_asr()
 
         if self.enable_diarization and self.transcript_config:
             from offline.enrichment.transcripts.adapters.diarization import DiarizationAdapter
+
             self.diarization = DiarizationAdapter(self.transcript_config.diarization)
             self.diarization._load_pipeline()
 
     def embed_text(self, texts: list[str], source: str = "visual") -> np.ndarray:
-        encoder = (
-            self.caption_encoder if source == "text" else self.visual_encoder
-        )
+        encoder = self.caption_encoder if source == "text" else self.visual_encoder
         if encoder is None:
             raise RuntimeError("embedding model is disabled")
         return encoder.encode_text(texts)
@@ -181,25 +197,34 @@ class LocalAdapter:
             raise RuntimeError("reranker model is disabled")
         return list(self.reranker.score_batch(query, images))
 
+    def translate_query_events(self, events: list[str]) -> list[str]:
+        """Translate query events with the process-owned Qwen model."""
+
+        if self.query_preparer is None:
+            raise RuntimeError("query-preparation model is disabled")
+        return self.query_preparer.translate(events)
+
+    def generate_query_candidates(
+        self, events: list[str], candidate_count: int = 5
+    ) -> dict[str, Any]:
+        """Generate aligned candidates with the process-owned Qwen model."""
+
+        if self.query_preparer is None:
+            raise RuntimeError("query-preparation model is disabled")
+        return self.query_preparer.generate_candidates(events, candidate_count)
+
     def readiness(self) -> InferenceReadiness:
-        generator_loaded = (
-            self.captioner is not None and self.captioner.model is not None
-        )
-        visual_loaded = (
-            self.visual_encoder is not None and self.visual_encoder.model is not None
-        )
-        caption_loaded = (
-            self.caption_encoder is not None and self.caption_encoder.model is not None
-        )
-        reranker_loaded = (
-            self.reranker is not None and self.reranker._base_model is not None
-        )
-        ocr_loaded = (
-            self.ocr_adapter is not None and self.ocr_adapter.model is not None
-        )
+        generator_loaded = self.captioner is not None and self.captioner.model is not None
+        visual_loaded = self.visual_encoder is not None and self.visual_encoder.model is not None
+        caption_loaded = self.caption_encoder is not None and self.caption_encoder.model is not None
+        reranker_loaded = self.reranker is not None and self.reranker._base_model is not None
+        ocr_loaded = self.ocr_adapter is not None and self.ocr_adapter.model is not None
         asr_loaded = self.asr is not None
         diarization_loaded = self.diarization is not None
-        
+        query_preparation_loaded = (
+            self.query_preparer is not None and self.query_preparer.model is not None
+        )
+
         return InferenceReadiness(
             ready=(not self.enable_caption or generator_loaded)
             and (not self.enable_visual_embedding or visual_loaded)
@@ -207,18 +232,16 @@ class LocalAdapter:
             and (not self.enable_reranker or reranker_loaded)
             and (not self.enable_ocr or ocr_loaded)
             and (not self.enable_asr or asr_loaded)
-            and (not self.enable_diarization or diarization_loaded),
+            and (not self.enable_diarization or diarization_loaded)
+            and (not self.enable_query_preparation or query_preparation_loaded),
             models={
                 "caption_generation": _model_status(
                     enabled=self.enable_caption,
                     loaded=generator_loaded,
                     checkpoint=self.config.caption_generation.model_checkpoint,
                     revision=(
-                        self.captioner.resolved_revision
-                        if self.captioner is not None
-                        else None
-                    ),
-                ),
+                        self.captioner.resolved_revision if self.captioner is not None else None
+                ),),
                 "visual_embedding": _model_status(
                     enabled=self.enable_visual_embedding,
                     loaded=visual_loaded,
@@ -236,38 +259,45 @@ class LocalAdapter:
                     loaded=reranker_loaded,
                     checkpoint=self.config.reranker.checkpoint,
                     revision=(
-                        self.reranker.resolved_revision
-                        if self.reranker is not None
-                        else None
-                    ),
-                ),
+                        self.reranker.resolved_revision if self.reranker is not None else None
+                ),),
                 "ocr": _model_status(
                     enabled=self.enable_ocr,
                     loaded=ocr_loaded,
                     checkpoint=(
-                        self.ocr_adapter.config.checkpoint
-                        if self.ocr_adapter is not None
-                        else None
+                        self.ocr_adapter.config.checkpoint if self.ocr_adapter is not None else None
                     ),
                     revision=(
-                        self.ocr_adapter.config.revision
-                        if self.ocr_adapter is not None
-                        else None
-                    ),
-                ),
+                        self.ocr_adapter.config.revision if self.ocr_adapter is not None else None
+                ),),
                 "asr": _model_status(
                     enabled=self.enable_asr,
                     loaded=asr_loaded,
-                    checkpoint=self.transcript_config.asr.model_name if self.transcript_config else None,
-                    revision=self.transcript_config.asr.revision if self.transcript_config else None,
-                ),
+                    checkpoint=(
+                        self.transcript_config.asr.model_name if self.transcript_config else None
+                    ),
+                    revision=(
+                        self.transcript_config.asr.revision if self.transcript_config else None
+                ),),
                 "diarization": _model_status(
                     enabled=self.enable_diarization,
                     loaded=diarization_loaded,
-                    checkpoint=self.transcript_config.diarization.model_name if self.transcript_config else None,
-                    revision=self.transcript_config.diarization.revision if self.transcript_config else None,
-                ),
-            },
+                    checkpoint=(
+                        self.transcript_config.diarization.model_name
+                        if self.transcript_config
+                        else None
+                    ),
+                    revision=(
+                        self.transcript_config.diarization.revision
+                        if self.transcript_config
+                        else None
+                ),),
+                "query_preparation": _model_status(
+                    enabled=self.enable_query_preparation,
+                    loaded=query_preparation_loaded,
+                    checkpoint=self.config.query_preparation.model_checkpoint,
+                    revision=self.config.query_preparation.revision,
+            ),},
             capabilities=_capabilities(
                 embedding=visual_loaded or caption_loaded,
                 reranking=reranker_loaded,
@@ -277,18 +307,16 @@ class LocalAdapter:
                 ocr=ocr_loaded,
                 asr=asr_loaded,
                 diarization=diarization_loaded,
-            ),
-        )
+                query_preparation=query_preparation_loaded,
+        ),)
 
-    def boundary_scores(self, frames: np.ndarray, *, source: str) -> np.ndarray:
+    @staticmethod
+    def boundary_scores(frames: np.ndarray, *, source: str) -> np.ndarray:
         """Reject retired local boundary scoring explicitly."""
-
-        raise RuntimeError(
-            f"local {source} boundary scoring was removed; use BTC keyframes"
-        )
+        raise RuntimeError(f"local {source} boundary scoring was removed; use BTC keyframes")
 
     def transcribe_reference(self, payload: Any):
-        import tempfile
+
         if self.asr is None:
             raise RuntimeError("ASR capability is disabled")
         with tempfile.TemporaryDirectory(prefix="hcmai-audio-") as directory:
@@ -297,7 +325,7 @@ class LocalAdapter:
             return self.asr.transcribe(path, payload.video_id)
 
     def diarize_reference(self, payload: Any):
-        import tempfile
+
         if self.diarization is None:
             raise RuntimeError("diarization capability is disabled")
         with tempfile.TemporaryDirectory(prefix="hcmai-audio-") as directory:
@@ -307,8 +335,9 @@ class LocalAdapter:
 
 
 def _download_audio(payload: Any, target: Path) -> None:
-    import hashlib
+
     import httpx
+
     maximum = int(os.getenv("HCMAI_MAX_AUDIO_BYTES", str(1024 * 1024 * 1024)))
     digest = hashlib.sha256()
 
@@ -322,7 +351,7 @@ def _download_audio(payload: Any, target: Path) -> None:
                     raise ValueError("remote audio exceeds configured byte limit")
                 digest.update(chunk)
                 handle.write(chunk)
-    
+
     if digest.hexdigest() != payload.audio_sha256:
         raise ValueError("remote audio checksum mismatch")
 

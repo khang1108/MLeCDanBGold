@@ -20,6 +20,8 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
 from hcmai.corpus.corpus import _CorpusFrameLoadError
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.query_preparation.adapters.qwen import QwenQueryPreparationAdapter
+from hcmai.query_preparation.service import QueryPreparationService
 from thundercompute.pipeline import LLMService, LLMServiceConfig
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.retrieval.retriever.pipeline import RetrievalService
@@ -63,6 +65,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         messages,
     )
     llm = _load_remote_llm(settings, messages)
+    query_preparation = _load_query_preparation(settings, llm, messages)
     retrieval = _load_retrieval(
         settings,
         models,
@@ -76,6 +79,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         retrieval=retrieval,
         config=settings.search,
         llm=llm,
+        query_preparation=query_preparation,
     )
 
 
@@ -120,6 +124,25 @@ def _load_remote_llm(
             f"{category or type(error).__name__}"
         )
     return service
+
+
+def _load_query_preparation(
+    settings: AppConfig,
+    llm: LLMService | None,
+    messages: list[str],
+) -> QueryPreparationService | None:
+    """Construct query preparation only when remote readiness advertises it."""
+
+    capabilities = llm.capability_health() if llm is not None else {}
+    if not capabilities.get("query_preparation", False):
+        messages.append(
+            "Query preparation unavailable; Dense search remains available"
+        )
+        return None
+    return QueryPreparationService(
+        QwenQueryPreparationAdapter(llm),
+        settings.query_preparation,
+    )
 
 
 def _load_corpus(

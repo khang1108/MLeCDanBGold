@@ -42,3 +42,12 @@ reranker:
   batch_size: 16
   max_length: 1024
   max_pixels: 262144
+
+query_preparation:
+  model_checkpoint: "Qwen/Qwen3-4B"
+  revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+  device: "cuda"
+  dtype: "bfloat16"
+  max_new_tokens: 768
+  do_sample_translation: false
+  candidate_temperature: 0.6

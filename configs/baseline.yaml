@@ -86,3 +86,12 @@ inference:
 
   max_concurrency: 4
   minimum_retry_budget_seconds: 0.05
+
+query_preparation:
+  model_name: "Qwen/Qwen3-4B"
+  model_revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+  prompt_version: "query-prep-v1"
+  candidate_count: 5
+  cache_enabled: true
+  cache_ttl_seconds: 3600
+  cache_max_entries: 2048

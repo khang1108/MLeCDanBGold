@@ -368,6 +368,25 @@ class InferenceConfig(BaseModel):
         return self
 
 
+class QueryPreparationConfig(BaseModel):
+    """Configuration for stateless Qwen query preparation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_name: str = "Qwen/Qwen3-4B"
+    model_revision: str = Field(
+        default="1cfa9a7208912126459214e8b04321603b3df60c",
+        min_length=40,
+        max_length=40,
+        pattern=r"^[0-9a-f]{40}$",
+    )
+    prompt_version: str = Field(default="query-prep-v1", min_length=1)
+    candidate_count: Literal[5] = 5
+    cache_enabled: bool = True
+    cache_ttl_seconds: float = Field(default=3600, gt=0)
+    cache_max_entries: int = Field(default=2048, ge=1)
+
+
 class BenchmarkConfig(BaseModel):
     """Configuration recorded alongside benchmark results for reproducibility."""
 
@@ -388,6 +407,9 @@ class AppConfig(BaseSettings):
     search: SearchConfig = Field(default_factory=SearchConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     inference: InferenceConfig = Field(default_factory=InferenceConfig)
+    query_preparation: QueryPreparationConfig = Field(
+        default_factory=QueryPreparationConfig
+    )
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> AppConfig:

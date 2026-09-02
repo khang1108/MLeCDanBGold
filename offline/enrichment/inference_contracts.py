@@ -135,6 +135,7 @@ class _ReadinessCapabilities(ContractModel):
     ocr: bool = False
     asr: bool = False
     diarization: bool = False
+    query_preparation: bool = False
 
 
 class InferenceReadiness(ContractModel):

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from hcmai.api.contracts import (
     SearchRequest,
     SearchResponse,
+    QueryCandidateResponse,
+    QueryCandidatesRequest,
+    QueryCandidatesResponse,
     TRAKERequest,
     TRAKEResponse,
     SubmissionResult,
@@ -22,8 +26,10 @@ from hcmai.common.observability import METRICS
 from hcmai.common.utils.video import official_frame_idx
 from hcmai.orchestration.temporal_search import TemporalSearchService
 from hcmai.retrieval.models import RetrievalSource
+from hcmai.temporal.planner import split_query_events
 
 if TYPE_CHECKING:
+    from hcmai.query_preparation.service import QueryPreparationService
     from hcmai.retrieval.retriever.pipeline import RetrievalService
     from thundercompute.pipeline import LLMService
 
@@ -43,6 +49,7 @@ class SearchService:
         retrieval: RetrievalService | None,
         config: SearchConfig | None = None,
         llm: LLMService | None = None,
+        query_preparation: QueryPreparationService | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
@@ -50,6 +57,7 @@ class SearchService:
         self.retrieval = retrieval
         self.config = config or SearchConfig()
         self.llm = llm
+        self.query_preparation = query_preparation
 
         temporal = (
             TemporalSearchService(
@@ -156,6 +164,7 @@ class SearchService:
                 "kis": search_ready,
                 "trake": search_ready,
                 "shared_retrieval": retrieval_ready,
+                "query_preparation": self.query_preparation is not None,
                 "remote_inference": remote_capabilities,
                 "frame_assets": asset_status["ready"],
                 "frame_asset_status": asset_status,
@@ -184,6 +193,35 @@ class SearchService:
 
         self._ensure_search_ready()
         return self.kis.execute(request)
+
+    def generate_query_candidates(
+        self, request: QueryCandidatesRequest
+    ) -> QueryCandidatesResponse:
+        """Generate five candidates without retaining request or search state."""
+
+        if self.query_preparation is None:
+            raise SearchServiceUnavailableError(
+                "Query preparation capability is unavailable"
+            )
+        events = (
+            tuple(request.events)
+            if request.events is not None
+            else split_query_events(request.query or "")
+        )
+        started = perf_counter()
+        result = self.query_preparation.generate_candidates(events)
+        return QueryCandidatesResponse(
+            original_events=list(result.original_events),
+            literal_en=list(result.literal_en),
+            candidates=[
+                QueryCandidateResponse(
+                    index=candidate.index,
+                    events=list(candidate.events),
+                )
+                for candidate in result.candidates
+            ],
+            query_preparation_ms=(perf_counter() - started) * 1_000,
+        )
 
     def search_trake(self, request: TRAKERequest) -> TRAKEResponse:
         """Execute a validated TRAKE request through the explicit TRAKE workflow."""

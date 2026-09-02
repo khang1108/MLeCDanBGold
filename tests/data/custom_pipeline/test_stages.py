@@ -12,7 +12,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-
 from hcmai.data.custom_pipeline.config import SchedulingConfig
 from hcmai.data.custom_pipeline.stages import (
     StageCommand,
@@ -54,7 +53,9 @@ def fake_stage(tmp_path: Path) -> Path:
     return script
 
 
-def _argv(script: Path, output: Path, *, oom_above: int | None = None, fail_message: str | None = None) -> tuple[str, ...]:
+def _argv(
+    script: Path, output: Path, *, oom_above: int | None = None, fail_message: str | None = None
+) -> tuple[str, ...]:
     argv = [sys.executable, str(script), "--output", str(output)]
     if oom_above is not None:
         argv += ["--oom-above", str(oom_above)]
@@ -151,8 +152,7 @@ def test_run_stage_propagates_cpu_thread_environment(fake_stage: Path, tmp_path:
                 handle.write(os.environ.get("OMP_NUM_THREADS", "unset"))
             sys.exit(0)
             """
-        )
-    )
+    ))
     command = StageCommand(
         name="index_build",
         argv=(sys.executable, str(script), "--output", str(output)),
@@ -187,8 +187,7 @@ def test_run_batch_stages_executes_in_strict_order(fake_stage: Path, tmp_path: P
                 handle.write("done")
             sys.exit(0)
             """
-        )
-    )
+    ))
     stage_names = ["extraction", "caption", "ocr", "objects", "context", "visual_embedding"]
     commands = [
         StageCommand(
@@ -223,8 +222,7 @@ def test_run_batch_stages_raises_on_missing_declared_output(tmp_path: Path) -> N
             args = parser.parse_args()
             sys.exit(0)  # succeeds without writing the declared output
             """
-        )
-    )
+    ))
     command = StageCommand(
         name="objects",
         argv=(sys.executable, str(script), "--output", str(tmp_path / "missing.out")),

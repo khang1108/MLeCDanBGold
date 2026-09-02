@@ -1,10 +1,4 @@
-"""Tests for per-video batch sharding and the three-index batch bundle.
-
-Covers exact ordered coverage, duplicate/missing/foreign frame_id rejection,
-empty child tables, finite-vector/dimension checks, contiguous mapping
-positions, deterministic shard writing, and that the built visual/context/ASR
-indexes all load and stay scoped to exactly the requested batch videos.
-"""
+FRAME_NATIVE_TABLES = "frame_native_tables"
 
 from __future__ import annotations
 
@@ -18,15 +12,14 @@ pytest.importorskip("faiss")
 
 from hcmai.data.custom_pipeline.asr import ASRReuseBundle
 from hcmai.data.custom_pipeline.shards import (
-    VideoShard,
     VideoShardError,
     build_batch_index_bundle,
     split_batch_artifacts_by_video,
     write_video_shard,
 )
+
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
-
 
 _VIDEO_A = "L01_V001"
 _VIDEO_B = "L01_V002"
@@ -49,12 +42,8 @@ def _frame_native_table(extra_columns: dict[str, object] | None = None) -> pd.Da
 
 
 def _vector_mapping() -> pd.DataFrame:
-    return pd.DataFrame(
-        [
-            {**row, "embedding_index": index}
-            for index, row in enumerate(_FRAMES)
-        ]
-    )
+    return pd.DataFrame([{**row, "embedding_index": index} for index, row in enumerate(_FRAMES)])
+
 
 
 def _default_inputs() -> dict[str, object]:
@@ -75,7 +64,7 @@ def _default_inputs() -> dict[str, object]:
     return {
         "video_ids": _VIDEO_IDS,
         "frames_table": _frames_table(),
-        "frame_native_tables": frame_native_tables,
+        FRAME_NATIVE_TABLES: frame_native_tables,
         "child_tables": child_tables,
         "visual_vectors": visual_vectors,
         "visual_mapping": visual_mapping,
@@ -85,7 +74,6 @@ def _default_inputs() -> dict[str, object]:
 
 
 # ---------------------------------------------------------------------------
-# split_batch_artifacts_by_video / validate_video_shard
 # ---------------------------------------------------------------------------
 
 
@@ -122,8 +110,8 @@ def test_split_accepts_non_empty_child_tables_scoped_to_owning_video() -> None:
 
 def test_split_rejects_missing_frame_in_frame_native_table() -> None:
     inputs = _default_inputs()
-    caption = inputs["frame_native_tables"]["caption"]
-    inputs["frame_native_tables"]["caption"] = caption.iloc[[0]]  # drop f1
+    caption = inputs[FRAME_NATIVE_TABLES]["caption"]
+    inputs[FRAME_NATIVE_TABLES]["caption"] = caption.iloc[[0]]  # drop f1
     with pytest.raises(VideoShardError, match="incomplete frame coverage"):
         split_batch_artifacts_by_video(**inputs)
 
@@ -139,8 +127,8 @@ def test_split_rejects_foreign_frame_in_child_table() -> None:
 
 def test_split_rejects_duplicate_frame_in_frame_native_table() -> None:
     inputs = _default_inputs()
-    caption = inputs["frame_native_tables"]["caption"]
-    inputs["frame_native_tables"]["caption"] = pd.concat(
+    caption = inputs[FRAME_NATIVE_TABLES]["caption"]
+    inputs[FRAME_NATIVE_TABLES]["caption"] = pd.concat(
         [caption, caption.iloc[[0]]], ignore_index=True
     )
     with pytest.raises(VideoShardError, match="duplicate frame_id"):
@@ -182,34 +170,30 @@ def test_write_video_shard_persists_tables_and_vectors(tmp_path: Path) -> None:
 
 
 def _build_asr_bundle(index_root: Path) -> ASRReuseBundle:
-    mapping = pd.DataFrame(
-        [
-            {
-                "embedding_index": 0,
-                "segment_id": f"{_VIDEO_A}-000",
-                "video_id": _VIDEO_A,
-                "segment_index": 0,
-                "start_ms": 0,
-                "end_ms": 1000,
-            },
-            {
-                "embedding_index": 1,
-                "segment_id": f"{_VIDEO_B}-000",
-                "video_id": _VIDEO_B,
-                "segment_index": 0,
-                "start_ms": 0,
-                "end_ms": 500,
-            },
-            {
-                "embedding_index": 2,
-                "segment_id": "unrelated-000",
-                "video_id": "L09_V999",
-                "segment_index": 0,
-                "start_ms": 0,
-                "end_ms": 500,
-            },
-        ]
-    )
+    mapping = pd.DataFrame([{
+        "embedding_index": 0,
+        "segment_id": f"{_VIDEO_A}-000",
+        "video_id": _VIDEO_A,
+        "segment_index": 0,
+        "start_ms": 0,
+        "end_ms": 1000,
+        },
+        {
+        "embedding_index": 1,
+        "segment_id": f"{_VIDEO_B}-000",
+        "video_id": _VIDEO_B,
+        "segment_index": 0,
+        "start_ms": 0,
+        "end_ms": 500,
+        },
+        {
+        "embedding_index": 2,
+        "segment_id": "unrelated-000",
+        "video_id": "L09_V999",
+        "segment_index": 0,
+        "start_ms": 0,
+        "end_ms": 500,
+    },])
     vectors = np.eye(3, dtype=np.float32)
     index = SegmentDenseIndex.build(vectors, mapping, dataset_version="v1", model_name="test")
     index.save(index_root)

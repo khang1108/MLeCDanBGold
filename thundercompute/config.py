@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.io import read_yaml, read_yaml_section
@@ -40,6 +42,25 @@ class HostedRerankerConfig(BaseModel):
     max_pixels: int = Field(default=262144, ge=4096)
 
 
+class HostedQueryPreparationConfig(BaseModel):
+    """Pinned Qwen text-generation settings for query preparation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_checkpoint: str = "Qwen/Qwen3-4B"
+    revision: str = Field(
+        default="1cfa9a7208912126459214e8b04321603b3df60c",
+        min_length=40,
+        max_length=40,
+        pattern=r"^[0-9a-f]{40}$",
+    )
+    device: str = "cuda"
+    dtype: str = "bfloat16"
+    max_new_tokens: int = Field(default=768, ge=1)
+    do_sample_translation: Literal[False] = False
+    candidate_temperature: float = Field(default=0.6, gt=0)
+
+
 class LLMServiceConfig(BaseModel):
     """Hosted inference settings plus pinned dense encoder configurations."""
 
@@ -51,6 +72,9 @@ class LLMServiceConfig(BaseModel):
     caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     evidence_embedding: EncoderConfig | None = None
     reranker: HostedRerankerConfig = Field(default_factory=HostedRerankerConfig)
+    query_preparation: HostedQueryPreparationConfig = Field(
+        default_factory=HostedQueryPreparationConfig
+    )
 
     @property
     def resolved_evidence_embedding(self) -> EncoderConfig:

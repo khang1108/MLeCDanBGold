@@ -49,6 +49,12 @@ class LLMService:
     def reranker(self) -> Any:
         return self.adapter.reranker
 
+    @property
+    def query_preparer(self) -> Any:
+        """Return the hosted query-preparation adapter when available."""
+
+        return self.adapter.query_preparer
+
     def load(self) -> None:
         method = getattr(self.adapter, "load", None)
         if method is not None:
@@ -75,6 +81,7 @@ class LLMService:
                 "embedding": False,
                 "reranking": False,
                 "structured_parsing": False,
+                "query_preparation": False,
             }
         return readiness.capabilities.model_dump()
 
@@ -100,6 +107,18 @@ class LLMService:
 
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
+
+    def translate_query_events(self, events: list[str]) -> list[str]:
+        """Translate ordered retrieval events through the configured provider."""
+
+        return self.adapter.translate_query_events(events)
+
+    def generate_query_candidates(
+        self, events: list[str], candidate_count: int = 5
+    ) -> dict[str, Any]:
+        """Generate literal and controlled retrieval-event bundles."""
+
+        return self.adapter.generate_query_candidates(events, candidate_count)
 
     def boundary_scores(self, frames: Any, *, source: str) -> Any:
         return self.adapter.boundary_scores(frames, source=source)

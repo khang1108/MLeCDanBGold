@@ -26,7 +26,12 @@ from offline.enrichment.inference_contracts import (
 )
 from hcmai.common.utils.logging import get_logger
 from thundercompute.gateway import InferenceGateway, InferenceGatewayError
-from thundercompute.contracts import BoundaryScoreResponse, RerankResponse
+from thundercompute.contracts import (
+    BoundaryScoreResponse,
+    QueryCandidatesResponse,
+    QueryTranslationResponse,
+    RerankResponse,
+)
 from thundercompute.resilience import FailureCategory
 
 logger = get_logger(__name__)
@@ -62,6 +67,28 @@ class InferenceClient:
             json={"source": source, "texts": texts},
         )
         return _validated(TextEmbeddingResponse, payload)
+
+    def translate_query_events(self, events: list[str]) -> list[str]:
+        """Request aligned literal translations from Thundercompute."""
+
+        payload = self._post(
+            "/query-preparation/translate",
+            json={"events": events},
+        )
+        response = _validated(QueryTranslationResponse, payload)
+        return list(response.events)
+
+    def generate_query_candidates(
+        self, events: list[str], candidate_count: int = 5
+    ) -> dict[str, Any]:
+        """Request exactly five aligned retrieval candidate bundles."""
+
+        payload = self._post(
+            "/query-preparation/candidates",
+            json={"events": events, "candidate_count": candidate_count},
+        )
+        response = _validated(QueryCandidatesResponse, payload)
+        return response.model_dump()
 
     def readiness(self, deadline_at: float | None = None) -> InferenceReadiness:
         payload = self._request("GET", "/ready", deadline_at=deadline_at)

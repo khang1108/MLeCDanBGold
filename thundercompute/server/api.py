@@ -31,6 +31,10 @@ from offline.enrichment.ocr.models.entities import json_safe_ocr_raw
 from thundercompute.pipeline import LLMService
 from thundercompute.contracts import (
     BoundaryScoreResponse,
+    QueryCandidatesRequest,
+    QueryCandidatesResponse,
+    QueryEventsRequest,
+    QueryTranslationResponse,
     RerankItem,
     RerankResponse,
     TextEmbeddingRequest,
@@ -114,6 +118,18 @@ def create_llm_app(runtime: LLMService | None = None) -> FastAPI:
     app.add_api_route(
         "/v1/rerank", rerank, methods=["POST"], response_model=RerankResponse
     )
+    app.add_api_route(
+        "/query-preparation/translate",
+        translate_query_events,
+        methods=["POST"],
+        response_model=QueryTranslationResponse,
+    )
+    app.add_api_route(
+        "/query-preparation/candidates",
+        generate_query_candidates,
+        methods=["POST"],
+        response_model=QueryCandidatesResponse,
+    )
     return app
 
 
@@ -134,6 +150,51 @@ async def ready(request: Request) -> InferenceReadiness:
     if not value.ready:
         raise HTTPException(status_code=503, detail="Models are not ready")
     return value
+
+
+async def translate_query_events(
+    payload: QueryEventsRequest, request: Request
+) -> QueryTranslationResponse:
+    """Translate ordered query events and reject provider shape drift."""
+
+    try:
+        events = request.app.state.runtime.translate_query_events(list(payload.events))
+        response = QueryTranslationResponse(events=events)
+        if len(response.events) != len(payload.events):
+            raise ValueError("translation changed event count")
+        return response
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Query translation failed: {(str(error) or type(error).__name__)[:160]}",
+        ) from error
+
+
+async def generate_query_candidates(
+    payload: QueryCandidatesRequest, request: Request
+) -> QueryCandidatesResponse:
+    """Generate exactly five candidates aligned to the request events."""
+
+    try:
+        value = request.app.state.runtime.generate_query_candidates(
+            list(payload.events), payload.candidate_count
+        )
+        response = QueryCandidatesResponse.model_validate(value)
+        expected = len(payload.events)
+        if len(response.literal_en) != expected or any(
+            len(candidate) != expected for candidate in response.candidates
+        ):
+            raise ValueError("candidate generation changed event count")
+        return response
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Query candidate generation failed: {(str(error) or type(error).__name__)[:160]}",
+        ) from error
 
 
 async def embed(

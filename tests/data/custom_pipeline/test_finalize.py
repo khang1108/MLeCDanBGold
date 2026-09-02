@@ -8,6 +8,7 @@ contiguous global mappings across all three global indexes.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -37,32 +38,33 @@ from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
 
 def _frames(video_id: str, count: int, start: int = 0) -> list[dict[str, object]]:
-    return [
-        {
-            "frame_id": f"{video_id}_f{i}",
-            "video_id": video_id,
-            "frame_idx": i,
-            "timestamp_ms": i * 1000,
+    return [{
+        "frame_id": f"{video_id}_f{i}",
+        "video_id": video_id,
+        "frame_idx": i,
+        "timestamp_ms": i * 1000,
         }
         for i in range(start, start + count)
     ]
 
 
 def _asr_bundle_for(video_ids: list[str], index_root: Path) -> ASRReuseBundle:
-    rows = [
-        {
-            "embedding_index": position,
-            "segment_id": f"{video_id}-000",
-            "video_id": video_id,
-            "segment_index": 0,
-            "start_ms": 0,
-            "end_ms": 1000,
+    rows = [{
+        "embedding_index": position,
+        "segment_id": f"{video_id}-000",
+        "video_id": video_id,
+        "segment_index": 0,
+        "start_ms": 0,
+        "end_ms": 1000,
         }
         for position, video_id in enumerate(video_ids)
     ]
     mapping = pd.DataFrame(rows)
     index = SegmentDenseIndex.build(
-        np.eye(len(video_ids), dtype=np.float32), mapping, dataset_version="v1", model_name="asr-test"
+        np.eye(len(video_ids), dtype=np.float32),
+        mapping,
+        dataset_version="v1",
+        model_name="asr-test",
     )
     index.save(index_root)
     return ASRReuseBundle(
@@ -76,7 +78,12 @@ def _asr_bundle_for(video_ids: list[str], index_root: Path) -> ASRReuseBundle:
 
 
 def _commit_one_batch(
-    root: Path, batch_id: str, archive_id: str, video_ids: list[str], frames_per_video: int, image_root: Path
+    root: Path,
+    batch_id: str,
+    archive_id: str,
+    video_ids: list[str],
+    frames_per_video: int,
+    image_root: Path,
 ) -> Path:
     """Build, validate, and commit one fully synthetic batch."""
 
@@ -93,10 +100,13 @@ def _commit_one_batch(
         "ocr_frames": pd.DataFrame([dict(row, normalized_text=None) for row in frames]),
         "object_frames": pd.DataFrame([dict(row, summary=None) for row in frames]),
         "context": pd.DataFrame([dict(row, context_text="context") for row in frames]),
-        "frames": pd.DataFrame(
-            [dict(row, image_path=str((image_root / f"{row['frame_id']}.jpg").relative_to(image_root))) for row in frames]
-        ),
-    }
+        "frames": pd.DataFrame([
+            dict(
+                row,
+                image_path=str((image_root / f"{row['frame_id']}.jpg").relative_to(image_root)),
+            )
+            for row in frames
+    ]),}
     child_tables = {
         "ocr_regions": pd.DataFrame(columns=["frame_id", "video_id"]),
         "object_detections": pd.DataFrame(columns=["frame_id", "video_id"]),
@@ -108,7 +118,14 @@ def _commit_one_batch(
     vectors = np.random.default_rng(42).standard_normal((count, 4)).astype(np.float32)
 
     shards = split_batch_artifacts_by_video(
-        video_ids, frames_table, frame_native_tables, child_tables, vectors, mapping, vectors, mapping
+        video_ids,
+        frames_table,
+        frame_native_tables,
+        child_tables,
+        vectors,
+        mapping,
+        vectors,
+        mapping,
     )
     staging_root = root / f"staging_{batch_id}"
     for video_id in video_ids:
@@ -206,7 +223,6 @@ def test_compact_batch_embeddings_rejects_dimension_mismatch(tmp_path: Path) -> 
     manifests = discover_committed_batches(tmp_path / "batches")
 
     # Corrupt the second batch's visual metadata to disagree on embedding_dim.
-    import json
 
     metadata_path = manifests[1].root / "visual" / "metadata.json"
     metadata = json.loads(metadata_path.read_text())

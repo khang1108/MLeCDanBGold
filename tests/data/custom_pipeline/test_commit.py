@@ -7,6 +7,7 @@ cleanup-safety invariants, and deterministic inventory ordering.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +32,6 @@ from hcmai.data.custom_pipeline.shards import (
 from hcmai.data.custom_pipeline.state import BatchStage, PipelineStateStore, VideoStage
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
-
 _VIDEO_A = "L01_V001"
 _VIDEO_B = "L01_V002"
 _VIDEO_IDS = [_VIDEO_A, _VIDEO_B]
@@ -51,26 +51,22 @@ def _vector_mapping() -> pd.DataFrame:
 
 
 def _asr_bundle(index_root: Path) -> ASRReuseBundle:
-    mapping = pd.DataFrame(
-        [
-            {
-                "embedding_index": 0,
-                "segment_id": f"{_VIDEO_A}-000",
-                "video_id": _VIDEO_A,
-                "segment_index": 0,
-                "start_ms": 0,
-                "end_ms": 1000,
-            },
-            {
-                "embedding_index": 1,
-                "segment_id": f"{_VIDEO_B}-000",
-                "video_id": _VIDEO_B,
-                "segment_index": 0,
-                "start_ms": 0,
-                "end_ms": 500,
-            },
-        ]
-    )
+    mapping = pd.DataFrame([{
+        "embedding_index": 0,
+        "segment_id": f"{_VIDEO_A}-000",
+        "video_id": _VIDEO_A,
+        "segment_index": 0,
+        "start_ms": 0,
+        "end_ms": 1000,
+        },
+        {
+        "embedding_index": 1,
+        "segment_id": f"{_VIDEO_B}-000",
+        "video_id": _VIDEO_B,
+        "segment_index": 0,
+        "start_ms": 0,
+        "end_ms": 500,
+    },])
     index = SegmentDenseIndex.build(
         np.eye(2, dtype=np.float32), mapping, dataset_version="v1", model_name="test"
     )
@@ -128,7 +124,6 @@ def _build_staged_batch(staging_root: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# build_batch_inventory / validate_local_batch
 # ---------------------------------------------------------------------------
 
 
@@ -199,7 +194,6 @@ def test_commit_writes_markers_after_payload_and_publishes_atomically(tmp_path: 
 
 
 def test_commit_is_idempotent_for_an_identical_resume(tmp_path: Path) -> None:
-    import shutil
 
     final_root = tmp_path / "final" / "L01-batch000"
 
@@ -354,7 +348,6 @@ def test_cleanup_rejects_paths_escaping_the_allowed_root(tmp_path: Path) -> None
     escaping_path.write_bytes(b"video")
 
     with pytest.raises(ValueError, match="outside allowed root"):
-        cleanup_ephemeral_batch(
-            store, "L01-batch000", [escaping_path], allowed_root=active_root
-        )
-    assert escaping_path.exists()  # never touched
+        cleanup_ephemeral_batch(store, "L01-batch000", [escaping_path], allowed_root=active_root)
+    assert escaping_path.exists()
+  # never touched

@@ -52,8 +52,37 @@ class RerankResponse(_HTTPContract):
     latency_ms: float = Field(ge=0)
 
 
+class QueryEventsRequest(_HTTPContract):
+    """Ordered non-empty retrieval events for literal translation."""
+
+    events: list[_NonEmptyString] = Field(min_length=1)
+
+
+class QueryCandidatesRequest(QueryEventsRequest):
+    """Ordered retrieval events with the frozen public candidate count."""
+
+    candidate_count: Literal[5] = 5
+
+
+class QueryTranslationResponse(_HTTPContract):
+    """Ordered literal English translations from the hosted model."""
+
+    events: list[_NonEmptyString] = Field(min_length=1)
+
+
+class QueryCandidatesResponse(_HTTPContract):
+    """Literal translations and exactly five aligned event bundles."""
+
+    literal_en: list[_NonEmptyString] = Field(min_length=1)
+    candidates: list[list[_NonEmptyString]] = Field(min_length=5, max_length=5)
+
+
 __all__ = [
     "BoundaryScoreResponse",
+    "QueryCandidatesRequest",
+    "QueryCandidatesResponse",
+    "QueryEventsRequest",
+    "QueryTranslationResponse",
     "RerankItem",
     "RerankResponse",
     "TextEmbeddingRequest",
