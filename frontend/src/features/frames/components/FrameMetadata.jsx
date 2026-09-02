@@ -34,10 +34,10 @@ const FrameMetadata = ({ frame, playbackTime }) => {
 
   return (
   <div className="inspector-meta-list">
-    <div className="inspector-meta-item">
+    {frame.frame_id && <div className="inspector-meta-item">
       <span className="meta-lbl">Internal frame ID</span>
       <span className="meta-val monospace">{frame.frame_id}</span>
-    </div>
+    </div>}
     <div className="inspector-meta-item">
       <span className="meta-lbl">Video ID</span>
       <span className="meta-val monospace">{displayVideoId(frame.video_id)}</span>
@@ -50,10 +50,10 @@ const FrameMetadata = ({ frame, playbackTime }) => {
       <span className="meta-lbl">Title</span>
       <span className="meta-val">{metadataValue(title)}</span>
     </div>}
-    <div className="inspector-meta-item">
+    {frame.frame_idx !== undefined && frame.frame_idx !== null && <div className="inspector-meta-item">
       <span className="meta-lbl">BTC frame index</span>
       <span className="meta-val monospace">{liveFrameIdx}</span>
-    </div>
+    </div>}
     {Number.isFinite(liveTimestampMs) && <div className="inspector-meta-item">
       <span className="meta-lbl">Timestamp</span>
       <span className="meta-val">{liveTimestampMs} ms</span>

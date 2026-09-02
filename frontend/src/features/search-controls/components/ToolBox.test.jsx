@@ -3,10 +3,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import ToolBox from './ToolBox';
 
 describe('ToolBox component', () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
   test('renders Top-K number input and preset chips without any slider', () => {
     const setTopK = jest.fn();
     render(<ToolBox topK={20} setTopK={setTopK} onReset={jest.fn()} />);
@@ -67,5 +63,12 @@ describe('ToolBox component', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /reset parameters/i }));
     expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the submission files panel in the Query sidebar', () => {
+    render(<ToolBox topK={20} setTopK={jest.fn()} onReset={jest.fn()} />);
+
+    expect(screen.getByRole('region', { name: 'Shared submission files' })).toBeTruthy();
+    expect(screen.getByText('No Query Files')).toBeTruthy();
   });
 });

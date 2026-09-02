@@ -41,3 +41,17 @@
   margin: 0;
   padding-left: 16px;
 }
+
+/* Workspace owns its own scroll regions so the app shell remains usable on
+   narrow screens without hiding history or shared filenames. */
+@media (max-width: 850px) {
+  .workspace-page {
+    overflow: auto;
+  }
+
+  .submission-tree-list,
+  .workspace-history-list {
+    max-height: 360px;
+    overflow-y: auto;
+  }
+}

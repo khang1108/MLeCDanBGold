@@ -47,7 +47,7 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  gap: 6px;
+  gap: var(--spacing-xs);
   overflow: hidden;
 }
 
@@ -55,7 +55,7 @@
   display: grid;
   grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
   flex: 1;
-  gap: 8px;
+  gap: var(--spacing-xs);
   min-height: 0;
   overflow: hidden;
 }
@@ -65,10 +65,10 @@
   display: flex;
   flex: 0 0 250px;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-xs);
   max-height: 100%;
   min-width: 0;
-  padding: 14px 16px;
+  padding: var(--spacing-md);
   border: 1px solid var(--color-hairline);
   border-radius: var(--rounded-lg);
   background: var(--color-surface);
@@ -188,7 +188,7 @@
 .filter-main-column {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--spacing-xs);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -197,7 +197,7 @@
 .filter-form {
   flex: 0 0 auto;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--color-hairline);
   border-radius: var(--rounded-lg);
   background: var(--color-surface);
@@ -366,13 +366,13 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  gap: 6px;
+  gap: var(--spacing-xs);
   overflow: hidden;
 }
 
 .filter-results {
   flex: 1;
-  gap: 6px;
+  gap: var(--spacing-xs);
   min-height: 0;
   padding: 0 0 16px;
   overflow: hidden;
@@ -411,32 +411,6 @@
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
-}
-
-.filter-page-size {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--color-ink-muted);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.filter-page-size select {
-  min-height: 28px;
-  padding: 3px 24px 3px 7px;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--rounded-sm);
-  outline: none;
-  background: var(--color-surface);
-  color: var(--color-ink);
-  font: inherit;
-}
-
-.filter-page-size select:focus-visible {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 
 .filter-pagination {

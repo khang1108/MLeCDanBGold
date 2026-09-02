@@ -11,6 +11,7 @@ const FramesBox = ({
   events = [],
   onFrameClick,
   onSubmit,
+  getFrameClassName,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
   const hasLatency = latencyMs !== null && latencyMs !== undefined;
@@ -71,11 +72,12 @@ const FramesBox = ({
           (results.length ? (
             <div className="frames-grid">
               {results.map((frame, index) => (
-                <FrameCard
-                  key={`${frame.video_id}:${frame.frame_ids.join("|")}:${index}`}
+                  <FrameCard
+                  key={`${frame.video_id}:${(frame.frame_ids || [frame.frame_id]).join("|")}:${index}`}
                   frame={frame}
-                  events={events}
-                  onClick={() => onFrameClick(frame)}
+                    events={events}
+                    className={getFrameClassName?.(frame)}
+                    onClick={() => onFrameClick(frame)}
                   onSubmit={onSubmit}
                 />
               ))}

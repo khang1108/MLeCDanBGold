@@ -1,30 +1,41 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FilterWorkspace from './FilterWorkspace';
 import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
+import { SubmissionDialogProvider } from '../../submission/contexts/SubmissionDialogContext';
 import { filterFrames } from '../../../api/filter';
 import { getFrameDetail } from '../../../api/frames';
+import { getSubmissionFiles } from '../../../api/workspace';
 
 jest.mock('../../../api/filter');
 jest.mock('../../../api/frames');
+jest.mock('../../../api/workspace', () => ({
+  getSubmissionFiles: jest.fn().mockResolvedValue({ files: [] }),
+  workspaceWebSocketUrl: jest.fn(() => 'ws://example.test/api/v1/workspace/ws'),
+}));
 
-const renderWorkspace = (props = {}) => render(
-  <SubmissionProvider>
-    <FilterWorkspace {...props} />
-  </SubmissionProvider>,
-);
+const renderWorkspace = async (props = {}) => {
+  const result = render(
+    <SubmissionProvider>
+      <SubmissionDialogProvider><FilterWorkspace {...props} /></SubmissionDialogProvider>
+    </SubmissionProvider>,
+  );
+  await act(async () => Promise.resolve());
+  return result;
+};
 
 beforeEach(() => {
   filterFrames.mockReset();
   getFrameDetail.mockReset();
+  getSubmissionFiles.mockResolvedValue({ files: [] });
   getFrameDetail.mockImplementation(async ({ frameId }) => ({
     frame_id: frameId,
     frame_url: `http://example.test/${frameId}.jpg`,
   }));
 });
 
-test('renders every available folder', () => {
-  renderWorkspace({ isActive: false });
+test('renders every available folder', async () => {
+  await renderWorkspace({ isActive: false });
 
   expect(screen.getByLabelText('Folder')).toBeTruthy();
   fireEvent.focus(screen.getByLabelText('Folder'));
@@ -34,8 +45,15 @@ test('renders every available folder', () => {
   ]);
 });
 
-test('filters folder options as the user types', () => {
-  renderWorkspace({ isActive: false });
+test('keeps the submission files panel in the Filter sidebar', async () => {
+  await renderWorkspace({ isActive: true });
+
+  expect(screen.getByRole('region', { name: 'Shared submission files' })).toBeTruthy();
+  expect(screen.getByText('No Query Files')).toBeTruthy();
+});
+
+test('filters folder options as the user types', async () => {
+  await renderWorkspace({ isActive: false });
 
   const folderInput = screen.getByLabelText('Folder');
   fireEvent.change(folderInput, { target: { value: 'L26' } });
@@ -64,7 +82,7 @@ test('switches video scope to result-backed typeahead options after filtering', 
       },
     ],
   });
-  renderWorkspace({ isActive: false });
+  await renderWorkspace({ isActive: false });
 
   expect(screen.getByLabelText('Video').getAttribute('role')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
@@ -77,8 +95,8 @@ test('switches video scope to result-backed typeahead options after filtering', 
   expect(screen.queryByRole('option', { name: 'L26_topic.video-1' })).toBeNull();
 });
 
-test('shows the same welcome copy as the query page before filtering', () => {
-  renderWorkspace({ isActive: false });
+test('shows the same welcome copy as the query page before filtering', async () => {
+  await renderWorkspace({ isActive: false });
 
   expect(screen.getByText('Welcome to HCMAI Frame Search')).toBeTruthy();
   expect(screen.getByText(
@@ -86,8 +104,8 @@ test('shows the same welcome copy as the query page before filtering', () => {
   )).toBeTruthy();
 });
 
-test('keeps object controls compact and supports adding rows', () => {
-  renderWorkspace({ isActive: false });
+test('keeps object controls compact and supports adding rows', async () => {
+  await renderWorkspace({ isActive: false });
 
   const objectInput = screen.getByLabelText('Object 1, format name colon count');
   fireEvent.change(objectInput, { target: { value: 'chair: 4' } });
@@ -97,8 +115,8 @@ test('keeps object controls compact and supports adding rows', () => {
   expect(screen.getByLabelText('Object 2, format name colon count')).toBeTruthy();
 });
 
-test('uses vertically growing text fields for long filter values', () => {
-  renderWorkspace({ isActive: false });
+test('uses vertically growing text fields for long filter values', async () => {
+  await renderWorkspace({ isActive: false });
 
   expect(screen.getByLabelText('Title').tagName).toBe('TEXTAREA');
   expect(screen.getByLabelText('ASR / Transcript').tagName).toBe('TEXTAREA');
@@ -128,7 +146,7 @@ test('renders the backend page without client-side rescoping', async () => {
       },
     ],
   });
-  renderWorkspace({ isActive: false });
+  await renderWorkspace({ isActive: false });
 
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Boat' } });
   fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
@@ -156,7 +174,7 @@ test('renders the backend page without client-side rescoping', async () => {
 
 test('includes the current folder and video scope in the Filter request', async () => {
   filterFrames.mockResolvedValueOnce({ results: [] });
-  renderWorkspace({ isActive: false });
+  await renderWorkspace({ isActive: false });
 
   fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'L26' } });
   fireEvent.change(screen.getByLabelText('Video'), {
@@ -213,7 +231,7 @@ test('uses applied scope for pagination without filtering the backend page again
       ],
     });
 
-  renderWorkspace({ isActive: false });
+  await renderWorkspace({ isActive: false });
   fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'L26' } });
   fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
   await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(1));
@@ -256,7 +274,7 @@ test('uses complete Filter rows without requesting per-frame details', async () 
       asr: 'Xin chào',
     })),
   });
-  renderWorkspace({ isActive: false, onFrameClick });
+  await renderWorkspace({ isActive: false, onFrameClick });
 
   fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
   const firstFrame = await screen.findByAltText('Frame frame-0');
@@ -302,7 +320,7 @@ test('requests page 1 for a new filter after navigating to another page', async 
       }],
     });
 
-  renderWorkspace({ isActive: false });
+  await renderWorkspace({ isActive: false });
   fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Page 4' })).toBeTruthy());
 
@@ -323,25 +341,10 @@ test('requests page 1 for a new filter after navigating to another page', async 
   }));
 });
 
-test('changing page size reapplies the current session at page 1', async () => {
-  filterFrames
-    .mockResolvedValueOnce({ total_pages: 3, results: [] })
-    .mockResolvedValueOnce({ total_pages: 2, results: [] });
-  renderWorkspace({ isActive: false });
-  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Boat' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
-  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(1));
+test('does not expose a user-controlled frames-per-page selector', async () => {
+  await renderWorkspace({ isActive: false });
 
-  fireEvent.change(screen.getByLabelText('Frames per page'), {
-    target: { value: '24' },
-  });
-
-  await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(2));
-  expect(filterFrames.mock.calls[1][0]).toEqual(expect.objectContaining({
-    pageId: 1,
-    framesPerPage: 24,
-    filters: expect.objectContaining({ title: 'Boat' }),
-  }));
+  expect(screen.queryByLabelText('Frames per page')).toBeNull();
 });
 
 test('freezes an Auto size for pagination and recalculates only a new filter', async () => {
@@ -349,7 +352,7 @@ test('freezes an Auto size for pagination and recalculates only a new filter', a
     .mockResolvedValueOnce({ total_pages: 2, results: [] })
     .mockResolvedValueOnce({ total_pages: 2, results: [] })
     .mockResolvedValueOnce({ total_pages: 2, results: [] });
-  renderWorkspace({ isActive: false });
+  await renderWorkspace({ isActive: false });
   fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
   await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(1));
   const firstSize = filterFrames.mock.calls[0][0].framesPerPage;
@@ -360,10 +363,12 @@ test('freezes an Auto size for pagination and recalculates only a new filter', a
   fireEvent(window, new Event('resize'));
   expect(filterFrames).toHaveBeenCalledTimes(1);
 
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Page 2' })).toBeTruthy());
   fireEvent.click(screen.getByRole('button', { name: 'Page 2' }));
   await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(2));
   expect(filterFrames.mock.calls[1][0].framesPerPage).toBe(firstSize);
 
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Filter' })).toBeTruthy());
   fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
   await waitFor(() => expect(filterFrames).toHaveBeenCalledTimes(3));
   expect(filterFrames.mock.calls[2][0]).toEqual(expect.objectContaining({

@@ -15,7 +15,7 @@
   justify-content: center;
   min-height: 26px;
   padding: 4px 9px;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-hairline));
   border-radius: var(--rounded-sm);
   background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
   color: var(--color-primary);
