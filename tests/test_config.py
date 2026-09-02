@@ -60,23 +60,6 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.search.alignment.cluster_delta == 0.0
     assert config.inference.enabled is True
     assert config.inference.base_url == "https://api.iamphuckhang.dev"
-    assert config.filter.catalog_path == Path(
-        "artifacts/filter/filter_catalog.sqlite"
-    )
-    assert config.filter.connection_pool_size == 4
-    assert config.filter.sqlite_cache_kib == 8192
-
-
-@pytest.mark.parametrize("pool_size", [0, 5])
-def test_filter_config_rejects_unbounded_connection_pools(pool_size: int) -> None:
-    """Keep Filter SQLite memory bounded for the shared FAISS host."""
-
-    with pytest.raises(ValueError):
-        AppConfig.model_validate(
-            {"filter": {"connection_pool_size": pool_size}}
-        )
-
-
 def test_search_config_rejects_retired_progressive_options() -> None:
     """Fail configuration loading instead of silently reviving removed state."""
 

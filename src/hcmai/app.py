@@ -18,9 +18,6 @@ from fastapi.responses import JSONResponse
 
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.filtering.catalog import FilterCatalogCorruptError
-from hcmai.filtering.service import FilterService
-from hcmai.filtering.setup import load_filter_service
 from hcmai.api.routers import (
     create_filter_router,
     create_frames_router,
@@ -49,15 +46,13 @@ def _configure_backend_logging() -> None:
 
 def create_app(
     search_service: SearchService | None = None,
-    filter_service: FilterService | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     service_container: dict[str, Any] = {
         "service": search_service,
         "startup_messages": [],
-        "filter_service": filter_service,
-        "filter_error": None,
     }
+
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         _configure_backend_logging()
@@ -66,16 +61,6 @@ def create_app(
             service_container["service"] = SearchService.load(
                 service_container["startup_messages"]
             )
-        if service_container["filter_service"] is None:
-            try:
-                service_container["filter_service"] = load_filter_service(
-                    service_container["startup_messages"]
-                )
-            except FilterCatalogCorruptError as error:
-                # Corruption is surfaced as a Filter 500 while Search remains
-                # available; missing/unopenable catalogs degrade to 503.
-                service_container["filter_error"] = error
-                logger.exception("Filter catalog failed validation")
         service = service_container["service"]
         health = service.health(service_container["startup_messages"])
         logger.info(
@@ -96,10 +81,6 @@ def create_app(
             close = getattr(service, "close", None)
             if close is not None:
                 close()
-            filter_runtime = service_container.get("filter_service")
-            filter_close = getattr(filter_runtime, "close", None)
-            if filter_close is not None:
-                filter_close()
             logger.info("Backend shutdown completed")
 
     app = FastAPI(
@@ -146,7 +127,7 @@ def create_app(
     app.include_router(create_search_router(service_container))
     app.include_router(create_trake_router(service_container))
     app.include_router(create_frames_router(service_container))
-    app.include_router(create_filter_router(service_container))
+    app.include_router(create_filter_router())
 
     return app
 

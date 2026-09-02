@@ -1,5 +1,9 @@
 # Disk-Backed Metadata Filter Implementation Plan
 
+> **Status: RETIRED on 2026-09-02.** The implemented exact Filter backend was
+> intentionally removed. This plan is historical and must not be executed;
+> only the stable endpoint placeholder remains.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the exact, deterministic `/api/v1/filter` feature over a read-only SQLite catalog, integrate its complete page response into Filter Workspace, and keep filter memory bounded while FAISS remains loaded.

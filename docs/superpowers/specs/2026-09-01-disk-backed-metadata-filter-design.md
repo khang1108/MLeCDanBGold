@@ -1,7 +1,11 @@
 # Disk-Backed Metadata Filter Design
 
 **Date:** 2026-09-01  
-**Status:** Implemented and real-corpus benchmark verified on 2026-09-02
+**Status:** RETIRED on 2026-09-02
+
+> This design is retained only as historical context. The exact Filter backend,
+> catalog, and offline builder were removed by product decision. Only
+> `POST /api/v1/filter` remains as a `501 Not Implemented` development stub.
 
 **Implementation:** See
 `docs/superpowers/plans/2026-09-02-disk-backed-metadata-filter.md`. The

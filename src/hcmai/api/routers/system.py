@@ -46,19 +46,6 @@ def create_system_router(service_container: dict[str, Any]) -> APIRouter:
                 service_container.get("startup_messages", ())
             )
 
-        filter_service = service_container.get("filter_service")
-        filter_health = (
-            filter_service.health()
-            if filter_service is not None
-            else {
-                "ready": False,
-                "catalog_version": None,
-                "frame_count": 0,
-            }
-        )
-        capabilities = payload.setdefault("capabilities", {})
-        capabilities["filter"] = bool(filter_health["ready"])
-        payload["filter_catalog"] = filter_health
         return payload
 
     return router

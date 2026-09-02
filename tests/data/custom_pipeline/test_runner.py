@@ -19,14 +19,14 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from offline.ingestion.custom_pipeline.asr import ASRReuseBundle
-from offline.ingestion.custom_pipeline.config import (
+from hcmai.data.custom_pipeline.asr import ASRReuseBundle
+from hcmai.data.custom_pipeline.config import (
     ArchivePlan,
     ArchiveWorkWindow,
     DiskBudgetConfig,
     SchedulingConfig,
 )
-from offline.ingestion.custom_pipeline.runner import (
+from hcmai.data.custom_pipeline.runner import (
     BatchArtifacts,
     RunnerContext,
     finalize_pipeline,
@@ -34,7 +34,7 @@ from offline.ingestion.custom_pipeline.runner import (
     preflight_pipeline,
     process_archive,
 )
-from offline.ingestion.custom_pipeline.state import ArchiveStage, PipelineStateStore, VideoStage
+from hcmai.data.custom_pipeline.state import ArchiveStage, PipelineStateStore, VideoStage
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
 
@@ -238,69 +238,6 @@ def test_process_archive_commits_one_batch_and_cleans_archive(
     assert not (context.active_root / "archives" / plan.entries[0].archive_id).exists()
 
 
-def test_process_archive_resumes_an_interrupted_download(
-    fake_curl: Path, tmp_path: Path
-) -> None:
-    context = _context(tmp_path)
-    plan = ArchivePlan.from_urls(["https://example.org/Videos_L01.zip"])
-    state_store = PipelineStateStore(context.run_root)
-    state_store.create_or_resume_run(
-        _identity(plan), ArchiveWorkWindow(offset=0, limit=1)
-    )
-    archive_id = plan.entries[0].archive_id
-    state_store.ensure_archive(archive_id, plan.entries[0].position)
-    state_store.advance_archive(archive_id, ArchiveStage.DOWNLOADING)
-
-    batch_ids = process_archive(
-        context,
-        state_store,
-        plan.entries[0],
-        _make_produce_batch_artifacts(state_store),
-        _asr_bundle_factory(tmp_path / "asr_indexes"),
-        dataset_version="dataset_v1",
-        visual_model_name="siglip-test",
-        context_model_name="bge-test",
-    )
-
-    assert len(batch_ids) == 1
-    archive_record = state_store.get_archive(archive_id)
-    assert archive_record is not None and archive_record.stage == ArchiveStage.CLEANED
-
-
-def test_process_archive_commits_only_the_requested_batch_slice(
-    fake_curl: Path, tmp_path: Path
-) -> None:
-    context = _context(tmp_path)
-    context = RunnerContext(
-        run_root=context.run_root,
-        artifacts_root=context.artifacts_root,
-        native_executable=context.native_executable,
-        disk_budget=context.disk_budget,
-        scheduling=SchedulingConfig(max_videos_per_batch=1),
-    )
-    plan = ArchivePlan.from_urls(["https://example.org/Videos_L01.zip"])
-    state_store = PipelineStateStore(context.run_root)
-    state_store.create_or_resume_run(_identity(plan), ArchiveWorkWindow(offset=0, limit=1))
-
-    batch_ids = process_archive(
-        context,
-        state_store,
-        plan.entries[0],
-        _make_produce_batch_artifacts(state_store),
-        _asr_bundle_factory(tmp_path / "asr_indexes"),
-        dataset_version="dataset_v1",
-        visual_model_name="siglip-test",
-        context_model_name="bge-test",
-        batch_offset=1,
-        batch_limit=1,
-    )
-
-    assert batch_ids == ["Videos_L01-batch001"]
-    committed = context.artifacts_root / "batches" / plan.entries[0].archive_id
-    assert (committed / "Videos_L01-batch001" / "_SUCCESS.json").is_file()
-    assert not (committed / "Videos_L01-batch000").exists()
-
-
 def test_pipeline_status_reports_recommended_next_offset(fake_curl: Path, tmp_path: Path) -> None:
     context = _context(tmp_path)
     plan = ArchivePlan.from_urls(["https://example.org/Videos_L01.zip"])
@@ -353,7 +290,7 @@ def test_finalize_pipeline_produces_a_report(fake_curl: Path, tmp_path: Path) ->
 
 
 def _identity(plan: ArchivePlan):
-    from offline.ingestion.custom_pipeline.contracts import RunIdentity
+    from hcmai.data.custom_pipeline.contracts import RunIdentity
 
     return RunIdentity(
         version="dataset_v1",

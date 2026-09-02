@@ -1,12 +1,10 @@
-"""Tests for independent Search and Filter health reporting."""
+"""Tests for Search health reporting while Filter remains a route stub."""
 
 from __future__ import annotations
 
 import asyncio
 
 import httpx
-import pytest
-
 from fastapi import FastAPI
 
 from hcmai.api.routers.system import create_system_router
@@ -33,22 +31,6 @@ class _Search:
         }
 
 
-class _Filter:
-    """Return safe catalog health facts."""
-
-    def __init__(self, ready: bool) -> None:
-        self.ready = ready
-
-    def health(self):
-        """Return the standalone capability state."""
-
-        return {
-            "ready": self.ready,
-            "catalog_version": "filter-v1" if self.ready else None,
-            "frame_count": 470_000 if self.ready else 0,
-        }
-
-
 def _health(container: dict[str, object]) -> dict[str, object]:
     """Read health through ASGI without starting application services."""
 
@@ -68,45 +50,19 @@ def _health(container: dict[str, object]) -> dict[str, object]:
     return response.json()
 
 
-@pytest.mark.parametrize("search_ready", [False, True])
-@pytest.mark.parametrize("filter_ready", [False, True])
-def test_filter_health_never_recalculates_search_readiness(
-    search_ready: bool,
-    filter_ready: bool,
-) -> None:
-    """Keep KIS/TRAKE availability independent from the optional catalog."""
-
-    payload = _health(
-        {
-            "service": _Search(search_ready),
-            "filter_service": _Filter(filter_ready) if filter_ready else None,
-            "startup_messages": [],
-        }
-    )
-
-    assert payload["ready"] is search_ready
-    assert payload["capabilities"]["search"] is search_ready
-    assert payload["capabilities"]["kis"] is search_ready
-    assert payload["capabilities"]["trake"] is search_ready
-    assert payload["capabilities"]["filter"] is filter_ready
-    assert payload["filter_catalog"]["ready"] is filter_ready
-
-
-def test_health_reports_missing_filter_without_paths() -> None:
-    """Expose a bounded degraded shape without catalog internals."""
+def test_health_remains_owned_by_search_runtime() -> None:
+    """Do not advertise an unfinished Filter backend capability."""
 
     payload = _health(
         {
             "service": _Search(True),
-            "filter_service": None,
-            "startup_messages": ["Filter catalog unavailable"],
+            "startup_messages": [],
         }
     )
 
-    assert payload["filter_catalog"] == {
-        "ready": False,
-        "catalog_version": None,
-        "frame_count": 0,
-    }
-    assert "path" not in str(payload["filter_catalog"]).lower()
-
+    assert payload["ready"] is True
+    assert payload["capabilities"]["search"] is True
+    assert payload["capabilities"]["kis"] is True
+    assert payload["capabilities"]["trake"] is True
+    assert "filter" not in payload["capabilities"]
+    assert "filter_catalog" not in payload

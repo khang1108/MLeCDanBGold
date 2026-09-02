@@ -16,8 +16,8 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from offline.ingestion.custom_pipeline.asr import ASRReuseBundle
-from offline.ingestion.custom_pipeline.shards import (
+from hcmai.data.custom_pipeline.asr import ASRReuseBundle
+from hcmai.data.custom_pipeline.shards import (
     VideoShard,
     VideoShardError,
     build_batch_index_bundle,

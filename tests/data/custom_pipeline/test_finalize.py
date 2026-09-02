@@ -16,23 +16,22 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from offline.ingestion.custom_pipeline.asr import ASRReuseBundle
-from offline.ingestion.custom_pipeline.commit import build_batch_inventory, commit_local_batch
-from offline.ingestion.custom_pipeline.finalize import (
+from hcmai.data.custom_pipeline.asr import ASRReuseBundle
+from hcmai.data.custom_pipeline.commit import build_batch_inventory, commit_local_batch
+from hcmai.data.custom_pipeline.finalize import (
     FinalizeError,
     compact_batch_embeddings,
-    compact_batch_embeddings_to_memmap,
     compact_frame_metadata,
     discover_committed_batches,
     finalize_corpus,
     require_full_plan_cleaned,
 )
-from offline.ingestion.custom_pipeline.shards import (
+from hcmai.data.custom_pipeline.shards import (
     build_batch_index_bundle,
     split_batch_artifacts_by_video,
     write_video_shard,
 )
-from offline.ingestion.custom_pipeline.state import ArchiveStage, PipelineStateStore
+from hcmai.data.custom_pipeline.state import ArchiveStage, PipelineStateStore
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
@@ -200,29 +199,6 @@ def test_compact_batch_embeddings_concatenates_across_batches(tmp_path: Path) ->
     assert mapping["embedding_index"].tolist() == list(range(5))
 
 
-def test_chunked_embedding_compaction_uses_memmap_and_batch_spans(
-    tmp_path: Path,
-) -> None:
-    """Keep global vectors disk-backed and preserve configured batch chunks."""
-
-    image_root = tmp_path / "images"
-    _commit_one_batch(tmp_path, "L01-batch000", "L01", ["L01_V001"], 2, image_root)
-    _commit_one_batch(tmp_path, "L02-batch000", "L02", ["L02_V001"], 3, image_root)
-    manifests = discover_committed_batches(tmp_path / "batches")
-
-    compacted = compact_batch_embeddings_to_memmap(
-        manifests,
-        "visual",
-        tmp_path / "visual_vectors.npy",
-        batch_chunk_size=1,
-    )
-
-    assert isinstance(compacted.vectors, np.memmap)
-    assert compacted.vectors.shape == (5, 4)
-    assert compacted.batch_spans == ((0, 2), (2, 5))
-    assert compacted.mapping["embedding_index"].tolist() == list(range(5))
-
-
 def test_compact_batch_embeddings_rejects_dimension_mismatch(tmp_path: Path) -> None:
     image_root = tmp_path / "images"
     _commit_one_batch(tmp_path, "L01-batch000", "L01", ["L01_V001"], 2, image_root)
@@ -285,7 +261,6 @@ def test_finalize_corpus_produces_global_indexes_and_report(tmp_path: Path) -> N
         image_root,
         output_root,
         dataset_version="dataset_v1",
-        batch_chunk_size=1,
     )
 
     assert report["batch_count"] == 2
@@ -293,7 +268,6 @@ def test_finalize_corpus_produces_global_indexes_and_report(tmp_path: Path) -> N
     assert report["frame_counts"]["caption"] == 5
     assert report["vector_counts"]["visual"] == 5
     assert report["vector_counts"]["asr_segments"] == 2
-    assert report["batch_chunk_size"] == 1
     assert (output_root / "reports" / "finalize_report.json").is_file()
 
     visual_index = DenseIndex.load(output_root / "indexes" / "visual")

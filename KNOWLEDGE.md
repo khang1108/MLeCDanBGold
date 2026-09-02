@@ -29,18 +29,16 @@ host must reserve most practical memory headroom for FAISS and retrieval maps.
 
 ### Status
 
-**VERIFIED (real corpus + FAISS-resident benchmark).** The baseline meets the
-P95 and Filter-RSS targets. The concurrency-10 exact-object P95 has only about
-95 ms margin below the two-second target and should remain a monitored case.
+**REJECTED / RETIRED (2026-09-02).** The measurements remain valid historical
+evidence, but the exact Filter product semantics did not match the desired
+ranked, search-engine-like experience. The catalog, runtime service, and
+offline builder were intentionally removed.
 
 ### Decision or Experiment
 
-Retain exact AND filtering with normalized substring text, exact object counts,
-timestamp-containing ASR, stable video/time ordering, and the four-connection
-pool. Re-run the same 1/4/10 benchmark after catalog/schema changes and monitor
-the exact-object case. FTS5 trigram remains unnecessary for V1 because the
-measured baseline meets the target. The full approved design and decision log
-are in
+Do not restore exact AND filtering as the Filter product without a new approved
+design. The stable endpoint currently returns HTTP 501 with an explicit
+under-development message. Historical design details remain in
 `docs/superpowers/specs/2026-09-01-disk-backed-metadata-filter-design.md`.
 
 ## Unified ordered event-to-frame alignment baseline

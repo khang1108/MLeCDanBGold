@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from offline.ingestion.custom_pipeline.config import SchedulingConfig
-from offline.ingestion.custom_pipeline.stages import (
+from hcmai.data.custom_pipeline.config import SchedulingConfig
+from hcmai.data.custom_pipeline.stages import (
     StageCommand,
     StageExecutionError,
     run_batch_stages,

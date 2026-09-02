@@ -8,7 +8,6 @@ asset-serving APIs; ``hcmai.corpus`` remains the read facade for online use.
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -249,26 +248,6 @@ class _SpecialistArtifactReader(Generic[_EvidenceT]):
             )
         self.frame_store_id = _uniform_lineage(self._records, self.artifact_path)
         self._validate_manifest()
-        self.version_identity = self._version_identity()
-
-    def _version_identity(self) -> dict[str, str]:
-        """Return uniform artifact versions for reproducible build lineage."""
-
-        versions: dict[str, str] = {}
-        manifest = _adjacent_manifest(self.artifact_path)
-        for field in self.version_fields:
-            values = {getattr(record, field) for record in self._records}
-            if len(values) > 1:
-                raise ValueError(f"{self.artifact_path} requires uniform {field}")
-            value = next(iter(values), None)
-            if value is None and manifest is not None:
-                value = manifest.get(field)
-            if not isinstance(value, str) or not value.strip():
-                raise ValueError(
-                    f"{self.artifact_path} requires a non-empty {field}"
-                )
-            versions[field] = value
-        return versions
 
     def _validate_manifest(self) -> None:
         """Reject sibling manifests that disagree with artifact rows."""
@@ -497,145 +476,6 @@ class OfflineTranscriptStore:
             for record in self._by_video.get(video_id, ())
             if record.start_ms < end_ms and record.end_ms > start_ms
         ]
-
-
-@dataclass(frozen=True, slots=True)
-class ObjectCountsArtifact:
-    """One offline object-count row retaining canonical frame identity."""
-
-    frame_id: str
-    video_id: str
-    frame_idx: int
-    timestamp_ms: int
-    counts: dict[str, int]
-    status: str
-
-
-def _validated_object_counts(value: object, path: Path) -> dict[str, int]:
-    """Decode non-negative exact object multiplicities from one artifact row."""
-
-    if not isinstance(value, str):
-        raise ValueError(f"counts_json must be a string in {path}")
-    try:
-        raw = json.loads(value)
-    except json.JSONDecodeError as error:
-        raise ValueError(f"counts_json must contain JSON in {path}") from error
-    if not isinstance(raw, dict):
-        raise ValueError(f"counts_json must contain an object in {path}")
-
-    counts: dict[str, int] = {}
-    for label, count in raw.items():
-        label = _canonical_string(label, "object label")
-        count = _strict_int(count, f"count for {label!r}")
-        if count < 0:
-            raise ValueError(f"object count must be non-negative in {path}")
-        counts[label] = count
-    return counts
-
-
-class ObjectCountsArtifactReader:
-    """Read lightweight object counts for offline catalog construction."""
-
-    def __init__(self, artifact_path: str | Path) -> None:
-        """Validate flattened object rows and index exact canonical frame IDs."""
-
-        self.artifact_path = Path(artifact_path)
-        if not self.artifact_path.is_file():
-            raise FileNotFoundError(
-                f"Object counts artifact does not exist: {self.artifact_path}"
-            )
-        table = pd.read_parquet(self.artifact_path)
-        required = {
-            "frame_id",
-            "video_id",
-            "frame_idx",
-            "timestamp_ms",
-            "counts_json",
-            "status",
-        }
-        missing = sorted(required.difference(table.columns))
-        if missing:
-            raise ValueError(
-                f"{self.artifact_path} is missing columns: {', '.join(missing)}"
-            )
-
-        records: list[ObjectCountsArtifact] = []
-        for row in _nullable_rows(table):
-            frame_id, video_id, frame_idx, timestamp_ms = _frame_identity(row)
-            status = row.get("status")
-            if status not in {"pending", "processing", "completed", "failed"}:
-                raise ValueError(
-                    f"Object counts status is invalid in {self.artifact_path}"
-                )
-            records.append(
-                ObjectCountsArtifact(
-                    frame_id=frame_id,
-                    video_id=video_id,
-                    frame_idx=frame_idx,
-                    timestamp_ms=timestamp_ms,
-                    counts=_validated_object_counts(
-                        row.get("counts_json"), self.artifact_path
-                    ),
-                    status=cast(str, status),
-                )
-            )
-        self._records = tuple(records)
-        self._by_frame_id = {record.frame_id: record for record in self._records}
-        if len(self._by_frame_id) != len(self._records):
-            raise ValueError(f"Duplicate frame_id values in {self.artifact_path}")
-
-    def iter_records(self) -> Iterator[ObjectCountsArtifact]:
-        """Iterate object-count rows in deterministic artifact order."""
-
-        return iter(self._records)
-
-    def get_counts(self, frame_id: str) -> dict[str, int] | None:
-        """Return completed counts while preserving missing/failed semantics."""
-
-        record = self._by_frame_id.get(frame_id)
-        if record is None or record.status != "completed":
-            return None
-        return dict(record.counts)
-
-
-@dataclass(frozen=True, slots=True)
-class VideoMetadataArtifact:
-    """Minimal organizer metadata required by offline Filter construction."""
-
-    video_id: str
-    title: str | None
-
-
-class VideoMetadataArtifactReader:
-    """Read organizer video titles without depending on runtime corpus stores."""
-
-    def __init__(self, metadata_root: str | Path) -> None:
-        """Index valid ``{video_id}.json`` files by canonical filename stem."""
-
-        self.metadata_root = Path(metadata_root)
-        if not self.metadata_root.is_dir():
-            raise NotADirectoryError(
-                f"Video metadata directory does not exist: {self.metadata_root}"
-            )
-        self._by_video_id: dict[str, VideoMetadataArtifact] = {}
-        for path in sorted(self.metadata_root.glob("*.json")):
-            raw = read_json(path)
-            if not isinstance(raw, dict):
-                raise ValueError(f"Video metadata must be an object: {path}")
-            title = raw.get("title")
-            if not isinstance(title, str) or not title.strip():
-                title = None
-            else:
-                title = title.strip()
-            self._by_video_id[path.stem] = VideoMetadataArtifact(
-                video_id=path.stem,
-                title=title,
-            )
-
-    def get(self, video_id: str) -> VideoMetadataArtifact | None:
-        """Return metadata for one exact canonical video ID when present."""
-
-        return self._by_video_id.get(video_id)
 
 
 class FrameAssetError(OSError):
