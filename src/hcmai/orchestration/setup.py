@@ -146,14 +146,32 @@ def _load_dense_temporal(
     assert context is not None
     assert asr_retriever is not None
     try:
-        if context.index.metadata.embedding_dim != asr_retriever.index.metadata.embedding_dim:
-            raise ValueError("Context and ASR segment index dimensions differ")
+        context_dimension = context.index.metadata.embedding_dim
     except Exception as error:
         messages.append(
             "Dense temporal evidence identity validation failed: "
             f"{type(error).__name__}: {error}"
         )
-        return None, context_ready, asr_ready
+        return None, False, asr_ready
+
+    try:
+        asr_dimension = asr_retriever.index.metadata.embedding_dim
+    except Exception as error:
+        messages.append(
+            "Dense temporal evidence identity validation failed: "
+            f"{type(error).__name__}: {error}"
+        )
+        return None, context_ready, False
+
+    if context_dimension != asr_dimension:
+        error = ValueError("Context and ASR segment index dimensions differ")
+        messages.append(
+            "Dense temporal evidence identity validation failed: "
+            f"{type(error).__name__}: {error}"
+        )
+        # One shared text encoder cannot serve both dimensions. Context owns
+        # that encoder binding, so ASR is the incompatible capability.
+        return None, context_ready, False
 
     try:
         projected_asr = SegmentProjectedASRIndex(
@@ -183,6 +201,11 @@ def _load_dense_temporal(
             "Dense temporal evidence identity validation failed: "
             f"{type(error).__name__}: {error}"
         )
+        message = str(error)
+        if message.startswith("context Dense index identity conflicts"):
+            context_ready = False
+        elif message.startswith("asr Dense index identity conflicts"):
+            asr_ready = False
         return None, context_ready, asr_ready
     return scorer, context_ready, asr_ready
 

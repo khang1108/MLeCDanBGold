@@ -8,8 +8,6 @@ still exist in older shared schema modules during the migration window.
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from hcmai.api.contracts import (
     SearchLatency,
     SearchRequest,
@@ -20,6 +18,8 @@ from hcmai.api.contracts import (
     TRAKERequest,
     TRAKEResponse,
 )
+
+from pydantic import ValidationError
 
 
 def _kis_result(**updates) -> SearchResult:
@@ -37,8 +37,7 @@ def _kis_result(**updates) -> SearchResult:
             "ocr": "BUTTER",
             "objects": ["chef", "pan"],
             "asr": "add butter to the pan",
-        },
-    }
+    },}
     payload.update(updates)
     return SearchResult.model_validate(payload)
 
@@ -91,9 +90,7 @@ def test_trake_requires_explicit_events() -> None:
     with pytest.raises(ValidationError):
         TRAKERequest.model_validate({"query": "legacy prose query"})
     with pytest.raises(ValidationError):
-        TRAKERequest.model_validate(
-            {"events": ["e1"], "query_type": "trake"}
-        )
+        TRAKERequest.model_validate({"events": ["e1"], "query_type": "trake"})
 
 
 def test_trake_request_rejects_empty_or_blank_events_and_non_positive_top_k() -> None:
@@ -166,6 +163,8 @@ def test_kis_response_requires_every_result_to_match_event_count() -> None:
     response = SearchResponse(
         query="chef cooks. chef plates.",
         events=["chef cooks", "chef plates"],
+        use_dense=False,
+        use_bm25=False,
         results=[_kis_result()],
         latency=SearchLatency(total_ms=12.5),
     )
@@ -179,6 +178,8 @@ def test_kis_response_requires_every_result_to_match_event_count() -> None:
         SearchResponse(
             query="chef cooks. chef plates. chef serves.",
             events=["chef cooks", "chef plates", "chef serves"],
+            use_dense=False,
+            use_bm25=False,
             results=[_kis_result()],
             latency=SearchLatency(total_ms=12.5),
         )
@@ -188,12 +189,13 @@ def test_kis_response_allows_empty_event_lists_when_paths_match() -> None:
     response = SearchResponse(
         query="",
         events=[],
+        use_dense=False,
+        use_bm25=False,
         results=[
             _kis_result(
                 frame_ids=[],
                 timestamps_ms=[],
-            )
-        ],
+        )],
         latency=SearchLatency(total_ms=0),
     )
 
@@ -226,6 +228,8 @@ def test_trake_path_does_not_apply_extra_value_constraints() -> None:
 def test_trake_response_requires_every_path_to_match_event_count() -> None:
     response = TRAKEResponse(
         events=["enter kitchen", "add butter"],
+        use_dense=False,
+        use_bm25=False,
         paths=[_trake_path()],
         latency=SearchLatency(total_ms=9.5),
     )
@@ -235,6 +239,8 @@ def test_trake_response_requires_every_path_to_match_event_count() -> None:
     with pytest.raises(ValidationError, match="one frame per event"):
         TRAKEResponse(
             events=["enter kitchen", "add butter", "plate food"],
+            use_dense=False,
+            use_bm25=False,
             paths=[_trake_path()],
             latency=SearchLatency(total_ms=9.5),
         )
@@ -243,13 +249,14 @@ def test_trake_response_requires_every_path_to_match_event_count() -> None:
 def test_trake_response_allows_empty_event_lists_when_paths_match() -> None:
     response = TRAKEResponse(
         events=[],
+        use_dense=False,
+        use_bm25=False,
         paths=[
             _trake_path(
                 frame_ids=[],
                 frame_idxs=[],
                 timestamps_ms=[],
-            )
-        ],
+        )],
         latency=SearchLatency(total_ms=0),
     )
 

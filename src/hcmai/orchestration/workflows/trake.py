@@ -9,15 +9,21 @@ canonical alignment identity.
 from __future__ import annotations
 
 from time import perf_counter
+from typing import TYPE_CHECKING
+
 from hcmai.api.contracts import (
     SearchLatency,
     TRAKEPath,
     TRAKERequest,
     TRAKEResponse,
 )
+from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.temporal_search import TemporalSearchService
 from hcmai.temporal import AlignedPath
+
+if TYPE_CHECKING:
+    from hcmai.query_preparation.service import QueryPreparationService
 
 logger = get_logger(__name__)
 
@@ -28,10 +34,14 @@ class TRAKEPipeline:
     def __init__(
         self,
         temporal: TemporalSearchService | None,
+        query_preparation: QueryPreparationService | None = None,
+        max_temporal_event_count: int = DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
     ) -> None:
         """Bind the shared temporal-search service used by this task head."""
 
         self.temporal = temporal
+        self.query_preparation = query_preparation
+        self.max_temporal_event_count = max_temporal_event_count
 
     def execute(self, request: TRAKERequest) -> TRAKEResponse:
         """Align explicit events and project paths without video-level merging.
@@ -48,9 +58,31 @@ class TRAKEPipeline:
 
         query_started = perf_counter()
         events = request.events
+        if len(events) > self.max_temporal_event_count:
+            raise ValueError(
+                f"requests may contain at most {self.max_temporal_event_count} temporal events"
+            )
+        retrieval_events = request.retrieval_events or events
+        caption_events: list[str] | tuple[str, ...] | None = None
+        if request.use_bm25:
+            if request.retrieval_events is not None:
+                caption_events = request.retrieval_events
+            else:
+                if self.query_preparation is None:
+                    raise RuntimeError(
+                        "query preparation is unavailable for BM25 caption translation"
+                    )
+                caption_events = self.query_preparation.translate_literal(tuple(events))
         query_ms = (perf_counter() - query_started) * 1_000
 
-        search = self.temporal.search(events, top_k=request.top_k)
+        search = self.temporal.search(
+            events,
+            retrieval_events=retrieval_events,
+            caption_events=caption_events,
+            use_dense=request.use_dense,
+            use_bm25=request.use_bm25,
+            top_k=request.top_k,
+        )
 
         materialization_started = perf_counter()
         paths = [self._build_path(path) for path in search.paths]
@@ -66,6 +98,10 @@ class TRAKEPipeline:
 
         return TRAKEResponse(
             events=list(events),
+            dense_events=list(retrieval_events) if request.use_dense else None,
+            bm25_caption_events=(list(caption_events) if caption_events else None),
+            use_dense=request.use_dense,
+            use_bm25=request.use_bm25,
             paths=paths,
             latency=SearchLatency(
                 query_ms=query_ms,
@@ -73,13 +109,11 @@ class TRAKEPipeline:
                 alignment_ms=search.alignment_ms,
                 materialization_ms=materialization_ms,
                 total_ms=total_ms,
-            ),
-        )
+        ),)
 
-    @classmethod
-    def _build_path(cls, path: AlignedPath) -> TRAKEPath:
+    @staticmethod
+    def _build_path(path: AlignedPath) -> TRAKEPath:
         """Convert one canonical aligned path without changing its coordinates."""
-
         frame_ids = list(path.frame_ids)
         return TRAKEPath(
             video_id=path.video_id,

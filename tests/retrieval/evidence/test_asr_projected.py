@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from types import SimpleNamespace
 
 from hcmai.corpus.models import Frame
 from hcmai.retrieval.retriever.dense.index import DenseIndex
@@ -231,6 +232,37 @@ def test_projected_asr_mirrors_canonical_identity() -> None:
     np.testing.assert_array_equal(projected.frame_idx, VISUAL_FRAME_IDX)
     np.testing.assert_array_equal(projected.timestamps, VISUAL_TIMESTAMPS)
     assert projected.metadata.embedding_dim == 3
+
+
+@pytest.mark.parametrize(
+    ("field", "stale_value"),
+    [("video_id", "stale-video"), ("frame_idx", 99), ("timestamp_ms", 99_000)],
+)
+def test_projected_asr_rejects_stale_projector_identity(
+    field: str,
+    stale_value: object,
+) -> None:
+    """A known frame_id must carry the canonical projection identity tuple."""
+
+    identity = {
+        "frame_id": "v1-f1",
+        "video_id": "v1",
+        "frame_idx": 1,
+        "timestamp_ms": 1_000,
+    }
+    identity[field] = stale_value
+    projector = SimpleNamespace(
+        project=lambda *args, **kwargs: SimpleNamespace(**identity)
+    )
+
+    with pytest.raises(ValueError, match="identity conflicts with canonical index"):
+        from hcmai.retrieval.evidence.asr_projected import SegmentProjectedASRIndex
+
+        SegmentProjectedASRIndex(
+            segment_index=_segment_index(),
+            canonical_index=_canonical_index(),
+            projector=projector,
+        )
 
 
 def test_segment_inside_interval_maps_to_existing_canonical_frame() -> None:

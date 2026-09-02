@@ -4,36 +4,59 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from time import perf_counter
-from typing import TYPE_CHECKING, Any
+from typing import Any, TYPE_CHECKING
 
 from hcmai.api.contracts import (
-    SearchRequest,
-    SearchResponse,
     QueryCandidateResponse,
     QueryCandidatesRequest,
     QueryCandidatesResponse,
+    SearchRequest,
+    SearchResponse,
+    SubmissionResult,
     TRAKERequest,
     TRAKEResponse,
-    SubmissionResult,
 )
+
 from hcmai.common.config import SearchConfig
+from hcmai.common.observability import METRICS
 from hcmai.common.utils.logging import get_logger
+from hcmai.common.utils.video import official_frame_idx
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
+from hcmai.orchestration.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
-from hcmai.common.observability import METRICS
-from hcmai.common.utils.video import official_frame_idx
-from hcmai.orchestration.temporal_search import TemporalSearchService
 from hcmai.retrieval.models import RetrievalSource
 from hcmai.temporal.planner import split_query_events
 
 if TYPE_CHECKING:
     from hcmai.query_preparation.service import QueryPreparationService
+    from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
     from hcmai.retrieval.retriever.pipeline import RetrievalService
     from thundercompute.pipeline import LLMService
 
 logger = get_logger(__name__)
+_UNSET = object()
+
+
+class _LegacyDenseEvidenceAdapter:
+    """Adapt the former visual-only temporal boundary for existing callers."""
+
+    def __init__(self, retrieval: RetrievalService) -> None:
+        self.retrieval = retrieval
+        self.dense = retrieval
+        self.bm25 = None
+
+    def score_events(
+        self,
+        original_events: Sequence[str],
+        retrieval_events: Sequence[str],
+        **_: Any,
+    ) -> Any:
+        """Delegate ordered event scoring to the legacy visual capability."""
+
+        del original_events
+        return self.retrieval.score_event_videos(retrieval_events)
 
 
 class SearchServiceUnavailableError(RuntimeError):
@@ -50,6 +73,7 @@ class SearchService:
         config: SearchConfig | None = None,
         llm: LLMService | None = None,
         query_preparation: QueryPreparationService | None = None,
+        temporal_evidence: TemporalEvidenceScorer | None | object = _UNSET,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
@@ -58,21 +82,36 @@ class SearchService:
         self.config = config or SearchConfig()
         self.llm = llm
         self.query_preparation = query_preparation
+        self.temporal_evidence = (
+            _LegacyDenseEvidenceAdapter(retrieval)
+            if temporal_evidence is _UNSET and retrieval is not None
+            else temporal_evidence
+        )
 
         temporal = (
             TemporalSearchService(
                 self.corpus,
-                self.retrieval,
+                self.temporal_evidence,
                 self.config.alignment,
+                self.config.max_temporal_event_count,
             )
-            if self.corpus is not None and self.retrieval is not None
+            if self.corpus is not None and self.temporal_evidence is not None
             else None
         )
-        self.kis = KISPipeline(self.corpus, temporal)
-        self.trake = TRAKEPipeline(temporal)
+        self.kis = KISPipeline(
+            self.corpus,
+            temporal,
+            query_preparation,
+            self.config.max_temporal_event_count,
+        )
+        self.trake = TRAKEPipeline(
+            temporal,
+            query_preparation,
+            self.config.max_temporal_event_count,
+        )
 
-    @classmethod
-    def load(cls, messages: list[str]) -> SearchService:
+    @staticmethod
+    def load(messages: list[str]) -> SearchService:
         """Load the configured search service and append startup diagnostics."""
 
         from hcmai.orchestration.setup import load_search_service
@@ -103,27 +142,49 @@ class SearchService:
 
         corpus_ready = self.corpus is not None
         retrieval_ready = self.retrieval is not None
+        dense_temporal_ready = (
+            self.temporal_evidence is not None
+            and getattr(self.temporal_evidence, "dense", None) is not None
+        )
+        visual_dense_ready = bool(
+            getattr(
+                self.temporal_evidence,
+                "visual_dense_ready",
+                dense_temporal_ready,
+        ))
+        context_dense_ready = bool(
+            getattr(
+                self.temporal_evidence,
+                "context_dense_ready",
+                dense_temporal_ready,
+        ))
+        asr_dense_ready = bool(
+            getattr(
+                self.temporal_evidence,
+                "asr_dense_ready",
+                dense_temporal_ready,
+        ))
+        bm25_ready = (
+            self.temporal_evidence is not None
+            and getattr(self.temporal_evidence, "bm25", None) is not None
+        )
         asset_status = self._frame_asset_status()
         active_sources = (
             set(getattr(self.retrieval, "active_sources", (RetrievalSource.VISUAL,)))
             if self.retrieval is not None
             else set()
         )
-        search_ready = corpus_ready and retrieval_ready
+        search_ready = corpus_ready and self.temporal_evidence is not None
         default_remote_capabilities = {
             "embedding": False,
             "reranking": False,
             "structured_parsing": False,
         }
         capability_health = (
-            getattr(self.llm, "capability_health", None)
-            if self.llm is not None
-            else None
+            getattr(self.llm, "capability_health", None) if self.llm is not None else None
         )
         remote_capabilities = (
-            capability_health()
-            if capability_health is not None
-            else default_remote_capabilities
+            capability_health() if capability_health is not None else default_remote_capabilities
         )
         return {
             "status": "ok",
@@ -133,24 +194,20 @@ class SearchService:
             "total_frames": len(self.corpus) if self.corpus is not None else 0,
             "evidence_stores": {
                 source.value: (
-                    self.corpus.has_evidence(source)
-                    if self.corpus is not None
-                    else False
+                    self.corpus.has_evidence(source) if self.corpus is not None else False
                 )
                 for source in (
                     RetrievalSource.CAPTION,
                     RetrievalSource.OCR,
                     RetrievalSource.ASR,
-                )
-            },
+            )},
             "remote_inference": (
                 self.llm.gateway_health()
                 if self.llm is not None
                 else {
                     "configured": False,
                     "circuit_state": "not_configured",
-                }
-            ),
+            }),
             "retrieval_modalities": {
                 source.value: {
                     "active": source in active_sources,
@@ -164,6 +221,12 @@ class SearchService:
                 "kis": search_ready,
                 "trake": search_ready,
                 "shared_retrieval": retrieval_ready,
+                "visual_dense": visual_dense_ready,
+                "context_dense": context_dense_ready,
+                "asr_dense": asr_dense_ready,
+                "dense_temporal": dense_temporal_ready,
+                "bm25": bm25_ready,
+                "hybrid_temporal": dense_temporal_ready and bm25_ready,
                 "query_preparation": self.query_preparation is not None,
                 "remote_inference": remote_capabilities,
                 "frame_assets": asset_status["ready"],
@@ -192,17 +255,14 @@ class SearchService:
         """Execute a validated KIS request through the explicit KIS workflow."""
 
         self._ensure_search_ready()
+        self._ensure_translation_ready(request.use_bm25, request.retrieval_events)
         return self.kis.execute(request)
 
-    def generate_query_candidates(
-        self, request: QueryCandidatesRequest
-    ) -> QueryCandidatesResponse:
+    def generate_query_candidates(self, request: QueryCandidatesRequest) -> QueryCandidatesResponse:
         """Generate five candidates without retaining request or search state."""
 
         if self.query_preparation is None:
-            raise SearchServiceUnavailableError(
-                "Query preparation capability is unavailable"
-            )
+            raise SearchServiceUnavailableError("Query preparation capability is unavailable")
         events = (
             tuple(request.events)
             if request.events is not None
@@ -227,7 +287,18 @@ class SearchService:
         """Execute a validated TRAKE request through the explicit TRAKE workflow."""
 
         self._ensure_search_ready()
+        self._ensure_translation_ready(request.use_bm25, request.retrieval_events)
         return self.trake.execute(request)
+
+    def _ensure_translation_ready(
+        self, use_bm25: bool, retrieval_events: Sequence[str] | None
+    ) -> None:
+        """Require literal translation only for original-query BM25 search."""
+
+        if use_bm25 and retrieval_events is None and self.query_preparation is None:
+            raise SearchServiceUnavailableError(
+                "Query preparation is required for BM25 caption translation"
+            )
 
     def _ensure_search_ready(self) -> None:
         """Reject online search when canonical data or retrieval is unavailable."""
@@ -235,8 +306,8 @@ class SearchService:
         missing: list[str] = []
         if self.corpus is None:
             missing.append("canonical frame data")
-        if self.retrieval is None:
-            missing.append("retrieval service")
+        if self.temporal_evidence is None:
+            missing.append("temporal evidence service")
         if missing:
             raise SearchServiceUnavailableError(
                 f"Search dependencies not loaded: {', '.join(missing)}"

@@ -33,6 +33,9 @@ index:
     asr: "asr_embeddings.npy"
 
 search:
+  # Conservative matrix/encoder request ceiling; lower deployments may tighten it.
+  max_temporal_event_count: 32
+
   hybrid_temporal:
     dense:
       visual_weight: 0.3333333333333333

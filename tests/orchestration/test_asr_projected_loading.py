@@ -208,6 +208,42 @@ def test_load_dense_temporal_marks_asr_unready_when_projection_fails(
     ]
 
 
+@pytest.mark.parametrize(
+    ("error_message", "expected_readiness"),
+    [
+        ("context Dense index identity conflicts with visual index", (False, True)),
+        ("asr Dense index identity conflicts with visual index", (True, False)),
+    ],
+)
+def test_load_dense_temporal_classifies_scorer_identity_failures(
+    monkeypatch: Any,
+    error_message: str,
+    expected_readiness: tuple[bool, bool],
+) -> None:
+    """Mark the source named by deterministic scorer validation as unready."""
+
+    visual, context, asr = _dense_bindings()
+    retrieval, _ = _retrieval(
+        (RetrievalSource.CONTEXT, context),
+        (RetrievalSource.ASR, asr),
+    )
+    messages: list[str] = []
+
+    monkeypatch.setattr(setup, "SegmentProjectedASRIndex", lambda **kwargs: object())
+    monkeypatch.setattr(
+        setup,
+        "DenseTemporalScorer",
+        lambda **kwargs: (_ for _ in ()).throw(ValueError(error_message)),
+    )
+
+    scorer, context_ready, asr_ready = setup._load_dense_temporal(
+        AppConfig(), cast(Any, retrieval), visual, messages
+    )
+
+    assert scorer is None
+    assert (context_ready, asr_ready) == expected_readiness
+
+
 def test_load_dense_temporal_rejects_incompatible_context_and_asr_dimensions(
     monkeypatch: Any,
 ) -> None:
@@ -240,7 +276,7 @@ def test_load_dense_temporal_rejects_incompatible_context_and_asr_dimensions(
     )
 
     assert scorer is None
-    assert (context_ready, asr_ready) == (True, True)
+    assert (context_ready, asr_ready) == (True, False)
     assert messages == [
         "Dense temporal evidence identity validation failed: ValueError: "
         "Context and ASR segment index dimensions differ"

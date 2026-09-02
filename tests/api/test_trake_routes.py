@@ -7,7 +7,6 @@ import asyncio
 import httpx
 import pytest
 from fastapi import FastAPI
-
 from hcmai.api.contracts import SearchLatency, TRAKERequest, TRAKEResponse
 from hcmai.api.routers.trake import create_trake_router
 from hcmai.orchestration.pipeline import SearchService
@@ -27,6 +26,10 @@ class _Service:
         self.requests.append(request)
         return TRAKEResponse(
             events=request.events,
+            dense_events=request.events if request.use_dense else None,
+            bm25_caption_events=request.events if request.use_bm25 else None,
+            use_dense=request.use_dense,
+            use_bm25=request.use_bm25,
             paths=[],
             latency=SearchLatency(),
         )
@@ -81,8 +84,7 @@ def test_trake_route_keeps_pydantic_validation() -> None:
         {"events": [], "top_k": 1},
         {"events": ["e1", " \t "], "top_k": 1},
         {"events": ["e1"], "top_k": 0},
-    ],
-)
+],)
 def test_trake_route_rejects_invalid_values_at_http_boundary(
     payload: dict[str, object],
 ) -> None:
@@ -109,11 +111,7 @@ def test_trake_route_reports_missing_runtime_dependencies() -> None:
     """Map degraded explicit TRAKE wiring to HTTP 503."""
 
     app = FastAPI()
-    app.include_router(
-        create_trake_router(
-            {"service": SearchService(corpus=None, retrieval=None)}
-        )
-    )
+    app.include_router(create_trake_router({"service": SearchService(corpus=None, retrieval=None)}))
 
     response = _post(app, {"events": ["e1", "e2"], "top_k": 3})
 

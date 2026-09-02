@@ -115,7 +115,23 @@ class SegmentProjectedASRIndex:
                     "projector returned frame_id absent from canonical index: "
                     f"{projected_frame_id!r}"
                 )
-            mapped[int(segment_position)] = position_by_frame_id[projected_frame_id]
+            canonical_position = position_by_frame_id[projected_frame_id]
+            projected_identity = (
+                str(projection.video_id),
+                int(projection.frame_idx),
+                int(projection.timestamp_ms),
+            )
+            canonical_identity = (
+                str(self.video_ids[canonical_position]),
+                int(self.frame_idx[canonical_position]),
+                int(self.timestamps[canonical_position]),
+            )
+            if projected_identity != canonical_identity:
+                raise ValueError(
+                    "projector identity conflicts with canonical index for frame_id "
+                    f"{projected_frame_id!r}"
+                )
+            mapped[int(segment_position)] = canonical_position
         return mapped
 
     def score_subset(

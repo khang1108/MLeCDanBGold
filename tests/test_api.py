@@ -11,11 +11,10 @@ import numpy as np
 import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
-
 from hcmai.app import create_app
-from hcmai.retrieval.models import RetrievalSource
 from hcmai.corpus import Corpus, Frame
 from hcmai.orchestration.pipeline import SearchService
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
@@ -49,16 +48,11 @@ class MockFrameStore:
     def __len__(self) -> int:
         return len(self._records)
 
-    def frame_asset_status(self) -> SimpleNamespace:
+    @staticmethod
+    def frame_asset_status() -> SimpleNamespace:
         """Report that this in-memory fixture has no local asset resolver."""
-
         return SimpleNamespace(
-            as_dict=lambda: {
-                "ready": False,
-                "checked": 0,
-                "available": 0,
-                "missing": 0,
-            }
+            as_dict=lambda: {"ready": False, "checked": 0, "available": 0, "missing": 0}
         )
 
     def has_evidence(self, source: RetrievalSource) -> bool:
@@ -78,11 +72,13 @@ class MockFrameStore:
     def ocr(self, frame_id):
         return self._evidence(frame_id, RetrievalSource.OCR)
 
-    def objects(self, frame_id):
+    @staticmethod
+    def objects(frame_id):
         del frame_id
         return ()
 
-    def title(self, video_id):
+    @staticmethod
+    def title(video_id):
         del video_id
         return None
 
@@ -94,7 +90,8 @@ class MockFrameStore:
 class MockRetriever:
     """Mock Retriever for testing API search."""
 
-    def score_event_videos(self, events, filters=None, **kwargs):
+    @staticmethod
+    def score_event_videos(events, filters=None, **kwargs):
         """Return the one canonical visual score column used by API tests."""
 
         del filters, kwargs
@@ -103,10 +100,10 @@ class MockRetriever:
                 video_id="L21_V001",
                 frame_ids=np.array(["L21_V001_00000090"], dtype=object),
                 frame_idx=np.array([90]),
-                timestamps_ms=np.array([3_600]),
+                timestamps_ms=np.array([3600]),
                 scores=np.full((len(events), 1), 0.95),
-            )
-        ]
+        )]
+
 
 
 class MockEvidenceStore:
@@ -141,9 +138,7 @@ def request(
 ) -> httpx.Response:
     """Send one request through the ASGI boundary without a live server."""
     async def send() -> httpx.Response:
-        transport = httpx.ASGITransport(
-            app=app, raise_app_exceptions=raise_app_exceptions
-        )
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=raise_app_exceptions)
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://testserver",
@@ -174,10 +169,8 @@ def test_unexpected_errors_keep_cors_headers(api_app: FastAPI) -> None:
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal server error"}
-    assert (
-        response.headers["access-control-allow-origin"]
-        == "http://localhost:3000"
-    )
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
 
 
 def test_cors_preflight_allows_local_frontend(api_app: FastAPI) -> None:
@@ -191,14 +184,11 @@ def test_cors_preflight_allows_local_frontend(api_app: FastAPI) -> None:
             "Origin": "http://localhost:3000",
             "Access-Control-Request-Method": "POST",
             "Access-Control-Request-Headers": "content-type",
-        },
-    )
+    },)
 
     assert response.status_code == 200
-    assert (
-        response.headers["access-control-allow-origin"]
-        == "http://localhost:3000"
-    )
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
 
 
 def test_health_check_endpoint(api_app: FastAPI) -> None:
@@ -244,12 +234,17 @@ def test_search_materializes_configured_text_evidence() -> None:
 
     health = request(app, "GET", "/health").json()
     result = request(
-        app, "POST", "/api/v1/search", json={"query": "cooking"}
+        app,
+        "POST",
+        "/api/v1/search",
+        json={"query": "cooking", "use_bm25": False},
     ).json()["results"][0]
 
     metadata = result["metadata"]
     assert (metadata["caption"], metadata["ocr"], metadata["asr"]) == (
-        "A person cooking.", "BƠ", "Cho bơ vào chảo."
+        "A person cooking.",
+        "BƠ",
+        "Cho bơ vào chảo.",
     )
 
 
@@ -257,6 +252,7 @@ def test_search_endpoint(api_app: FastAPI) -> None:
     """Test the POST /api/v1/search endpoint."""
     payload = {
         "query": "một người đang đi bộ",
+        "use_bm25": False,
         "top_k": 5,
     }
     response = request(api_app, "POST", "/api/v1/search", json=payload)
@@ -301,9 +297,7 @@ def test_vqa_route_is_not_registered(api_app: FastAPI) -> None:
 def test_degraded_service_preserves_unavailable_statuses() -> None:
     app = create_app(SearchService(corpus=None, retrieval=None))
 
-    search = request(
-        app, "POST", "/api/v1/search", json={"query": "red bus"}
-    )
+    search = request(app, "POST", "/api/v1/search", json={"query": "red bus"})
     frame = request(app, "GET", "/api/v1/frames/frame-1")
 
     assert search.status_code == 503
@@ -317,7 +311,7 @@ def test_search_endpoint_exposes_frozen_latency_stages(api_app: FastAPI) -> None
         api_app,
         "POST",
         "/api/v1/search",
-        json={"query": "red bus", "top_k": 5},
+        json={"query": "red bus", "use_bm25": False, "top_k": 5},
     )
 
     assert response.status_code == 200
@@ -337,9 +331,8 @@ def test_get_frame_endpoint(api_app: FastAPI) -> None:
     data = response.json()
     assert data["frame_id"] == "L21_V001_00000090"
 
-    notFoundResponse = request(api_app, "GET", "/api/v1/frames/UNKNOWN_FRAME")
-    assert notFoundResponse.status_code == 404
-
+    not_found_response = request(api_app, "GET", "/api/v1/frames/UNKNOWN_FRAME")
+    assert not_found_response.status_code == 404
 
 
 def test_missing_required_config_aborts_startup(
@@ -354,10 +347,10 @@ def test_missing_required_config_aborts_startup(
 
     async def inspect_health() -> dict:
         async with app.router.lifespan_context(app):
-            route = cast(APIRoute, next(
-                route for route in app.routes
-                if getattr(route, "path", None) == "/health"
-            ))
+            route = cast(
+                APIRoute,
+                next(route for route in app.routes if getattr(route, "path", None) == "/health"),
+            )
             return await route.endpoint()
 
     with pytest.raises(FileNotFoundError, match="Config not found"):

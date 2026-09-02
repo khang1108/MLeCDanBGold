@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings
 
 # Recall cut-offs frozen for baseline comparison
 RECALL_CUTOFFS: tuple[int, ...] = (1, 5, 20, 50, 100)
+DEFAULT_MAX_TEMPORAL_EVENT_COUNT = 32
 FUSION_SOURCES: tuple[RetrievalSource, ...] = tuple(RetrievalSource)
 TEXT_RETRIEVAL_SOURCES: tuple[RetrievalSource, ...] = (
     RetrievalSource.CAPTION,
@@ -234,13 +235,15 @@ class IndexConfig(BaseModel):
             RetrievalSource.ASR: "asr_embeddings.npy",
     })
 
-    @staticmethod
     @field_validator("text_embedding_filenames")
+    @classmethod
     def validate_text_embedding_filenames(
-        filenames: dict[RetrievalSource, str]
+        cls,
+        filenames: dict[RetrievalSource, str],
     ) -> dict[RetrievalSource, str]:
         """Require one safe NumPy artifact filename per text modality."""
 
+        del cls
         if set(filenames) != set(TEXT_RETRIEVAL_SOURCES):
             raise ValueError("text_embedding_filenames must configure caption, ocr, and asr")
         for filename in filenames.values():
@@ -362,6 +365,11 @@ class SearchConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    max_temporal_event_count: int = Field(
+        default=DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
+        ge=1,
+        le=DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
+    )
     fusion: FusionConfig = Field(default_factory=FusionConfig)
     cache: RetrievalCacheConfig = Field(default_factory=RetrievalCacheConfig)
     alignment: AlignmentConfig = Field(default_factory=AlignmentConfig)

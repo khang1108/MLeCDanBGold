@@ -1,15 +1,15 @@
 from __future__ import annotations
+
 import asyncio
 from types import SimpleNamespace
 from typing import cast
+
 import httpx
 import numpy as np
 import pytest
 from hcmai.app import create_app
-from hcmai.corpus import Frame
-from hcmai.retrieval.models import RetrievalSource
+from hcmai.corpus import Corpus, Frame
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.corpus import Corpus
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
@@ -21,9 +21,13 @@ class Store:
     video_metadata_store = None
 
     def __init__(self):
-        self._records = (Frame(
-            frame_id=FRAME_ID, video_id="TEST_V001", frame_idx=0,
-            timestamp_ms=0, image_path="missing.jpg",
+        self._records = (
+            Frame(
+                frame_id=FRAME_ID,
+                video_id="TEST_V001",
+                frame_idx=0,
+                timestamp_ms=0,
+                image_path="missing.jpg",
         ),)
     def get(self, frame_id):
         if frame_id == FRAME_ID:
@@ -35,53 +39,55 @@ class Store:
     def __len__(self):
         return len(self._records)
 
-    def frame_asset_status(self):
+    @staticmethod
+    def frame_asset_status():
         return SimpleNamespace(
-            as_dict=lambda: {
-                "ready": False,
-                "checked": 0,
-                "available": 0,
-                "missing": 0,
-            }
+            as_dict=lambda: {"ready": False, "checked": 0, "available": 0, "missing": 0}
         )
 
-    def has_evidence(self, source):
+    @staticmethod
+    def has_evidence(source):
         del source
         return False
 
-    def caption(self, frame_id):
+    @staticmethod
+    def caption(frame_id):
         del frame_id
         return None
     ocr = caption
-    def objects(self, frame_id):
+    @staticmethod
+    def objects(frame_id):
         del frame_id
         return ()
-    def title(self, video_id):
+    @staticmethod
+    def title(video_id):
         del video_id
         return None
-    def transcript(self, video_id, start_ms, end_ms):
+    @staticmethod
+    def transcript(video_id, start_ms, end_ms):
         del video_id, start_ms, end_ms
         return None
 
 class Retriever:
-    def score_event_videos(self, events, filters=None, **kwargs):
+    @staticmethod
+    def score_event_videos(events, filters=None, **kwargs):
         """Return one canonical alignment column for the API contract fixture."""
-
         del filters, kwargs
-        return [VideoEventScores(
-            video_id="TEST_V001",
-            frame_ids=np.array([FRAME_ID], dtype=object),
-            frame_idx=np.array([0]),
-            timestamps_ms=np.array([0]),
-            scores=np.full((len(events), 1), 0.9),
+        return [
+            VideoEventScores(
+                video_id="TEST_V001",
+                frame_ids=np.array([FRAME_ID], dtype=object),
+                frame_idx=np.array([0]),
+                timestamps_ms=np.array([0]),
+                scores=np.full((len(events), 1), 0.9),
         )]
+
+
 
 def request(app, method, path, **kwargs):
     async def send():
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             return await client.request(method, path, **kwargs)
     loop = asyncio.new_event_loop()
     try:
@@ -91,9 +97,7 @@ def request(app, method, path, **kwargs):
 
 def test_app_exposes_only_standalone_search_contract() -> None:
     store, retriever = Store(), Retriever()
-    service = SearchService(
-        cast(Corpus, store), cast(RetrievalService, retriever)
-    )
+    service = SearchService(cast(Corpus, store), cast(RetrievalService, retriever))
     app = create_app(service)
     health = request(app, "GET", "/health").json()
     capabilities = health["capabilities"]
@@ -111,7 +115,12 @@ def test_app_exposes_only_standalone_search_contract() -> None:
         "reranking": False,
         "structured_parsing": False,
     }
-    search = request(app, "POST", "/api/v1/search", json={"query": "red car"})
+    search = request(
+        app,
+        "POST",
+        "/api/v1/search",
+        json={"query": "red car", "use_bm25": False},
+    )
     assert search.status_code == 200
     result = search.json()["results"][0]
     assert "frame_url" not in result

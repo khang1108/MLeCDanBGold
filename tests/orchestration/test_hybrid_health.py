@@ -141,3 +141,35 @@ def test_health_reports_partial_dense_source_readiness() -> None:
     assert health["context_dense"] is True
     assert health["asr_dense"] is False
     assert health["dense_temporal"] is False
+
+
+def test_dimension_mismatch_produces_truthful_search_health(monkeypatch: Any) -> None:
+    """Do not advertise ASR Dense after shared-encoder incompatibility."""
+
+    mapping = pd.DataFrame(
+        [{"frame_id": "f1", "video_id": "v1", "frame_idx": 1, "timestamp_ms": 10}]
+    )
+    bindings = {
+        RetrievalSource.VISUAL: SimpleNamespace(index=SimpleNamespace(mapping=mapping)),
+        RetrievalSource.CONTEXT: SimpleNamespace(
+            index=SimpleNamespace(metadata=SimpleNamespace(embedding_dim=4))
+        ),
+        RetrievalSource.ASR: SimpleNamespace(
+            index=SimpleNamespace(metadata=SimpleNamespace(embedding_dim=8)),
+            projector=object(),
+        ),
+    }
+    retrieval = SimpleNamespace(source_retriever=bindings.get, active_sources=())
+    monkeypatch.setattr(setup, "_load_bm25_temporal", lambda *args: object())
+
+    evidence = setup._load_temporal_evidence(AppConfig(), cast(Any, retrieval), [])
+    assert evidence is not None
+    health = SearchService(
+        cast(Any, FakeCorpus()),
+        cast(Any, retrieval),
+        temporal_evidence=evidence,
+    ).health()["capabilities"]
+
+    assert health["context_dense"] is True
+    assert health["asr_dense"] is False
+    assert health["dense_temporal"] is False

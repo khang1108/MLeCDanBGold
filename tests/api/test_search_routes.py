@@ -7,7 +7,6 @@ import asyncio
 import httpx
 import pytest
 from fastapi import FastAPI
-
 from hcmai.api.contracts import SearchLatency, SearchRequest, SearchResponse
 from hcmai.api.routers.search import create_search_router
 from hcmai.orchestration.pipeline import SearchService
@@ -28,6 +27,10 @@ class _Service:
         return SearchResponse(
             query=request.query,
             events=[request.query],
+            dense_events=[request.query] if request.use_dense else None,
+            bm25_caption_events=[request.query] if request.use_bm25 else None,
+            use_dense=request.use_dense,
+            use_bm25=request.use_bm25,
             results=[],
             latency=SearchLatency(),
         )
@@ -80,8 +83,7 @@ def test_search_route_keeps_pydantic_validation() -> None:
     [
         {"query": " \n\t ", "top_k": 1},
         {"query": "chef cooks", "top_k": 0},
-    ],
-)
+],)
 def test_search_route_rejects_invalid_values_at_http_boundary(
     payload: dict[str, object],
 ) -> None:
@@ -109,9 +111,7 @@ def test_search_route_reports_missing_runtime_dependencies() -> None:
 
     app = FastAPI()
     app.include_router(
-        create_search_router(
-            {"service": SearchService(corpus=None, retrieval=None)}
-        )
+        create_search_router({"service": SearchService(corpus=None, retrieval=None)})
     )
 
     response = _post(app, {"query": "chef cooks", "top_k": 3})

@@ -3,7 +3,8 @@
 from pathlib import Path
 
 import pytest
-from hcmai.common.config import AppConfig, HybridTemporalConfig, IndexConfig
+from hcmai.common.config import AppConfig, HybridTemporalConfig, IndexConfig, SearchConfig
+from hcmai.retrieval.models import RetrievalSource
 from pydantic import ValidationError
 
 
@@ -54,3 +55,39 @@ def test_index_config_uses_segment_asr_without_frame_native_asr_path() -> None:
     assert config.asr_segment_path == Path("artifacts/indexes/asr_segments")
     assert config.asr_projection_max_gap_ms == 5_000
     assert not hasattr(config, "asr_path")
+
+
+def test_text_embedding_filenames_require_every_text_source() -> None:
+    """Reject incomplete offline text-index filename mappings."""
+
+    with pytest.raises(ValueError, match="must configure caption, ocr, and asr"):
+        IndexConfig(
+            text_embedding_filenames={
+                RetrievalSource.CAPTION: "caption_embeddings.npy",
+                RetrievalSource.OCR: "ocr_embeddings.npy",
+            }
+        )
+
+
+@pytest.mark.parametrize("filename", ["../asr.npy", "nested/asr.npy", "asr.txt"])
+def test_text_embedding_filenames_reject_unsafe_names(filename: str) -> None:
+    """Keep configured artifacts within their selected index directory."""
+
+    with pytest.raises(ValueError, match="plain .npy filenames"):
+        IndexConfig(
+            text_embedding_filenames={
+                RetrievalSource.CAPTION: "caption_embeddings.npy",
+                RetrievalSource.OCR: "ocr_embeddings.npy",
+                RetrievalSource.ASR: filename,
+            }
+        )
+
+
+def test_temporal_event_limit_is_conservative_and_configurable() -> None:
+    """Default to 32 events while allowing stricter deployment limits."""
+
+    assert SearchConfig().max_temporal_event_count == 32
+    assert SearchConfig(max_temporal_event_count=8).max_temporal_event_count == 8
+
+    with pytest.raises(ValueError):
+        SearchConfig(max_temporal_event_count=33)

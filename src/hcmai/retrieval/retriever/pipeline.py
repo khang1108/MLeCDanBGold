@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from hcmai.common.config import FusionConfig, RetrievalCacheConfig
-from hcmai.retrieval.models import RetrievalResult, RetrievalSource
 from hcmai.corpus import Corpus
-from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
-from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME, DenseIndex
+from hcmai.retrieval.embedding.models.contracts import TextEmbeddingAdapter
+from hcmai.retrieval.models import RetrievalResult, RetrievalSource
 from hcmai.retrieval.retriever.cache import EmbeddingCache
+from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME, DenseIndex
 from hcmai.retrieval.retriever.dense.retriever import DenseRetriever
 from hcmai.retrieval.retriever.fusion.rrf import RRFFusionRetriever
 from hcmai.retrieval.retriever.models.contracts import Retriever, VectorRetriever
@@ -46,9 +46,7 @@ class RetrievalService:
         cache_config: RetrievalCacheConfig | None = None,
     ) -> "RetrievalService":
         cache = _embedding_cache(cache_config)
-        prompt_version = (
-            cache_config.prompt_version if cache_config is not None else "query-v1"
-        )
+        prompt_version = cache_config.prompt_version if cache_config is not None else "query-v1"
         return cls(
             DenseRetriever(
                 encoder,
@@ -56,8 +54,7 @@ class RetrievalService:
                 source,
                 embedding_cache=cache,
                 prompt_version=prompt_version,
-            )
-        )
+        ))
 
     @classmethod
     def from_fast_track_indexes(
@@ -83,14 +80,11 @@ class RetrievalService:
         has_text_index = context_index is not None or asr_segment_index is not None
         if has_text_index and text_encoder is None:
             raise ValueError(
-                "text_encoder is required when Context or ASR segment indexes "
-                "are configured"
+                "text_encoder is required when Context or ASR segment indexes " "are configured"
             )
 
         cache = _embedding_cache(cache_config)
-        prompt_version = (
-            cache_config.prompt_version if cache_config is not None else "query-v1"
-        )
+        prompt_version = cache_config.prompt_version if cache_config is not None else "query-v1"
         retrievers: list[VectorRetriever] = [
             DenseRetriever(
                 visual_encoder,
@@ -98,8 +92,7 @@ class RetrievalService:
                 RetrievalSource.VISUAL,
                 embedding_cache=cache,
                 prompt_version=prompt_version,
-            )
-        ]
+        )]
         if context_index is not None:
             assert text_encoder is not None
             retrievers.append(
@@ -108,14 +101,11 @@ class RetrievalService:
                     context_index,
                     cache,
                     prompt_version,
-                )
-            )
+            ))
         if asr_segment_index is not None:
             assert text_encoder is not None
             frames = tuple(
-                corpus.frames(
-                    [str(frame_id) for frame_id in visual_index.mapping["frame_id"]]
-                )
+                corpus.frames([str(frame_id) for frame_id in visual_index.mapping["frame_id"]])
             )
             retrievers.append(
                 ASRSegmentRetriever(
@@ -125,8 +115,7 @@ class RetrievalService:
                     cache,
                     prompt_version,
                     max_projection_gap_ms,
-                )
-            )
+            ))
 
         if len(retrievers) == 1:
             return cls(retrievers[0])
@@ -138,9 +127,7 @@ class RetrievalService:
 
         index = getattr(self._retriever, "index", None)
         if index is None:
-            raise RuntimeError(
-                "Index metadata is unavailable for fused retrieval"
-            )
+            raise RuntimeError("Index metadata is unavailable for fused retrieval")
         return index.metadata
 
     def score_event_videos(
@@ -174,6 +161,15 @@ class RetrievalService:
         active = {getattr(retriever, "source") for retriever in retrievers}
         return tuple(source for source in RetrievalSource if source in active)
 
+    def source_retriever(self, source: RetrievalSource) -> Any | None:
+        """Return the configured frame retriever for one exact modality."""
+
+        retrievers = getattr(self._retriever, "retrievers", (self._retriever,))
+        return next(
+            (retriever for retriever in retrievers if getattr(retriever, "source", None) is source),
+            None,
+        )
+
     def search(
         self,
         query: str,
@@ -199,9 +195,7 @@ class RetrievalService:
         for retriever in retrievers:
             if getattr(retriever, "source_family", None) == source_family:
                 return retriever
-        raise RuntimeError(
-            f"No {source_family!r} retriever is configured for retrieval"
-        )
+        raise RuntimeError(f"No {source_family!r} retriever is configured for retrieval")
 
     @staticmethod
     def load_index(

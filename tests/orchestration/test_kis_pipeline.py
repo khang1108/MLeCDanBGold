@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
-
 from hcmai.api.contracts import SearchRequest
 from hcmai.corpus import Frame
-from hcmai.retrieval.models import RetrievalSource
 from hcmai.orchestration.temporal_search import TemporalSearchResult
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.temporal import AlignedPath
@@ -27,6 +23,7 @@ class FakeAlignment:
         events: tuple[str, ...],
         *,
         top_k: int,
+        **_: object,
     ) -> TemporalSearchResult:
         """Return a path without invoking retrieval or dynamic programming."""
 
@@ -39,8 +36,7 @@ class FakeAlignment:
                     frame_ids=("f0", "f1", "f2", "f3", "f4"),
                     frame_idxs=(0, 1, 2, 3, 4),
                     timestamps_ms=(0, 1_000, 2_000, 3_000, 4_000),
-                ),
-            ),
+            ),),
             retrieval_ms=12.5,
             alignment_ms=7.25,
         )
@@ -49,50 +45,45 @@ class FakeAlignment:
 class FakeCorpus:
     """Expose only the canonical data reads KIS materialization needs."""
 
-    def frame(self, frame_id: str) -> Frame:
+    @staticmethod
+    def frame(frame_id: str) -> Frame:
         """Resolve a synthetic canonical frame record."""
-
         index = int(frame_id[1:])
         return Frame(
             frame_id=frame_id,
             video_id="V01",
             frame_idx=index,
-            timestamp_ms=index * 1_000,
+            timestamp_ms=index * 1000,
             image_path=f"{frame_id}.jpg",
         )
 
-    def caption(self, frame_id: str) -> str | None:
+    @staticmethod
+    def caption(frame_id: str) -> str | None:
         """Provide frame-native evidence only for the representative frame."""
-
         assert frame_id == "f2"
         return "chef coats ingredient"
 
-    def ocr(self, frame_id: str) -> str | None:
+    @staticmethod
+    def ocr(frame_id: str) -> str | None:
         """Provide OCR evidence for the representative frame."""
-
         assert frame_id == "f2"
         return "FLOUR"
 
-    def objects(self, frame_id: str) -> tuple[str, ...]:
+    @staticmethod
+    def objects(frame_id: str) -> tuple[str, ...]:
         """Return unordered labels to verify deterministic metadata ordering."""
-
         assert frame_id == "f2"
         return ("bowl", "person")
 
-    def transcript(
-        self,
-        video_id: str,
-        start_ms: int,
-        end_ms: int,
-    ) -> str | None:
+    @staticmethod
+    def transcript(video_id: str, start_ms: int, end_ms: int) -> str | None:
         """Return transcript evidence only at the representative timestamp."""
-
-        assert (video_id, start_ms, end_ms) == ("V01", 2_000, 2_001)
+        assert (video_id, start_ms, end_ms) == ("V01", 2000, 2001)
         return "coat it with flour"
 
-    def title(self, video_id: str) -> str | None:
+    @staticmethod
+    def title(video_id: str) -> str | None:
         """Provide the organizer title for the aligned video."""
-
         assert video_id == "V01"
         return "Cooking Episode"
 
@@ -102,8 +93,11 @@ def test_kis_projects_middle_frame_and_materializes_representative_metadata() ->
 
     alignment = FakeAlignment()
     response = KISPipeline(FakeCorpus(), alignment).execute(
-        SearchRequest(query="e1\ne2\ne3\ne4\ne5", top_k=1)
-    )
+        SearchRequest(
+            query="e1\ne2\ne3\ne4\ne5",
+            use_bm25=False,
+            top_k=1,
+    ))
     result = response.results[0]
 
     assert response.events == ["e1", "e2", "e3", "e4", "e5"]

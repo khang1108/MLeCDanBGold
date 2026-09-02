@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from hcmai.api.contracts import TRAKERequest
 from hcmai.orchestration.temporal_search import TemporalSearchResult
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
@@ -23,6 +22,7 @@ class FakeAlignment:
         events: list[str],
         *,
         top_k: int,
+        **_: object,
     ) -> TemporalSearchResult:
         """Return two independently ranked paths from the same video."""
 
@@ -42,8 +42,7 @@ class FakeAlignment:
                     frame_ids=("f2", "f3"),
                     frame_idxs=(30, 40),
                     timestamps_ms=(3_000, 4_000),
-                ),
-            ),
+            ),),
             retrieval_ms=12.5,
             alignment_ms=7.25,
         )
@@ -54,7 +53,7 @@ def test_trake_keeps_same_video_paths_independent() -> None:
 
     alignment = FakeAlignment()
     response = TRAKEPipeline(alignment).execute(
-        TRAKERequest(events=["e1", "e2"], top_k=2)
+        TRAKERequest(events=["e1", "e2"], use_bm25=False, top_k=2)
     )
 
     assert response.events == ["e1", "e2"]
@@ -68,7 +67,7 @@ def test_trake_preserves_ordered_arrays_and_raw_scores() -> None:
     """Expose canonical path values without rewriting their identity."""
 
     response = TRAKEPipeline(FakeAlignment()).execute(
-        TRAKERequest(events=["e1", "e2"], top_k=2)
+        TRAKERequest(events=["e1", "e2"], use_bm25=False, top_k=2)
     )
     path = response.paths[0]
 
@@ -91,7 +90,13 @@ def test_trake_returns_empty_paths_for_valid_unalignable_events() -> None:
     class EmptyAlignment:
         """Return a valid empty temporal-search result."""
 
-        def search(self, events: list[str], *, top_k: int) -> TemporalSearchResult:
+        def search(
+            self,
+            events: list[str],
+            *,
+            top_k: int,
+            **_: object,
+        ) -> TemporalSearchResult:
             """Provide no alignment while retaining non-negative stage timings."""
 
             del events, top_k
@@ -102,7 +107,7 @@ def test_trake_returns_empty_paths_for_valid_unalignable_events() -> None:
             )
 
     response = TRAKEPipeline(EmptyAlignment()).execute(
-        TRAKERequest(events=["e1", "e2"])
+        TRAKERequest(events=["e1", "e2"], use_bm25=False)
     )
 
     assert response.paths == []
