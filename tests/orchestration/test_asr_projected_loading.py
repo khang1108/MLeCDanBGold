@@ -31,6 +31,21 @@ _PRODUCTION_INDEX_PATHS = (
 )
 
 
+def _require_production_indexes() -> None:
+    """Skip only when the required published Dense bundles are unavailable."""
+
+    missing = [
+        str(path)
+        for path in _PRODUCTION_INDEX_PATHS
+        if not (REPOSITORY_ROOT / path).is_dir()
+    ]
+    if missing:
+        pytest.skip(
+            "production Dense temporal artifacts are not mounted: "
+            + ", ".join(missing)
+        )
+
+
 def _dense_bindings(
     *,
     context_dimension: int = 4,
@@ -233,7 +248,7 @@ def test_load_dense_temporal_rejects_incompatible_context_and_asr_dimensions(
 
 
 def test_production_artifacts_project_segment_asr_to_canonical_frames() -> None:
-    """Validate the mounted Dense temporal artifact lineage without reindexing.
+    """Validate mounted segment-ASR projection identity without reindexing.
 
     This test deliberately follows the fast-track runtime construction: it
     looks up the visual index's canonical IDs through ``Corpus`` and lets
@@ -243,16 +258,7 @@ def test_production_artifacts_project_segment_asr_to_canonical_frames() -> None:
     bundles must fail visibly.
     """
 
-    missing = [
-        str(path)
-        for path in _PRODUCTION_INDEX_PATHS
-        if not (REPOSITORY_ROOT / path).is_dir()
-    ]
-    if missing:
-        pytest.skip(
-            "production Dense temporal artifacts are not mounted: "
-            + ", ".join(missing)
-        )
+    _require_production_indexes()
 
     visual = DenseIndex.load(REPOSITORY_ROOT / "artifacts/indexes/visual")
     context = DenseIndex.load(REPOSITORY_ROOT / "artifacts/indexes/context")
@@ -260,7 +266,7 @@ def test_production_artifacts_project_segment_asr_to_canonical_frames() -> None:
         REPOSITORY_ROOT / "artifacts/indexes/asr_segments"
     )
 
-    settings = AppConfig.from_yaml(REPOSITORY_ROOT / "configs/baseline.yaml")
+    settings = setup._load_app_config()
     corpus = Corpus.open(REPOSITORY_ROOT / settings.dataset.frames_path)
     canonical_frames = tuple(
         corpus.frames(
@@ -294,3 +300,41 @@ def test_production_artifacts_project_segment_asr_to_canonical_frames() -> None:
             & (projected.segment_frame_positions < len(visual.frame_ids))
         )
     )
+
+
+def test_production_artifacts_satisfy_fast_track_lineage() -> None:
+    """Require mounted Context and ASR bundles to pass runtime validation.
+
+    Projection identity alone is insufficient for an online Dense temporal
+    capability: setup must also accept each published artifact's configured
+    BGE model and revision. This exercises the exact startup loader instead of
+    fabricating a compatible encoder from artifact metadata.
+    """
+
+    _require_production_indexes()
+
+    settings = setup._load_app_config()
+    models = setup._load_model_config()
+    visual = setup.RetrievalService.load_index(
+        REPOSITORY_ROOT / "artifacts/indexes/visual"
+    )
+    messages: list[str] = []
+    encoder_config = models.resolved_evidence_embedding
+    context = setup._load_fast_track_index(
+        source=RetrievalSource.CONTEXT,
+        path=REPOSITORY_ROOT / "artifacts/indexes/context",
+        visual=visual,
+        encoder_config=encoder_config,
+        settings=settings,
+        messages=messages,
+    )
+    asr_segments = setup._load_fast_track_index(
+        source=RetrievalSource.ASR,
+        path=REPOSITORY_ROOT / "artifacts/indexes/asr_segments",
+        visual=visual,
+        encoder_config=encoder_config,
+        settings=settings,
+        messages=messages,
+    )
+
+    assert context is not None and asr_segments is not None, "\n".join(messages)

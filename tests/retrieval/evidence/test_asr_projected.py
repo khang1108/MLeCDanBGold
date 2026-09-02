@@ -304,6 +304,16 @@ def test_score_subset_honors_requested_canonical_positions() -> None:
     scores = projected.score_subset(QUERY_VECTORS, subset)
 
     assert scores.shape == (len(QUERY_VECTORS), 2)
+    np.testing.assert_allclose(
+        scores,
+        np.asarray(
+            [
+                [0.0, 1.0],
+                [np.sqrt(3.0) / 2.0, np.sqrt(3.0) / 2.0],
+            ],
+            dtype=np.float32,
+        ),
+    )
 
 
 def test_score_subset_does_not_call_segment_top_k_search(monkeypatch) -> None:
