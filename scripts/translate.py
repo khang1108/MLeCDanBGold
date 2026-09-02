@@ -1,4 +1,4 @@
-"""Dịch caption tiếng Anh sang tiếng Việt bằng Qwen3-VL chạy cục bộ qua vLLM.
+"""Dịch caption tiếng Anh sang tiếng Việt bằng Qwen3 chạy cục bộ qua vLLM.
 
 Bỏ qua file đã có sẵn ở thư mục output, nên chạy lại là tiếp tục dở dang.
 """
@@ -13,8 +13,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from tqdm import tqdm
 
-MODEL = "Qwen/Qwen3-VL-8B-Instruct"
-ARTIFACT_VERSION = "caption_qwen_vl_vi_v1"
+MODEL = "Qwen/Qwen3-8B"
+ARTIFACT_VERSION = "caption_vi_v1"
 PROMPT = (
     "Dịch mô tả khung hình sau sang tiếng Việt. Giữ nguyên mọi chi tiết "
     "(màu sắc, số lượng, vật thể, vị trí). Chỉ trả về bản dịch.\n\n"
@@ -27,7 +27,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--captions", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--max-model-len", type=int, default=16384)
+    parser.add_argument("--revision")
+    parser.add_argument("--max-model-len", type=int, default=1024)
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.90)
     return parser.parse_args(argv)
@@ -56,20 +57,21 @@ def merge(texts: Sequence[str], picked: Sequence[int], values: Sequence[str]) ->
     return merged
 
 
-def rewrite(table: pa.Table, translated: Sequence[str]) -> pa.Table:
-    """Thay cột text và đánh dấu artifact_version của bản dịch."""
+def rewrite(table: pa.Table, translated: Sequence[str], revision: str | None) -> pa.Table:
+    """Thay cột text và ghi lại lineage sang model đã dịch."""
 
-    table = table.set_column(
-        table.schema.get_field_index("text"),
-        "text",
-        pa.array(list(translated), type=table.schema.field("text").type),
-    )
-    index = table.schema.get_field_index("artifact_version")
-    return table.set_column(
-        index,
-        "artifact_version",
-        pa.array([ARTIFACT_VERSION] * table.num_rows, type=table.schema.field(index).type),
-    )
+    replacements = {
+        "text": list(translated),
+        "artifact_version": [ARTIFACT_VERSION] * table.num_rows,
+        "model_name": [MODEL] * table.num_rows,
+        "model_revision": [revision] * table.num_rows,
+    }
+    for column, values in replacements.items():
+        index = table.schema.get_field_index(column)
+        table = table.set_column(
+            index, column, pa.array(values, type=table.schema.field(index).type)
+        )
+    return table
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -94,6 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     llm = LLM(
         model=MODEL,
+        revision=args.revision,
         dtype="bfloat16",
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
@@ -111,10 +114,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             ],
             sampling,
             use_tqdm=False,
+            chat_template_kwargs={"enable_thinking": False},
         )
         values = [output.outputs[0].text.strip() for output in outputs]
         target.parent.mkdir(parents=True, exist_ok=True)
-        pq.write_table(rewrite(table, merge(texts, picked, values)), target)
+        pq.write_table(
+            rewrite(table, merge(texts, picked, values), args.revision), target
+        )
     return 0
 
 
