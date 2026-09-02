@@ -1,5 +1,48 @@
 # HCMAI Research Knowledge
 
+## Disk-backed exact metadata filtering under a shared FAISS RAM budget
+
+**Date:** 2026-09-01 (verified 2026-09-02)
+**Problem:** The merged Filter Workspace needs exact metadata filtering and
+backend-owned pagination over roughly 470,000 frames, while the 16 GiB serving
+host must reserve most practical memory headroom for FAISS and retrieval maps.
+
+### Findings
+
+- **SOURCE:** Filter V1 now exposes `/api/v1/filter` independently from Search
+  over a read-only SQLite catalog with a four-connection bounded pool.
+- **SOURCE:** The frontend sends field-specific metadata filters, folder/video
+  scope, `frames_per_pages`, and `page_id`; it expects canonical identities and
+  pagination counts.
+- **SOURCE:** A second corpus-wide normalized Python projection risks
+  avoidable RAM duplication and contention with FAISS.
+- **VERIFIED:** The offline builder published 470,804 canonical frames with all
+  five modalities in 127.46 seconds. The resulting catalog is 1,316,909,056
+  bytes; online serving materializes only the requested page.
+- **VERIFIED:** With the real 470,804-vector Visual FAISS index resident,
+  concurrency-10 P95 was 1,905.20 ms for the slowest exact-object case and
+  1,358.23 ms for the combined folder/title/object case. The same run produced
+  zero query errors.
+- **VERIFIED:** Filter RSS grew cumulatively by about 36.3 MiB while FAISS was
+  resident across concurrency 1, 4, and 10 benchmark phases, below the 64 MiB
+  target. `mmap_size=0` and the bounded connection pool remained active.
+
+### Status
+
+**VERIFIED (real corpus + FAISS-resident benchmark).** The baseline meets the
+P95 and Filter-RSS targets. The concurrency-10 exact-object P95 has only about
+95 ms margin below the two-second target and should remain a monitored case.
+
+### Decision or Experiment
+
+Retain exact AND filtering with normalized substring text, exact object counts,
+timestamp-containing ASR, stable video/time ordering, and the four-connection
+pool. Re-run the same 1/4/10 benchmark after catalog/schema changes and monitor
+the exact-object case. FTS5 trigram remains unnecessary for V1 because the
+measured baseline meets the target. The full approved design and decision log
+are in
+`docs/superpowers/specs/2026-09-01-disk-backed-metadata-filter-design.md`.
+
 ## Unified ordered event-to-frame alignment baseline
 
 **Date:** 2026-08-30
