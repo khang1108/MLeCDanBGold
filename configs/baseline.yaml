@@ -67,6 +67,11 @@ api:
   default_top_k: 20
   maximum_top_k: 100
 
+filter:
+  catalog_path: "artifacts/filter/filter_catalog.sqlite"
+  connection_pool_size: 4
+  sqlite_cache_kib: 8192
+
 inference:
   base_url: "https://api.iamphuckhang.dev"
   timeout_seconds: 120

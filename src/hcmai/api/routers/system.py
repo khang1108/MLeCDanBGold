@@ -16,7 +16,7 @@ def create_system_router(service_container: dict[str, Any]) -> APIRouter:
     async def health_check() -> dict[str, Any]:
         service = service_container.get("service")
         if service is None:
-            return {
+            payload = {
                 "status": "ok",
                 "ready": False,
                 "frame_store_loaded": False,
@@ -41,6 +41,24 @@ def create_system_router(service_container: dict[str, Any]) -> APIRouter:
                 },
                 "startup_messages": [],
             }
-        return service.health(service_container.get("startup_messages", ()))
+        else:
+            payload = service.health(
+                service_container.get("startup_messages", ())
+            )
+
+        filter_service = service_container.get("filter_service")
+        filter_health = (
+            filter_service.health()
+            if filter_service is not None
+            else {
+                "ready": False,
+                "catalog_version": None,
+                "frame_count": 0,
+            }
+        )
+        capabilities = payload.setdefault("capabilities", {})
+        capabilities["filter"] = bool(filter_health["ready"])
+        payload["filter_catalog"] = filter_health
+        return payload
 
     return router

@@ -380,6 +380,16 @@ class BenchmarkConfig(BaseModel):
     recall_cutoffs: list[int] = Field(default_factory=lambda: list(RECALL_CUTOFFS))
 
 
+class FilterConfig(BaseModel):
+    """Bounded runtime settings for the optional disk-backed Filter catalog."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    catalog_path: Path = Path("artifacts/filter/filter_catalog.sqlite")
+    connection_pool_size: int = Field(default=4, ge=1, le=4)
+    sqlite_cache_kib: int = Field(default=8192, ge=1024, le=8192)
+
+
 class AppConfig(BaseSettings):
     """Central settings for the HCMAI 2026 search pipeline."""
 
@@ -388,6 +398,7 @@ class AppConfig(BaseSettings):
     search: SearchConfig = Field(default_factory=SearchConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     inference: InferenceConfig = Field(default_factory=InferenceConfig)
+    filter: FilterConfig = Field(default_factory=FilterConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> AppConfig:
