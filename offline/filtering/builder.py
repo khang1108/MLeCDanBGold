@@ -20,18 +20,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from hcmai.corpus.models import Frame
-from hcmai.corpus.stores import (
-    CaptionStore,
-    FrameStore,
-    ObjectCountsStore,
-    OCRStore,
-    TranscriptStore,
-    VideoMetadataStore,
-)
 from hcmai.filtering.catalog import CatalogAvailability, FilterCatalog
 from hcmai.filtering.normalization import normalize_filter_text
 from hcmai.filtering.schema import CATALOG_SCHEMA_VERSION, create_catalog_schema
+from offline.artifact_readers import (
+    CanonicalFrame,
+    CaptionArtifactReader,
+    FrameArtifactReader,
+    ObjectCountsArtifactReader,
+    OCRArtifactReader,
+    OfflineTranscriptStore,
+    VideoMetadataArtifactReader,
+)
 
 
 _FOLDER_PATTERN = re.compile(r"[A-Za-z]\d+")
@@ -105,12 +105,12 @@ class FilterCatalogBuildReport:
 class _Sources:
     """Loaded source stores plus their global modality availability."""
 
-    frames: FrameStore
-    video_metadata: VideoMetadataStore | None
-    captions: CaptionStore | None
-    ocr: OCRStore | None
-    objects: ObjectCountsStore | None
-    transcripts: TranscriptStore | None
+    frames: FrameArtifactReader
+    video_metadata: VideoMetadataArtifactReader | None
+    captions: CaptionArtifactReader | None
+    ocr: OCRArtifactReader | None
+    objects: ObjectCountsArtifactReader | None
+    transcripts: OfflineTranscriptStore | None
     availability: CatalogAvailability
 
 
@@ -167,25 +167,29 @@ def _load_sources(config: FilterCatalogBuildConfig) -> _Sources:
     """Load only configured published artifacts through existing readers."""
 
     return _Sources(
-        frames=FrameStore(config.frames_path),
+        frames=FrameArtifactReader(config.frames_path),
         video_metadata=(
-            VideoMetadataStore(config.video_metadata_path)
+            VideoMetadataArtifactReader(config.video_metadata_path)
             if config.video_metadata_path is not None
             else None
         ),
         captions=(
-            CaptionStore(config.caption_path)
+            CaptionArtifactReader(config.caption_path)
             if config.caption_path is not None
             else None
         ),
-        ocr=OCRStore(config.ocr_path) if config.ocr_path is not None else None,
+        ocr=(
+            OCRArtifactReader(config.ocr_path)
+            if config.ocr_path is not None
+            else None
+        ),
         objects=(
-            ObjectCountsStore(config.object_counts_path)
+            ObjectCountsArtifactReader(config.object_counts_path)
             if config.object_counts_path is not None
             else None
         ),
         transcripts=(
-            TranscriptStore(config.transcripts_path)
+            OfflineTranscriptStore(config.transcripts_path)
             if config.transcripts_path is not None
             else None
         ),
@@ -201,7 +205,7 @@ def _load_sources(config: FilterCatalogBuildConfig) -> _Sources:
 
 def _validate_source_identity(
     sources: _Sources,
-    canonical: dict[str, Frame],
+    canonical: dict[str, CanonicalFrame],
 ) -> None:
     """Reject specialist evidence that invents or changes frame identity."""
 
@@ -238,7 +242,7 @@ def _validate_source_identity(
 def _write_catalog(
     path: Path,
     *,
-    frames: tuple[Frame, ...],
+    frames: tuple[CanonicalFrame, ...],
     sources: _Sources,
     catalog_version: str,
     source_lineage: dict[str, Any],
@@ -388,14 +392,16 @@ def _folder_id(video_id: str) -> str:
     return prefix
 
 
-def _frame_asr(store: TranscriptStore | None, frame: Frame) -> str | None:
+def _frame_asr(
+    store: OfflineTranscriptStore | None, frame: CanonicalFrame
+) -> str | None:
     """Join only ordered half-open transcript segments containing this frame."""
 
     if store is None:
         return None
     text = " ".join(
         segment.text.strip()
-        for segment in store.get_at_time(frame.video_id, frame.timestamp_ms)
+        for segment in store.get_at(frame.video_id, frame.timestamp_ms)
         if segment.text.strip()
     )
     return text or None
@@ -474,4 +480,3 @@ def _path_checksum(path: Path) -> str:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
     return f"sha256:{digest.hexdigest()}"
-
