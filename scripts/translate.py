@@ -27,7 +27,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--captions", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--max-model-len", type=int, default=1024)
+    parser.add_argument("--max-model-len", type=int, default=16384)
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.90)
     return parser.parse_args(argv)
@@ -97,7 +97,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         dtype="bfloat16",
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
-        limit_mm_per_prompt={"image": 0, "video": 0},
     )
     sampling = SamplingParams(temperature=0.0, max_tokens=args.max_new_tokens)
 
