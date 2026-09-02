@@ -15,6 +15,8 @@ def _table() -> pa.Table:
             "frame_id": pa.array(["a", "b", "c", "d"]),
             "text": pa.array(["a dog", "", "a cat", ""]),
             "artifact_version": pa.array(["caption_qwen_vl_v1"] * 4),
+            "model_name": pa.array(["Qwen/Qwen3-VL-8B-Instruct"] * 4),
+            "model_revision": pa.array(["0c351dd"] * 4),
         }
     )
 
@@ -39,10 +41,18 @@ def test_merge_rejects_length_mismatch() -> None:
         merge(["a dog", "a cat"], [0, 1], ["một con chó"])
 
 
-def test_rewrite_preserves_schema_and_bumps_version() -> None:
+def test_rewrite_preserves_schema_and_repoints_lineage() -> None:
     table = _table()
-    out = rewrite(table, ["một con chó", "", "một con mèo", ""])
+    out = rewrite(table, ["một con chó", "", "một con mèo", ""], "abc123")
 
     assert out.schema == table.schema
     assert out.column("text").to_pylist()[0] == "một con chó"
-    assert set(out.column("artifact_version").to_pylist()) == {"caption_qwen_vl_vi_v1"}
+    assert set(out.column("artifact_version").to_pylist()) == {"caption_vi_v1"}
+    assert set(out.column("model_name").to_pylist()) == {"Qwen/Qwen3-8B"}
+    assert set(out.column("model_revision").to_pylist()) == {"abc123"}
+
+
+def test_rewrite_accepts_an_unpinned_revision() -> None:
+    out = rewrite(_table(), ["a", "b", "c", "d"], None)
+
+    assert out.column("model_revision").to_pylist() == [None] * 4
