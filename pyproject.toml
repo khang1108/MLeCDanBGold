@@ -63,6 +63,9 @@ preprocessing = [
 objects = [
     "ultralytics-opencv-headless>=8.4, <9.0",
 ]
+translation = [
+    "vllm>=0.11, <1.0",
+]
 pipeline = [
     "accelerate>=1.12, <2.0",
     "av>=14, <19",
