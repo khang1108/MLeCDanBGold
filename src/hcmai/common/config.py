@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Mapping
+from math import isclose
+from pathlib import Path
 from typing import Any, Literal
-from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings
 
 from hcmai.retrieval.models import RetrievalSource
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_settings import BaseSettings
+
 
 # Recall cut-offs frozen for baseline comparison
 RECALL_CUTOFFS: tuple[int, ...] = (1, 5, 20, 50, 100)
@@ -57,9 +59,7 @@ class EnrichmentArtifactsConfig(BaseModel):
     caption_path: Path | None = Path("artifacts/corpus/caption.parquet")
     ocr_path: Path | None = Path("artifacts/corpus/ocr_frames.parquet")
     object_path: Path | None = Path("artifacts/corpus/object_frames.parquet")
-    asr_path: Path | None = Path(
-        "artifacts/enrichment/asr/frame_enrichment.parquet"
-    )
+    asr_path: Path | None = Path("artifacts/enrichment/asr/frame_enrichment.parquet")
     context_path: Path | None = Path("artifacts/corpus/context.parquet")
     transcripts_path: Path | None = Path("artifacts/enrichment/transcripts")
 
@@ -71,9 +71,8 @@ class DatasetConfig(BaseModel):
     root: Path = Path("data")
     frames_path: Path = Path("artifacts/frame_store/frames.parquet")
     media_info_path: Path | None = Path("data/media-info")
-    enrichment: EnrichmentArtifactsConfig = Field(
-        default_factory=EnrichmentArtifactsConfig
-    )
+    enrichment: EnrichmentArtifactsConfig = Field(default_factory=EnrichmentArtifactsConfig)
+
 
 
 class EncoderConfig(BaseModel):
@@ -162,9 +161,7 @@ class TranscriptJobConfig(BaseModel):
     frame_evidence_window_ms: int = Field(default=2_000, ge=0)
     output_dir: Path = Path("artifacts/enrichment/transcripts")
     frames_path: Path = Path("artifacts/frame_store/frames.parquet")
-    frame_enrichment_path: Path = Path(
-        "artifacts/enrichment/asr/frame_enrichment.parquet"
-    )
+    frame_enrichment_path: Path = Path("artifacts/enrichment/asr/frame_enrichment.parquet")
     frame_store_id: str | None = None
 
     @classmethod
@@ -200,12 +197,11 @@ class TranscriptJobConfig(BaseModel):
             transcript_values["frame_store_id"] = dataset_values["frame_store_id"]
         config = cls.model_validate(transcript_values)
         project_root = Path(__file__).resolve().parents[3]
-        return config.model_copy(update={
-            "output_dir": _project_path(config.output_dir, project_root),
-            "frames_path": _project_path(config.frames_path, project_root),
-            "frame_enrichment_path": _project_path(
-                config.frame_enrichment_path, project_root
-            ),
+        return config.model_copy(
+            update={
+                "output_dir": _project_path(config.output_dir, project_root),
+                "frames_path": _project_path(config.frames_path, project_root),
+                "frame_enrichment_path": _project_path(config.frame_enrichment_path, project_root),
         })
 
 
@@ -227,7 +223,7 @@ class IndexConfig(BaseModel):
     asr_segment_path: Path = Path("artifacts/indexes/asr_segments")
     caption_path: Path = Path("artifacts/indexes/caption")
     ocr_path: Path = Path("artifacts/indexes/ocr")
-    asr_path: Path = Path("artifacts/indexes/asr")
+    bm25_path: Path = Path("artifacts/indexes/bm25")
     context_embedding_filename: str = "context_embeddings.npy"
     asr_segment_embedding_filename: str = "asr_embeddings.npy"
     asr_projection_max_gap_ms: int = Field(default=5_000, ge=0)
@@ -236,27 +232,21 @@ class IndexConfig(BaseModel):
             RetrievalSource.CAPTION: "caption_embeddings.npy",
             RetrievalSource.OCR: "ocr_embeddings.npy",
             RetrievalSource.ASR: "asr_embeddings.npy",
-        }
-    )
+    })
 
+    @staticmethod
     @field_validator("text_embedding_filenames")
-    @classmethod
     def validate_text_embedding_filenames(
-        cls,
-        filenames: dict[RetrievalSource, str],
+        filenames: dict[RetrievalSource, str]
     ) -> dict[RetrievalSource, str]:
         """Require one safe NumPy artifact filename per text modality."""
 
         if set(filenames) != set(TEXT_RETRIEVAL_SOURCES):
-            raise ValueError(
-                "text_embedding_filenames must configure caption, ocr, and asr"
-            )
+            raise ValueError("text_embedding_filenames must configure caption, ocr, and asr")
         for filename in filenames.values():
             path = Path(filename)
             if path.name != filename or path.suffix != ".npy":
-                raise ValueError(
-                    "text embedding filenames must be plain .npy filenames"
-                )
+                raise ValueError("text embedding filenames must be plain .npy filenames")
         return filenames
 
 
@@ -266,9 +256,7 @@ class FusionConfig(BaseModel):
     method: Literal["rrf"] = "rrf"
     rrf_k: int = Field(default=60, gt=0)
     modality_max_workers: int = Field(default=4, ge=1)
-    required_sources: set[RetrievalSource] = Field(
-        default_factory=lambda: {RetrievalSource.VISUAL}
-    )
+    required_sources: set[RetrievalSource] = Field(default_factory=lambda: {RetrievalSource.VISUAL})
     normalize_active_weights: bool = True
     source_weights: dict[RetrievalSource, float] = Field(
         default_factory=lambda: {source: 1.0 for source in FUSION_SOURCES}
@@ -283,8 +271,7 @@ class FusionConfig(BaseModel):
             raise ValueError("required_sources contains an unknown modality")
         if set(self.source_weights) != expected:
             raise ValueError(
-                "fusion source_weights must configure visual, context, "
-                "caption, ocr, and asr"
+                "fusion source_weights must configure visual, context, " "caption, ocr, and asr"
             )
         if any(weight <= 0 for weight in self.source_weights.values()):
             raise ValueError("fusion weights must be greater than zero")
@@ -321,6 +308,55 @@ class AlignmentConfig(BaseModel):
     cluster_delta: float = Field(default=0.0, ge=0.0)
 
 
+class DenseTemporalWeights(BaseModel):
+    """Convex source weights for full-corpus Dense temporal evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    visual_weight: float = Field(default=1 / 3, ge=0)
+    context_weight: float = Field(default=1 / 3, ge=0)
+    asr_weight: float = Field(default=1 / 3, ge=0)
+
+    @model_validator(mode="after")
+    def validate_sum(self) -> DenseTemporalWeights:
+        """Require normalized Dense source weights."""
+
+        total = self.visual_weight + self.context_weight + self.asr_weight
+        if not isclose(total, 1.0, abs_tol=1e-6):
+            raise ValueError("dense temporal weights must sum to 1.0")
+        return self
+
+
+class BM25FieldWeights(BaseModel):
+    """Non-negative field weights for frame-native BM25 evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title_weight: float = Field(default=1.0, ge=0)
+    caption_weight: float = Field(default=1.0, ge=0)
+    ocr_weight: float = Field(default=1.0, ge=0)
+    asr_weight: float = Field(default=1.0, ge=0)
+
+
+class HybridTemporalConfig(BaseModel):
+    """Full-corpus Dense/BM25 temporal evidence configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dense: DenseTemporalWeights = Field(default_factory=DenseTemporalWeights)
+    bm25_fields: BM25FieldWeights = Field(default_factory=BM25FieldWeights)
+    dense_weight: float = Field(default=0.5, ge=0)
+    bm25_weight: float = Field(default=0.5, ge=0)
+
+    @model_validator(mode="after")
+    def validate_sum(self) -> HybridTemporalConfig:
+        """Require normalized hybrid source weights."""
+
+        if not isclose(self.dense_weight + self.bm25_weight, 1.0, abs_tol=1e-6):
+            raise ValueError("hybrid temporal weights must sum to 1.0")
+        return self
+
+
 class SearchConfig(BaseModel):
     """Single search configuration selected for the competition pipeline."""
 
@@ -329,6 +365,8 @@ class SearchConfig(BaseModel):
     fusion: FusionConfig = Field(default_factory=FusionConfig)
     cache: RetrievalCacheConfig = Field(default_factory=RetrievalCacheConfig)
     alignment: AlignmentConfig = Field(default_factory=AlignmentConfig)
+    hybrid_temporal: HybridTemporalConfig = Field(default_factory=HybridTemporalConfig)
+
 
 
 class ApiConfig(BaseModel):
@@ -407,13 +445,12 @@ class AppConfig(BaseSettings):
     search: SearchConfig = Field(default_factory=SearchConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     inference: InferenceConfig = Field(default_factory=InferenceConfig)
-    query_preparation: QueryPreparationConfig = Field(
-        default_factory=QueryPreparationConfig
-    )
+    query_preparation: QueryPreparationConfig = Field(default_factory=QueryPreparationConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> AppConfig:
         """Load configuration from a YAML file."""
+
         from hcmai.common.utils.io import read_yaml
 
         data = read_yaml(path)

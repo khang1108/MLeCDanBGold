@@ -18,11 +18,11 @@ index:
   path: "artifacts/indexes/visual"
   context_path: "artifacts/indexes/context"
   asr_segment_path: "artifacts/indexes/asr_segments"
+  bm25_path: "artifacts/indexes/bm25"
 
   # Offline text-index destinations retained for artifact-generation jobs.
   caption_path: "artifacts/indexes/caption"
   ocr_path: "artifacts/indexes/ocr"
-  asr_path: "artifacts/indexes/asr"
 
   asr_projection_max_gap_ms: 5000
 
@@ -33,6 +33,19 @@ index:
     asr: "asr_embeddings.npy"
 
 search:
+  hybrid_temporal:
+    dense:
+      visual_weight: 0.3333333333333333
+      context_weight: 0.3333333333333333
+      asr_weight: 0.3333333333333333
+    bm25_fields:
+      title_weight: 1.0
+      caption_weight: 1.0
+      ocr_weight: 1.0
+      asr_weight: 1.0
+    dense_weight: 0.5
+    bm25_weight: 0.5
+
   alignment:
     lambda_gap: 0.00001
     event_power: 1.0

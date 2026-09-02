@@ -357,18 +357,18 @@ Dense temporal evidence consists of:
 
 1. Visual SigLIP2 frame index.
 2. Context BGE frame index.
-3. Frame-aligned ASR BGE index.
+3. Segment-native ASR BGE scores projected onto canonical frames.
 
-The current segment-ASR retriever remains available for detached generic RRF retrieval, but temporal Dense scoring does not use Top-K segment projection because DP requires a complete frame score row.
+Temporal Dense scoring uses complete-ASR segment scores and projects them onto canonical frame rows before alignment; it does not rely on Top-K segment retrieval because DP requires a complete frame score row.
 
-`IndexConfig.asr_path` is the frame-aligned ASR dense artifact used by the new temporal Dense scorer. Existing `asr_segment_path` remains the segment-native generic-retrieval artifact.
+`IndexConfig.asr_segment_path` is the only ASR Dense artifact. `asr_projection_max_gap_ms` bounds whether a segment score may contribute to a frame. No frame-native ASR Dense artifact is created or consumed.
 
 ### 10.2 Shared encoding
 
 For one request:
 
 - selected retrieval events are encoded once by SigLIP2 for Visual scores;
-- selected retrieval events are encoded once by BGE and the same text query batch scores both Context and frame-ASR indexes.
+- selected retrieval events are encoded once by BGE and the same text query batch scores both Context and segment-ASR indexes.
 
 The implementation must not load duplicate BGE/SigLIP model instances for the hybrid scorer.
 
