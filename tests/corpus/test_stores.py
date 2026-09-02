@@ -30,6 +30,7 @@ def _write_frame_artifact(path: Path) -> None:
                 "video_id": "video-001",
                 "frame_idx": 42,
                 "timestamp_ms": 1_250,
+                "fps": 29.97,
                 "image_path": "keyframes/video-001/42.jpg",
                 "thumbnail_path": None,
                 "width": 1_920,
@@ -77,6 +78,7 @@ def test_corpus_stores_materialize_runtime_dataclasses(tmp_path: Path) -> None:
         frame_idx=42,
         timestamp_ms=1_250,
         image_path="keyframes/video-001/42.jpg",
+        fps=29.97,
     )
     assert segment == TranscriptSegment(
         segment_id="video-001-segment-000",

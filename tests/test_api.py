@@ -35,6 +35,7 @@ class MockFrameStore:
             timestamp_ms=3600,
             image_path="/data/keyframes/L21_V001/090.jpg",
             thumbnail_path="/data/thumbnails/L21_V001/090.jpg",
+            fps=29.97,
         )
         self._records = [self.record]
         self.evidence = evidence or {}
@@ -275,6 +276,7 @@ def test_search_endpoint(api_app: FastAPI) -> None:
     assert data["results"][0]["frame_ids"] == ["L21_V001_00000090"]
     assert data["results"][0]["video_id"] == "L21_V001"
     assert data["results"][0]["score"] == pytest.approx(0.95)
+    assert data["results"][0]["fps"] == 29.97
 
 
 def test_vqa_payload_is_rejected_by_kis_search_schema(api_app: FastAPI) -> None:

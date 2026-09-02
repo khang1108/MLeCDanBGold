@@ -53,6 +53,7 @@ class SearchResult(BaseModel):
     frame_ids: list[str]
     timestamps_ms: list[int]
     metadata: SearchResultMetadata
+    fps: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def validate_alignment_arrays(self) -> Self:

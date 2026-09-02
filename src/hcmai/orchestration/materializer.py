@@ -70,6 +70,7 @@ class SearchMaterializer:
             score=path.score,
             frame_ids=list(path.frame_ids),
             timestamps_ms=list(path.timestamps_ms),
+            fps=frame.fps,
             metadata=SearchResultMetadata(
                 title=title,
                 caption=caption,

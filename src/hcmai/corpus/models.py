@@ -14,6 +14,7 @@ class Frame:
 
     ``frame_idx`` is the competition-facing frame coordinate; it must remain
     distinct from keyframe order and the internal ``frame_id``.
+    ``fps`` is optional because legacy frame artifacts did not retain it.
     """
 
     frame_id: str
@@ -22,6 +23,7 @@ class Frame:
     timestamp_ms: int
     image_path: str
     thumbnail_path: str | None = None
+    fps: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
