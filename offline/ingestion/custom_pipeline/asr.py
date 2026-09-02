@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from hcmai.common.config import EncoderConfig
 from hcmai.common.utils.io import read_json
 from hcmai.common.utils.logging import get_logger
 from offline.enrichment.transcripts.manifest import TranscriptManifest
@@ -175,12 +176,20 @@ def validate_asr_source(
     transcripts_root: str | Path,
     index_root: str | Path,
     video_ids: Sequence[str],
+    *,
+    evidence_encoder: EncoderConfig | None = None,
 ) -> ASRReuseBundle:
     """Validate reusable transcripts/vectors and return a fingerprinted bundle.
 
+    When ``evidence_encoder`` is supplied, its exact model name and revision
+    must match the persisted ASR segment embeddings before a batch can reuse
+    them. This prevents a source vector space from being silently paired with
+    the query encoder configured for Context and ASR evidence.
+
     Raises:
         ValueError: If any manifest, segment table, or indexed vector for
-            ``video_ids`` is missing, incomplete, or internally inconsistent.
+            ``video_ids`` is missing, incomplete, internally inconsistent, or
+            was embedded by a different configured evidence encoder.
     """
 
     if not video_ids:
@@ -196,6 +205,11 @@ def validate_asr_source(
     )
 
     index = SegmentDenseIndex.load(index_path)
+    if evidence_encoder is not None:
+        if index.metadata.model_name != evidence_encoder.model_name:
+            raise ValueError("ASR index model differs from configured evidence encoder")
+        if index.metadata.model_revision != evidence_encoder.revision:
+            raise ValueError("ASR index revision differs from configured evidence encoder")
 
     manifests: list[TranscriptManifest] = []
     total_segments = 0

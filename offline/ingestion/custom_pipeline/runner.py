@@ -176,6 +176,8 @@ def process_archive(
     dataset_version: str,
     visual_model_name: str,
     context_model_name: str,
+    visual_model_revision: str | None = None,
+    context_model_revision: str | None = None,
     batch_offset: int = 0,
     batch_limit: int | None = None,
 ) -> list[str]:
@@ -240,7 +242,9 @@ def process_archive(
             asr_bundle_factory,
             dataset_version=dataset_version,
             visual_model_name=visual_model_name,
+            visual_model_revision=visual_model_revision,
             context_model_name=context_model_name,
+            context_model_revision=context_model_revision,
         )
 
     state_store.advance_archive(archive_id, ArchiveStage.COMPLETE)
@@ -282,6 +286,8 @@ def _process_one_batch(
     dataset_version: str,
     visual_model_name: str,
     context_model_name: str,
+    visual_model_revision: str | None,
+    context_model_revision: str | None,
 ) -> None:
     """Run one canonical batch from source staging through commit and cleanup."""
 
@@ -327,7 +333,9 @@ def _process_one_batch(
         staging_root,
         dataset_version=dataset_version,
         visual_model_name=visual_model_name,
+        visual_model_revision=visual_model_revision,
         context_model_name=context_model_name,
+        context_model_revision=context_model_revision,
     )
     state_store.advance_batch(batch_id, BatchStage.INDEXES_COMPLETE)
 

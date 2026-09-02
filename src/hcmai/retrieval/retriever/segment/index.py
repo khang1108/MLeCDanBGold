@@ -125,6 +125,7 @@ class SegmentDenseIndex:
         *,
         dataset_version: str,
         model_name: str,
+        model_revision: str | None = None,
         index_type: str = "flat_ip",
     ) -> SegmentDenseIndex:
         """Build an exact index from normalized ASR segment embeddings.
@@ -137,6 +138,7 @@ class SegmentDenseIndex:
                 columns are retained, but ``frame_id`` is forbidden.
             dataset_version: Dataset version paired with this immutable bundle.
             model_name: Name of the text encoder that produced ``embeddings``.
+            model_revision: Optional immutable revision of that text encoder.
             index_type: Only ``flat_ip`` is supported for the exact baseline.
         """
 
@@ -155,6 +157,7 @@ class SegmentDenseIndex:
         metadata = IndexMetadata(
             dataset_version=dataset_version,
             model_name=model_name,
+            model_revision=model_revision,
             index_type=index_type,
             metric="inner_product",
             normalization="l2",

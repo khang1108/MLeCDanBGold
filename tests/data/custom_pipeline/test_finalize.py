@@ -210,9 +210,10 @@ def test_compact_batch_embeddings_concatenates_across_batches(tmp_path: Path) ->
     _commit_one_batch(tmp_path, "L02-batch000", "L02", ["L02_V001"], 3, image_root)
     manifests = discover_committed_batches(tmp_path / "batches")
 
-    vectors, mapping, model_name = compact_batch_embeddings(manifests, "visual")
+    vectors, mapping, model_name, model_revision = compact_batch_embeddings(manifests, "visual")
     assert len(vectors) == 5
     assert model_name == "siglip-test"
+    assert model_revision is None
     assert mapping["embedding_index"].tolist() == list(range(5))
 
 

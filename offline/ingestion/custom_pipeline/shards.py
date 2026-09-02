@@ -22,6 +22,7 @@ from hcmai.common.utils.logging import get_logger
 from offline.ingestion.custom_pipeline.asr import ASRReuseBundle
 from hcmai.retrieval.retriever.artifacts import sha256_file
 from hcmai.retrieval.retriever.dense.index import DenseIndex
+from hcmai.retrieval.retriever.models.metadata import IndexMetadata
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
 logger = get_logger(__name__)
@@ -254,11 +255,13 @@ def _concatenate_shard_vectors(
 
 def _subset_asr_segments(
     asr_bundle: ASRReuseBundle, video_ids: Sequence[str]
-) -> tuple[np.ndarray, pd.DataFrame]:
+) -> tuple[np.ndarray, pd.DataFrame, IndexMetadata]:
     """Subset persisted ASR vectors/mapping for exactly ``video_ids``.
 
     Reuses the already-validated :class:`SegmentDenseIndex`; no ASR inference
-    or text embedding is ever performed here.
+    or text embedding is ever performed here. The source metadata travels
+    with the subset so the derived batch index retains its true encoder
+    lineage instead of assigning a synthetic model label.
     """
 
     index = SegmentDenseIndex.load(asr_bundle.index_root)
@@ -272,7 +275,7 @@ def _subset_asr_segments(
     vectors = np.concatenate(vector_parts, axis=0)
     mapping = pd.concat(mapping_parts, ignore_index=True)
     mapping = mapping.assign(embedding_index=np.arange(len(mapping)))
-    return vectors, mapping
+    return vectors, mapping, index.metadata
 
 
 def _summarize_index(output_dir: Path, checksum_filenames: Sequence[str], vector_count: int, embedding_dim: int) -> IndexArtifactSummary:
@@ -298,7 +301,9 @@ def build_batch_index_bundle(
     *,
     dataset_version: str,
     visual_model_name: str,
+    visual_model_revision: str | None = None,
     context_model_name: str,
+    context_model_revision: str | None = None,
 ) -> BatchIndexInventory:
     """Build, publish, and checksum-load a batch's visual/context/ASR indexes.
 
@@ -326,21 +331,38 @@ def build_batch_index_bundle(
     visual_vectors, visual_mapping = _concatenate_shard_vectors(video_ids, video_shards, "visual")
     visual_dir = output_root / "visual"
     DenseIndex.build(
-        visual_vectors, visual_mapping, dataset_version=dataset_version, model_name=visual_model_name
+        visual_vectors,
+        visual_mapping,
+        dataset_version=dataset_version,
+        model_name=visual_model_name,
+        model_revision=visual_model_revision,
     ).save(visual_dir)
     loaded_visual = DenseIndex.load(visual_dir)
 
     context_vectors, context_mapping = _concatenate_shard_vectors(video_ids, video_shards, "context")
     context_dir = output_root / "context"
     DenseIndex.build(
-        context_vectors, context_mapping, dataset_version=dataset_version, model_name=context_model_name
+        context_vectors,
+        context_mapping,
+        dataset_version=dataset_version,
+        model_name=context_model_name,
+        model_revision=context_model_revision,
     ).save(context_dir)
     loaded_context = DenseIndex.load(context_dir)
 
-    asr_vectors, asr_mapping = _subset_asr_segments(asr_bundle, video_ids)
+    asr_vectors, asr_mapping, asr_metadata = _subset_asr_segments(asr_bundle, video_ids)
+    if asr_metadata.model_name != context_model_name:
+        raise ValueError("reusable ASR source model differs from configured evidence encoder")
+    if asr_metadata.model_revision != context_model_revision:
+        raise ValueError("reusable ASR source revision differs from configured evidence encoder")
+
     asr_dir = output_root / "asr_segments"
     SegmentDenseIndex.build(
-        asr_vectors, asr_mapping, dataset_version=dataset_version, model_name="reused-asr-vectors"
+        asr_vectors,
+        asr_mapping,
+        dataset_version=dataset_version,
+        model_name=asr_metadata.model_name,
+        model_revision=asr_metadata.model_revision,
     ).save(asr_dir)
     loaded_asr = SegmentDenseIndex.load(asr_dir)
 

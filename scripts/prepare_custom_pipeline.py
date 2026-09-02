@@ -339,12 +339,6 @@ def _encode_context_vectors(texts: list[str], config: EncoderConfig):
     return adapter.encode_text(texts)
 
 
-def _model_name(config_path: Path, section: str) -> str:
-    """Return one pinned encoder's model_name for index provenance."""
-
-    return read_yaml_section(config_path, "models")[section]["model_name"]
-
-
 # ---------------------------------------------------------------------------
 # Batch identity (RunIdentity) helpers.
 # ---------------------------------------------------------------------------
@@ -601,8 +595,15 @@ def _make_produce_batch_artifacts(
 def _make_asr_bundle_factory(args: argparse.Namespace) -> Callable[[list[str]], ASRReuseBundle]:
     """Validate and return reusable ASR evidence for exactly one batch's videos."""
 
+    evidence_encoder = _load_encoder_config(args.config, "evidence_embedding")
+
     def _factory(video_ids: list[str]) -> ASRReuseBundle:
-        return validate_asr_source(args.transcripts_root, args.asr_index_root, video_ids)
+        return validate_asr_source(
+            args.transcripts_root,
+            args.asr_index_root,
+            video_ids,
+            evidence_encoder=evidence_encoder,
+        )
 
     return _factory
 
@@ -748,8 +749,8 @@ def _cmd_process_archive(args: argparse.Namespace) -> dict[str, Any]:
 
     produce_batch_artifacts = _make_produce_batch_artifacts(args, state_store)
     asr_bundle_factory = _make_asr_bundle_factory(args)
-    visual_model_name = _model_name(args.config, "visual_embedding")
-    context_model_name = _model_name(args.config, "evidence_embedding")
+    visual_encoder = _load_encoder_config(args.config, "visual_embedding")
+    context_encoder = _load_encoder_config(args.config, "evidence_embedding")
 
     committed_batches: dict[str, list[str]] = {}
     for entry in window.select(plan):
@@ -760,8 +761,10 @@ def _cmd_process_archive(args: argparse.Namespace) -> dict[str, Any]:
             produce_batch_artifacts,
             asr_bundle_factory,
             dataset_version=args.version,
-            visual_model_name=visual_model_name,
-            context_model_name=context_model_name,
+            visual_model_name=visual_encoder.model_name,
+            visual_model_revision=visual_encoder.revision,
+            context_model_name=context_encoder.model_name,
+            context_model_revision=context_encoder.revision,
             batch_offset=args.batch_offset,
             batch_limit=args.batch_limit,
         )

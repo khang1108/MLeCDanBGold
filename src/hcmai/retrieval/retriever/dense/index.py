@@ -111,6 +111,7 @@ class DenseIndex:
         *,
         dataset_version: str,
         model_name: str,
+        model_revision: str | None = None,
         index_type: str = "flat_ip",
         show_progress: bool = False,
     ) -> DenseIndex:
@@ -122,6 +123,7 @@ class DenseIndex:
                 positions ``0..N-1`` and one row per embedding.
             dataset_version: Dataset version to couple to the index artifact.
             model_name: Encoder checkpoint that produced the embeddings.
+            model_revision: Optional immutable revision of that encoder.
             index_type: Index family; only ``flat_ip`` is supported.
 
         Returns:
@@ -168,6 +170,7 @@ class DenseIndex:
         metadata = IndexMetadata(
             dataset_version=dataset_version,
             model_name=model_name,
+            model_revision=model_revision,
             index_type=index_type,
             metric="inner_product",
             normalization="l2",

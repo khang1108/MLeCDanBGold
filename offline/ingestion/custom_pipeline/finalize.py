@@ -320,13 +320,13 @@ def compact_frame_metadata(
 
 def compact_batch_embeddings(
     batch_manifests: Sequence[BatchManifest], kind: str
-) -> tuple[np.ndarray, pd.DataFrame, str]:
+) -> tuple[np.ndarray, pd.DataFrame, str, str | None]:
     """Concatenate one embedding ``kind`` ('visual', 'context', 'asr_segments')
     across every committed batch's already-validated index.
 
     Returns:
-        A ``(vectors, mapping, model_name)`` tuple, where ``model_name`` is the
-        single encoder name shared by every compacted batch.
+        A ``(vectors, mapping, model_name, model_revision)`` tuple, where the
+        encoder name and revision are shared by every compacted batch.
 
     Raises:
         FinalizeError: If a batch's video_ids overlap another batch's, its
@@ -342,6 +342,7 @@ def compact_batch_embeddings(
     mapping_parts: list[pd.DataFrame] = []
     expected_dim: int | None = None
     expected_model: str | None = None
+    expected_revision: str | None = None
 
     for manifest in batch_manifests:
         index = loader(manifest.root / kind)
@@ -356,6 +357,7 @@ def compact_batch_embeddings(
         if expected_dim is None:
             expected_dim = index.metadata.embedding_dim
             expected_model = index.metadata.model_name
+            expected_revision = index.metadata.model_revision
         elif index.metadata.embedding_dim != expected_dim:
             raise FinalizeError(
                 f"batch {manifest.batch_id} {kind} embedding_dim "
@@ -365,6 +367,10 @@ def compact_batch_embeddings(
             raise FinalizeError(
                 f"batch {manifest.batch_id} {kind} model_name "
                 f"{index.metadata.model_name!r} disagrees with {expected_model!r}"
+            )
+        elif index.metadata.model_revision != expected_revision:
+            raise FinalizeError(
+                f"batch {manifest.batch_id} {kind} model_revision differs"
             )
 
         vector_parts.append(np.asarray(index.vectors))
@@ -378,7 +384,7 @@ def compact_batch_embeddings(
 
     logger.info("compacted %s embeddings: %d vector(s), dim=%s", kind, len(vectors), expected_dim)
     assert expected_model is not None
-    return vectors, mapping, expected_model
+    return vectors, mapping, expected_model, expected_revision
 
 
 def compact_batch_embeddings_to_memmap(
@@ -633,11 +639,16 @@ def build_dense_index_from_precomputed(
     *,
     dataset_version: str,
     model_name: str,
+    model_revision: str | None = None,
 ) -> DenseIndex:
     """Build, publish, and checksum-load a global frame-native dense index."""
 
     DenseIndex.build(
-        vectors, mapping, dataset_version=dataset_version, model_name=model_name
+        vectors,
+        mapping,
+        dataset_version=dataset_version,
+        model_name=model_name,
+        model_revision=model_revision,
     ).save(output_dir)
     return DenseIndex.load(output_dir)
 
@@ -649,11 +660,16 @@ def build_segment_index_from_precomputed(
     *,
     dataset_version: str,
     model_name: str,
+    model_revision: str | None = None,
 ) -> SegmentDenseIndex:
     """Build, publish, and checksum-load a global ASR segment dense index."""
 
     SegmentDenseIndex.build(
-        vectors, mapping, dataset_version=dataset_version, model_name=model_name
+        vectors,
+        mapping,
+        dataset_version=dataset_version,
+        model_name=model_name,
+        model_revision=model_revision,
     ).save(output_dir)
     return SegmentDenseIndex.load(output_dir)
 
