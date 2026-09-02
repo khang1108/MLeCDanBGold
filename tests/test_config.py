@@ -36,7 +36,7 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.index.asr_projection_max_gap_ms == 5_000
     assert config.index.caption_path.as_posix() == "artifacts/indexes/caption"
     assert config.index.ocr_path.as_posix() == "artifacts/indexes/ocr"
-    assert config.index.asr_path.as_posix() == "artifacts/indexes/asr"
+    assert not hasattr(config.index, "asr_path")
     assert config.index.text_embedding_filenames == {
         RetrievalSource.CAPTION: "caption_embeddings.npy",
         RetrievalSource.OCR: "ocr_embeddings.npy",
