@@ -9,6 +9,7 @@ visual :class:`DenseIndex` and timeline selection is delegated to the shared
 
 from __future__ import annotations
 
+from numbers import Integral
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -123,11 +124,94 @@ class SegmentProjectedASRIndex:
         positions: np.ndarray,
         chunk_size: int = 65_536,
     ) -> np.ndarray:
-        """Reserve the frame-shaped scoring contract for the scoring task."""
+        """Score every ASR segment and scatter maxima onto canonical frames.
 
-        raise NotImplementedError(
-            "segment-projected ASR scoring is implemented in Task 2"
+        Segment vectors are already L2-normalized, so exact matrix
+        multiplication computes cosine similarity. Chunks bound the segment
+        vector and score matrices held at once; all chunks are scored before
+        the per-event frame floor is filled and the requested positions are
+        selected.
+
+        Args:
+            query_vectors: One ``[embedding_dim]`` query or a two-dimensional
+                ``[event_count, embedding_dim]`` array of finite values.
+            positions: One-dimensional integer canonical frame positions to
+                return, in the caller's requested order.
+            chunk_size: Positive number of segment vectors to score per chunk.
+
+        Returns:
+            ``float32`` scores shaped ``[event_count, len(positions)]``.
+
+        Raises:
+            ValueError: If queries, positions, or chunk size violate the
+                scoring contract.
+        """
+
+        queries = np.asarray(query_vectors, dtype=np.float32)
+        if queries.ndim == 1:
+            queries = queries.reshape(1, -1)
+        elif queries.ndim != 2:
+            raise ValueError("query_vectors must be one- or two-dimensional")
+        expected_dim = int(self.metadata.embedding_dim)
+        if queries.shape[1] != expected_dim:
+            raise ValueError(
+                "query_vectors embedding dimension does not match ASR index: "
+                f"expected {expected_dim}, got {queries.shape[1]}"
+            )
+        if not np.all(np.isfinite(queries)):
+            raise ValueError("query_vectors must contain only finite values")
+        queries = np.ascontiguousarray(queries, dtype=np.float32)
+
+        raw_positions = np.asarray(positions)
+        if raw_positions.ndim != 1:
+            raise ValueError("positions must be a one-dimensional integer array")
+        if not np.issubdtype(raw_positions.dtype, np.integer):
+            raise ValueError("positions must contain integer values")
+        positions = np.ascontiguousarray(raw_positions, dtype=np.int64)
+        if np.any((positions < 0) | (positions >= len(self.frame_ids))):
+            raise ValueError("positions must be within canonical frame bounds")
+
+        if (
+            isinstance(chunk_size, bool)
+            or not isinstance(chunk_size, Integral)
+            or chunk_size <= 0
+        ):
+            raise ValueError("chunk_size must be a positive integer")
+        chunk_size = int(chunk_size)
+
+        frame_scores = np.full(
+            (len(queries), len(self.frame_ids)),
+            -np.inf,
+            dtype=np.float32,
         )
+        for start in range(0, len(self._segment_vectors), chunk_size):
+            stop = min(start + chunk_size, len(self._segment_vectors))
+            vectors = np.asarray(
+                self._segment_vectors[start:stop],
+                dtype=np.float32,
+            )
+            chunk_scores = queries @ vectors.T
+            mapped = self.segment_frame_positions[start:stop]
+            valid = mapped >= 0
+            if not np.any(valid):
+                continue
+            target_positions = mapped[valid]
+            for event_index in range(len(queries)):
+                np.maximum.at(
+                    frame_scores[event_index],
+                    target_positions,
+                    chunk_scores[event_index, valid],
+                )
+
+        for event_index in range(len(queries)):
+            covered = np.isfinite(frame_scores[event_index])
+            if not np.any(covered):
+                frame_scores[event_index].fill(0.0)
+                continue
+            floor = float(frame_scores[event_index, covered].min())
+            frame_scores[event_index, ~covered] = floor
+
+        return np.asarray(frame_scores[:, positions], dtype=np.float32)
 
 
 __all__ = ["SegmentProjectedASRIndex"]
