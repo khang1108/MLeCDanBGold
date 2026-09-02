@@ -97,6 +97,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dtype="bfloat16",
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
+        limit_mm_per_prompt={"image": 0, "video": 0},
     )
     sampling = SamplingParams(temperature=0.0, max_tokens=args.max_new_tokens)
 
@@ -104,7 +105,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         table = pq.read_table(source)
         texts = table.column("text").to_pylist()
         picked = pending(table)
-        # vLLM trả kết quả đúng thứ tự đầu vào.
         outputs = llm.chat(
             [
                 [{"role": "user", "content": PROMPT + texts[index]}]
