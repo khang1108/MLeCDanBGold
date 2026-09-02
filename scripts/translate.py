@@ -15,10 +15,14 @@ from tqdm import tqdm
 
 MODEL = "Qwen/Qwen3-8B"
 ARTIFACT_VERSION = "caption_vi_v1"
-PROMPT = (
-    "Dịch mô tả khung hình sau sang tiếng Việt. Giữ nguyên mọi chi tiết "
-    "(màu sắc, số lượng, vật thể, vị trí). Chỉ trả về bản dịch.\n\n"
-)
+SYSTEM = """Dịch mô tả khung hình video từ tiếng Anh sang tiếng Việt.
+
+Quy tắc:
+- Dịch trọn vẹn, không để sót bất kỳ từ tiếng Anh nào.
+- Giữ nguyên tên riêng, tên thương hiệu, và chữ trên biển hiệu hoặc logo.
+- Giữ đủ mọi chi tiết: màu sắc, số lượng, chất liệu, vật thể, vị trí, hành động.
+- Không thêm, không bớt, không giải thích, không mở đầu.
+- Trả lời bằng đúng một đoạn văn là bản dịch."""
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -109,7 +113,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         picked = pending(table)
         outputs = llm.chat(
             [
-                [{"role": "user", "content": PROMPT + texts[index]}]
+                [
+                    {"role": "system", "content": SYSTEM},
+                    {"role": "user", "content": texts[index]},
+                ]
                 for index in picked
             ],
             sampling,
