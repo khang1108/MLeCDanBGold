@@ -135,3 +135,14 @@ def test_segment_outside_projection_gap_is_unmapped() -> None:
     projected = make_projected_asr(max_projection_gap_ms=100)
 
     assert projected.segment_frame_positions[2] == -1
+
+
+def test_evidence_package_star_import_binds_all_public_symbols() -> None:
+    """Every name advertised by the evidence package is publicly importable."""
+
+    namespace: dict[str, object] = {}
+    exec("from hcmai.retrieval.evidence import *", namespace)
+
+    import hcmai.retrieval.evidence as evidence
+
+    assert set(evidence.__all__).issubset(namespace)
