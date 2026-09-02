@@ -6,12 +6,29 @@ algorithms, which belong to the retrieval evidence contract tests.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+import numpy as np
+import pytest
+
 from hcmai.common.config import AppConfig
+from hcmai.common.config import REPOSITORY_ROOT
+from hcmai.corpus import Corpus
 from hcmai.orchestration import setup
+from hcmai.retrieval.evidence.asr_projected import SegmentProjectedASRIndex
 from hcmai.retrieval.models import RetrievalSource
+from hcmai.retrieval.retriever.dense.index import DenseIndex
+from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+from hcmai.retrieval.retriever.segment.retriever import ASRSegmentRetriever
+
+
+_PRODUCTION_INDEX_PATHS = (
+    Path("artifacts/indexes/visual"),
+    Path("artifacts/indexes/context"),
+    Path("artifacts/indexes/asr_segments"),
+)
 
 
 def _dense_bindings(
@@ -213,3 +230,67 @@ def test_load_dense_temporal_rejects_incompatible_context_and_asr_dimensions(
         "Dense temporal evidence identity validation failed: ValueError: "
         "Context and ASR segment index dimensions differ"
     ]
+
+
+def test_production_artifacts_project_segment_asr_to_canonical_frames() -> None:
+    """Validate the mounted Dense temporal artifact lineage without reindexing.
+
+    This test deliberately follows the fast-track runtime construction: it
+    looks up the visual index's canonical IDs through ``Corpus`` and lets
+    ``ASRSegmentRetriever`` construct ``SegmentFrameProjector`` with the
+    configured gap. Production bundles are optional in ordinary test
+    environments, so only their absence is a skip condition; invalid mounted
+    bundles must fail visibly.
+    """
+
+    missing = [
+        str(path)
+        for path in _PRODUCTION_INDEX_PATHS
+        if not (REPOSITORY_ROOT / path).is_dir()
+    ]
+    if missing:
+        pytest.skip(
+            "production Dense temporal artifacts are not mounted: "
+            + ", ".join(missing)
+        )
+
+    visual = DenseIndex.load(REPOSITORY_ROOT / "artifacts/indexes/visual")
+    context = DenseIndex.load(REPOSITORY_ROOT / "artifacts/indexes/context")
+    asr_segments = SegmentDenseIndex.load(
+        REPOSITORY_ROOT / "artifacts/indexes/asr_segments"
+    )
+
+    settings = AppConfig.from_yaml(REPOSITORY_ROOT / "configs/baseline.yaml")
+    corpus = Corpus.open(REPOSITORY_ROOT / settings.dataset.frames_path)
+    canonical_frames = tuple(
+        corpus.frames(
+            [str(frame_id) for frame_id in visual.mapping["frame_id"]]
+        )
+    )
+    text_encoder = SimpleNamespace(
+        config=SimpleNamespace(model_name=asr_segments.metadata.model_name),
+        embedding_dim=asr_segments.metadata.embedding_dim,
+    )
+    asr_retriever = ASRSegmentRetriever(
+        text_encoder,
+        asr_segments,
+        canonical_frames,
+        max_projection_gap_ms=settings.index.asr_projection_max_gap_ms,
+    )
+    projected = SegmentProjectedASRIndex(
+        segment_index=asr_segments,
+        canonical_index=visual,
+        projector=asr_retriever.projector,
+    )
+
+    assert len(projected.frame_ids) == len(visual.frame_ids)
+    np.testing.assert_array_equal(projected.frame_ids, visual.frame_ids)
+    assert projected.metadata.embedding_dim == context.metadata.embedding_dim
+    assert np.any(projected.segment_frame_positions >= 0)
+    assert np.all(
+        (projected.segment_frame_positions == -1)
+        | (
+            (projected.segment_frame_positions >= 0)
+            & (projected.segment_frame_positions < len(visual.frame_ids))
+        )
+    )

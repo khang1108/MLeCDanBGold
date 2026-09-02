@@ -286,3 +286,32 @@ L4-class deployment, lower the batch/sequence limits first, then capture
 `torch.cuda.max_memory_allocated()` for Visual query embedding, BGE query
 embedding, reranking at candidate depths 4/8/16, concurrent mixed requests,
 and startup resident memory before declaring the profile verified.
+
+## Segment-projected ASR Dense temporal
+
+**Date:** 2026-09-02
+
+**Problem:** Dense temporal was wired to a frame-native
+`artifacts/indexes/asr` artifact that is not part of the production artifact
+pipeline. Production ASR already exists as timestamped transcript segments and a
+segment-native Dense index at `artifacts/indexes/asr_segments`.
+
+**Decision:** Reuse the existing `SegmentDenseIndex` and
+`SegmentFrameProjector` at runtime. Score each event against all ASR segments,
+project segment scores onto canonical visual frames, max-aggregate collisions,
+and assign uncovered frames the event floor before the existing per-event
+min-max normalization.
+
+**Preserved contracts:** Transcript artifacts, segment-ASR generic retrieval,
+BM25 frame-ASR projection, Dense weights, Hybrid fusion, and monotonic DP remain
+unchanged.
+
+**Artifact contract:** No frame-native Dense ASR index is required. Dense ASR
+uses `artifacts/indexes/asr_segments`; BM25 ASR may continue to use
+`artifacts/enrichment/asr/frame_enrichment.parquet`.
+
+### Status
+
+**SOURCE (code/tests/artifact contract):** This is a production-artifact
+correction, not a measured retrieval-quality change. No HCMAI accuracy
+improvement is claimed.
