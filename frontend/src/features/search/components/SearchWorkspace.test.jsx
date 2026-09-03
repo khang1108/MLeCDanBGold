@@ -393,7 +393,7 @@ test('keeps the viewed color while allowing a failed activity patch to retry', a
   await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(2));
 });
 
-test('highlights submitted frame with submitted class when submit is clicked', async () => {
+test('highlights a frame only after its active query records the submission', async () => {
   searchFrames.mockResolvedValueOnce({
     results: [{
       frame_id: 'frame-kis',
@@ -412,10 +412,27 @@ test('highlights submitted frame with submitted class when submit is clicked', a
   submit('red boat');
 
   const submitBtn = await screen.findByRole('button', { name: /submit this frame/i });
+  await waitFor(() => expect(createQueryHistory).toHaveBeenCalledTimes(1));
+  const queryId = createQueryHistory.mock.calls[0][0].queryId;
+  const card = screen.getByAltText('Frame frame-kis').closest('.frame-card');
+
+  fireEvent.click(screen.getByAltText('Frame frame-kis'));
+  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledWith({ queryId, frameId: 'frame-kis' }));
+  expect(card.classList.contains('viewed')).toBe(true);
+
   fireEvent.click(submitBtn);
+  expect(card.classList.contains('submitted')).toBe(false);
+
+  await act(async () => window.dispatchEvent(new CustomEvent('hcmai:history-changed', {
+    detail: { queryId: 'another-query', frameIds: ['frame-kis'] },
+  })));
+  expect(card.classList.contains('submitted')).toBe(false);
+
+  await act(async () => window.dispatchEvent(new CustomEvent('hcmai:history-changed', {
+    detail: { queryId, frameIds: ['frame-kis'] },
+  })));
 
   const submittedBtn = await screen.findByRole('button', { name: /frame submitted/i });
   expect(submittedBtn.textContent).toBe('✓ Submitted');
-  const card = submittedBtn.closest('.frame-card');
   expect(card.classList.contains('submitted')).toBe(true);
 });

@@ -18,8 +18,6 @@ const SubmissionFileModal = ({
   onLoadConflict,
   onRebaseConflict,
   error,
-  historyPatchError,
-  onRetryHistoryPatch,
 }) => {
   const searchRef = useRef(null);
   const editorRef = useRef(null);
@@ -178,14 +176,6 @@ const SubmissionFileModal = ({
           <>
             <div className="submission-modal-body submission-editor-body">
               {error && <div className="submission-status-banner error" role="alert">{error}</div>}
-              {historyPatchError && (
-                <div className="submission-status-banner error" role="alert">
-                  History state was not recorded.{' '}
-                  <button type="button" className="btn-link" onClick={onRetryHistoryPatch} disabled={isMutating}>
-                    Retry history update
-                  </button>
-                </div>
-              )}
               {remoteConflict && (
                 <div className="submission-conflict" role="alert">
                   <strong>This file changed on the server.</strong>

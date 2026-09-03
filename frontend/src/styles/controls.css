@@ -214,25 +214,6 @@
   gap: 6px;
 }
 
-.submission-clear-btn {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  line-height: 1;
-  border-radius: var(--rounded-sm);
-  color: #dc2626;
-  border: 1px solid rgba(220, 38, 38, 0.25);
-  background-color: rgba(220, 38, 38, 0.05);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.submission-clear-btn:hover {
-  background-color: rgba(220, 38, 38, 0.12);
-  border-color: #dc2626;
-  color: #b91c1c;
-}
-
 .toolbox-retrieval-section {
   padding: 0;
   border: 0;
