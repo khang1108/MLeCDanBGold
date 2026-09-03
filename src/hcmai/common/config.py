@@ -332,6 +332,23 @@ class DenseTemporalWeights(BaseModel):
         return self
 
 
+class RobustCalibrationConfig(BaseModel):
+    """Parameters for robust quantile-based score calibration and reliability."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    q_low: float = Field(default=0.05, ge=0.0, lt=1.0)
+    q_high: float = Field(default=0.95, gt=0.0, le=1.0)
+    top_fraction: float = Field(default=0.01, gt=0.0, le=0.25)
+    eps: float = Field(default=1e-6, gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_quantiles(self) -> RobustCalibrationConfig:
+        if self.q_low >= self.q_high:
+            raise ValueError("q_low must be less than q_high")
+        return self
+
+
 class BM25FieldWeights(BaseModel):
     """Non-negative field weights for frame-native BM25 evidence."""
 
@@ -384,6 +401,8 @@ class ApiConfig(BaseModel):
 
     default_top_k: int = 20
     maximum_top_k: int = 100
+    image_max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
+    image_max_pixels: int = Field(default=40_000_000, gt=0)
 
 
 class InferenceConfig(BaseModel):
