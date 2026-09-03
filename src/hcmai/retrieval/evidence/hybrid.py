@@ -52,7 +52,24 @@ class TemporalEvidenceScorer:
             dense_ready if context_dense_ready is None else context_dense_ready
         )
         self.asr_dense_ready = dense_ready if asr_dense_ready is None else asr_dense_ready
-        self._adaptive_fusion = TemporalFusionScorer(config.adaptive)
+
+    def _adaptive_scorer(self) -> TemporalFusionScorer:
+        """Instantiate a stateless adaptive scorer using current configuration."""
+
+        return TemporalFusionScorer(self.config.adaptive)
+
+    def with_config(self, config: HybridTemporalConfig) -> TemporalEvidenceScorer:
+        """Create an immutable clone of this evidence scorer with updated configuration."""
+
+        return TemporalEvidenceScorer(
+            visual_index=self.visual_index,
+            dense=self.dense,
+            bm25=self.bm25,
+            config=config,
+            visual_dense_ready=self.visual_dense_ready,
+            context_dense_ready=self.context_dense_ready,
+            asr_dense_ready=self.asr_dense_ready,
+        )
 
     def _score_legacy(
         self,
@@ -99,7 +116,14 @@ class TemporalEvidenceScorer:
         if use_dense:
             if self.dense is None:
                 raise RuntimeError("Dense temporal evidence is unavailable")
-            components.update(self.dense.score_components(retrieval_events).components)
+            interval_proj = getattr(self.config.adaptive, "asr_interval_projection", True)
+            try:
+                dense_bundle = self.dense.score_components(
+                    retrieval_events, asr_interval_projection=interval_proj
+                )
+            except TypeError:
+                dense_bundle = self.dense.score_components(retrieval_events)
+            components.update(dense_bundle.components)
         if use_bm25:
             if self.bm25 is None:
                 raise RuntimeError("BM25 temporal evidence is unavailable")
@@ -127,8 +151,9 @@ class TemporalEvidenceScorer:
             use_dense=use_dense,
             use_bm25=use_bm25,
         )
-        calibrated = self._adaptive_fusion.calibrate_bundle(bundle)
-        fused = self._adaptive_fusion.fuse(
+        scorer = self._adaptive_scorer()
+        calibrated = scorer.calibrate_bundle(bundle)
+        fused = scorer.fuse(
             original_events=original_events,
             retrieval_events=retrieval_events,
             bundle=bundle,

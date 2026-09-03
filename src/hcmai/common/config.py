@@ -370,6 +370,7 @@ class AdaptiveTemporalFusionConfig(BaseModel):
     robust_calibration: bool = True
     confidence_gating: bool = True
     event_routing: bool = True
+    asr_interval_projection: bool = True
     base_component_weights: dict[str, float] = Field(
         default_factory=lambda: {
             "visual_dense": 0.35,
