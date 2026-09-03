@@ -42,7 +42,12 @@ class DenseTemporalScorer:
         self.weights = weights
         self.chunk_size = chunk_size
 
-    def score_components(self, retrieval_events: Sequence[str]) -> TemporalScoreBundle:
+    def score_components(
+        self,
+        retrieval_events: Sequence[str],
+        *,
+        asr_interval_projection: bool = True,
+    ) -> TemporalScoreBundle:
         """Score raw components for each enabled expert without row normalization."""
 
         events = [" ".join(event.split()) for event in retrieval_events]
@@ -68,15 +73,25 @@ class DenseTemporalScorer:
                     self.context_index.score_subset(text_vectors, positions, self.chunk_size),
                 )
             if self.asr_index is not None:
-                asr_coverage = getattr(self.asr_index, "coverage_mask", None)
+                if hasattr(self.asr_index, "score_subset_masked"):
+                    asr_raw, asr_coverage = self.asr_index.score_subset_masked(
+                        text_vectors,
+                        positions,
+                        self.chunk_size,
+                        interval_projection=asr_interval_projection,
+                    )
+                else:
+                    asr_raw = self.asr_index.score_subset(text_vectors, positions, self.chunk_size)
+                    asr_cov = getattr(self.asr_index, "coverage_mask", None)
+                    asr_coverage = (
+                        np.asarray(asr_cov, dtype=bool)[positions]
+                        if asr_cov is not None
+                        else None
+                    )
                 components["asr_dense"] = TemporalScoreComponent(
                     "asr_dense",
-                    self.asr_index.score_subset(text_vectors, positions, self.chunk_size),
-                    coverage=(
-                        np.asarray(asr_coverage, dtype=bool)
-                        if asr_coverage is not None
-                        else None
-                    ),
+                    asr_raw,
+                    coverage=asr_coverage,
                 )
 
         return TemporalScoreBundle(components)
@@ -84,13 +99,29 @@ class DenseTemporalScorer:
     def score_events(self, retrieval_events: Sequence[str]) -> np.ndarray:
         """Score every canonical frame using legacy fixed-weight normalized fusion."""
 
-        bundle = self.score_components(retrieval_events)
-        required = {"visual_dense", "context_dense", "asr_dense"}
-        if set(bundle.components) != required:
+        if self.context_index is None or self.asr_index is None:
             raise RuntimeError("legacy Dense temporal fusion requires Visual, Context, and ASR")
-        visual = minmax_rows(bundle.components["visual_dense"].raw_scores)
-        context = minmax_rows(bundle.components["context_dense"].raw_scores)
-        asr = minmax_rows(bundle.components["asr_dense"].raw_scores)
+
+        events = [" ".join(event.split()) for event in retrieval_events]
+        if not events or any(not event for event in events):
+            raise ValueError("retrieval events must contain non-empty strings")
+
+        visual_vectors = np.asarray(self.visual_encoder.encode_text(events), dtype=np.float32)
+        positions = np.arange(len(self.visual_index.frame_ids), dtype=np.int64)
+
+        assert self.text_encoder is not None
+        text_vectors = np.asarray(self.text_encoder.encode_text(events), dtype=np.float32)
+
+        visual_raw = self.visual_index.score_subset(visual_vectors, positions, self.chunk_size)
+        context_raw = self.context_index.score_subset(text_vectors, positions, self.chunk_size)
+        if hasattr(self.asr_index, "score_subset_legacy"):
+            asr_raw = self.asr_index.score_subset_legacy(text_vectors, positions, self.chunk_size)
+        else:
+            asr_raw = self.asr_index.score_subset(text_vectors, positions, self.chunk_size)
+
+        visual = minmax_rows(visual_raw)
+        context = minmax_rows(context_raw)
+        asr = minmax_rows(asr_raw)
         return np.asarray(
             self.weights.visual_weight * visual
             + self.weights.context_weight * context
