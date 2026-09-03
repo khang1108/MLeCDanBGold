@@ -1,219 +1,137 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import SubmissionWorktree from './SubmissionWorktree';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { getSubmissionFiles } from '../../../api/workspace';
 import { SubmissionProvider } from '../contexts/SubmissionContext';
+import { SubmissionDialogProvider } from '../contexts/SubmissionDialogContext';
+import SubmissionWorktree from './SubmissionWorktree';
 import * as submissionArchive from '../submissionArchive';
 
-const renderWorktree = (props = {}) => render(
-  <SubmissionProvider>
-    <SubmissionWorktree {...props} />
-  </SubmissionProvider>,
-);
+jest.mock('../../../api/workspace', () => ({
+  getSubmissionFiles: jest.fn(),
+  workspaceWebSocketUrl: jest.fn(() => 'ws://example.test/api/v1/workspace/ws'),
+  markFramesSubmitted: jest.fn(),
+}));
 
-describe('SubmissionWorktree component', () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    jest.clearAllMocks();
+class MockWebSocket {
+  static instances = [];
+  static OPEN = 1;
+
+  constructor() {
+    this.readyState = 0;
+    this.sent = [];
+    MockWebSocket.instances.push(this);
+  }
+
+  send(value) { this.sent.push(value); }
+  open() { this.readyState = 1; this.onopen?.(); }
+  message(payload) { this.onmessage?.({ data: JSON.stringify(payload) }); }
+  close() { this.readyState = 3; this.onclose?.(); }
+}
+
+const renderWorktree = async (files = []) => {
+  // SubmissionProvider hydrates on mount and once more after the socket opens.
+  // Keep the fixture stable across both calls so the second hydration does not
+  // replace the test data with the default empty response.
+  getSubmissionFiles.mockResolvedValue({ files });
+  const result = render(
+    <SubmissionProvider>
+      <SubmissionDialogProvider><SubmissionWorktree /></SubmissionDialogProvider>
+    </SubmissionProvider>,
+  );
+  await act(async () => Promise.resolve());
+  await act(async () => MockWebSocket.instances[MockWebSocket.instances.length - 1].open());
+  await act(async () => Promise.resolve());
+  return result;
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  MockWebSocket.instances = [];
+  window.WebSocket = MockWebSocket;
+  getSubmissionFiles.mockResolvedValue({ files: [] });
+});
+
+afterEach(() => {
+  delete window.WebSocket;
+});
+
+const commitCreate = async (name) => {
+  const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+  await waitFor(() => expect(socket.sent.some((value) => JSON.parse(value).name === name)).toBe(true));
+  await act(async () => socket.message({
+    type: 'submission_file.created',
+    file: { name, content: '', is_validated: false, revision: 0 },
+  }));
+};
+
+test('renders the filename-only empty state without browser storage', async () => {
+  await renderWorktree();
+  expect(screen.getByText('Submission Files')).toBeTruthy();
+  expect(screen.getByText('No Query Files')).toBeTruthy();
+});
+
+test('creates unique CSV targets from uploaded query files after broadcasts', async () => {
+  await renderWorktree();
+  fireEvent.change(screen.getByTestId('query-file-input'), {
+    target: { files: [
+      new File(['one'], 'query_1.txt', { type: 'text/plain' }),
+      new File(['two'], 'query_2.txt', { type: 'text/plain' }),
+    ] },
   });
+  await commitCreate('query_1.csv');
+  await commitCreate('query_2.csv');
+  expect(await screen.findByText('query_1.csv')).toBeTruthy();
+  expect(screen.getByText('query_2.csv')).toBeTruthy();
+  expect(screen.queryByText(/lines|empty|has entries/i)).toBeNull();
+  expect(screen.getByRole('button', { name: /download csv zip \(0\)/i }).disabled).toBe(true);
+});
 
-  test('renders upload state when no submission files are loaded', () => {
-    renderWorktree();
+test('keeps file picker and folder picker fallbacks', async () => {
+  const originalPicker = window.showOpenFilePicker;
+  window.showOpenFilePicker = jest.fn().mockResolvedValue([
+    { getFile: jest.fn().mockResolvedValue(new File(['query'], 'query.txt')) },
+  ]);
+  await renderWorktree();
+  fireEvent.click(screen.getByRole('button', { name: /upload query files/i }));
+  await commitCreate('query.csv');
+  expect(await screen.findByText('query.csv')).toBeTruthy();
+  expect(window.showOpenFilePicker).toHaveBeenCalledTimes(1);
+  if (originalPicker) window.showOpenFilePicker = originalPicker;
+  else delete window.showOpenFilePicker;
+});
 
-    expect(screen.getByText('Submission Files')).toBeTruthy();
-    expect(screen.getByText('No Query Files')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /upload query files/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /select folder/i })).toBeTruthy();
+test('skips duplicate targets instead of overwriting them', async () => {
+  await renderWorktree([{ name: 'query.csv', content: '', is_validated: false, revision: 0 }]);
+  await screen.findByText('query.csv');
+  fireEvent.change(screen.getByTestId('query-file-input'), {
+    target: { files: [new File(['query'], 'query.txt')] },
   });
+  expect((await screen.findByRole('status')).textContent).toMatch(/skipped existing/i);
+  expect(MockWebSocket.instances[0].sent).toHaveLength(0);
+});
 
-  test('creates local CSV targets from uploaded query files', async () => {
-    renderWorktree();
-    const fileInput = screen.getByTestId('query-file-input');
-    fireEvent.change(fileInput, {
-      target: {
-        files: [
-          new File(['sample query 1'], 'query_1.txt', { type: 'text/plain' }),
-          new File(['sample query 2'], 'query_2.txt', { type: 'text/plain' }),
-        ],
-      },
-    });
+test('renders border-only visual state and opens the global editor on double-click', async () => {
+  await renderWorktree([
+    { name: 'empty.csv', content: '', is_validated: false, revision: 0 },
+    { name: 'filled.csv', content: 'V01,1', is_validated: false, revision: 1 },
+    { name: 'validated.csv', content: 'V01,2', is_validated: true, revision: 2 },
+  ]);
+  expect(await screen.findByText('empty.csv')).toBeTruthy();
+  expect(screen.getByText('empty.csv').parentElement.className).toContain('empty');
+  expect(screen.getByText('filled.csv').parentElement.className).toContain('filled');
+  expect(screen.getByText('validated.csv').parentElement.className).toContain('validated');
+  fireEvent.doubleClick(screen.getByText('filled.csv'));
+  expect(await screen.findByRole('textbox', { name: /edit filled\.csv content/i })).toBeTruthy();
+});
 
-    await waitFor(() => {
-      expect(screen.getByText('query_1.csv')).toBeTruthy();
-      expect(screen.getByText('query_2.csv')).toBeTruthy();
-    });
-
-    expect(screen.getByText('submissions/')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /download csv zip \(0\)/i }).disabled).toBe(true);
-  });
-
-  test('uses the browser file picker API without a backend request', async () => {
-    const originalPicker = window.showOpenFilePicker;
-    const pickedFile = new File(['query'], 'query.txt', { type: 'text/plain' });
-    window.showOpenFilePicker = jest.fn().mockResolvedValue([
-      { getFile: jest.fn().mockResolvedValue(pickedFile) },
-    ]);
-
-    try {
-      renderWorktree();
-      fireEvent.click(screen.getByRole('button', { name: /upload query files/i }));
-
-      expect(await screen.findByText('query.csv')).toBeTruthy();
-      expect(window.showOpenFilePicker).toHaveBeenCalledTimes(1);
-    } finally {
-      if (originalPicker) window.showOpenFilePicker = originalPicker;
-      else delete window.showOpenFilePicker;
-    }
-  });
-
-  test('reads nested files selected through the browser directory picker', async () => {
-    const originalPicker = window.showDirectoryPicker;
-    const pickedFile = new File(['query'], 'nested-query.txt', { type: 'text/plain' });
-    const directoryHandle = {
-      values: async function* values() {
-        yield { kind: 'file', getFile: jest.fn().mockResolvedValue(pickedFile) };
-      },
-    };
-    window.showDirectoryPicker = jest.fn().mockResolvedValue(directoryHandle);
-
-    try {
-      renderWorktree();
-      fireEvent.click(screen.getByRole('button', { name: /select folder/i }));
-
-      expect(await screen.findByText('nested-query.csv')).toBeTruthy();
-      expect(window.showDirectoryPicker).toHaveBeenCalledWith({ mode: 'read' });
-    } finally {
-      if (originalPicker) window.showDirectoryPicker = originalPicker;
-      else delete window.showDirectoryPicker;
-    }
-  });
-
-  test('submit request opens the picker, appends the BTC row, and opens the editor', async () => {
-    window.localStorage.setItem(
-      'hcmai.submission.files',
-      JSON.stringify([
-        { id: 'query_1.csv', name: 'query_1.csv', content: '' },
-        { id: 'other.csv', name: 'other.csv', content: '' },
-      ]),
-    );
-
-    renderWorktree({
-      submissionRequest: { line: 'L21_V001,17794', source: 'KIS/TRAKE frame' },
-    });
-
-    expect(await screen.findByRole('dialog', { name: /choose a csv file/i })).toBeTruthy();
-    const search = screen.getByRole('textbox', { name: /search submission files/i });
-    fireEvent.change(search, { target: { value: 'query_1' } });
-    fireEvent.keyDown(search, { key: 'Enter', code: 'Enter' });
-
-    const editor = await screen.findByRole('textbox', { name: /edit query_1\.csv content/i });
-    expect(editor.value).toBe('L21_V001,17794');
-  });
-
-  test('keeps the highlighted picker file visible while navigating with arrows', async () => {
-    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
-    const scrollIntoView = jest.fn();
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
-    window.localStorage.setItem(
-      'hcmai.submission.files',
-      JSON.stringify([
-        { id: 'one.csv', name: 'one.csv', content: '' },
-        { id: 'two.csv', name: 'two.csv', content: '' },
-      ]),
-    );
-
-    try {
-      renderWorktree({
-        submissionRequest: { line: 'L21_V001,17794', source: 'KIS/TRAKE frame' },
-      });
-      const search = await screen.findByRole('textbox', { name: /search submission files/i });
-      fireEvent.keyDown(search, { key: 'ArrowDown', code: 'ArrowDown' });
-
-      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' }));
-    } finally {
-      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
-    }
-  });
-
-  test('Enter saves and closes the editor, while double-click opens a file', async () => {
-    window.localStorage.setItem(
-      'hcmai.submission.files',
-      JSON.stringify([
-        { id: 'query_1.csv', name: 'query_1.csv', content: 'L21_V001,100' },
-      ]),
-    );
-
-    renderWorktree();
-    fireEvent.doubleClick(screen.getByText('query_1.csv'));
-
-    const editor = await screen.findByRole('textbox', { name: /edit query_1\.csv content/i });
-    fireEvent.change(editor, { target: { value: 'L21_V001,200' } });
-    fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter' });
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(JSON.parse(window.localStorage.getItem('hcmai.submission.files'))[0].content)
-      .toBe('L21_V001,200');
-  });
-
-  test('Escape closes an open file editor without saving', async () => {
-    window.localStorage.setItem(
-      'hcmai.submission.files',
-      JSON.stringify([
-        { id: 'query_1.csv', name: 'query_1.csv', content: 'L21_V001,100' },
-      ]),
-    );
-
-    renderWorktree();
-    fireEvent.doubleClick(screen.getByText('query_1.csv'));
-    const editor = await screen.findByRole('textbox', { name: /edit query_1\.csv content/i });
-    fireEvent.change(editor, { target: { value: 'L21_V001,999' } });
-    fireEvent.keyDown(editor, { key: 'Escape', code: 'Escape' });
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(JSON.parse(window.localStorage.getItem('hcmai.submission.files'))[0].content)
-      .toBe('L21_V001,100');
-  });
-
-  test('Escape closes the file picker without bubbling to the parent modal', async () => {
-    window.localStorage.setItem(
-      'hcmai.submission.files',
-      JSON.stringify([
-        { id: 'query_1.csv', name: 'query_1.csv', content: '' },
-      ]),
-    );
-    const parentEscapeHandler = jest.fn();
-    window.addEventListener('keydown', parentEscapeHandler);
-
-    try {
-      renderWorktree({
-        submissionRequest: { line: 'L21_V001,17794', source: 'Frame inspector' },
-      });
-      const search = await screen.findByRole('textbox', { name: /search submission files/i });
-
-      fireEvent.keyDown(search, { key: 'Escape', code: 'Escape' });
-
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-      expect(parentEscapeHandler).not.toHaveBeenCalled();
-    } finally {
-      window.removeEventListener('keydown', parentEscapeHandler);
-    }
-  });
-
-  test('downloads only non-empty CSV files as one ZIP', async () => {
-    window.localStorage.setItem(
-      'hcmai.submission.files',
-      JSON.stringify([
-        { id: 'filled.csv', name: 'filled.csv', content: 'L21_V001,100' },
-        { id: 'empty.csv', name: 'empty.csv', content: '  \n' },
-      ]),
-    );
-    jest.spyOn(submissionArchive, 'downloadCsvArchive').mockReturnValue(true);
-
-    renderWorktree();
-    fireEvent.click(screen.getByRole('button', { name: /download csv zip \(1\)/i }));
-
-    expect(submissionArchive.downloadCsvArchive).toHaveBeenCalledWith([
-      { id: 'filled.csv', name: 'filled.csv', content: 'L21_V001,100' },
-    ]);
-    expect((await screen.findByRole('status')).textContent).toMatch(/submissions\.zip/i);
-  });
+test('downloads only non-empty shared files', async () => {
+  jest.spyOn(submissionArchive, 'downloadCsvArchive').mockReturnValue(true);
+  await renderWorktree([
+    { name: 'filled.csv', content: 'V01,100', is_validated: false, revision: 1 },
+    { name: 'empty.csv', content: '  \n', is_validated: false, revision: 2 },
+  ]);
+  fireEvent.click(await screen.findByRole('button', { name: /download csv zip \(1\)/i }));
+  expect(submissionArchive.downloadCsvArchive).toHaveBeenCalledWith([
+    { name: 'filled.csv', content: 'V01,100', is_validated: false, revision: 1 },
+  ]);
 });

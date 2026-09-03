@@ -1,17 +1,61 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { searchFrames, searchTrake } from '../../../api/search';
 import SearchWorkspace, {
   parseRetrievalDescription,
   parseTrakeEvents,
 } from './SearchWorkspace';
 import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
+import { SubmissionDialogProvider } from '../../submission/contexts/SubmissionDialogContext';
+import {
+  createQueryHistory,
+  getSubmissionFiles,
+  markFrameViewed,
+} from '../../../api/workspace';
 
 jest.mock('../../../api/search');
+jest.mock('../../../api/workspace', () => ({
+  getSubmissionFiles: jest.fn(),
+  workspaceWebSocketUrl: jest.fn(() => 'ws://example.test/api/v1/workspace/ws'),
+  createQueryHistory: jest.fn(),
+  markFrameViewed: jest.fn(),
+  markFramesSubmitted: jest.fn(),
+}));
+
+class MockWebSocket {
+  static instances = [];
+  static OPEN = 1;
+  constructor() { this.readyState = 0; this.sent = []; MockWebSocket.instances.push(this); }
+  send(value) { this.sent.push(value); }
+  open() { this.readyState = 1; this.onopen?.(); }
+  message(payload) { this.onmessage?.({ data: JSON.stringify(payload) }); }
+  close() { this.readyState = 3; this.onclose?.(); }
+}
+
+const renderSearch = (props) => {
+  const result = render(
+    <SubmissionProvider>
+      <SubmissionDialogProvider><SearchWorkspace {...props} /></SubmissionDialogProvider>
+    </SubmissionProvider>,
+  );
+  act(() => MockWebSocket.instances[MockWebSocket.instances.length - 1].open());
+  return result;
+};
 
 beforeEach(() => {
   searchFrames.mockReset();
   searchTrake.mockReset();
+  // Search behavior does not need the shared file list. Leaving hydration
+  // pending keeps this suite focused and avoids unrelated async state updates.
+  getSubmissionFiles.mockReturnValue(new Promise(() => {}));
+  createQueryHistory.mockResolvedValue({});
+  markFrameViewed.mockResolvedValue({});
+  MockWebSocket.instances = [];
+  window.WebSocket = MockWebSocket;
+});
+
+afterEach(() => {
+  delete window.WebSocket;
 });
 
 const EVENT_PLACEHOLDER = 'Describe the event, or add E1, E2, ... for TRAKE';
@@ -50,7 +94,7 @@ test.each([
   searchFrames.mockResolvedValueOnce({
     results: [], warnings: [], latency: SEARCH_LATENCY,
   });
-  render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
+  renderSearch({ topK: 20, setTopK: jest.fn() });
   submit(description);
 
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
@@ -81,12 +125,9 @@ test('TRAKE renders same-video backend paths independently and submits only the 
     ],
     total_results: 3,
     warnings: [],
+    latency: SEARCH_LATENCY,
   });
-  render(
-    <SubmissionProvider>
-      <SearchWorkspace topK={20} setTopK={jest.fn()} />
-    </SubmissionProvider>,
-  );
+  renderSearch({ topK: 20, setTopK: jest.fn() });
   submit('Person enters and leaves.\nE1: first event\nE2: second event');
 
   await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
@@ -114,16 +155,9 @@ test('TRAKE accepts one labeled event and opens its frame as read-only', async (
       timestamps_ms: [1000],
     }],
     warnings: [],
+    latency: SEARCH_LATENCY,
   });
-  render(
-    <SubmissionProvider>
-      <SearchWorkspace
-        topK={20}
-        setTopK={jest.fn()}
-        onFrameClick={onFrameClick}
-      />
-    </SubmissionProvider>,
-  );
+  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick });
   submit('A short video. E1: only one event');
 
   await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
@@ -160,7 +194,7 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
     warnings: [],
     latency: SEARCH_LATENCY,
   });
-  render(<SearchWorkspace topK={20} setTopK={jest.fn()} onFrameClick={onFrameClick} />);
+  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick });
   submit('red boat');
 
   const frameImage = await screen.findByAltText('Frame frame-kis');
@@ -177,6 +211,165 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
 });
 
 test('does not render the retired query-helper control', () => {
-  render(<SearchWorkspace topK={20} setTopK={jest.fn()} />);
+  renderSearch({ topK: 20, setTopK: jest.fn() });
   expect(screen.queryByRole('button', { name: /suggest query/i })).toBeNull();
+});
+
+test('requires the shared User ID before starting live retrieval', async () => {
+  const onFocusUserId = jest.fn();
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: '  ', onFocusUserId });
+  submit('a red vehicle passes');
+
+  expect((await screen.findByRole('alert')).textContent).toMatch(/user id/i);
+  expect(onFocusUserId).toHaveBeenCalledTimes(1);
+  expect(searchFrames).not.toHaveBeenCalled();
+  expect(createQueryHistory).not.toHaveBeenCalled();
+});
+
+test('persists a successful KIS search as a full replay snapshot', async () => {
+  searchFrames.mockResolvedValueOnce({
+    results: [{
+      frame_id: 'frame-kis',
+      video_id: 'V01',
+      frame_idx: 125,
+      timestamp_ms: 10_010,
+      fps: 29.97,
+      folder_id: 'L21',
+      frame_ids: ['frame-kis'],
+      timestamps_ms: [10_010],
+      scores: { final: 0.91 },
+      caption: 'A red boat',
+      metadata: {
+        title: 'boat video',
+        caption: 'A red boat',
+        ocr: 'MARINA',
+        objects: ['boat', 'person'],
+        asr: 'A boat is moving',
+      },
+    }],
+    warnings: [],
+    latency: SEARCH_LATENCY,
+  });
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+  submit('red boat');
+
+  await waitFor(() => expect(createQueryHistory).toHaveBeenCalledWith(expect.objectContaining({
+    userId: 'team-a',
+    queryText: 'red boat',
+    resultSnapshot: {
+      events: [],
+      latency: SEARCH_LATENCY,
+      warnings: [],
+      results: [{
+        frame_id: 'frame-kis',
+        video_id: 'V01',
+        frame_idx: 125,
+        timestamp_ms: 10_010,
+        fps: 29.97,
+        folder_id: 'L21',
+        scores: { final: 0.91 },
+        score: 0.91,
+        frame_ids: ['frame-kis'],
+        timestamps_ms: [10_010],
+        caption: 'A red boat',
+        metadata: {
+          title: 'boat video',
+          caption: 'A red boat',
+          ocr: 'MARINA',
+          objects: ['boat', 'person'],
+          asr: 'A boat is moving',
+        },
+      }],
+    },
+    signal: expect.any(AbortSignal),
+  })));
+  expect(createQueryHistory.mock.calls[0][0].queryId).toMatch(/^query-/);
+  expect(createQueryHistory.mock.calls[0][0].resultSnapshot.results[0].metadata).toEqual({
+    title: 'boat video',
+    caption: 'A red boat',
+    ocr: 'MARINA',
+    objects: ['boat', 'person'],
+    asr: 'A boat is moving',
+  });
+});
+
+test('persists a successful TRAKE search while preserving path order', async () => {
+  searchTrake.mockResolvedValueOnce({
+    events: ['first event', 'second event'],
+    paths: [{
+      video_id: 'V01',
+      score: 3.0,
+      frame_ids: ['f2', 'f1'],
+      frame_idxs: [20, 10],
+      timestamps_ms: [2000, 1000],
+    }],
+    warnings: [],
+    latency: SEARCH_LATENCY,
+  });
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+  submit('A video. E1: first event E2: second event');
+
+  await waitFor(() => expect(createQueryHistory).toHaveBeenCalled());
+  expect(createQueryHistory.mock.calls[0][0].resultSnapshot).toEqual({
+    events: ['first event', 'second event'],
+    latency: SEARCH_LATENCY,
+    warnings: [],
+    paths: [{
+      video_id: 'V01',
+      score: 3,
+      frame_ids: ['f2', 'f1'],
+      frame_idxs: [20, 10],
+      timestamps_ms: [2000, 1000],
+    }],
+  });
+});
+
+test('keeps live results visible but creates no active history session when history persistence fails', async () => {
+  createQueryHistory.mockRejectedValueOnce(new Error('history unavailable'));
+  searchFrames.mockResolvedValueOnce({
+    results: [{
+      frame_id: 'frame-kis',
+      video_id: 'V01',
+      frame_idx: 1,
+      timestamp_ms: 1000,
+      frame_ids: ['frame-kis'],
+      timestamps_ms: [1000],
+      scores: { final: 0.5 },
+    }],
+    warnings: [],
+    latency: SEARCH_LATENCY,
+  });
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+  submit('red boat');
+
+  expect(await screen.findByAltText('Frame frame-kis')).toBeTruthy();
+  expect(await screen.findByText(/history was not saved/i)).toBeTruthy();
+  fireEvent.click(screen.getByAltText('Frame frame-kis'));
+  expect(markFrameViewed).not.toHaveBeenCalled();
+});
+
+test('keeps the viewed color while allowing a failed activity patch to retry', async () => {
+  markFrameViewed.mockRejectedValueOnce(new Error('activity unavailable'));
+  searchFrames.mockResolvedValueOnce({
+    results: [{
+      frame_id: 'frame-kis',
+      video_id: 'V01',
+      frame_idx: 1,
+      timestamp_ms: 1000,
+      frame_ids: ['frame-kis'],
+      timestamps_ms: [1000],
+      scores: { final: 0.5 },
+    }],
+    warnings: [],
+    latency: SEARCH_LATENCY,
+  });
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+  submit('red boat');
+
+  const frameImage = await screen.findByAltText('Frame frame-kis');
+  fireEvent.click(frameImage);
+  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText(/history view state was not recorded/i)).toBeTruthy();
+  fireEvent.click(frameImage);
+  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(2));
 });

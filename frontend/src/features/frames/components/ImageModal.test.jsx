@@ -214,6 +214,16 @@ test('requires canonical timestamp instead of deriving seek time from frame_idx'
   expect(screen.queryByText('Timestamp')).toBeNull();
 });
 
+test('supports manual video inspection without inventing frame identity', async () => {
+  render(<ImageModal frame={{ video_id: 'V01', timestamp_ms: 12_000 }} onClose={jest.fn()} />);
+
+  expect(await screen.findByLabelText('Video for V01')).toBeTruthy();
+  expect(screen.getByText('V01 · 12000 ms')).toBeTruthy();
+  expect(screen.queryByText('Internal frame ID')).toBeNull();
+  expect(screen.queryByText('BTC frame index')).toBeNull();
+  expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
+});
+
 test('closes the inspector when Escape is pressed', () => {
   const onClose = jest.fn();
   const { unmount } = render(<ImageModal frame={frame} onClose={onClose} />);

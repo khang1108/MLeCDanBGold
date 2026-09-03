@@ -8,11 +8,10 @@ import React, {
 import { filterFrames } from '../../../api/filter';
 import FrameCard from '../../frames/components/FrameCard';
 import SubmissionWorktree from '../../submission/components/SubmissionWorktree';
-import { useSubmission } from '../../submission/contexts/SubmissionContext';
+import { useSubmissionDialog } from '../../submission/contexts/SubmissionDialogContext';
 import { displayVideoId } from '../../frames/videoSource';
 import FilterForm from './FilterForm';
 import FilterPagination from './FilterPagination';
-import FilterPageSize from './FilterPageSize';
 import FolderScopeCombobox from './FolderScopeCombobox';
 import { DEFAULT_FRAMES_PER_PAGE, resolveFramesPerPage } from '../filterPagination';
 import {
@@ -43,8 +42,6 @@ const FilterResults = ({
   totalPages,
   isLoading,
   onPageChange,
-  pageSizeMode,
-  onPageSizeChange,
 }) => {
   const pagination = (
     <FilterPagination
@@ -54,14 +51,6 @@ const FilterResults = ({
       onPageChange={onPageChange}
     />
   );
-  const pageSizeControl = (
-    <FilterPageSize
-      value={pageSizeMode}
-      onChange={onPageSizeChange}
-      disabled={isLoading}
-    />
-  );
-
   const renderFrame = (frame) => {
     return (
       <FrameCard
@@ -117,7 +106,6 @@ const FilterResults = ({
       >
         <div className="filter-result-toolbar">
           <div className="filter-result-summary">No frames match the current scope.</div>
-          {pageSizeControl}
         </div>
         <div className="frames-empty-state filter-empty-state">
           <p className="body-md frames-empty-text">No matching frames</p>
@@ -139,7 +127,6 @@ const FilterResults = ({
           {folderId ? ` · ${folderId}` : ''}
           {selectedVideoId ? ` · ${displayVideoId(selectedVideoId)}` : ''}
         </div>
-        {pageSizeControl}
       </div>
       <div className="frames-scroll-region">
         <div className="frames-grid">{results.map(renderFrame)}</div>
@@ -166,10 +153,9 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
   const [error, setError] = useState(null);
   const [pageId, setPageId] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [pageSizeMode, setPageSizeMode] = useState('auto');
   const requestRef = useRef(null);
   const resultsViewportRef = useRef(null);
-  const { requestSubmission } = useSubmission();
+  const { requestSubmission } = useSubmissionDialog();
 
   const folderIds = FILTER_FOLDER_IDS;
   const videoIds = useMemo(() => {
@@ -183,9 +169,9 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     requestRef.current?.abort();
   }, []);
 
-  const resolveCurrentPageSize = useCallback((mode) => {
+  const resolveCurrentPageSize = useCallback(() => {
     const element = resultsViewportRef.current;
-    return resolveFramesPerPage(mode, {
+    return resolveFramesPerPage('auto', {
       width: element?.clientWidth,
       height: element?.clientHeight,
     });
@@ -236,7 +222,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     if (isFiltering) return;
 
     // A new filter is a new result set, so it must always start on page 1.
-    const nextFramesPerPage = resolveCurrentPageSize(pageSizeMode);
+    const nextFramesPerPage = resolveCurrentPageSize();
     setAppliedFilters(filters);
     setAppliedScope({ folderId: activeFolder, videoId: selectedVideoId });
     setAppliedFramesPerPage(nextFramesPerPage);
@@ -248,23 +234,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
       requestedFramesPerPage: nextFramesPerPage,
       resetPagination: true,
     });
-  }, [activeFolder, filters, isFiltering, pageSizeMode, requestFilterPage, resolveCurrentPageSize, selectedVideoId]);
-
-  const handlePageSizeChange = useCallback((nextMode) => {
-    setPageSizeMode(nextMode);
-    const nextFramesPerPage = resolveCurrentPageSize(nextMode);
-    if (!hasFiltered || isFiltering) return;
-
-    setAppliedFramesPerPage(nextFramesPerPage);
-    requestFilterPage({
-      requestedFilters: appliedFilters,
-      requestedFolderId: appliedScope.folderId,
-      requestedVideoId: appliedScope.videoId,
-      requestedPage: 1,
-      requestedFramesPerPage: nextFramesPerPage,
-      resetPagination: true,
-    });
-  }, [appliedFilters, appliedScope, hasFiltered, isFiltering, requestFilterPage, resolveCurrentPageSize]);
+  }, [activeFolder, filters, isFiltering, requestFilterPage, resolveCurrentPageSize, selectedVideoId]);
 
   const handlePageChange = useCallback((nextPage) => {
     if (isFiltering || nextPage === pageId
@@ -340,6 +310,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
           </label>
 
           {isActive && <SubmissionWorktree />}
+
         </aside>
 
         <div className="filter-main-column">
@@ -365,8 +336,6 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
               totalPages={totalPages}
               isLoading={isFiltering}
               onPageChange={handlePageChange}
-              pageSizeMode={pageSizeMode}
-              onPageSizeChange={handlePageSizeChange}
             />
           </div>
         </div>

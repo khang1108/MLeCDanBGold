@@ -3,7 +3,7 @@ import { keyframeUrl } from '../../../api/keyframes';
 import { displayVideoId } from '../../frames/videoSource';
 
 /** Render one backend-provided ordered TRAKE alignment path without reordering it. */
-const TrakePathCard = ({ events, path, onSubmit, onFrameClick }) => (
+const TrakePathCard = ({ events, path, onSubmit, onFrameClick, getFrameClassName }) => (
   <article
     className="trake-path-card"
     aria-label={`TRAKE path for ${displayVideoId(path.video_id)}`}
@@ -16,7 +16,7 @@ const TrakePathCard = ({ events, path, onSubmit, onFrameClick }) => (
       <button
         type="button"
         className="btn-secondary trake-path-submit-btn"
-        onClick={() => onSubmit(path)}
+        onClick={() => onSubmit?.({ ...path, frame_ids: path.frame_ids.slice() })}
       >
         Submit this path
       </button>
@@ -35,7 +35,7 @@ const TrakePathCard = ({ events, path, onSubmit, onFrameClick }) => (
           <li className="trake-path-event" key={`${frameId}-${index}`}>
             <button
               type="button"
-              className="trake-path-event-content"
+              className={`trake-path-event-content ${getFrameClassName?.(frameId) || ''}`.trim()}
               onClick={() => onFrameClick?.(frame)}
               aria-label={`View event E${index + 1}: ${events[index]}`}
             >

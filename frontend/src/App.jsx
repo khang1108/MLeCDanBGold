@@ -1,30 +1,35 @@
-import React, { useRef, useState } from "react";
-import ImageModal from "./features/frames/components/ImageModal";
-import SearchWorkspace from "./features/search/components/SearchWorkspace";
-import FilterWorkspace from "./features/filter/components/FilterWorkspace";
-import { useHealthCheck } from "./features/health/hooks/useHealthCheck";
-import HealthBadge from "./features/health/components/HealthBadge";
-import { useVimMode } from "./features/vim/hooks/useVimMode";
-import VimModeBadge from "./features/vim/components/VimModeBadge";
-import TopKPromptModal from "./features/vim/components/TopKPromptModal";
-import VimHelpModal from "./features/vim/components/VimHelpModal";
-import ApiDocsModal from "./features/docs/components/ApiDocsModal";
-import { SubmissionProvider, useSubmission } from "./features/submission/contexts/SubmissionContext";
+/** Application shell composed from modular feature components. */
+import React, { useRef, useState } from 'react';
+import { AppHeader } from './features/header';
+import { ImageModal } from './features/frames';
+import { SearchWorkspace } from './features/search';
+import { FilterWorkspace } from './features/filter';
+import { WorkspacePage } from './features/workspace';
+import { useHealthCheck } from './features/health';
+import { useVimMode, TopKPromptModal, VimHelpModal } from './features/vim';
+import { ApiDocsModal } from './features/docs';
+import { SubmissionProvider, SubmissionDialogProvider, useSubmissionDialog } from './features/submission';
 
-function AppContent() {
+const AppContent = () => {
   const [selectedFrame, setSelectedFrame] = useState(null);
-  const [activeQuery, setActiveQuery] = useState("");
-  const [activePage, setActivePage] = useState("query");
-  const [modalQuery, setModalQuery] = useState("");
+  const [activeQuery, setActiveQuery] = useState('');
+  const [activePage, setActivePage] = useState('query');
+  const [modalQuery, setModalQuery] = useState('');
+  const [userId, setUserId] = useState('');
+  const [userIdError, setUserIdError] = useState(null);
   const [topK, setTopK] = useState(20);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
+  const [replayRequest, setReplayRequest] = useState(null);
+  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const replayTokenRef = useRef(0);
+  const userIdInputRef = useRef(null);
   const queryInputRef = useRef(null);
   const { isHealthy, healthData } = useHealthCheck();
-  const { requestSubmission } = useSubmission();
+  const { requestSubmission } = useSubmissionDialog();
   const vim = useVimMode({
     onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
-    enableTopK: activePage === "query",
+    enableTopK: activePage === 'query',
   });
 
   const handleQueryFrameClick = (selection) => {
@@ -33,74 +38,79 @@ function AppContent() {
   };
 
   const handleFilterFrameClick = (frame) => {
-    setSelectedFrame({ frame, submissionMode: "kis" });
-    setModalQuery("");
+    setSelectedFrame({ frame, submissionMode: 'kis' });
+    setModalQuery('');
+  };
+
+  const handleManualVideo = (frame) => {
+    setSelectedFrame({ frame, submissionMode: 'none' });
+    setModalQuery('');
+  };
+
+  const handleReplay = (historyItem) => {
+    replayTokenRef.current += 1;
+    setReplayRequest({ item: historyItem, token: replayTokenRef.current });
+    setActivePage('query');
+  };
+
+  const handleFocusUserId = () => {
+    setUserIdError('A User ID is required before searching.');
+    userIdInputRef.current?.focus();
+  };
+
+  const handleInspectorSubmit = (intent) => {
+    requestSubmission({
+      ...intent,
+      history: selectedFrame?.history,
+    });
   };
 
   return (
     <div className="app-wrapper">
-      <header className="app-header">
-        <div className="app-title-group">
-          <h1 className="app-title">HCMAI 2026 Frame Retrieval</h1>
-          <HealthBadge
-            isHealthy={isHealthy}
-            healthData={healthData}
-          />
-          <VimModeBadge
-            mode={vim.mode}
-            onToggleMode={() =>
-              vim.mode === "NORMAL"
-                ? vim.enterInsertMode()
-                : vim.enterNormalMode()
-            }
-          />
-          <button
-            type="button"
-            className="api-docs-badge-btn"
-            onClick={() => setIsDocsOpen(true)}
-            title="Interactive API Docs / FastAPI Specs"
-          >
-            <span className="api-docs-icon"></span>
-            <span>API Docs</span>
-          </button>
-        </div>
-        <nav className="workspace-nav" aria-label="Workspace selection">
-          <button
-            type="button"
-            className={`workspace-nav-btn ${activePage === "query" ? "active" : ""}`}
-            onClick={() => setActivePage("query")}
-            aria-pressed={activePage === "query"}
-          >
-            Query
-          </button>
-          <button
-            type="button"
-            className={`workspace-nav-btn ${activePage === "filter" ? "active" : ""}`}
-            onClick={() => setActivePage("filter")}
-            aria-pressed={activePage === "filter"}
-          >
-            Filter
-          </button>
-        </nav>
-      </header>
+      <AppHeader
+        isHealthy={isHealthy}
+        healthData={healthData}
+        vimMode={vim.mode}
+        onToggleVimMode={() => (vim.mode === 'NORMAL' ? vim.enterInsertMode() : vim.enterNormalMode())}
+        onOpenDocs={() => setIsDocsOpen(true)}
+        userId={userId}
+        onChangeUserId={(event) => {
+          setUserId(event.target.value);
+          if (event.target.value.trim()) setUserIdError(null);
+        }}
+        userIdError={userIdError}
+        userIdInputRef={userIdInputRef}
+        activePage={activePage}
+        onSelectPage={setActivePage}
+      />
 
       <main className="app-container adhoc-app">
-        <div className="workspace-panel" hidden={activePage !== "query"}>
+        <div className="workspace-panel" hidden={activePage !== 'query'}>
           <SearchWorkspace
-            isActive={activePage === "query"}
+            isActive={activePage === 'query'}
+            userId={userId}
             topK={topK}
             setTopK={setTopK}
             onFrameClick={handleQueryFrameClick}
             onQueryChange={setActiveQuery}
             queryInputRef={queryInputRef}
-            onFocusQueryInput={() => vim.setMode("INSERT")}
-            onBlurQueryInput={() => vim.setMode("NORMAL")}
+            onFocusQueryInput={() => vim.setMode('INSERT')}
+            onBlurQueryInput={() => vim.setMode('NORMAL')}
+            onFocusUserId={handleFocusUserId}
+            onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
+            replayRequest={replayRequest}
           />
         </div>
-        <div className="workspace-panel" hidden={activePage !== "filter"}>
-          <FilterWorkspace
-            isActive={activePage === "filter"}
-            onFrameClick={handleFilterFrameClick}
+        <div className="workspace-panel" hidden={activePage !== 'filter'}>
+          <FilterWorkspace isActive={activePage === 'filter'} onFrameClick={handleFilterFrameClick} />
+        </div>
+        <div className="workspace-panel" hidden={activePage !== 'workspace'}>
+          <WorkspacePage
+            isActive={activePage === 'workspace'}
+            userId={userId}
+            historyRefreshToken={historyRefreshToken}
+            onReplay={handleReplay}
+            onOpenManualVideo={handleManualVideo}
           />
         </div>
       </main>
@@ -109,34 +119,28 @@ function AppContent() {
         <ImageModal
           frame={selectedFrame.frame}
           query={modalQuery}
-          onSubmit={selectedFrame.submissionMode === "kis" ? requestSubmission : undefined}
+          onSubmit={selectedFrame.submissionMode === 'kis' ? handleInspectorSubmit : undefined}
           onClose={() => setSelectedFrame(null)}
         />
       )}
       <TopKPromptModal
-        isOpen={vim.isTopKOpen && activePage === "query"}
+        isOpen={vim.isTopKOpen && activePage === 'query'}
         currentTopK={topK}
         onSave={setTopK}
         onClose={() => vim.setIsTopKOpen(false)}
       />
-      <VimHelpModal
-        isOpen={vim.isHelpOpen}
-        onClose={() => vim.setIsHelpOpen(false)}
-      />
-      <ApiDocsModal
-        isOpen={isDocsOpen}
-        onClose={() => setIsDocsOpen(false)}
-      />
+      <VimHelpModal isOpen={vim.isHelpOpen} onClose={() => vim.setIsHelpOpen(false)} />
+      <ApiDocsModal isOpen={isDocsOpen} onClose={() => setIsDocsOpen(false)} />
     </div>
   );
-}
+};
 
-function App() {
-  return (
-    <SubmissionProvider>
+const App = () => (
+  <SubmissionProvider>
+    <SubmissionDialogProvider>
       <AppContent />
-    </SubmissionProvider>
-  );
-}
+    </SubmissionDialogProvider>
+  </SubmissionProvider>
+);
 
 export default App;

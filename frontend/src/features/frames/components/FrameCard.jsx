@@ -10,6 +10,7 @@ const FrameCard = ({
   detail = null,
   detailStatus = 'idle',
   imageLoading = 'lazy',
+  className = '',
   onClick,
   onSubmit,
 }) => {
@@ -25,7 +26,7 @@ const FrameCard = ({
   };
 
   return (
-      <div className="frame-card" onClick={onClick}>
+      <div className={`frame-card ${className}`.trim()} onClick={onClick}>
       <div className="frame-card-header">
         <span className="frame-index-text">
           {displayVideoId(displayFrame.video_id)}, {displayFrame.frame_idx}

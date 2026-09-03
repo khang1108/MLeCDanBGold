@@ -9,7 +9,7 @@ import {
 
 // The player page endpoint returns HTML, so the inspector uses the raw MP4
 // stream and seeks native media time to the selected canonical timestamp.
-const ImageModal = ({ frame, query, onSubmit, onClose }) => {
+const ImageModal = ({ frame = {}, query, onSubmit, onClose }) => {
   const modalCardRef = React.useRef(null);
   const videoRef = React.useRef(null);
   const [videoError, setVideoError] = useState(null);
@@ -194,7 +194,7 @@ const ImageModal = ({ frame, query, onSubmit, onClose }) => {
         <div className="modal-inspector-column">
           <div className="inspector-header">
             <span className="inspector-title">
-              {videoLabel} · {frame.frame_idx}
+      {videoLabel} · {Number.isFinite(frame.frame_idx) ? frame.frame_idx : `${frame.timestamp_ms} ms`}
             </span>
             <div className="inspector-header-actions">
               {onSubmit && (

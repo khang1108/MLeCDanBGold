@@ -1,86 +1,81 @@
+/** Presentational picker/editor for the global shared submission dialog. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-/**
- * Search existing submission files or edit one file's CSV content.
- *
- * Picker Enter chooses the highlighted file. Editor Enter saves and closes;
- * Shift+Enter remains available for inserting a newline.
- */
 const SubmissionFileModal = ({
   mode,
-  files,
+  files = [],
   editorFile,
   pendingLine,
+  draft: controlledDraft,
+  onDraftChange,
   onSelectFile,
   onSave,
+  onValidate,
+  onDelete,
   onClose,
+  isMutating = false,
+  remoteConflict,
+  onLoadConflict,
+  onRebaseConflict,
+  error,
+  historyPatchError,
+  onRetryHistoryPatch,
 }) => {
   const searchRef = useRef(null);
   const editorRef = useRef(null);
   const fileOptionRefs = useRef(new Map());
   const [searchText, setSearchText] = useState('');
-  const [highlightedFileId, setHighlightedFileId] = useState(null);
-  const [draft, setDraft] = useState('');
+  const [highlightedFileName, setHighlightedFileName] = useState(null);
+  const [localDraft, setLocalDraft] = useState('');
+  const draft = controlledDraft === undefined ? localDraft : controlledDraft;
 
   const filteredFiles = useMemo(() => {
     const query = searchText.trim().toLowerCase();
-    if (!query) return files;
-    return files.filter((file) => file.name.toLowerCase().includes(query));
+    return query ? files.filter((file) => file.name.toLowerCase().includes(query)) : files;
   }, [files, searchText]);
 
   useEffect(() => {
-    if (mode === 'picker') {
-      setSearchText('');
-      setHighlightedFileId(files[0]?.id || null);
-      window.setTimeout(() => searchRef.current?.focus(), 0);
-    }
-  }, [mode, files]);
+    if (mode !== 'picker') return;
+    setSearchText('');
+    setHighlightedFileName(files[0]?.name || null);
+    window.setTimeout(() => searchRef.current?.focus(), 0);
+  }, [files, mode]);
 
   useEffect(() => {
-    if (mode === 'editor') {
-      setDraft(editorFile?.content || '');
-      window.setTimeout(() => editorRef.current?.focus(), 0);
-    }
-  }, [mode, editorFile]);
+    if (mode !== 'editor') return;
+    setLocalDraft(editorFile?.content || '');
+    window.setTimeout(() => editorRef.current?.focus(), 0);
+  }, [editorFile, mode]);
 
   useEffect(() => {
-    if (filteredFiles.length === 0) {
-      setHighlightedFileId(null);
-    } else if (!filteredFiles.some((file) => file.id === highlightedFileId)) {
-      setHighlightedFileId(filteredFiles[0].id);
+    if (filteredFiles.length === 0) setHighlightedFileName(null);
+    else if (!filteredFiles.some((file) => file.name === highlightedFileName)) {
+      setHighlightedFileName(filteredFiles[0].name);
     }
-  }, [filteredFiles, highlightedFileId]);
+  }, [filteredFiles, highlightedFileName]);
 
   useEffect(() => {
     if (!mode) return undefined;
-
     const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        // This modal can be opened above the frame inspector. Capture Escape
-        // before the inspector's window listener so only this layer closes.
-        event.stopPropagation();
-        onClose();
-      }
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!isMutating) onClose?.();
     };
-
     window.addEventListener('keydown', handleEscape, true);
     return () => window.removeEventListener('keydown', handleEscape, true);
-  }, [mode, onClose]);
+  }, [isMutating, mode, onClose]);
 
   useEffect(() => {
-    if (!highlightedFileId) return;
-    fileOptionRefs.current.get(highlightedFileId)?.scrollIntoView?.({
-      block: 'nearest',
-    });
-  }, [highlightedFileId]);
+    if (!highlightedFileName) return;
+    fileOptionRefs.current.get(highlightedFileName)?.scrollIntoView?.({ block: 'nearest' });
+  }, [highlightedFileName]);
 
   if (!mode) return null;
 
   const chooseHighlightedFile = () => {
-    const file = filteredFiles.find((item) => item.id === highlightedFileId)
-      || filteredFiles[0];
-    if (file) onSelectFile(file.id);
+    const file = filteredFiles.find((item) => item.name === highlightedFileName) || filteredFiles[0];
+    if (file) onSelectFile?.(file.name);
   };
 
   const handlePickerKeyDown = (event) => {
@@ -89,35 +84,40 @@ const SubmissionFileModal = ({
       chooseHighlightedFile();
       return;
     }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (filteredFiles.length === 0) return;
-      const currentIndex = Math.max(
-        filteredFiles.findIndex((file) => file.id === highlightedFileId),
-        0,
-      );
-      const offset = event.key === 'ArrowDown' ? 1 : -1;
-      const nextIndex = (currentIndex + offset + filteredFiles.length) % filteredFiles.length;
-      setHighlightedFileId(filteredFiles[nextIndex].id);
-    }
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key) || filteredFiles.length === 0) return;
+    event.preventDefault();
+    const currentIndex = Math.max(
+      filteredFiles.findIndex((file) => file.name === highlightedFileName),
+      0,
+    );
+    const offset = event.key === 'ArrowDown' ? 1 : -1;
+    setHighlightedFileName(filteredFiles[
+      (currentIndex + offset + filteredFiles.length) % filteredFiles.length
+    ].name);
   };
 
   const handleEditorKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      onSave(draft);
+      if (!isMutating) onSave?.();
     }
   };
 
+  const setDraft = (value) => {
+    if (controlledDraft === undefined) setLocalDraft(value);
+    onDraftChange?.(value);
+  };
+  const close = () => {
+    if (!isMutating) onClose?.();
+  };
+
   return (
-    <div className="submission-modal-overlay" role="presentation" onClick={onClose}>
+    <div className="submission-modal-overlay" role="presentation" onClick={close}>
       <section
         className="submission-file-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={mode === 'picker'
-          ? 'Choose a CSV file'
-          : 'Edit ' + (editorFile?.name || 'CSV file')}
+        aria-label={mode === 'picker' ? 'Choose a CSV file' : `Edit ${editorFile?.name || 'CSV file'}`}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="submission-modal-header">
@@ -125,7 +125,7 @@ const SubmissionFileModal = ({
             <p className="submission-modal-kicker">Submission workspace</p>
             <h2>{mode === 'picker' ? 'Choose a CSV file' : editorFile?.name}</h2>
           </div>
-          <button type="button" className="submission-modal-close" onClick={onClose} aria-label="Close">
+          <button type="button" className="submission-modal-close" onClick={close} disabled={isMutating} aria-label="Close">
             ×
           </button>
         </header>
@@ -150,21 +150,18 @@ const SubmissionFileModal = ({
               />
               <ul className="submission-file-picker-list">
                 {filteredFiles.length > 0 ? filteredFiles.map((file) => (
-                  <li key={file.id}>
+                  <li key={file.name}>
                     <button
                       type="button"
-                      className={'submission-file-option ' + (file.id === highlightedFileId ? 'highlighted' : '')}
+                      className={`submission-file-option ${file.name === highlightedFileName ? 'highlighted' : ''}`}
                       ref={(node) => {
-                        if (node) fileOptionRefs.current.set(file.id, node);
-                        else fileOptionRefs.current.delete(file.id);
+                        if (node) fileOptionRefs.current.set(file.name, node);
+                        else fileOptionRefs.current.delete(file.name);
                       }}
-                      onClick={() => onSelectFile(file.id)}
-                      onMouseEnter={() => setHighlightedFileId(file.id)}
+                      onClick={() => onSelectFile?.(file.name)}
+                      onMouseEnter={() => setHighlightedFileName(file.name)}
                     >
                       <span className="submission-file-option-name">{file.name}</span>
-                      <span className="submission-file-option-meta">
-                        {file.content?.trim() ? 'has entries' : 'empty'}
-                      </span>
                     </button>
                   </li>
                 )) : (
@@ -174,12 +171,35 @@ const SubmissionFileModal = ({
             </div>
             <footer className="submission-modal-footer">
               <span>Use ↑/↓ to highlight, Enter to choose</span>
-              <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
             </footer>
           </>
         ) : (
           <>
             <div className="submission-modal-body submission-editor-body">
+              {error && <div className="submission-status-banner error" role="alert">{error}</div>}
+              {historyPatchError && (
+                <div className="submission-status-banner error" role="alert">
+                  History state was not recorded.{' '}
+                  <button type="button" className="btn-link" onClick={onRetryHistoryPatch} disabled={isMutating}>
+                    Retry history update
+                  </button>
+                </div>
+              )}
+              {remoteConflict && (
+                <div className="submission-conflict" role="alert">
+                  <strong>This file changed on the server.</strong>
+                  <pre>{remoteConflict.content}</pre>
+                  <div className="submission-conflict-actions">
+                    <button type="button" className="btn-secondary" onClick={onLoadConflict} disabled={isMutating}>
+                      Load server copy
+                    </button>
+                    <button type="button" className="btn-primary" onClick={onRebaseConflict} disabled={isMutating}>
+                      Keep draft and rebase
+                    </button>
+                  </div>
+                </div>
+              )}
               <textarea
                 ref={editorRef}
                 className="submission-file-editor"
@@ -187,12 +207,24 @@ const SubmissionFileModal = ({
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={handleEditorKeyDown}
                 spellCheck="false"
-                aria-label={'Edit ' + (editorFile?.name || 'CSV file') + ' content'}
+                aria-label={`Edit ${editorFile?.name || 'CSV file'} content`}
+                disabled={isMutating}
               />
             </div>
-            <footer className="submission-modal-footer">
+            <footer className="submission-modal-footer submission-editor-footer">
               <span>Enter to save · Shift+Enter for a new line</span>
-              <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+              <div className="submission-editor-actions">
+                <button type="button" className="btn-secondary" onClick={onDelete} disabled={isMutating}>
+                  Delete
+                </button>
+                <button type="button" className="btn-secondary" onClick={onValidate} disabled={isMutating || !draft.trim() || editorFile?.is_validated}>
+                  Validate
+                </button>
+                <button type="button" className="btn-primary" onClick={onSave} disabled={isMutating}>
+                  Lưu
+                </button>
+                <button type="button" className="btn-secondary" onClick={close} disabled={isMutating}>Cancel</button>
+              </div>
             </footer>
           </>
         )}

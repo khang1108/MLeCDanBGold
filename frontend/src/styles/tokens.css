@@ -14,6 +14,10 @@
   --color-ink-muted: #615d59;
   --color-ink-faint: #a39e98;
   --color-hairline: #e6e6e6;
+  --color-focus-ring: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  --color-success: #2f9a5d;
+  --color-warning: #b7791f;
+  --color-danger: #b42318;
 
   /* Decorative Sticker Palette */
   --color-accent-sky: #62aef0;
