@@ -1,0 +1,41 @@
+server:
+  # Nếu máy khác cần gọi API vào laptop này
+  host: "0.0.0.0"
+  port: 8100
+
+
+# ============================================================
+# EMBEDDING MODELS ONLY
+# ============================================================
+
+visual_embedding:
+  backend: "siglip"
+  name: "google/siglip2-base-patch16-224"
+  revision: "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2"
+
+  device: "cpu"
+
+  # Latitude 5500: bắt đầu nhỏ trước
+  batch_size: 8
+
+  image_size: 224
+
+  # CPU -> float32 an toàn nhất
+  dtype: "float32"
+
+
+caption_embedding:
+  backend: "bge_m3"
+  name: "BAAI/bge-m3"
+  revision: "5617a9f61b028005a4858fdac845db406aefb181"
+
+  device: "cpu"
+
+  # BGE-M3 khá nặng trên CPU
+  batch_size: 8
+
+  # Caption/query thực tế rất hiếm khi cần 8192 tokens
+  # giảm xuống để hạn chế RAM + latency
+  max_length: 1024
+
+  dtype: "float32"
