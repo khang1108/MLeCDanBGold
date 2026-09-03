@@ -141,11 +141,41 @@ const ImageSearchWorkspace = ({
     });
   }, [activeQuerySession, historyForSession, requestSubmission]);
 
-  const handleFileSelect = (file) => {
+  const handleFileSelect = useCallback((file) => {
     if (!file) return;
     setSelectedFile(file);
     setError(null);
-  };
+  }, []);
+
+  // Support pasting image from clipboard (Ctrl + V / Cmd + V)
+  useEffect(() => {
+    if (!isActive) return undefined;
+
+    const handlePaste = (event) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            const ext = file.type.split('/')[1] || 'png';
+            const fallbackName = `pasted-image-${Date.now()}.${ext}`;
+            const namedFile = file.name && file.name !== 'image.png'
+              ? file
+              : new File([file], fallbackName, { type: file.type });
+            handleFileSelect(namedFile);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [handleFileSelect, isActive]);
 
   const handleClearFile = (e) => {
     e?.stopPropagation?.();
@@ -301,7 +331,7 @@ const ImageSearchWorkspace = ({
                 onClick={() => fileInputRef.current?.click()}
               >
                 <span className="image-dropzone-icon" aria-hidden="true">📁</span>
-                <span>Choose or drop an image (JPEG, PNG, WebP)</span>
+                <span>Choose, drop, or paste an image (Ctrl + V)</span>
               </button>
             ) : (
               <div className="image-preview-badge">

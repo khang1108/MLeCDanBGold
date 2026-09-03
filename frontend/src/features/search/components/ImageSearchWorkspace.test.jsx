@@ -61,9 +61,29 @@ afterEach(() => {
 test('renders empty image dropzone with disabled Search button', () => {
   renderImageSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
 
-  expect(screen.getByText(/Choose or drop an image/i)).toBeTruthy();
+  expect(screen.getByText(/Choose, drop, or paste an image/i)).toBeTruthy();
   const searchBtn = screen.getByRole('button', { name: 'Search' });
   expect(searchBtn.disabled).toBe(true);
+});
+
+test('pasting an image via clipboard (Ctrl+V) selects image and enables Search', () => {
+  renderImageSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+
+  const pastedFile = new File(['pasted-data'], 'clipboard-photo.png', { type: 'image/png' });
+  const clipboardEvent = new Event('paste', { bubbles: true, cancelable: true });
+  clipboardEvent.clipboardData = {
+    items: [
+      {
+        type: 'image/png',
+        getAsFile: () => pastedFile,
+      },
+    ],
+  };
+
+  fireEvent(window, clipboardEvent);
+
+  expect(screen.getByText('clipboard-photo.png')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Search' }).disabled).toBe(false);
 });
 
 test('selecting an image displays preview and enables Search button', async () => {
@@ -226,5 +246,5 @@ test('New Search resets image file and clears results', async () => {
 
   expect(screen.queryByText(/V1/)).toBeNull();
   expect(screen.queryByText('test.png')).toBeNull();
-  expect(screen.getByText(/Choose or drop an image/i)).toBeTruthy();
+  expect(screen.getByText(/Choose, drop, or paste an image/i)).toBeTruthy();
 });
