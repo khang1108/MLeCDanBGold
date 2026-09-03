@@ -96,7 +96,7 @@ export const DatabasePage = ({ isActive = false }) => {
 
       {isLoadingTables ? (
         <div className="db-loading-state">Loading database tables...</div>
-      ) : (
+      ) : tables.length > 0 ? (
         <>
           <TableSelector
             tables={tables}
@@ -125,7 +125,9 @@ export const DatabasePage = ({ isActive = false }) => {
             />
           )}
         </>
-      )}
+      ) : !error ? (
+        <div className="db-empty-state">No database tables available.</div>
+      ) : null}
     </div>
   );
 };
