@@ -1,5 +1,28 @@
 # HCMAI Research Knowledge
 
+## Multimodal Temporal Evidence Calibration & Emission Matrix (P0)
+
+**Date:** 2026-09-04
+**Problem:** Monotonic DP alignment requires trustworthy, uncorrupted emission scores $S[e, f]$. In v9 legacy scoring, fixed minmax normalization with point ASR projection caused target videos to collapse outside top retrieval candidates (rank $>300$). Naive robust calibration over the full matrix destroyed sparse BM25 matches and allowed unobserved zeros to define confidence.
+
+### Sources
+- Repository implementation: `src/hcmai/retrieval/evidence/`
+- Full-corpus empirical evaluation on 470,804 frames (`artifacts/p0_ablation_results.jsonl`, `docs/superpowers/specs/2026-09-04-temporal-p0-evaluation.md`).
+
+### Findings
+- **VERIFIED (C1):** Calibrating sparse evidence over valid support ($raw\_scores > 0$ for BM25, boolean coverage for ASR) prevents positive matches from collapsing into zero span.
+- **VERIFIED (C2 & C7):** Masked ASR interval projection initialized with $-\infty$ accurately scatters cosine similarities across sampled canonical frames inside speech segments without zero-clipping negative cosine similarities.
+- **VERIFIED (C3):** Exact v9 legacy scoring equivalence is preserved via dedicated `score_subset_legacy()`.
+- **VERIFIED (C4 & C5):** Stateless adaptive scorers and `with_config` cloning prevent config mutation leakage across ablation runs.
+- **VERIFIED (Decision Gate):** On target query `L26_V254_cooking`, legacy v9 ($A0$) failed to retrieve the target video ($>300$). Decomposed component scoring ($A1$) improved target rank to **88** with ground-truth frame alignments `[425, 450, 475, 550]`. Dense-only adaptive ($A6$) narrowed the top-1 score gap to **0.062** (target score 3.908 vs top score 3.970).
+
+### Status
+VERIFIED
+
+### Decision
+P0 emission scoring quality is confirmed sufficient for P1 DP work. Maintain conservative speech/OCR boosts in runtime configurations to prevent conversational distractors from degrading high-precision visual signals.
+
+
 ## Disk-backed exact metadata filtering under a shared FAISS RAM budget
 
 **Date:** 2026-09-01 (verified 2026-09-02)
