@@ -15,6 +15,7 @@ const ToolBox = ({
   useBm25 = true,
   setUseBm25 = NOOP,
   includeSubmissionWorktree = true,
+  showRetrievalSources = true,
 }) => {
   const topKInputId = useId();
   const [topKText, setTopKText] = useState(String(topK));
@@ -75,42 +76,44 @@ const ToolBox = ({
         </div>
       </div>
 
-      <fieldset className="toolbox-section toolbox-retrieval-section">
-        <legend className="toolbox-label">Retrieval sources</legend>
-        <div className="toolbox-toggle-list">
-          <label className="toolbox-toggle-row">
-            <span className="toolbox-toggle-copy">
-              <span className="toolbox-toggle-name">Dense</span>
-              <span className="toolbox-toggle-description">Semantic matching</span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              className="toolbox-switch"
-              checked={useDense}
-              onChange={(event) => setUseDense(event.target.checked)}
-              disabled={useDense && !useBm25}
-              aria-label="Use Dense retrieval"
-            />
-          </label>
+      {showRetrievalSources && (
+        <fieldset className="toolbox-section toolbox-retrieval-section">
+          <legend className="toolbox-label">Retrieval sources</legend>
+          <div className="toolbox-toggle-list">
+            <label className="toolbox-toggle-row">
+              <span className="toolbox-toggle-copy">
+                <span className="toolbox-toggle-name">Dense</span>
+                <span className="toolbox-toggle-description">Semantic matching</span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                className="toolbox-switch"
+                checked={useDense}
+                onChange={(event) => setUseDense(event.target.checked)}
+                disabled={useDense && !useBm25}
+                aria-label="Use Dense retrieval"
+              />
+            </label>
 
-          <label className="toolbox-toggle-row">
-            <span className="toolbox-toggle-copy">
-              <span className="toolbox-toggle-name">BM25</span>
-              <span className="toolbox-toggle-description">Lexical matching</span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              className="toolbox-switch"
-              checked={useBm25}
-              onChange={(event) => setUseBm25(event.target.checked)}
-              disabled={useBm25 && !useDense}
-              aria-label="Use BM25 retrieval"
-            />
-          </label>
-        </div>
-      </fieldset>
+            <label className="toolbox-toggle-row">
+              <span className="toolbox-toggle-copy">
+                <span className="toolbox-toggle-name">BM25</span>
+                <span className="toolbox-toggle-description">Lexical matching</span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                className="toolbox-switch"
+                checked={useBm25}
+                onChange={(event) => setUseBm25(event.target.checked)}
+                disabled={useBm25 && !useDense}
+                aria-label="Use BM25 retrieval"
+              />
+            </label>
+          </div>
+        </fieldset>
+      )}
 
       {includeSubmissionWorktree && <SubmissionWorktree />}
     </aside>
