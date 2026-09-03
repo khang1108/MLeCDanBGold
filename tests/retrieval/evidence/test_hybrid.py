@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from collections.abc import Sequence
+from typing import Any
+
 from hcmai.common.config import HybridTemporalConfig
+from hcmai.retrieval.evidence.components import (
+    TemporalScoreBundle,
+    TemporalScoreComponent,
+)
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 
 
@@ -28,8 +35,8 @@ class FakeIndex:
         return np.flatnonzero(self.video_ids == video_id)
 
 
-def _matrix(result: list[object]) -> np.ndarray:
-    return np.concatenate([item.scores for item in result], axis=1)  # type: ignore[attr-defined]
+def _matrix(result: Sequence[Any]) -> np.ndarray:
+    return np.concatenate([item.scores for item in result], axis=1)
 
 
 @pytest.mark.parametrize(
@@ -86,11 +93,6 @@ class ComponentScorer:
         self.scores = scores
 
     def score_components(self, *events: object) -> TemporalScoreBundle:
-        from hcmai.retrieval.evidence.components import (
-            TemporalScoreBundle,
-            TemporalScoreComponent,
-        )
-
         return TemporalScoreBundle(
             {self.name: TemporalScoreComponent(self.name, self.scores.copy())}
         )

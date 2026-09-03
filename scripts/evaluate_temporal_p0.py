@@ -215,7 +215,7 @@ def main() -> int:
                 row["target_video_id"] = target_video_id
                 if target_rank is not None:
                     row["target_rank"] = target_rank
-                    row["target_score"] = round(target_score, 4)
+                    row["target_score"] = round(target_score, 4) if target_score is not None else None
                     row["score_gap"] = score_gap
                     row["target_frame_indices"] = target_frames
 

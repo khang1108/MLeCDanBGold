@@ -20,7 +20,10 @@ from hcmai.retrieval.evidence.calibration import (
     CalibratedComponent,
     calibrate_component,
 )
-from hcmai.retrieval.evidence.components import TemporalScoreBundle
+from hcmai.retrieval.evidence.components import (
+    TemporalScoreBundle,
+    TemporalScoreComponent,
+)
 from hcmai.retrieval.evidence.normalization import minmax_rows
 
 SPEECH_CUES: tuple[str, ...] = (

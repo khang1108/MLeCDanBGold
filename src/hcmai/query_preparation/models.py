@@ -32,9 +32,11 @@ class QueryPreparationAdapter(Protocol):
     @staticmethod
     def translate(events_vi: Sequence[str]) -> tuple[str, ...]:
         """Translate ordered Vietnamese events into literal English."""
+        ...
 
     @staticmethod
     def generate_candidates(
         events_vi: Sequence[str], candidate_count: int
     ) -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]:
         """Generate a literal translation and aligned candidate bundles."""
+        ...

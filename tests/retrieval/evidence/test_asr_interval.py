@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 import numpy as np
 import pandas as pd
 import pytest
@@ -53,9 +54,21 @@ class FakeProjector:
         return FakeProjection(pos, self.timestamps)
 
 
+def _make_index(
+    segment_index: Any,
+    canonical_index: Any,
+    projector: Any,
+) -> SegmentProjectedASRIndex:
+    return SegmentProjectedASRIndex(
+        segment_index=cast(Any, segment_index),
+        canonical_index=cast(Any, canonical_index),
+        projector=cast(Any, projector),
+    )
+
+
 def test_asr_segment_covers_every_canonical_frame_inside_interval() -> None:
     timestamps = [0, 1000, 2000, 3000, 4000]
-    index = SegmentProjectedASRIndex(
+    index = _make_index(
         segment_index=FakeSegmentIndex(
             [{"video_id": "v1", "start_ms": 900, "end_ms": 3100}],
             [[1.0, 0.0]],
@@ -79,7 +92,7 @@ def test_asr_segment_covers_every_canonical_frame_inside_interval() -> None:
 
 def test_overlapping_asr_segments_use_max_similarity() -> None:
     timestamps = [0, 1000, 2000, 3000]
-    index = SegmentProjectedASRIndex(
+    index = _make_index(
         segment_index=FakeSegmentIndex(
             [
                 {"video_id": "v1", "start_ms": 500, "end_ms": 2200},
@@ -102,7 +115,7 @@ def test_overlapping_asr_segments_use_max_similarity() -> None:
 
 def test_asr_interval_without_sampled_frame_uses_projector_fallback() -> None:
     timestamps = [0, 2000, 4000]
-    index = SegmentProjectedASRIndex(
+    index = _make_index(
         segment_index=FakeSegmentIndex(
             [{"video_id": "v1", "start_ms": 2100, "end_ms": 2900}],
             [[1.0, 0.0]],
@@ -121,7 +134,7 @@ def test_asr_interval_without_sampled_frame_uses_projector_fallback() -> None:
 
 def test_negative_covered_similarity_remains_negative() -> None:
     timestamps = [0, 1000, 2000]
-    index = SegmentProjectedASRIndex(
+    index = _make_index(
         segment_index=FakeSegmentIndex(
             [{"video_id": "v1", "start_ms": 900, "end_ms": 1100}],
             [[-0.8, 0.6]],
@@ -143,7 +156,7 @@ def test_negative_covered_similarity_remains_negative() -> None:
 
 def test_uncovered_score_is_zero_and_coverage_is_false() -> None:
     timestamps = [0, 1000, 2000]
-    index = SegmentProjectedASRIndex(
+    index = _make_index(
         segment_index=FakeSegmentIndex(
             [{"video_id": "v1", "start_ms": 0, "end_ms": 100}],
             [[0.5, 0.5]],
@@ -168,7 +181,7 @@ def test_legacy_point_floor_matches_reference_v9() -> None:
         {"video_id": "v1", "start_ms": 2500, "end_ms": 3500},
     ]
     # Fallback positions: segment 0 -> frame 1, segment 1 -> frame 3
-    index = SegmentProjectedASRIndex(
+    index = _make_index(
         segment_index=FakeSegmentIndex(mapping, segment_vectors),
         canonical_index=FakeCanonicalIndex(timestamps),
         projector=FakeProjector(timestamps, fallback_positions=[1, 3]),
@@ -185,7 +198,7 @@ def test_legacy_point_floor_matches_reference_v9() -> None:
 
 def test_point_masked_and_interval_masked_differ_on_multiframe_segment() -> None:
     timestamps = [0, 1000, 2000, 3000]
-    index = SegmentProjectedASRIndex(
+    index = _make_index(
         segment_index=FakeSegmentIndex(
             [{"video_id": "v1", "start_ms": 900, "end_ms": 2100}],  # covers frames 1 and 2
             [[1.0, 0.0]],

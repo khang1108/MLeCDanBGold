@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from time import perf_counter
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 
 from hcmai.api.contracts import (
     QueryCandidateResponse,
@@ -123,7 +123,7 @@ class SearchService:
         temporal = (
             TemporalSearchService(
                 self.corpus,
-                self.temporal_evidence,
+                cast(TemporalEvidenceScorer, self.temporal_evidence),
                 self.config.alignment,
                 self.config.max_temporal_event_count,
             )

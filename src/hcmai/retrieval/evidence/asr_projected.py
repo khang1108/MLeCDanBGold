@@ -10,7 +10,7 @@ visual :class:`DenseIndex` and timeline selection is delegated to the shared
 from __future__ import annotations
 
 from numbers import Integral
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -122,8 +122,8 @@ class SegmentProjectedASRIndex:
 
         for segment_position, row in self.segment_index.mapping.iterrows():
             video_id = str(row["video_id"])
-            start_ms = int(row["start_ms"])
-            end_ms = int(row["end_ms"])
+            start_ms = int(cast(Any, row["start_ms"]))
+            end_ms = int(cast(Any, row["end_ms"]))
 
             if video_id in video_positions_cache:
                 video_positions = video_positions_cache[video_id]
@@ -151,7 +151,7 @@ class SegmentProjectedASRIndex:
             if len(inside) > 0:
                 covered_positions = inside.tolist()
             else:
-                fallback_pos = int(self.segment_frame_positions[int(segment_position)])
+                fallback_pos = int(self.segment_frame_positions[int(cast(Any, segment_position))])
                 if fallback_pos >= 0:
                     covered_positions = [fallback_pos]
                 else:
@@ -183,8 +183,8 @@ class SegmentProjectedASRIndex:
         for segment_position, row in self.segment_index.mapping.iterrows():
             projection = projector.project(
                 str(row["video_id"]),
-                start_ms=int(row["start_ms"]),
-                end_ms=int(row["end_ms"]),
+                start_ms=int(cast(Any, row["start_ms"])),
+                end_ms=int(cast(Any, row["end_ms"])),
             )
             if projection is None:
                 continue
@@ -210,7 +210,7 @@ class SegmentProjectedASRIndex:
                     "projector identity conflicts with canonical index for frame_id "
                     f"{projected_frame_id!r}"
                 )
-            mapped[int(segment_position)] = canonical_position
+            mapped[int(cast(Any, segment_position))] = canonical_position
         return mapped
 
     def _validate_scoring_inputs(

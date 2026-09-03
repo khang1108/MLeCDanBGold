@@ -14,6 +14,7 @@ import pandas as pd
 class FakeIndex:
     scores: np.ndarray
     embedding_dim: int = 2
+    coverage_mask: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         frame_count = self.scores.shape[1]

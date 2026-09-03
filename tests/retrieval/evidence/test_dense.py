@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -72,7 +73,7 @@ class RecordingFrameIndex:
 
     def __init__(
         self,
-        identity_source: object,
+        identity_source: Any,
         embedding_dim: int,
         scale: float,
     ) -> None:
