@@ -44,7 +44,7 @@ INDEX_DATASET_ARGS=(
   --frame-manifest artifacts/frame_store/manifest.json
   --keyframes-root data/keyframes
   --map-keyframes-root data/map_keyframes
-  --context artifacts/enrichment/context/frame_context_v1.parquet
+  --context artifacts/enrichment/context_vi/frame_context_v1.parquet
   --transcripts artifacts/enrichment/transcripts
   --expected-video-count 873
   --expected-frame-count 177321
@@ -192,7 +192,7 @@ The stages publish to:
 
 ```text
 artifacts/indexes/visual/
-artifacts/indexes/context/
+artifacts/indexes/context_vi/
 artifacts/indexes/asr_segments/
 artifacts/indexes/build_report.json
 ```
@@ -278,7 +278,7 @@ do not point a profile at a partial staging directory:
 
 ```bash
 export HCMAI_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/visual"
-export HCMAI_CONTEXT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/context"
+export HCMAI_CONTEXT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/context_vi"
 export HCMAI_ASR_SEGMENT_INDEX_PATH="$HCMAI_LOCAL_ROOT/artifacts/indexes/asr_segments"
 ```
 

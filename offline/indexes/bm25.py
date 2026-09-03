@@ -62,7 +62,11 @@ def build_bm25_index(
 
     documents = pd.DataFrame({"frame_id": mapping["frame_id"]})
     documents["title"] = _titles(mapping, Path(media_info_path))
-    documents["caption"] = _evidence_text(caption_path, "text", mapping)
+    # Vietnamese rebuilds may use the FrameContext artifact directly, where
+    # the specialist caption is retained under ``caption_text``.
+    documents["caption"] = _evidence_text(
+        caption_path, "text", mapping, fallback="caption_text"
+    )
     documents["ocr"] = _evidence_text(ocr_path, "normalized_text", mapping, fallback="raw_text")
     documents["asr"] = _evidence_text(asr_path, "asr_text", mapping)
 
@@ -192,7 +196,10 @@ def _parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--frames", default="artifacts/frame_store/frames.parquet")
-    parser.add_argument("--caption", default="artifacts/corpus/caption.parquet")
+    parser.add_argument(
+        "--caption",
+        default="artifacts/enrichment/context_vi/frame_context_v1.parquet",
+    )
     parser.add_argument("--ocr", default="artifacts/corpus/ocr_frames.parquet")
     parser.add_argument("--asr", default="artifacts/enrichment/asr/frame_enrichment.parquet")
     parser.add_argument("--media-info", default="data/media-info")

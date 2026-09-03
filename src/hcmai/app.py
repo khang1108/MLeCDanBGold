@@ -14,13 +14,18 @@ from typing import Any, AsyncGenerator
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+from hcmai.api.history import WorkspaceStore
 from hcmai.api.routers import (
     create_frames_router,
     create_query_candidates_router,
     create_search_router,
     create_system_router,
     create_trake_router,
+    create_workspace_router,
 )
+from hcmai.common.utils.logging import configure_logging, get_logger
+from hcmai.orchestration.pipeline import SearchService
 
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
@@ -45,10 +50,12 @@ def _configure_backend_logging() -> None:
 
 def create_app(
     search_service: SearchService | None = None,
+    workspace_store: WorkspaceStore | None = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     service_container: dict[str, Any] = {
         "service": search_service,
+        "workspace_store": workspace_store,
         "startup_messages": [],
     }
 
@@ -56,6 +63,16 @@ def create_app(
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         _configure_backend_logging()
         logger.info("Backend startup started")
+        if service_container["workspace_store"] is None:
+            workspace_path = os.getenv("HCMAI_WORKSPACE_DB")
+            if workspace_path:
+                try:
+                    service_container["workspace_store"] = WorkspaceStore(
+                        workspace_path
+                    )
+                except Exception:
+                    logger.exception("Workspace database initialization failed")
+                    raise
         if service_container["service"] is None:
             service_container["service"] = SearchService.load(service_container["startup_messages"])
         service = service_container["service"]
@@ -120,6 +137,7 @@ def create_app(
     app.include_router(create_query_candidates_router(service_container))
     app.include_router(create_trake_router(service_container))
     app.include_router(create_frames_router(service_container))
+    app.include_router(create_workspace_router(service_container))
 
     return app
 

@@ -525,10 +525,10 @@ def test_context_and_segment_paths_are_dedicated_to_the_runtime() -> None:
     index = IndexConfig()
 
     assert enrichment.context_path == Path(
-        "artifacts/enrichment/context/frame_context_v1.parquet"
+        "artifacts/enrichment/context_vi/frame_context_v1.parquet"
     )
     assert enrichment.transcripts_path == Path("artifacts/enrichment/transcripts")
-    assert index.context_path == Path("artifacts/indexes/context")
+    assert index.context_path == Path("artifacts/indexes/context_vi")
     assert index.asr_segment_path == Path("artifacts/indexes/asr_segments")
     assert index.context_embedding_filename == "context_embeddings.npy"
     assert index.asr_segment_embedding_filename == "asr_embeddings.npy"
@@ -569,7 +569,7 @@ def test_indexing_config_uses_portable_corpus_paths_and_expected_counts() -> Non
     assert "dataset" not in config
     assert config["indexes"] == {
         "visual": "artifacts/indexes/visual",
-        "context": "artifacts/indexes/context",
+        "context": "artifacts/indexes/context_vi",
         "asr_segments": "artifacts/indexes/asr_segments",
     }
     assert config["projection"]["max_projection_gap_ms"] == 5_000
@@ -581,7 +581,7 @@ def test_baseline_enables_context_and_segment_startup() -> None:
     baseline = read_yaml("configs/baseline.yaml")
     index = baseline["index"]
 
-    assert index["context_path"] == "artifacts/indexes/context"
+    assert index["context_path"] == "artifacts/indexes/context_vi"
     assert index["asr_segment_path"] == "artifacts/indexes/asr_segments"
     assert index["asr_projection_max_gap_ms"] == 5_000
     assert "context" in baseline["search"]["fusion"]["source_weights"]

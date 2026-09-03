@@ -19,6 +19,7 @@ class _Data:
             frame_idx=10,
             timestamp_ms=1_000,
             image_path="frame-1.jpg",
+            fps=29.97,
         )
 
     def caption(self, frame_id: str) -> str | None:
@@ -72,4 +73,5 @@ def test_materializer_exposes_raw_path_score_without_context_retrieval() -> None
     )
 
     assert result.score == 0.73
+    assert result.fps == 29.97
     assert "context" not in result.metadata.model_dump()

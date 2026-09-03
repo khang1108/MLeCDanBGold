@@ -28,14 +28,14 @@ def test_default_artifact_paths_remain_current_layout() -> None:
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
     assert settings.dataset.enrichment.context_path.as_posix() == (
-        "artifacts/corpus/context.parquet"
+        "artifacts/enrichment/context_vi/frame_context_v1.parquet"
     )
     assert settings.dataset.enrichment.transcripts_path.as_posix() == (
         "artifacts/enrichment/transcripts"
     )
     assert settings.dataset.media_info_path.as_posix() == "data/media-info"
     assert settings.index.path.as_posix() == "artifacts/indexes/visual"
-    assert settings.index.context_path.as_posix() == "artifacts/indexes/context"
+    assert settings.index.context_path.as_posix() == "artifacts/indexes/context_vi"
     assert settings.index.asr_segment_path.as_posix() == (
         "artifacts/indexes/asr_segments"
     )

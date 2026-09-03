@@ -7,8 +7,8 @@ import pytest
 from hcmai.corpus import Frame, TranscriptSegment, VideoMetadata
 
 
-def test_frame_has_the_six_field_runtime_contract() -> None:
-    """Frame exposes identity, timing, and image paths only."""
+def test_frame_has_the_runtime_contract() -> None:
+    """Frame exposes identity, timing, image paths, and optional FPS."""
     assert [field.name for field in fields(Frame)] == [
         "frame_id",
         "video_id",
@@ -16,6 +16,7 @@ def test_frame_has_the_six_field_runtime_contract() -> None:
         "timestamp_ms",
         "image_path",
         "thumbnail_path",
+        "fps",
     ]
 
 

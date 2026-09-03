@@ -156,12 +156,12 @@ Các path quan trọng khi chạy backend:
 | Canonical metadata | `artifacts/frame_store/frames.parquet` |
 | Keyframe asset root | `data` |
 | Visual index | `artifacts/indexes/visual` |
-| Context index | `artifacts/indexes/context` |
+| Context index | `artifacts/indexes/context_vi` |
 | ASR segment index | `artifacts/indexes/asr_segments` |
 | Caption artifact | `artifacts/corpus/caption.parquet` |
 | OCR artifact | `artifacts/corpus/ocr_frames.parquet` |
 | Object artifact | `artifacts/corpus/object_frames.parquet` |
-| Context artifact | `artifacts/corpus/context.parquet` |
+| Context artifact | `artifacts/enrichment/context_vi/frame_context_v1.parquet` |
 | Transcript artifact | `artifacts/enrichment/transcripts/` |
 
 Lưu ý: `HCMAI_DATASET_ROOT` là root để resolve ảnh. Với canonical
@@ -292,7 +292,7 @@ INDEX_DATASET_ARGS=(
   --frame-manifest artifacts/frame_store/manifest.json
   --keyframes-root data/keyframes
   --map-keyframes-root data/map_keyframes
-  --context artifacts/corpus/context.parquet
+  --context artifacts/enrichment/context_vi/frame_context_v1.parquet
   --transcripts artifacts/enrichment/transcripts
   --expected-video-count 873
   --expected-frame-count 177321

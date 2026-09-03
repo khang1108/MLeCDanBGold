@@ -25,13 +25,15 @@ def test_baseline_config_matches_runtime_contract() -> None:
     assert config.dataset.enrichment.caption_path == Path("artifacts/corpus/caption.parquet")
     assert config.dataset.enrichment.ocr_path == Path("artifacts/corpus/ocr_frames.parquet")
     assert config.dataset.enrichment.object_path == Path("artifacts/corpus/object_frames.parquet")
-    assert config.dataset.enrichment.context_path == Path("artifacts/corpus/context.parquet")
+    assert config.dataset.enrichment.context_path == Path(
+        "artifacts/enrichment/context_vi/frame_context_v1.parquet"
+    )
     assert config.dataset.media_info_path == Path("data/media-info")
     assert config.dataset.enrichment.asr_path == Path(
         "artifacts/enrichment/asr/frame_enrichment.parquet"
     )
     assert config.index.path.as_posix() == "artifacts/indexes/visual"
-    assert config.index.context_path.as_posix() == "artifacts/indexes/context"
+    assert config.index.context_path.as_posix() == "artifacts/indexes/context_vi"
     assert config.index.asr_segment_path.as_posix() == "artifacts/indexes/asr_segments"
     assert config.index.asr_projection_max_gap_ms == 5_000
     assert config.index.caption_path.as_posix() == "artifacts/indexes/caption"

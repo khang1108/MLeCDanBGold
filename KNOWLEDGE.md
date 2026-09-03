@@ -315,3 +315,26 @@ uses `artifacts/indexes/asr_segments`; BM25 ASR may continue to use
 **SOURCE (code/tests/artifact contract):** This is a production-artifact
 correction, not a measured retrieval-quality change. No HCMAI accuracy
 improvement is claimed.
+
+## Vietnamese context and direct BM25 routing
+
+**Date:** 2026-09-02
+
+**Problem:** Caption and FrameContext artifacts are being replaced with
+Vietnamese versions, so translating each original query to English for caption
+BM25 is both unnecessary and inconsistent with the new corpus language.
+
+**Decision:** BM25 uses the original Vietnamese event for title, caption, OCR,
+and ASR. Generated English candidates affect Dense retrieval only. Runtime
+Context defaults move to `artifacts/indexes/context_vi` and
+`artifacts/enrichment/context_vi/frame_context_v1.parquet`.
+
+**Artifact contract:** The BM25 artifact must be rebuilt from the Vietnamese
+FrameContext/caption source after synchronization; online serving continues to
+load the precomputed `artifacts/indexes/bm25` artifact and never rebuilds it.
+
+### Status
+
+**SOURCE (routing/config/tests); PENDING DATA:** Runtime behavior is verified by
+tests. Full artifact startup remains pending completion of the AWS sync and a
+Vietnamese BM25 rebuild. No retrieval-quality improvement is claimed yet.

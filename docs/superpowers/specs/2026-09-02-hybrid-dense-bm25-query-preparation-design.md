@@ -12,7 +12,7 @@ Extend the cleaned KIS/TRAKE temporal-search baseline with two independently sel
 1. **Dense Retrieval** — Visual SigLIP2 + Context BGE + ASR BGE.
 2. **BM25 lexical retrieval** — fielded lexical evidence over canonical-frame `title`, `caption`, `ocr`, and `asr` text.
 
-Both families produce full-corpus event-to-frame scores, are normalized and fused before the existing monotonic DP decoder, and are controlled by two UI toggles. The same feature also adds local Qwen3-4B query preparation so Vietnamese input can be translated for English-caption BM25 and optionally rewritten into five user-selectable English retrieval candidates.
+Both families produce full-corpus event-to-frame scores, are normalized and fused before the existing monotonic DP decoder, and are controlled by two UI toggles. Local Qwen3-4B query preparation generates optional English retrieval candidates; BM25 searches the Vietnamese corpus directly.
 
 The temporal decoder itself is not redesigned in this feature.
 
@@ -30,8 +30,6 @@ This feature does **not**:
 
 - change strict monotonic DP ordering, full-event alignment, gap penalty, event power, path diversity, or representative-frame semantics;
 - add candidate-video pruning or sparse Top-K gating before DP;
-- translate the corpus offline;
-- create Vietnamese caption artifacts;
 - add query sessions, candidate IDs, or server-side search state;
 - add a learned cross-modal calibration model;
 - use RRF scores as DP matrix values;
@@ -66,7 +64,7 @@ These controls apply identically to KIS and TRAKE.
 The user input is Vietnamese. Every request preserves two conceptual representations:
 
 - **original events (`q_vi`)** — the user's Vietnamese events after the existing deterministic event planning/normalization;
-- **retrieval events (`q_r`)** — the exact event strings selected by the user for Dense retrieval and English-caption BM25.
+- **retrieval events (`q_r`)** — the exact event strings selected by the user for Dense retrieval.
 
 When the user retrieves the original query:
 
@@ -99,7 +97,7 @@ translate_literal(events_vi: Sequence[str]) -> tuple[str, ...]
 generate_candidates(events_vi: Sequence[str]) -> QueryCandidateSet
 ```
 
-`translate_literal()` is a minimal Vietnamese-to-English translation path used only when English caption text must be searched and the user has not supplied an English candidate. It uses non-thinking/greedy generation with a conservative prompt.
+`translate_literal()` remains available for query-preparation compatibility, but online BM25 search does not call it. Translation and rewriting are useful only when producing optional Dense retrieval candidates.
 
 `generate_candidates()` is an explicit user action. One model request produces:
 
@@ -229,7 +227,7 @@ use_dense: bool
 use_bm25: bool
 ```
 
-`events` continues to mean the original canonical event sequence. `dense_events` is the selected retrieval bundle when Dense is enabled. `bm25_caption_events` is either that selected English bundle or the automatically generated literal English translation when Original + BM25 is used. This distinction is required because Original hybrid search legitimately uses Vietnamese for Dense while using English for caption BM25.
+`events` continues to mean the original canonical event sequence. `dense_events` is the selected retrieval bundle when Dense is enabled. `bm25_caption_events` reports the original Vietnamese events used for caption BM25. Candidate selection never changes this BM25 representation.
 
 No search/candidate session ID is introduced.
 
@@ -248,27 +246,20 @@ Dense query preparation never performs an implicit translation.
 
 ### 8.2 BM25 ON
 
-BM25 routes by corpus-field language:
+BM25 sends the original Vietnamese event to every lexical field:
 
 ```text
 title_vi   ← original_events[i]
+caption_vi ← original_events[i]
 ocr_vi     ← original_events[i]
 asr_vi     ← original_events[i]
-caption_en ← caption_query_en[i]
 ```
-
-`caption_query_en` is resolved as follows:
-
-1. If the request contains `retrieval_events`, use them directly.
-2. Otherwise call `QueryPreparationService.translate_literal(original_events)`.
 
 Therefore:
 
 - Dense-only + Original does not invoke Qwen.
-- BM25 + Original invokes Qwen only on a translation-cache miss.
-- Candidate retrieval does not need an additional translation call because the selected English candidate already supplies caption lexical text.
-
-If BM25 is selected for Original retrieval and query preparation is unavailable, the request fails explicitly; caption BM25 is not silently dropped.
+- BM25 never invokes Qwen and can run without query preparation.
+- Candidate retrieval uses the candidate only for Dense and keeps original Vietnamese for BM25.
 
 ## 9. BM25 Corpus and Artifact Contract
 
@@ -334,7 +325,7 @@ The baseline is a **fielded BM25 scorer** implemented as independent field BM25 
 ```text
 B_raw(i, j) =
     w_title   * BM25_title(original_vi_i, frame_j.title)
-  + w_caption * BM25_caption(caption_en_i, frame_j.caption)
+  + w_caption * BM25_caption(original_vi_i, frame_j.caption)
   + w_ocr     * BM25_ocr(original_vi_i, frame_j.ocr)
   + w_asr     * BM25_asr(original_vi_i, frame_j.asr)
 ```
@@ -547,8 +538,8 @@ Rules:
 - BM25 toggle is disabled if the BM25 artifact is unavailable.
 - Generate Candidates is disabled if query preparation is unavailable.
 - Original Dense-only search can still run when Qwen is unavailable.
-- Original BM25 search requires query preparation for English caption translation and fails clearly if it is unavailable.
-- Search using a frontend-supplied English candidate can run BM25 without a fresh Qwen call.
+- Original and candidate-backed BM25 search can run when query preparation is unavailable.
+- A frontend-supplied English candidate changes Dense retrieval only.
 - No selected evidence source is silently omitted.
 
 ## 16. Frontend Design
@@ -673,11 +664,10 @@ Tests must prove:
 
 ### 18.2 BM25
 
-Use a tiny canonical corpus containing mixed Vietnamese and English evidence to prove:
+Use a tiny canonical corpus containing Vietnamese evidence to prove:
 
-- Vietnamese query terms match title/OCR/ASR fields;
-- English caption query terms match caption fields;
-- the wrong-language lexical path does not accidentally substitute for the routed field;
+- Vietnamese query terms match title/caption/OCR/ASR fields;
+- generated English candidates do not replace the original BM25 query;
 - missing fields contribute zero;
 - field weights are applied deterministically;
 - loaded BM25 identity maps exactly to canonical frames;
@@ -745,7 +735,7 @@ The feature should make the following ablations available without code changes:
 
 ```text
 A. Dense original VI
-B. BM25 original VI + literal EN caption translation
+B. BM25 original VI over Vietnamese fields
 C. Hybrid original
 D. Dense candidate #k
 E. BM25 candidate #k
@@ -763,9 +753,9 @@ The feature is ready to freeze when:
 3. Generate Candidates returns one literal translation plus exactly five event-aligned candidates.
 4. KIS and TRAKE requests are stateless and accept concrete selected retrieval events.
 5. Dense mode uses Visual + Context + frame-ASR full-corpus scoring.
-6. BM25 uses canonical-frame title/caption/OCR/ASR fielded scoring with Vietnamese/English query routing.
-7. Original BM25 performs VI→EN translation only when needed.
-8. Candidate retrieval uses the selected candidate for Dense and BM25 caption while retaining original VI for BM25 title/OCR/ASR.
+6. BM25 uses canonical-frame title/caption/OCR/ASR fielded scoring with the original Vietnamese events.
+7. BM25 search never requires or invokes query preparation.
+8. Candidate retrieval uses the selected candidate only for Dense and retains original Vietnamese for all BM25 fields.
 9. Per-event normalization and configurable Dense/BM25 fusion feed the unchanged DP decoder.
 10. UI supports Original + five generated retrieval hypotheses and independent Dense/BM25 toggles.
 11. Automated backend/frontend tests cover mode routing, event invariants, fusion math, API contracts, and unchanged DP semantics.

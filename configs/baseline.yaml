@@ -9,14 +9,14 @@ dataset:
     ocr_path: "artifacts/corpus/ocr_frames.parquet"
     object_path: "artifacts/corpus/object_frames.parquet"
     asr_path: "artifacts/enrichment/asr/frame_enrichment.parquet"
-    context_path: "artifacts/corpus/context.parquet"
+    context_path: "artifacts/enrichment/context_vi/frame_context_v1.parquet"
     transcripts_path: "artifacts/enrichment/transcripts"
 
 index:
   type: "flat_ip"
 
   path: "artifacts/indexes/visual"
-  context_path: "artifacts/indexes/context"
+  context_path: "artifacts/indexes/context_vi"
   asr_segment_path: "artifacts/indexes/asr_segments"
   bm25_path: "artifacts/indexes/bm25"
 

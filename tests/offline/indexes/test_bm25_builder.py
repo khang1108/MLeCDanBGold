@@ -26,7 +26,7 @@ def test_builder_preserves_canonical_mapping_and_missing_fields(tmp_path: Path) 
             {"frame_id": "f3", "video_id": "v2", "frame_idx": 30, "timestamp_ms": 3000},
         ]
     )
-    caption = pd.DataFrame([{"frame_id": "f1", "text": "white apron"}])
+    caption = pd.DataFrame([{"frame_id": "f1", "caption_text": "tạp dề trắng"}])
     ocr = pd.DataFrame([{"frame_id": "f2", "normalized_text": "HTV 60"}])
     asr = pd.DataFrame([{"frame_id": "f3", "asr_text": "xin chao"}])
     frames_path = tmp_path / "frames.parquet"
@@ -59,6 +59,8 @@ def test_builder_preserves_canonical_mapping_and_missing_fields(tmp_path: Path) 
         assert matrix.format == "csr"
         assert matrix.shape[0] == 3
         assert json.loads((output / f"{field}_vocab.json").read_text())
+    caption_vocabulary = json.loads((output / "caption_vocab.json").read_text())
+    assert {"tạp", "dề", "trắng"} <= set(caption_vocabulary)
     metadata = json.loads((output / "metadata.json").read_text())
     assert metadata["document_count"] == 3
     assert metadata["dataset_version"] == "fixture-v1"

@@ -1,10 +1,19 @@
-"""Public FastAPI request and response contracts.
-
-This package owns thin Pydantic HTTP-boundary models for KIS, TRAKE, frame
-catalog, and submission routes.
-"""
+"""Public Pydantic contracts for the HCMAI HTTP and WebSocket APIs."""
 
 from .frames import CatalogTranscriptSegment, FrameCatalogEntry
+from .history import (
+    QueryHistoryCreate,
+    QueryHistoryList,
+    QueryHistoryRecord,
+    QueryHistorySubmissionUpdate,
+    QueryHistoryViewedFrameUpdate,
+    SubmissionFile,
+    SubmissionFileCreate,
+    SubmissionFileDelete,
+    SubmissionFileList,
+    SubmissionFileUpdate,
+    SubmissionFileValidate,
+)
 from .latency import SearchLatency
 from .query_candidates import (
     QueryCandidateResponse,
@@ -15,17 +24,29 @@ from .search import SearchRequest, SearchResponse, SearchResult, SearchResultMet
 from .submission import SubmissionResult
 from .trake import TRAKEPath, TRAKERequest, TRAKEResponse
 
+
 __all__ = [
     "CatalogTranscriptSegment",
     "FrameCatalogEntry",
     "QueryCandidateResponse",
     "QueryCandidatesRequest",
     "QueryCandidatesResponse",
+    "QueryHistoryCreate",
+    "QueryHistoryList",
+    "QueryHistoryRecord",
+    "QueryHistorySubmissionUpdate",
+    "QueryHistoryViewedFrameUpdate",
     "SearchLatency",
     "SearchRequest",
+    "SearchResponse",
     "SearchResult",
     "SearchResultMetadata",
-    "SearchResponse",
+    "SubmissionFile",
+    "SubmissionFileCreate",
+    "SubmissionFileDelete",
+    "SubmissionFileList",
+    "SubmissionFileUpdate",
+    "SubmissionFileValidate",
     "SubmissionResult",
     "TRAKEPath",
     "TRAKERequest",

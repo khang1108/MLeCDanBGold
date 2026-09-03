@@ -63,16 +63,9 @@ class TRAKEPipeline:
                 f"requests may contain at most {self.max_temporal_event_count} temporal events"
             )
         retrieval_events = request.retrieval_events or events
-        caption_events: list[str] | tuple[str, ...] | None = None
-        if request.use_bm25:
-            if request.retrieval_events is not None:
-                caption_events = request.retrieval_events
-            else:
-                if self.query_preparation is None:
-                    raise RuntimeError(
-                        "query preparation is unavailable for BM25 caption translation"
-                    )
-                caption_events = self.query_preparation.translate_literal(tuple(events))
+        # Candidate rewrites belong only to Dense retrieval. BM25 searches the
+        # original Vietnamese events against the Vietnamese context corpus.
+        caption_events = events if request.use_bm25 else None
         query_ms = (perf_counter() - query_started) * 1_000
 
         search = self.temporal.search(

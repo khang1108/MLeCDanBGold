@@ -91,7 +91,7 @@ indexing:
 
   indexes:
     visual: artifacts/indexes/visual
-    context: artifacts/indexes/context
+    context: artifacts/indexes/context_vi
     asr_segments: artifacts/indexes/asr_segments
 
   projection:

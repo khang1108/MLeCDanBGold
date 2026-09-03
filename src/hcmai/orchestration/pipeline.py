@@ -255,7 +255,6 @@ class SearchService:
         """Execute a validated KIS request through the explicit KIS workflow."""
 
         self._ensure_search_ready()
-        self._ensure_translation_ready(request.use_bm25, request.retrieval_events)
         return self.kis.execute(request)
 
     def generate_query_candidates(self, request: QueryCandidatesRequest) -> QueryCandidatesResponse:
@@ -287,18 +286,7 @@ class SearchService:
         """Execute a validated TRAKE request through the explicit TRAKE workflow."""
 
         self._ensure_search_ready()
-        self._ensure_translation_ready(request.use_bm25, request.retrieval_events)
         return self.trake.execute(request)
-
-    def _ensure_translation_ready(
-        self, use_bm25: bool, retrieval_events: Sequence[str] | None
-    ) -> None:
-        """Require literal translation only for original-query BM25 search."""
-
-        if use_bm25 and retrieval_events is None and self.query_preparation is None:
-            raise SearchServiceUnavailableError(
-                "Query preparation is required for BM25 caption translation"
-            )
 
     def _ensure_search_ready(self) -> None:
         """Reject online search when canonical data or retrieval is unavailable."""

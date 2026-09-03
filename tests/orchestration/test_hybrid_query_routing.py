@@ -1,4 +1,4 @@
-"""Tests for lazy translation and selected query routing."""
+"""Tests for Vietnamese BM25 and selected dense-query routing."""
 
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ class RecordingPreparation:
         (
             SearchRequest(query="mot.", use_dense=False, use_bm25=True),
             ("mot.",),
-            ("EN mot.",),
-            [("mot.",)],
+            ("mot.",),
+            [],
         ),
         (
             SearchRequest(
@@ -51,7 +51,7 @@ class RecordingPreparation:
                 query="mot.", retrieval_events=["candidate"], use_dense=False, use_bm25=True
             ),
             ("candidate",),
-            ("candidate",),
+            ("mot.",),
             [],
 ),],)
 def test_kis_lazy_translation_routing(
@@ -77,6 +77,53 @@ def test_kis_lazy_translation_routing(
     assert preparation.calls == translation_calls
     assert response.dense_events == (list(dense_events) if search_request.use_dense else None)
     assert response.bm25_caption_events == (list(caption_events) if caption_events else None)
+
+
+def test_kis_bm25_does_not_require_query_preparation() -> None:
+    """Search Vietnamese text directly when candidate generation is unavailable."""
+
+    temporal = RecordingTemporal()
+    pipeline = KISPipeline(
+        corpus=cast(Any, object()),
+        temporal=cast(Any, temporal),
+        query_preparation=None,
+    )
+
+    response = pipeline.execute(
+        SearchRequest(query="người đi xe máy", use_dense=False, use_bm25=True)
+    )
+
+    _, kwargs = temporal.calls[0]
+    assert kwargs["caption_events"] == ("người đi xe máy",)
+    assert response.bm25_caption_events == ["người đi xe máy"]
+
+
+def test_trake_candidate_only_changes_dense_query() -> None:
+    """Keep original Vietnamese events on BM25 when Dense uses a candidate."""
+
+    temporal = RecordingTemporal()
+    preparation = RecordingPreparation()
+    pipeline = TRAKEPipeline(
+        temporal=cast(Any, temporal),
+        query_preparation=cast(Any, preparation),
+    )
+
+    response = pipeline.execute(
+        TRAKERequest(
+            events=["một người chạy"],
+            retrieval_events=["a person running"],
+            use_dense=True,
+            use_bm25=True,
+        )
+    )
+
+    original, kwargs = temporal.calls[0]
+    assert original == ["một người chạy"]
+    assert kwargs["retrieval_events"] == ["a person running"]
+    assert kwargs["caption_events"] == ["một người chạy"]
+    assert preparation.calls == []
+    assert response.dense_events == ["a person running"]
+    assert response.bm25_caption_events == ["một người chạy"]
 
 
 def test_kis_configured_event_limit_runs_before_translation_and_search() -> None:

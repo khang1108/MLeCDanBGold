@@ -51,6 +51,7 @@ class _FrameArtifact(BaseModel):
     timestamp_ms: int = Field(ge=0)
     image_path: str = Field(min_length=1)
     thumbnail_path: str | None = None
+    fps: float | None = Field(default=None, gt=0)
 
 
 class FrameStore:
@@ -185,6 +186,9 @@ class FrameStore:
             and math.isnan(value)
         ):
             values["thumbnail_path"] = None
+        fps = values.get("fps")
+        if fps is pd.NA or isinstance(fps, float) and math.isnan(fps):
+            values["fps"] = None
         artifact_record = _FrameArtifact.model_validate(values)
         return Frame(
             frame_id=artifact_record.frame_id,
@@ -193,6 +197,7 @@ class FrameStore:
             timestamp_ms=artifact_record.timestamp_ms,
             image_path=artifact_record.image_path,
             thumbnail_path=artifact_record.thumbnail_path,
+            fps=artifact_record.fps,
         )
 
     def get(self, frame_id: str) -> Frame:

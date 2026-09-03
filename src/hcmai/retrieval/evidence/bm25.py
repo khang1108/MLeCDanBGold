@@ -1,7 +1,7 @@
 """Load and score fielded frame-native BM25 artifacts read-only.
 
-Original events score title, OCR, and ASR while selected English events score
-caption. Results are always reordered to canonical visual-index positions.
+Original Vietnamese events score title, caption, OCR, and ASR. Results are
+always reordered to canonical visual-index positions.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ class BM25ArtifactError(RuntimeError):
 
 
 class BM25TemporalScorer:
-    """Score full-corpus original/caption event pairs over four BM25 fields."""
+    """Score original Vietnamese events over four frame-native BM25 fields."""
 
     def __init__(
         self,
@@ -108,7 +108,7 @@ class BM25TemporalScorer:
         original_events: Sequence[str],
         caption_events: Sequence[str],
     ) -> np.ndarray:
-        """Score VI fields from originals and caption only from English events."""
+        """Score Vietnamese fields, with the caption query routed explicitly."""
 
         if len(original_events) != len(caption_events) or not original_events:
             raise ValueError("original and caption events must have equal non-zero lengths")

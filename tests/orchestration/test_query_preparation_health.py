@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any, cast
 
+from hcmai.api.contracts import SearchRequest
 from hcmai.common.config import AppConfig
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.setup import _load_query_preparation
@@ -52,6 +53,22 @@ def test_query_preparation_is_independent_from_dense_search() -> None:
 
     assert health["capabilities"]["search"] is True
     assert health["capabilities"]["query_preparation"] is False
+
+
+def test_bm25_search_is_independent_from_query_preparation() -> None:
+    """Do not gate direct Vietnamese BM25 on the optional Qwen capability."""
+
+    service = SearchService(
+        corpus=cast(Any, FakeCorpus()),
+        retrieval=cast(Any, SimpleNamespace(active_sources=())),
+    )
+    service.kis = cast(Any, SimpleNamespace(execute=lambda request: request.query))
+
+    result = service.search_kis(
+        SearchRequest(query="người đi xe máy", use_dense=False, use_bm25=True)
+    )
+
+    assert result == "người đi xe máy"
 
 
 def test_setup_constructs_service_only_for_ready_capability() -> None:

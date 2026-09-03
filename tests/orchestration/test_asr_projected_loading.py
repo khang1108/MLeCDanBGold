@@ -19,26 +19,32 @@ from hcmai.corpus import Corpus
 from hcmai.orchestration import setup
 from hcmai.retrieval.evidence.asr_projected import SegmentProjectedASRIndex
 from hcmai.retrieval.models import RetrievalSource
+from hcmai.retrieval.retriever.dense.index import (
+    REQUIRED_INDEX_FILENAMES as FRAME_INDEX_FILENAMES,
+)
 from hcmai.retrieval.retriever.dense.index import DenseIndex
+from hcmai.retrieval.retriever.segment.index import (
+    REQUIRED_INDEX_FILENAMES as SEGMENT_INDEX_FILENAMES,
+)
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 from hcmai.retrieval.retriever.segment.retriever import ASRSegmentRetriever
 
 
-_PRODUCTION_INDEX_PATHS = (
-    Path("artifacts/indexes/visual"),
-    Path("artifacts/indexes/context"),
-    Path("artifacts/indexes/asr_segments"),
+_PRODUCTION_INDEX_BUNDLES = (
+    (Path("artifacts/indexes/visual"), FRAME_INDEX_FILENAMES),
+    (Path("artifacts/indexes/context_vi"), FRAME_INDEX_FILENAMES),
+    (Path("artifacts/indexes/asr_segments"), SEGMENT_INDEX_FILENAMES),
 )
 
 
 def _require_production_indexes() -> None:
     """Skip only when the required published Dense bundles are unavailable."""
 
-    missing = [
-        str(path)
-        for path in _PRODUCTION_INDEX_PATHS
-        if not (REPOSITORY_ROOT / path).is_dir()
-    ]
+    missing = []
+    for path, filenames in _PRODUCTION_INDEX_BUNDLES:
+        root = REPOSITORY_ROOT / path
+        if not all((root / filename).is_file() for filename in filenames):
+            missing.append(str(path))
     if missing:
         pytest.skip(
             "production Dense temporal artifacts are not mounted: "
@@ -296,13 +302,13 @@ def test_production_artifacts_project_segment_asr_to_canonical_frames() -> None:
 
     _require_production_indexes()
 
+    settings = setup._load_app_config()
     visual = DenseIndex.load(REPOSITORY_ROOT / "artifacts/indexes/visual")
-    context = DenseIndex.load(REPOSITORY_ROOT / "artifacts/indexes/context")
+    context = DenseIndex.load(REPOSITORY_ROOT / settings.index.context_path)
     asr_segments = SegmentDenseIndex.load(
         REPOSITORY_ROOT / "artifacts/indexes/asr_segments"
     )
 
-    settings = setup._load_app_config()
     corpus = Corpus.open(REPOSITORY_ROOT / settings.dataset.frames_path)
     canonical_frames = tuple(
         corpus.frames(
@@ -358,7 +364,7 @@ def test_production_artifacts_satisfy_fast_track_lineage() -> None:
     encoder_config = models.resolved_evidence_embedding
     context = setup._load_fast_track_index(
         source=RetrievalSource.CONTEXT,
-        path=REPOSITORY_ROOT / "artifacts/indexes/context",
+        path=REPOSITORY_ROOT / settings.index.context_path,
         visual=visual,
         encoder_config=encoder_config,
         settings=settings,

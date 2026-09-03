@@ -61,7 +61,9 @@ class EnrichmentArtifactsConfig(BaseModel):
     ocr_path: Path | None = Path("artifacts/corpus/ocr_frames.parquet")
     object_path: Path | None = Path("artifacts/corpus/object_frames.parquet")
     asr_path: Path | None = Path("artifacts/enrichment/asr/frame_enrichment.parquet")
-    context_path: Path | None = Path("artifacts/corpus/context.parquet")
+    context_path: Path | None = Path(
+        "artifacts/enrichment/context_vi/frame_context_v1.parquet"
+    )
     transcripts_path: Path | None = Path("artifacts/enrichment/transcripts")
 
 
@@ -220,7 +222,7 @@ class IndexConfig(BaseModel):
 
     type: str = "flat_ip"
     path: Path = Path("artifacts/indexes/visual")
-    context_path: Path = Path("artifacts/indexes/context")
+    context_path: Path = Path("artifacts/indexes/context_vi")
     asr_segment_path: Path = Path("artifacts/indexes/asr_segments")
     caption_path: Path = Path("artifacts/indexes/caption")
     ocr_path: Path = Path("artifacts/indexes/ocr")

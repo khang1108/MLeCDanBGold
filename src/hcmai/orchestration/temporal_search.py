@@ -21,6 +21,10 @@ if TYPE_CHECKING:
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 
 
+# =====================================================================
+# 1. DATA CONTRACTS & SEARCH RESULT CONTAINER
+# =====================================================================
+
 @dataclass(frozen=True, slots=True)
 class TemporalSearchResult:
     """Shared temporal-search output and stage timings for one request."""
@@ -29,6 +33,10 @@ class TemporalSearchResult:
     retrieval_ms: float
     alignment_ms: float
 
+
+# =====================================================================
+# 2. TEMPORAL SEARCH SERVICE: CORE ORCHESTRATION FACADE
+# =====================================================================
 
 class TemporalSearchService:
     """Score ordered events, decode monotonic paths, and preserve identity."""
@@ -59,6 +67,13 @@ class TemporalSearchService:
     ) -> TemporalSearchResult:
         """Return canonical aligned paths for one ordered event sequence."""
 
+        # =================================================================
+        # STEP 1: VALIDATION & INPUT NORMALIZATION
+        # =================================================================
+        # - Kiểm tra giới hạn top_k > 0
+        # - Chuẩn hóa khoảng trắng cho từng sự kiện và loại bỏ sự kiện rỗng
+        # - Đảm bảo số lượng sự kiện không vượt quá cấu hình tối đa
+        # - Khởi tạo các biến sự kiện phục vụ cho Dense và BM25 retrieval
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero")
 
@@ -80,6 +95,13 @@ class TemporalSearchService:
             else tuple(" ".join(event.split()) for event in caption_events)
         )
 
+        # =================================================================
+        # STEP 2: MULTIMODAL RETRIEVAL & EVIDENCE SCORING
+        # =================================================================
+        # - Gọi TemporalEvidenceScorer để tính toán ma trận điểm trên toàn bộ corpus
+        # - Kết hợp linh hoạt Dense (SigLIP visual, BGE context/ASR) và BM25 (tiếng Việt)
+        # - Phân tách điểm toàn corpus thành các ma trận VideoEventScores theo từng video
+        # - Đo lường chính xác thời gian truy xuất (retrieval_ms)
         retrieval_started = perf_counter()
         score_events = getattr(self.evidence, "score_events", None)
         if score_events is None:
@@ -98,11 +120,23 @@ class TemporalSearchService:
             )
         retrieval_ms = (perf_counter() - retrieval_started) * 1_000
 
+        # =================================================================
+        # STEP 3: CANONICAL IDENTITY VALIDATION
+        # =================================================================
+        # - Đối chiếu từng ma trận video với Corpus để phát hiện sớm các bất thường
+        # - Kiểm tra kích thước ma trận, sự tồn tại và tính nhất quán của frame_id,
+        #   frame_idx và timestamp_ms so với bản ghi gốc
         score_by_video: dict[str, VideoEventScores] = {}
         for video in scores:
             self._validate_video_scores(len(original), video)
             score_by_video[video.video_id] = video
 
+        # =================================================================
+        # STEP 4: MONOTONIC DYNAMIC PROGRAMMING (PATH DECODING)
+        # =================================================================
+        # - Chạy thuật toán quy hoạch động đơn điệu trên ma trận điểm của từng video
+        # - Áp dụng phạt khoảng cách thời gian (lambda_gap) và phân cụm (cluster_delta)
+        # - Xếp hạng phân tầng (stratified) để đảm bảo tính đa dạng giữa các video
         alignment_started = perf_counter()
         rows = rank_paths(
             scores,
@@ -111,6 +145,12 @@ class TemporalSearchService:
             event_power=self.config.event_power,
             cluster_delta=self.config.cluster_delta,
         )
+
+        # =================================================================
+        # STEP 5: CANONICAL PATH MATERIALIZATION & RESULT PACKAGING
+        # =================================================================
+        # - Ánh xạ các hàng kết quả DPPath sang AlignedPath chứa đầy đủ tọa độ canonical
+        # - Đo thời gian gióng hàng (alignment_ms) và trả về container kết quả hoàn chỉnh
         paths = tuple(
             self._materialize_aligned_path(row, score_by_video[row.video_id]) for row in rows
         )
@@ -121,12 +161,21 @@ class TemporalSearchService:
             alignment_ms=alignment_ms,
         )
 
+    # =====================================================================
+    # 3. HELPER: VALIDATE RETRIEVAL SCORE METADATA AGAINST CORPUS
+    # =====================================================================
     def _validate_video_scores(
         self,
         event_count: int,
         video: VideoEventScores,
     ) -> None:
-        """Reject score metadata that conflicts with canonical frame records."""
+        """Reject score metadata that conflicts with canonical frame records.
+
+        Bảo vệ tính toàn vẹn định danh của cuộc thi:
+        1. Kích thước ma trận (scores.shape) phải khớp với (số sự kiện, số frames).
+        2. Độ dài các mảng metadata (frame_idx, timestamps_ms) phải bằng số frames.
+        3. Từng frame_id phải thuộc về đúng video_id và khớp chính xác frame_idx, timestamp_ms với Corpus.
+        """
 
         frame_count = len(video.frame_ids)
         if video.scores.shape != (event_count, frame_count):
@@ -146,12 +195,22 @@ class TemporalSearchService:
             if frame.timestamp_ms != round(float(video.timestamps_ms[position])):
                 raise ValueError("temporal score timestamp conflicts with canonical data")
 
+    # =====================================================================
+    # 4. HELPER: MATERIALIZE DECODED DP ROW INTO CANONICAL ALIGNED PATH
+    # =====================================================================
     def _materialize_aligned_path(
         self,
         row: DPPath,
         video: VideoEventScores,
     ) -> AlignedPath:
-        """Resolve one decoded DP row into canonical frame indices and times."""
+        """Resolve one decoded DP row into canonical frame indices and times.
+
+        Biến đổi kết quả giải mã DPPath thành AlignedPath canonical:
+        1. Tra cứu chỉ số vị trí của từng frame_id trong video metadata.
+        2. Tái xác thực frame_idx và timestamp từ Corpus gốc nhằm đảm bảo
+           tọa độ nộp bài (frame_idx) không bị biến đổi hay sai lệch.
+        3. Tạo đối tượng AlignedPath bất biến (frozen dataclass).
+        """
 
         positions = {str(frame_id): position for position, frame_id in enumerate(video.frame_ids)}
         frame_idxs: list[int] = []

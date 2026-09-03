@@ -74,7 +74,6 @@ def cluster_starts(scores: np.ndarray, delta: float) -> np.ndarray:
         starts[frame] = anchor
     return starts
 
-
 def align_video(
     video: VideoEventScores,
     lambda_gap: float = 1e-5,

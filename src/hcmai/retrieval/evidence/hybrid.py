@@ -1,7 +1,8 @@
 """Route and fuse full-corpus Dense and BM25 temporal evidence.
 
-English caption events are resolved by orchestration before this scorer. This
-module never calls query preparation, shortlists frames, or changes DP logic.
+Original Vietnamese caption events are resolved by orchestration before this
+scorer. This module never calls query preparation, shortlists frames, or
+changes DP logic.
 """
 
 from __future__ import annotations
