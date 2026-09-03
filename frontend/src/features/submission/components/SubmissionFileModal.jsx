@@ -18,8 +18,6 @@ const SubmissionFileModal = ({
   onLoadConflict,
   onRebaseConflict,
   error,
-  historyPatchError,
-  onRetryHistoryPatch,
 }) => {
   const searchRef = useRef(null);
   const editorRef = useRef(null);
@@ -67,6 +65,18 @@ const SubmissionFileModal = ({
   }, [mode, onClose]);
 
   useEffect(() => {
+    if (mode !== 'editor') return undefined;
+    const handleEditorSaveShortcut = (event) => {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing || isMutating) return;
+      if (['BUTTON', 'SELECT'].includes(event.target?.tagName)) return;
+      event.preventDefault();
+      onSave?.();
+    };
+    window.addEventListener('keydown', handleEditorSaveShortcut, true);
+    return () => window.removeEventListener('keydown', handleEditorSaveShortcut, true);
+  }, [isMutating, mode, onSave]);
+
+  useEffect(() => {
     if (!highlightedFileName) return;
     fileOptionRefs.current.get(highlightedFileName)?.scrollIntoView?.({ block: 'nearest' });
   }, [highlightedFileName]);
@@ -94,13 +104,6 @@ const SubmissionFileModal = ({
     setHighlightedFileName(filteredFiles[
       (currentIndex + offset + filteredFiles.length) % filteredFiles.length
     ].name);
-  };
-
-  const handleEditorKeyDown = (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      if (!isMutating) onSave?.();
-    }
   };
 
   const setDraft = (value) => {
@@ -178,14 +181,6 @@ const SubmissionFileModal = ({
           <>
             <div className="submission-modal-body submission-editor-body">
               {error && <div className="submission-status-banner error" role="alert">{error}</div>}
-              {historyPatchError && (
-                <div className="submission-status-banner error" role="alert">
-                  History state was not recorded.{' '}
-                  <button type="button" className="btn-link" onClick={onRetryHistoryPatch} disabled={isMutating}>
-                    Retry history update
-                  </button>
-                </div>
-              )}
               {remoteConflict && (
                 <div className="submission-conflict" role="alert">
                   <strong>This file changed on the server.</strong>
@@ -205,7 +200,6 @@ const SubmissionFileModal = ({
                 className="submission-file-editor"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={handleEditorKeyDown}
                 spellCheck="false"
                 aria-label={`Edit ${editorFile?.name || 'CSV file'} content`}
                 disabled={isMutating}

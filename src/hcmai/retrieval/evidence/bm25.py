@@ -15,6 +15,7 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 from hcmai.common.config import BM25FieldWeights
+from hcmai.retrieval.evidence.components import TemporalScoreBundle, TemporalScoreComponent
 from scipy import sparse
 
 FIELDS = ("title", "caption", "ocr", "asr")
@@ -103,6 +104,37 @@ class BM25TemporalScorer:
             matrices[field] = matrix
         return cls(matrices, vocabularies, reorder, field_weights)
 
+    def score_components(
+        self,
+        original_events: Sequence[str],
+        caption_events: Sequence[str],
+    ) -> TemporalScoreBundle:
+        """Score each BM25 field independently without field weighting."""
+
+        if len(original_events) != len(caption_events) or not original_events:
+            raise ValueError("original and caption events must have equal non-zero lengths")
+
+        rows = {
+            "bm25_title": np.zeros((len(original_events), len(self._reorder)), dtype=np.float32),
+            "bm25_caption": np.zeros((len(original_events), len(self._reorder)), dtype=np.float32),
+            "bm25_ocr": np.zeros((len(original_events), len(self._reorder)), dtype=np.float32),
+            "bm25_asr": np.zeros((len(original_events), len(self._reorder)), dtype=np.float32),
+        }
+        for event_index, (original, caption) in enumerate(
+            zip(original_events, caption_events, strict=True)
+        ):
+            original_tokens = _tokenize(original)
+            rows["bm25_title"][event_index] = self._score_field("title", original_tokens)[self._reorder]
+            rows["bm25_ocr"][event_index] = self._score_field("ocr", original_tokens)[self._reorder]
+            rows["bm25_asr"][event_index] = self._score_field("asr", original_tokens)[self._reorder]
+            rows["bm25_caption"][event_index] = self._score_field(
+                "caption", _tokenize(caption)
+            )[self._reorder]
+
+        return TemporalScoreBundle(
+            {name: TemporalScoreComponent(name, scores) for name, scores in rows.items()}
+        )
+
     def score_events(
         self,
         original_events: Sequence[str],
@@ -110,26 +142,13 @@ class BM25TemporalScorer:
     ) -> np.ndarray:
         """Score Vietnamese fields, with the caption query routed explicitly."""
 
-        if len(original_events) != len(caption_events) or not original_events:
-            raise ValueError("original and caption events must have equal non-zero lengths")
-        rows = np.zeros((len(original_events), len(self._reorder)), dtype=np.float32)
-        vi_fields = (
-            ("title", self._field_weights.title_weight),
-            ("ocr", self._field_weights.ocr_weight),
-            ("asr", self._field_weights.asr_weight),
-        )
-        for event_index, (original, caption) in enumerate(
-            zip(original_events, caption_events, strict=True)
-        ):
-            artifact_scores = np.zeros(len(self._reorder), dtype=np.float32)
-            original_tokens = _tokenize(original)
-            for field, weight in vi_fields:
-                artifact_scores += weight * self._score_field(field, original_tokens)
-            artifact_scores += self._field_weights.caption_weight * self._score_field(
-                "caption", _tokenize(caption)
-            )
-            rows[event_index] = artifact_scores[self._reorder]
-        return rows
+        bundle = self.score_components(original_events, caption_events)
+        return (
+            self._field_weights.title_weight * bundle.components["bm25_title"].raw_scores
+            + self._field_weights.caption_weight * bundle.components["bm25_caption"].raw_scores
+            + self._field_weights.ocr_weight * bundle.components["bm25_ocr"].raw_scores
+            + self._field_weights.asr_weight * bundle.components["bm25_asr"].raw_scores
+        ).astype(np.float32, copy=False)
 
     def _score_field(self, field: str, tokens: Sequence[str]) -> np.ndarray:
         """Sum precomputed sparse columns for query terms present in one field."""

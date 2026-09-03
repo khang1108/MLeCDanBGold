@@ -12,7 +12,14 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
+import time
 
+from hcmai.api.contracts.database import (
+    DatabaseColumn,
+    DatabaseQueryResponse,
+    DatabaseRowsPage,
+    DatabaseTable,
+)
 from hcmai.api.contracts.history import (
     QueryHistoryCreate,
     QueryHistoryRecord,
@@ -22,6 +29,11 @@ from hcmai.common.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+_DATABASE_TABLE_ORDER = {
+    "query_history": "created_at DESC, rowid DESC",
+    "submission_files": "name ASC",
+}
 
 
 class RevisionConflict(Exception):
@@ -167,6 +179,105 @@ class WorkspaceStore:
         return [_submission_file(row) for row in rows]
 
 
+    def list_database_tables(self) -> list[DatabaseTable]:
+        """Describe visible tables without exposing internal SQLite tables."""
+
+        with self._readonly_connection() as connection:
+            return [
+                DatabaseTable(
+                    name=table_name,
+                    row_count=connection.execute(
+                        f"SELECT COUNT(*) FROM {table_name}"
+                    ).fetchone()[0],
+                    columns=_table_columns(connection, table_name),
+                )
+                for table_name in _DATABASE_TABLE_ORDER
+            ]
+
+
+    def list_database_rows(
+        self,
+        table_name: str,
+        *,
+        page: int,
+        page_size: int,
+    ) -> DatabaseRowsPage:
+        """Read one stable page from an allowlisted application table."""
+
+        try:
+            order_by = _DATABASE_TABLE_ORDER[table_name]
+        except KeyError:
+            raise KeyError(
+                f"Database table {table_name!r} is not available"
+            ) from None
+
+        if page < 1 or not 1 <= page_size <= 100:
+            raise ValueError("Database pagination is outside the supported bounds")
+
+        with self._readonly_connection() as connection:
+            total_rows = int(
+                connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            )
+            offset = (page - 1) * page_size
+            rows = connection.execute(
+                f"SELECT * FROM {table_name} ORDER BY {order_by} LIMIT ? OFFSET ?",
+                (page_size, offset),
+            ).fetchall()
+
+        return DatabaseRowsPage(
+            table=table_name,
+            page=page,
+            page_size=page_size,
+            total_rows=total_rows,
+            total_pages=(total_rows + page_size - 1) // page_size,
+            rows=[dict(row) for row in rows],
+        )
+
+
+    def execute_query(
+        self,
+        query: str,
+        *,
+        max_rows: int = 100,
+    ) -> DatabaseQueryResponse:
+        """Execute an arbitrary raw SQL query against workspace SQLite."""
+
+        cleaned_query = query.strip()
+        if not cleaned_query:
+            raise ValueError("SQL query cannot be empty")
+        if max_rows < 1:
+            raise ValueError("max_rows must be at least 1")
+
+        start_time = time.perf_counter()
+        try:
+            with self._connection() as connection:
+                cursor = connection.execute(cleaned_query)
+                if cursor.description is not None:
+                    columns = [col[0] for col in cursor.description]
+                    fetched_rows = cursor.fetchmany(max_rows)
+                    rows = [dict(row) for row in fetched_rows]
+                    is_mutation = False
+                    rows_affected = 0
+                else:
+                    columns = []
+                    rows = []
+                    is_mutation = True
+                    rows_affected = cursor.rowcount if cursor.rowcount >= 0 else 0
+        except sqlite3.Error as error:
+            raise ValueError(f"SQLite execution failed: {error}") from error
+
+        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 3)
+
+        return DatabaseQueryResponse(
+            query=cleaned_query,
+            columns=columns,
+            rows=rows,
+            rows_affected=rows_affected,
+            execution_time_ms=execution_time_ms,
+            is_mutation=is_mutation,
+        )
+
+
     def create_submission_file(self, name: str, content: str) -> SubmissionFile:
         """Create one globally named submission file at revision one."""
 
@@ -270,6 +381,20 @@ class WorkspaceStore:
         except Exception:
             connection.rollback()
             raise
+        finally:
+            connection.close()
+
+
+    @contextmanager
+    def _readonly_connection(self) -> Iterator[sqlite3.Connection]:
+        """Open SQLite in URI read-only mode for database-browser requests."""
+
+        database_uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
+        connection = sqlite3.connect(database_uri, uri=True, timeout=5.0)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA query_only=ON")
+        try:
+            yield connection
         finally:
             connection.close()
 
@@ -393,6 +518,23 @@ def _submission_file(row: sqlite3.Row) -> SubmissionFile:
         is_validated=bool(row["is_validated"]),
         revision=row["revision"],
     )
+
+
+def _table_columns(
+    connection: sqlite3.Connection,
+    table_name: str,
+) -> list[DatabaseColumn]:
+    """Project SQLite schema facts for one already-allowlisted table name."""
+
+    return [
+        DatabaseColumn(
+            name=row["name"],
+            type=row["type"],
+            nullable=not bool(row["notnull"]) and not bool(row["pk"]),
+            primary_key=bool(row["pk"]),
+        )
+        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    ]
 
 
 __all__ = ["RevisionConflict", "WorkspaceStore"]

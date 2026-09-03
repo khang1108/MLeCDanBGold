@@ -33,6 +33,15 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
     );
   }
 ));
+jest.mock("./features/search/components/ImageSearchWorkspace", () => (
+  function FakeImageSearchWorkspace({ isActive, userId }) {
+    return (
+      <div data-testid="image-search-workspace">
+        Image search workspace (active: {String(isActive)}) for {userId || ''}
+      </div>
+    );
+  }
+));
 jest.mock("./features/workspace/components/WorkspacePage", () => (
   function FakeWorkspacePage({ onReplay, onOpenManualVideo, userId, historyRefreshToken }) {
     return (
@@ -61,6 +70,11 @@ jest.mock("./features/workspace/components/WorkspacePage", () => (
     );
   }
 ));
+jest.mock("./features/database", () => ({
+  DatabasePage: function FakeDatabasePage({ isActive }) {
+    return <div data-testid="database-page">Database Page (active: {String(isActive)})</div>;
+  },
+}));
 jest.mock("./features/health/hooks/useHealthCheck", () => ({
   useHealthCheck: () => ({ isHealthy: true, healthData: {} }),
 }));
@@ -76,6 +90,10 @@ jest.mock("./features/vim/hooks/useVimMode", () => ({
     setIsHelpOpen: jest.fn(),
   }),
 }));
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 test("mounts one shared search workspace without task tabs", () => {
   render(<App />);
@@ -127,3 +145,38 @@ test('opens manual video inspection without exposing a fake frame submission', (
   expect(screen.getByText('V01 · 1000 ms')).toBeTruthy();
   expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
 });
+
+test('navigates to Database workspace when Database tab is clicked', () => {
+  render(<App />);
+  const databaseTab = screen.getByRole('button', { name: 'Database' });
+  expect(databaseTab.getAttribute('aria-pressed')).toBe('false');
+
+  fireEvent.click(databaseTab);
+  expect(databaseTab.getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByTestId('database-page').textContent).toContain('active: true');
+});
+
+test('navigates to Image Search workspace when Image Search tab is clicked', () => {
+  render(<App />);
+  const imageSearchTab = screen.getByRole('button', { name: 'Image Search' });
+  expect(imageSearchTab.getAttribute('aria-pressed')).toBe('false');
+
+  fireEvent.click(imageSearchTab);
+  expect(imageSearchTab.getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByTestId('image-search-workspace').textContent).toContain('active: true');
+});
+
+test('initializes User ID from localStorage and updates localStorage on change', () => {
+  localStorage.setItem('hcmai_user_id', 'team-stored');
+  render(<App />);
+
+  const userId = screen.getByLabelText('User ID');
+  expect(userId.value).toBe('team-stored');
+
+  fireEvent.change(userId, { target: { value: 'team-new' } });
+  expect(localStorage.getItem('hcmai_user_id')).toBe('team-new');
+
+  fireEvent.change(userId, { target: { value: '' } });
+  expect(localStorage.getItem('hcmai_user_id')).toBeNull();
+});
+

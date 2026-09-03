@@ -45,13 +45,16 @@ export const SubmissionDialogProvider = ({ children }) => {
   const [baseContent, setBaseContent] = useState('');
   const [mutation, setMutation] = useState(null);
   const [error, setError] = useState(null);
-  const [historyPatch, setHistoryPatch] = useState(null);
-  const [historyPatchError, setHistoryPatchError] = useState(null);
   const mountedRef = useRef(true);
   const mutationRef = useRef(null);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
+  useEffect(() => {
+    // StrictMode replays effect cleanup during development. Restore this flag
+    // on every setup so a confirmed WebSocket mutation is not discarded.
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const editorFile = useMemo(
@@ -66,8 +69,6 @@ export const SubmissionDialogProvider = ({ children }) => {
     setBaseContent('');
     setMutation(null);
     setError(null);
-    setHistoryPatch(null);
-    setHistoryPatchError(null);
   }, []);
 
   const closeDialog = useCallback(() => {
@@ -75,14 +76,19 @@ export const SubmissionDialogProvider = ({ children }) => {
     setDraft('');
     setBaseContent('');
     setError(null);
-    setHistoryPatch(null);
-    setHistoryPatchError(null);
   }, []);
+
+  const finishSuccessfulEditorOperation = useCallback(() => {
+    // A confirmed save or validation should always dismiss the editor. This
+    // deliberately bypasses resetDialog's in-flight guard after clearing the
+    // ref, so both completion paths have identical close behavior.
+    mutationRef.current = null;
+    setMutation(null);
+    closeDialog();
+  }, [closeDialog]);
 
   const requestSubmission = useCallback((intent) => {
     setError(null);
-    setHistoryPatch(null);
-    setHistoryPatchError(null);
     setDialog({
       ...emptyDialog,
       mode: 'picker',
@@ -94,8 +100,6 @@ export const SubmissionDialogProvider = ({ children }) => {
     const file = files.find((item) => item.name === name);
     if (!file) return;
     setError(null);
-    setHistoryPatch(null);
-    setHistoryPatchError(null);
     setDraft(file.content);
     setBaseContent(file.content);
     setDialog({
@@ -120,29 +124,31 @@ export const SubmissionDialogProvider = ({ children }) => {
     }));
   }, [dialog.pendingIntent, files]);
 
-  const markHistoryAfterCommit = useCallback(async (committedFile) => {
-    const history = dialog.pendingIntent?.history;
+  const markHistoryAfterCommit = useCallback((committedFile, pendingIntent) => {
+    const history = pendingIntent?.history;
     if (!history) return;
     const patch = {
       queryId: history.queryId,
       submissionFileName: committedFile.name,
-      submissionLine: dialog.pendingIntent.line,
+      submissionLine: pendingIntent.line,
       frameIds: history.frameIds,
     };
-    setHistoryPatch(patch);
-    try {
-      await markFramesSubmitted(patch);
-      setHistoryPatch(null);
-      setHistoryPatchError(null);
-      window.dispatchEvent(new CustomEvent('hcmai:history-changed', { detail: patch }));
-    } catch (patchError) {
-      setHistoryPatchError(patchError.message || 'History state was not recorded');
-      throw patchError;
-    }
-  }, [dialog.pendingIntent]);
+
+    // The file update is complete once its WebSocket confirmation arrives.
+    // Keep the editor responsive while the independent history PATCH finishes.
+    void Promise.resolve()
+      .then(() => markFramesSubmitted(patch))
+      .then(() => {
+        window.dispatchEvent(new CustomEvent('hcmai:history-changed', { detail: patch }));
+      })
+      .catch((patchError) => {
+        console.error('Could not record submission history', patchError);
+      });
+  }, []);
 
   const saveDraft = useCallback(async ({ validateAfter = false } = {}) => {
-    if (!editorFile || mutationRef.current || historyPatchError) return;
+    if (!editorFile || mutationRef.current) return;
+    const pendingIntent = dialog.pendingIntent;
     const operation = { kind: validateAfter ? 'save-and-validate' : 'save', name: editorFile.name };
     mutationRef.current = operation;
     setMutation(operation.kind);
@@ -157,7 +163,6 @@ export const SubmissionDialogProvider = ({ children }) => {
       setBaseContent(committed.content);
       setDraft(committed.content);
       setDialog((current) => ({ ...current, baseRevision: committed.revision }));
-      await markHistoryAfterCommit(committed);
       if (validateAfter) {
         setMutation('validate');
         const validated = await validateFile({
@@ -170,34 +175,17 @@ export const SubmissionDialogProvider = ({ children }) => {
         setDraft(validated.content);
         setDialog((current) => ({ ...current, baseRevision: validated.revision }));
       }
-      mutationRef.current = null;
-      setMutation(null);
-      if (!validateAfter || !historyPatchError) resetDialog();
+      finishSuccessfulEditorOperation();
+      markHistoryAfterCommit(committed, pendingIntent);
     } catch (saveError) {
       mutationRef.current = null;
       setMutation(null);
       if (saveError?.latestFile) {
         setDialog((current) => ({ ...current, remoteConflict: saveError.latestFile }));
       }
-      if (!historyPatchError) setError(saveError.message || 'Could not save submission file');
+      setError(saveError.message || 'Could not save submission file');
     }
-  }, [dialog.baseRevision, draft, editorFile, historyPatchError, markHistoryAfterCommit, resetDialog, updateFile, validateFile]);
-
-  const retryHistoryPatch = useCallback(async () => {
-    if (!historyPatch || mutationRef.current) return;
-    setMutation('history-patch');
-    try {
-      await markFramesSubmitted(historyPatch);
-      setHistoryPatchError(null);
-      setHistoryPatch(null);
-      setMutation(null);
-      window.dispatchEvent(new CustomEvent('hcmai:history-changed', { detail: historyPatch }));
-      resetDialog();
-    } catch (retryError) {
-      setMutation(null);
-      setHistoryPatchError(retryError.message || 'History state was not recorded');
-    }
-  }, [historyPatch, resetDialog]);
+  }, [dialog.baseRevision, dialog.pendingIntent, draft, editorFile, finishSuccessfulEditorOperation, markHistoryAfterCommit, updateFile, validateFile]);
 
   const handleValidate = useCallback(() => {
     if (!editorFile || (editorFile.is_validated && draft === baseContent)) return;
@@ -210,9 +198,7 @@ export const SubmissionDialogProvider = ({ children }) => {
           if (!mountedRef.current) return;
           setBaseContent(committed.content);
           setDraft(committed.content);
-          setMutation(null);
-          mutationRef.current = null;
-          resetDialog();
+          finishSuccessfulEditorOperation();
         })
         .catch((validateError) => {
           mutationRef.current = null;
@@ -223,7 +209,7 @@ export const SubmissionDialogProvider = ({ children }) => {
           setError(validateError.message || 'Could not validate submission file');
         });
     }
-  }, [baseContent, draft, editorFile, resetDialog, saveDraft, validateFile]);
+  }, [baseContent, draft, editorFile, finishSuccessfulEditorOperation, saveDraft, validateFile]);
 
   const handleDelete = useCallback(() => {
     if (!editorFile || mutationRef.current) return;
@@ -290,7 +276,6 @@ export const SubmissionDialogProvider = ({ children }) => {
     mutation,
     pendingFileNames,
     error,
-    historyPatchError,
     remoteConflict: dialog.remoteConflict,
     selectFile,
     setDraft,
@@ -298,7 +283,6 @@ export const SubmissionDialogProvider = ({ children }) => {
     handleValidate,
     handleDelete,
     resetDialog,
-    retryHistoryPatch,
     loadConflict,
     rebaseConflict,
   }), [
@@ -311,7 +295,6 @@ export const SubmissionDialogProvider = ({ children }) => {
     files,
     handleDelete,
     handleValidate,
-    historyPatchError,
     loadConflict,
     mutation,
     openEditor,
@@ -319,7 +302,6 @@ export const SubmissionDialogProvider = ({ children }) => {
     rebaseConflict,
     requestSubmission,
     resetDialog,
-    retryHistoryPatch,
     saveDraft,
     selectFile,
   ]);
@@ -344,8 +326,6 @@ export const SubmissionDialogProvider = ({ children }) => {
         onLoadConflict={loadConflict}
         onRebaseConflict={rebaseConflict}
         error={error}
-        historyPatchError={historyPatchError}
-        onRetryHistoryPatch={retryHistoryPatch}
       />
     </SubmissionDialogContext.Provider>
   );

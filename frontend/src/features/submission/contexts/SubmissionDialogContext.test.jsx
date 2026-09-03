@@ -44,11 +44,14 @@ const Probe = () => {
   );
 };
 
-const renderDialogs = () => render(
-  <SubmissionProvider>
-    <SubmissionDialogProvider><Probe /></SubmissionDialogProvider>
-  </SubmissionProvider>,
-);
+const renderDialogs = ({ strictMode = false } = {}) => {
+  const dialogs = (
+    <SubmissionProvider>
+      <SubmissionDialogProvider><Probe /></SubmissionDialogProvider>
+    </SubmissionProvider>
+  );
+  return render(strictMode ? <React.StrictMode>{dialogs}</React.StrictMode> : dialogs);
+};
 
 beforeEach(async () => {
   jest.clearAllMocks();
@@ -63,11 +66,13 @@ afterEach(() => {
   delete window.dialogProbe;
 });
 
-const openAndHydrate = async () => {
-  renderDialogs();
+const openAndHydrate = async (options) => {
+  renderDialogs(options);
   await act(async () => Promise.resolve());
-  await act(async () => MockWebSocket.instances[0].open());
+  const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+  await act(async () => socket.open());
   await act(async () => Promise.resolve());
+  return socket;
 };
 
 test('opens an editor with committed content and discards Esc without sending', async () => {
@@ -104,6 +109,100 @@ test('picker appends an intent to the draft and saves only after the update broa
   }));
 });
 
+test('closes after a file save without waiting for the history patch', async () => {
+  let resolveHistoryPatch;
+  markFramesSubmitted.mockImplementationOnce(() => new Promise((resolve) => {
+    resolveHistoryPatch = resolve;
+  }));
+  await openAndHydrate();
+  fireEvent.click(screen.getByRole('button', { name: 'Request submission' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'a.csv' }));
+  const editor = await screen.findByRole('textbox', { name: /edit a\.csv content/i });
+
+  fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter' });
+  await act(async () => MockWebSocket.instances[0].message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: 'V01,20', is_validated: false, revision: 2 },
+  }));
+
+  await waitFor(() => expect(markFramesSubmitted).toHaveBeenCalledWith({
+    queryId: 'q1', submissionFileName: 'a.csv', submissionLine: 'V01,20', frameIds: ['f1'],
+  }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+  await act(async () => resolveHistoryPatch({ ok: true }));
+});
+
+test('saves and closes when Enter is pressed immediately after selecting a file', async () => {
+  await openAndHydrate();
+  fireEvent.click(screen.getByRole('button', { name: 'Request submission' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'a.csv' }));
+  await screen.findByRole('textbox', { name: /edit a\.csv content/i });
+
+  // Selecting a file can briefly leave focus on the document before the
+  // editor receives it, so the save shortcut must not depend on focus timing.
+  fireEvent.keyDown(document.body, { key: 'Enter', code: 'Enter' });
+  expect(JSON.parse(MockWebSocket.instances[0].sent[0])).toEqual({
+    type: 'submission_file.update', name: 'a.csv', content: 'V01,20', expected_revision: 1,
+  });
+  await act(async () => MockWebSocket.instances[0].message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: 'V01,20', is_validated: false, revision: 2 },
+  }));
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('saves, closes, and records history after the StrictMode effect replay', async () => {
+  const socket = await openAndHydrate({ strictMode: true });
+  fireEvent.click(screen.getByRole('button', { name: 'Request submission' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'a.csv' }));
+  fireEvent.keyDown(await screen.findByRole('textbox', { name: /edit a\.csv content/i }), {
+    key: 'Enter', code: 'Enter',
+  });
+  expect(JSON.parse(socket.sent[0])).toEqual({
+    type: 'submission_file.update', name: 'a.csv', content: 'V01,20', expected_revision: 1,
+  });
+  await act(async () => socket.message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: 'V01,20', is_validated: false, revision: 2 },
+  }));
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(markFramesSubmitted).toHaveBeenCalledWith({
+    queryId: 'q1', submissionFileName: 'a.csv', submissionLine: 'V01,20', frameIds: ['f1'],
+  }));
+});
+
+test('validates and closes after choosing a submission file', async () => {
+  await openAndHydrate();
+  fireEvent.click(screen.getByRole('button', { name: 'Request submission' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'a.csv' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Validate' }));
+
+  // The submission line changes the draft, so validation first commits the
+  // draft and then validates that confirmed revision.
+  expect(JSON.parse(MockWebSocket.instances[0].sent[0])).toEqual({
+    type: 'submission_file.update', name: 'a.csv', content: 'V01,20', expected_revision: 1,
+  });
+  await act(async () => MockWebSocket.instances[0].message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: 'V01,20', is_validated: false, revision: 2 },
+  }));
+  expect(JSON.parse(MockWebSocket.instances[0].sent[1])).toEqual({
+    type: 'submission_file.validate', name: 'a.csv', is_validated: true, expected_revision: 2,
+  });
+  await act(async () => MockWebSocket.instances[0].message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: 'V01,20', is_validated: true, revision: 3 },
+  }));
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(markFramesSubmitted).toHaveBeenCalledWith({
+    queryId: 'q1', submissionFileName: 'a.csv', submissionLine: 'V01,20', frameIds: ['f1'],
+  }));
+});
+
 test('allows the editor to close while save confirmation is pending', async () => {
   await openAndHydrate();
   fireEvent.click(screen.getByRole('button', { name: 'Open editor' }));
@@ -133,22 +232,4 @@ test('shows an explicit conflict and allows rebasing the draft', async () => {
   fireEvent.click(screen.getByRole('button', { name: /keep draft and rebase/i }));
   fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
   expect(JSON.parse(MockWebSocket.instances[0].sent[0])).toMatchObject({ expected_revision: 2 });
-});
-
-test('retries only the history patch after the file commit has succeeded', async () => {
-  markFramesSubmitted.mockRejectedValueOnce(new Error('history unavailable'));
-  await openAndHydrate();
-  fireEvent.click(screen.getByRole('button', { name: 'Request submission' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'a.csv' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
-  await act(async () => MockWebSocket.instances[0].message({
-    type: 'submission_file.updated',
-    file: { name: 'a.csv', content: 'V01,20', is_validated: false, revision: 2 },
-  }));
-  expect(await screen.findByText(/history state was not recorded/i)).toBeTruthy();
-  expect(MockWebSocket.instances[0].sent).toHaveLength(1);
-  fireEvent.click(screen.getByRole('button', { name: /retry history update/i }));
-  await waitFor(() => expect(markFramesSubmitted).toHaveBeenCalledTimes(2));
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-  expect(MockWebSocket.instances[0].sent).toHaveLength(1);
 });

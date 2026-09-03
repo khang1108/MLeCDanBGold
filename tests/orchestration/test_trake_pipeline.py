@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from hcmai.api.contracts import TRAKERequest
-from hcmai.orchestration.temporal_search import TemporalSearchResult
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchResult
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.temporal import AlignedPath
 

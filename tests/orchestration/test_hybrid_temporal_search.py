@@ -8,7 +8,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 from hcmai.common.config import AlignmentConfig
-from hcmai.orchestration.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
@@ -46,7 +46,9 @@ def test_temporal_search_routes_representations_to_evidence_scorer(monkeypatch: 
         received.extend(scores)
         return []
 
-    monkeypatch.setattr("hcmai.orchestration.temporal_search.rank_paths", fake_rank_paths)
+    monkeypatch.setattr(
+        "hcmai.orchestration.workflows.temporal_search.rank_paths", fake_rank_paths
+    )
     service = TemporalSearchService(cast(Any, FakeCorpus()), scorer, AlignmentConfig())
 
     result = service.search(

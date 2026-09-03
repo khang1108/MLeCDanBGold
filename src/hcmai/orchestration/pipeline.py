@@ -10,6 +10,7 @@ from hcmai.api.contracts import (
     QueryCandidateResponse,
     QueryCandidatesRequest,
     QueryCandidatesResponse,
+    ImageSearchResponse,
     SearchRequest,
     SearchResponse,
     SubmissionResult,
@@ -17,13 +18,14 @@ from hcmai.api.contracts import (
     TRAKEResponse,
 )
 
-from hcmai.common.config import SearchConfig
+from hcmai.common.config import ApiConfig, SearchConfig
 from hcmai.common.observability import METRICS
 from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.video import official_frame_idx
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
-from hcmai.orchestration.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.image_search import ImageSearchService
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.retrieval.models import RetrievalSource
@@ -32,6 +34,7 @@ from hcmai.temporal.planner import split_query_events
 if TYPE_CHECKING:
     from hcmai.query_preparation.service import QueryPreparationService
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
+    from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
     from hcmai.retrieval.retriever.pipeline import RetrievalService
     from llm.pipeline import LLMService
 
@@ -64,7 +67,7 @@ class SearchServiceUnavailableError(RuntimeError):
 
 
 class SearchService:
-    """Expose explicit KIS and TRAKE workflows over shared runtime services."""
+    """Expose image, KIS, and TRAKE search over shared runtime services."""
 
     def __init__(
         self,
@@ -74,6 +77,8 @@ class SearchService:
         llm: LLMService | None = None,
         query_preparation: QueryPreparationService | None = None,
         temporal_evidence: TemporalEvidenceScorer | None | object = _UNSET,
+        image_encoder: ImageEmbeddingAdapter | None = None,
+        api_config: ApiConfig | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
@@ -86,6 +91,33 @@ class SearchService:
             _LegacyDenseEvidenceAdapter(retrieval)
             if temporal_evidence is _UNSET and retrieval is not None
             else temporal_evidence
+        )
+        self.api_config = api_config or ApiConfig()
+
+        if image_encoder is None and retrieval is not None:
+            source_retriever = getattr(retrieval, "source_retriever", None)
+            visual = (
+                source_retriever(RetrievalSource.VISUAL)
+                if source_retriever is not None
+                else None
+            )
+            candidate_encoder = getattr(visual, "encoder", None)
+            if hasattr(candidate_encoder, "encode_images"):
+                image_encoder = candidate_encoder
+        self.image_search = (
+            ImageSearchService(
+                corpus,
+                retrieval,
+                image_encoder,
+                max_upload_bytes=self.api_config.image_max_upload_bytes,
+                max_pixels=self.api_config.image_max_pixels,
+            )
+            if (
+                corpus is not None
+                and retrieval is not None
+                and image_encoder is not None
+            )
+            else None
         )
 
         temporal = (
@@ -218,6 +250,7 @@ class SearchService:
             "observability": METRICS.snapshot(),
             "capabilities": {
                 "search": search_ready,
+                "image_search": self.image_search is not None,
                 "kis": search_ready,
                 "trake": search_ready,
                 "shared_retrieval": retrieval_ready,
@@ -256,6 +289,25 @@ class SearchService:
 
         self._ensure_search_ready()
         return self.kis.execute(request)
+
+    def search_image(
+        self,
+        payload: bytes,
+        *,
+        content_type: str | None,
+        top_k: int,
+    ) -> ImageSearchResponse:
+        """Search canonical frames using one uploaded image as visual evidence."""
+
+        if self.image_search is None:
+            raise SearchServiceUnavailableError(
+                "Image search dependencies not loaded: visual image encoder"
+            )
+        return self.image_search.search(
+            payload,
+            content_type=content_type,
+            top_k=top_k,
+        )
 
     def generate_query_candidates(self, request: QueryCandidatesRequest) -> QueryCandidatesResponse:
         """Generate five candidates without retaining request or search state."""

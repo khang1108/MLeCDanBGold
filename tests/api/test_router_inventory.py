@@ -13,6 +13,9 @@ def test_filter_placeholder_is_removed_and_competition_routes_remain() -> None:
 
     assert "/api/v1/filter" not in paths
     assert {
+        "/api/v1/database/tables",
+        "/api/v1/database/tables/{table_name}/rows",
+        "/api/v1/database/execute",
         "/api/v1/search",
         "/api/v1/trake",
         "/api/v1/query-candidates",

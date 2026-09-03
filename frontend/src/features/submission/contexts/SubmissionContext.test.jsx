@@ -81,6 +81,20 @@ test('connects globally without touching browser storage and hydrates after open
   setItem.mockRestore();
 });
 
+test('sorts worktree filenames by their embedded numeric order', async () => {
+  getSubmissionFiles.mockResolvedValue({ files: [
+    { name: 'query-team-10-final.csv', content: '', is_validated: false, revision: 0 },
+    { name: 'query-team-2-final.csv', content: '', is_validated: false, revision: 0 },
+    { name: 'query-team-1-final.csv', content: '', is_validated: false, revision: 0 },
+  ] });
+  await renderProvider();
+  await openSocket();
+
+  expect(screen.getByTestId('file-names').textContent).toBe(
+    'query-team-1-final.csv,query-team-2-final.csv,query-team-10-final.csv',
+  );
+});
+
 test('replays file events received while hydration is pending', async () => {
   let resolveHydration;
   getSubmissionFiles.mockReturnValueOnce(new Promise((resolve) => { resolveHydration = resolve; }));

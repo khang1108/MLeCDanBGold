@@ -164,6 +164,22 @@ class LocalAdapter:
             raise RuntimeError("embedding model is disabled")
         return encoder.encode_text(texts)
 
+    def embed_images(
+        self,
+        images: Sequence[Image.Image],
+        *,
+        source: str = "visual",
+        item_ids: list[str] | None = None,
+    ) -> np.ndarray:
+        """Encode images into visual embedding vectors using the visual adapter."""
+        if source != "visual":
+            raise RuntimeError(f"image embedding does not support source {source!r}")
+        if self.visual_encoder is None:
+            raise RuntimeError("visual embedding model is disabled")
+        if not hasattr(self.visual_encoder, "encode_images"):
+            raise RuntimeError("visual encoder does not support image encoding")
+        return self.visual_encoder.encode_images(list(images))
+
     def ocr(self, images: Sequence[Image.Image]) -> list[OCRResult]:
         """Return structured OCR results without discarding raw regions."""
         if self.ocr_adapter is None:

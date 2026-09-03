@@ -19,7 +19,7 @@ from hcmai.api.contracts import (
 )
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.common.utils.logging import get_logger
-from hcmai.orchestration.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.temporal import AlignedPath
 
 if TYPE_CHECKING:

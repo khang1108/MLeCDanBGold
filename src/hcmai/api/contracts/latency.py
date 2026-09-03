@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SearchLatency(BaseModel):
-    """Public latency breakdown for one temporal search request."""
+    """Public latency breakdown for one text or image search request."""
 
     model_config = ConfigDict(extra="forbid")
 

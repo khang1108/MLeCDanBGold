@@ -119,3 +119,12 @@ class SearchResponse(BaseModel):
             raise ValueError("each result must contain one aligned frame per event")
 
         return self
+
+
+class ImageSearchResponse(BaseModel):
+    """Visual nearest-neighbour results for one uploaded query image."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[SearchResult] = Field(default_factory=list)
+    latency: SearchLatency

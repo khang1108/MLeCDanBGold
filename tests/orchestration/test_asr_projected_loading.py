@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from hcmai.common.config import AppConfig
@@ -59,18 +60,37 @@ def _dense_bindings(
 ) -> tuple[Any, Any, Any]:
     """Create small retriever bindings with distinct index dependencies."""
 
-    visual = SimpleNamespace(index=object(), encoder=object())
+    class _MockIndex:
+        def __init__(self, dim: int) -> None:
+            self.frame_ids = ("f0",)
+            self.video_ids = ("v0",)
+            self.frame_idx = (0,)
+            self.timestamps = (0,)
+            self.mapping = pd.DataFrame(
+                [{"video_id": "v0", "start_ms": 0, "end_ms": 1000}]
+            )
+            self.vectors = np.zeros((1, dim), dtype=np.float32)
+            self.metadata = SimpleNamespace(embedding_dim=dim)
+
+    class _MockProjector:
+        def project(self, video_id: str, *, start_ms: int, end_ms: int) -> Any:
+            return SimpleNamespace(
+                video_id="v0",
+                frame_id="f0",
+                frame_idx=0,
+                timestamp_ms=0,
+            )
+
+    encoder = SimpleNamespace(encode_text=lambda texts: np.zeros((len(texts), 4), dtype=np.float32))
+    visual = SimpleNamespace(index=_MockIndex(4), encoder=encoder)
     context = SimpleNamespace(
-        index=SimpleNamespace(
-            metadata=SimpleNamespace(embedding_dim=context_dimension),
-        ),
-        encoder=object(),
+        index=_MockIndex(context_dimension),
+        encoder=encoder,
     )
     asr = SimpleNamespace(
-        index=SimpleNamespace(
-            metadata=SimpleNamespace(embedding_dim=asr_dimension),
-        ),
-        projector=object(),
+        index=_MockIndex(asr_dimension),
+        projector=_MockProjector(),
+        encoder=encoder,
     )
     return visual, context, asr
 
@@ -140,7 +160,7 @@ def test_load_dense_temporal_reuses_asr_segment_retriever(monkeypatch: Any) -> N
 
 
 def test_load_dense_temporal_reports_missing_context() -> None:
-    """Keep Dense unavailable when its frame-native Context evidence is absent."""
+    """Keep surviving visual and ASR Dense available when Context evidence is absent."""
 
     visual, _, asr = _dense_bindings()
     retrieval, _ = _retrieval((RetrievalSource.ASR, asr))
@@ -153,13 +173,14 @@ def test_load_dense_temporal_reports_missing_context() -> None:
         messages,
     )
 
-    assert scorer is None
+    assert scorer is not None
+    assert scorer.context_index is None
     assert (context_ready, asr_ready) == (False, True)
     assert messages == ["Dense temporal evidence unavailable: Context retriever missing"]
 
 
 def test_load_dense_temporal_reports_missing_asr_segment_retriever() -> None:
-    """Keep Dense unavailable when projected segment-ASR cannot be supplied."""
+    """Keep surviving visual and Context Dense available when ASR cannot be supplied."""
 
     visual, context, _ = _dense_bindings()
     retrieval, _ = _retrieval((RetrievalSource.CONTEXT, context))
@@ -172,7 +193,8 @@ def test_load_dense_temporal_reports_missing_asr_segment_retriever() -> None:
         messages,
     )
 
-    assert scorer is None
+    assert scorer is not None
+    assert scorer.asr_index is None
     assert (context_ready, asr_ready) == (True, False)
     assert messages == ["Dense temporal evidence unavailable: ASR segment retriever missing"]
 
@@ -206,7 +228,8 @@ def test_load_dense_temporal_marks_asr_unready_when_projection_fails(
         messages,
     )
 
-    assert scorer is None
+    assert scorer is not None
+    assert scorer.asr_index is None
     assert (context_ready, asr_ready) == (True, False)
     assert messages == [
         "Dense temporal ASR projection failed: ValueError: "

@@ -1,0 +1,84 @@
+"""HTTP contracts for safe, read-only inspection of the workspace SQLite DB.
+
+The contracts expose table metadata and paginated rows. They do not expose the
+database path, SQLite connection details, or arbitrary query execution.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
+
+
+class DatabaseColumn(BaseModel):
+    """One SQLite column projected for frontend table headers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    type: str
+    nullable: bool
+    primary_key: bool
+
+
+class DatabaseTable(BaseModel):
+    """Metadata and current row count for one frontend-visible table."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    row_count: int = Field(ge=0)
+    columns: list[DatabaseColumn]
+
+
+class DatabaseTableList(BaseModel):
+    """Allowlisted SQLite tables available to the frontend browser."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tables: list[DatabaseTable]
+
+
+class DatabaseRowsPage(BaseModel):
+    """One bounded page of raw SQLite values from an allowlisted table."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    table: str = Field(min_length=1)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total_rows: int = Field(ge=0)
+    total_pages: int = Field(ge=0)
+    rows: list[dict[str, JsonValue]] = Field(default_factory=list)
+
+
+class DatabaseQueryRequest(BaseModel):
+    """Input payload for executing an arbitrary SQL query."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1)
+    max_rows: int = Field(default=100, ge=1, le=500)
+
+
+class DatabaseQueryResponse(BaseModel):
+    """Execution output from a raw SQL query."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str
+    columns: list[str] = Field(default_factory=list)
+    rows: list[dict[str, JsonValue]] = Field(default_factory=list)
+    rows_affected: int = 0
+    execution_time_ms: float = Field(ge=0.0)
+    is_mutation: bool = False
+
+
+__all__ = [
+    "DatabaseColumn",
+    "DatabaseQueryRequest",
+    "DatabaseQueryResponse",
+    "DatabaseRowsPage",
+    "DatabaseTable",
+    "DatabaseTableList",
+]
+

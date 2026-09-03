@@ -1,5 +1,13 @@
 """Public Pydantic contracts for the HCMAI HTTP and WebSocket APIs."""
 
+from .database import (
+    DatabaseColumn,
+    DatabaseQueryRequest,
+    DatabaseQueryResponse,
+    DatabaseRowsPage,
+    DatabaseTable,
+    DatabaseTableList,
+)
 from .frames import CatalogTranscriptSegment, FrameCatalogEntry
 from .history import (
     QueryHistoryCreate,
@@ -21,14 +29,27 @@ from .query_candidates import (
     QueryCandidatesRequest,
     QueryCandidatesResponse,
 )
-from .search import SearchRequest, SearchResponse, SearchResult, SearchResultMetadata
+from .search import (
+    ImageSearchResponse,
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+    SearchResultMetadata,
+)
 from .submission import SubmissionResult
 from .trake import TRAKEPath, TRAKERequest, TRAKEResponse
 
 
 __all__ = [
     "CatalogTranscriptSegment",
+    "DatabaseColumn",
+    "DatabaseQueryRequest",
+    "DatabaseQueryResponse",
+    "DatabaseRowsPage",
+    "DatabaseTable",
+    "DatabaseTableList",
     "FrameCatalogEntry",
+    "ImageSearchResponse",
     "QueryCandidateResponse",
     "QueryCandidatesRequest",
     "QueryCandidatesResponse",

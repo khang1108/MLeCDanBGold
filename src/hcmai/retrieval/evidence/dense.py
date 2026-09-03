@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 from hcmai.common.config import DenseTemporalWeights
+from hcmai.retrieval.evidence.components import TemporalScoreBundle, TemporalScoreComponent
 from hcmai.retrieval.evidence.normalization import minmax_rows
 
 
@@ -21,16 +22,18 @@ class DenseTemporalScorer:
         self,
         *,
         visual_index: Any,
-        context_index: Any,
-        asr_index: Any,
+        context_index: Any | None = None,
+        asr_index: Any | None = None,
         visual_encoder: Any,
-        text_encoder: Any,
+        text_encoder: Any | None = None,
         weights: DenseTemporalWeights,
         chunk_size: int = 65_536,
     ) -> None:
-        """Bind three canonical indexes and two non-duplicated query encoders."""
+        """Bind canonical visual index and any available Context/ASR indexes."""
 
-        _validate_indexes(visual_index, context_index, asr_index)
+        _validate_optional_indexes(visual_index, context_index, asr_index)
+        if (context_index is not None or asr_index is not None) and text_encoder is None:
+            raise ValueError("text_encoder is required for Context or ASR Dense scoring")
         self.visual_index = visual_index
         self.context_index = context_index
         self.asr_index = asr_index
@@ -39,22 +42,55 @@ class DenseTemporalScorer:
         self.weights = weights
         self.chunk_size = chunk_size
 
-    def score_events(self, retrieval_events: Sequence[str]) -> np.ndarray:
-        """Score every canonical frame for all selected retrieval events."""
+    def score_components(self, retrieval_events: Sequence[str]) -> TemporalScoreBundle:
+        """Score raw components for each enabled expert without row normalization."""
 
         events = [" ".join(event.split()) for event in retrieval_events]
         if not events or any(not event for event in events):
             raise ValueError("retrieval events must contain non-empty strings")
+
         visual_vectors = np.asarray(self.visual_encoder.encode_text(events), dtype=np.float32)
-        text_vectors = np.asarray(self.text_encoder.encode_text(events), dtype=np.float32)
         positions = np.arange(len(self.visual_index.frame_ids), dtype=np.int64)
-        visual = minmax_rows(
-            self.visual_index.score_subset(visual_vectors, positions, self.chunk_size)
-        )
-        context = minmax_rows(
-            self.context_index.score_subset(text_vectors, positions, self.chunk_size)
-        )
-        asr = minmax_rows(self.asr_index.score_subset(text_vectors, positions, self.chunk_size))
+
+        components: dict[str, TemporalScoreComponent] = {
+            "visual_dense": TemporalScoreComponent(
+                "visual_dense",
+                self.visual_index.score_subset(visual_vectors, positions, self.chunk_size),
+            )
+        }
+
+        if self.context_index is not None or self.asr_index is not None:
+            assert self.text_encoder is not None
+            text_vectors = np.asarray(self.text_encoder.encode_text(events), dtype=np.float32)
+            if self.context_index is not None:
+                components["context_dense"] = TemporalScoreComponent(
+                    "context_dense",
+                    self.context_index.score_subset(text_vectors, positions, self.chunk_size),
+                )
+            if self.asr_index is not None:
+                asr_coverage = getattr(self.asr_index, "coverage_mask", None)
+                components["asr_dense"] = TemporalScoreComponent(
+                    "asr_dense",
+                    self.asr_index.score_subset(text_vectors, positions, self.chunk_size),
+                    coverage=(
+                        np.asarray(asr_coverage, dtype=bool)
+                        if asr_coverage is not None
+                        else None
+                    ),
+                )
+
+        return TemporalScoreBundle(components)
+
+    def score_events(self, retrieval_events: Sequence[str]) -> np.ndarray:
+        """Score every canonical frame using legacy fixed-weight normalized fusion."""
+
+        bundle = self.score_components(retrieval_events)
+        required = {"visual_dense", "context_dense", "asr_dense"}
+        if set(bundle.components) != required:
+            raise RuntimeError("legacy Dense temporal fusion requires Visual, Context, and ASR")
+        visual = minmax_rows(bundle.components["visual_dense"].raw_scores)
+        context = minmax_rows(bundle.components["context_dense"].raw_scores)
+        asr = minmax_rows(bundle.components["asr_dense"].raw_scores)
         return np.asarray(
             self.weights.visual_weight * visual
             + self.weights.context_weight * context
@@ -63,14 +99,20 @@ class DenseTemporalScorer:
         )
 
 
-def _validate_indexes(visual: Any, context: Any, asr: Any) -> None:
-    """Require identical canonical identity order and compatible dimensions."""
+def _validate_optional_indexes(visual: Any, context: Any | None, asr: Any | None) -> None:
+    """Require identical canonical identity order for any enabled expert."""
 
     expected = _identity(visual)
     for name, index in (("context", context), ("asr", asr)):
+        if index is None:
+            continue
         if _identity(index) != expected:
             raise ValueError(f"{name} Dense index identity conflicts with visual index")
-    if context.metadata.embedding_dim != asr.metadata.embedding_dim:
+    if (
+        context is not None
+        and asr is not None
+        and context.metadata.embedding_dim != asr.metadata.embedding_dim
+    ):
         raise ValueError("Context and ASR Dense index dimensions differ")
 
 

@@ -49,7 +49,25 @@ const normalizeFiles = (files) => {
   return files.map(normalizeFile);
 };
 
-const sortFiles = (files) => [...files].sort((left, right) => left.name.localeCompare(right.name));
+const worktreeOrder = (fileName) => {
+  const match = fileName.match(/(?:^|-)(\d+)(?=-|\.|$)/);
+  const value = match ? Number(match[1]) : Number.NaN;
+  return Number.isSafeInteger(value) ? value : null;
+};
+
+const sortFiles = (files) => [...files].sort((left, right) => {
+  const leftOrder = worktreeOrder(left.name);
+  const rightOrder = worktreeOrder(right.name);
+
+  // Worktree filenames carry the organizer-assigned sequence in a hyphenated
+  // segment. Lexical sorting would incorrectly place 10 before 2.
+  if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+  if (leftOrder !== null && rightOrder === null) return -1;
+  if (leftOrder === null && rightOrder !== null) return 1;
+  return left.name.localeCompare(right.name);
+});
 const eventName = (payload) => (typeof payload?.type === 'string' ? payload.type : '');
 const fileEventTypes = new Set([
   'submission_file.created',
@@ -287,7 +305,7 @@ export const SubmissionProvider = ({ children }) => {
       }
       cancelPendingOperations();
     };
-  }, [cancelPendingOperations, connect]);
+  }, [cancelPendingOperations, connect, hydrate]);
 
   const sendMutation = useCallback(({ name, kind, command, expectedRevision, content }) => {
     const socket = socketRef.current;

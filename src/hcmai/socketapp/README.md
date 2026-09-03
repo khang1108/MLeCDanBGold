@@ -9,17 +9,21 @@ or manage Cloudflare credentials.
 
 ## Configuration
 
-Video serving is disabled unless `SOCKETAPP_VIDEO_ROOT` is set. This lets the
-retrieval backend start normally on machines that do not store source videos.
+Video serving is disabled unless `SOCKETAPP_VIDEO_ROOT` is set in the
+repository-level `.env`. This lets the retrieval backend start normally on
+machines that do not store source videos. The backend loads this file before
+constructing the catalog, so no shell `export` is required.
+
+```dotenv
+SOCKETAPP_VIDEO_ROOT=/absolute/path/to/videos
+# Optional when filenames do not equal canonical video_id values:
+SOCKETAPP_MANIFEST=/absolute/path/to/videos.json
+# Optional; defaults shown:
+SOCKETAPP_ALLOW_EMPTY=false
+SOCKETAPP_CACHE_CONTROL=public, max-age=3600
+```
 
 ```bash
-export SOCKETAPP_VIDEO_ROOT=/absolute/path/to/videos
-# Optional when filenames do not equal canonical video_id values:
-export SOCKETAPP_MANIFEST=/absolute/path/to/videos.json
-# Optional; defaults shown:
-export SOCKETAPP_ALLOW_EMPTY=false
-export SOCKETAPP_CACHE_CONTROL='public, max-age=3600'
-
 PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app \
   --host 127.0.0.1 --port 8000
 ```

@@ -82,7 +82,6 @@ const SearchWorkspace = ({
   const [isSearching, setIsSearching] = useState(false);
   const [activeQuerySession, setActiveQuerySession] = useState(null);
   const [replaySnapshot, setReplaySnapshot] = useState(null);
-  const [submittedFrameIds, setSubmittedFrameIds] = useState(() => new Set());
   const queryTextareaRef = useRef(null);
   const requestRef = useRef(null);
   const viewedPatchRef = useRef(new Set());
@@ -154,9 +153,6 @@ const SearchWorkspace = ({
 
   const handleTrakeSubmit = useCallback((path) => {
     const vid = displayVideoId(path.video_id);
-    if (path.frame_ids?.length) {
-      setSubmittedFrameIds((prev) => new Set([...prev, ...path.frame_ids]));
-    }
     requestSubmission({
       line: `${vid},${path.frame_idxs.join(',')}`,
       source: 'TRAKE path',
@@ -166,9 +162,6 @@ const SearchWorkspace = ({
 
   const handleFrameSubmit = useCallback((frame) => {
     const vid = displayVideoId(frame.video_id);
-    if (frame?.frame_id) {
-      setSubmittedFrameIds((prev) => new Set([...prev, frame.frame_id]));
-    }
     requestSubmission({
       line: `${vid},${frame.frame_idx}`,
       source: 'KIS/TRAKE frame',
@@ -184,13 +177,15 @@ const SearchWorkspace = ({
 
   useEffect(() => {
     const handleHistoryChanged = (event) => {
-      const frameIds = event?.detail?.frameIds;
-      if (Array.isArray(frameIds) && frameIds.length > 0) {
-        setSubmittedFrameIds((prev) => new Set([...prev, ...frameIds]));
-        setActiveQuerySession((current) => (current
-          ? { ...current, frameActivity: withSubmittedFrames(current.frameActivity, frameIds) }
-          : current));
-      }
+      const { queryId, frameIds } = event?.detail || {};
+      if (!queryId || !Array.isArray(frameIds) || frameIds.length === 0) return;
+      setActiveQuerySession((current) => {
+        if (!current || current.queryId !== queryId) return current;
+        return {
+          ...current,
+          frameActivity: withSubmittedFrames(current.frameActivity, frameIds),
+        };
+      });
     };
     window.addEventListener('hcmai:history-changed', handleHistoryChanged);
     return () => window.removeEventListener('hcmai:history-changed', handleHistoryChanged);
@@ -379,10 +374,9 @@ const SearchWorkspace = ({
     (frameOrId) => {
       const frameId = typeof frameOrId === 'string' ? frameOrId : frameOrId?.frame_id;
       if (!frameId) return '';
-      if (submittedFrameIds.has(frameId)) return 'submitted';
       return activityStateForFrame(frameId, activeQuerySession?.frameActivity);
     },
-    [activeQuerySession?.frameActivity, submittedFrameIds],
+    [activeQuerySession?.frameActivity],
   );
 
   const renderResults = () => {

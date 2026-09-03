@@ -162,12 +162,12 @@ const SubmissionWorktree = () => {
           <div className="submission-header-actions">
             <button
               type="button"
-              className="submission-clear-btn"
+              className="submission-icon-btn"
               onClick={handleClearFiles}
               title="Clear all submission files"
               aria-label="Clear all files"
             >
-              Clear
+              ×
             </button>
             <button
               type="button"

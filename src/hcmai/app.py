@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from hcmai.api.history import WorkspaceStore
 from hcmai.api.routers import (
+    create_database_router,
     create_frames_router,
     create_query_candidates_router,
     create_search_router,
@@ -176,6 +177,7 @@ def create_app(
     app.include_router(create_query_candidates_router(service_container))
     app.include_router(create_trake_router(service_container))
     app.include_router(create_frames_router(service_container))
+    app.include_router(create_database_router(service_container))
     app.include_router(create_workspace_router(service_container))
     app.include_router(create_video_router(service_container))
 

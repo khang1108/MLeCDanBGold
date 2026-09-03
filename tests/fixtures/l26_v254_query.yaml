@@ -1,0 +1,12 @@
+query_id: "L26_V254_cooking"
+target_video_id: "L26_V254"
+query: |
+  Một cô gái mặc tạp dề trắng đứng cạnh một lọ hoa riềng tía.
+  Cô gái mặc tạp dề trắng đặt bốn nguyên liệu X chưa xác định lên một đĩa trắng.
+  Cùng cô gái mặc tạp dề trắng cầm hai nguyên liệu X cùng loại lên.
+  Cô gái mặc tạp dề trắng nói chuyện với một người ngồi đối diện về món ăn sẽ nấu.
+retrieval_events:
+  - "A woman wearing a white apron stands beside a vase of purple galangal flowers."
+  - "A woman wearing a white apron places four unidentified ingredients X on a white plate."
+  - "The same woman wearing a white apron holds two of the same unidentified ingredients X."
+  - "The woman wearing a white apron talks with a person seated opposite her about the dish they will cook."

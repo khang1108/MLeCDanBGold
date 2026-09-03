@@ -332,6 +332,23 @@ class DenseTemporalWeights(BaseModel):
         return self
 
 
+class RobustCalibrationConfig(BaseModel):
+    """Parameters for robust quantile-based score calibration and reliability."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    q_low: float = Field(default=0.05, ge=0.0, lt=1.0)
+    q_high: float = Field(default=0.95, gt=0.0, le=1.0)
+    top_fraction: float = Field(default=0.01, gt=0.0, le=0.25)
+    eps: float = Field(default=1e-6, gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_quantiles(self) -> RobustCalibrationConfig:
+        if self.q_low >= self.q_high:
+            raise ValueError("q_low must be less than q_high")
+        return self
+
+
 class BM25FieldWeights(BaseModel):
     """Non-negative field weights for frame-native BM25 evidence."""
 
@@ -343,6 +360,39 @@ class BM25FieldWeights(BaseModel):
     asr_weight: float = Field(default=1.0, ge=0)
 
 
+class AdaptiveTemporalFusionConfig(BaseModel):
+    """Configuration for adaptive event-driven multimodal temporal evidence fusion."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    calibration: RobustCalibrationConfig = Field(default_factory=RobustCalibrationConfig)
+    robust_calibration: bool = True
+    confidence_gating: bool = True
+    event_routing: bool = True
+    base_component_weights: dict[str, float] = Field(
+        default_factory=lambda: {
+            "visual_dense": 0.35,
+            "context_dense": 0.35,
+            "asr_dense": 0.08,
+            "bm25_title": 0.02,
+            "bm25_caption": 0.10,
+            "bm25_ocr": 0.04,
+            "bm25_asr": 0.06,
+        }
+    )
+    visual_boost: float = Field(default=1.4, ge=1.0)
+    speech_boost: float = Field(default=5.0, ge=1.0)
+    ocr_boost: float = Field(default=3.0, ge=1.0)
+
+    @model_validator(mode="after")
+    def validate_component_weights(self) -> AdaptiveTemporalFusionConfig:
+        if any(weight < 0.0 for weight in self.base_component_weights.values()):
+            raise ValueError("adaptive component weights must be non-negative")
+        if sum(self.base_component_weights.values()) <= 0.0:
+            raise ValueError("adaptive component weights must contain positive mass")
+        return self
+
+
 class HybridTemporalConfig(BaseModel):
     """Full-corpus Dense/BM25 temporal evidence configuration."""
 
@@ -352,6 +402,8 @@ class HybridTemporalConfig(BaseModel):
     bm25_fields: BM25FieldWeights = Field(default_factory=BM25FieldWeights)
     dense_weight: float = Field(default=0.5, ge=0)
     bm25_weight: float = Field(default=0.5, ge=0)
+    fusion_mode: Literal["legacy", "adaptive_p0"] = "legacy"
+    adaptive: AdaptiveTemporalFusionConfig = Field(default_factory=AdaptiveTemporalFusionConfig)
 
     @model_validator(mode="after")
     def validate_sum(self) -> HybridTemporalConfig:
@@ -384,6 +436,8 @@ class ApiConfig(BaseModel):
 
     default_top_k: int = 20
     maximum_top_k: int = 100
+    image_max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
+    image_max_pixels: int = Field(default=40_000_000, gt=0)
 
 
 class InferenceConfig(BaseModel):

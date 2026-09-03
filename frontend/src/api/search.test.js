@@ -1,4 +1,4 @@
-import { searchFrames, searchTrake } from './search';
+import { searchFrames, searchFramesByImage, searchTrake } from './search';
 
 const response = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -127,7 +127,7 @@ test('posts explicit ordered events to the dedicated TRAKE route', async () => {
   })).resolves.toEqual(payload);
 
   expect(global.fetch).toHaveBeenCalledWith(
-    'http://127.0.0.1:8000/api/v1/trake',
+    expect.stringContaining('/api/v1/trake'),
     expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({
@@ -160,7 +160,7 @@ test('posts a single TRAKE event accepted by the backend contract', async () => 
   await expect(searchTrake({ events: [' only one '], topK: 20 }))
     .resolves.toEqual(payload);
   expect(global.fetch).toHaveBeenCalledWith(
-    'http://127.0.0.1:8000/api/v1/trake',
+    expect.stringContaining('/api/v1/trake'),
     expect.objectContaining({
       body: JSON.stringify({
         events: ['only one'],
@@ -258,4 +258,56 @@ test('rejects a malformed successful TRAKE response', async () => {
 
   await expect(searchTrake({ events: ['e1', 'e2'], topK: 20 }))
     .rejects.toThrow('invalid response contract');
+});
+
+test('posts multipart image search request and returns normalized results and latency', async () => {
+  const payload = {
+    results: [{
+      frame_id: 'img-f1',
+      video_id: 'L01_V001',
+      frame_idx: 10,
+      timestamp_ms: 1000,
+      score: 0.88,
+      frame_ids: ['img-f1'],
+      timestamps_ms: [1000],
+      metadata: { caption: 'Kitchen with red pot' },
+    }],
+    latency: {
+      query_ms: 10.123,
+      retrieval_ms: 20.456,
+      alignment_ms: 0,
+      materialization_ms: 5.789,
+      total_ms: 36.368,
+    },
+  };
+  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload));
+
+  const fakeFile = new File(['fake content'], 'test.png', { type: 'image/png' });
+  const result = await searchFramesByImage({ imageFile: fakeFile, topK: 15 });
+
+  expect(result.results[0].frame_id).toBe('img-f1');
+  expect(result.latency.total_ms).toBe(36.37);
+  expect(global.fetch).toHaveBeenCalledWith(
+    expect.stringContaining('/api/v1/search/image'),
+    expect.objectContaining({
+      method: 'POST',
+      body: expect.any(FormData),
+    }),
+  );
+});
+
+test('throws if no imageFile is provided to searchFramesByImage', async () => {
+  await expect(searchFramesByImage({ imageFile: null, topK: 20 })).rejects.toThrow(
+    'An image file is required for image search',
+  );
+});
+
+test('rejects a malformed image search response', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(
+    response({ results: 'not an array' }),
+  );
+
+  const fakeFile = new File(['fake content'], 'test.png', { type: 'image/png' });
+  await expect(searchFramesByImage({ imageFile: fakeFile, topK: 20 }))
+    .rejects.toThrow('Image search server returned an invalid response contract');
 });

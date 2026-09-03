@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import io
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import FastAPI
-from hcmai.api.contracts import SearchLatency, SearchRequest, SearchResponse
+from PIL import Image
+
+from hcmai.api.contracts import (
+    ImageSearchResponse,
+    SearchLatency,
+    SearchRequest,
+    SearchResponse,
+)
 from hcmai.api.routers.search import create_search_router
 from hcmai.orchestration.pipeline import SearchService
 
@@ -48,6 +57,38 @@ def _post(app: FastAPI, payload: dict[str, object]) -> httpx.Response:
             return await client.post("/api/v1/search", json=payload)
 
     return asyncio.run(send())
+
+
+def _post_image(
+    app: FastAPI,
+    payload: bytes,
+    *,
+    content_type: str = "image/jpeg",
+    top_k: int = 3,
+) -> httpx.Response:
+    """Upload one image through the public multipart route."""
+
+    async def send() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            return await client.post(
+                "/api/v1/search/image",
+                data={"top_k": str(top_k)},
+                files={"image": ("query.jpg", payload, content_type)},
+            )
+
+    return asyncio.run(send())
+
+
+def _jpeg() -> bytes:
+    """Build one small valid upload without fixture files."""
+
+    output = io.BytesIO()
+    Image.new("RGB", (2, 2), "red").save(output, "JPEG")
+    return output.getvalue()
 
 
 def test_search_route_calls_explicit_kis_method() -> None:
@@ -118,3 +159,55 @@ def test_search_route_reports_missing_runtime_dependencies() -> None:
 
     assert response.status_code == 503
     assert "dependencies not loaded" in response.json()["detail"]
+
+
+def test_image_search_route_delegates_multipart_payload() -> None:
+    """Pass one bounded image and validated top-k to the image service."""
+
+    class ImageService:
+        SUPPORTED_MEDIA_TYPES = {"image/jpeg", "image/png", "image/webp"}
+        max_upload_bytes = 1024
+
+    class Service:
+        image_search = ImageService()
+
+        def __init__(self) -> None:
+            self.call: tuple[bytes, str | None, int] | None = None
+
+        def search_image(
+            self,
+            payload: bytes,
+            *,
+            content_type: str | None,
+            top_k: int,
+        ) -> ImageSearchResponse:
+            self.call = (payload, content_type, top_k)
+            return ImageSearchResponse(results=[], latency=SearchLatency())
+
+    service = Service()
+    app = FastAPI()
+    app.include_router(create_search_router({"service": service}))
+    payload = _jpeg()
+
+    response = _post_image(app, payload, top_k=7)
+
+    assert response.status_code == 200
+    assert service.call == (payload, "image/jpeg", 7)
+    assert response.json()["results"] == []
+
+
+def test_image_search_route_rejects_unsupported_media_type() -> None:
+    """Reject non-image uploads before invoking model inference."""
+
+    service = SimpleNamespace(
+        image_search=SimpleNamespace(
+            SUPPORTED_MEDIA_TYPES={"image/jpeg", "image/png", "image/webp"},
+            max_upload_bytes=1024,
+        )
+    )
+    app = FastAPI()
+    app.include_router(create_search_router({"service": service}))
+
+    response = _post_image(app, b"not an image", content_type="text/plain")
+
+    assert response.status_code == 415

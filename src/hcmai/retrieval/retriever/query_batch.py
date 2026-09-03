@@ -6,11 +6,14 @@ from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
+from PIL import Image
 
-from hcmai.common.observability import StageTrace
-from hcmai.retrieval.embedding.pipeline import TextEmbeddingAdapter
-from hcmai.common.observability import PipelineStage
+from hcmai.common.observability import PipelineStage, StageTrace
 from hcmai.common.observability.tracing import StageTimer
+from hcmai.retrieval.embedding.pipeline import (
+    ImageEmbeddingAdapter,
+    TextEmbeddingAdapter,
+)
 from hcmai.retrieval.retriever.cache import EmbeddingCache, EmbeddingCacheKey
 
 SourceFamily = Literal["visual", "text"]
@@ -27,10 +30,18 @@ class QueryText:
 
 
 @dataclass(frozen=True, slots=True)
+class QueryImage:
+    """One uploaded visual query with stable batch position."""
+
+    position: int
+    source_family: Literal["visual"] = "visual"
+
+
+@dataclass(frozen=True, slots=True)
 class QueryEmbedding:
     """One query vector with encoder and source-family provenance."""
 
-    query: QueryText
+    query: QueryText | QueryImage
     vector: np.ndarray
     model_name: str
     revision: str | None
@@ -167,6 +178,40 @@ def encode_query_batch(
             normalized=_is_normalized(by_text[query.normalized_text]),
         )
         for query in queries
+    )
+    return QueryEmbeddingBatch(embeddings=embeddings, encoding_trace=trace)
+
+
+def encode_image_query_batch(
+    images: list[Image.Image],
+    encoder: ImageEmbeddingAdapter,
+) -> QueryEmbeddingBatch:
+    """Encode uploaded images once for direct search of the visual index.
+
+    Image queries deliberately bypass the text embedding cache because their
+    byte content has no stable text identity or prompt version.
+    """
+
+    if not images:
+        raise ValueError("images must not be empty")
+
+    timer = StageTimer(PipelineStage.ENCODE.value)
+    vectors = _validated_vectors(encoder.encode_images(images), len(images))
+    revision = _encoder_revision(encoder)
+    trace = timer.finish(
+        input_count=len(images),
+        output_count=len(images),
+        backend=encoder.config.model_name,
+    )
+    embeddings = tuple(
+        QueryEmbedding(
+            query=QueryImage(position=position),
+            vector=_readonly(vector),
+            model_name=encoder.config.model_name,
+            revision=revision,
+            normalized=_is_normalized(vector),
+        )
+        for position, vector in enumerate(vectors)
     )
     return QueryEmbeddingBatch(embeddings=embeddings, encoding_trace=trace)
 
