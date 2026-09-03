@@ -11,12 +11,34 @@ import { useVimMode, TopKPromptModal, VimHelpModal } from './features/vim';
 import { ApiDocsModal } from './features/docs';
 import { SubmissionProvider, SubmissionDialogProvider, useSubmissionDialog } from './features/submission';
 
+const USER_ID_STORAGE_KEY = 'hcmai_user_id';
+
+const getStoredUserId = () => {
+  try {
+    return window.localStorage.getItem(USER_ID_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+const persistUserId = (val) => {
+  try {
+    if (val) {
+      window.localStorage.setItem(USER_ID_STORAGE_KEY, val);
+    } else {
+      window.localStorage.removeItem(USER_ID_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+};
+
 const AppContent = () => {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
   const [activePage, setActivePage] = useState('query');
   const [modalQuery, setModalQuery] = useState('');
-  const [userId, setUserId] = useState('');
+  const [userId, setUserId] = useState(getStoredUserId);
   const [userIdError, setUserIdError] = useState(null);
   const [topK, setTopK] = useState(20);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
@@ -76,8 +98,10 @@ const AppContent = () => {
         onOpenDocs={() => setIsDocsOpen(true)}
         userId={userId}
         onChangeUserId={(event) => {
-          setUserId(event.target.value);
-          if (event.target.value.trim()) setUserIdError(null);
+          const nextUserId = event.target.value;
+          setUserId(nextUserId);
+          persistUserId(nextUserId);
+          if (nextUserId.trim()) setUserIdError(null);
         }}
         userIdError={userIdError}
         userIdInputRef={userIdInputRef}

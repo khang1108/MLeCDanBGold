@@ -91,6 +91,10 @@ jest.mock("./features/vim/hooks/useVimMode", () => ({
   }),
 }));
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
 test("mounts one shared search workspace without task tabs", () => {
   render(<App />);
 
@@ -160,5 +164,19 @@ test('navigates to Image Search workspace when Image Search tab is clicked', () 
   fireEvent.click(imageSearchTab);
   expect(imageSearchTab.getAttribute('aria-pressed')).toBe('true');
   expect(screen.getByTestId('image-search-workspace').textContent).toContain('active: true');
+});
+
+test('initializes User ID from localStorage and updates localStorage on change', () => {
+  localStorage.setItem('hcmai_user_id', 'team-stored');
+  render(<App />);
+
+  const userId = screen.getByLabelText('User ID');
+  expect(userId.value).toBe('team-stored');
+
+  fireEvent.change(userId, { target: { value: 'team-new' } });
+  expect(localStorage.getItem('hcmai_user_id')).toBe('team-new');
+
+  fireEvent.change(userId, { target: { value: '' } });
+  expect(localStorage.getItem('hcmai_user_id')).toBeNull();
 });
 
