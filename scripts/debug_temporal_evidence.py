@@ -124,25 +124,40 @@ def main() -> int:
             continue
 
         print(f"\n================ Video: {video_id} ({len(positions)} frames) ================")
-        header = f"{'Event':<6} {'Component':<16} {'RawMax':<8} {'Reliability':<12} {'Coverage':<10} {'TopFrameIdx'}"
+        header = f"{'Event':<6} {'Component':<15} {'RawMax':<8} {'RawMed':<8} {'CalMax':<8} {'Rel':<6} {'Cov':<6} {'TopFrameIdx'}"
         print(header)
-        print("-" * 80)
+        print("-" * 95)
 
         for event_idx, (orig, ret) in enumerate(zip(original_events, retrieval_events)):
-            print(f"E{event_idx + 1}: {orig[:40]}... -> {ret[:40]}...")
+            print(f"E{event_idx + 1}: {orig[:45]}... -> {ret[:45]}...")
+            router_mults = temporal._adaptive_scorer().router.multipliers(orig, ret)
+            mults_str = ", ".join(f"{k}: {v:.1f}" for k, v in router_mults.items() if v != 1.0)
+            if mults_str:
+                print(f"    [Router active multipliers]: {mults_str}")
 
             for name, comp in bundle.components.items():
                 raw_in_vid = comp.raw_scores[event_idx, positions]
                 cal_in_vid = calibrated[name].scores[event_idx, positions]
 
                 raw_max = float(raw_in_vid.max()) if len(raw_in_vid) else 0.0
+                cal_max = float(cal_in_vid.max()) if len(cal_in_vid) else 0.0
                 reliability = float(calibrated[name].reliability[event_idx])
 
                 if comp.coverage is not None:
                     cov_in_vid = comp.coverage[positions]
                     coverage_pct = f"{int(np.mean(cov_in_vid.astype(np.float32)) * 100)}%"
+                    supported_in_vid = cov_in_vid
+                elif name.startswith("bm25_"):
+                    coverage_pct = "100%"
+                    supported_in_vid = raw_in_vid > 0.0
                 else:
                     coverage_pct = "100%"
+                    supported_in_vid = None
+
+                if supported_in_vid is not None and np.any(supported_in_vid):
+                    raw_med = float(np.median(raw_in_vid[supported_in_vid]))
+                else:
+                    raw_med = float(np.median(raw_in_vid)) if len(raw_in_vid) else 0.0
 
                 top_k = min(args.top_frames, len(cal_in_vid))
                 if top_k > 0:
@@ -153,18 +168,19 @@ def main() -> int:
                     top_frames_str = "none"
 
                 print(
-                    f"E{event_idx + 1:<5} {name:<16} {raw_max:<8.3f} {reliability:<12.2f} {coverage_pct:<10} {top_frames_str}"
+                    f"E{event_idx + 1:<5} {name:<15} {raw_max:<8.3f} {raw_med:<8.3f} {cal_max:<8.3f} {reliability:<6.2f} {coverage_pct:<6} {top_frames_str}"
                 )
 
             # Print fused score row for this event
             fused_in_vid = fused[event_idx, positions]
             fused_max = float(fused_in_vid.max()) if len(fused_in_vid) else 0.0
+            fused_med = float(np.median(fused_in_vid)) if len(fused_in_vid) else 0.0
             top_k = min(args.top_frames, len(fused_in_vid))
             top_pos = np.argsort(-fused_in_vid, kind="stable")[:top_k]
             fused_frames = visual_index.frame_idx[positions[top_pos]]
             fused_frames_str = ",".join(str(idx) for idx in fused_frames)
             print(
-                f"E{event_idx + 1:<5} {'fused_adaptive':<16} {fused_max:<8.3f} {'1.00':<12} {'100%':<10} {fused_frames_str}"
+                f"E{event_idx + 1:<5} {'fused_adaptive':<15} {fused_max:<8.3f} {fused_med:<8.3f} {fused_max:<8.3f} {'1.00':<6} {'100%':<6} {fused_frames_str}"
             )
             print()
 

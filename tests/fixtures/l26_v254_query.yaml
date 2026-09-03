@@ -10,3 +10,7 @@ retrieval_events:
   - "A woman wearing a white apron places four unidentified ingredients X on a white plate."
   - "The same woman wearing a white apron holds two of the same unidentified ingredients X."
   - "The woman wearing a white apron talks with a person seated opposite her about the dish they will cook."
+target_regions:
+  hold_two_X: [300, 475]
+  plate_X: [500, 525]
+  dialogue: [550, 950]
