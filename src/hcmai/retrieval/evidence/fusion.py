@@ -83,6 +83,17 @@ class TemporalFusionScorer:
         self.config = config
         self.router = EventModalityRouter(config)
 
+    def calibrate_bundle(
+        self,
+        bundle: TemporalScoreBundle,
+    ) -> dict[str, CalibratedComponent]:
+        """Calibrate all components in a score bundle using configured calibration parameters."""
+
+        return {
+            name: calibrate_component(component.raw_scores, self.config.calibration)
+            for name, component in bundle.components.items()
+        }
+
     def fuse(
         self,
         *,
@@ -109,10 +120,7 @@ class TemporalFusionScorer:
         if bundle.shape[0] != len(original_events):
             raise ValueError("component event count must match query event count")
 
-        calibrated = {
-            name: calibrate_component(component.raw_scores, self.config.calibration)
-            for name, component in bundle.components.items()
-        }
+        calibrated = self.calibrate_bundle(bundle)
         result = np.zeros(bundle.shape, dtype=np.float32)
 
         for event_index, (original, retrieval) in enumerate(

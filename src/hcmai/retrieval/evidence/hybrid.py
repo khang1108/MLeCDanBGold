@@ -12,9 +12,14 @@ from typing import Any
 
 import numpy as np
 from hcmai.common.config import HybridTemporalConfig
+from hcmai.retrieval.evidence.calibration import CalibratedComponent
 from hcmai.retrieval.evidence.components import (
     TemporalScoreBundle,
     TemporalScoreComponent,
+)
+from hcmai.retrieval.evidence.diagnostics import (
+    TemporalEvidenceDebugResult,
+    build_evidence_diagnostics,
 )
 from hcmai.retrieval.evidence.fusion import TemporalFusionScorer
 from hcmai.retrieval.evidence.normalization import minmax_rows
@@ -104,6 +109,32 @@ class TemporalEvidenceScorer:
             )
         return TemporalScoreBundle(components)
 
+    def _prepare_adaptive_components(
+        self,
+        original_events: Sequence[str],
+        retrieval_events: Sequence[str],
+        *,
+        caption_events: Sequence[str] | None,
+        use_dense: bool,
+        use_bm25: bool,
+    ) -> tuple[TemporalScoreBundle, dict[str, CalibratedComponent], np.ndarray]:
+        """Score and calibrate components and compute fused scores."""
+
+        bundle = self._score_components(
+            original_events,
+            retrieval_events,
+            caption_events=caption_events,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+        )
+        calibrated = self._adaptive_fusion.calibrate_bundle(bundle)
+        fused = self._adaptive_fusion.fuse(
+            original_events=original_events,
+            retrieval_events=retrieval_events,
+            bundle=bundle,
+        )
+        return bundle, calibrated, fused
+
     def score_events(
         self,
         original_events: Sequence[str],
@@ -132,23 +163,52 @@ class TemporalEvidenceScorer:
                 use_bm25=use_bm25,
             )
         else:
-            bundle = self._score_components(
+            _, _, scores = self._prepare_adaptive_components(
                 original_events,
                 retrieval_events,
                 caption_events=caption_events,
                 use_dense=use_dense,
                 use_bm25=use_bm25,
             )
-            scores = self._adaptive_fusion.fuse(
-                original_events=original_events,
-                retrieval_events=retrieval_events,
-                bundle=bundle,
-            )
 
         expected_shape = (event_count, len(self.visual_index.frame_ids))
         if scores.shape != expected_shape:
             raise ValueError("temporal evidence matrix shape conflicts with canonical index")
         return _split_videos(self.visual_index, np.asarray(scores, dtype=np.float32))
+
+    def debug_score_events(
+        self,
+        original_events: Sequence[str],
+        retrieval_events: Sequence[str],
+        *,
+        caption_events: Sequence[str] | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = True,
+        top_positions: int = 10,
+    ) -> TemporalEvidenceDebugResult:
+        """Score full corpus and return component-level diagnostic telemetry."""
+
+        if not use_dense and not use_bm25:
+            raise ValueError("at least one temporal evidence source must be enabled")
+        event_count = len(original_events)
+        if not event_count or len(retrieval_events) != event_count:
+            raise ValueError("original and retrieval event counts must match")
+        if use_bm25 and (caption_events is None or len(caption_events) != event_count):
+            raise ValueError("BM25 caption event counts must match original events")
+
+        bundle, calibrated, fused = self._prepare_adaptive_components(
+            original_events,
+            retrieval_events,
+            caption_events=caption_events,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+        )
+        return build_evidence_diagnostics(
+            bundle=bundle,
+            calibrated=calibrated,
+            fused_scores=fused,
+            top_positions=top_positions,
+        )
 
 
 def _split_videos(index: Any, scores: np.ndarray) -> list[VideoEventScores]:
