@@ -381,3 +381,31 @@ exposed through the public search service.
 Measure image-query Recall@K and latency on a hand-labeled HCMAI reference-image
 set. Compare the direct SigLIP2 baseline against optional visual reranking and
 multi-crop query embeddings before adopting any more complex method.
+
+## Temporal evidence calibration, interval ASR projection, and DP chronology bounds (P0)
+
+**Date:** 2026-09-03
+
+**Problem:** Conflated multimodal score distributions, single-point ASR projection, and diagnosing whether failure of L26_V254 to rank was caused by weak evidence (Case A) or strict monotonic DP chronology suppressing overlapping event intervals (Case B).
+
+### Sources
+- HCMAI 2026 Competition Rules & TRAKE evaluation specification
+- docs/superpowers/specs/2026-09-03-hcmai-p0-temporal-evidence-design.md
+- docs/superpowers/plans/2026-09-03-hcmai-p0-temporal-evidence.md
+
+### Findings
+- **SOURCE:** Pre-P0 temporal evidence conflated unbounded BM25 scores with bounded cosine dense scores and treated missing ASR speech coverage as zero-similarity negative evidence.
+- **SOURCE / EXPERIMENT:** Evaluating the A0-A5 ablation matrix on the reference L26_V254 query revealed that interval ASR projection and robust row calibration significantly improved individual event score emissions (Event 1: 0.764 -> 0.861, Event 2: 0.702 -> 0.825).
+- **SOURCE / EXPERIMENT:** Despite improved evidence emissions, the global path ranking remained at rank 11 because the target video's ground-truth event windows overlap in time, which the strictly monotonic DP recurrence (`t1 < t2`) pruned out. This definitively verified **Case B**.
+
+### Relevance to HCMAI
+- Event-adaptive fusion and interval ASR projection provide reliable, calibrated frame-level evidence.
+- Safe production configuration maintains `fusion_mode="legacy"` by default with `--fusion-mode adaptive` available for testing.
+- Overlapping temporal events cannot be solved by tuning evidence scores alone; resolving Case B requires a relaxed/interval DP formulation in future temporal planning work.
+
+### Status
+VERIFIED / IMPLEMENTED
+
+### Decision or Experiment
+Preserve legacy default scoring in production while supporting calibrated adaptive fusion. Advance the resolution of Case B to future temporal DP planning research.
+
