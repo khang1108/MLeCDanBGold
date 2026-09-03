@@ -5,6 +5,7 @@ import { ImageModal } from './features/frames';
 import { SearchWorkspace } from './features/search';
 import { FilterWorkspace } from './features/filter';
 import { WorkspacePage } from './features/workspace';
+import { DatabasePage } from './features/database';
 import { useHealthCheck } from './features/health';
 import { useVimMode, TopKPromptModal, VimHelpModal } from './features/vim';
 import { ApiDocsModal } from './features/docs';
@@ -112,6 +113,9 @@ const AppContent = () => {
             onReplay={handleReplay}
             onOpenManualVideo={handleManualVideo}
           />
+        </div>
+        <div className="workspace-panel" hidden={activePage !== 'database'}>
+          <DatabasePage isActive={activePage === 'database'} />
         </div>
       </main>
 

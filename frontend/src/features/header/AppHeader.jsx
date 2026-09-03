@@ -54,6 +54,7 @@ export const AppHeader = ({
           ['query', 'Query'],
           ['filter', 'Filter'],
           ['workspace', 'Workspace'],
+          ['database', 'Database'],
         ].map(([page, label]) => (
           <button
             key={page}

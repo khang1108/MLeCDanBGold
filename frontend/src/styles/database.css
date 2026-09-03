@@ -1,0 +1,205 @@
+/* SQLite Database Browser: Clean, white background, zero icons */
+.database-page {
+  background: #ffffff;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-lg);
+  box-sizing: border-box;
+  color: var(--color-ink);
+  font-family: var(--font-family);
+}
+
+.db-header {
+  margin-bottom: var(--spacing-md);
+}
+
+.db-title {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.db-subtitle {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
+}
+
+.db-table-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-hairline);
+  padding-bottom: var(--spacing-xs);
+}
+
+.db-table-tab {
+  background: #ffffff;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-ink-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.db-table-tab:hover:not(:disabled) {
+  border-color: var(--color-ink-muted);
+}
+
+.db-table-tab.active {
+  background: #f0f4f8;
+  border-color: var(--color-primary);
+  color: var(--color-primary-active);
+  font-weight: 600;
+}
+
+.db-table-tab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.db-table-metadata {
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+  background: #fafafa;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  padding: 8px 12px;
+  margin-bottom: var(--spacing-md);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.db-metadata-label {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.db-grid-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  background: #ffffff;
+  margin-bottom: var(--spacing-md);
+}
+
+.db-grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  text-align: left;
+}
+
+.db-grid-table th {
+  background: #f7f7f7;
+  border-bottom: 1px solid var(--color-hairline);
+  padding: 10px 12px;
+  font-weight: 600;
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.db-grid-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-hairline);
+  color: var(--color-ink);
+  font-family: monospace, var(--font-family);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.db-grid-table tr:hover td {
+  background: #fafafa;
+}
+
+.db-cell-null {
+  color: var(--color-ink-faint);
+  font-style: italic;
+}
+
+.db-loading-state,
+.db-empty-state,
+.db-error-state {
+  padding: var(--spacing-xl);
+  text-align: center;
+  font-size: 0.875rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  background: #ffffff;
+  margin-bottom: var(--spacing-md);
+}
+
+.db-error-state {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+  background: #fffafa;
+}
+
+.db-pagination-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xs) 0;
+}
+
+.db-pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.db-pagination-info {
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
+}
+
+.db-btn {
+  background: #ffffff;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.db-btn:hover:not(:disabled) {
+  border-color: var(--color-ink-muted);
+}
+
+.db-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.db-pagination-size {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.db-size-label {
+  font-size: 0.875rem;
+  color: var(--color-ink-muted);
+}
+
+.db-select {
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  background: #ffffff;
+  padding: 4px 8px;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+}

@@ -61,6 +61,11 @@ jest.mock("./features/workspace/components/WorkspacePage", () => (
     );
   }
 ));
+jest.mock("./features/database", () => ({
+  DatabasePage: function FakeDatabasePage({ isActive }) {
+    return <div data-testid="database-page">Database Page (active: {String(isActive)})</div>;
+  },
+}));
 jest.mock("./features/health/hooks/useHealthCheck", () => ({
   useHealthCheck: () => ({ isHealthy: true, healthData: {} }),
 }));
@@ -127,3 +132,14 @@ test('opens manual video inspection without exposing a fake frame submission', (
   expect(screen.getByText('V01 · 1000 ms')).toBeTruthy();
   expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
 });
+
+test('navigates to Database workspace when Database tab is clicked', () => {
+  render(<App />);
+  const databaseTab = screen.getByRole('button', { name: 'Database' });
+  expect(databaseTab.getAttribute('aria-pressed')).toBe('false');
+
+  fireEvent.click(databaseTab);
+  expect(databaseTab.getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByTestId('database-page').textContent).toContain('active: true');
+});
+
