@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from hcmai.api.contracts import SearchRequest
 from hcmai.corpus import Frame
-from hcmai.orchestration.temporal_search import TemporalSearchResult
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchResult
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.temporal import AlignedPath
 

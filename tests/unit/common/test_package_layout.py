@@ -16,7 +16,7 @@ import pytest
         "offline.enrichment.transcripts.pipeline",
         "hcmai.temporal.dp",
         "hcmai.temporal.planner",
-        "hcmai.orchestration.temporal_search",
+        "hcmai.orchestration.workflows.temporal_search",
         "hcmai.orchestration.workflows.kis",
         "hcmai.orchestration.workflows.trake",
     ],

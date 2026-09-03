@@ -10,7 +10,7 @@ import pytest
 from PIL import Image
 
 from hcmai.corpus import Frame
-from hcmai.orchestration.image_search import (
+from hcmai.orchestration.workflows.image_search import (
     ImageQueryTooLargeError,
     ImageSearchService,
     InvalidImageQueryError,

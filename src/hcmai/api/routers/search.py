@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from hcmai.api.contracts import ImageSearchResponse, SearchRequest, SearchResponse
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
-from hcmai.orchestration.image_search import (
+from hcmai.orchestration.workflows.image_search import (
     ImageQueryTooLargeError,
     InvalidImageQueryError,
 )

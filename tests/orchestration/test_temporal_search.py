@@ -9,7 +9,7 @@ import pytest
 
 from hcmai.common.config import AlignmentConfig
 from hcmai.corpus import Frame
-from hcmai.orchestration.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 

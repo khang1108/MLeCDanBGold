@@ -28,7 +28,9 @@ from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 from hcmai.retrieval.models import RetrievalSource
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+# pyrefly: ignore [missing-import]
 from llm.config import LLMServiceConfig
+# pyrefly: ignore [missing-import]
 from llm.pipeline import LLMService
 
 logger = get_logger(__name__)
@@ -167,6 +169,9 @@ def _load_dense_temporal(
     projects its existing index onto the canonical visual frame identities.
     """
 
+    if retrieval is None:
+        return None, False, False
+
     context = retrieval.source_retriever(RetrievalSource.CONTEXT)
     asr_retriever = retrieval.source_retriever(RetrievalSource.ASR)
     context_ready = False
@@ -181,7 +186,7 @@ def _load_dense_temporal(
         try:
             _ = context.index.metadata.embedding_dim
             context_index = context.index
-            text_encoder = context.encoder
+            text_encoder = getattr(context, "encoder", None)
             context_ready = True
         except Exception as error:
             messages.append(
@@ -198,6 +203,7 @@ def _load_dense_temporal(
                     "Dense temporal evidence identity validation failed: "
                     "ValueError: Context and ASR segment index dimensions differ"
                 )
+                return None, context_ready, False
             else:
                 projected_asr = SegmentProjectedASRIndex(
                     segment_index=asr_retriever.index,
@@ -211,6 +217,7 @@ def _load_dense_temporal(
             messages.append(
                 f"Dense temporal ASR projection failed: {type(error).__name__}: {error}"
             )
+            asr_ready = False
 
     try:
         scorer = DenseTemporalScorer(
@@ -227,7 +234,15 @@ def _load_dense_temporal(
         messages.append(
             f"Dense temporal evidence identity validation failed: {type(error).__name__}: {error}"
         )
-        return None, False, False
+        message = str(error)
+        if message.startswith("context Dense index identity conflicts"):
+            context_ready = False
+        elif message.startswith("asr Dense index identity conflicts"):
+            asr_ready = False
+        else:
+            context_ready = False
+            asr_ready = False
+        return None, context_ready, asr_ready
 
 
 def _load_bm25_temporal(
@@ -576,6 +591,7 @@ def _load_fast_track_index(
     source: RetrievalSource,
     path: Path,
     messages: list[str],
+    **kwargs: Any,
 ) -> Any | None:
     """Load one optional evidence index, deferring compatibility to its consumer."""
 

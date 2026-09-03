@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 
 from hcmai.app import create_app
+from hcmai.common import environment
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.socketapp.catalog import VideoCatalog
 from hcmai.api.routers.videos import (
@@ -128,15 +129,20 @@ def test_unconfigured_catalog_has_explicit_health_and_503() -> None:
     assert response.json()["detail"] == "Local video catalog is not configured"
 
 
-def test_app_lifespan_loads_catalog_from_environment(
+def test_app_lifespan_loads_catalog_from_repository_dotenv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The main app owns catalog construction when a video root is configured."""
+    """The main app builds the video catalog from the repository ``.env``."""
 
     root = tmp_path / "videos"
     root.mkdir()
     (root / "L21_V001.mp4").write_bytes(b"video")
-    monkeypatch.setenv("SOCKETAPP_VIDEO_ROOT", str(root))
+    (tmp_path / ".env").write_text(
+        f"SOCKETAPP_VIDEO_ROOT={root}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SOCKETAPP_VIDEO_ROOT", raising=False)
+    monkeypatch.setattr(environment, "REPOSITORY_ROOT", tmp_path)
     app = create_app(search_service=SearchService(corpus=None, retrieval=None))
 
     async def verify() -> None:

@@ -14,7 +14,7 @@ from hcmai.api.contracts import SearchLatency, SearchRequest, SearchResponse
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
 from hcmai.orchestration.materializer import SearchMaterializer
-from hcmai.orchestration.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.temporal import split_query_events
 
 if TYPE_CHECKING:

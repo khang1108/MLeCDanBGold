@@ -24,8 +24,8 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.common.utils.video import official_frame_idx
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
-from hcmai.orchestration.image_search import ImageSearchService
-from hcmai.orchestration.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.image_search import ImageSearchService
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.retrieval.models import RetrievalSource

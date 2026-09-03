@@ -56,10 +56,10 @@ class _Data:
 class _Alignment:
     """Return a fixed path whose score differs from all frame-local scores."""
 
-    def search(self, events, *, top_k):
+    def search(self, events, *, top_k, **kwargs):
         """Expose a path result without invoking a reranker or model provider."""
 
-        del events, top_k
+        del events, top_k, kwargs
         frame = _Data().frame("frame-a")
         return SimpleNamespace(
             paths=(
