@@ -1,4 +1,4 @@
-"""Tests for Search health reporting while Filter remains a route stub."""
+"""Tests for Search health reporting with optional literal Filter readiness."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ class _Search:
                 "search": self.ready,
                 "kis": self.ready,
                 "trake": self.ready,
+                "filter": self.ready,
             },
             "startup_messages": list(messages),
         }
@@ -50,8 +51,8 @@ def _health(container: dict[str, object]) -> dict[str, object]:
     return response.json()
 
 
-def test_health_remains_owned_by_search_runtime() -> None:
-    """Do not advertise an unfinished Filter backend capability."""
+def test_health_reports_filter_from_search_runtime() -> None:
+    """Expose literal Filter readiness through the existing health document."""
 
     payload = _health(
         {
@@ -64,5 +65,5 @@ def test_health_remains_owned_by_search_runtime() -> None:
     assert payload["capabilities"]["search"] is True
     assert payload["capabilities"]["kis"] is True
     assert payload["capabilities"]["trake"] is True
-    assert "filter" not in payload["capabilities"]
+    assert payload["capabilities"]["filter"] is True
     assert "filter_catalog" not in payload

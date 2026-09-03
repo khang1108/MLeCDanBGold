@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
-from hcmai.api.contracts import ImageSearchResponse, SearchRequest, SearchResponse
+from hcmai.api.contracts import (
+    FilterRequest,
+    FilterResponse,
+    ImageSearchResponse,
+    SearchRequest,
+    SearchResponse,
+)
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.orchestration.workflows.image_search import (
@@ -120,5 +127,31 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
         except Exception:
             logger.exception("API image search request failed unexpectedly")
             raise
+
+    @router.post("/api/v1/filter", response_model=FilterResponse)
+    async def filter_frames(request: FilterRequest) -> FilterResponse:
+        """Run direct substring matching over evidence loaded at startup."""
+
+        service = service_container.get("service")
+        if service is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Search service not initialized",
+            )
+        started = perf_counter()
+        try:
+            response = await run_in_threadpool(service.filter_frames, request)
+        except SearchServiceUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(error),
+            ) from error
+        logger.info(
+            "Literal filter completed matches=%d page=%d elapsed_ms=%.1f",
+            response.total_results,
+            response.page_id,
+            (perf_counter() - started) * 1_000,
+        )
+        return response
 
     return router

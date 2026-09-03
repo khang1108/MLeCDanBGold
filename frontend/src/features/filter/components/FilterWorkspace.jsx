@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { filterFrames } from '../../../api/filter';
 import FrameCard from '../../frames/components/FrameCard';
 import SubmissionWorktree from '../../submission/components/SubmissionWorktree';
@@ -12,29 +6,34 @@ import { useSubmissionDialog } from '../../submission/contexts/SubmissionDialogC
 import { displayVideoId } from '../../frames/videoSource';
 import FilterForm from './FilterForm';
 import FilterPagination from './FilterPagination';
-import FolderScopeCombobox from './FolderScopeCombobox';
 import { DEFAULT_FRAMES_PER_PAGE, resolveFramesPerPage } from '../filterPagination';
-import {
-  FILTER_FOLDER_IDS,
-  filterResultsByScope,
-  getFrameFolderId,
-  normalizeFolderId,
-} from '../filterUtils';
 
-const createInitialFilterValues = () => ({
-  title: '',
-  asr: '',
-  caption: '',
-  ocr: '',
-  objects: [{ id: 'object-1', value: '' }],
-});
+
+const MatchedFrame = ({ frame, onFrameClick, onSubmit }) => (
+  <div className="filter-result-card">
+    <FrameCard
+      frame={frame}
+      imageLoading="eager"
+      onClick={() => onFrameClick?.(frame)}
+      onSubmit={onSubmit}
+    />
+    <div className="filter-match-list">
+      {Object.entries(frame.matches || {}).map(([source, text]) => (
+        <p className="filter-match-text" key={source} title={text}>
+          <strong>{source}</strong>: {text}
+        </p>
+      ))}
+    </div>
+  </div>
+);
+
 
 const FilterResults = ({
   results,
+  totalResults,
+  availableSources,
   hasFiltered,
   error,
-  folderId,
-  selectedVideoId,
   onFrameClick,
   onSubmit,
   containerRef,
@@ -43,177 +42,115 @@ const FilterResults = ({
   isLoading,
   onPageChange,
 }) => {
-  const pagination = (
-    <FilterPagination
-      currentPage={currentPage}
-      totalPages={totalPages}
-      isLoading={isLoading}
-      onPageChange={onPageChange}
-    />
-  );
-  const renderFrame = (frame) => {
-    return (
-      <FrameCard
-        key={frame.frame_id}
-        frame={frame}
-        imageLoading="eager"
-        onClick={() => onFrameClick?.(frame)}
-        onSubmit={onSubmit}
-      />
-    );
-  };
-
   if (error) {
     return (
-      <section
-        ref={containerRef}
-        className="frames-container filter-results"
-        aria-label="Filter results"
-      >
-        <div className="error-alert" role="alert">
-          <div className="error-details">
-            <h4 className="error-title">Filter Connection Error</h4>
-            <p className="error-message">{error}</p>
-          </div>
-        </div>
+      <section ref={containerRef} className="frames-container filter-results" aria-label="Filter results">
+        <div className="error-alert" role="alert">{error}</div>
       </section>
     );
   }
 
-  if (!hasFiltered) {
+  if (!hasFiltered || !results.length) {
     return (
-      <section
-        ref={containerRef}
-        className="frames-container filter-results"
-        aria-label="Filter results"
-      >
+      <section ref={containerRef} className="frames-container filter-results" aria-label="Filter results">
         <div className="frames-empty-state filter-empty-state">
-          <div className="filter-empty-icon" aria-hidden="true">🎯</div>
-          <p className="body-md frames-empty-text">Welcome to HCMAI Frame Search</p>
+          <p className="body-md frames-empty-text">
+            {hasFiltered ? 'No matching frames' : 'Search text evidence directly'}
+          </p>
           <p className="caption frames-empty-subtext">
-            Enter a natural language question or keywords above to query the video corpus.
+            {hasFiltered
+              ? 'Try another keyword or remove the folder/video scope.'
+              : 'One keyword checks Title, Caption, OCR, ASR, and Objects.'}
           </p>
         </div>
-      </section>
-    );
-  }
-
-  if (!results.length) {
-    return (
-      <section
-        ref={containerRef}
-        className="frames-container filter-results"
-        aria-label="Filter results"
-      >
-        <div className="filter-result-toolbar">
-          <div className="filter-result-summary">No frames match the current scope.</div>
-        </div>
-        <div className="frames-empty-state filter-empty-state">
-          <div className="filter-empty-icon" aria-hidden="true">🔍</div>
-          <p className="body-md frames-empty-text">No matching frames</p>
-          <p className="caption frames-empty-subtext">
-            Try adjusting your Title, ASR, Caption, OCR, or Object filters.
-          </p>
-        </div>
-        {pagination}
+        {hasFiltered && totalPages > 0 && (
+          <FilterPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            isLoading={isLoading}
+            onPageChange={onPageChange}
+          />
+        )}
       </section>
     );
   }
 
   return (
-    <section
-      ref={containerRef}
-      className="frames-container filter-results"
-      aria-label="Filter results"
-    >
+    <section ref={containerRef} className="frames-container filter-results" aria-label="Filter results">
       <div className="filter-result-toolbar">
         <div className="filter-result-summary">
-          <strong>{results.length}</strong> frame{results.length === 1 ? '' : 's'}
-          {folderId ? ` · ${folderId}` : ''}
-          {selectedVideoId ? ` · ${displayVideoId(selectedVideoId)}` : ''}
+          <strong>{totalResults}</strong> matches
+          {availableSources.length ? ` · ${availableSources.join(', ')}` : ''}
         </div>
       </div>
       <div className="frames-scroll-region">
-        <div className="frames-grid">{results.map(renderFrame)}</div>
+        <div className="frames-grid">
+          {results.map((frame) => (
+            <MatchedFrame
+              key={frame.frame_id}
+              frame={frame}
+              onFrameClick={onFrameClick}
+              onSubmit={onSubmit}
+            />
+          ))}
+        </div>
       </div>
-      {pagination}
+      <FilterPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        isLoading={isLoading}
+        onPageChange={onPageChange}
+      />
     </section>
   );
 };
 
-/**
- * Independent metadata-filter page. It owns filter/scope/detail state while
- * reusing the Query viewer and submission workflow at the application level.
- */
+
+/** Search raw corpus text with optional free-text folder and video scopes. */
 const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
-  const [filters, setFilters] = useState(createInitialFilterValues);
-  const [activeFolder, setActiveFolder] = useState(null);
-  const [selectedVideoId, setSelectedVideoId] = useState('');
+  const [query, setQuery] = useState('');
+  const [folderId, setFolderId] = useState('');
+  const [videoId, setVideoId] = useState('');
+  const [applied, setApplied] = useState(null);
   const [results, setResults] = useState([]);
-  const [appliedFilters, setAppliedFilters] = useState(createInitialFilterValues);
-  const [appliedScope, setAppliedScope] = useState({ folderId: null, videoId: '' });
-  const [appliedFramesPerPage, setAppliedFramesPerPage] = useState(DEFAULT_FRAMES_PER_PAGE);
+  const [availableSources, setAvailableSources] = useState([]);
+  const [totalResults, setTotalResults] = useState(0);
+  const [pageId, setPageId] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
   const [hasFiltered, setHasFiltered] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const [error, setError] = useState(null);
-  const [pageId, setPageId] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const requestRef = useRef(null);
   const resultsViewportRef = useRef(null);
   const { requestSubmission } = useSubmissionDialog();
 
-  const folderIds = FILTER_FOLDER_IDS;
-  const videoIds = useMemo(() => {
-    const scopedResults = filterResultsByScope(results, { folderId: activeFolder });
-    return Array.from(new Set(
-      scopedResults.map((frame) => frame.video_id).filter(Boolean),
-    ));
-  }, [activeFolder, results]);
+  useEffect(() => () => requestRef.current?.abort(), []);
 
-  useEffect(() => () => {
-    requestRef.current?.abort();
-  }, []);
+  const pageSize = useCallback(() => resolveFramesPerPage('auto', {
+    width: resultsViewportRef.current?.clientWidth,
+    height: resultsViewportRef.current?.clientHeight,
+  }), []);
 
-  const resolveCurrentPageSize = useCallback(() => {
-    const element = resultsViewportRef.current;
-    return resolveFramesPerPage('auto', {
-      width: element?.clientWidth,
-      height: element?.clientHeight,
-    });
-  }, []);
-
-  const requestFilterPage = useCallback(async ({
-    requestedFilters,
-    requestedFolderId,
-    requestedVideoId,
-    requestedPage,
-    requestedFramesPerPage,
-    resetPagination = false,
-  }) => {
+  const requestPage = useCallback(async (parameters) => {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
     setIsFiltering(true);
     setHasFiltered(true);
     setError(null);
-    setResults([]);
-    setPageId(requestedPage);
-    if (resetPagination) setTotalPages(1);
 
     try {
-      const response = await filterFrames({
-        filters: requestedFilters,
-        folderId: requestedFolderId,
-        videoId: requestedVideoId,
-        framesPerPage: requestedFramesPerPage,
-        pageId: requestedPage,
-        signal: controller.signal,
-      });
+      const response = await filterFrames({ ...parameters, signal: controller.signal });
       setResults(response.results || []);
+      setAvailableSources(response.available_sources || []);
+      setTotalResults(response.total_results || 0);
+      setPageId(response.page_id);
       setTotalPages(response.total_pages);
     } catch (requestError) {
-      if (requestError.name === 'AbortError') return;
-      setError(requestError.message || 'Failed to contact filter API');
+      if (requestError.name !== 'AbortError') {
+        setResults([]);
+        setError(requestError.message || 'Failed to contact filter API');
+      }
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null;
@@ -224,55 +161,26 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
 
   const handleFilter = useCallback((event) => {
     event.preventDefault();
-    if (isFiltering) return;
-
-    // A new filter is a new result set, so it must always start on page 1.
-    const nextFramesPerPage = resolveCurrentPageSize();
-    setAppliedFilters(filters);
-    setAppliedScope({ folderId: activeFolder, videoId: selectedVideoId });
-    setAppliedFramesPerPage(nextFramesPerPage);
-    requestFilterPage({
-      requestedFilters: filters,
-      requestedFolderId: activeFolder,
-      requestedVideoId: selectedVideoId,
-      requestedPage: 1,
-      requestedFramesPerPage: nextFramesPerPage,
-      resetPagination: true,
-    });
-  }, [activeFolder, filters, isFiltering, requestFilterPage, resolveCurrentPageSize, selectedVideoId]);
+    if (isFiltering || !query.trim()) return;
+    const parameters = {
+      query,
+      folderId,
+      videoId,
+      framesPerPage: pageSize() || DEFAULT_FRAMES_PER_PAGE,
+      pageId: 1,
+    };
+    setApplied(parameters);
+    requestPage(parameters);
+  }, [folderId, isFiltering, pageSize, query, requestPage, videoId]);
 
   const handlePageChange = useCallback((nextPage) => {
-    if (isFiltering || nextPage === pageId
-        || nextPage < 1 || nextPage > totalPages) return;
-
-    requestFilterPage({
-      requestedFilters: appliedFilters,
-      requestedFolderId: appliedScope.folderId,
-      requestedVideoId: appliedScope.videoId,
-      requestedPage: nextPage,
-      requestedFramesPerPage: appliedFramesPerPage,
-    });
-  }, [appliedFilters, appliedFramesPerPage, appliedScope, isFiltering, pageId, requestFilterPage, totalPages]);
-
-  const handleReset = useCallback(() => {
-    setFilters(createInitialFilterValues());
-  }, []);
-
-  const handleFolderChange = useCallback((folderId) => {
-    const nextFolder = folderId.trim();
-    if (selectedVideoId && nextFolder && !results.some((frame) => (
-      frame.video_id === selectedVideoId
-      && getFrameFolderId(frame) === normalizeFolderId(nextFolder)
-    ))) {
-      setSelectedVideoId('');
-    }
-    setActiveFolder(nextFolder || null);
-  }, [results, selectedVideoId]);
+    if (!applied || isFiltering || nextPage < 1 || nextPage > totalPages) return;
+    requestPage({ ...applied, pageId: nextPage });
+  }, [applied, isFiltering, requestPage, totalPages]);
 
   const handleFrameSubmit = useCallback((frame) => {
-    const videoId = displayVideoId(frame.video_id);
     requestSubmission({
-      line: `${videoId},${frame.frame_idx}`,
+      line: `${displayVideoId(frame.video_id)},${frame.frame_idx}`,
       source: 'KIS frame',
     });
   }, [requestSubmission]);
@@ -282,65 +190,49 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
       <div className="filter-workspace-body">
         <aside className="adhoc-sidebar filter-sidebar">
           <h3 className="adhoc-sidebar-title">Filter Scope</h3>
-
           <div className="filter-scope-card">
-            <div className="filter-scope-field">
-              <label className="filter-scope-label" htmlFor="filter-folder-id">
-                Folder
-              </label>
-              <FolderScopeCombobox
-                value={activeFolder || ''}
-                options={folderIds}
-                onChange={handleFolderChange}
+            <label className="filter-scope-field" htmlFor="filter-folder-id">
+              <span className="filter-scope-label">Folder</span>
+              <input
+                id="filter-folder-id"
+                aria-label="Folder"
+                className="input-text filter-scope-input"
+                value={folderId}
+                onChange={(event) => setFolderId(event.target.value)}
+                placeholder="folder_id"
               />
-            </div>
-
-            <div className="filter-scope-field">
-              <label className="filter-scope-label" htmlFor="filter-video-id">
-                Video
-              </label>
-              {hasFiltered && videoIds.length > 0 ? (
-                <FolderScopeCombobox
-                  inputId="filter-video-id"
-                  scopeLabel="video"
-                  placeholder="video_id"
-                  value={selectedVideoId}
-                  options={videoIds}
-                  onChange={setSelectedVideoId}
-                />
-              ) : (
-                <input
-                  id="filter-video-id"
-                  className="input-text filter-scope-input"
-                  type="text"
-                  value={selectedVideoId}
-                  onChange={(event) => setSelectedVideoId(event.target.value)}
-                  placeholder="video_id"
-                  autoComplete="off"
-                />
-              )}
-            </div>
+            </label>
+            <label className="filter-scope-field" htmlFor="filter-video-id">
+              <span className="filter-scope-label">Video</span>
+              <input
+                id="filter-video-id"
+                aria-label="Video"
+                className="input-text filter-scope-input"
+                value={videoId}
+                onChange={(event) => setVideoId(event.target.value)}
+                placeholder="video_id"
+              />
+            </label>
           </div>
-
           {isActive && <SubmissionWorktree />}
         </aside>
 
         <div className="filter-main-column">
           <FilterForm
-            values={filters}
-            onChange={setFilters}
+            query={query}
+            onChange={setQuery}
             onSubmit={handleFilter}
-            onReset={handleReset}
+            onReset={() => setQuery('')}
             isLoading={isFiltering}
           />
           <div className="filter-results-shell">
-            {isFiltering && <div className="filter-loading" role="status">Loading filter results…</div>}
+            {isFiltering && <div className="filter-loading" role="status">Searching text…</div>}
             <FilterResults
               results={results}
+              totalResults={totalResults}
+              availableSources={availableSources}
               hasFiltered={hasFiltered}
               error={error}
-              folderId={activeFolder}
-              selectedVideoId={selectedVideoId}
               onFrameClick={onFrameClick}
               onSubmit={handleFrameSubmit}
               containerRef={resultsViewportRef}
@@ -355,5 +247,6 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     </div>
   );
 };
+
 
 export default FilterWorkspace;

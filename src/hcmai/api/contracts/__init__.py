@@ -9,6 +9,7 @@ from .database import (
     DatabaseTableList,
 )
 from .frames import CatalogTranscriptSegment, FrameCatalogEntry
+from .filter import FilterRequest, FilterResponse, FilterResult
 from .history import (
     QueryHistoryCreate,
     QueryHistoryList,
@@ -49,6 +50,9 @@ __all__ = [
     "DatabaseTable",
     "DatabaseTableList",
     "FrameCatalogEntry",
+    "FilterRequest",
+    "FilterResponse",
+    "FilterResult",
     "ImageSearchResponse",
     "QueryCandidateResponse",
     "QueryCandidatesRequest",

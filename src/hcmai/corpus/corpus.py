@@ -7,7 +7,7 @@ ingestion, enrichment, context construction, index building, or mutation.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from itertools import islice
 from pathlib import Path
 
@@ -164,6 +164,11 @@ class Corpus:
 
         return self._frames.get_many(frame_ids)
 
+    def iter_frames(self) -> Iterator[Frame]:
+        """Iterate canonical frames in their deterministic artifact order."""
+
+        return self._frames.iter_frames()
+
     def caption(self, frame_id: str) -> str | None:
         """Return usable completed caption text, or ``None`` when unavailable."""
 
@@ -177,15 +182,26 @@ class Corpus:
     def objects(self, frame_id: str) -> tuple[str, ...]:
         """Return stable sorted object labels from completed count evidence.
 
-        Counts remain an offline-only representation; this runtime projection
-        intentionally exposes each current label key once, including keys with
-        a count of zero.
+        This label-only projection supports existing retrieval callers. Use
+        :meth:`object_counts` when display or literal search needs multiplicity.
         """
 
         if self._object_counts is None:
             return ()
         counts = self._object_counts.get_counts(frame_id)
         return tuple(sorted(counts)) if counts is not None else ()
+
+    def object_counts(self, frame_id: str) -> dict[str, int]:
+        """Return completed object counts without discarding multiplicity."""
+
+        if self._object_counts is None:
+            return {}
+        return self._object_counts.get_counts(frame_id) or {}
+
+    def has_object_counts(self) -> bool:
+        """Report whether frame-aligned object evidence is configured."""
+
+        return self._object_counts is not None
 
     def transcript(
         self,
@@ -225,6 +241,24 @@ class Corpus:
             )
         )
 
+    def transcript_segments_for_video(
+        self,
+        video_id: str,
+    ) -> tuple[TranscriptSegment, ...]:
+        """Return all transcript segments for one video in timeline order."""
+
+        if self._transcripts is None:
+            return ()
+        return tuple(sorted(
+            self._transcripts.get_by_video(video_id),
+            key=lambda segment: (
+                segment.start_ms,
+                segment.end_ms,
+                segment.segment_index,
+                segment.segment_id,
+            ),
+        ))
+
     def title(self, video_id: str) -> str | None:
         """Return organizer video title, or ``None`` when metadata is unavailable."""
 
@@ -232,6 +266,11 @@ class Corpus:
             return None
         metadata = self._video_metadata.get(video_id)
         return metadata.title if metadata is not None else None
+
+    def has_titles(self) -> bool:
+        """Report whether organizer video metadata is configured."""
+
+        return self._video_metadata is not None
 
     def image_path(self, frame_id: str) -> Path:
         """Resolve and verify one frame image under the configured dataset root."""
