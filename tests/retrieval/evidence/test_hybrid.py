@@ -76,3 +76,45 @@ def test_both_off_and_event_mismatch_are_rejected() -> None:
         scorer.score_events(
             ("vi", "vi2"), ("en",), caption_events=("en",), use_dense=True, use_bm25=False
         )
+
+
+class ComponentScorer:
+    """Return scripted component bundle."""
+
+    def __init__(self, name: str, scores: np.ndarray) -> None:
+        self.name = name
+        self.scores = scores
+
+    def score_components(self, *events: object) -> TemporalScoreBundle:
+        from hcmai.retrieval.evidence.components import (
+            TemporalScoreBundle,
+            TemporalScoreComponent,
+        )
+
+        return TemporalScoreBundle(
+            {self.name: TemporalScoreComponent(self.name, self.scores.copy())}
+        )
+
+
+def test_adaptive_fusion_mode_runs_successfully() -> None:
+    """Adaptive fusion mode splits scores into VideoEventScores correctly."""
+
+    scorer = TemporalEvidenceScorer(
+        visual_index=FakeIndex(),
+        dense=ComponentScorer("visual_dense", np.asarray([[0.2, 0.4, 0.8]], dtype=np.float32)),
+        bm25=ComponentScorer("bm25_caption", np.asarray([[10.0, 20.0, 30.0]], dtype=np.float32)),
+        config=HybridTemporalConfig(fusion_mode="adaptive_p0"),
+    )
+
+    result = scorer.score_events(
+        ("vi",),
+        ("retrieval",),
+        caption_events=("caption",),
+        use_dense=True,
+        use_bm25=True,
+    )
+
+    assert len(result) == 2
+    matrix = _matrix(result)
+    assert matrix.shape == (1, 3)
+    assert np.all(np.isfinite(matrix))
