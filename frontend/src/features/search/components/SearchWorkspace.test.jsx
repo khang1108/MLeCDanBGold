@@ -104,6 +104,25 @@ test.each([
   expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
 });
 
+test('sends the selected Dense and BM25 modes with KIS search', async () => {
+  searchFrames.mockResolvedValueOnce({
+    results: [], warnings: [], latency: SEARCH_LATENCY,
+  });
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  fireEvent.click(screen.getByRole('switch', { name: /use dense retrieval/i }));
+  submit('a lexical-only query');
+
+  await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
+    expect.objectContaining({
+      query: 'a lexical-only query',
+      topK: 20,
+      useDense: false,
+      useBm25: true,
+    }),
+  ));
+});
+
 test('TRAKE renders same-video backend paths independently and submits only the selected path', async () => {
   searchTrake.mockResolvedValueOnce({
     events: ['first event', 'second event'],

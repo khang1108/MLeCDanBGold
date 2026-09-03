@@ -67,6 +67,8 @@ const SearchWorkspace = ({
   replayRequest,
 }) => {
   const [eventDescription, setEventDescription] = useState('');
+  const [useDense, setUseDense] = useState(true);
+  const [useBm25, setUseBm25] = useState(true);
   const [resultType, setResultType] = useState(null);
   const [frames, setFrames] = useState([]);
   const [kisEvents, setKisEvents] = useState([]);
@@ -240,8 +242,20 @@ const SearchWorkspace = ({
     lastReplayTokenRef.current = null;
     try {
       const response = isTrakeMode
-        ? await searchTrake({ events, topK, signal: controller.signal })
-        : await searchFrames({ query: retrieval.query, topK, signal: controller.signal });
+        ? await searchTrake({
+          events,
+          topK,
+          useDense,
+          useBm25,
+          signal: controller.signal,
+        })
+        : await searchFrames({
+          query: retrieval.query,
+          topK,
+          useDense,
+          useBm25,
+          signal: controller.signal,
+        });
       if (controller.signal.aborted) return;
       const snapshotOptions = {
         events: response.events || events || [],
@@ -297,7 +311,16 @@ const SearchWorkspace = ({
         setIsSearching(false);
       }
     }
-  }, [eventDescription, isSearching, onFocusUserId, onHistoryRefresh, topK, userId]);
+  }, [
+    eventDescription,
+    isSearching,
+    onFocusUserId,
+    onHistoryRefresh,
+    topK,
+    useBm25,
+    useDense,
+    userId,
+  ]);
 
   const handleNewSearch = useCallback(() => {
     requestRef.current?.abort();
@@ -381,7 +404,10 @@ const SearchWorkspace = ({
           <ToolBox
             topK={topK}
             setTopK={setTopK}
-            onReset={() => setTopK(20)}
+            useDense={useDense}
+            setUseDense={setUseDense}
+            useBm25={useBm25}
+            setUseBm25={setUseBm25}
             includeSubmissionWorktree={isActive}
           />
         </aside>

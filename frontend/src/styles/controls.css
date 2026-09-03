@@ -193,47 +193,102 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
-/* Preset Chips */
-.toolbox-presets-row {
+.toolbox-retrieval-section {
+  padding: 0;
+  border: 0;
+  margin: var(--spacing-sm) 0 0;
+}
+
+.toolbox-toggle-list {
   display: flex;
+  flex-direction: column;
   gap: 6px;
-  width: 100%;
+  margin-top: 4px;
 }
 
-.toolbox-preset-chip {
-  flex: 1;
-  padding: 4px 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
-  background-color: var(--color-canvas-soft);
+.toolbox-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-height: 42px;
+  padding: 6px 8px;
   border: 1px solid var(--color-hairline);
-  border-radius: var(--rounded-sm);
-  color: var(--color-ink-muted);
+  border-radius: var(--rounded-md);
+  background: var(--color-surface);
   cursor: pointer;
-  transition: all 0.15s ease;
 }
 
-.toolbox-preset-chip:hover {
-  background-color: var(--color-surface);
-  border-color: var(--color-ink-faint);
+.toolbox-toggle-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.toolbox-toggle-name {
   color: var(--color-ink);
-}
-
-.toolbox-preset-chip.active {
-  background-color: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  font-weight: 700;
-}
-
-.toolbox-reset-btn {
-  width: 100%;
-  padding: 8px;
   font-size: 13px;
   font-weight: 600;
-  margin-top: var(--spacing-sm);
-  margin-bottom: 12px;
+}
+
+.toolbox-toggle-description,
+.toolbox-help {
+  color: var(--color-ink-muted);
+  font-size: 11px;
+}
+
+.toolbox-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  appearance: none;
+  border: 1px solid var(--color-ink-faint);
+  border-radius: var(--rounded-full);
+  background: var(--color-canvas-soft);
+  cursor: pointer;
+}
+
+.toolbox-switch::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--rounded-full);
+  background: var(--color-ink-muted);
+  content: '';
+}
+
+.toolbox-switch:checked {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface));
+}
+
+.toolbox-switch:checked::after {
+  left: 17px;
+  background: var(--color-primary);
+}
+
+.toolbox-switch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.toolbox-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.toolbox-toggle-row:has(.toolbox-switch:disabled) {
+  cursor: not-allowed;
+}
+
+.toolbox-help {
+  margin: 2px 0 0;
+  line-height: 1.4;
 }
 
 /* ─────────────────────────────────────────────────────────── */

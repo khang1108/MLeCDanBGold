@@ -1,4 +1,8 @@
-const STREAM_API_BASE_URL = 'https://stream.iamphuckhang.dev/api/v1';
+import { API_BASE_URL } from '../../api/client';
+
+const STREAM_API_BASE_URL = (
+  process.env.REACT_APP_STREAM_API_BASE_URL || `${API_BASE_URL}/api/v1`
+).replace(/\/+$/, '');
 
 export const displayVideoId = (videoId) => {
   const parts = String(videoId || '').split('.').filter(Boolean);

@@ -3,9 +3,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import ToolBox from './ToolBox';
 
 describe('ToolBox component', () => {
-  test('renders Top-K number input and preset chips without any slider', () => {
+  test('renders an unbounded Top-K number input without presets or a slider', () => {
     const setTopK = jest.fn();
-    render(<ToolBox topK={20} setTopK={setTopK} onReset={jest.fn()} />);
+    render(<ToolBox topK={20} setTopK={setTopK} />);
 
     expect(screen.getByText('Top-K results')).toBeTruthy();
     expect(screen.queryByRole('slider')).toBeNull();
@@ -13,29 +13,29 @@ describe('ToolBox component', () => {
     const numberInput = screen.getByLabelText(/top-k value/i);
     expect(numberInput).toBeTruthy();
     expect(numberInput.value).toBe('20');
-
-    expect(screen.getByRole('button', { name: '10' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '20' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '50' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '100' })).toBeTruthy();
+    expect(numberInput.max).toBe('');
+    expect(screen.queryByRole('button', { name: '10' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '20' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '50' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '100' })).toBeNull();
   });
 
   test('allows typing a custom value in direct input mode', () => {
     const setTopK = jest.fn();
-    render(<ToolBox topK={20} setTopK={setTopK} onReset={jest.fn()} />);
+    render(<ToolBox topK={20} setTopK={setTopK} />);
 
     const numberInput = screen.getByLabelText(/top-k value/i);
-    fireEvent.change(numberInput, { target: { value: '35' } });
-    expect(setTopK).toHaveBeenCalledWith(35);
+    fireEvent.change(numberInput, { target: { value: '10000' } });
+    expect(setTopK).toHaveBeenCalledWith(10000);
 
     // Press Enter to commit
     fireEvent.keyDown(numberInput, { key: 'Enter', code: 'Enter' });
-    expect(setTopK).toHaveBeenCalledWith(35);
+    expect(setTopK).toHaveBeenCalledWith(10000);
   });
 
   test('stepper buttons increment and decrement value', () => {
     const setTopK = jest.fn();
-    render(<ToolBox topK={20} setTopK={setTopK} onReset={jest.fn()} />);
+    render(<ToolBox topK={20} setTopK={setTopK} />);
 
     const increaseBtn = screen.getByLabelText(/increase top-k/i);
     fireEvent.click(increaseBtn);
@@ -46,27 +46,49 @@ describe('ToolBox component', () => {
     expect(setTopK).toHaveBeenCalledWith(20);
   });
 
-  test('preset buttons set exact Top-K values', () => {
-    const setTopK = jest.fn();
-    render(<ToolBox topK={20} setTopK={setTopK} onReset={jest.fn()} />);
+  test('renders accessible Dense and BM25 switches', () => {
+    const setUseDense = jest.fn();
+    const setUseBm25 = jest.fn();
+    render(
+      <ToolBox
+        topK={20}
+        setTopK={jest.fn()}
+        useDense
+        setUseDense={setUseDense}
+        useBm25
+        setUseBm25={setUseBm25}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: '50' }));
-    expect(setTopK).toHaveBeenCalledWith(50);
+    const dense = screen.getByRole('switch', { name: /use dense retrieval/i });
+    const bm25 = screen.getByRole('switch', { name: /use bm25 retrieval/i });
+    expect(dense.checked).toBe(true);
+    expect(bm25.checked).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: '100' }));
-    expect(setTopK).toHaveBeenCalledWith(100);
+    fireEvent.click(dense);
+    fireEvent.click(bm25);
+    expect(setUseDense).toHaveBeenCalledWith(false);
+    expect(setUseBm25).toHaveBeenCalledWith(false);
   });
 
-  test('clicking Reset Parameters triggers onReset callback', () => {
-    const onReset = jest.fn();
-    render(<ToolBox topK={50} setTopK={jest.fn()} onReset={onReset} />);
+  test('does not allow the only enabled retrieval source to be disabled', () => {
+    render(
+      <ToolBox
+        topK={20}
+        setTopK={jest.fn()}
+        useDense
+        setUseDense={jest.fn()}
+        useBm25={false}
+        setUseBm25={jest.fn()}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: /reset parameters/i }));
-    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('switch', { name: /use dense retrieval/i }).disabled).toBe(true);
+    expect(screen.getByRole('switch', { name: /use bm25 retrieval/i }).disabled).toBe(false);
   });
 
   test('keeps the submission files panel in the Query sidebar', () => {
-    render(<ToolBox topK={20} setTopK={jest.fn()} onReset={jest.fn()} />);
+    render(<ToolBox topK={20} setTopK={jest.fn()} />);
 
     expect(screen.getByRole('region', { name: 'Shared submission files' })).toBeTruthy();
     expect(screen.getByText('No Query Files')).toBeTruthy();

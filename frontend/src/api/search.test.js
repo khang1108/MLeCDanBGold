@@ -8,7 +8,7 @@ const response = (payload, status = 200) => ({
 
 afterEach(() => jest.restoreAllMocks());
 
-test('posts the standalone search request with only query and top_k', async () => {
+test('posts the standalone search request with explicit retrieval sources', async () => {
   const payload = {
     query: 'chef cooks',
     events: ['chef cooks'],
@@ -44,6 +44,8 @@ test('posts the standalone search request with only query and top_k', async () =
       body: JSON.stringify({
         query: 'chef cooks',
         top_k: 20,
+        use_dense: true,
+        use_bm25: true,
       }),
     }),
   );
@@ -106,6 +108,8 @@ test('posts explicit ordered events to the dedicated TRAKE route', async () => {
       body: JSON.stringify({
         events: ['person enters', 'person leaves'],
         top_k: 20,
+        use_dense: true,
+        use_bm25: true,
       }),
     }),
   );
@@ -133,9 +137,67 @@ test('posts a single TRAKE event accepted by the backend contract', async () => 
   expect(global.fetch).toHaveBeenCalledWith(
     'http://127.0.0.1:8000/api/v1/trake',
     expect.objectContaining({
-      body: JSON.stringify({ events: ['only one'], top_k: 20 }),
+      body: JSON.stringify({
+        events: ['only one'],
+        top_k: 20,
+        use_dense: true,
+        use_bm25: true,
+      }),
     }),
   );
+});
+
+test('forwards a BM25-only selection to both search contracts', async () => {
+  const kisPayload = { events: [], results: [], latency: {
+    query_ms: 0,
+    retrieval_ms: 0,
+    alignment_ms: 0,
+    materialization_ms: 0,
+    total_ms: 0,
+  } };
+  const trakePayload = { events: ['event'], paths: [], latency: kisPayload.latency };
+  jest.spyOn(global, 'fetch')
+    .mockResolvedValueOnce(response(kisPayload))
+    .mockResolvedValueOnce(response(trakePayload));
+
+  await searchFrames({
+    query: 'boat',
+    topK: 10,
+    useDense: false,
+    useBm25: true,
+  });
+  await searchTrake({
+    events: ['event'],
+    topK: 10,
+    useDense: false,
+    useBm25: true,
+  });
+
+  expect(global.fetch.mock.calls[0][1].body).toBe(JSON.stringify({
+    query: 'boat',
+    top_k: 10,
+    use_dense: false,
+    use_bm25: true,
+  }));
+  expect(global.fetch.mock.calls[1][1].body).toBe(JSON.stringify({
+    events: ['event'],
+    top_k: 10,
+    use_dense: false,
+    use_bm25: true,
+  }));
+});
+
+test('rejects disabling both retrieval sources before contacting the backend', async () => {
+  const fetchSpy = jest.spyOn(global, 'fetch');
+
+  await expect(searchFrames({
+    query: 'boat',
+    topK: 10,
+    useDense: false,
+    useBm25: false,
+  })).rejects.toThrow('at least one retrieval source');
+
+  expect(fetchSpy).not.toHaveBeenCalled();
 });
 
 test('rejects TRAKE input with no non-empty events before contacting the backend', async () => {

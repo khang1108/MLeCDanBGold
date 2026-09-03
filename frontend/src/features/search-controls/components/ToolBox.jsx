@@ -2,13 +2,20 @@ import React, { useEffect, useId, useState } from "react";
 import SubmissionWorktree from "../../../features/submission/components/SubmissionWorktree";
 
 const TOP_K_MIN = 1;
-const TOP_K_MAX = 100;
-const TOP_K_PRESETS = [10, 20, 50, 100];
+const NOOP = () => {};
 
 /**
  * User-tunable search controls with direct numeric input and quick presets.
  */
-const ToolBox = ({ topK, setTopK, onReset, includeSubmissionWorktree = true }) => {
+const ToolBox = ({
+  topK,
+  setTopK,
+  useDense = true,
+  setUseDense = NOOP,
+  useBm25 = true,
+  setUseBm25 = NOOP,
+  includeSubmissionWorktree = true,
+}) => {
   const topKInputId = useId();
   const [topKText, setTopKText] = useState(String(topK));
 
@@ -21,16 +28,16 @@ const ToolBox = ({ topK, setTopK, onReset, includeSubmissionWorktree = true }) =
     if (Number.isNaN(num)) {
       num = topK || 20;
     }
-    const clamped = Math.max(TOP_K_MIN, Math.min(TOP_K_MAX, num));
-    setTopK(clamped);
-    setTopKText(String(clamped));
+    const normalized = Math.max(TOP_K_MIN, num);
+    setTopK(normalized);
+    setTopKText(String(normalized));
   };
 
   const handleTopKTextChange = (e) => {
     const val = e.target.value;
     setTopKText(val);
     const num = parseInt(val, 10);
-    if (!Number.isNaN(num) && num >= TOP_K_MIN && num <= TOP_K_MAX) {
+    if (!Number.isNaN(num) && num >= TOP_K_MIN) {
       setTopK(num);
     }
   };
@@ -48,7 +55,7 @@ const ToolBox = ({ topK, setTopK, onReset, includeSubmissionWorktree = true }) =
 
   const stepTopK = (delta) => {
     const current = parseInt(topKText, 10) || topK || 20;
-    const nextVal = Math.max(TOP_K_MIN, Math.min(TOP_K_MAX, current + delta));
+    const nextVal = Math.max(TOP_K_MIN, current + delta);
     setTopK(nextVal);
     setTopKText(String(nextVal));
   };
@@ -77,7 +84,6 @@ const ToolBox = ({ topK, setTopK, onReset, includeSubmissionWorktree = true }) =
               id={topKInputId}
               type="number"
               min={TOP_K_MIN}
-              max={TOP_K_MAX}
               value={topKText}
               onChange={handleTopKTextChange}
               onKeyDown={handleTopKKeyDown}
@@ -90,33 +96,51 @@ const ToolBox = ({ topK, setTopK, onReset, includeSubmissionWorktree = true }) =
               type="button"
               className="toolbox-stepper-btn"
               onClick={() => stepTopK(1)}
-              disabled={topK >= TOP_K_MAX}
               aria-label="Increase Top-K"
             >
               +
             </button>
           </div>
-          <div className="toolbox-presets-row">
-            {TOP_K_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                className={`toolbox-preset-chip ${topK === preset ? "active" : ""}`}
-                onClick={() => {
-                  setTopK(preset);
-                  setTopKText(String(preset));
-                }}
-              >
-                {preset}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
-      <button type="button" className="btn-utility toolbox-reset-btn" onClick={onReset}>
-        Reset Parameters
-      </button>
+      <fieldset className="toolbox-section toolbox-retrieval-section">
+        <legend className="toolbox-label">Retrieval sources</legend>
+        <div className="toolbox-toggle-list">
+          <label className="toolbox-toggle-row">
+            <span className="toolbox-toggle-copy">
+              <span className="toolbox-toggle-name">Dense</span>
+              <span className="toolbox-toggle-description">Semantic matching</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              className="toolbox-switch"
+              checked={useDense}
+              onChange={(event) => setUseDense(event.target.checked)}
+              disabled={useDense && !useBm25}
+              aria-label="Use Dense retrieval"
+            />
+          </label>
+
+          <label className="toolbox-toggle-row">
+            <span className="toolbox-toggle-copy">
+              <span className="toolbox-toggle-name">BM25</span>
+              <span className="toolbox-toggle-description">Lexical matching</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              className="toolbox-switch"
+              checked={useBm25}
+              onChange={(event) => setUseBm25(event.target.checked)}
+              disabled={useBm25 && !useDense}
+              aria-label="Use BM25 retrieval"
+            />
+          </label>
+        </div>
+        <p className="toolbox-help">At least one source must stay enabled.</p>
+      </fieldset>
 
       {includeSubmissionWorktree && <SubmissionWorktree />}
     </aside>
