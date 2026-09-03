@@ -245,6 +245,18 @@ class WorkspaceStore:
         logger.info("Submission file deleted name=%s", name)
 
 
+    def clear_submission_files(self) -> list[str]:
+        """Delete all shared submission files and return their deleted names."""
+
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute("SELECT name FROM submission_files").fetchall()
+            names = [str(row["name"]) for row in rows]
+            connection.execute("DELETE FROM submission_files")
+        logger.info("All submission files cleared count=%d", len(names))
+        return names
+
+
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         """Open one short SQLite transaction for an operation."""

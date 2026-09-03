@@ -30,12 +30,22 @@ export const fileVisualState = (file) => {
 };
 
 const SubmissionWorktree = () => {
-  const { files, createFile, connectionError, pendingFileNames } = useSubmission();
+  const { files, createFile, clearFiles, connectionError, pendingFileNames } = useSubmission();
   const { openEditor } = useSubmissionDialog();
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
   const [status, setStatus] = useState(null);
+
+  const handleClearFiles = async () => {
+    if (!window.confirm('Are you sure you want to clear all submission files?')) return;
+    try {
+      await clearFiles();
+      setStatus({ type: 'info', message: 'Cleared all submission files.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message || 'Failed to clear submission files' });
+    }
+  };
 
   const processSelectedFiles = async (selectedFiles) => {
     if (!selectedFiles?.length) return;
@@ -149,9 +159,26 @@ const SubmissionWorktree = () => {
       <div className="toolbox-label-row submission-header-row">
         <label className="toolbox-label">Submission Files</label>
         {files.length > 0 && (
-          <button type="button" className="submission-icon-btn" onClick={handleChooseFiles} title="Add more query files" aria-label="Add files">
-            +
-          </button>
+          <div className="submission-header-actions">
+            <button
+              type="button"
+              className="submission-clear-btn"
+              onClick={handleClearFiles}
+              title="Clear all submission files"
+              aria-label="Clear all files"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="submission-icon-btn"
+              onClick={handleChooseFiles}
+              title="Add more query files"
+              aria-label="Add files"
+            >
+              +
+            </button>
+          </div>
         )}
       </div>
 

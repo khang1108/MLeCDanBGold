@@ -210,9 +210,14 @@ h3 {
 }
 
 /* Scrollbar styles for pure clean look */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -220,10 +225,10 @@ h3 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-hairline);
+  background: rgba(0, 0, 0, 0.16);
   border-radius: var(--rounded-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-ink-faint);
+  background: rgba(0, 0, 0, 0.32);
 }

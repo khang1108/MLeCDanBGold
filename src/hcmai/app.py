@@ -140,16 +140,23 @@ def create_app(
                 content={"detail": "Internal server error"},
             )
 
+    cors_origins = [
+        value.strip()
+        for value in os.getenv(
+            "HCMAI_CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000,https://hcmai.iamphuckhang.dev,https://hcmai.iamphuckhnag.dev",
+        ).split(",")
+        if value.strip()
+    ]
+    cors_origin_regex = os.getenv(
+        "HCMAI_CORS_ORIGIN_REGEX",
+        r"^https?://(localhost|127\.0\.0\.1|(.+\.)?iamphuckhang\.dev|(.+\.)?iamphuckhnag\.dev)(:\d+)?$",
+    )
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            value.strip()
-            for value in os.getenv(
-                "HCMAI_CORS_ORIGINS",
-                "http://localhost:3000,http://127.0.0.1:3000",
-            ).split(",")
-            if value.strip()
-        ],
+        allow_origins=cors_origins,
+        allow_origin_regex=cors_origin_regex,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],

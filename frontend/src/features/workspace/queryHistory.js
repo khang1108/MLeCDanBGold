@@ -44,11 +44,22 @@ const normalizeEvents = (events, field) => {
   return events.map((event, index) => requireText(event, `${field}[${index}]`));
 };
 
+const roundLatencyVal = (val) => {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return val;
+  return Math.round(val * 100) / 100;
+};
+
 const normalizeLatency = (latency, field) => {
   if (!latency || typeof latency !== 'object' || Array.isArray(latency)) {
     throw new Error(`${field} must be an object`);
   }
-  return { ...latency };
+  const normalized = { ...latency };
+  Object.keys(normalized).forEach((key) => {
+    if (typeof normalized[key] === 'number') {
+      normalized[key] = roundLatencyVal(normalized[key]);
+    }
+  });
+  return normalized;
 };
 
 const normalizeCaption = (result, field) => {

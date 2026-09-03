@@ -59,3 +59,17 @@ test('shows a loading placeholder while page details are fetched', () => {
 
   expect(screen.getByText('Loading frame…')).toBeTruthy();
 });
+
+test('shows submitted state in button when frame has submitted className', () => {
+  const frame = {
+    frame_id: 'internal-frame-1',
+    video_id: 'L21_V001',
+    frame_idx: 17794,
+    caption: 'A sample frame',
+  };
+  render(<FrameCard frame={frame} className="submitted" onClick={jest.fn()} onSubmit={jest.fn()} />);
+
+  const submitButton = screen.getByRole('button', { name: /frame submitted/i });
+  expect(submitButton.textContent).toBe('✓ Submitted');
+  expect(submitButton.classList.contains('submitted')).toBe(true);
+});

@@ -135,3 +135,19 @@ test('downloads only non-empty shared files', async () => {
     { name: 'filled.csv', content: 'V01,100', is_validated: false, revision: 1 },
   ]);
 });
+
+test('renders Clear button when files exist and sends clear command on confirm', async () => {
+  jest.spyOn(window, 'confirm').mockReturnValue(true);
+  await renderWorktree([
+    { name: 'query-1.csv', content: 'V01,1', is_validated: false, revision: 1 },
+  ]);
+
+  const clearBtn = await screen.findByRole('button', { name: /clear all files/i });
+  expect(clearBtn).toBeTruthy();
+  fireEvent.click(clearBtn);
+
+  const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+  await waitFor(() => {
+    expect(socket.sent.some((v) => JSON.parse(v).type === 'submission_file.clear')).toBe(true);
+  });
+});

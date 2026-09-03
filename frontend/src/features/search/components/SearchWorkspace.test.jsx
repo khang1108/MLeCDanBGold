@@ -392,3 +392,30 @@ test('keeps the viewed color while allowing a failed activity patch to retry', a
   fireEvent.click(frameImage);
   await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(2));
 });
+
+test('highlights submitted frame with submitted class when submit is clicked', async () => {
+  searchFrames.mockResolvedValueOnce({
+    results: [{
+      frame_id: 'frame-kis',
+      video_id: 'V01',
+      frame_idx: 125,
+      timestamp_ms: 1000,
+      frame_ids: ['frame-kis'],
+      timestamps_ms: [1000],
+      scores: { final: 0.8 },
+      caption: 'A test frame',
+    }],
+    warnings: [],
+    latency: SEARCH_LATENCY,
+  });
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+  submit('red boat');
+
+  const submitBtn = await screen.findByRole('button', { name: /submit this frame/i });
+  fireEvent.click(submitBtn);
+
+  const submittedBtn = await screen.findByRole('button', { name: /frame submitted/i });
+  expect(submittedBtn.textContent).toBe('✓ Submitted');
+  const card = submittedBtn.closest('.frame-card');
+  expect(card.classList.contains('submitted')).toBe(true);
+});

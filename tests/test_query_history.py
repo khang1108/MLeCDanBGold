@@ -471,3 +471,40 @@ def test_history_store_reopens(tmp_path: Path) -> None:
     )
     reopened = WorkspaceStore(database)
     assert reopened.get_recent_history("user-a")[0].query_id == "query-001"
+
+
+def test_clear_submission_files_broadcasts_over_websocket(
+    workspace_app: FastAPI,
+    workspace_store: WorkspaceStore,
+) -> None:
+    """Clear all submission files and broadcast the event to all WebSocket clients."""
+
+    workspace_store.create_submission_file("file1.csv", "V01,1")
+    workspace_store.create_submission_file("file2.csv", "V02,2")
+    assert len(workspace_store.list_submission_files()) == 2
+
+    with TestClient(workspace_app) as client:
+        with client.websocket_connect(
+            "/api/v1/workspace/ws",
+            headers={"origin": "http://localhost:3000"},
+        ) as websocket:
+            websocket.send_json({"type": "submission_file.clear"})
+            event = websocket.receive_json()
+            assert event["type"] == "submission_file.cleared"
+            assert set(event["deleted_names"]) == {"file1.csv", "file2.csv"}
+
+    assert len(workspace_store.list_submission_files()) == 0
+
+
+def test_delete_submission_files_http_endpoint(
+    workspace_app: FastAPI,
+    workspace_store: WorkspaceStore,
+) -> None:
+    """DELETE /api/v1/submission-files clears files and returns event."""
+
+    workspace_store.create_submission_file("file1.csv", "V01,1")
+    response = request(workspace_app, "DELETE", "/api/v1/submission-files")
+    assert response.status_code == 200
+    assert response.json()["type"] == "submission_file.cleared"
+    assert response.json()["deleted_names"] == ["file1.csv"]
+    assert len(workspace_store.list_submission_files()) == 0

@@ -1,6 +1,11 @@
 import React from "react";
 import FrameCard from "./FrameCard";
 
+export const roundLatencyDisplay = (val) => {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return val;
+  return Math.round(val * 100) / 100;
+};
+
 // Keeps result, loading, error, warning, and welcome states in one result feature.
 const FramesBox = ({
   results,
@@ -16,7 +21,9 @@ const FramesBox = ({
   const hasSearched = latencyMs !== null || error !== null;
   const hasLatency = latencyMs !== null && latencyMs !== undefined;
   const structuredLatency = typeof latencyMs === "object" && latencyMs !== null;
-  const totalLatencyMs = structuredLatency ? latencyMs.total_ms : latencyMs;
+  const totalLatencyMs = structuredLatency
+    ? roundLatencyDisplay(latencyMs.total_ms)
+    : roundLatencyDisplay(latencyMs);
   if (isLoading) return null;
 
   return (
@@ -39,19 +46,19 @@ const FramesBox = ({
           {structuredLatency && (
             <div className="latency-stages">
               <span className="latency-stage-item">
-                Query: {latencyMs.query_ms}ms
+                Query: {roundLatencyDisplay(latencyMs.query_ms)}ms
               </span>
               <span className="latency-stage-divider">|</span>
               <span className="latency-stage-item">
-                Retrieval: {latencyMs.retrieval_ms}ms
+                Retrieval: {roundLatencyDisplay(latencyMs.retrieval_ms)}ms
               </span>
               <span className="latency-stage-divider">|</span>
               <span className="latency-stage-item">
-                Alignment: {latencyMs.alignment_ms}ms
+                Alignment: {roundLatencyDisplay(latencyMs.alignment_ms)}ms
               </span>
               <span className="latency-stage-divider">|</span>
               <span className="latency-stage-item">
-                Materialize: {latencyMs.materialization_ms}ms
+                Materialize: {roundLatencyDisplay(latencyMs.materialization_ms)}ms
               </span>
             </div>
           )}

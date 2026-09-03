@@ -218,16 +218,7 @@ const ImageModal = ({ frame = {}, query, onSubmit, onClose }) => {
             </div>
           </div>
           <div className="inspector-content">
-            <div className="inspector-section">
-              <span className="inspector-section-label">Caption</span>
-              <p className="inspector-caption-text">
-                {frame.metadata?.caption ?? frame.caption ?? "No caption available"}
-              </p>
-            </div>
-            <div className="inspector-section">
-              <span className="inspector-section-label">Metadata</span>
-              <FrameMetadata frame={frame} playbackTime={playbackTime} />
-            </div>
+            <FrameMetadata frame={frame} playbackTime={playbackTime} />
           </div>
         </div>
         </div>

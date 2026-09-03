@@ -63,6 +63,31 @@ test('surfaces the backend error message', async () => {
   })).rejects.toThrow('Search engine is not initialized');
 });
 
+test('rounds latency stages to 2 decimal places', async () => {
+  const payload = {
+    query: 'chef cooks',
+    events: ['chef cooks'],
+    results: [],
+    latency: {
+      query_ms: 1.23456,
+      retrieval_ms: 2.34567,
+      alignment_ms: 3.45678,
+      materialization_ms: 4.56789,
+      total_ms: 11.6049,
+    },
+  };
+  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload));
+
+  const result = await searchFrames({ query: 'chef cooks', topK: 10 });
+  expect(result.latency).toEqual({
+    query_ms: 1.23,
+    retrieval_ms: 2.35,
+    alignment_ms: 3.46,
+    materialization_ms: 4.57,
+    total_ms: 11.6,
+  });
+});
+
 test('rejects a malformed successful search response', async () => {
   jest.spyOn(global, 'fetch').mockResolvedValue(
     response({ events: ['boat'], results: [] }),

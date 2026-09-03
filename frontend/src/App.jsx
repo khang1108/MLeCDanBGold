@@ -61,7 +61,7 @@ const AppContent = () => {
   const handleInspectorSubmit = (intent) => {
     requestSubmission({
       ...intent,
-      history: selectedFrame?.history,
+      history: selectedFrame?.history || (selectedFrame?.frame?.frame_id ? { frameIds: [selectedFrame.frame.frame_id] } : undefined),
     });
   };
 

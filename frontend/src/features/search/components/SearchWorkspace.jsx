@@ -22,6 +22,8 @@ import {
   getSnapshotKind,
   normalizeFrameActivity,
   withViewedFrame,
+  withSubmittedFrames,
+  activityStateForFrame,
 } from '../../workspace/queryHistory';
 import TrakeResults from './TrakeResults';
 
@@ -80,6 +82,7 @@ const SearchWorkspace = ({
   const [isSearching, setIsSearching] = useState(false);
   const [activeQuerySession, setActiveQuerySession] = useState(null);
   const [replaySnapshot, setReplaySnapshot] = useState(null);
+  const [submittedFrameIds, setSubmittedFrameIds] = useState(() => new Set());
   const queryTextareaRef = useRef(null);
   const requestRef = useRef(null);
   const viewedPatchRef = useRef(new Set());
@@ -151,6 +154,9 @@ const SearchWorkspace = ({
 
   const handleTrakeSubmit = useCallback((path) => {
     const vid = displayVideoId(path.video_id);
+    if (path.frame_ids?.length) {
+      setSubmittedFrameIds((prev) => new Set([...prev, ...path.frame_ids]));
+    }
     requestSubmission({
       line: `${vid},${path.frame_idxs.join(',')}`,
       source: 'TRAKE path',
@@ -160,6 +166,9 @@ const SearchWorkspace = ({
 
   const handleFrameSubmit = useCallback((frame) => {
     const vid = displayVideoId(frame.video_id);
+    if (frame?.frame_id) {
+      setSubmittedFrameIds((prev) => new Set([...prev, frame.frame_id]));
+    }
     requestSubmission({
       line: `${vid},${frame.frame_idx}`,
       source: 'KIS/TRAKE frame',
@@ -172,6 +181,20 @@ const SearchWorkspace = ({
   const handleReplayPathSubmit = useCallback((path) => handleTrakeSubmit(path), [handleTrakeSubmit]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  useEffect(() => {
+    const handleHistoryChanged = (event) => {
+      const frameIds = event?.detail?.frameIds;
+      if (Array.isArray(frameIds) && frameIds.length > 0) {
+        setSubmittedFrameIds((prev) => new Set([...prev, ...frameIds]));
+        setActiveQuerySession((current) => (current
+          ? { ...current, frameActivity: withSubmittedFrames(current.frameActivity, frameIds) }
+          : current));
+      }
+    };
+    window.addEventListener('hcmai:history-changed', handleHistoryChanged);
+    return () => window.removeEventListener('hcmai:history-changed', handleHistoryChanged);
+  }, []);
 
   useEffect(() => {
     const item = replayRequest?.item || replayRequest;
@@ -352,6 +375,16 @@ const SearchWorkspace = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleNewSearch]);
 
+  const getFrameClassName = useCallback(
+    (frameOrId) => {
+      const frameId = typeof frameOrId === 'string' ? frameOrId : frameOrId?.frame_id;
+      if (!frameId) return '';
+      if (submittedFrameIds.has(frameId)) return 'submitted';
+      return activityStateForFrame(frameId, activeQuerySession?.frameActivity);
+    },
+    [activeQuerySession?.frameActivity, submittedFrameIds],
+  );
+
   const renderResults = () => {
     if (resultType === 'replay-kis' || resultType === 'replay-trake') {
       return (
@@ -364,8 +397,33 @@ const SearchWorkspace = ({
         />
       );
     }
-    if (resultType === 'trake') return <TrakeResults events={trakeEvents} paths={paths} warnings={warnings} error={error} hasSearched onFrameClick={openTrakeFrame} onTrakeSubmit={handleTrakeSubmit} />;
-    return <FramesBox results={frames} isLoading={false} error={error} latencyMs={searchLatencyMs} warnings={warnings} events={kisEvents} onFrameClick={openKisFrame} onSubmit={handleFrameSubmit} />;
+    if (resultType === 'trake') {
+      return (
+        <TrakeResults
+          events={trakeEvents}
+          paths={paths}
+          warnings={warnings}
+          error={error}
+          hasSearched
+          onFrameClick={openTrakeFrame}
+          onTrakeSubmit={handleTrakeSubmit}
+          getFrameClassName={getFrameClassName}
+        />
+      );
+    }
+    return (
+      <FramesBox
+        results={frames}
+        isLoading={false}
+        error={error}
+        latencyMs={searchLatencyMs}
+        warnings={warnings}
+        events={kisEvents}
+        onFrameClick={openKisFrame}
+        onSubmit={handleFrameSubmit}
+        getFrameClassName={getFrameClassName}
+      />
+    );
   };
 
   return (

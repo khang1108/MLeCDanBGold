@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from typing import Any
 
@@ -17,6 +18,7 @@ from hcmai.api.contracts import (
     QueryHistoryRecord,
     QueryHistorySubmissionUpdate,
     QueryHistoryViewedFrameUpdate,
+    SubmissionFileClear,
     SubmissionFileCreate,
     SubmissionFileDelete,
     SubmissionFileList,
@@ -32,6 +34,7 @@ COMMANDS = {
     "submission_file.update": SubmissionFileUpdate,
     "submission_file.validate": SubmissionFileValidate,
     "submission_file.delete": SubmissionFileDelete,
+    "submission_file.clear": SubmissionFileClear,
 }
 
 
@@ -149,10 +152,26 @@ def _allowed_origins() -> set[str]:
         value.strip()
         for value in os.getenv(
             "HCMAI_CORS_ORIGINS",
-            "http://localhost:3000,http://127.0.0.1:3000",
+            "http://localhost:3000,http://127.0.0.1:3000,https://hcmai.iamphuckhang.dev,https://hcmai.iamphuckhnag.dev",
         ).split(",")
         if value.strip()
     }
+
+
+def _is_origin_allowed(origin: str | None) -> bool:
+    """Check if the incoming browser origin is permitted for WebSocket connections."""
+    if not origin:
+        return True
+    origins = _allowed_origins()
+    if "*" in origins or origin in origins:
+        return True
+    regex_pattern = os.getenv(
+        "HCMAI_CORS_ORIGIN_REGEX",
+        r"^https?://(localhost|127\.0\.0\.1|(.+\.)?iamphuckhang\.dev|(.+\.)?iamphuckhnag\.dev)(:\d+)?$",
+    )
+    if regex_pattern and re.match(regex_pattern, origin):
+        return True
+    return False
 
 
 async def _run_file_command(
@@ -187,6 +206,10 @@ async def _run_file_command(
             command.expected_revision,
         )
         return {"type": "submission_file.updated", "file": file.model_dump()}
+
+    if isinstance(command, SubmissionFileClear):
+        deleted_names = await run_in_threadpool(store.clear_submission_files)
+        return {"type": "submission_file.cleared", "deleted_names": deleted_names}
 
     await run_in_threadpool(
         store.delete_submission_file, command.name, command.expected_revision
@@ -285,6 +308,17 @@ def create_workspace_router(service_container: dict[str, Any]) -> APIRouter:
         )
         return SubmissionFileList(files=files)
 
+    @router.delete("/api/v1/submission-files")
+    async def clear_submission_files() -> dict[str, object]:
+        """Delete all shared submission files and broadcast to connected clients."""
+
+        deleted_names = await run_in_threadpool(
+            _workspace_store(service_container).clear_submission_files
+        )
+        event = {"type": "submission_file.cleared", "deleted_names": deleted_names}
+        await connections.broadcast(event)
+        return event
+
     @router.websocket("/api/v1/workspace/ws")
     async def workspace_socket(websocket: WebSocket) -> None:
         """Commit file commands and broadcast only committed changes."""
@@ -294,7 +328,7 @@ def create_workspace_router(service_container: dict[str, Any]) -> APIRouter:
         if store is None:
             await websocket.close(code=1013)
             return
-        if origin and origin not in _allowed_origins():
+        if origin and not _is_origin_allowed(origin):
             await websocket.close(code=1008)
             return
 

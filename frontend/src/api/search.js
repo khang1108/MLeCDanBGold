@@ -1,5 +1,23 @@
 import { requestJson } from './client';
 
+export const roundLatencyMs = (val) => {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return val;
+  return Math.round(val * 100) / 100;
+};
+
+export const normalizeSearchLatency = (latency) => {
+  if (!latency || typeof latency !== 'object' || Array.isArray(latency)) {
+    return typeof latency === 'number' ? roundLatencyMs(latency) : latency;
+  }
+  const normalized = { ...latency };
+  Object.keys(normalized).forEach((key) => {
+    if (typeof normalized[key] === 'number') {
+      normalized[key] = roundLatencyMs(normalized[key]);
+    }
+  });
+  return normalized;
+};
+
 const hasSearchLatency = (latency) => (
   latency
   && typeof latency === 'object'
@@ -36,7 +54,10 @@ export const searchFrames = async ({
     throw new Error('Search server returned an invalid response contract');
   }
 
-  return payload;
+  return {
+    ...payload,
+    latency: normalizeSearchLatency(payload.latency),
+  };
 };
 
 export const searchTrake = async ({
@@ -73,5 +94,8 @@ export const searchTrake = async ({
     throw new Error('TRAKE server returned an invalid response contract');
   }
 
-  return payload;
+  return {
+    ...payload,
+    latency: normalizeSearchLatency(payload.latency),
+  };
 };

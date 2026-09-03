@@ -1,9 +1,20 @@
 // Shared HTTP transport for every published FastAPI endpoint.
 const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000';
 
-export const API_BASE_URL = (
-  process.env.REACT_APP_API_BASE_URL || DEFAULT_API_BASE_URL
-).replace(/\/+$/, '');
+const resolveDefaultBaseUrl = () => {
+  if (process.env.REACT_APP_API_BASE_URL) {
+    return process.env.REACT_APP_API_BASE_URL;
+  }
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    if (host.includes('iamphuckhang.dev') || host.includes('iamphuckhnag.dev')) {
+      return 'https://backend.iamphuckhang.dev';
+    }
+  }
+  return DEFAULT_API_BASE_URL;
+};
+
+export const API_BASE_URL = resolveDefaultBaseUrl().replace(/\/+$/, '');
 
 /** Resolve an API-relative asset path without rewriting absolute URLs. */
 export const resolveApiUrl = (value) => {

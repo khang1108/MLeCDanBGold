@@ -122,11 +122,20 @@ class SubmissionFileDelete(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+class SubmissionFileClear(BaseModel):
+    """WebSocket command that clears all shared submission files."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["submission_file.clear"] = "submission_file.clear"
+
+
 SubmissionFileCommand = (
     SubmissionFileCreate
     | SubmissionFileUpdate
     | SubmissionFileValidate
     | SubmissionFileDelete
+    | SubmissionFileClear
 )
 
 
@@ -139,6 +148,7 @@ __all__ = [
     "QueryHistorySubmissionUpdate",
     "QueryHistoryViewedFrameUpdate",
     "SubmissionFile",
+    "SubmissionFileClear",
     "SubmissionFileCommand",
     "SubmissionFileCreate",
     "SubmissionFileDelete",

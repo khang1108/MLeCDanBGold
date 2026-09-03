@@ -88,6 +88,7 @@ const FilterResults = ({
         aria-label="Filter results"
       >
         <div className="frames-empty-state filter-empty-state">
+          <div className="filter-empty-icon" aria-hidden="true">🎯</div>
           <p className="body-md frames-empty-text">Welcome to HCMAI Frame Search</p>
           <p className="caption frames-empty-subtext">
             Enter a natural language question or keywords above to query the video corpus.
@@ -108,7 +109,11 @@ const FilterResults = ({
           <div className="filter-result-summary">No frames match the current scope.</div>
         </div>
         <div className="frames-empty-state filter-empty-state">
+          <div className="filter-empty-icon" aria-hidden="true">🔍</div>
           <p className="body-md frames-empty-text">No matching frames</p>
+          <p className="caption frames-empty-subtext">
+            Try adjusting your Title, ASR, Caption, OCR, or Object filters.
+          </p>
         </div>
         {pagination}
       </section>
@@ -276,41 +281,48 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     <div className="adhoc-workspace filter-workspace">
       <div className="filter-workspace-body">
         <aside className="adhoc-sidebar filter-sidebar">
-          <label className="filter-scope-field" htmlFor="filter-folder-id">
-            <span>Folder</span>
-            <FolderScopeCombobox
-              value={activeFolder || ''}
-              options={folderIds}
-              onChange={handleFolderChange}
-            />
-          </label>
+          <h3 className="adhoc-sidebar-title">Filter Scope</h3>
 
-          <label className="filter-scope-field" htmlFor="filter-video-id">
-            <span>Video</span>
-            {hasFiltered && videoIds.length > 0 ? (
+          <div className="filter-scope-card">
+            <div className="filter-scope-field">
+              <label className="filter-scope-label" htmlFor="filter-folder-id">
+                Folder
+              </label>
               <FolderScopeCombobox
-                inputId="filter-video-id"
-                scopeLabel="video"
-                placeholder="video_id"
-                value={selectedVideoId}
-                options={videoIds}
-                onChange={setSelectedVideoId}
+                value={activeFolder || ''}
+                options={folderIds}
+                onChange={handleFolderChange}
               />
-            ) : (
-              <input
-                id="filter-video-id"
-                className="input-text filter-scope-input"
-                type="text"
-                value={selectedVideoId}
-                onChange={(event) => setSelectedVideoId(event.target.value)}
-                placeholder="video_id"
-                autoComplete="off"
-              />
-            )}
-          </label>
+            </div>
+
+            <div className="filter-scope-field">
+              <label className="filter-scope-label" htmlFor="filter-video-id">
+                Video
+              </label>
+              {hasFiltered && videoIds.length > 0 ? (
+                <FolderScopeCombobox
+                  inputId="filter-video-id"
+                  scopeLabel="video"
+                  placeholder="video_id"
+                  value={selectedVideoId}
+                  options={videoIds}
+                  onChange={setSelectedVideoId}
+                />
+              ) : (
+                <input
+                  id="filter-video-id"
+                  className="input-text filter-scope-input"
+                  type="text"
+                  value={selectedVideoId}
+                  onChange={(event) => setSelectedVideoId(event.target.value)}
+                  placeholder="video_id"
+                  autoComplete="off"
+                />
+              )}
+            </div>
+          </div>
 
           {isActive && <SubmissionWorktree />}
-
         </aside>
 
         <div className="filter-main-column">

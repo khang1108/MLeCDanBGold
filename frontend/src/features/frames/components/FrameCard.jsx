@@ -25,6 +25,8 @@ const FrameCard = ({
     onSubmit?.(displayFrame);
   };
 
+  const isSubmitted = className.split(/\s+/).includes('submitted');
+
   return (
       <div className={`frame-card ${className}`.trim()} onClick={onClick}>
       <div className="frame-card-header">
@@ -35,12 +37,12 @@ const FrameCard = ({
           <div className="frame-card-actions">
             <button
               type="button"
-              className="card-submit-btn"
+              className={`card-submit-btn ${isSubmitted ? 'submitted' : ''}`.trim()}
               onClick={submitFrame}
-              title="Submit this frame"
-              aria-label="Submit this frame"
+              title={isSubmitted ? "Submitted frame (click to resubmit)" : "Submit this frame"}
+              aria-label={isSubmitted ? "Frame submitted" : "Submit this frame"}
             >
-              Submit
+              {isSubmitted ? "✓ Submitted" : "Submit"}
             </button>
           </div>
         )}

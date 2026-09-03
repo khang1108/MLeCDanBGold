@@ -130,6 +130,18 @@ export const SubmissionProvider = ({ children }) => {
       return;
     }
 
+    if (type === 'submission_file.cleared') {
+      setFileState([]);
+      const pendingKeys = Array.from(pendingRef.current.keys());
+      pendingKeys.forEach((key) => {
+        const pending = pendingRef.current.get(key);
+        if (pending?.kind === 'clear') {
+          settlePending(key, null, []);
+        }
+      });
+      return;
+    }
+
     if (type === 'submission_file.deleted') {
       if (typeof payload.name !== 'string' || !payload.name.trim()) {
         console.warn('Ignoring malformed submission_file.deleted event', payload);
@@ -359,6 +371,14 @@ export const SubmissionProvider = ({ children }) => {
     });
   }, [sendMutation]);
 
+  const clearFiles = useCallback(() => {
+    return sendMutation({
+      name: '__all__',
+      kind: 'clear',
+      command: { type: 'submission_file.clear' },
+    });
+  }, [sendMutation]);
+
   const refreshFiles = useCallback(() => {
     if (!isSocketOpen(socketRef.current)) return Promise.reject(new Error('Workspace WebSocket is not connected'));
     hydrate();
@@ -375,8 +395,9 @@ export const SubmissionProvider = ({ children }) => {
     updateFile,
     validateFile,
     deleteFile,
+    clearFiles,
     refreshFiles,
-  }), [connectionError, createFile, deleteFile, files, isConnected, pendingFileNames, refreshFiles, updateFile, validateFile]);
+  }), [clearFiles, connectionError, createFile, deleteFile, files, isConnected, pendingFileNames, refreshFiles, updateFile, validateFile]);
 
   return <SubmissionContext.Provider value={value}>{children}</SubmissionContext.Provider>;
 };
@@ -390,6 +411,7 @@ export const useSubmission = () => {
     updateFile: () => Promise.reject(new Error('SubmissionProvider is missing')),
     validateFile: () => Promise.reject(new Error('SubmissionProvider is missing')),
     deleteFile: () => Promise.reject(new Error('SubmissionProvider is missing')),
+    clearFiles: () => Promise.reject(new Error('SubmissionProvider is missing')),
     refreshFiles: () => Promise.reject(new Error('SubmissionProvider is missing')),
   };
 };

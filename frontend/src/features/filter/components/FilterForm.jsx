@@ -1,15 +1,15 @@
 import React, { useId, useLayoutEffect, useRef } from 'react';
 
 const TEXT_FIELDS = [
-  { key: 'title', label: 'Title', placeholder: 'title' },
-  { key: 'asr', label: 'ASR / Transcript', placeholder: 'asr' },
-  { key: 'caption', label: 'Caption', placeholder: 'caption' },
-  { key: 'ocr', label: 'OCR', placeholder: 'ocr' },
+  { key: 'title', label: 'Title', icon: '📝', placeholder: 'Video title keywords…' },
+  { key: 'caption', label: 'Caption', icon: '💬', placeholder: 'Visual caption keywords…' },
+  { key: 'ocr', label: 'OCR', icon: '🔤', placeholder: 'On-screen text keywords…' },
+  { key: 'asr', label: 'ASR / Transcript', icon: '🎙️', placeholder: 'Spoken transcript keywords…' },
 ];
 
 const resizeTextArea = (textArea) => {
   textArea.style.height = '0px';
-  textArea.style.height = `${Math.max(textArea.scrollHeight, 31)}px`;
+  textArea.style.height = `${Math.max(textArea.scrollHeight, 36)}px`;
 };
 
 /** Compact metadata-only filter form. Scope controls live beside the result view. */
@@ -56,13 +56,17 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
   return (
     <form className="filter-form" onSubmit={onSubmit}>
       <div className="filter-text-grid">
-        {TEXT_FIELDS.map(({ key, label, placeholder }) => {
+        {TEXT_FIELDS.map(({ key, label, icon, placeholder }) => {
           const inputId = `${formId}-${key}`;
           return (
-            <label className="filter-field" htmlFor={inputId} key={key}>
-              <span className="sr-only">{label}</span>
+            <div className="filter-field-col" key={key}>
+              <label className="filter-field-label" htmlFor={inputId}>
+                <span className="filter-field-icon" aria-hidden="true">{icon}</span>
+                {label}
+              </label>
               <textarea
                 id={inputId}
+                aria-label={label}
                 className="input-text filter-input"
                 ref={(node) => {
                   if (node) textAreaRefs.current[key] = node;
@@ -74,57 +78,64 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
                 onInput={(event) => resizeTextArea(event.currentTarget)}
                 placeholder={placeholder}
               />
-            </label>
+            </div>
           );
         })}
       </div>
 
       <section className="filter-objects-section" aria-label="Object filters">
+        <div className="filter-objects-group">
+          <span className="filter-objects-title">
+            <span className="filter-field-icon" aria-hidden="true">📦</span>
+            Detected Objects
+          </span>
+          <div className="filter-object-list">
+            {values.objects.map((row, index) => {
+              const value = row.value ?? '';
+              return (
+                <div className="filter-object-row" key={row.id}>
+                  <label className="filter-object-name-field">
+                    <span className="sr-only">Object {index + 1} name</span>
+                    <input
+                      className="filter-object-input"
+                      type="text"
+                      value={value}
+                      onChange={(event) => updateObject(row.id, event)}
+                      placeholder="name: count"
+                      aria-label={`Object ${index + 1}, format name colon count`}
+                      style={{ width: `${Math.max(9, value.length + 2)}ch` }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="filter-remove-object-btn"
+                    onClick={() => removeObject(row.id)}
+                    aria-label={`Remove object ${index + 1}`}
+                    title="Remove object"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              className="filter-add-object-btn"
+              onClick={addObject}
+              aria-label="Add object filter"
+              title="Add object filter"
+            >
+              + Add object
+            </button>
+          </div>
+        </div>
+
         <div className="filter-form-actions">
           <button type="button" className="btn-secondary filter-reset-btn" onClick={onReset}>
             Clear
           </button>
-          <button type="submit" className="btn-secondary filter-submit-btn" disabled={isLoading}>
+          <button type="submit" className="btn-primary filter-submit-btn" disabled={isLoading}>
             {isLoading ? 'Filtering…' : 'Filter'}
-          </button>
-        </div>
-        <div className="filter-object-list">
-          {values.objects.map((row, index) => {
-            const value = row.value ?? '';
-            return (
-              <div className="filter-object-row" key={row.id}>
-                <label className="filter-object-name-field">
-                  <span className="sr-only">Object {index + 1} name</span>
-                  <input
-                    className="input-text filter-object-input"
-                    type="text"
-                    value={value}
-                    onChange={(event) => updateObject(row.id, event)}
-                    placeholder="name: count"
-                    aria-label={`Object ${index + 1}, format name colon count`}
-                    style={{ width: `${Math.max(9, value.length + 2)}ch` }}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="filter-remove-object-btn"
-                  onClick={() => removeObject(row.id)}
-                  aria-label={`Remove object ${index + 1}`}
-                  title="Remove object"
-                >
-                  ×
-                </button>
-              </div>
-            );
-          })}
-          <button
-            type="button"
-            className="filter-add-object-btn"
-            onClick={addObject}
-            aria-label="Add object filter"
-            title="Add object filter"
-          >
-            +
           </button>
         </div>
       </section>
