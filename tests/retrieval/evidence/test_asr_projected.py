@@ -304,14 +304,15 @@ def test_score_subset_scores_all_segments_then_scatter_maxes_collisions() -> Non
     assert scores[0, COLLISION_FRAME] == pytest.approx(EXPECTED_MAX_SCORE)
 
 
-def test_uncovered_frames_receive_event_floor() -> None:
-    """Canonical frames without projected ASR receive each event's floor."""
+def test_uncovered_frames_receive_zero_score_and_coverage_false() -> None:
+    """Canonical frames without projected ASR receive zero score and false coverage."""
 
     projected = make_collision_projected_asr()
 
     scores = projected.score_subset(QUERY_VECTORS, ALL_FRAME_POSITIONS)
 
-    assert scores[0, NO_ASR_FRAME] == pytest.approx(scores[0].min())
+    assert scores[0, NO_ASR_FRAME] == 0.0
+    assert not projected.coverage_mask[NO_ASR_FRAME]
 
 
 def test_no_valid_projected_segments_returns_constant_zero_row() -> None:
@@ -341,7 +342,7 @@ def test_score_subset_honors_requested_canonical_positions() -> None:
         np.asarray(
             [
                 [0.0, 1.0],
-                [np.sqrt(3.0) / 2.0, np.sqrt(3.0) / 2.0],
+                [0.0, np.sqrt(3.0) / 2.0],
             ],
             dtype=np.float32,
         ),

@@ -163,3 +163,26 @@ def test_dense_scorer_text_encoder_called_once_for_both_context_and_asr() -> Non
     assert len(t_encoder.calls) == 1
 
 
+def test_dense_scorer_attaches_asr_coverage_mask() -> None:
+    visual = FakeIndex(np.asarray([[0.1, 0.2]], dtype=np.float32))
+    asr = FakeIndex(np.asarray([[0.5, 0.6]], dtype=np.float32))
+    asr.coverage_mask = np.asarray([True, False], dtype=bool)
+    v_encoder = FakeEncoder(np.asarray([[1.0, 0.0]], dtype=np.float32))
+    t_encoder = FakeEncoder(np.asarray([[0.0, 1.0]], dtype=np.float32))
+    scorer = DenseTemporalScorer(
+        visual_index=visual,
+        context_index=None,
+        asr_index=asr,
+        visual_encoder=v_encoder,
+        text_encoder=t_encoder,
+        weights=DenseTemporalWeights(),
+    )
+    bundle = scorer.score_components(["event"])
+    assert bundle.components["asr_dense"].coverage is not None
+    np.testing.assert_array_equal(
+        bundle.components["asr_dense"].coverage,
+        np.asarray([True, False]),
+    )
+
+
+

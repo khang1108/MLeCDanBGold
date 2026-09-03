@@ -89,6 +89,75 @@ class SegmentProjectedASRIndex:
         ):
             raise ValueError("projected canonical frame positions are out of bounds")
 
+        (
+            self.segment_coverage_offsets,
+            self.segment_coverage_positions,
+            self.coverage_mask,
+        ) = self._build_segment_coverage(canonical_index)
+
+    def _build_segment_coverage(
+        self,
+        canonical_index: DenseIndex,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Precompute canonical frame intervals per segment and total coverage."""
+
+        offsets = [0]
+        flattened_positions: list[int] = []
+        coverage_mask = np.zeros(len(self.frame_ids), dtype=bool)
+
+        has_video_positions = hasattr(canonical_index, "video_positions") and callable(
+            getattr(canonical_index, "video_positions")
+        )
+        video_positions_cache: dict[str, np.ndarray] = {}
+
+        for segment_position, row in self.segment_index.mapping.iterrows():
+            video_id = str(row["video_id"])
+            start_ms = int(row["start_ms"])
+            end_ms = int(row["end_ms"])
+
+            if video_id in video_positions_cache:
+                video_positions = video_positions_cache[video_id]
+            else:
+                try:
+                    if has_video_positions:
+                        video_positions = np.asarray(
+                            canonical_index.video_positions(video_id),
+                            dtype=np.int64,
+                        )
+                    else:
+                        video_positions = np.flatnonzero(self.video_ids == video_id)
+                except (KeyError, IndexError):
+                    video_positions = np.empty(0, dtype=np.int64)
+                video_positions_cache[video_id] = video_positions
+
+            if len(video_positions) > 0:
+                video_timestamps = self.timestamps[video_positions]
+                inside = video_positions[
+                    (video_timestamps >= start_ms) & (video_timestamps <= end_ms)
+                ]
+            else:
+                inside = np.empty(0, dtype=np.int64)
+
+            if len(inside) > 0:
+                covered_positions = inside.tolist()
+            else:
+                fallback_pos = int(self.segment_frame_positions[int(segment_position)])
+                if fallback_pos >= 0:
+                    covered_positions = [fallback_pos]
+                else:
+                    covered_positions = []
+
+            flattened_positions.extend(covered_positions)
+            offsets.append(len(flattened_positions))
+            for pos in covered_positions:
+                coverage_mask[pos] = True
+
+        return (
+            np.asarray(offsets, dtype=np.int64),
+            np.asarray(flattened_positions, dtype=np.int64),
+            coverage_mask,
+        )
+
     def _build_segment_frame_positions(
         self,
         projector: SegmentFrameProjector,
@@ -144,9 +213,8 @@ class SegmentProjectedASRIndex:
 
         Segment vectors are already L2-normalized, so exact matrix
         multiplication computes cosine similarity. Chunks bound the segment
-        vector and score matrices held at once; all chunks are scored before
-        the per-event frame floor is filled and the requested positions are
-        selected.
+        vector and score matrices held at once. Coverage across segment
+        intervals is scattered with max aggregation; uncovered frames remain 0.0.
 
         Args:
             query_vectors: One ``[embedding_dim]`` query or a two-dimensional
@@ -195,9 +263,8 @@ class SegmentProjectedASRIndex:
             raise ValueError("chunk_size must be a positive integer")
         chunk_size = int(chunk_size)
 
-        frame_scores = np.full(
+        frame_scores = np.zeros(
             (len(queries), len(self.frame_ids)),
-            -np.inf,
             dtype=np.float32,
         )
         for start in range(0, len(self._segment_vectors), chunk_size):
@@ -207,25 +274,18 @@ class SegmentProjectedASRIndex:
                 dtype=np.float32,
             )
             chunk_scores = queries @ vectors.T
-            mapped = self.segment_frame_positions[start:stop]
-            valid = mapped >= 0
-            if not np.any(valid):
-                continue
-            target_positions = mapped[valid]
-            for event_index in range(len(queries)):
-                np.maximum.at(
-                    frame_scores[event_index],
-                    target_positions,
-                    chunk_scores[event_index, valid],
-                )
-
-        for event_index in range(len(queries)):
-            covered = np.isfinite(frame_scores[event_index])
-            if not np.any(covered):
-                frame_scores[event_index].fill(0.0)
-                continue
-            floor = float(frame_scores[event_index, covered].min())
-            frame_scores[event_index, ~covered] = floor
+            for local_segment, global_segment in enumerate(range(start, stop)):
+                offset_start = self.segment_coverage_offsets[global_segment]
+                offset_stop = self.segment_coverage_offsets[global_segment + 1]
+                target_positions = self.segment_coverage_positions[offset_start:offset_stop]
+                if not len(target_positions):
+                    continue
+                for event_index in range(len(queries)):
+                    np.maximum.at(
+                        frame_scores[event_index],
+                        target_positions,
+                        chunk_scores[event_index, local_segment],
+                    )
 
         return np.asarray(frame_scores[:, positions], dtype=np.float32)
 

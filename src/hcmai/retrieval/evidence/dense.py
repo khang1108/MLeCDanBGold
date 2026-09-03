@@ -68,9 +68,15 @@ class DenseTemporalScorer:
                     self.context_index.score_subset(text_vectors, positions, self.chunk_size),
                 )
             if self.asr_index is not None:
+                asr_coverage = getattr(self.asr_index, "coverage_mask", None)
                 components["asr_dense"] = TemporalScoreComponent(
                     "asr_dense",
                     self.asr_index.score_subset(text_vectors, positions, self.chunk_size),
+                    coverage=(
+                        np.asarray(asr_coverage, dtype=bool)
+                        if asr_coverage is not None
+                        else None
+                    ),
                 )
 
         return TemporalScoreBundle(components)
