@@ -322,7 +322,10 @@ def create_workspace_router(service_container: dict[str, Any]) -> APIRouter:
         deleted_names = await run_in_threadpool(
             _workspace_store(service_container).clear_submission_files
         )
-        event = {"type": "submission_file.cleared", "deleted_names": deleted_names}
+        event: dict[str, object] = {
+            "type": "submission_file.cleared",
+            "deleted_names": deleted_names,
+        }
         await connections.broadcast(event)
         return event
 

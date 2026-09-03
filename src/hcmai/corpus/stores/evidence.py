@@ -220,7 +220,7 @@ def _require_file(path: str | Path, artifact: str) -> Path:
 def _nullable_rows(table: pd.DataFrame) -> list[dict[str, Any]]:
     """Convert pandas null scalars to ``None`` before contract validation."""
 
-    values = table.astype(object).where(table.notna(), None)
+    values = table.astype(object).where(table.notna(), cast(Any, None))
     return cast(list[dict[str, Any]], values.to_dict(orient="records"))
 
 

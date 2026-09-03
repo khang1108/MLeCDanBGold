@@ -11,6 +11,7 @@ import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 
@@ -90,7 +91,7 @@ class ObjectCountsStore:
 
         self._records_by_frame_id: dict[str, ObjectCountsRecord] = {}
         frame_store_ids: set[str] = set()
-        for row in table.where(table.notna(), None).to_dict(orient="records"):
+        for row in table.where(table.notna(), cast(Any, None)).to_dict(orient="records"):
             frame_id = _non_blank_text(row["frame_id"])
             video_id = _non_blank_text(row["video_id"])
             if frame_id is None or video_id is None:

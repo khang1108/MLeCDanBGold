@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Self
+from typing import Any, Self, cast
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -53,7 +53,7 @@ def load_transcript_records(
     records = []
     for path in paths:
         table = pd.read_parquet(path).astype(object)
-        rows = table.where(table.notna(), None).to_dict(orient="records")
+        rows = table.where(table.notna(), cast(Any, None)).to_dict(orient="records")
         for row in rows:
             artifact_record = _TranscriptArtifact.model_validate(row)
             records.append(

@@ -319,6 +319,8 @@ class SegmentProjectedASRIndex:
             cov_positions = self.interval_coverage_positions
         else:
             coverage_mask = self.point_coverage_mask
+            offsets = np.empty(0, dtype=np.int64)
+            cov_positions = np.empty(0, dtype=np.int64)
 
         frame_scores = np.full(
             (len(queries), len(self.frame_ids)),
