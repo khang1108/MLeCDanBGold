@@ -87,15 +87,54 @@ class TemporalFusionScorer:
         self.config = config
         self.router = EventModalityRouter(config)
 
-    def _calibrate(self, raw_scores: np.ndarray) -> CalibratedComponent:
+    def _calibrate(
+        self,
+        name: str,
+        component: TemporalScoreComponent,
+    ) -> CalibratedComponent:
         """Calibrate component scores using configured robust or minmax calibration."""
 
+        if component.coverage is not None:
+            support = np.broadcast_to(component.coverage, component.raw_scores.shape)
+        elif name.startswith("bm25_"):
+            support = component.raw_scores > 0.0
+        else:
+            support = None
+
+        reliability_mode: Literal["contrast", "binary"] = (
+            "binary" if name.startswith("bm25_") else "contrast"
+        )
+
         if self.config.robust_calibration:
-            return calibrate_component(raw_scores, self.config.calibration)
+            return calibrate_component(
+                component.raw_scores,
+                self.config.calibration,
+                support=support,
+                reliability_mode=reliability_mode,
+            )
+
+        if support is not None:
+            calibrated = np.zeros_like(component.raw_scores, dtype=np.float32)
+            reliability = np.zeros(component.raw_scores.shape[0], dtype=np.float32)
+            for e in range(component.raw_scores.shape[0]):
+                indices = np.flatnonzero(support[e])
+                if len(indices) == 0:
+                    continue
+                vals = component.raw_scores[e, indices]
+                low = float(vals.min())
+                high = float(vals.max())
+                span = high - low
+                if span > self.config.calibration.eps:
+                    calibrated[e, indices] = (vals - low) / span
+                    reliability[e] = 1.0
+                elif high > 0.0:
+                    calibrated[e, indices] = 1.0
+                    reliability[e] = 1.0
+            return CalibratedComponent(scores=calibrated, reliability=reliability)
 
         # Fallback to minmax normalization with binary reliability
-        scores = minmax_rows(raw_scores)
-        spans = np.ptp(raw_scores, axis=1) if raw_scores.ndim == 2 else np.asarray([])
+        scores = minmax_rows(component.raw_scores)
+        spans = np.ptp(component.raw_scores, axis=1) if component.raw_scores.ndim == 2 else np.asarray([])
         reliability = np.where(spans > self.config.calibration.eps, 1.0, 0.0).astype(np.float32)
         return CalibratedComponent(scores=scores, reliability=reliability)
 
@@ -106,7 +145,7 @@ class TemporalFusionScorer:
         """Calibrate all components in a score bundle using configured calibration parameters."""
 
         return {
-            name: self._calibrate(component.raw_scores)
+            name: self._calibrate(name, component)
             for name, component in bundle.components.items()
         }
 
