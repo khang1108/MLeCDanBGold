@@ -75,6 +75,7 @@ def test_load_search_service_has_visual_only_requirements_and_no_reranker(
             setup, "_load_corpus", lambda *args, **kwargs: fake_corpus
         )
         monkeypatch.setattr(setup, "_load_remote_llm", lambda *args, **kwargs: None)
+        monkeypatch.setattr(setup, "LiteralTextIndex", lambda corpus: None)
 
         def load_retrieval(
             settings_arg: AppConfig,

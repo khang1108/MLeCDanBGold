@@ -25,6 +25,7 @@ from hcmai.retrieval.evidence.asr_projected import SegmentProjectedASRIndex
 from hcmai.retrieval.evidence.bm25 import BM25TemporalScorer
 from hcmai.retrieval.evidence.dense import DenseTemporalScorer
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
+from hcmai.retrieval.evidence.literal import LiteralTextIndex
 from hcmai.retrieval.models import RetrievalSource
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
@@ -75,6 +76,13 @@ def load_search_service(messages: list[str]) -> SearchService:
         corpus=corpus,
     )
     temporal_evidence = _load_temporal_evidence(settings, retrieval, messages)
+    literal_text = LiteralTextIndex(corpus) if corpus is not None else None
+    if literal_text is not None:
+        logger.info(
+            "Literal filter loaded frames=%d sources=%s",
+            len(corpus),
+            ",".join(literal_text.available_sources) or "none",
+        )
     return SearchService(
         corpus=corpus,
         retrieval=retrieval,
@@ -82,6 +90,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         llm=llm,
         query_preparation=query_preparation,
         temporal_evidence=temporal_evidence,
+        literal_text=literal_text,
     )
 
 

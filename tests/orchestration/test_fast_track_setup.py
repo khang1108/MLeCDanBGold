@@ -590,6 +590,7 @@ def test_public_startup_selects_fast_track_once(
         return corpus
 
     monkeypatch.setattr(setup, "_load_corpus", load_corpus)
+    monkeypatch.setattr(setup, "LiteralTextIndex", lambda value: None)
     visual = SimpleNamespace(metadata=_metadata(
         model_name="visual/model",
         model_revision="visual-revision",
