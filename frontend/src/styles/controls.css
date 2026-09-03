@@ -125,61 +125,12 @@
   text-transform: uppercase;
 }
 
-/* Direct Input Layout */
-.toolbox-direct-input-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  margin-top: 2px;
-}
-
-.toolbox-stepper-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.toolbox-stepper-btn {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--rounded-md);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-ink);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  box-sizing: border-box;
-}
-
-.toolbox-stepper-btn:hover:not(:disabled) {
-  background-color: var(--color-canvas-soft);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.toolbox-stepper-btn:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.toolbox-stepper-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.toolbox-top-k-row {
+  justify-content: flex-start;
+  gap: var(--spacing-sm);
 }
 
 .toolbox-number-input {
-  flex: 1 1 0;
-  min-width: 0;
-  width: 0;
   height: 32px;
   padding: 0 8px;
   font-size: 14px;
@@ -195,6 +146,11 @@
   appearance: textfield;
   box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.toolbox-top-k-input {
+  flex: 0 0 68px;
+  width: 68px;
 }
 
 .toolbox-number-input::-webkit-outer-spin-button,

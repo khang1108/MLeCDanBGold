@@ -65,6 +65,18 @@ const SubmissionFileModal = ({
   }, [mode, onClose]);
 
   useEffect(() => {
+    if (mode !== 'editor') return undefined;
+    const handleEditorSaveShortcut = (event) => {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing || isMutating) return;
+      if (['BUTTON', 'SELECT'].includes(event.target?.tagName)) return;
+      event.preventDefault();
+      onSave?.();
+    };
+    window.addEventListener('keydown', handleEditorSaveShortcut, true);
+    return () => window.removeEventListener('keydown', handleEditorSaveShortcut, true);
+  }, [isMutating, mode, onSave]);
+
+  useEffect(() => {
     if (!highlightedFileName) return;
     fileOptionRefs.current.get(highlightedFileName)?.scrollIntoView?.({ block: 'nearest' });
   }, [highlightedFileName]);
@@ -92,13 +104,6 @@ const SubmissionFileModal = ({
     setHighlightedFileName(filteredFiles[
       (currentIndex + offset + filteredFiles.length) % filteredFiles.length
     ].name);
-  };
-
-  const handleEditorKeyDown = (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      if (!isMutating) onSave?.();
-    }
   };
 
   const setDraft = (value) => {
@@ -195,7 +200,6 @@ const SubmissionFileModal = ({
                 className="submission-file-editor"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={handleEditorKeyDown}
                 spellCheck="false"
                 aria-label={`Edit ${editorFile?.name || 'CSV file'} content`}
                 disabled={isMutating}

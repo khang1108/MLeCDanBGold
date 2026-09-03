@@ -73,6 +73,15 @@ export const SubmissionDialogProvider = ({ children }) => {
     setError(null);
   }, []);
 
+  const finishSuccessfulEditorOperation = useCallback(() => {
+    // A confirmed save or validation should always dismiss the editor. This
+    // deliberately bypasses resetDialog's in-flight guard after clearing the
+    // ref, so both completion paths have identical close behavior.
+    mutationRef.current = null;
+    setMutation(null);
+    closeDialog();
+  }, [closeDialog]);
+
   const requestSubmission = useCallback((intent) => {
     setError(null);
     setDialog({
@@ -161,9 +170,7 @@ export const SubmissionDialogProvider = ({ children }) => {
         setDraft(validated.content);
         setDialog((current) => ({ ...current, baseRevision: validated.revision }));
       }
-      mutationRef.current = null;
-      setMutation(null);
-      resetDialog();
+      finishSuccessfulEditorOperation();
       markHistoryAfterCommit(committed, pendingIntent);
     } catch (saveError) {
       mutationRef.current = null;
@@ -173,7 +180,7 @@ export const SubmissionDialogProvider = ({ children }) => {
       }
       setError(saveError.message || 'Could not save submission file');
     }
-  }, [dialog.baseRevision, dialog.pendingIntent, draft, editorFile, markHistoryAfterCommit, resetDialog, updateFile, validateFile]);
+  }, [dialog.baseRevision, dialog.pendingIntent, draft, editorFile, finishSuccessfulEditorOperation, markHistoryAfterCommit, updateFile, validateFile]);
 
   const handleValidate = useCallback(() => {
     if (!editorFile || (editorFile.is_validated && draft === baseContent)) return;
@@ -186,9 +193,7 @@ export const SubmissionDialogProvider = ({ children }) => {
           if (!mountedRef.current) return;
           setBaseContent(committed.content);
           setDraft(committed.content);
-          setMutation(null);
-          mutationRef.current = null;
-          resetDialog();
+          finishSuccessfulEditorOperation();
         })
         .catch((validateError) => {
           mutationRef.current = null;
@@ -199,7 +204,7 @@ export const SubmissionDialogProvider = ({ children }) => {
           setError(validateError.message || 'Could not validate submission file');
         });
     }
-  }, [baseContent, draft, editorFile, resetDialog, saveDraft, validateFile]);
+  }, [baseContent, draft, editorFile, finishSuccessfulEditorOperation, saveDraft, validateFile]);
 
   const handleDelete = useCallback(() => {
     if (!editorFile || mutationRef.current) return;

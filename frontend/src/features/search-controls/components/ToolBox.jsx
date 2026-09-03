@@ -53,54 +53,25 @@ const ToolBox = ({
     commitTopKValue(topKText);
   };
 
-  const stepTopK = (delta) => {
-    const current = parseInt(topKText, 10) || topK || 20;
-    const nextVal = Math.max(TOP_K_MIN, current + delta);
-    setTopK(nextVal);
-    setTopKText(String(nextVal));
-  };
-
   return (
     <aside className="toolbox-sidebar">
       <div className="toolbox-section">
-        <div className="toolbox-label-row">
+        <div className="toolbox-label-row toolbox-top-k-row">
           <label htmlFor={topKInputId} className="toolbox-label">
             Top-K results
           </label>
-        </div>
-
-        <div className="toolbox-direct-input-container">
-          <div className="toolbox-stepper-row">
-            <button
-              type="button"
-              className="toolbox-stepper-btn"
-              onClick={() => stepTopK(-1)}
-              disabled={topK <= TOP_K_MIN}
-              aria-label="Decrease Top-K"
-            >
-              −
-            </button>
-            <input
-              id={topKInputId}
-              type="number"
-              min={TOP_K_MIN}
-              value={topKText}
-              onChange={handleTopKTextChange}
-              onKeyDown={handleTopKKeyDown}
-              onBlur={handleTopKBlur}
-              className="toolbox-number-input"
-              placeholder="20"
-              aria-label="Top-K value"
-            />
-            <button
-              type="button"
-              className="toolbox-stepper-btn"
-              onClick={() => stepTopK(1)}
-              aria-label="Increase Top-K"
-            >
-              +
-            </button>
-          </div>
+          <input
+            id={topKInputId}
+            type="number"
+            min={TOP_K_MIN}
+            value={topKText}
+            onChange={handleTopKTextChange}
+            onKeyDown={handleTopKKeyDown}
+            onBlur={handleTopKBlur}
+            className="toolbox-number-input toolbox-top-k-input"
+            placeholder="20"
+            aria-label="Top-K value"
+          />
         </div>
       </div>
 
@@ -139,7 +110,6 @@ const ToolBox = ({
             />
           </label>
         </div>
-        <p className="toolbox-help">At least one source must stay enabled.</p>
       </fieldset>
 
       {includeSubmissionWorktree && <SubmissionWorktree />}

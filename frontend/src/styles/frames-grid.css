@@ -46,6 +46,8 @@
 .frames-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  /* An expanded Alignment belongs only to its own card, not its whole row. */
+  align-items: start;
   gap: var(--spacing-xs);
   width: 100%;
 }

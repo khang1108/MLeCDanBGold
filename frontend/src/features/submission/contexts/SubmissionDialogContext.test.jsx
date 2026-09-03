@@ -128,19 +128,53 @@ test('closes after a file save without waiting for the history patch', async () 
   await act(async () => resolveHistoryPatch({ ok: true }));
 });
 
-test('closes after validation finishes', async () => {
-  getSubmissionFiles.mockResolvedValue({ files: [
-    { name: 'a.csv', content: 'V01,1', is_validated: false, revision: 1 },
-  ] });
+test('saves and closes when Enter is pressed immediately after selecting a file', async () => {
   await openAndHydrate();
-  fireEvent.click(screen.getByRole('button', { name: 'Open editor' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Validate' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Request submission' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'a.csv' }));
+  await screen.findByRole('textbox', { name: /edit a\.csv content/i });
+
+  // Selecting a file can briefly leave focus on the document before the
+  // editor receives it, so the save shortcut must not depend on focus timing.
+  fireEvent.keyDown(document.body, { key: 'Enter', code: 'Enter' });
+  expect(JSON.parse(MockWebSocket.instances[0].sent[0])).toEqual({
+    type: 'submission_file.update', name: 'a.csv', content: 'V01,20', expected_revision: 1,
+  });
   await act(async () => MockWebSocket.instances[0].message({
     type: 'submission_file.updated',
-    file: { name: 'a.csv', content: '', is_validated: true, revision: 2 },
+    file: { name: 'a.csv', content: 'V01,20', is_validated: false, revision: 2 },
   }));
 
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('validates and closes after choosing a submission file', async () => {
+  await openAndHydrate();
+  fireEvent.click(screen.getByRole('button', { name: 'Request submission' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'a.csv' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Validate' }));
+
+  // The submission line changes the draft, so validation first commits the
+  // draft and then validates that confirmed revision.
+  expect(JSON.parse(MockWebSocket.instances[0].sent[0])).toEqual({
+    type: 'submission_file.update', name: 'a.csv', content: 'V01,20', expected_revision: 1,
+  });
+  await act(async () => MockWebSocket.instances[0].message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: 'V01,20', is_validated: false, revision: 2 },
+  }));
+  expect(JSON.parse(MockWebSocket.instances[0].sent[1])).toEqual({
+    type: 'submission_file.validate', name: 'a.csv', is_validated: true, expected_revision: 2,
+  });
+  await act(async () => MockWebSocket.instances[0].message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: 'V01,20', is_validated: true, revision: 3 },
+  }));
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(markFramesSubmitted).toHaveBeenCalledWith({
+    queryId: 'q1', submissionFileName: 'a.csv', submissionLine: 'V01,20', frameIds: ['f1'],
+  }));
 });
 
 test('allows the editor to close while save confirmation is pending', async () => {

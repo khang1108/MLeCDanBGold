@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import ToolBox from './ToolBox';
 
 describe('ToolBox component', () => {
-  test('renders an unbounded Top-K number input without presets or a slider', () => {
+  test('renders an inline Top-K number input without stepper controls, presets, or a slider', () => {
     const setTopK = jest.fn();
     render(<ToolBox topK={20} setTopK={setTopK} />);
 
@@ -18,6 +18,9 @@ describe('ToolBox component', () => {
     expect(screen.queryByRole('button', { name: '20' })).toBeNull();
     expect(screen.queryByRole('button', { name: '50' })).toBeNull();
     expect(screen.queryByRole('button', { name: '100' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /increase top-k/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /decrease top-k/i })).toBeNull();
+    expect(numberInput.closest('.toolbox-top-k-row')).toBeTruthy();
   });
 
   test('allows typing a custom value in direct input mode', () => {
@@ -31,19 +34,6 @@ describe('ToolBox component', () => {
     // Press Enter to commit
     fireEvent.keyDown(numberInput, { key: 'Enter', code: 'Enter' });
     expect(setTopK).toHaveBeenCalledWith(10000);
-  });
-
-  test('stepper buttons increment and decrement value', () => {
-    const setTopK = jest.fn();
-    render(<ToolBox topK={20} setTopK={setTopK} />);
-
-    const increaseBtn = screen.getByLabelText(/increase top-k/i);
-    fireEvent.click(increaseBtn);
-    expect(setTopK).toHaveBeenCalledWith(21);
-
-    const decreaseBtn = screen.getByLabelText(/decrease top-k/i);
-    fireEvent.click(decreaseBtn);
-    expect(setTopK).toHaveBeenCalledWith(20);
   });
 
   test('renders accessible Dense and BM25 switches', () => {
@@ -85,6 +75,7 @@ describe('ToolBox component', () => {
 
     expect(screen.getByRole('switch', { name: /use dense retrieval/i }).disabled).toBe(true);
     expect(screen.getByRole('switch', { name: /use bm25 retrieval/i }).disabled).toBe(false);
+    expect(screen.queryByText(/at least one source/i)).toBeNull();
   });
 
   test('keeps the submission files panel in the Query sidebar', () => {
