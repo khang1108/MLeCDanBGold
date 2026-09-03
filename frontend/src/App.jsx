@@ -2,7 +2,7 @@
 import React, { useRef, useState } from 'react';
 import { AppHeader } from './features/header';
 import { ImageModal } from './features/frames';
-import { SearchWorkspace } from './features/search';
+import { SearchWorkspace, ImageSearchWorkspace } from './features/search';
 import { FilterWorkspace } from './features/filter';
 import { WorkspacePage } from './features/workspace';
 import { DatabasePage } from './features/database';
@@ -30,7 +30,7 @@ const AppContent = () => {
   const vim = useVimMode({
     onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
-    enableTopK: activePage === 'query',
+    enableTopK: activePage === 'query' || activePage === 'image-search',
   });
 
   const handleQueryFrameClick = (selection) => {
@@ -102,6 +102,17 @@ const AppContent = () => {
             replayRequest={replayRequest}
           />
         </div>
+        <div className="workspace-panel" hidden={activePage !== 'image-search'}>
+          <ImageSearchWorkspace
+            isActive={activePage === 'image-search'}
+            userId={userId}
+            topK={topK}
+            setTopK={setTopK}
+            onFrameClick={handleQueryFrameClick}
+            onFocusUserId={handleFocusUserId}
+            onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
+          />
+        </div>
         <div className="workspace-panel" hidden={activePage !== 'filter'}>
           <FilterWorkspace isActive={activePage === 'filter'} onFrameClick={handleFilterFrameClick} />
         </div>
@@ -128,7 +139,7 @@ const AppContent = () => {
         />
       )}
       <TopKPromptModal
-        isOpen={vim.isTopKOpen && activePage === 'query'}
+        isOpen={vim.isTopKOpen && (activePage === 'query' || activePage === 'image-search')}
         currentTopK={topK}
         onSave={setTopK}
         onClose={() => vim.setIsTopKOpen(false)}

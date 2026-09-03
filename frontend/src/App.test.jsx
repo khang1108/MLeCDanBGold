@@ -33,6 +33,15 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
     );
   }
 ));
+jest.mock("./features/search/components/ImageSearchWorkspace", () => (
+  function FakeImageSearchWorkspace({ isActive, userId }) {
+    return (
+      <div data-testid="image-search-workspace">
+        Image search workspace (active: {String(isActive)}) for {userId || ''}
+      </div>
+    );
+  }
+));
 jest.mock("./features/workspace/components/WorkspacePage", () => (
   function FakeWorkspacePage({ onReplay, onOpenManualVideo, userId, historyRefreshToken }) {
     return (
@@ -141,5 +150,15 @@ test('navigates to Database workspace when Database tab is clicked', () => {
   fireEvent.click(databaseTab);
   expect(databaseTab.getAttribute('aria-pressed')).toBe('true');
   expect(screen.getByTestId('database-page').textContent).toContain('active: true');
+});
+
+test('navigates to Image Search workspace when Image Search tab is clicked', () => {
+  render(<App />);
+  const imageSearchTab = screen.getByRole('button', { name: 'Image Search' });
+  expect(imageSearchTab.getAttribute('aria-pressed')).toBe('false');
+
+  fireEvent.click(imageSearchTab);
+  expect(imageSearchTab.getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByTestId('image-search-workspace').textContent).toContain('active: true');
 });
 
