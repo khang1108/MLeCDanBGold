@@ -74,6 +74,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         messages,
         corpus=corpus,
     )
+    image_encoder = _load_image_encoder(models, retrieval, llm, messages)
     temporal_evidence = _load_temporal_evidence(settings, retrieval, messages)
     return SearchService(
         corpus=corpus,
@@ -82,7 +83,43 @@ def load_search_service(messages: list[str]) -> SearchService:
         llm=llm,
         query_preparation=query_preparation,
         temporal_evidence=temporal_evidence,
+        image_encoder=image_encoder,
+        api_config=settings.api,
     )
+
+
+def _load_image_encoder(
+    models: LLMServiceConfig,
+    retrieval: RetrievalService | None,
+    llm: LLMService | None,
+    messages: list[str],
+) -> Any | None:
+    """Reuse the local SigLIP2 adapter or bind its hosted image endpoint."""
+
+    if retrieval is None:
+        return None
+    source_retriever = getattr(retrieval, "source_retriever", None)
+    if source_retriever is None:
+        return None
+    visual = source_retriever(RetrievalSource.VISUAL)
+    if visual is None:
+        return None
+    if hasattr(visual.encoder, "encode_images"):
+        return visual.encoder
+    if llm is None:
+        messages.append("Image search unavailable: SigLIP2 image encoder missing")
+        return None
+    try:
+        return EmbeddingService.create_remote_visual_adapter(
+            llm,
+            models.visual_embedding,
+            visual.index.metadata.embedding_dim,
+        )
+    except Exception as error:
+        messages.append(
+            "Image search unavailable: " f"{type(error).__name__}: {error}"
+        )
+        return None
 
 
 def _load_temporal_evidence(
@@ -132,81 +169,65 @@ def _load_dense_temporal(
 
     context = retrieval.source_retriever(RetrievalSource.CONTEXT)
     asr_retriever = retrieval.source_retriever(RetrievalSource.ASR)
-    context_ready = context is not None
-    asr_ready = asr_retriever is not None
+    context_ready = False
+    asr_ready = False
+    context_index = None
+    projected_asr = None
+    text_encoder = None
 
     if context is None:
         messages.append("Dense temporal evidence unavailable: Context retriever missing")
+    else:
+        try:
+            _ = context.index.metadata.embedding_dim
+            context_index = context.index
+            text_encoder = context.encoder
+            context_ready = True
+        except Exception as error:
+            messages.append(
+                f"Dense temporal evidence identity validation failed: {type(error).__name__}: {error}"
+            )
+
     if asr_retriever is None:
         messages.append("Dense temporal evidence unavailable: ASR segment retriever missing")
-    if not context_ready or not asr_ready:
-        return None, context_ready, asr_ready
-
-    assert context is not None
-    assert asr_retriever is not None
-    try:
-        context_dimension = context.index.metadata.embedding_dim
-    except Exception as error:
-        messages.append(
-            "Dense temporal evidence identity validation failed: "
-            f"{type(error).__name__}: {error}"
-        )
-        return None, False, asr_ready
-
-    try:
-        asr_dimension = asr_retriever.index.metadata.embedding_dim
-    except Exception as error:
-        messages.append(
-            "Dense temporal evidence identity validation failed: "
-            f"{type(error).__name__}: {error}"
-        )
-        return None, context_ready, False
-
-    if context_dimension != asr_dimension:
-        error = ValueError("Context and ASR segment index dimensions differ")
-        messages.append(
-            "Dense temporal evidence identity validation failed: "
-            f"{type(error).__name__}: {error}"
-        )
-        # One shared text encoder cannot serve both dimensions. Context owns
-        # that encoder binding, so ASR is the incompatible capability.
-        return None, context_ready, False
-
-    try:
-        projected_asr = SegmentProjectedASRIndex(
-            segment_index=asr_retriever.index,
-            canonical_index=visual.index,
-            projector=asr_retriever.projector,
-        )
-    except Exception as error:
-        messages.append(
-            "Dense temporal ASR projection failed: "
-            f"{type(error).__name__}: {error}"
-        )
-        return None, context_ready, False
+    else:
+        try:
+            asr_dimension = asr_retriever.index.metadata.embedding_dim
+            if context_ready and context_index.metadata.embedding_dim != asr_dimension:
+                messages.append(
+                    "Dense temporal evidence identity validation failed: "
+                    "ValueError: Context and ASR segment index dimensions differ"
+                )
+            else:
+                projected_asr = SegmentProjectedASRIndex(
+                    segment_index=asr_retriever.index,
+                    canonical_index=visual.index,
+                    projector=asr_retriever.projector,
+                )
+                if text_encoder is None and getattr(asr_retriever, "encoder", None) is not None:
+                    text_encoder = asr_retriever.encoder
+                asr_ready = True
+        except Exception as error:
+            messages.append(
+                f"Dense temporal ASR projection failed: {type(error).__name__}: {error}"
+            )
 
     try:
         scorer = DenseTemporalScorer(
             visual_index=visual.index,
-            context_index=context.index,
-            asr_index=projected_asr,
+            context_index=context_index if context_ready else None,
+            asr_index=projected_asr if asr_ready else None,
             visual_encoder=visual.encoder,
-            text_encoder=context.encoder,
+            text_encoder=text_encoder,
             weights=settings.search.hybrid_temporal.dense,
             chunk_size=settings.search.alignment.chunk_size,
         )
+        return scorer, context_ready, asr_ready
     except Exception as error:
         messages.append(
-            "Dense temporal evidence identity validation failed: "
-            f"{type(error).__name__}: {error}"
+            f"Dense temporal evidence identity validation failed: {type(error).__name__}: {error}"
         )
-        message = str(error)
-        if message.startswith("context Dense index identity conflicts"):
-            context_ready = False
-        elif message.startswith("asr Dense index identity conflicts"):
-            asr_ready = False
-        return None, context_ready, asr_ready
-    return scorer, context_ready, asr_ready
+        return None, False, False
 
 
 def _load_bm25_temporal(

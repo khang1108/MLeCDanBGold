@@ -88,3 +88,78 @@ def test_bm25_score_components_keeps_fields_separate(tmp_path) -> None:
     # ocr matches f2 for HTV
     assert bundle.components["bm25_ocr"].raw_scores[0, 1] > 0
 
+
+def test_dense_scorer_supports_visual_only() -> None:
+    visual = FakeIndex(np.asarray([[0.1, 0.2]], dtype=np.float32))
+    encoder = FakeEncoder(np.asarray([[1.0, 0.0]], dtype=np.float32))
+    scorer = DenseTemporalScorer(
+        visual_index=visual,
+        context_index=None,
+        asr_index=None,
+        visual_encoder=encoder,
+        text_encoder=None,
+        weights=DenseTemporalWeights(),
+    )
+    bundle = scorer.score_components(["event"])
+    assert set(bundle.components) == {"visual_dense"}
+    assert len(encoder.calls) == 1
+
+
+def test_dense_scorer_supports_visual_and_context() -> None:
+    visual = FakeIndex(np.asarray([[0.1, 0.2]], dtype=np.float32))
+    context = FakeIndex(np.asarray([[0.3, 0.4]], dtype=np.float32))
+    v_encoder = FakeEncoder(np.asarray([[1.0, 0.0]], dtype=np.float32))
+    t_encoder = FakeEncoder(np.asarray([[0.0, 1.0]], dtype=np.float32))
+    scorer = DenseTemporalScorer(
+        visual_index=visual,
+        context_index=context,
+        asr_index=None,
+        visual_encoder=v_encoder,
+        text_encoder=t_encoder,
+        weights=DenseTemporalWeights(),
+    )
+    bundle = scorer.score_components(["event"])
+    assert set(bundle.components) == {"visual_dense", "context_dense"}
+    assert len(v_encoder.calls) == 1
+    assert len(t_encoder.calls) == 1
+
+
+def test_dense_scorer_supports_visual_and_asr() -> None:
+    visual = FakeIndex(np.asarray([[0.1, 0.2]], dtype=np.float32))
+    asr = FakeIndex(np.asarray([[0.5, 0.6]], dtype=np.float32))
+    v_encoder = FakeEncoder(np.asarray([[1.0, 0.0]], dtype=np.float32))
+    t_encoder = FakeEncoder(np.asarray([[0.0, 1.0]], dtype=np.float32))
+    scorer = DenseTemporalScorer(
+        visual_index=visual,
+        context_index=None,
+        asr_index=asr,
+        visual_encoder=v_encoder,
+        text_encoder=t_encoder,
+        weights=DenseTemporalWeights(),
+    )
+    bundle = scorer.score_components(["event"])
+    assert set(bundle.components) == {"visual_dense", "asr_dense"}
+    assert len(v_encoder.calls) == 1
+    assert len(t_encoder.calls) == 1
+
+
+def test_dense_scorer_text_encoder_called_once_for_both_context_and_asr() -> None:
+    visual = FakeIndex(np.asarray([[0.1, 0.2]], dtype=np.float32))
+    context = FakeIndex(np.asarray([[0.3, 0.4]], dtype=np.float32))
+    asr = FakeIndex(np.asarray([[0.5, 0.6]], dtype=np.float32))
+    v_encoder = FakeEncoder(np.asarray([[1.0, 0.0]], dtype=np.float32))
+    t_encoder = FakeEncoder(np.asarray([[0.0, 1.0]], dtype=np.float32))
+    scorer = DenseTemporalScorer(
+        visual_index=visual,
+        context_index=context,
+        asr_index=asr,
+        visual_encoder=v_encoder,
+        text_encoder=t_encoder,
+        weights=DenseTemporalWeights(),
+    )
+    bundle = scorer.score_components(["event"])
+    assert set(bundle.components) == {"visual_dense", "context_dense", "asr_dense"}
+    assert len(v_encoder.calls) == 1
+    assert len(t_encoder.calls) == 1
+
+
