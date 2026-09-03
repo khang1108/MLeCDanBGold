@@ -3,6 +3,8 @@
 This module exposes the HTTP API boundary between the Python search service
 and the Node.js frontend. It loads online models and frame indexes once at
 application startup during the lifespan context.
+
+Hello endipi
 """
 
 from __future__ import annotations
