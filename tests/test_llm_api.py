@@ -585,3 +585,56 @@ def test_caption_and_ocr_use_independent_model_backends():
     assert ocr.processor is ocr_processor
     assert ocr.model is not model
     assert ocr.processor is not processor
+
+
+def test_local_adapter_embed_images_delegates_to_visual_encoder():
+    config = LLMServiceConfig.from_yaml("llm/config.yaml")
+    visual_encoder = SimpleNamespace(
+        encode_images=lambda images: np.ones((len(images), 768), dtype=np.float32),
+        model=object(),
+    )
+    adapter = LocalAdapter(
+        config,
+        visual_encoder=visual_encoder,
+        enable_caption=False,
+        enable_visual_embedding=True,
+        enable_caption_embedding=False,
+        enable_reranker=False,
+    )
+    runtime = LLMService(adapter)
+    img = Image.new("RGB", (10, 10))
+    vectors = runtime.embed_images([img], source="visual")
+    assert vectors.shape == (1, 768)
+
+    with pytest.raises(RuntimeError, match="does not support source 'dino'"):
+        runtime.embed_images([img], source="dino")
+
+
+def test_local_adapter_embed_images_route():
+    config = LLMServiceConfig.from_yaml("llm/config.yaml")
+    visual_encoder = SimpleNamespace(
+        encode_images=lambda images: np.ones((len(images), 768), dtype=np.float32),
+        model=object(),
+    )
+    adapter = LocalAdapter(
+        config,
+        visual_encoder=visual_encoder,
+        enable_caption=False,
+        enable_visual_embedding=True,
+        enable_caption_embedding=False,
+        enable_reranker=False,
+    )
+    app = create_llm_app(LLMService(adapter))
+    img_bytes = _jpeg(10)
+    response = request(
+        app,
+        "POST",
+        "/v1/embeddings/images",
+        data={"item_ids": json.dumps(["0"])},
+        files=[("images", ("0.jpg", img_bytes, "image/jpeg"))],
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["item_ids"] == ["0"]
+    assert len(body["embeddings"]) == 1
+    assert len(body["embeddings"][0]) == 768
