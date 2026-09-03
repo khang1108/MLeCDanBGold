@@ -44,11 +44,14 @@ const Probe = () => {
   );
 };
 
-const renderDialogs = () => render(
-  <SubmissionProvider>
-    <SubmissionDialogProvider><Probe /></SubmissionDialogProvider>
-  </SubmissionProvider>,
-);
+const renderDialogs = ({ strictMode = false } = {}) => {
+  const dialogs = (
+    <SubmissionProvider>
+      <SubmissionDialogProvider><Probe /></SubmissionDialogProvider>
+    </SubmissionProvider>
+  );
+  return render(strictMode ? <React.StrictMode>{dialogs}</React.StrictMode> : dialogs);
+};
 
 beforeEach(async () => {
   jest.clearAllMocks();
@@ -63,11 +66,13 @@ afterEach(() => {
   delete window.dialogProbe;
 });
 
-const openAndHydrate = async () => {
-  renderDialogs();
+const openAndHydrate = async (options) => {
+  renderDialogs(options);
   await act(async () => Promise.resolve());
-  await act(async () => MockWebSocket.instances[0].open());
+  const socket = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+  await act(async () => socket.open());
   await act(async () => Promise.resolve());
+  return socket;
 };
 
 test('opens an editor with committed content and discards Esc without sending', async () => {
@@ -146,6 +151,27 @@ test('saves and closes when Enter is pressed immediately after selecting a file'
   }));
 
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('saves, closes, and records history after the StrictMode effect replay', async () => {
+  const socket = await openAndHydrate({ strictMode: true });
+  fireEvent.click(screen.getByRole('button', { name: 'Request submission' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'a.csv' }));
+  fireEvent.keyDown(await screen.findByRole('textbox', { name: /edit a\.csv content/i }), {
+    key: 'Enter', code: 'Enter',
+  });
+  expect(JSON.parse(socket.sent[0])).toEqual({
+    type: 'submission_file.update', name: 'a.csv', content: 'V01,20', expected_revision: 1,
+  });
+  await act(async () => socket.message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: 'V01,20', is_validated: false, revision: 2 },
+  }));
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(markFramesSubmitted).toHaveBeenCalledWith({
+    queryId: 'q1', submissionFileName: 'a.csv', submissionLine: 'V01,20', frameIds: ['f1'],
+  }));
 });
 
 test('validates and closes after choosing a submission file', async () => {

@@ -305,7 +305,7 @@ export const SubmissionProvider = ({ children }) => {
       }
       cancelPendingOperations();
     };
-  }, [cancelPendingOperations, connect]);
+  }, [cancelPendingOperations, connect, hydrate]);
 
   const sendMutation = useCallback(({ name, kind, command, expectedRevision, content }) => {
     const socket = socketRef.current;

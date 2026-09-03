@@ -48,8 +48,13 @@ export const SubmissionDialogProvider = ({ children }) => {
   const mountedRef = useRef(true);
   const mutationRef = useRef(null);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
+  useEffect(() => {
+    // StrictMode replays effect cleanup during development. Restore this flag
+    // on every setup so a confirmed WebSocket mutation is not discarded.
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const editorFile = useMemo(
