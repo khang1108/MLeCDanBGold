@@ -176,9 +176,9 @@ def _load_dense_temporal(
     asr_retriever = retrieval.source_retriever(RetrievalSource.ASR)
     context_ready = False
     asr_ready = False
-    context_index = None
-    projected_asr = None
-    text_encoder = None
+    context_index: Any | None = None
+    projected_asr: Any | None = None
+    text_encoder: Any | None = None
 
     if context is None:
         messages.append("Dense temporal evidence unavailable: Context retriever missing")
@@ -198,7 +198,11 @@ def _load_dense_temporal(
     else:
         try:
             asr_dimension = asr_retriever.index.metadata.embedding_dim
-            if context_ready and context_index.metadata.embedding_dim != asr_dimension:
+            if (
+                context_ready
+                and context_index is not None
+                and context_index.metadata.embedding_dim != asr_dimension
+            ):
                 messages.append(
                     "Dense temporal evidence identity validation failed: "
                     "ValueError: Context and ASR segment index dimensions differ"
@@ -446,7 +450,7 @@ def _typed_artifact_available(
         return False
     if path.is_file():
         return path.stat().st_size > 0
-    return bool(
+    return (
         allow_directory
         and path.is_dir()
         and any(item.is_file() for item in path.rglob("*.parquet"))
