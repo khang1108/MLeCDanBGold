@@ -30,3 +30,15 @@ test('Escape closes without invoking save', () => {
   expect(baseProps.onClose).toHaveBeenCalledTimes(1);
 });
 
+test('close controls remain available while a save confirmation is pending', () => {
+  const onClose = jest.fn();
+  render(<SubmissionFileModal {...baseProps} isMutating onClose={onClose} />);
+
+  const closeButton = screen.getByRole('button', { name: 'Close' });
+  const cancelButton = screen.getByRole('button', { name: 'Cancel' });
+  expect(closeButton.disabled).toBe(false);
+  expect(cancelButton.disabled).toBe(false);
+
+  fireEvent.click(cancelButton);
+  expect(onClose).toHaveBeenCalledTimes(1);
+});

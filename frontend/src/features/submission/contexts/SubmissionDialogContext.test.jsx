@@ -104,6 +104,21 @@ test('picker appends an intent to the draft and saves only after the update broa
   }));
 });
 
+test('allows the editor to close while save confirmation is pending', async () => {
+  await openAndHydrate();
+  fireEvent.click(screen.getByRole('button', { name: 'Open editor' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Lưu' }));
+  expect(MockWebSocket.instances[0].sent).toHaveLength(1);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+  await act(async () => MockWebSocket.instances[0].message({
+    type: 'submission_file.updated',
+    file: { name: 'a.csv', content: '', is_validated: false, revision: 2 },
+  }));
+});
+
 test('shows an explicit conflict and allows rebasing the draft', async () => {
   await openAndHydrate();
   fireEvent.click(screen.getByRole('button', { name: 'Open editor' }));

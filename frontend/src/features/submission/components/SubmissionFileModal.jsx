@@ -60,11 +60,11 @@ const SubmissionFileModal = ({
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
-      if (!isMutating) onClose?.();
+      onClose?.();
     };
     window.addEventListener('keydown', handleEscape, true);
     return () => window.removeEventListener('keydown', handleEscape, true);
-  }, [isMutating, mode, onClose]);
+  }, [mode, onClose]);
 
   useEffect(() => {
     if (!highlightedFileName) return;
@@ -108,7 +108,7 @@ const SubmissionFileModal = ({
     onDraftChange?.(value);
   };
   const close = () => {
-    if (!isMutating) onClose?.();
+    onClose?.();
   };
 
   return (
@@ -125,7 +125,7 @@ const SubmissionFileModal = ({
             <p className="submission-modal-kicker">Submission workspace</p>
             <h2>{mode === 'picker' ? 'Choose a CSV file' : editorFile?.name}</h2>
           </div>
-          <button type="button" className="submission-modal-close" onClick={close} disabled={isMutating} aria-label="Close">
+          <button type="button" className="submission-modal-close" onClick={close} aria-label="Close">
             ×
           </button>
         </header>
@@ -223,7 +223,7 @@ const SubmissionFileModal = ({
                 <button type="button" className="btn-primary" onClick={onSave} disabled={isMutating}>
                   Lưu
                 </button>
-                <button type="button" className="btn-secondary" onClick={close} disabled={isMutating}>Cancel</button>
+                <button type="button" className="btn-secondary" onClick={close}>Cancel</button>
               </div>
             </footer>
           </>

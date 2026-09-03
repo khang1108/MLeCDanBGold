@@ -19,6 +19,7 @@ import { getSubmissionFiles, workspaceWebSocketUrl } from '../../../api/workspac
 const OPEN_STATE = 1;
 const MIN_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 10000;
+const MUTATION_TIMEOUT_MS = 15000;
 const SubmissionContext = createContext(null);
 
 const cancellationError = (message = 'Submission provider was closed') => {
@@ -80,6 +81,7 @@ export const SubmissionProvider = ({ children }) => {
   const settlePending = useCallback((name, error, file) => {
     const pending = pendingRef.current.get(name);
     if (!pending) return;
+    window.clearTimeout(pending.timeoutId);
     pendingRef.current.delete(name);
     updatePendingNames();
     if (error) pending.reject(error);
@@ -244,7 +246,10 @@ export const SubmissionProvider = ({ children }) => {
   connectRef.current = connect;
 
   const cancelPendingOperations = useCallback(() => {
-    pendingRef.current.forEach((pending) => pending.reject(cancellationError()));
+    pendingRef.current.forEach((pending) => {
+      window.clearTimeout(pending.timeoutId);
+      pending.reject(cancellationError());
+    });
     pendingRef.current.clear();
   }, []);
 
@@ -279,7 +284,20 @@ export const SubmissionProvider = ({ children }) => {
       return Promise.reject(new Error(`A ${name} operation is already pending`));
     }
     return new Promise((resolve, reject) => {
-      pendingRef.current.set(name, { kind, expectedRevision, content, resolve, reject });
+      const timeoutId = window.setTimeout(() => {
+        settlePending(
+          name,
+          new Error(`Timed out waiting for the server to confirm ${name}`),
+        );
+      }, MUTATION_TIMEOUT_MS);
+      pendingRef.current.set(name, {
+        kind,
+        expectedRevision,
+        content,
+        resolve,
+        reject,
+        timeoutId,
+      });
       updatePendingNames();
       try {
         socket.send(JSON.stringify(command));

@@ -70,6 +70,15 @@ export const SubmissionDialogProvider = ({ children }) => {
     setHistoryPatchError(null);
   }, []);
 
+  const closeDialog = useCallback(() => {
+    setDialog(emptyDialog);
+    setDraft('');
+    setBaseContent('');
+    setError(null);
+    setHistoryPatch(null);
+    setHistoryPatchError(null);
+  }, []);
+
   const requestSubmission = useCallback((intent) => {
     setError(null);
     setHistoryPatch(null);
@@ -125,7 +134,7 @@ export const SubmissionDialogProvider = ({ children }) => {
       await markFramesSubmitted(patch);
       setHistoryPatch(null);
       setHistoryPatchError(null);
-      window.dispatchEvent(new CustomEvent('hcmai:history-changed'));
+      window.dispatchEvent(new CustomEvent('hcmai:history-changed', { detail: patch }));
     } catch (patchError) {
       setHistoryPatchError(patchError.message || 'History state was not recorded');
       throw patchError;
@@ -182,7 +191,7 @@ export const SubmissionDialogProvider = ({ children }) => {
       setHistoryPatchError(null);
       setHistoryPatch(null);
       setMutation(null);
-      window.dispatchEvent(new CustomEvent('hcmai:history-changed'));
+      window.dispatchEvent(new CustomEvent('hcmai:history-changed', { detail: historyPatch }));
       resetDialog();
     } catch (retryError) {
       setMutation(null);
@@ -329,7 +338,7 @@ export const SubmissionDialogProvider = ({ children }) => {
         onSave={() => saveDraft()}
         onValidate={handleValidate}
         onDelete={handleDelete}
-        onClose={resetDialog}
+        onClose={closeDialog}
         isMutating={Boolean(mutation)}
         remoteConflict={dialog.remoteConflict}
         onLoadConflict={loadConflict}

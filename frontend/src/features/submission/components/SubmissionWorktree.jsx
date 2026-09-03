@@ -176,14 +176,15 @@ const SubmissionWorktree = () => {
             {files.map((file) => {
               const visualState = fileVisualState(file);
               return (
-                <li
-                  key={file.name}
-                  className={`submission-tree-item submission-file-row ${visualState}`}
-                  onDoubleClick={() => openEditor(file.name)}
-                  aria-label={file.name}
-                  title="Double-click to edit"
-                >
-                  <span className="tree-file-name">{file.name}</span>
+                <li key={file.name} className="submission-tree-item">
+                  <button
+                    type="button"
+                    className={`submission-file-row ${visualState}`}
+                    onClick={() => openEditor(file.name)}
+                    title="Click to edit"
+                  >
+                    <span className="tree-file-name">{file.name}</span>
+                  </button>
                 </li>
               );
             })}

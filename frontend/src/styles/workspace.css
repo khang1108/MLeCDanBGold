@@ -235,12 +235,16 @@
 
 .submission-file-row {
   display: block;
+  width: 100%;
   padding: 10px 12px;
   border-width: 2px;
   border-style: solid;
   border-radius: var(--rounded-md);
   background: var(--color-surface);
+  color: inherit;
   cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
 
 .submission-file-row.empty { border-color: #b8bec7; }
@@ -250,6 +254,11 @@
 .submission-file-row:hover {
   background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface));
   box-shadow: var(--shadow-level-1);
+}
+
+.submission-file-row:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .submission-file-row .tree-file-name {

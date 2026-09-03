@@ -110,7 +110,7 @@ test('skips duplicate targets instead of overwriting them', async () => {
   expect(MockWebSocket.instances[0].sent).toHaveLength(0);
 });
 
-test('renders border-only visual state and opens the global editor on double-click', async () => {
+test('renders border-only visual state and opens the global editor on one click', async () => {
   await renderWorktree([
     { name: 'empty.csv', content: '', is_validated: false, revision: 0 },
     { name: 'filled.csv', content: 'V01,1', is_validated: false, revision: 1 },
@@ -120,7 +120,7 @@ test('renders border-only visual state and opens the global editor on double-cli
   expect(screen.getByText('empty.csv').parentElement.className).toContain('empty');
   expect(screen.getByText('filled.csv').parentElement.className).toContain('filled');
   expect(screen.getByText('validated.csv').parentElement.className).toContain('validated');
-  fireEvent.doubleClick(screen.getByText('filled.csv'));
+  fireEvent.click(screen.getByRole('button', { name: 'filled.csv' }));
   expect(await screen.findByRole('textbox', { name: /edit filled\.csv content/i })).toBeTruthy();
 });
 
