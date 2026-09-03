@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 from hcmai.common.config import DenseTemporalWeights
+from hcmai.retrieval.evidence.components import TemporalScoreBundle, TemporalScoreComponent
 from hcmai.retrieval.evidence.normalization import minmax_rows
 
 
@@ -39,22 +40,41 @@ class DenseTemporalScorer:
         self.weights = weights
         self.chunk_size = chunk_size
 
-    def score_events(self, retrieval_events: Sequence[str]) -> np.ndarray:
-        """Score every canonical frame for all selected retrieval events."""
+    def score_components(self, retrieval_events: Sequence[str]) -> TemporalScoreBundle:
+        """Score raw components for each expert without row normalization."""
 
         events = [" ".join(event.split()) for event in retrieval_events]
         if not events or any(not event for event in events):
             raise ValueError("retrieval events must contain non-empty strings")
+
         visual_vectors = np.asarray(self.visual_encoder.encode_text(events), dtype=np.float32)
         text_vectors = np.asarray(self.text_encoder.encode_text(events), dtype=np.float32)
         positions = np.arange(len(self.visual_index.frame_ids), dtype=np.int64)
-        visual = minmax_rows(
-            self.visual_index.score_subset(visual_vectors, positions, self.chunk_size)
+
+        return TemporalScoreBundle(
+            {
+                "visual_dense": TemporalScoreComponent(
+                    "visual_dense",
+                    self.visual_index.score_subset(visual_vectors, positions, self.chunk_size),
+                ),
+                "context_dense": TemporalScoreComponent(
+                    "context_dense",
+                    self.context_index.score_subset(text_vectors, positions, self.chunk_size),
+                ),
+                "asr_dense": TemporalScoreComponent(
+                    "asr_dense",
+                    self.asr_index.score_subset(text_vectors, positions, self.chunk_size),
+                ),
+            }
         )
-        context = minmax_rows(
-            self.context_index.score_subset(text_vectors, positions, self.chunk_size)
-        )
-        asr = minmax_rows(self.asr_index.score_subset(text_vectors, positions, self.chunk_size))
+
+    def score_events(self, retrieval_events: Sequence[str]) -> np.ndarray:
+        """Score every canonical frame using legacy fixed-weight normalized fusion."""
+
+        bundle = self.score_components(retrieval_events)
+        visual = minmax_rows(bundle.components["visual_dense"].raw_scores)
+        context = minmax_rows(bundle.components["context_dense"].raw_scores)
+        asr = minmax_rows(bundle.components["asr_dense"].raw_scores)
         return np.asarray(
             self.weights.visual_weight * visual
             + self.weights.context_weight * context
