@@ -11,15 +11,16 @@ from hcmai.retrieval.evidence.ablation import (
 
 
 def test_ablation_matrix_all_runs_present() -> None:
-    """Ensure all 6 named stages A0-A5 are defined and resolvable by aliases."""
+    """Ensure all 7 named stages A0-A6 are defined and resolvable by aliases."""
 
     expected_keys = [
         "A0_legacy_v9",
         "A1_components_fixed",
-        "A2_robust_calibration",
-        "A3_confidence_gating",
-        "A4_asr_interval",
+        "A2_asr_interval",
+        "A3_robust_calibration",
+        "A4_confidence_gating",
         "A5_adaptive_p0",
+        "A6_dense_only",
     ]
     assert list(ABLATION_RUNS.keys()) == expected_keys
 
@@ -31,7 +32,7 @@ def test_ablation_matrix_all_runs_present() -> None:
 
 
 def test_alignment_config_is_identical_across_all_stages() -> None:
-    """Assert DP alignment settings are strictly identical across A0-A5."""
+    """Assert DP alignment settings are strictly identical across A0-A6."""
 
     base_alignment = ABLATION_RUNS["A0_legacy_v9"].alignment
 
@@ -42,7 +43,7 @@ def test_alignment_config_is_identical_across_all_stages() -> None:
 
 
 def test_single_feature_delta_between_ablation_stages() -> None:
-    """Verify that each sequential stage A0->A5 differs by exactly one intended feature."""
+    """Verify that each sequential stage A0->A6 differs by exactly one intended feature."""
 
     runs = list(ABLATION_RUNS.values())
 
@@ -54,35 +55,39 @@ def test_single_feature_delta_between_ablation_stages() -> None:
     assert a0.confidence_gating == a1.confidence_gating is False
     assert a0.event_routing == a1.event_routing is False
     assert a0.interval_projection == a1.interval_projection is False
+    assert a0.use_bm25 == a1.use_bm25 is True
 
-    # A1 -> A2: only robust_calibration changes from False to True
+    # A1 -> A2: only interval_projection changes from False to True
     a1, a2 = runs[1], runs[2]
-    assert a1.robust_calibration is False
-    assert a2.robust_calibration is True
+    assert a1.interval_projection is False
+    assert a2.interval_projection is True
     assert a1.fusion_mode == a2.fusion_mode == "adaptive_p0"
+    assert a1.robust_calibration == a2.robust_calibration is False
     assert a1.confidence_gating == a2.confidence_gating is False
     assert a1.event_routing == a2.event_routing is False
-    assert a1.interval_projection == a2.interval_projection is False
+    assert a1.use_bm25 == a2.use_bm25 is True
 
-    # A2 -> A3: only confidence_gating changes from False to True
+    # A2 -> A3: only robust_calibration changes from False to True
     a2, a3 = runs[2], runs[3]
-    assert a2.confidence_gating is False
-    assert a3.confidence_gating is True
+    assert a2.robust_calibration is False
+    assert a3.robust_calibration is True
     assert a2.fusion_mode == a3.fusion_mode == "adaptive_p0"
-    assert a2.robust_calibration == a3.robust_calibration is True
+    assert a2.confidence_gating == a3.confidence_gating is False
     assert a2.event_routing == a3.event_routing is False
-    assert a2.interval_projection == a3.interval_projection is False
+    assert a2.interval_projection == a3.interval_projection is True
+    assert a2.use_bm25 == a3.use_bm25 is True
 
-    # A3 -> A4: only interval_projection changes from False to True
+    # A3 -> A4: only confidence_gating changes from False to True
     a3, a4 = runs[3], runs[4]
-    assert a3.interval_projection is False
-    assert a4.interval_projection is True
+    assert a3.confidence_gating is False
+    assert a4.confidence_gating is True
     assert a3.fusion_mode == a4.fusion_mode == "adaptive_p0"
     assert a3.robust_calibration == a4.robust_calibration is True
-    assert a3.confidence_gating == a4.confidence_gating is True
     assert a3.event_routing == a4.event_routing is False
+    assert a3.interval_projection == a4.interval_projection is True
+    assert a3.use_bm25 == a4.use_bm25 is True
 
-    # A4 -> A5: only event_routing changes from False to True
+    # A4 -> A5: only event_routing changes from False to True (Full P0)
     a4, a5 = runs[4], runs[5]
     assert a4.event_routing is False
     assert a5.event_routing is True
@@ -90,6 +95,17 @@ def test_single_feature_delta_between_ablation_stages() -> None:
     assert a4.robust_calibration == a5.robust_calibration is True
     assert a4.confidence_gating == a5.confidence_gating is True
     assert a4.interval_projection == a5.interval_projection is True
+    assert a4.use_bm25 == a5.use_bm25 is True
+
+    # A5 -> A6: only use_bm25 changes from True to False (Dense-only)
+    a5, a6 = runs[5], runs[6]
+    assert a5.use_bm25 is True
+    assert a6.use_bm25 is False
+    assert a5.fusion_mode == a6.fusion_mode == "adaptive_p0"
+    assert a5.robust_calibration == a6.robust_calibration is True
+    assert a5.confidence_gating == a6.confidence_gating is True
+    assert a5.interval_projection == a6.interval_projection is True
+    assert a5.event_routing == a6.event_routing is True
 
 
 def test_to_hybrid_config_converts_properly() -> None:

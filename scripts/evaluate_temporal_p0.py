@@ -21,6 +21,7 @@ from hcmai.orchestration.setup import load_search_service
 from hcmai.retrieval.evidence.ablation import (
     ABLATION_RUNS,
     AblationRunConfig,
+    make_ablation_scorer,
     resolve_ablation_run,
 )
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
@@ -28,7 +29,7 @@ from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run P0 temporal evidence ablation matrix A0-A5"
+        description="Run P0 temporal evidence ablation matrix A0-A6"
     )
     parser.add_argument(
         "--queries-file",
@@ -39,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--runs",
         nargs="+",
-        default=["A0", "A1", "A2", "A3", "A4", "A5"],
+        default=["A0", "A1", "A2", "A3", "A4", "A5", "A6"],
         help="List of ablation runs to execute (e.g. A0 A1 ... or full names)",
     )
     parser.add_argument(
@@ -161,17 +162,14 @@ def main() -> int:
     )
     print("-" * 105)
 
+    baseline_scorer = temporal_evidence
     for run_cfg in runs:
-        # Apply run configuration to temporal evidence scorer
-        temporal_evidence.config = run_cfg.to_hybrid_config()
-
-        # Update ASR index interval projection setting
-        asr_index = getattr(temporal_evidence.dense, "asr_index", None)
-        if asr_index is not None and hasattr(asr_index, "interval_projection"):
-            asr_index.interval_projection = run_cfg.interval_projection
-
-        # Apply alignment config (ensuring identity across all stages)
+        run_scorer, run_kw = make_ablation_scorer(baseline_scorer, run_cfg.name)
+        temporal_search.evidence = run_scorer
         temporal_search.config = run_cfg.alignment
+
+        run_use_dense = args.use_dense and run_kw.get("use_dense", True)
+        run_use_bm25 = args.use_bm25 and run_kw.get("use_bm25", True)
 
         for q in queries:
             search_result = temporal_search.search(
@@ -179,8 +177,8 @@ def main() -> int:
                 retrieval_events=q["retrieval_events"],
                 caption_events=q["caption_events"],
                 top_k=args.top_k,
-                use_dense=args.use_dense,
-                use_bm25=args.use_bm25,
+                use_dense=run_use_dense,
+                use_bm25=run_use_bm25,
             )
 
             paths = search_result.paths
