@@ -1,4 +1,4 @@
-import { requestJson } from './client';
+import { requestFormData, requestJson } from './client';
 
 export const roundLatencyMs = (val) => {
   if (typeof val !== 'number' || !Number.isFinite(val)) return val;
@@ -92,6 +92,34 @@ export const searchTrake = async ({
     || !hasSearchLatency(payload?.latency)
   ) {
     throw new Error('TRAKE server returned an invalid response contract');
+  }
+
+  return {
+    ...payload,
+    latency: normalizeSearchLatency(payload.latency),
+  };
+};
+
+export const searchFramesByImage = async ({
+  imageFile,
+  topK = 20,
+  signal,
+}) => {
+  if (!imageFile) {
+    throw new Error('An image file is required for image search');
+  }
+
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  formData.append('top_k', String(topK));
+
+  const payload = await requestFormData('/api/v1/search/image', formData, { signal });
+
+  if (
+    !Array.isArray(payload?.results)
+    || !hasSearchLatency(payload?.latency)
+  ) {
+    throw new Error('Image search server returned an invalid response contract');
   }
 
   return {
