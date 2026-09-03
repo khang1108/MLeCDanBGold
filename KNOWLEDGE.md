@@ -338,3 +338,46 @@ load the precomputed `artifacts/indexes/bm25` artifact and never rebuilds it.
 **SOURCE (routing/config/tests); PENDING DATA:** Runtime behavior is verified by
 tests. Full artifact startup remains pending completion of the AWS sync and a
 Vietnamese BM25 rebuild. No retrieval-quality improvement is claimed yet.
+
+## Direct image-to-keyframe retrieval with SigLIP2
+
+**Date:** 2026-09-03
+
+**Problem:** KIS users may provide a reference image instead of text. The
+runtime already has a SigLIP2 visual frame index, but only text queries were
+exposed through the public search service.
+
+### Sources
+
+- [SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic
+  Understanding, Localization, and Dense Features](https://arxiv.org/abs/2502.14786)
+
+### Findings
+
+- **PAPER:** SigLIP2 is a dual vision-language encoder evaluated for
+  image-text retrieval and visual-representation transfer. Its image encoder
+  produces normalized vectors compatible with similarity retrieval when the
+  query and corpus use the same pinned checkpoint and preprocessing.
+- **SOURCE:** HCMAI visual keyframes are already embedded with
+  `google/siglip2-base-patch16-224` and searched through the canonical visual
+  FAISS mapping.
+
+### Relevance to HCMAI
+
+- **SOURCE / PAPER-SUPPORTED:** Encode an uploaded image with the same pinned
+  SigLIP2 visual adapter, search the existing visual index directly, and
+  materialize identities only through `Corpus`. This reuses the established
+  index and preserves `video_id`, `frame_id`, `frame_idx`, and `timestamp_ms`.
+- **PROPOSED:** Direct image-to-image nearest-neighbour search is the initial
+  baseline. It does not establish improved KIS accuracy and intentionally does
+  not add text, BM25, or temporal-event fusion without query-specific evidence.
+
+### Status
+
+**PAPER-SUPPORTED / SOURCE-IMPLEMENTED; NOT YET BENCHMARKED.**
+
+### Decision or Experiment
+
+Measure image-query Recall@K and latency on a hand-labeled HCMAI reference-image
+set. Compare the direct SigLIP2 baseline against optional visual reranking and
+multi-crop query embeddings before adopting any more complex method.

@@ -13,8 +13,12 @@ from collections.abc import Sequence
 import numpy as np
 
 from hcmai.common.config import AdaptiveTemporalFusionConfig
-from hcmai.retrieval.evidence.calibration import calibrate_component
+from hcmai.retrieval.evidence.calibration import (
+    CalibratedComponent,
+    calibrate_component,
+)
 from hcmai.retrieval.evidence.components import TemporalScoreBundle
+from hcmai.retrieval.evidence.normalization import minmax_rows
 
 SPEECH_CUES: tuple[str, ...] = (
     "nói", "hỏi", "trả lời", "đối thoại", "phỏng vấn", "cho biết", "giới thiệu",
@@ -83,6 +87,18 @@ class TemporalFusionScorer:
         self.config = config
         self.router = EventModalityRouter(config)
 
+    def _calibrate(self, raw_scores: np.ndarray) -> CalibratedComponent:
+        """Calibrate component scores using configured robust or minmax calibration."""
+
+        if self.config.robust_calibration:
+            return calibrate_component(raw_scores, self.config.calibration)
+
+        # Fallback to minmax normalization with binary reliability
+        scores = minmax_rows(raw_scores)
+        spans = np.ptp(raw_scores, axis=1) if raw_scores.ndim == 2 else np.asarray([])
+        reliability = np.where(spans > self.config.calibration.eps, 1.0, 0.0).astype(np.float32)
+        return CalibratedComponent(scores=scores, reliability=reliability)
+
     def calibrate_bundle(
         self,
         bundle: TemporalScoreBundle,
@@ -90,7 +106,7 @@ class TemporalFusionScorer:
         """Calibrate all components in a score bundle using configured calibration parameters."""
 
         return {
-            name: calibrate_component(component.raw_scores, self.config.calibration)
+            name: self._calibrate(component.raw_scores)
             for name, component in bundle.components.items()
         }
 

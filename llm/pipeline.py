@@ -97,13 +97,21 @@ class LLMService:
     def embed_text(self, texts: list[str], source: str = "visual") -> Any:
         return self.adapter.embed_text(texts, source)
 
-    def embed_images(self, images: Any, *, source: str = "visual") -> Any:
+    def embed_images(
+        self,
+        images: Any,
+        *,
+        source: str = "visual",
+        item_ids: list[str] | None = None,
+    ) -> Any:
         """Embed decoded images using the requested visual encoder."""
 
         method = getattr(self.adapter, "embed_images", None)
         if method is None:
             raise RuntimeError("image embedding is not supported by this provider")
-        return method(images, source=source)
+        if item_ids is None:
+            return method(images, source=source)
+        return method(images, source=source, item_ids=item_ids)
 
     def caption(self, images: Any) -> Any:
         return self.adapter.caption(images)

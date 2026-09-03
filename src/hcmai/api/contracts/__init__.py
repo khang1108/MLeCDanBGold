@@ -29,7 +29,13 @@ from .query_candidates import (
     QueryCandidatesRequest,
     QueryCandidatesResponse,
 )
-from .search import SearchRequest, SearchResponse, SearchResult, SearchResultMetadata
+from .search import (
+    ImageSearchResponse,
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+    SearchResultMetadata,
+)
 from .submission import SubmissionResult
 from .trake import TRAKEPath, TRAKERequest, TRAKEResponse
 
@@ -43,6 +49,7 @@ __all__ = [
     "DatabaseTable",
     "DatabaseTableList",
     "FrameCatalogEntry",
+    "ImageSearchResponse",
     "QueryCandidateResponse",
     "QueryCandidatesRequest",
     "QueryCandidatesResponse",

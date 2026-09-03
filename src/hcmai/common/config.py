@@ -366,6 +366,7 @@ class AdaptiveTemporalFusionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     calibration: RobustCalibrationConfig = Field(default_factory=RobustCalibrationConfig)
+    robust_calibration: bool = True
     confidence_gating: bool = True
     event_routing: bool = True
     base_component_weights: dict[str, float] = Field(

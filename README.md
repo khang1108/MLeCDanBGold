@@ -99,6 +99,18 @@ KIS endpoint:
 POST /api/v1/search
 ```
 
+Tìm keyframe bằng ảnh tham chiếu dùng cùng SigLIP2 visual index:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/search/image \
+  -F "image=@query.jpg;type=image/jpeg" \
+  -F "top_k=20"
+```
+
+Endpoint nhận JPEG, PNG hoặc WebP và trả về cùng cấu trúc canonical frame
+result của KIS. Giới hạn upload/pixel nằm trong `api.image_max_upload_bytes`
+và `api.image_max_pixels` của `configs/baseline.yaml`.
+
 ### 2.3. Luồng TRAKE online
 
 ```text
@@ -122,6 +134,7 @@ POST /api/v1/trake
 | --- | --- |
 | `GET /health` | Kiểm tra backend, FrameStore, index và inference |
 | `POST /api/v1/search` | KIS search |
+| `POST /api/v1/search/image` | SigLIP2 image-to-keyframe search |
 | `POST /api/v1/trake` | TRAKE ordered-event alignment |
 | `GET /api/v1/keyframes/{frame_id}` | Lấy canonical keyframe theo internal `frame_id` |
 | `GET /api/v1/frames/{frame_id}/neighbors` | Lấy frame lân cận theo thời gian |

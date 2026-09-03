@@ -36,8 +36,9 @@ class SegmentProjectedASRIndex:
         segment_index: SegmentDenseIndex,
         canonical_index: DenseIndex,
         projector: SegmentFrameProjector,
+        interval_projection: bool = True,
     ) -> None:
-        """Bind a segment index to an existing canonical visual index.
+        """Project dense ASR segment vectors to canonical frame coordinates.
 
         Raises:
             ValueError: If either index has inconsistent identity/vector
@@ -78,6 +79,7 @@ class SegmentProjectedASRIndex:
         self.timestamps = timestamps
         self.metadata = segment_index.metadata
         self._segment_vectors = segment_vectors
+        self.interval_projection = interval_projection
         self.segment_frame_positions = self._build_segment_frame_positions(
             projector,
             canonical_frame_ids,
@@ -138,7 +140,7 @@ class SegmentProjectedASRIndex:
             else:
                 inside = np.empty(0, dtype=np.int64)
 
-            if len(inside) > 0:
+            if self.interval_projection and len(inside) > 0:
                 covered_positions = inside.tolist()
             else:
                 fallback_pos = int(self.segment_frame_positions[int(segment_position)])

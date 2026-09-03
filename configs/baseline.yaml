@@ -82,6 +82,8 @@ search:
 api:
   default_top_k: 20
   maximum_top_k: 100
+  image_max_upload_bytes: 10485760
+  image_max_pixels: 40000000
 
 inference:
   base_url: "https://api.iamphuckhang.dev"
