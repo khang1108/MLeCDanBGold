@@ -19,7 +19,7 @@ from hcmai.common.config import (
 from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.io import read_yaml, write_json, write_yaml
 from hcmai.corpus.stores import FrameContextStore, FrameStore
-from thundercompute.config import LLMServiceConfig
+from llm.config import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 from offline.artifact_readers import (
     CaptionArtifactReader,
@@ -442,7 +442,7 @@ def test_remote_context_encoder_uses_text_source_family(
 ) -> None:
     """Hosted Context embeddings use the BGE text endpoint, not ``context``."""
 
-    from thundercompute.pipeline import LLMService
+    from llm.pipeline import LLMService
     from offline.indexes import text as artifacts
 
     captured: dict[str, object] = {}

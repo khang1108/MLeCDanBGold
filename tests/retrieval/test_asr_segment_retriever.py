@@ -19,7 +19,7 @@ from hcmai.corpus.stores.transcript import TranscriptStore
 from offline.enrichment.transcripts.artifacts import (
     load_transcript_artifact_records,
 )
-from thundercompute.config import LLMServiceConfig
+from llm.config import LLMServiceConfig
 from hcmai.retrieval.retriever.artifacts import fingerprint_files
 
 
@@ -297,7 +297,7 @@ def test_remote_asr_segment_encoder_uses_text_source_family(
 ) -> None:
     """Hosted segment embeddings select the generic BGE text endpoint."""
 
-    from thundercompute.pipeline import LLMService
+    from llm.pipeline import LLMService
     from offline.indexes import asr_segment as artifacts
 
     captured: dict[str, object] = {}

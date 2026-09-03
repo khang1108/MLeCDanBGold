@@ -124,7 +124,7 @@ aws s3 cp s3://mlecdanbgold-hcmai-hk/data/artifacts/indexes/latest.json -
 ## Install the remote build environment
 
 Connect using the manual provider workflow documented in
-[`thundercompute/README.md`](../../thundercompute/README.md), then install the
+[`llm/README.md`](../../llm/README.md), then install the
 build environment in the remote checkout.
 
 ```bash
@@ -163,7 +163,7 @@ are loaded and pinned correctly before an embedding stage begins. It sends
 SigLIP images to the visual endpoint and both FrameContext and ASR text to the
 BGE `text` family. Leave off the option to build with local models instead.
 
-The A6000 starting batch is 128 in both `thundercompute/config.yaml` and
+The A6000 starting batch is 128 in both `llm/config.yaml` and
 `configs/prepare.yaml`; adjust its `models` section only after observing actual VRAM and
 latency with the corpus's real image/text lengths. The builder has one active
 embedding batch at a time. Sending several simultaneous requests to one

@@ -7,13 +7,12 @@ from pathlib import Path
 from time import monotonic
 from typing import Any
 
-from dotenv import load_dotenv
 from hcmai.common.config import (
     AppConfig,
-    REPOSITORY_ROOT,
     resolve_dataset_root,
     resolve_repository_path,
 )
+from hcmai.common.environment import load_repository_environment
 
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
@@ -29,8 +28,8 @@ from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 from hcmai.retrieval.models import RetrievalSource
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
-from thundercompute.config import LLMServiceConfig
-from thundercompute.pipeline import LLMService
+from llm.config import LLMServiceConfig
+from llm.pipeline import LLMService
 
 logger = get_logger(__name__)
 
@@ -38,9 +37,9 @@ logger = get_logger(__name__)
 def load_search_service(messages: list[str]) -> SearchService:
     """Build explicit KIS/TRAKE workflows while preserving degraded startup."""
 
-    # Runtime paths and credentials live in the repository root .env for local
-    # launches. Existing process variables keep precedence for deployments.
-    load_dotenv(REPOSITORY_ROOT / ".env", override=False)
+    # Re-apply the repository .env at this composition boundary so stale
+    # terminal/system exports cannot redirect runtime paths.
+    load_repository_environment()
 
     settings = _load_app_config()
     models = _load_model_config()
@@ -240,7 +239,7 @@ def _load_app_config() -> AppConfig:
 
 
 def _load_model_config() -> LLMServiceConfig:
-    path = resolve_repository_path(os.getenv("HCMAI_LLM_CONFIG", "thundercompute/config.yaml"))
+    path = resolve_repository_path(os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml"))
     if not path.is_file():
         raise FileNotFoundError(f"Model config not found at {path}")
     return LLMServiceConfig.from_yaml(path)
@@ -463,7 +462,7 @@ def _load_fast_track_retrieval(
     corpus: Corpus | None,
     messages: list[str],
 ) -> RetrievalService | None:
-    """Load validated retrieval indexes without default reranker wiring.
+    """Load available retrieval indexes without default reranker wiring.
 
     The online KIS/TRAKE baseline requires only the visual index. Context and
     segment-ASR indexes remain optional detached retrieval capabilities.
@@ -482,9 +481,6 @@ def _load_fast_track_retrieval(
     context = _load_fast_track_index(
         source=RetrievalSource.CONTEXT,
         path=context_path,
-        visual=visual,
-        encoder_config=encoder_config,
-        settings=settings,
         messages=messages,
     )
     if context is None and RetrievalSource.CONTEXT in settings.search.fusion.required_sources:
@@ -493,9 +489,6 @@ def _load_fast_track_retrieval(
     asr_segment = _load_fast_track_index(
         source=RetrievalSource.ASR,
         path=asr_segment_path,
-        visual=visual,
-        encoder_config=encoder_config,
-        settings=settings,
         messages=messages,
     )
     if asr_segment is None and RetrievalSource.ASR in settings.search.fusion.required_sources:
@@ -561,37 +554,17 @@ def _load_fast_track_index(
     *,
     source: RetrievalSource,
     path: Path,
-    visual: Any,
-    encoder_config: Any,
-    settings: AppConfig,
     messages: list[str],
 ) -> Any | None:
-    """Load one optional v2 evidence index and validate its online contract."""
+    """Load one optional evidence index, deferring compatibility to its consumer."""
 
     if not path.is_dir():
         messages.append(f"{source.value.upper()} index not available at {path}")
         return None
     try:
         if source is RetrievalSource.CONTEXT:
-            index = RetrievalService.load_index(path)
-            expected_entity_kind = "frame"
-        else:
-            index = SegmentDenseIndex.load(path)
-            expected_entity_kind = "segment"
-        metadata = index.metadata
-        if metadata.schema_version != "dense-index-v2":
-            raise ValueError("metadata must use dense-index-v2")
-        if metadata.entity_kind != expected_entity_kind:
-            raise ValueError(f"entity_kind must be {expected_entity_kind!r}")
-        if metadata.retrieval_source != source.value:
-            raise ValueError(f"retrieval_source must be {source.value!r}")
-        if metadata.dataset_version != visual.metadata.dataset_version:
-            raise ValueError("dataset version differs from visual index")
-        if metadata.model_name != encoder_config.model_name:
-            raise ValueError("model differs from configured evidence encoder")
-        if metadata.model_revision != encoder_config.revision:
-            raise ValueError("revision differs from configured evidence encoder")
-        return index
+            return RetrievalService.load_index(path)
+        return SegmentDenseIndex.load(path)
     except Exception as error:
         label = "asr segment" if source is RetrievalSource.ASR else source.value
         messages.append(f"Could not load {label} index {path}: " f"{type(error).__name__}: {error}")
@@ -599,11 +572,6 @@ def _load_fast_track_index(
 
 
 def _query_encoder(config: Any, index: Any, llm: LLMService | None, source: str) -> Any:
-    if index.metadata.model_name != config.model_name:
-        raise ValueError(
-            f"{source} index model {index.metadata.model_name!r} does not "
-            f"match llm config {config.model_name!r}"
-        )
     if llm is None:
         return EmbeddingService.create_text_adapter(config)
     return EmbeddingService.create_remote_adapter(llm, config, index.metadata.embedding_dim, source)

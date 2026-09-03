@@ -17,16 +17,16 @@ from offline.enrichment.inference_contracts import (
     InferenceReadiness,
 )
 from offline.enrichment.transcripts.models import TranscriptSegment
-from thundercompute.adapters.http import InferenceClient
-from thundercompute.config import LLMServiceConfig
+from llm.remote import InferenceClient
+from llm.config import LLMServiceConfig
 from hcmai.retrieval.embedding.adapters.remote import RemoteEmbeddingAdapter
 from offline.enrichment.caption.adapters.remote import RemoteCaptionAdapter
 from offline.enrichment.ocr.adapters.florence import FlorenceAdapter
 from offline.enrichment.ocr.config import OCRConfig
 from offline.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
-from thundercompute.adapters.local import LocalAdapter
-from thundercompute.pipeline import LLMService
-from thundercompute.server.api import create_llm_app
+from llm.local import LocalAdapter
+from llm.pipeline import LLMService
+from llm.server.api import create_llm_app
 
 
 def _model_status(**values: object) -> dict[str, object]:
@@ -36,7 +36,7 @@ def _model_status(**values: object) -> dict[str, object]:
 
 
 class FakeRuntime:
-    config = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
+    config = LLMServiceConfig.from_yaml("llm/config.yaml")
     reranker = SimpleNamespace(resolved_revision="test")
     captioner = SimpleNamespace(resolved_revision="caption-sha")
 
@@ -547,11 +547,11 @@ def test_asr_only_environment_does_not_construct_unrequested_models(
     assert adapter.reranker is None
     assert not hasattr(adapter, "vqa_model")
     assert adapter.enable_diarization is False
-    assert not hasattr(LLMServiceConfig.from_yaml("thundercompute/config.yaml"), "vqa_model")
+    assert not hasattr(LLMServiceConfig.from_yaml("llm/config.yaml"), "vqa_model")
 
 
 def test_caption_and_ocr_use_independent_model_backends():
-    config = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
+    config = LLMServiceConfig.from_yaml("llm/config.yaml")
     model = object()
     processor = object()
     captioner = SimpleNamespace(

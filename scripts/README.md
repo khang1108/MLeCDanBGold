@@ -12,8 +12,8 @@ stores, or generators directly.
 supports explicitly disabled diarization, and materializes frame-aligned ASR
 through the canonical `FrameEnrichment`/`ASRStore` contract.
 
-The root `thundercompute/` directory is the shared hosted-inference component.
-See [`thundercompute/README.md`](../thundercompute/README.md) for its endpoint
+The root `llm/` directory is the shared hosted-inference component.
+See [`llm/README.md`](../llm/README.md) for its endpoint
 contracts and the manual `tnr create -> scp -> connect -> run -> delete` flow.
 
 ## Validate the repository
@@ -23,7 +23,7 @@ checks explicitly from the repository root and investigate or record every
 non-zero result:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai thundercompute
+PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai llm
 PYTHONPATH=.:src aic/bin/python -m pytest -q
 CI=true npm --prefix frontend test -- --watchAll=false --runInBand
 npm --prefix frontend run build

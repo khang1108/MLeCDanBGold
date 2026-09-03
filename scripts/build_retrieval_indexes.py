@@ -417,7 +417,7 @@ def load_offline_config(
 def load_model_config(path: str | Path) -> Any:
     """Load the pinned Visual and shared evidence encoder configuration."""
 
-    from thundercompute.config import LLMServiceConfig
+    from llm.config import LLMServiceConfig
 
     config = LLMServiceConfig.from_yaml(path, section="models")
     for label, encoder in (
@@ -635,7 +635,7 @@ def create_remote_embedding_adapters(
     """Create checked remote adapters without deriving an endpoint from env vars."""
 
     from hcmai.common.config import InferenceConfig
-    from thundercompute.pipeline import LLMService
+    from llm.pipeline import LLMService
     from hcmai.retrieval.embedding.pipeline import EmbeddingService
 
     base_url = inference_url.strip()

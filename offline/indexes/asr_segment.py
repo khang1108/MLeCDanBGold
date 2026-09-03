@@ -14,18 +14,18 @@ from tempfile import mkdtemp
 
 import numpy as np
 import pandas as pd
-
 from hcmai.common.config import AppConfig
 from hcmai.common.utils.logging import get_logger
-from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
+from hcmai.retrieval.embedding.models.contracts import TextEmbeddingAdapter
+from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.retrieval.models import RetrievalSource
 from hcmai.retrieval.retriever.artifacts import fingerprint_files, publish_directory
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
-from offline.enrichment.transcripts.artifacts import load_transcript_artifact_records
+from llm.config import LLMServiceConfig
 from offline.enrichment.models import ProcessingStatus
+from offline.enrichment.transcripts.artifacts import load_transcript_artifact_records
 from offline.enrichment.transcripts.models import TranscriptSegment
 from offline.indexes.text import _encode_texts, _encoder_revision, _normalized
-from thundercompute.config import LLMServiceConfig
-from hcmai.retrieval.models import RetrievalSource
 
 logger = get_logger(__name__)
 
@@ -48,23 +48,21 @@ def build_segment_corpus(
         text = " ".join(segment.text.split())
         if not text:
             continue
-        rows.append(
-            {
-                "embedding_index": len(texts),
-                "segment_id": segment.segment_id,
-                "video_id": segment.video_id,
-                "segment_index": segment.segment_index,
-                "start_ms": segment.start_ms,
-                "end_ms": segment.end_ms,
-                "language": segment.language,
-                "speaker_id": segment.speaker_id,
-                "confidence": segment.confidence,
-                "status": segment.status.value,
-                "model_name": segment.model_name,
-                "model_revision": segment.model_revision,
-                "artifact_version": segment.artifact_version,
-            }
-        )
+        rows.append({
+            "embedding_index": len(texts),
+            "segment_id": segment.segment_id,
+            "video_id": segment.video_id,
+            "segment_index": segment.segment_index,
+            "start_ms": segment.start_ms,
+            "end_ms": segment.end_ms,
+            "language": segment.language,
+            "speaker_id": segment.speaker_id,
+            "confidence": segment.confidence,
+            "status": segment.status.value,
+            "model_name": segment.model_name,
+            "model_revision": segment.model_revision,
+            "artifact_version": segment.artifact_version,
+        })
         texts.append(text)
     if not texts:
         raise ValueError("Transcript artifact contains no usable completed segments")
@@ -121,7 +119,7 @@ def build_asr_segment_index(
 
 def build_asr_segment_artifacts(
     config_path: str | Path = "configs/baseline.yaml",
-    model_config_path: str | Path = "thundercompute/config.yaml",
+    model_config_path: str | Path = "llm/config.yaml",
     *,
     transcripts_path: str | Path | None = None,
     output_dir: str | Path | None = None,
@@ -161,14 +159,9 @@ def _transcript_source(value: str | Path | None) -> tuple[Path, tuple[Path, ...]
         raise ValueError("Transcript artifact path is not configured")
     path = Path(value)
     parquet_files = sorted(path.rglob("*.parquet")) if path.is_dir() else [path]
-    if (
-        not parquet_files
-        or any(
-            parquet.suffix != ".parquet"
-            or not parquet.is_file()
-            or parquet.stat().st_size == 0
-            for parquet in parquet_files
-        )
+    if not parquet_files or any(
+        parquet.suffix != ".parquet" or not parquet.is_file() or parquet.stat().st_size == 0
+        for parquet in parquet_files
     ):
         raise FileNotFoundError(f"Transcript artifact is not available at {path}")
     return path, transcript_lineage_files(path)
@@ -184,7 +177,7 @@ def _segment_encoder(
     encoder_config = models.resolved_evidence_embedding
     selected = encoder
     if selected is None and settings.inference.enabled:
-        from thundercompute.pipeline import LLMService
+        from llm.pipeline import LLMService
 
         base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
         service = LLMService.remote(base_url, settings.inference)

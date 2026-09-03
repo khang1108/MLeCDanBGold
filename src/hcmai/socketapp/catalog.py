@@ -1,4 +1,4 @@
-"""Safe, immutable-at-runtime catalog of local video files.
+"""Safe, immutable-at-runtime catalog of local HCMAI video files.
 
 The catalog owns video-ID-to-file resolution and path validation. It does not
 serve bytes, infer metadata from HCMAI frames, or fall back to YouTube. A JSON

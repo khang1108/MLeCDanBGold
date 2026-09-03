@@ -1,30 +1,24 @@
-"""Pipeline xây dựng Corpus (Tập dữ liệu).
-
-Module này định nghĩa quy trình tạo ra bộ corpus chính thức từ các video và frame đã xử lý.
-
-Các nhiệm vụ chính:
-1. Thu thập metadata: Tổng hợp thông tin từ các frame đã được trích xuất (metadata, timestamp).
-2. Liên kết Media: Đảm bảo các file ảnh và video gốc được ánh xạ đúng đường dẫn tuyệt đối.
-3. Chuẩn bị Indexing: Tạo cấu trúc chuẩn để các công cụ tìm kiếm (retrieval) có thể ingest dễ dàng."""
-
-from __future__ import annotations
+FRAME_ENRICHMENT_PARQUET = "frame_enrichment.parquet"
 
 import hashlib
 import json
 import logging
 import shutil
-from contextlib import contextmanager
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
+from time import perf_counter
+
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.io import atomic_write, read_json, write_json
+from hcmai.retrieval.models import RetrievalSource
 from offline.ingestion.corpus_build.config import S3CorpusPreparationConfig
 from offline.ingestion.corpus_build.publish import S3Publication
 from offline.ingestion.s3 import (
@@ -71,7 +65,7 @@ class PreparationPaths:
             raise ValueError("limit must be greater than zero")
         if offset is not None and offset < 0:
             raise ValueError("offset must be non-negative")
-            
+
         suffix_parts = []
         if limit is not None:
             suffix_parts.append(f"limit-{limit}")
@@ -129,9 +123,7 @@ class PreparationPaths:
         )
 
     @classmethod
-    def from_enrichment_job(
-        cls, config: S3CorpusPreparationConfig, job: Any
-    ) -> "PreparationPaths":
+    def from_enrichment_job(cls, config: S3CorpusPreparationConfig, job: Any) -> "PreparationPaths":
         """Align BTC-native orchestration paths with the enrichment contract."""
 
         artifacts = job.frame_store_output.parent
@@ -158,7 +150,7 @@ class PreparationPaths:
 
     @property
     def asr_enrichment_path(self) -> Path:
-        return self.asr_root / "frame_enrichment.parquet"
+        return self.asr_root / FRAME_ENRICHMENT_PARQUET
 
     @property
     def visual_embeddings_path(self) -> Path:
@@ -174,7 +166,7 @@ class PreparationPaths:
             RetrievalSource.OCR: self.ocr_root,
             RetrievalSource.ASR: self.asr_root,
         }
-        return roots[source] / "frame_enrichment.parquet"
+        return roots[source] / FRAME_ENRICHMENT_PARQUET
 
     def index_root(self, source: RetrievalSource) -> Path:
         return {
@@ -217,33 +209,52 @@ class PreparationCacheRun:
     duration_seconds: float
 
 
-
 class PreparationOperations(Protocol):
     """Existing stage services adapted to the shared S3 source lifecycle."""
 
-    def prepare_btc_frame_store(self) -> Path: ...
+    @staticmethod
+    def prepare_btc_frame_store() -> Path:
+        pass
 
-    def prepare_transcript(self, video: Path) -> Path: ...
+    @staticmethod
+    def prepare_transcript(video: Path) -> Path:
+        pass
 
-    def materialize_asr(self) -> Path: ...
+    @staticmethod
+    def materialize_asr() -> Path:
+        pass
 
-    def generate_caption(self) -> Path: ...
+    @staticmethod
+    def generate_caption() -> Path:
+        pass
 
-    def generate_ocr(self) -> Path: ...
+    @staticmethod
+    def generate_ocr() -> Path:
+        pass
 
-    def detect_objects(self) -> Path: ...
+    @staticmethod
+    def detect_objects() -> Path:
+        pass
 
-    def build_frame_context(self) -> Path: ...
+    @staticmethod
+    def build_frame_context() -> Path:
+        pass
 
-    def build_visual_index(self) -> Path: ...
+    @staticmethod
+    def build_visual_index() -> Path:
+        pass
 
-    def build_text_index(self, source: RetrievalSource) -> Path: ...
+    @staticmethod
+    def build_text_index(source: RetrievalSource) -> Path:
+        pass
 
-    def build_visual_artifacts(self) -> tuple[Path, Path]: ...
+    @staticmethod
+    def build_visual_artifacts() -> tuple[Path, Path]:
+        pass
 
-    def build_text_embeddings(
-        self, source: RetrievalSource
-    ) -> tuple[Path, Path]: ...
+    @staticmethod
+    def build_text_embeddings(source: RetrievalSource) -> tuple[Path, Path]:
+        pass
 
 
 class DefaultPreparationOperations:
@@ -257,20 +268,20 @@ class DefaultPreparationOperations:
         resume: bool,
         limit: int | None,
         enrichment_config: str | Path = "configs/prepare.yaml",
-        model_config: str | Path = "thundercompute/config.yaml",
+        model_config: str | Path = "llm/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
         dataset: Mapping[str, Any] | None = None,
         s3_client: Any | None = None,
     ) -> None:
         from hcmai.common.config import TranscriptJobConfig
+        from llm.config import LLMServiceConfig
         from offline.enrichment.caption.config import CaptionJobConfig
         from offline.enrichment.pipeline import EnrichmentJobConfig
-        from thundercompute.config import LLMServiceConfig
 
         storage = config.preprocessing.s3
         if storage is None:
             raise ValueError("Default preparation operations require S3 storage")
-        
+
         self.config = config
 
         self.storage = storage
@@ -296,7 +307,7 @@ class DefaultPreparationOperations:
             dataset=self.dataset,
         )
         self.model_config = LLMServiceConfig.from_yaml(self.model_config_path)
-        
+
         self._validate_model_pins()
         self._transcripts: Any | None = None
         self._text_encoder: Any | None = None
@@ -308,11 +319,9 @@ class DefaultPreparationOperations:
         if pool_config is None:
             return None
         if capability not in self._remote_pools:
-            from thundercompute.adapters.pool import InferenceClientPool
+            from llm.remote import InferenceClientPool
 
-            self._remote_pools[capability] = InferenceClientPool.from_config(
-                pool_config
-            )
+            self._remote_pools[capability] = InferenceClientPool.from_config(pool_config)
         return self._remote_pools[capability]
 
     def _validate_model_pins(self) -> None:
@@ -351,22 +360,19 @@ class DefaultPreparationOperations:
                 self.model_config.caption_embedding.revision,
                 pins.text_embedding.model_name,
                 pins.text_embedding.revision,
-            ),
-        }
+        ),}
 
         # Tìm các stage có version không khớp
         mismatched = [
             name
-            for name, (actual_name, actual_revision, name_pin, revision_pin)
-            in pairs.items()
+            for name, (actual_name, actual_revision, name_pin, revision_pin) in pairs.items()
             if (actual_name, actual_revision) != (name_pin, revision_pin)
         ]
 
         # Báo lỗi nếu phát hiện sai khác phiên bản
         if mismatched:
             raise ValueError(
-                "Preparation model pins differ from stage configuration: "
-                + ", ".join(mismatched)
+                "Preparation model pins differ from stage configuration: " + ", ".join(mismatched)
             )
 
     def _transcript_service(self) -> Any:
@@ -376,19 +382,17 @@ class DefaultPreparationOperations:
 
             pool = self._remote_pool("transcript")
             if pool is None:
-                self._transcripts = TranscriptService.from_job_config(
-                    self.transcript_job
-                )
+                self._transcripts = TranscriptService.from_job_config(self.transcript_job)
             else:
-                from offline.ingestion.corpus_build.audio import S3AudioReferenceProvider
                 from offline.enrichment.transcripts.adapters.remote import (
                     RemoteASRAdapter,
                     RemoteDiarizationAdapter,
                 )
+                from offline.ingestion.corpus_build.audio import S3AudioReferenceProvider
 
                 if self.s3_client is None:
                     raise RuntimeError("remote transcripts require an S3 client")
-                
+
                 run_id = getattr(self, "_current_run_id", "unbound")
                 self._audio_references = S3AudioReferenceProvider(
                     self.s3_client,
@@ -396,10 +400,8 @@ class DefaultPreparationOperations:
                     prefix=f"{self.storage.artifacts_prefix}/runs/{run_id}",
                     work_root=self.paths.state_root,
                 )
-                
-                asr = RemoteASRAdapter(
-                    pool, self.transcript_job.asr, self._audio_references
-                )
+
+                asr = RemoteASRAdapter(pool, self.transcript_job.asr, self._audio_references)
                 diarization = (
                     RemoteDiarizationAdapter(
                         pool,
@@ -409,7 +411,7 @@ class DefaultPreparationOperations:
                     if self.transcript_job.diarization.enabled
                     else None
                 )
-                
+
                 self._transcripts = TranscriptService(asr, diarization)
         return self._transcripts
 
@@ -423,9 +425,7 @@ class DefaultPreparationOperations:
             dataset=self.dataset,
         )
         if frames_path != self.paths.frames_path:
-            raise ValueError(
-                "BTC frame store path differs from the active enrichment contract"
-            )
+            raise ValueError("BTC frame store path differs from the active enrichment contract")
         return frames_path
 
     def prepare_transcript(self, video: Path) -> Path:
@@ -524,8 +524,7 @@ class DefaultPreparationOperations:
                     "image_size": caption.image_size,
                     "batch_size": caption.batch_size,
                     "effective_configuration": caption_config,
-                },
-            }
+            },}
         if stage == "ocr":
             return {
                 "dependencies": {**common, "configuration": ocr_config},
@@ -540,8 +539,7 @@ class DefaultPreparationOperations:
                     "dtype": ocr.dtype,
                     "batch_size": ocr.batch_size,
                     "runtime_settings": ocr_config,
-                },
-            }
+            },}
         if stage == "objects":
             return {
                 "dependencies": {
@@ -553,8 +551,7 @@ class DefaultPreparationOperations:
                     "frame_store_id": lineage,
                     "source": "yoloe",
                     **object_config,
-                },
-            }
+            },}
         if stage == "frame_context":
             serializer = {
                 "caption_token_budget": context.caption_token_budget,
@@ -577,8 +574,7 @@ class DefaultPreparationOperations:
                     "object_version": objects.artifact_version,
                     "frame_store_id": lineage,
                     "serializer_config": serializer,
-                },
-            }
+            },}
         return {}
 
     def generate_caption(self) -> Path:
@@ -605,7 +601,7 @@ class DefaultPreparationOperations:
             )
         finally:
             del adapter
-        return self.paths.caption_root / "frame_enrichment.parquet"
+        return self.paths.caption_root / FRAME_ENRICHMENT_PARQUET
 
     def generate_ocr(self) -> Path:
         from offline.enrichment.pipeline import EnrichmentService
@@ -629,7 +625,7 @@ class DefaultPreparationOperations:
             )
         finally:
             del adapter
-        return self.paths.ocr_root / "frame_enrichment.parquet"
+        return self.paths.ocr_root / FRAME_ENRICHMENT_PARQUET
 
     def detect_objects(self) -> Path:
         """Run YOLOE and publish object evidence through the public facade."""
@@ -664,7 +660,6 @@ class DefaultPreparationOperations:
     def build_visual_index(self) -> Path:
         import numpy as np
         import pandas as pd
-
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
         from hcmai.retrieval.retriever.dense.index import INDEX_FILENAME
         from offline.embeddings.pipeline import build_visual_artifacts
@@ -672,9 +667,7 @@ class DefaultPreparationOperations:
 
         pool = self._remote_pool("visual_embedding")
         encoder = (
-            EmbeddingService.create_remote_visual_adapter(
-                pool, self.model_config.visual_embedding
-            )
+            EmbeddingService.create_remote_visual_adapter(pool, self.model_config.visual_embedding)
             if pool is not None
             else None
         )
@@ -703,9 +696,7 @@ class DefaultPreparationOperations:
 
         pool = self._remote_pool("visual_embedding")
         encoder = (
-            EmbeddingService.create_remote_visual_adapter(
-                pool, self.model_config.visual_embedding
-            )
+            EmbeddingService.create_remote_visual_adapter(pool, self.model_config.visual_embedding)
             if pool is not None
             else None
         )
@@ -736,9 +727,7 @@ class DefaultPreparationOperations:
                     source="text",
                 )
                 if pool is not None
-                else EmbeddingService.create_text_adapter(
-                    self.model_config.caption_embedding
-                )
+                else EmbeddingService.create_text_adapter(self.model_config.caption_embedding)
             )
         build_text_artifacts(
             self.retrieval_config,
@@ -751,9 +740,7 @@ class DefaultPreparationOperations:
         )
         return self.paths.index_root(source) / INDEX_FILENAME
 
-    def build_text_embeddings(
-        self, source: RetrievalSource
-    ) -> tuple[Path, Path]:
+    def build_text_embeddings(self, source: RetrievalSource) -> tuple[Path, Path]:
         from hcmai.common.config import AppConfig
         from hcmai.retrieval.embedding.pipeline import EmbeddingService
         from offline.artifact_readers import (
@@ -774,9 +761,7 @@ class DefaultPreparationOperations:
                     source="text",
                 )
                 if pool is not None
-                else EmbeddingService.create_text_adapter(
-                    self.model_config.caption_embedding
-                )
+                else EmbeddingService.create_text_adapter(self.model_config.caption_embedding)
             )
         settings = AppConfig.from_yaml(self.retrieval_config)
         stores = {
@@ -809,7 +794,7 @@ class S3CorpusPreparationService:
         limit: int | None = None,
         offset: int | None = None,
         enrichment_config: str | Path = "configs/prepare.yaml",
-        model_config: str | Path = "thundercompute/config.yaml",
+        model_config: str | Path = "llm/config.yaml",
         retrieval_config: str | Path = "configs/baseline.yaml",
         paths: PreparationPaths | None = None,
         dataset: Mapping[str, Any] | None = None,
@@ -830,8 +815,7 @@ class S3CorpusPreparationService:
                 EnrichmentJobConfig.from_yaml(
                     enrichment_config,
                     dataset=self.dataset,
-                ),
-            )
+            ),)
         self.paths.state_root.mkdir(parents=True, exist_ok=True)
         self.client = client if client is not None else create_s3_client(storage)
         self.resume = resume
@@ -864,7 +848,7 @@ class S3CorpusPreparationService:
         # Kéo danh sách file từ S3 và tạo ID cho lần chạy này
         sources, run_id, inventory = self._sources_and_inventory()
         setattr(self.operations, "_current_run_id", run_id)
-        
+
         # Danh sách theo dõi tiến độ các stage
         completed: list[str] = []
         skipped: list[str] = []
@@ -879,7 +863,7 @@ class S3CorpusPreparationService:
             self._stage_outputs("frame_store"),
             skipped,
         )
-        
+
         asr_pending = self.config.stages.asr and self._pending(
             "asr",
             run_id,
@@ -887,7 +871,7 @@ class S3CorpusPreparationService:
             skipped,
             record_skip=False,
         )
-        
+
         if frame_pending:
             self.operations.prepare_btc_frame_store()
             self._complete_stage("frame_store", run_id)
@@ -897,31 +881,29 @@ class S3CorpusPreparationService:
         # only for timestamped ASR preparation.
         if asr_pending:
             logger.info("Starting ASR preparation stage...")
-            
+
             # Xử lý tuần tự từng video
-            for i, source in enumerate(
-                tqdm(sources, desc="Videos Processed", unit="video")
-            ):
+            for i, source in enumerate(tqdm(sources, desc="Videos Processed", unit="video")):
                 logger.info(
                     "Processing video %d/%d: %s",
                     i + 1,
                     len(sources),
                     source.video_id,
                 )
-                
+
                 # Quản lý vòng đời video: Tải tạm thời -> Decode -> Xoá file sau khi xong
                 with self._source_video(source) as video:
-                    
+
                     # Bước lấy Audio track từ Video phục vụ cho ASR
                     if asr_pending:
                         self.operations.prepare_transcript(video)
-                
+
             logger.info("Completed Video Frame & ASR Preparation Stage.")
 
         # =====================================================================
         # 3. STAGE 2: ENRICHMENT & INDEXING
         # =====================================================================
-        # Định nghĩa các stage phía sau theo định dạng: 
+        # Định nghĩa các stage phía sau theo định dạng:
         # (Tên stage, Điều kiện kích hoạt trong config, Hàm callback để thực thi)
         simple_stages = (
             ("caption", self.config.stages.caption, self.operations.generate_caption),
@@ -952,16 +934,15 @@ class S3CorpusPreparationService:
                 "asr_index",
                 self.config.stages.asr_index,
                 lambda: self.operations.build_text_index(RetrievalSource.ASR),
-            ),
-        )
-        
+        ),)
+
         # Chạy tuyến tính từng Enrichment Stage
         for stage_name, condition, executor in simple_stages:
-            
+
             # Nếu người dùng disable tính năng này trong config
             if not condition:
                 continue
-                
+
             # Kiểm tra xem stage này đã có marker báo đã xong chưa
             stage_pending = (
                 asr_pending
@@ -971,20 +952,19 @@ class S3CorpusPreparationService:
                     run_id,
                     self._stage_outputs(stage_name),
                     skipped,
-                )
-            )
-            
+            ))
+
             # Xử lý log "Skip" cho riêng ASR (để không in 2 lần do ASR gồm 2 bước: Audio Extract + Transcribe)
             if stage_name == "asr" and not stage_pending:
                 skipped.append("asr")
-                
+
             # Bắt đầu chạy nếu nó chưa hoàn thành
             if stage_pending:
-                logger.info(f"Starting enrichment stage: {stage_name.upper()}")
+                logger.info('Starting enrichment stage: {}', stage_name.upper())
                 executor()
                 self._complete_stage(stage_name, run_id)
                 completed.append(stage_name)
-                logger.info(f"Completed enrichment stage: {stage_name.upper()}")
+                logger.info('Completed enrichment stage: {}', stage_name.upper())
 
         publication = None
 
@@ -1000,8 +980,6 @@ class S3CorpusPreparationService:
 
     def cache_sources(self) -> PreparationCacheRun:
         """Download and verify the source inventory without running any model."""
-
-        from time import perf_counter
 
         started = perf_counter()
         sources, run_id, inventory = self._sources_and_inventory()
@@ -1019,9 +997,7 @@ class S3CorpusPreparationService:
                 partial = path.with_suffix(f"{path.suffix}.partial")
                 partial.unlink(missing_ok=True)
                 try:
-                    self.client.download_file(
-                        self.storage.bucket, source.key, str(partial)
-                    )
+                    self.client.download_file(self.storage.bucket, source.key, str(partial))
                     if partial.stat().st_size != source.size:
                         raise OSError(f"cached source size mismatch: {source.key}")
                     partial.replace(path)
@@ -1029,7 +1005,7 @@ class S3CorpusPreparationService:
                     partial.unlink(missing_ok=True)
                 downloaded += 1
             total += source.size
-        free_gib = shutil.disk_usage(root).free / (1024 ** 3)
+        free_gib = shutil.disk_usage(root).free / (1024**3)
         if free_gib < self.config.execution.minimum_free_gib_after_cache:
             raise OSError("source cache leaves less free disk than configured")
         return PreparationCacheRun(
@@ -1048,10 +1024,10 @@ class S3CorpusPreparationService:
     ) -> tuple[list[S3VideoObject], str, Path]:
         sources = list_video_objects(self.client, self.storage, limit=None)
         if self.offset is not None:
-            sources = sources[self.offset:]
+            sources = sources[self.offset :]
         if self.limit is not None:
-            sources = sources[:self.limit]
-            
+            sources = sources[: self.limit]
+
         run_id, inventory = self._record_inventory(sources)
         return sources, run_id, inventory
 
@@ -1066,9 +1042,7 @@ class S3CorpusPreparationService:
                 partial = path.with_suffix(f"{path.suffix}.partial")
                 partial.unlink(missing_ok=True)
                 try:
-                    self.client.download_file(
-                        self.storage.bucket, source.key, str(partial)
-                    )
+                    self.client.download_file(self.storage.bucket, source.key, str(partial))
                     if partial.stat().st_size != source.size:
                         raise OSError(f"cached source size mismatch: {source.key}")
                     partial.replace(path)
@@ -1084,13 +1058,12 @@ class S3CorpusPreparationService:
         sources: Sequence[S3VideoObject],
     ) -> tuple[str, Path]:
         """Lưu lại danh sách Video và tính toán mã băm SHA256 (Run ID).
-        
-        Mã băm này đóng vai trò là `frame_store_id` (Pipeline Fingerprint), 
+
+        Mã băm này đóng vai trò là `frame_store_id` (Pipeline Fingerprint),
         ngăn chặn việc nối ghép sai lệch dữ liệu nếu Config hoặc Inventory thay đổi.
         """
         objects = [
-            {**asdict(source), "source_version": source.source_version}
-            for source in sources
+            {**asdict(source), "source_version": source.source_version} for source in sources
         ]
         identity = {
             "pipeline_version": _PIPELINE_VERSION,
@@ -1102,8 +1075,7 @@ class S3CorpusPreparationService:
                 "bucket": self.storage.bucket,
                 "videos_prefix": self.storage.videos_prefix,
                 "objects": objects,
-            },
-        }
+        },}
         encoded = json.dumps(
             identity,
             ensure_ascii=False,
@@ -1138,7 +1110,7 @@ class S3CorpusPreparationService:
         record_skip: bool = True,
     ) -> bool:
         """State Machine Marker: Kiểm tra xem một Stage có cần chạy lại không.
-        
+
         Thay vì chỉ check `path.exists()`, hệ thống đối soát `run_id` trong marker
         và so khớp `file size` của các artifact, đảm bảo khả năng khôi phục (Resume)
         chính xác nhất ngay cả khi file bị xóa dở dang.
@@ -1156,12 +1128,9 @@ class S3CorpusPreparationService:
             ):
                 sizes = value.get("sizes", {})
                 if all(
-                    path.exists()
-                    and path.stat().st_size == sizes.get(str(path), -1)
+                    path.exists() and path.stat().st_size == sizes.get(str(path), -1)
                     for path in outputs
-                ) and self._stage_manifest_matches(
-                    stage, expected_identity["dependency_identity"]
-                ):
+                ) and self._stage_manifest_matches(stage, expected_identity["dependency_identity"]):
                     if record_skip:
                         skipped.append(stage)
                     return False
@@ -1175,12 +1144,8 @@ class S3CorpusPreparationService:
                 f"{stage} did not produce required outputs: " + ", ".join(missing)
             )
         identity = self._stage_marker_identity(stage, run_id)
-        if not self._stage_manifest_matches(
-            stage, identity["dependency_identity"]
-        ):
-            raise ValueError(
-                f"{stage} manifest does not match active stage identity"
-            )
+        if not self._stage_manifest_matches(stage, identity["dependency_identity"]):
+            raise ValueError(f"{stage} manifest does not match active stage identity")
         _atomic_json(
             self.paths.state_root / "stages" / f"{stage}.json",
             {
@@ -1190,12 +1155,9 @@ class S3CorpusPreparationService:
                 **identity,
                 "outputs": [str(path) for path in outputs],
                 "sizes": {str(path): path.stat().st_size for path in outputs if path.exists()},
-            },
-        )
+        },)
 
-    def _stage_marker_identity(
-        self, stage: str, run_id: str
-    ) -> dict[str, Any]:
+    def _stage_marker_identity(self, stage: str, run_id: str) -> dict[str, Any]:
         """Build one deterministic marker identity for the active stage."""
 
         provider = getattr(self.operations, "stage_dependency_identity", None)
@@ -1203,21 +1165,17 @@ class S3CorpusPreparationService:
         if not isinstance(raw, dict):
             raise TypeError("stage_dependency_identity must return a mapping")
         dependency_identity = _identity_value(raw)
-        fingerprint = _fingerprint(
-            {
-                "run_id": run_id,
-                "stage": stage,
-                "dependency_identity": dependency_identity,
-            }
-        )
+        fingerprint = _fingerprint({
+            "run_id": run_id,
+            "stage": stage,
+            "dependency_identity": dependency_identity,
+        })
         return {
             "dependency_identity": dependency_identity,
             "dependency_fingerprint": fingerprint,
         }
 
-    def _stage_manifest_matches(
-        self, stage: str, dependency_identity: Any
-    ) -> bool:
+    def _stage_manifest_matches(self, stage: str, dependency_identity: Any) -> bool:
         """Compare stable manifest fields with the active policy identity."""
 
         if not isinstance(dependency_identity, dict):
@@ -1228,9 +1186,7 @@ class S3CorpusPreparationService:
         if not isinstance(expected, dict):
             return False
         manifest_paths = [
-            path
-            for path in self._stage_outputs(stage)
-            if path.name == "manifest.json"
+            path for path in self._stage_outputs(stage) if path.name == "manifest.json"
         ]
         if len(manifest_paths) != 1 or not manifest_paths[0].is_file():
             return False
@@ -1244,14 +1200,14 @@ class S3CorpusPreparationService:
         caption_outputs = (
             self.paths.caption_root / "captions.parquet",
             self.paths.caption_root / "failures.json",
-            self.paths.caption_root / "frame_enrichment.parquet",
+            self.paths.caption_root / FRAME_ENRICHMENT_PARQUET,
             self.paths.caption_root / "manifest.json",
         )
         ocr_outputs = (
             self.paths.ocr_root / "frames.parquet",
             self.paths.ocr_root / "regions.parquet",
             self.paths.ocr_root / "failures.json",
-            self.paths.ocr_root / "frame_enrichment.parquet",
+            self.paths.ocr_root / FRAME_ENRICHMENT_PARQUET,
             self.paths.ocr_root / "ocr_report.json",
             self.paths.ocr_root / "manifest.json",
         )
@@ -1287,8 +1243,7 @@ class S3CorpusPreparationService:
                     self.paths.index_root(source) / "dense.index",
                 )
                 for source in _TEXT_SOURCES
-            },
-        }
+        },}
         return outputs[stage]
 
 
@@ -1335,8 +1290,11 @@ def _identity_subset(actual: Any, expected: Any) -> bool:
             for key, value in expected.items()
         )
     if isinstance(expected, list):
-        return isinstance(actual, list) and len(actual) == len(expected) and all(
-            _identity_subset(item, wanted)
-            for item, wanted in zip(actual, expected, strict=True)
-        )
+        return (
+            isinstance(actual, list)
+            and len(actual) == len(expected)
+            and all(
+                _identity_subset(item, wanted)
+                for item, wanted in zip(actual, expected, strict=True)
+        ))
     return type(actual) is type(expected) and actual == expected

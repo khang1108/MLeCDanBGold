@@ -1,4 +1,4 @@
-"""Render the standalone HTML player served by SocketApp.
+"""Render the standalone HTML player served by the HCMAI video router.
 
 The player owns browser-side playback state only. It seeks by an explicit
 non-negative ``timestamp_ms`` value after media metadata is loaded and reports

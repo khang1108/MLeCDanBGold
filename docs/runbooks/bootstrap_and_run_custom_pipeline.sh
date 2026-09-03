@@ -108,14 +108,14 @@ if [[ "$SKIP_INFERENCE_SERVER" != "1" ]]; then
     echo "==> inference gateway already responding at $HCMAI_INFERENCE_BASE_URL"
   else
     echo "==> starting local OCR inference gateway on $HCMAI_INFERENCE_BASE_URL"
-    HCMAI_LLM_CONFIG="thundercompute/config.yaml" \
+    HCMAI_LLM_CONFIG="llm/config.yaml" \
     HCMAI_ENABLE_CAPTION=false \
     HCMAI_ENABLE_OCR=true \
     HCMAI_ENABLE_ASR=false \
     HCMAI_ENABLE_VISUAL_EMBEDDING=false \
     HCMAI_ENABLE_CAPTION_EMBEDDING=false \
     HCMAI_ENABLE_RERANKER=false \
-    PYTHONPATH=.:src nohup aic/bin/python -m uvicorn thundercompute.server.api:app \
+    PYTHONPATH=.:src nohup aic/bin/python -m uvicorn llm.server.api:app \
       --host "$INFERENCE_HOST" --port "$INFERENCE_PORT" --workers 1 \
       >"$INFERENCE_LOG" 2>&1 &
     disown

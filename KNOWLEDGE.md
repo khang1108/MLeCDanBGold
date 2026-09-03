@@ -248,7 +248,7 @@ because ranking semantics are intentionally unchanged.
 
 **Date:** 2026-09-01
 **Problem:** Size one GPU for the resident SigLIP2 Base, BGE-M3, and
-Qwen3-VL-Reranker-2B services configured in `thundercompute/config.yaml`.
+Qwen3-VL-Reranker-2B services configured in `llm/config.yaml`.
 
 ### Sources
 

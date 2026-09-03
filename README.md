@@ -144,7 +144,7 @@ HCMAI_2026/
 │   ├── frame_store/           frames.parquet + manifest.json
 │   ├── enrichment/            captions, OCR, objects, context, transcripts
 │   └── indexes/               visual, context, asr_segments
-├── thundercompute/            shared inference service and config
+├── llm/                       shared inference service and config
 ├── tests/                     backend tests
 └── README.md
 ```
@@ -480,8 +480,8 @@ tnr connect "${INSTANCE_ID}"
 
 # Trên VM: cài pinned dependencies của package và chạy shared inference API.
 cd /home/ubuntu/hcmai
-HCMAI_LLM_CONFIG=thundercompute/config.yaml \
-PYTHONPATH=.:src python -m uvicorn thundercompute.server.api:app \
+HCMAI_LLM_CONFIG=llm/config.yaml \
+PYTHONPATH=.:src python -m uvicorn llm.server.api:app \
   --host 127.0.0.1 --port 8100 --workers 1
 
 # Khi xong, xóa instance để tránh phát sinh chi phí.
@@ -575,7 +575,7 @@ Repository hiện không có release-wrapper script. Chạy trực tiếp các g
 duy trì và xử lý mọi exit code khác `0` trước khi phát hành:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai thundercompute
+PYTHONPATH=.:src aic/bin/python -m compileall -q src/hcmai llm
 PYTHONPATH=.:src aic/bin/python -m pytest -q
 CI=true npm --prefix frontend test -- --watchAll=false --runInBand
 npm --prefix frontend run build
@@ -612,7 +612,7 @@ FrameStore phải resolve đến file đó.
 ### `reranker.batch_size` vượt quá 16
 
 Giới hạn contract hiện tại của hosted reranker là 16. Đặt
-`reranker.batch_size: 16` hoặc thấp hơn trong `thundercompute/config.yaml`, rồi restart
+`reranker.batch_size: 16` hoặc thấp hơn trong `llm/config.yaml`, rồi restart
 backend.
 
 ### Frontend báo không kết nối backend
@@ -629,8 +629,8 @@ backend.
 - [`scripts/README.md`](scripts/README.md): các CLI data/enrichment/index.
 - [`docs/runbooks/thundercompute-index-build.md`](docs/runbooks/thundercompute-index-build.md):
   build index và đồng bộ ThunderCompute.
-- [`thundercompute/README.md`](thundercompute/README.md):
+- [`llm/README.md`](llm/README.md):
   flow triển khai thủ công create/scp/SSH/delete và inference contracts.
 - [`configs/baseline.yaml`](configs/baseline.yaml): cấu hình serving/search.
 - [`configs/prepare.yaml`](configs/prepare.yaml): stage policies, S3 transport và model pins; dataset inputs truyền qua CLI.
-- [`thundercompute/config.yaml`](thundercompute/config.yaml): model checkpoint và reranker config.
+- [`llm/config.yaml`](llm/config.yaml): model checkpoint và reranker config.

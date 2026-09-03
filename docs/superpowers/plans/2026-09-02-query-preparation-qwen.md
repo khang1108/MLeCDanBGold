@@ -313,7 +313,7 @@ TRANSLATE: Translate each Vietnamese retrieval event to concise literal English.
 CANDIDATES: Return one literal English translation plus exactly five controlled English retrieval paraphrase bundles. Every bundle must preserve event count/order and all facts. Do not infer an unknown entity or replace X. Return JSON only.
 ```
 
-Use non-thinking/greedy decoding for translation; use non-thinking generation with temperature `0.6` for candidate diversity. Validate the decoded JSON before returning from Thundercompute.
+Use non-thinking/greedy decoding for translation; use non-thinking generation with temperature `0.6` for candidate diversity. Validate the decoded JSON before returning from llm.
 
 - [ ] **Step 5: Add the two FastAPI routes and gateway client methods**
 

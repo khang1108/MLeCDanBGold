@@ -287,7 +287,7 @@
 
   ```bash
   PYTHONPATH=.:src aic/bin/python -c \
-    'from thundercompute.config import LLMServiceConfig; LLMServiceConfig.from_yaml("thundercompute/config.yaml")'
+    'from llm.config import LLMServiceConfig; LLMServiceConfig.from_yaml("thundercompute/config.yaml")'
   ```
 
   Commit only provider/config/dependency/test files with:

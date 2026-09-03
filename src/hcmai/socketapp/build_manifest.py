@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
-"""Build an explicit SocketApp video manifest from a local video directory."""
+"""Build an explicit manifest for the integrated HCMAI video origin."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
-SCRIPT_ROOT = Path(__file__).resolve().parents[1]
-if str(SCRIPT_ROOT) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_ROOT))
-
-from socketapp.catalog import CatalogError, VideoCatalog
+from hcmai.socketapp.catalog import CatalogError, VideoCatalog
 
 
 def main(argv: list[str] | None = None) -> int:
     """Discover videos and atomically write a canonical-ID manifest."""
 
     parser = argparse.ArgumentParser(
-        description="Create a SocketApp JSON manifest from local video files."
+        description="Create an HCMAI source-video manifest from local files."
     )
     parser.add_argument("--video-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)

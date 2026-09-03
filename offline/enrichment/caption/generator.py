@@ -17,23 +17,24 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Sequence
 
-from hcmai.common.utils.io import read_json
 from hcmai.common.config import AppConfig
-from offline.enrichment.caption.artifacts import write_caption_artifacts
+from hcmai.common.utils.io import read_json
+from llm.pipeline import LLMService
+from offline.artifact_readers import FrameArtifactReader
 from offline.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
+from offline.enrichment.caption.artifacts import write_caption_artifacts
 from offline.enrichment.caption.config import (
-    DEFAULT_ENRICHMENT_CONFIG,
     CaptionConfig,
     CaptionJobConfig,
+    DEFAULT_ENRICHMENT_CONFIG,
     ENRICHMENT_VERSION,
 )
+
+from offline.enrichment.caption.models.contracts import CaptionAdapter
 from offline.enrichment.caption.report import build_manifest
 from offline.enrichment.caption.resume import guard_resume, resume_rows
 from offline.enrichment.caption.runner import run_batches
-from offline.enrichment.caption.models.contracts import CaptionAdapter
 from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
-from offline.artifact_readers import FrameArtifactReader
-from thundercompute.pipeline import LLMService
 
 
 def generate_captions(
@@ -50,10 +51,7 @@ def generate_captions(
     started, began, frames_path = datetime.now(timezone.utc), perf_counter(), Path(frames_path)
     root = Path(dataset_root).expanduser().resolve()
 
-    frames = [
-        asdict(frame)
-        for frame in FrameArtifactReader.load(frames_path).iter_frames()
-    ]
+    frames = [asdict(frame) for frame in FrameArtifactReader.load(frames_path).iter_frames()]
     order = [str(frame["frame_id"]) for frame in frames]
 
     if len(order) != len(set(order)):
@@ -69,9 +67,7 @@ def generate_captions(
 
     # Resume only from source caption evidence, never from the legacy view.
     guard_resume(captions_path, old, config, root, frame_store_id=frame_store_id)
-    rows, todo, skipped, retried = resume_rows(
-        frames, captions_path, config, frame_store_id
-    )
+    rows, todo, skipped, retried = resume_rows(frames, captions_path, config, frame_store_id)
     resolved_revision = captioner.resolve_revision()
     guard_resume(
         captions_path,
@@ -181,6 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     app_path = Path(args.app_config)
     settings = AppConfig.from_yaml(app_path) if app_path.is_file() else AppConfig()
+
     from offline.enrichment.caption.adapters.remote import RemoteCaptionAdapter
 
     service = LLMService.remote(

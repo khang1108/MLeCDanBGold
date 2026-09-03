@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from hcmai.query_preparation.service import QueryPreparationService
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
     from hcmai.retrieval.retriever.pipeline import RetrievalService
-    from thundercompute.pipeline import LLMService
+    from llm.pipeline import LLMService
 
 logger = get_logger(__name__)
 _UNSET = object()

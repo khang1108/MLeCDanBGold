@@ -545,7 +545,7 @@ def test_offline_index_cli_all_uses_explicit_remote_embedding_adapters(
     """Inject one checked remote SigLIP+BGE pair only when the CLI URL is set."""
 
     from hcmai.common.config import InferenceConfig
-    from thundercompute.pipeline import LLMService
+    from llm.pipeline import LLMService
     from hcmai.retrieval.embedding.pipeline import EmbeddingService
     from scripts import build_retrieval_indexes as workflow
 
@@ -679,7 +679,7 @@ def test_offline_index_cli_does_not_read_remote_url_from_environment(
 ) -> None:
     """Keep the no-flag workflow local even if another process set an endpoint."""
 
-    from thundercompute.pipeline import LLMService
+    from llm.pipeline import LLMService
     from scripts import build_retrieval_indexes as workflow
 
     events: list[str] = []
@@ -748,7 +748,7 @@ def test_remote_embedding_readiness_stops_before_preflight(
 ) -> None:
     """Fail before corpus work when the endpoint lacks the required BGE model."""
 
-    from thundercompute.pipeline import LLMService
+    from llm.pipeline import LLMService
     from scripts import build_retrieval_indexes as workflow
 
     events: list[str] = []

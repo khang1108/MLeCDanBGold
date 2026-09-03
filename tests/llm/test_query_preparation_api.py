@@ -6,15 +6,15 @@ import asyncio
 from typing import Any, cast
 
 import httpx
-from thundercompute.config import LLMServiceConfig
-from thundercompute.pipeline import LLMService
-from thundercompute.server.api import create_llm_app
+from llm.config import LLMServiceConfig
+from llm.pipeline import LLMService
+from llm.server.api import create_llm_app
 
 
 class FakeQueryPreparationRuntime:
     """Small injectable runtime that avoids loading GPU models."""
 
-    config = LLMServiceConfig.from_yaml("thundercompute/config.yaml")
+    config = LLMServiceConfig.from_yaml("llm/config.yaml")
     translation = ["a chef holds X", "the chef rolls X"]
 
     @staticmethod

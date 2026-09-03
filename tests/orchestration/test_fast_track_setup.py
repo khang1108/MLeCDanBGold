@@ -21,7 +21,7 @@ from hcmai.common.config import (
 )
 from hcmai.corpus.corpus import _CorpusFrameLoadError
 from hcmai.retrieval.models import RetrievalSource
-from thundercompute.config import LLMServiceConfig
+from llm.config import LLMServiceConfig
 from hcmai.orchestration import setup
 from hcmai.retrieval.retriever.pipeline import RetrievalService
 
@@ -289,33 +289,22 @@ def test_modern_index_paths_allow_environment_overrides(
     assert loaded_paths == [settings.index.path, override_context, override_asr]
 
 
-@pytest.mark.parametrize(
-    ("field", "value", "expected"),
-    [
-        ("schema_version", "dense-index-v1", "dense-index-v2"),
-        ("entity_kind", "segment", "entity_kind"),
-        ("retrieval_source", "caption", "retrieval_source"),
-        ("dataset_version", "other-dataset", "dataset version"),
-        ("model_name", "other/model", "model"),
-        ("model_revision", "other-revision", "revision"),
-    ],
-)
-def test_optional_incompatible_context_is_skipped_with_clear_warning(
+def test_legacy_context_metadata_does_not_block_runtime_loading(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    field: str,
-    value: str,
-    expected: str,
 ) -> None:
+    """Startup accepts usable legacy bundles without enforcing lineage fields."""
+
     settings = _modern_settings(tmp_path)
     metadata = _metadata(
-        model_name="evidence/model",
-        model_revision="evidence-revision",
+        model_name="legacy/model-label",
+        model_revision=None,
         dimension=1024,
         entity_kind="frame",
-        retrieval_source="context",
+        retrieval_source=None,
+        dataset_version="legacy-dataset-label",
+        schema_version="dense-index-v1",
     )
-    setattr(metadata, field, value)
     _install_modern_loaders(monkeypatch, settings, context_metadata=metadata)
     messages: list[str] = []
 
@@ -330,9 +319,10 @@ def test_optional_incompatible_context_is_skipped_with_clear_warning(
 
     assert cast(_LoadedService, service).active_sources == (
         RetrievalSource.VISUAL,
+        RetrievalSource.CONTEXT,
         RetrievalSource.ASR,
     )
-    assert any(expected in message for message in messages)
+    assert not messages
 
 
 def test_incompatible_asr_dimension_degrades_to_context(
@@ -585,11 +575,11 @@ def test_public_startup_selects_fast_track_once(
         monkeypatch.delenv(name, raising=False)
 
     settings = _modern_settings(tmp_path)
-    dotenv_calls: list[tuple[Path, bool]] = []
+    dotenv_calls: list[None] = []
     monkeypatch.setattr(
         setup,
-        "load_dotenv",
-        lambda path, *, override: dotenv_calls.append((path, override)),
+        "load_repository_environment",
+        lambda: dotenv_calls.append(None),
     )
     monkeypatch.setattr(setup, "_load_app_config", lambda: settings)
     monkeypatch.setattr(setup, "_load_model_config", _models)
@@ -632,4 +622,4 @@ def test_public_startup_selects_fast_track_once(
         RetrievalSource.ASR,
     )
     assert loaded_index_paths == [settings.index.path]
-    assert dotenv_calls == [(setup.REPOSITORY_ROOT / ".env", False)]
+    assert dotenv_calls == [None]

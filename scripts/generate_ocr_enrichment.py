@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = AppConfig.from_yaml(app_path) if app_path.is_file() else AppConfig()
     base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
     from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
-    from thundercompute.pipeline import LLMService
+    from llm.pipeline import LLMService
 
     service = LLMService.remote(base_url, settings.inference)
     engine = RemoteOCRAdapter(service, config)

@@ -22,13 +22,14 @@ from hcmai.api.routers import (
     create_search_router,
     create_system_router,
     create_trake_router,
+    create_video_router,
     create_workspace_router,
 )
+from hcmai.common.environment import load_repository_environment
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
-
-from hcmai.common.utils.logging import configure_logging, get_logger
-from hcmai.orchestration.pipeline import SearchService
+from hcmai.socketapp.catalog import VideoCatalog
+from hcmai.socketapp.config import video_settings_from_environment
 
 logger = get_logger(__name__)
 
@@ -51,11 +52,19 @@ def _configure_backend_logging() -> None:
 def create_app(
     search_service: SearchService | None = None,
     workspace_store: WorkspaceStore | None = None,
+    video_catalog: VideoCatalog | None = None,
 ) -> FastAPI:
-    """Create and configure the FastAPI application instance."""
+    """Create the API with optional injected search, workspace, and video stores."""
+
+    # The repository .env is the local runtime authority. Load it before any
+    # logging, CORS, workspace, video, or retrieval setting is resolved.
+    load_repository_environment()
+
     service_container: dict[str, Any] = {
         "service": search_service,
         "workspace_store": workspace_store,
+        "video_catalog": video_catalog,
+        "video_cache_control": "public, max-age=3600",
         "startup_messages": [],
     }
 
@@ -63,6 +72,21 @@ def create_app(
     async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         _configure_backend_logging()
         logger.info("Backend startup started")
+        if service_container["video_catalog"] is None:
+            video_settings = video_settings_from_environment()
+            if video_settings is not None:
+                service_container["video_catalog"] = VideoCatalog(
+                    video_settings.video_root,
+                    video_settings.manifest,
+                    allow_empty=video_settings.allow_empty,
+                )
+                service_container["video_cache_control"] = (
+                    video_settings.cache_control
+                )
+                logger.info(
+                    "Local video catalog loaded videos=%d",
+                    len(service_container["video_catalog"]),
+                )
         if service_container["workspace_store"] is None:
             workspace_path = os.getenv("HCMAI_WORKSPACE_DB")
             if workspace_path:
@@ -129,6 +153,14 @@ def create_app(
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[
+            "Accept-Ranges",
+            "Content-Length",
+            "Content-Range",
+            "Content-Type",
+            "ETag",
+            "Last-Modified",
+        ],
     )
     logger.info("Initializing FastAPI application for the backend service.")
 
@@ -138,6 +170,7 @@ def create_app(
     app.include_router(create_trake_router(service_container))
     app.include_router(create_frames_router(service_container))
     app.include_router(create_workspace_router(service_container))
+    app.include_router(create_video_router(service_container))
 
     return app
 

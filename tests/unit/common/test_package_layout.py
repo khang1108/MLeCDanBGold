@@ -36,7 +36,7 @@ def test_canonical_grouped_import_paths_are_available(module_name: str) -> None:
         "hcmai.temporal.aligners.monotonic_dp",
         "hcmai.temporal.settings",
         "hcmai.temporal.service",
-        "thundercompute.adapters.vqa",
+        "llm.adapters.vqa",
     ],
 )
 def test_retired_package_paths_are_unavailable(module_name: str) -> None:

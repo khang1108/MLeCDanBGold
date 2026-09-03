@@ -33,7 +33,7 @@ corpus/          read-only canonical frames, evidence, and asset resolution
 retrieval/       query encoding, index loading/search, fusion, and ranking
 temporal/        query planning and ordered temporal alignment
 orchestration/   application composition and thin KIS/TRAKE workflows
-thundercompute/  model gateway contracts and adapters
+llm/             model gateway contracts and adapters
 ```
 
 Offline construction ownership is documented in

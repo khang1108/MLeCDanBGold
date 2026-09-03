@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from offline.enrichment.inference_contracts import InferenceReadiness
-from thundercompute.adapters.pool import InferenceClientPool
+from llm.remote.pool import InferenceClientPool
 
 
 class FakeClient:

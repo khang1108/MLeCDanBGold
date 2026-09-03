@@ -9,18 +9,21 @@ from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Iterator
 from pathlib import Path
 from tempfile import mkdtemp
-from collections.abc import Iterator
 from typing import Any, Protocol
 
 import numpy as np
 import pandas as pd
-from tqdm.auto import tqdm
-
 from hcmai.common.config import AppConfig
-from hcmai.retrieval.models import RetrievalSource
 from hcmai.common.utils.logging import get_logger
+from hcmai.retrieval.embedding.models.contracts import TextEmbeddingAdapter
+from hcmai.retrieval.embedding.pipeline import EmbeddingService
+from hcmai.retrieval.models import RetrievalSource
+from hcmai.retrieval.retriever.artifacts import fingerprint_files, publish_directory
+from hcmai.retrieval.retriever.dense.index import DenseIndex
+from llm.pipeline import LLMService, LLMServiceConfig
 from offline.artifact_readers import (
     ASRArtifactReader,
     CaptionArtifactReader,
@@ -30,10 +33,8 @@ from offline.artifact_readers import (
     assert_frame_identity,
     assert_matching_lineage,
 )
-from hcmai.retrieval.embedding.pipeline import EmbeddingService, TextEmbeddingAdapter
-from hcmai.retrieval.retriever.artifacts import fingerprint_files, publish_directory
-from hcmai.retrieval.retriever.dense.index import DenseIndex
-from thundercompute.pipeline import LLMServiceConfig
+
+from tqdm.auto import tqdm
 
 logger = get_logger(__name__)
 _TEXT_SOURCES = {
@@ -55,23 +56,26 @@ class _FrameIdentity(Protocol):
 class _FrameLookup(Protocol):
     """Canonical frame lookup needed by an offline frame-native index join."""
 
-    def get(self, frame_id: str) -> _FrameIdentity:
+    @staticmethod
+    def get(frame_id: str) -> _FrameIdentity:
         """Return one canonical frame for an exact internal identity."""
 
 
 class _TextEvidenceLookup(Protocol):
     """Completed text and row iteration required by one specialist index join."""
 
-    def get_text(self, frame_id: str) -> str | None:
+    @staticmethod
+    def get_text(frame_id: str) -> str | None:
         """Return usable text for one exact canonical frame identity."""
 
-    def iter_records(self) -> Iterator[_FrameIdentity]:
+    @staticmethod
+    def iter_records() -> Iterator[_FrameIdentity]:
         """Iterate every persisted specialist row in deterministic order."""
 
 
 def build_text_artifacts(
     config_path: str | Path = "configs/baseline.yaml",
-    model_config_path: str | Path = "thundercompute/config.yaml",
+    model_config_path: str | Path = "llm/config.yaml",
     *,
     source: RetrievalSource = RetrievalSource.CAPTION,
     enrichment_path: str | Path | None = None,
@@ -114,7 +118,7 @@ def build_text_artifacts(
 
 def build_context_artifacts(
     config_path: str | Path = "configs/baseline.yaml",
-    model_config_path: str | Path = "thundercompute/config.yaml",
+    model_config_path: str | Path = "llm/config.yaml",
     *,
     context_path: str | Path | None = None,
     frames_path: str | Path | None = None,
@@ -169,9 +173,7 @@ def build_text_index(
     texts, mapping = _text_corpus(frames, evidence, source)
     vectors = _normalized(_encode_texts(texts, encoder, source))
     if len(vectors) != len(mapping):
-        raise ValueError(
-            f"Text encoder returned {len(vectors)} vectors for {len(mapping)} texts"
-        )
+        raise ValueError(f"Text encoder returned {len(vectors)} vectors for {len(mapping)} texts")
     index = DenseIndex.build(
         vectors,
         mapping,
@@ -241,7 +243,6 @@ def _text_encoder(
 
     selected = encoder
     if selected is None and settings.inference.enabled:
-        from thundercompute.pipeline import LLMService
 
         base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
         service = LLMService.remote(base_url, settings.inference)
@@ -255,7 +256,7 @@ def _text_encoder(
         selected = EmbeddingService.create_text_adapter(models.caption_embedding)
     if selected.config.model_name != models.caption_embedding.model_name:
         raise ValueError(
-            "Text encoder does not match thundercompute/config.yaml: "
+            "Text encoder does not match llm/config.yaml: "
             f"{selected.config.model_name!r} != {models.caption_embedding.model_name!r}"
         )
     return selected
@@ -319,7 +320,6 @@ def _context_encoder(
     encoder_config = models.resolved_evidence_embedding
     selected = encoder
     if selected is None and settings.inference.enabled:
-        from thundercompute.pipeline import LLMService
 
         base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
         service = LLMService.remote(base_url, settings.inference)
@@ -358,15 +358,13 @@ def _text_corpus(
         text = evidence.get_text(frame_id)
         if text is None:
             continue
-        mapping.append(
-            {
-                "frame_id": frame.frame_id,
-                "video_id": frame.video_id,
-                "frame_idx": frame.frame_idx,
-                "timestamp_ms": frame.timestamp_ms,
-                "embedding_index": len(texts),
-            }
-        )
+        mapping.append({
+            "frame_id": frame.frame_id,
+            "video_id": frame.video_id,
+            "frame_idx": frame.frame_idx,
+            "timestamp_ms": frame.timestamp_ms,
+            "embedding_index": len(texts),
+        })
         texts.append(text)
     if not texts:
         raise ValueError(f"{source.value} artifact contains no usable completed text")
@@ -390,15 +388,13 @@ def _context_corpus(
         text = contexts.get_text(context.frame_id)
         if text is None:
             continue
-        rows.append(
-            {
-                "frame_id": frame.frame_id,
-                "video_id": frame.video_id,
-                "frame_idx": frame.frame_idx,
-                "timestamp_ms": frame.timestamp_ms,
-                "embedding_index": len(texts),
-            }
-        )
+        rows.append({
+            "frame_id": frame.frame_id,
+            "video_id": frame.video_id,
+            "frame_idx": frame.frame_idx,
+            "timestamp_ms": frame.timestamp_ms,
+            "embedding_index": len(texts),
+        })
         texts.append(text)
     if not texts:
         raise ValueError("FrameContext artifact contains no usable context_text")

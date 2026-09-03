@@ -12,4 +12,10 @@ def test_filter_placeholder_is_removed_and_competition_routes_remain() -> None:
     }
 
     assert "/api/v1/filter" not in paths
-    assert {"/api/v1/search", "/api/v1/trake", "/api/v1/query-candidates"} <= paths
+    assert {
+        "/api/v1/search",
+        "/api/v1/trake",
+        "/api/v1/query-candidates",
+        "/api/v1/videos",
+        "/api/v1/videos/{video_id}/stream",
+    } <= paths

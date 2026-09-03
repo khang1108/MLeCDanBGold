@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from socketapp.catalog import CatalogError, VideoCatalog
+from hcmai.socketapp.catalog import CatalogError, VideoCatalog
 
 
 def test_manifest_maps_canonical_id_to_a_local_file(tmp_path: Path) -> None:
