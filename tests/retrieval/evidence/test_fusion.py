@@ -51,6 +51,33 @@ def test_visual_action_event_boosts_visual_components() -> None:
     assert weights["context_dense"] > AdaptiveTemporalFusionConfig().base_component_weights["context_dense"]
 
 
+def test_token_boundary_prevents_accidental_substring_matches() -> None:
+    """Substrings like 'xem' or 'design' must not trigger 'xe' or 'sign' cues."""
+
+    router = EventModalityRouter(AdaptiveTemporalFusionConfig())
+    # "xem" contains "xe", "design" contains "sign"
+    weights = router.multipliers(
+        "Khán giả đang xem một tiết mục.",
+        "The audience watches a design performance.",
+    )
+    base = AdaptiveTemporalFusionConfig().base_component_weights
+    # Neither visual action cue 'xe' nor OCR cue 'sign' should trigger!
+    assert weights["visual_dense"] == base["visual_dense"]
+    assert weights["bm25_ocr"] == base["bm25_ocr"]
+
+
+def test_generic_question_intent_does_not_trigger_cues() -> None:
+    """Events without modality cues retain default base component weights."""
+
+    router = EventModalityRouter(AdaptiveTemporalFusionConfig())
+    weights = router.multipliers(
+        "Sự việc diễn ra vào thời điểm nào?",
+        "At what time does the event take place?",
+    )
+    base = AdaptiveTemporalFusionConfig().base_component_weights
+    assert weights == base
+
+
 def test_fusion_renormalizes_when_asr_has_no_frame_coverage() -> None:
     """When ASR has no coverage on a frame, remaining components renormalize to 1.0."""
 

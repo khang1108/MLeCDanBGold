@@ -10,6 +10,9 @@ locally over modalities actually available and covering each frame.
 from __future__ import annotations
 
 from collections.abc import Sequence
+import re
+from typing import Literal
+import unicodedata
 import numpy as np
 
 from hcmai.common.config import AdaptiveTemporalFusionConfig
@@ -32,6 +35,14 @@ VISUAL_CUES: tuple[str, ...] = (
     "mặc", "cầm", "đặt", "đứng", "ngồi", "chạy", "xe", "đĩa", "màu",
     "wearing", "holds", "places", "stands", "sits", "runs", "plate", "color",
 )
+
+
+def _cue_matches(text: str, tokens: set[str], cue: str) -> bool:
+    """Match single-word cues on token boundaries, and multi-word cues as exact phrases."""
+    cue_clean = " ".join(cue.strip().lower().split())
+    if " " in cue_clean:
+        return f" {cue_clean} " in f" {text} "
+    return cue_clean in tokens
 
 
 class EventModalityRouter:
@@ -59,19 +70,22 @@ class EventModalityRouter:
         if not self.config.event_routing:
             return weights
 
-        combined = f"{original_event.lower()} {retrieval_event.lower()}"
+        raw_combined = f"{original_event} {retrieval_event}"
+        normalized = unicodedata.normalize("NFKC", raw_combined).lower()
+        cleaned_text = " ".join(re.sub(r"[^\w\s]", " ", normalized).split())
+        tokens = set(cleaned_text.split())
 
-        if any(cue in combined for cue in SPEECH_CUES):
+        if any(_cue_matches(cleaned_text, tokens, cue) for cue in SPEECH_CUES):
             if "asr_dense" in weights:
                 weights["asr_dense"] *= self.config.speech_boost
             if "bm25_asr" in weights:
                 weights["bm25_asr"] *= self.config.speech_boost
 
-        if any(cue in combined for cue in OCR_CUES):
+        if any(_cue_matches(cleaned_text, tokens, cue) for cue in OCR_CUES):
             if "bm25_ocr" in weights:
                 weights["bm25_ocr"] *= self.config.ocr_boost
 
-        if any(cue in combined for cue in VISUAL_CUES):
+        if any(_cue_matches(cleaned_text, tokens, cue) for cue in VISUAL_CUES):
             if "visual_dense" in weights:
                 weights["visual_dense"] *= self.config.visual_boost
             if "context_dense" in weights:
