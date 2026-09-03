@@ -101,4 +101,69 @@ describe('DatabasePage Component', () => {
       expect(screen.getByText(/Workspace database is not configured/)).toBeTruthy();
     });
   });
+
+  test('executes SQL query and renders custom result rows in DataGrid', async () => {
+    dbApi.fetchDatabaseTables.mockResolvedValueOnce(mockTables);
+    dbApi.fetchDatabaseRows.mockResolvedValueOnce(mockRows);
+    dbApi.executeDatabaseQuery.mockResolvedValueOnce({
+      query: 'SELECT user_id, count(*) as count FROM query_history GROUP BY user_id',
+      columns: ['user_id', 'count'],
+      rows: [{ user_id: 'user-1', count: 2 }],
+      rows_affected: 0,
+      execution_time_ms: 2.1,
+      is_mutation: false,
+    });
+
+    render(<DatabasePage isActive={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('query_history (2 rows)')).toBeTruthy();
+    });
+
+    const textarea = screen.getByPlaceholderText(/SELECT \* FROM/i);
+    fireEvent.change(textarea, {
+      target: { value: 'SELECT user_id, count(*) as count FROM query_history GROUP BY user_id' },
+    });
+
+    fireEvent.click(screen.getByText('Execute SQL'));
+
+    await waitFor(() => {
+      expect(screen.getByText('user-1')).toBeTruthy();
+      expect(screen.getByText(/2\.1 ms/)).toBeTruthy();
+    });
+
+    expect(dbApi.executeDatabaseQuery).toHaveBeenCalledWith(
+      'SELECT user_id, count(*) as count FROM query_history GROUP BY user_id',
+    );
+  });
+
+  test('executes SQL mutation query and reloads tables', async () => {
+    dbApi.fetchDatabaseTables.mockResolvedValue(mockTables);
+    dbApi.fetchDatabaseRows.mockResolvedValue(mockRows);
+    dbApi.executeDatabaseQuery.mockResolvedValueOnce({
+      query: 'DELETE FROM submission_files',
+      columns: [],
+      rows: [],
+      rows_affected: 1,
+      execution_time_ms: 1.0,
+      is_mutation: true,
+    });
+
+    render(<DatabasePage isActive={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('query_history (2 rows)')).toBeTruthy();
+    });
+
+    const textarea = screen.getByPlaceholderText(/SELECT \* FROM/i);
+    fireEvent.change(textarea, { target: { value: 'DELETE FROM submission_files' } });
+    fireEvent.click(screen.getByText('Execute SQL'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/1 row\(s\) affected/i)).toBeTruthy();
+    });
+
+    expect(dbApi.fetchDatabaseTables).toHaveBeenCalledTimes(2);
+  });
 });
+

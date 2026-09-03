@@ -4,6 +4,7 @@ import TableSelector from './TableSelector';
 import TableMetadata from './TableMetadata';
 import DataGrid from './DataGrid';
 import PaginationControls from './PaginationControls';
+import SqlQueryEditor from './SqlQueryEditor';
 
 describe('Database Sub-Components (No Icons, Plain Text UI)', () => {
   test('TableSelector renders table list and invokes onSelectTable on click', () => {
@@ -90,4 +91,37 @@ describe('Database Sub-Components (No Icons, Plain Text UI)', () => {
     fireEvent.change(select, { target: { value: '50' } });
     expect(onChangePageSize).toHaveBeenCalledWith(50);
   });
+
+  test('SqlQueryEditor triggers onExecute when clicking Execute SQL button', () => {
+    const onExecute = jest.fn();
+    render(<SqlQueryEditor onExecute={onExecute} isExecuting={false} />);
+
+    const textarea = screen.getByPlaceholderText(/SELECT \* FROM/i);
+    fireEvent.change(textarea, { target: { value: 'SELECT * FROM query_history' } });
+
+    const executeBtn = screen.getByText('Execute SQL');
+    expect(executeBtn.disabled).toBe(false);
+
+    fireEvent.click(executeBtn);
+    expect(onExecute).toHaveBeenCalledWith('SELECT * FROM query_history');
+  });
+
+  test('SqlQueryEditor displays execution stats and error', () => {
+    const { rerender } = render(
+      <SqlQueryEditor
+        onExecute={jest.fn()}
+        stats={{ execution_time_ms: 3.5, rows_count: 5, is_mutation: false }}
+      />
+    );
+    expect(screen.getByText(/5 row\(s\) returned in 3.5 ms/i)).toBeTruthy();
+
+    rerender(
+      <SqlQueryEditor
+        onExecute={jest.fn()}
+        error="near syntax error"
+      />
+    );
+    expect(screen.getByText(/near syntax error/i)).toBeTruthy();
+  });
 });
+

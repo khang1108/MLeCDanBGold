@@ -26,9 +26,20 @@ def _request(app, path: str) -> httpx.Response:
     return asyncio.run(send())
 
 
+def _post_json(app, path: str, json_data: dict) -> httpx.Response:
+    """Send one POST request with JSON body through ASGI without starting app lifespan."""
+
+    async def send() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.post(path, json=json_data)
+
+    return asyncio.run(send())
+
+
 @pytest.fixture
-def database_app(tmp_path):
-    """Create a populated temporary SQLite store behind the production router."""
+def workspace_store(tmp_path):
+    """Create a populated temporary SQLite store."""
 
     store = WorkspaceStore(tmp_path / "workspace.sqlite3")
     store.create_history(
@@ -40,7 +51,50 @@ def database_app(tmp_path):
         )
     )
     store.create_submission_file("answer.csv", "L21_V001,90")
-    return create_app(workspace_store=store)
+    return store
+
+
+@pytest.fixture
+def database_app(workspace_store):
+    """Create a populated temporary SQLite store behind the production router."""
+
+    return create_app(workspace_store=workspace_store)
+
+
+def test_workspace_store_executes_select_query(workspace_store) -> None:
+    """Execute SELECT query and verify columns, rows, and timing."""
+
+    result = workspace_store.execute_query(
+        "SELECT query_id, user_id FROM query_history WHERE query_id = 'query-1'"
+    )
+    assert result.columns == ["query_id", "user_id"]
+    assert len(result.rows) == 1
+    assert result.rows[0]["query_id"] == "query-1"
+    assert result.is_mutation is False
+    assert result.execution_time_ms >= 0.0
+
+
+def test_workspace_store_executes_mutation_query(workspace_store) -> None:
+    """Execute INSERT and verify rows_affected and persistence."""
+
+    result = workspace_store.execute_query(
+        "INSERT INTO submission_files (name, content, is_validated, revision) VALUES ('test.csv', 'data', 0, 1)"
+    )
+    assert result.is_mutation is True
+    assert result.rows_affected == 1
+
+    select_result = workspace_store.execute_query(
+        "SELECT name FROM submission_files WHERE name = 'test.csv'"
+    )
+    assert len(select_result.rows) == 1
+
+
+def test_workspace_store_raises_on_invalid_syntax(workspace_store) -> None:
+    """Invalid syntax raises ValueError with SQLite error detail."""
+
+    with pytest.raises(ValueError, match="syntax error"):
+        workspace_store.execute_query("SELCT * FROM query_history")
+
 
 
 def test_database_tables_exposes_only_application_tables(database_app) -> None:
@@ -95,3 +149,45 @@ def test_database_router_reports_missing_sqlite_configuration() -> None:
     response = _request(create_app(), "/api/v1/database/tables")
 
     assert response.status_code == 503
+
+
+def test_database_execute_endpoint_select(database_app) -> None:
+    """Endpoint handles SELECT queries successfully."""
+
+    response = _post_json(
+        database_app,
+        "/api/v1/database/execute",
+        {"query": "SELECT query_id FROM query_history", "max_rows": 10},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["columns"] == ["query_id"]
+    assert len(payload["rows"]) == 1
+    assert payload["is_mutation"] is False
+
+
+def test_database_execute_endpoint_mutation(database_app) -> None:
+    """Endpoint handles mutation queries and reports rows_affected."""
+
+    response = _post_json(
+        database_app,
+        "/api/v1/database/execute",
+        {"query": "INSERT INTO submission_files (name, content, is_validated, revision) VALUES ('ep.csv', 'x', 0, 1)"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["is_mutation"] is True
+    assert payload["rows_affected"] == 1
+
+
+def test_database_execute_endpoint_syntax_error(database_app) -> None:
+    """Endpoint returns HTTP 400 on SQLite syntax error."""
+
+    response = _post_json(
+        database_app,
+        "/api/v1/database/execute",
+        {"query": "SELCT * FROM query_history"},
+    )
+    assert response.status_code == 400
+    assert "syntax error" in response.json()["detail"]
+

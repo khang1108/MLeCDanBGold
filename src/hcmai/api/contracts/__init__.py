@@ -2,6 +2,8 @@
 
 from .database import (
     DatabaseColumn,
+    DatabaseQueryRequest,
+    DatabaseQueryResponse,
     DatabaseRowsPage,
     DatabaseTable,
     DatabaseTableList,
@@ -35,6 +37,8 @@ from .trake import TRAKEPath, TRAKERequest, TRAKEResponse
 __all__ = [
     "CatalogTranscriptSegment",
     "DatabaseColumn",
+    "DatabaseQueryRequest",
+    "DatabaseQueryResponse",
     "DatabaseRowsPage",
     "DatabaseTable",
     "DatabaseTableList",

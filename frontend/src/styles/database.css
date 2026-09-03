@@ -203,3 +203,128 @@
   font-size: 0.875rem;
   color: var(--color-ink);
 }
+
+.db-btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.db-btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-active);
+  border-color: var(--color-primary-active);
+}
+
+/* SQL Query Editor Console */
+.db-sql-editor {
+  background: #ffffff;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.db-sql-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.db-sql-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.db-sql-hint {
+  font-size: 0.75rem;
+  color: var(--color-ink-faint);
+}
+
+.db-sql-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-xs);
+  padding: 8px 12px;
+  font-family: monospace, var(--font-family);
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  resize: vertical;
+  min-height: 72px;
+}
+
+.db-sql-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.db-sql-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.db-sql-buttons {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.db-sql-stats {
+  font-size: 0.8125rem;
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+.db-sql-error {
+  font-size: 0.8125rem;
+  color: var(--color-danger);
+  background: #fffafa;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--rounded-xs);
+  padding: 6px 10px;
+}
+
+/* Custom Query Results View */
+.db-custom-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.db-custom-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  background: #fafafa;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  padding: 8px 12px;
+}
+
+.db-custom-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.db-custom-title code {
+  font-family: monospace;
+  background: #ffffff;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-xs);
+  padding: 2px 6px;
+  font-size: 0.8125rem;
+  color: var(--color-primary-active);
+}
+
+

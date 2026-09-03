@@ -51,9 +51,34 @@ class DatabaseRowsPage(BaseModel):
     rows: list[dict[str, JsonValue]] = Field(default_factory=list)
 
 
+class DatabaseQueryRequest(BaseModel):
+    """Input payload for executing an arbitrary SQL query."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1)
+    max_rows: int = Field(default=100, ge=1, le=500)
+
+
+class DatabaseQueryResponse(BaseModel):
+    """Execution output from a raw SQL query."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str
+    columns: list[str] = Field(default_factory=list)
+    rows: list[dict[str, JsonValue]] = Field(default_factory=list)
+    rows_affected: int = 0
+    execution_time_ms: float = Field(ge=0.0)
+    is_mutation: bool = False
+
+
 __all__ = [
     "DatabaseColumn",
+    "DatabaseQueryRequest",
+    "DatabaseQueryResponse",
     "DatabaseRowsPage",
     "DatabaseTable",
     "DatabaseTableList",
 ]
+

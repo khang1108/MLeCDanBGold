@@ -12,9 +12,11 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
+import time
 
 from hcmai.api.contracts.database import (
     DatabaseColumn,
+    DatabaseQueryResponse,
     DatabaseRowsPage,
     DatabaseTable,
 )
@@ -229,6 +231,50 @@ class WorkspaceStore:
             total_rows=total_rows,
             total_pages=(total_rows + page_size - 1) // page_size,
             rows=[dict(row) for row in rows],
+        )
+
+
+    def execute_query(
+        self,
+        query: str,
+        *,
+        max_rows: int = 100,
+    ) -> DatabaseQueryResponse:
+        """Execute an arbitrary raw SQL query against workspace SQLite."""
+
+        cleaned_query = query.strip()
+        if not cleaned_query:
+            raise ValueError("SQL query cannot be empty")
+        if max_rows < 1:
+            raise ValueError("max_rows must be at least 1")
+
+        start_time = time.perf_counter()
+        try:
+            with self._connection() as connection:
+                cursor = connection.execute(cleaned_query)
+                if cursor.description is not None:
+                    columns = [col[0] for col in cursor.description]
+                    fetched_rows = cursor.fetchmany(max_rows)
+                    rows = [dict(row) for row in fetched_rows]
+                    is_mutation = False
+                    rows_affected = 0
+                else:
+                    columns = []
+                    rows = []
+                    is_mutation = True
+                    rows_affected = cursor.rowcount if cursor.rowcount >= 0 else 0
+        except sqlite3.Error as error:
+            raise ValueError(f"SQLite execution failed: {error}") from error
+
+        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 3)
+
+        return DatabaseQueryResponse(
+            query=cleaned_query,
+            columns=columns,
+            rows=rows,
+            rows_affected=rows_affected,
+            execution_time_ms=execution_time_ms,
+            is_mutation=is_mutation,
         )
 
 

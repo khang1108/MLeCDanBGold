@@ -1,4 +1,4 @@
-import { fetchDatabaseTables, fetchDatabaseRows } from './database';
+import { fetchDatabaseTables, fetchDatabaseRows, executeDatabaseQuery } from './database';
 
 jest.mock('./client', () => {
   const actual = jest.requireActual('./client');
@@ -51,3 +51,29 @@ test('fetchDatabaseRows validates required tableName', async () => {
   await expect(fetchDatabaseRows('')).rejects.toThrow('tableName is required');
   expect(requestJson).not.toHaveBeenCalled();
 });
+
+test('executeDatabaseQuery sends POST /api/v1/database/execute', async () => {
+  const mockResponse = {
+    query: 'SELECT 1',
+    columns: ['1'],
+    rows: [{ '1': 1 }],
+    rows_affected: 0,
+    execution_time_ms: 1.5,
+    is_mutation: false,
+  };
+  requestJson.mockResolvedValueOnce(mockResponse);
+
+  const result = await executeDatabaseQuery('SELECT 1', { maxRows: 50 });
+  expect(requestJson).toHaveBeenCalledWith('/api/v1/database/execute', {
+    method: 'POST',
+    body: { query: 'SELECT 1', max_rows: 50 },
+    signal: undefined,
+  });
+  expect(result).toEqual(mockResponse);
+});
+
+test('executeDatabaseQuery rejects blank query', async () => {
+  await expect(executeDatabaseQuery('   ')).rejects.toThrow('query is required');
+  expect(requestJson).not.toHaveBeenCalled();
+});
+

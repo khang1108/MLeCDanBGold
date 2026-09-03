@@ -20,3 +20,20 @@ export const fetchDatabaseRows = async (tableName, { page = 1, pageSize = 25, si
   const path = `/api/v1/database/tables/${encodeURIComponent(tableName.trim())}/rows?${searchParams.toString()}`;
   return requestJson(path, { signal });
 };
+
+/** Execute an arbitrary raw SQL query on the workspace database. */
+export const executeDatabaseQuery = async (query, { maxRows = 100, signal } = {}) => {
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    throw new Error('query is required and must be a non-empty string');
+  }
+
+  return requestJson('/api/v1/database/execute', {
+    method: 'POST',
+    body: {
+      query: query.trim(),
+      max_rows: Math.min(500, Math.max(1, Math.floor(maxRows))),
+    },
+    signal,
+  });
+};
+

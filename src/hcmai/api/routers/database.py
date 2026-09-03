@@ -11,7 +11,12 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.concurrency import run_in_threadpool
 
-from hcmai.api.contracts import DatabaseRowsPage, DatabaseTableList
+from hcmai.api.contracts import (
+    DatabaseQueryRequest,
+    DatabaseQueryResponse,
+    DatabaseRowsPage,
+    DatabaseTableList,
+)
 from hcmai.api.history import WorkspaceStore
 
 
@@ -59,6 +64,22 @@ def create_database_router(service_container: dict[str, Any]) -> APIRouter:
         except KeyError as error:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(error),
+            ) from error
+
+    @router.post("/execute", response_model=DatabaseQueryResponse)
+    async def execute_query(request: DatabaseQueryRequest) -> DatabaseQueryResponse:
+        """Execute arbitrary SQL query against the workspace SQLite database."""
+
+        try:
+            return await run_in_threadpool(
+                _workspace_store(service_container).execute_query,
+                request.query,
+                max_rows=request.max_rows,
+            )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(error),
             ) from error
 
