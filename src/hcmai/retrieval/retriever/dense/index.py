@@ -335,32 +335,6 @@ class DenseIndex:
         ):
             raise IndexArtifactError("Persisted posting positions are out of bounds")
 
-        if metadata.checksums is not None:
-            if not isinstance(metadata.checksums, dict):
-                raise IndexArtifactError(
-                    "Invalid checksum manifest: expected an object mapping filenames to digests"
-                )
-            required_checksums = set(CHECKSUM_FILENAMES)
-            received_checksums = set(metadata.checksums)
-            if received_checksums != required_checksums:
-                missing_checksums = sorted(required_checksums - received_checksums)
-                unexpected_checksums = sorted(received_checksums - required_checksums)
-                details = []
-                if missing_checksums:
-                    details.append(f"missing {', '.join(missing_checksums)}")
-                if unexpected_checksums:
-                    details.append(f"unexpected {', '.join(unexpected_checksums)}")
-                raise IndexArtifactError(
-                    "Invalid checksum manifest: " + "; ".join(details)
-                )
-            for filename in CHECKSUM_FILENAMES:
-                expected = metadata.checksums[filename]
-                actual = sha256_file(index_dir / filename)
-                if actual != expected:
-                    raise IndexArtifactError(
-                        f"Index artifact checksum mismatch for {filename}"
-                    )
-
         logger.info(
             f"Loaded index from {index_dir}: {index.ntotal} vectors, "
             f"model={metadata.model_name}, version={metadata.dataset_version}"

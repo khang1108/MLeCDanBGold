@@ -1,5 +1,33 @@
 # HCMAI Research Knowledge
 
+## Temporal Alignment Quality vs Dense Retrieval: Pathology Diagnosis & Two-Stage Reranking (P1-Diag)
+
+**Date:** 2026-09-04  
+**Problem:** Multi-event temporal alignment frequently degrades retrieval quality compared to ordinary dense search, in some cases dropping target videos from top-10 to beyond rank >100 on narrative queries.
+
+### Sources
+- Live service empirical benchmark on 470,804 frames across 5 narrative queries (`docs/research/2026-09-04-temporal-quality-failure-analysis.md`, `docs/research/2026-09-04-benchmark-diagnostics.json`).
+- Diagnostic script: `scripts/diagnose_temporal_quality.py`.
+
+### Findings
+- **VERIFIED (Category A - Narrative Inversion):** Users frequently describe events non-chronologically (e.g., $E_2$ theft at $365\text{s}$ before $E_3$ waking at $22\text{s}$ in `L24_V035`; or $E_2$ plate at $500\text{s}$ before $E_3$ hold at $300\text{s}$ in `L26_V254`). Strict monotonic DP ($t_1 < t_2 < \dots < t_N$) mathematically fails, forcing selection of near-zero frames and dropping rank past 80 to >100.
+- **VERIFIED (Category B - Mandatory Penalty Collapse):** Strict DP scores videos as $\sum_{e=1}^N S[e, t_e] - \text{Gaps}$. One subtle or missing event drags down the entire video sum, allowing false-positive videos with mediocre constant scores across all events to beat the true video.
+- **VERIFIED (Category C - BM25 Keyword Leakage):** Caption vocabulary in `artifacts/indexes/bm25/metadata.json` is currently empty ($0$ terms). When queries contain generic words (e.g. *"bí"* in *"bí đỏ"*), BM25 matches titles (*"BÍ QUYẾT ÔN THI"*) across all frames of lecture videos (`L25_V003`). Min-max scaling scales this to $1.0$, which with `bm25_weight=0.5` adds $+0.50$ per frame, overpowering visual cosine similarities ($0.15-0.25$) by $>2.5\times$ and sending lecture videos to Rank 1.
+- **VERIFIED (Category D - Modality Dilution):** Equal fixed weighting ($0.333 \times \text{visual} + 0.333 \times \text{context} + 0.333 \times \text{asr}$) severely penalizes short, dialogue-free action videos (`L24_V044`), where the highest visual score in the corpus ($0.2305$) is diluted by $67\%$ to $0.0768$.
+- **VERIFIED (Category E - Gap Clustering Collapse):** $\lambda_{\text{gap}} = 10^{-5}\text{ ms}^{-1}$ ($0.01\text{ s}^{-1}$) penalizes 30-40s gaps by $0.30-0.40$, exceeding visual similarity differences and forcing strict DP to collapse paths into adjacent seconds (e.g., frames 363s, 365s, 366s in `L24_V035`).
+- **VERIFIED (P1a Soft DP Efficacy):** Soft-order DP with bounded transposition recovers rank dramatically: `L24_V035` improves from Rank 80 $\to$ **Rank 1**; `L24_V044` improves from >100 $\to$ **Rank 1**; `L27_V015` improves to **Rank 2**; `L26_V254` improves from >100 $\to$ **Rank 18**.
+
+### Status
+VERIFIED EMPIRICAL REPORT
+
+### Decision
+1. Retain dense search as the primary candidate generation gate ($K=50-100$).
+2. Apply temporal DP as an additive reranking bonus ($\text{Score} = \text{Dense} + \alpha \cdot \text{TemporalBonus}$) rather than an unconstrained global replacement.
+3. Adopt soft-order / skip-event alignment formulations to handle narrative inversions and missing visual keyframes.
+4. Attenuate BM25 title weights and replace min-max normalization with soft sigmoid scaling.
+
+---
+
 ## Multimodal Temporal Evidence Calibration & Emission Matrix (P0)
 
 **Date:** 2026-09-04

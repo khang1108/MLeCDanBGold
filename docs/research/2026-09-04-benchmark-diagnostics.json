@@ -1,0 +1,262 @@
+[
+  {
+    "id": "Q1_pumpkin_lion_dance",
+    "target_video_id": "L24_V035",
+    "n_events": 3,
+    "r0_dense_rank": ">100",
+    "r0_dense_score": null,
+    "r0_top1": "L30_V021",
+    "r0_top1_score": 0.8023010492324829,
+    "r0_hyb_rank": ">100",
+    "r0_hyb_score": null,
+    "r0_hyb_top1": "L25_V003",
+    "r1_dense_rank": 80,
+    "r1_dense_score": 1.668847025632859,
+    "r1_top1": "L29_V016",
+    "r1_top1_score": 2.085272831916809,
+    "r1_hyb_rank": ">100",
+    "r1_hyb_score": null,
+    "r1_hyb_top1": "L25_V003",
+    "r2_soft_rank": 1,
+    "r2_soft_score": 0.4910421371459961,
+    "target_event_max_scores": [
+      0.17390841245651245,
+      0.1800517439842224,
+      0.15811601281166077
+    ],
+    "target_event_argmax_timestamps": [
+      328000,
+      365000,
+      22000
+    ],
+    "top1_event_max_scores": [
+      0.1511232852935791,
+      0.11444342136383057,
+      0.12383273243904114
+    ],
+    "top1_event_argmax_timestamps": [
+      648000,
+      52000,
+      179000
+    ],
+    "target_r1_path": {
+      "video_id": "L24_V035",
+      "score": 1.668847025632859,
+      "frame_ids": [
+        "L24_V035_raw1fps_000000363",
+        "L24_V035_raw1fps_000000365",
+        "L24_V035_raw1fps_000000366"
+      ],
+      "frame_idxs": [
+        10890,
+        10950,
+        10980
+      ],
+      "timestamps_ms": [
+        363000,
+        365000,
+        366000
+      ]
+    }
+  },
+  {
+    "id": "Q2_lion_dance_ship",
+    "target_video_id": "L24_V044",
+    "n_events": 1,
+    "r0_dense_rank": ">100",
+    "r0_dense_score": null,
+    "r0_top1": "L24_V042",
+    "r0_top1_score": 0.8439688682556152,
+    "r0_hyb_rank": ">100",
+    "r0_hyb_score": null,
+    "r0_hyb_top1": "L22_V020",
+    "r1_dense_rank": ">100",
+    "r1_dense_score": null,
+    "r1_top1": "L24_V042",
+    "r1_top1_score": 0.802730917930603,
+    "r1_hyb_rank": ">100",
+    "r1_hyb_score": null,
+    "r1_hyb_top1": "L21_V015",
+    "r2_soft_rank": 1,
+    "r2_soft_score": 0.2305208295583725,
+    "target_event_max_scores": [
+      0.2305208295583725
+    ],
+    "target_event_argmax_timestamps": [
+      9002
+    ],
+    "top1_event_max_scores": [
+      0.20322488248348236
+    ],
+    "top1_event_argmax_timestamps": [
+      2000
+    ],
+    "target_r1_path": null
+  },
+  {
+    "id": "Q3_graffiti_rhino_monkeys",
+    "target_video_id": "L21_V013",
+    "n_events": 2,
+    "r0_dense_rank": 3,
+    "r0_dense_score": 0.8333085179328918,
+    "r0_top1": "L22_V011",
+    "r0_top1_score": 0.877758264541626,
+    "r0_hyb_rank": 5,
+    "r0_hyb_score": 0.7451459169387817,
+    "r0_hyb_top1": "L22_V010",
+    "r1_dense_rank": 1,
+    "r1_dense_score": 1.5667450571060177,
+    "r1_top1": "L21_V013",
+    "r1_top1_score": 1.5667450571060177,
+    "r1_hyb_rank": 1,
+    "r1_hyb_score": 1.396033360958099,
+    "r1_hyb_top1": "L21_V013",
+    "r2_soft_rank": 1,
+    "r2_soft_score": 0.43792274594306946,
+    "target_event_max_scores": [
+      0.21554195880889893,
+      0.25929319858551025
+    ],
+    "target_event_argmax_timestamps": [
+      749000,
+      764000
+    ],
+    "top1_event_max_scores": [
+      0.21554195880889893,
+      0.25929319858551025
+    ],
+    "top1_event_argmax_timestamps": [
+      749000,
+      764000
+    ],
+    "target_r1_path": {
+      "video_id": "L21_V013",
+      "score": 1.5667450571060177,
+      "frame_ids": [
+        "L21_V013_raw1fps_000000749",
+        "L21_V013_raw1fps_000000760"
+      ],
+      "frame_idxs": [
+        22470,
+        22800
+      ],
+      "timestamps_ms": [
+        749000,
+        760000
+      ]
+    }
+  },
+  {
+    "id": "Q4_western_fruits_trake",
+    "target_video_id": "L27_V015",
+    "n_events": 4,
+    "r0_dense_rank": 4,
+    "r0_dense_score": 0.7556281089782715,
+    "r0_top1": "L29_V013",
+    "r0_top1_score": 0.8052974343299866,
+    "r0_hyb_rank": 5,
+    "r0_hyb_score": 0.6420861482620239,
+    "r0_hyb_top1": "L27_V011",
+    "r1_dense_rank": 3,
+    "r1_dense_score": 2.6054259681701657,
+    "r1_top1": "L28_V011",
+    "r1_top1_score": 2.7075838971138,
+    "r1_hyb_rank": 9,
+    "r1_hyb_score": 1.7911578559875485,
+    "r1_hyb_top1": "L27_V011",
+    "r2_soft_rank": 2,
+    "r2_soft_score": 0.6438452377915382,
+    "target_event_max_scores": [
+      0.18159453570842743,
+      0.18113404512405396,
+      0.1519840806722641,
+      0.17746809124946594
+    ],
+    "target_event_argmax_timestamps": [
+      226000,
+      235000,
+      326000,
+      221000
+    ],
+    "top1_event_max_scores": [
+      0.14369750022888184,
+      0.13902826607227325,
+      0.15560367703437805,
+      0.15353769063949585
+    ],
+    "top1_event_argmax_timestamps": [
+      237000,
+      301000,
+      245000,
+      301000
+    ],
+    "target_r1_path": {
+      "video_id": "L27_V015",
+      "score": 2.6054259681701657,
+      "frame_ids": [
+        "L27_V015_raw1fps_000000225",
+        "L27_V015_raw1fps_000000231",
+        "L27_V015_raw1fps_000000232",
+        "L27_V015_raw1fps_000000236"
+      ],
+      "frame_idxs": [
+        5625,
+        5775,
+        5800,
+        5900
+      ],
+      "timestamps_ms": [
+        225000,
+        231000,
+        232000,
+        236000
+      ]
+    }
+  },
+  {
+    "id": "Q5_cooking_galangal_flowers",
+    "target_video_id": "L26_V254",
+    "n_events": 4,
+    "r0_dense_rank": 77,
+    "r0_dense_score": 0.7533987760543823,
+    "r0_top1": "L26_V307",
+    "r0_top1_score": 0.849582850933075,
+    "r0_hyb_rank": ">100",
+    "r0_hyb_score": null,
+    "r0_hyb_top1": "L23_V007",
+    "r1_dense_rank": ">100",
+    "r1_dense_score": null,
+    "r1_top1": "L26_V310",
+    "r1_top1_score": 2.8256286334991456,
+    "r1_hyb_rank": ">100",
+    "r1_hyb_score": null,
+    "r1_hyb_top1": "L26_V124",
+    "r2_soft_rank": 18,
+    "r2_soft_score": 0.6193101346492768,
+    "target_event_max_scores": [
+      0.16513901948928833,
+      0.16082574427127838,
+      0.15663999319076538,
+      0.179884672164917
+    ],
+    "target_event_argmax_timestamps": [
+      140000,
+      87000,
+      87000,
+      22000
+    ],
+    "top1_event_max_scores": [
+      0.16656816005706787,
+      0.1575193554162979,
+      0.16411970555782318,
+      0.172433003783226
+    ],
+    "top1_event_argmax_timestamps": [
+      28000,
+      17000,
+      17000,
+      99000
+    ],
+    "target_r1_path": null
+  }
+]

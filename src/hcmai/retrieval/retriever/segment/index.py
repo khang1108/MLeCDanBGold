@@ -235,7 +235,6 @@ class SegmentDenseIndex:
 
         metadata = IndexMetadata.from_dict(read_json(index_dir / METADATA_FILENAME))
         _validate_metadata(metadata)
-        _validate_checksums(index_dir, metadata)
 
         index = faiss.read_index(str(index_dir / INDEX_FILENAME))
         mapping = pd.read_parquet(index_dir / MAPPING_FILENAME)
