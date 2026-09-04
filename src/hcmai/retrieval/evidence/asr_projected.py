@@ -143,7 +143,7 @@ class SegmentProjectedASRIndex:
             if len(video_positions) > 0:
                 video_timestamps = self.timestamps[video_positions]
                 inside = video_positions[
-                    (video_timestamps >= start_ms) & (video_timestamps <= end_ms)
+                    (video_timestamps >= start_ms) & (video_timestamps < end_ms)
                 ]
             else:
                 inside = np.empty(0, dtype=np.int64)

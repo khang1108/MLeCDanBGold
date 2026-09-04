@@ -116,6 +116,26 @@ def test_sparse_bm25_no_match_row_is_all_zeros() -> None:
     assert result.reliability[0] == 0.0
 
 
+def test_equal_strength_sparse_bm25_matches_survive() -> None:
+    """Equal positive lexical matches remain calibrated as exact evidence."""
+
+    raw = np.asarray([[0.0, 0.0, 5.0, 0.0, 5.0, 0.0]], dtype=np.float32)
+    support = raw > 0.0
+
+    result = calibrate_component(
+        raw,
+        RobustCalibrationConfig(),
+        support=support,
+        reliability_mode="binary",
+    )
+
+    np.testing.assert_array_equal(
+        result.scores,
+        np.asarray([[0.0, 0.0, 1.0, 0.0, 1.0, 0.0]], dtype=np.float32),
+    )
+    assert result.reliability[0] == 1.0
+
+
 def test_sparse_asr_quantiles_use_covered_frames_only() -> None:
     """ASR calibration quantiles and reliability ignore uncovered zero background."""
 

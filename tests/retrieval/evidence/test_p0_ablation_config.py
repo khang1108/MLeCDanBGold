@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from hcmai.common.config import (
+    AdaptiveTemporalFusionConfig,
+    HybridTemporalConfig,
+    RobustCalibrationConfig,
+)
 from hcmai.retrieval.evidence.ablation import (
     ABLATION_RUNS,
     resolve_ablation_run,
@@ -11,43 +16,39 @@ from hcmai.retrieval.evidence.ablation import (
 
 
 def test_ablation_matrix_all_runs_present() -> None:
-    """Ensure all 7 named stages A0-A6 are defined and resolvable by aliases."""
+    """Ensure all seven B-series performance experiments are resolvable."""
 
     expected_keys = [
-        "A0_legacy_v9",
-        "A1_components_fixed",
-        "A2_asr_interval",
-        "A3_robust_calibration",
-        "A4_confidence_gating",
-        "A5_adaptive_p0",
-        "A6_dense_only",
+        "B0_legacy_v9",
+        "B1_flat_components",
+        "B2_asr_interval",
+        "B3_robust_calibration",
+        "B4_confidence_gating",
+        "B5_adaptive_p0",
+        "B6_dense_only",
     ]
     assert list(ABLATION_RUNS.keys()) == expected_keys
 
     for i, full_name in enumerate(expected_keys):
-        short_key = f"A{i}"
+        short_key = f"B{i}"
         run = resolve_ablation_run(short_key)
         assert run.name == full_name
         assert resolve_ablation_run(full_name).name == full_name
 
 
-def test_alignment_config_is_identical_across_all_stages() -> None:
-    """Assert DP alignment settings are strictly identical across A0-A6."""
+def test_runs_do_not_own_or_replace_loaded_alignment_config() -> None:
+    """Emission experiments must leave the service's loaded DP config untouched."""
 
-    base_alignment = ABLATION_RUNS["A0_legacy_v9"].alignment
-
-    for name, run in ABLATION_RUNS.items():
-        assert run.alignment == base_alignment, (
-            f"Run {name} modified AlignmentConfig: {run.alignment} != {base_alignment}"
-        )
+    assert all(not hasattr(run, "alignment") for run in ABLATION_RUNS.values())
 
 
 def test_single_feature_delta_between_ablation_stages() -> None:
-    """Verify that each sequential stage A0->A6 differs by exactly one intended feature."""
+    """Verify sequential B-stage settings after the explicit fusion baseline."""
 
     runs = list(ABLATION_RUNS.values())
 
-    # A0 -> A1: only fusion_mode changes from "legacy" to "adaptive_p0"
+    # B0 -> B1 intentionally changes the fusion equation. It is not presented
+    # as an exact componentized-legacy ablation.
     a0, a1 = runs[0], runs[1]
     assert a0.fusion_mode == "legacy"
     assert a1.fusion_mode == "adaptive_p0"
@@ -108,18 +109,47 @@ def test_single_feature_delta_between_ablation_stages() -> None:
     assert a5.event_routing == a6.event_routing is True
 
 
-def test_to_hybrid_config_converts_properly() -> None:
-    """Verify that to_hybrid_config correctly sets fusion_mode and adaptive sub-flags."""
+def test_apply_to_preserves_all_baseline_weights_and_boosts() -> None:
+    """Applying a run changes only its switches and keeps tuned baseline values."""
 
-    a5 = ABLATION_RUNS["A5_adaptive_p0"]
-    hybrid = a5.to_hybrid_config()
+    a5 = ABLATION_RUNS["B5_adaptive_p0"]
+    baseline = HybridTemporalConfig(
+        dense_weight=0.7,
+        bm25_weight=0.3,
+        adaptive=AdaptiveTemporalFusionConfig(
+            calibration=RobustCalibrationConfig(q_low=0.1, q_high=0.8),
+            base_component_weights={"visual_dense": 0.8, "bm25_ocr": 0.2},
+            visual_boost=1.7,
+            speech_boost=2.5,
+            ocr_boost=4.0,
+            robust_calibration=False,
+            confidence_gating=False,
+            event_routing=False,
+            asr_interval_projection=False,
+        ),
+    )
+
+    hybrid = a5.apply_to(baseline)
+
     assert hybrid.fusion_mode == "adaptive_p0"
     assert hybrid.adaptive.robust_calibration is True
     assert hybrid.adaptive.confidence_gating is True
     assert hybrid.adaptive.event_routing is True
+    assert hybrid.dense_weight == 0.7
+    assert hybrid.bm25_weight == 0.3
+    assert (
+        hybrid.adaptive.base_component_weights
+        == baseline.adaptive.base_component_weights
+    )
+    assert hybrid.adaptive.calibration == baseline.adaptive.calibration
+    assert hybrid.adaptive.visual_boost == 1.7
+    assert hybrid.adaptive.speech_boost == 2.5
+    assert hybrid.adaptive.ocr_boost == 4.0
+    assert baseline.fusion_mode == "legacy"
+    assert baseline.adaptive.event_routing is False
 
-    a0 = ABLATION_RUNS["A0_legacy_v9"]
-    hybrid_a0 = a0.to_hybrid_config()
+    a0 = ABLATION_RUNS["B0_legacy_v9"]
+    hybrid_a0 = a0.apply_to(baseline)
     assert hybrid_a0.fusion_mode == "legacy"
 
 
@@ -127,4 +157,4 @@ def test_resolve_ablation_run_unknown_key() -> None:
     """Verify error on invalid run key."""
 
     with pytest.raises(KeyError, match="Unknown ablation run"):
-        resolve_ablation_run("A99")
+        resolve_ablation_run("B99")

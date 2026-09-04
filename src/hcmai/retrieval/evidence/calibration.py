@@ -122,6 +122,10 @@ def calibrate_component(
         if span > config.eps:
             clipped = np.clip(supported_vals, low, high)
             calibrated[e, supported_indices] = (clipped - low) / span
+        elif reliability_mode == "binary" and np.any(supported_vals > 0.0):
+            # Equal-strength lexical hits are still exact evidence. Their lack
+            # of internal contrast must not erase every supported match.
+            calibrated[e, supported_indices] = 1.0
         else:
             calibrated[e, supported_indices] = 0.0
 

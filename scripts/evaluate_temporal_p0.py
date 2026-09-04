@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Run P0 temporal evidence ablations (A0-A5) and record ranking telemetry.
+"""Run P0 temporal evidence experiments (B0-B6) and record ranking telemetry.
 
 Usage:
     PYTHONPATH=src:. aic/bin/python scripts/evaluate_temporal_p0.py \\
         --queries-file tests/fixtures/l26_v254_query.yaml \\
-        --runs A0 A1 A2 A3 A4 A5 \\
+        --runs B0 B1 B2 B3 B4 B5 B6 \\
         --output-file artifacts/p0_ablation_results.jsonl
 """
 
@@ -19,7 +19,6 @@ import yaml
 
 from hcmai.orchestration.setup import load_search_service
 from hcmai.retrieval.evidence.ablation import (
-    ABLATION_RUNS,
     AblationRunConfig,
     make_ablation_scorer,
     resolve_ablation_run,
@@ -29,7 +28,7 @@ from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run P0 temporal evidence ablation matrix A0-A6"
+        description="Run P0 temporal evidence experiment matrix B0-B6"
     )
     parser.add_argument(
         "--queries-file",
@@ -40,8 +39,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--runs",
         nargs="+",
-        default=["A0", "A1", "A2", "A3", "A4", "A5", "A6"],
-        help="List of ablation runs to execute (e.g. A0 A1 ... or full names)",
+        default=["B0", "B1", "B2", "B3", "B4", "B5", "B6"],
+        help="List of experiment runs to execute (e.g. B0 B1 ... or full names)",
     )
     parser.add_argument(
         "--output-file",
@@ -166,8 +165,6 @@ def main() -> int:
     for run_cfg in runs:
         run_scorer, run_kw = make_ablation_scorer(baseline_scorer, run_cfg.name)
         temporal_search.evidence = run_scorer
-        temporal_search.config = run_cfg.alignment
-
         run_use_dense = args.use_dense and run_kw.get("use_dense", True)
         run_use_bm25 = args.use_bm25 and run_kw.get("use_bm25", True)
 

@@ -50,23 +50,23 @@ class MockDenseScorer:
 
 
 def test_ablation_runs_contain_all_seven_conditions() -> None:
-    """The ablation matrix must configure A0 through A6."""
+    """The experiment matrix must configure B0 through B6."""
 
     expected_keys = [
-        "A0_legacy_v9",
-        "A1_components_fixed",
-        "A2_asr_interval",
-        "A3_robust_calibration",
-        "A4_confidence_gating",
-        "A5_adaptive_p0",
-        "A6_dense_only",
+        "B0_legacy_v9",
+        "B1_flat_components",
+        "B2_asr_interval",
+        "B3_robust_calibration",
+        "B4_confidence_gating",
+        "B5_adaptive_p0",
+        "B6_dense_only",
     ]
     for key in expected_keys:
         cfg = resolve_ablation_run(key)
         assert cfg.name == key
 
     for i in range(7):
-        cfg = resolve_ablation_run(f"A{i}")
+        cfg = resolve_ablation_run(f"B{i}")
         assert cfg is not None
 
 
@@ -90,7 +90,7 @@ def test_make_ablation_scorer_does_not_mutate_baseline_scorer() -> None:
         config=base_config,
     )
 
-    a5_scorer, a5_kwargs = make_ablation_scorer(baseline_scorer, "A5")
+    a5_scorer, a5_kwargs = make_ablation_scorer(baseline_scorer, "B5")
 
     # Baseline configuration must remain completely untouched!
     assert baseline_scorer.config.fusion_mode == "legacy"
@@ -102,13 +102,13 @@ def test_make_ablation_scorer_does_not_mutate_baseline_scorer() -> None:
     assert a5_scorer.config.adaptive.speech_boost == 7.5
     assert a5_kwargs["use_bm25"] is True
 
-    # A6 scorer has use_bm25=False
-    a6_scorer, a6_kwargs = make_ablation_scorer(baseline_scorer, "A6")
+    # B6 scorer has use_bm25=False
+    a6_scorer, a6_kwargs = make_ablation_scorer(baseline_scorer, "B6")
     assert a6_kwargs["use_bm25"] is False
 
 
-def test_running_a0_after_a5_is_isolated() -> None:
-    """Running A0 after A5 produces exact legacy behavior and does not leak routing."""
+def test_running_b0_after_b5_is_isolated() -> None:
+    """Running B0 after B5 produces exact legacy behavior and does not leak routing."""
 
     raw = np.asarray([[0.1, 0.5, 0.9]], dtype=np.float32)
     asr = np.asarray([[0.2, 0.4, 0.8]], dtype=np.float32)
@@ -140,8 +140,8 @@ def test_running_a0_after_a5_is_isolated() -> None:
         config=base_config,
     )
 
-    a5_scorer, a5_kw = make_ablation_scorer(baseline_scorer, "A5")
-    a0_scorer, a0_kw = make_ablation_scorer(baseline_scorer, "A0")
+    a5_scorer, a5_kw = make_ablation_scorer(baseline_scorer, "B5")
+    a0_scorer, a0_kw = make_ablation_scorer(baseline_scorer, "B0")
 
     res_a5 = a5_scorer.score_events(
         ["Người phụ nữ nói chuyện"],
@@ -157,45 +157,17 @@ def test_running_a0_after_a5_is_isolated() -> None:
         **a0_kw,
     )
 
-    # A0 and A5 must produce different results because A5 uses event routing and robust calibration
+    # B0 and B5 differ because B5 uses event routing and robust calibration.
     assert not np.allclose(res_a0[0].scores, res_a5[0].scores)
 
 
-def test_a1_matches_a0_relative_proportions() -> None:
-    """A1 adaptive components without routing/gating preserve A0 relative weighting."""
+def test_legacy_and_flat_component_runs_are_named_as_distinct_experiments() -> None:
+    """The runtime matrix must not claim flat fusion is componentized legacy."""
 
-    raw = np.asarray([[0.1, 0.5, 0.9]], dtype=np.float32)
-    asr = np.asarray([[0.2, 0.4, 0.8]], dtype=np.float32)
-    dense = MockDenseScorer(raw, asr)
-    visual_idx = FakeIndex(raw)
+    legacy = resolve_ablation_run("B0")
+    flat = resolve_ablation_run("B1")
 
-    base_config = HybridTemporalConfig(
-        fusion_mode="legacy",
-        dense_weight=1.0,
-        bm25_weight=0.0,
-        adaptive=AdaptiveTemporalFusionConfig(
-            robust_calibration=False,
-            confidence_gating=False,
-            event_routing=False,
-            asr_interval_projection=False,
-            base_component_weights={"visual_dense": 0.35, "context_dense": 0.35, "asr_dense": 0.08},
-        ),
-    )
-    baseline_scorer = TemporalEvidenceScorer(
-        visual_index=visual_idx,
-        dense=dense,
-        bm25=None,
-        config=base_config,
-    )
-
-    a0_scorer, _ = make_ablation_scorer(baseline_scorer, "A0")
-    a1_scorer, _ = make_ablation_scorer(baseline_scorer, "A1")
-
-    # Both run dense-only
-    res_a0 = a0_scorer.score_events(["event"], ["event"], caption_events=None, use_dense=True, use_bm25=False)
-    res_a1 = a1_scorer.score_events(["event"], ["event"], caption_events=None, use_dense=True, use_bm25=False)
-
-    # In dense-only mode with matching weights, A0 and A1 are numerically proportional
-    a0_norm = res_a0[0].scores / res_a0[0].scores.sum()
-    a1_norm = res_a1[0].scores / res_a1[0].scores.sum()
-    np.testing.assert_allclose(a0_norm, a1_norm, atol=1e-5)
+    assert legacy.name == "B0_legacy_v9"
+    assert legacy.fusion_mode == "legacy"
+    assert flat.name == "B1_flat_components"
+    assert flat.fusion_mode == "adaptive_p0"

@@ -90,6 +90,29 @@ def test_asr_segment_covers_every_canonical_frame_inside_interval() -> None:
     np.testing.assert_allclose(scores, [[0.0, 1.0, 1.0, 1.0, 0.0]])
 
 
+def test_asr_segment_excludes_half_open_end_boundary() -> None:
+    """ASR interval coverage follows the shared ``[start_ms, end_ms)`` contract."""
+
+    timestamps = [1000, 2000]
+    index = _make_index(
+        segment_index=FakeSegmentIndex(
+            [{"video_id": "v1", "start_ms": 1000, "end_ms": 2000}],
+            [[1.0, 0.0]],
+        ),
+        canonical_index=FakeCanonicalIndex(timestamps),
+        projector=FakeProjector(timestamps, fallback_positions=0),
+    )
+
+    scores, coverage = index.score_subset_masked(
+        np.asarray([[1.0, 0.0]], dtype=np.float32),
+        np.arange(2, dtype=np.int64),
+        interval_projection=True,
+    )
+
+    np.testing.assert_array_equal(coverage, [True, False])
+    np.testing.assert_allclose(scores, [[1.0, 0.0]])
+
+
 def test_overlapping_asr_segments_use_max_similarity() -> None:
     timestamps = [0, 1000, 2000, 3000]
     index = _make_index(
