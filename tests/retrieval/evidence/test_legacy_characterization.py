@@ -169,7 +169,7 @@ def test_hybrid_legacy_minmaxes_bm25_then_uses_half_half_weights() -> None:
         visual_index=visual,
         dense=StaticDense(),
         bm25=StaticBM25(),
-        config=HybridTemporalConfig(),
+        config=HybridTemporalConfig(fusion_mode="legacy"),
     )
 
     videos = scorer.score_events(
@@ -221,7 +221,9 @@ def test_componentized_raw_scores_recombine_to_exact_legacy_hybrid() -> None:
         },
         bm25_weights,
     )
-    config = HybridTemporalConfig(dense_weight=0.4, bm25_weight=0.6)
+    config = HybridTemporalConfig(
+        fusion_mode="legacy", dense_weight=0.4, bm25_weight=0.6
+    )
     scorer = TemporalEvidenceScorer(
         visual_index=dense.visual_index,
         dense=dense,

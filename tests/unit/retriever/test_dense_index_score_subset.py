@@ -43,6 +43,19 @@ def test_score_subset_matches_matmul_across_chunks() -> None:
     assert np.allclose(scores, queries @ embeddings[positions].T, atol=1e-6)
 
 
+def test_score_subset_reads_an_ascending_run_as_a_slice() -> None:
+    index, embeddings = _index()
+
+    queries = embeddings[[3, 11]]
+    run = np.arange(4, 18, dtype=np.int64)
+
+    scores = index.score_subset(queries, run, chunk_size=5)
+    gathered = index.score_subset(queries, run[::-1].copy(), chunk_size=5)
+
+    assert np.array_equal(scores, queries @ embeddings[run].T)
+    assert np.array_equal(scores, gathered[:, ::-1])
+
+
 def test_an_incomplete_index_bundle_is_rejected_without_runtime_backfill(
     tmp_path,
 ) -> None:

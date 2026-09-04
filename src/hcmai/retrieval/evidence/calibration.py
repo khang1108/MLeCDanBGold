@@ -44,6 +44,11 @@ def calibrate_component(
     either from contrast between top-k and median (for continuous modalities)
     or binary match presence (for sparse lexical matches).
 
+    ``q_high`` defaults to 1.0 on purpose: retrieval ranks on the upper tail,
+    so clipping it flattens the frames the ranking depends on. At 0.95 over a
+    470k-frame corpus the top 23.5k frames tie at one value and the correct
+    frame is ordered by array position, not by score.
+
     Args:
         raw_scores: 2D array of shape ``[event_count, frame_count]`` of finite
             floating-point scores.

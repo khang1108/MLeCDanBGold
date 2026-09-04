@@ -78,7 +78,7 @@ class FakeCorpus:
     @staticmethod
     def transcript(video_id: str, start_ms: int, end_ms: int) -> str | None:
         """Return transcript evidence only at the representative timestamp."""
-        assert (video_id, start_ms, end_ms) == ("V01", 2000, 2001)
+        assert (video_id, start_ms, end_ms) == ("V01", 2_000, 2_001)
         return "coat it with flour"
 
     @staticmethod
@@ -89,7 +89,7 @@ class FakeCorpus:
 
 
 def test_kis_projects_middle_frame_and_materializes_representative_metadata() -> None:
-    """Keep every aligned path entry while selecting the deterministic midpoint."""
+    """Keep every aligned path entry while showing the middle moment of the path."""
 
     alignment = FakeAlignment()
     response = KISPipeline(FakeCorpus(), alignment).execute(

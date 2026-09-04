@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 import pytest
-from collections.abc import Sequence
 from typing import Any
 
-from hcmai.common.config import HybridTemporalConfig
+from hcmai.common.config import AdaptiveTemporalFusionConfig, HybridTemporalConfig
 from hcmai.retrieval.evidence.components import (
     TemporalScoreBundle,
     TemporalScoreComponent,
@@ -53,7 +54,7 @@ def test_three_fusion_modes(use_dense: bool, use_bm25: bool, expected: list[list
         visual_index=FakeIndex(),
         dense=MatrixScorer(np.asarray([[0.2, 0.4, 0.8]], dtype=np.float32)),
         bm25=MatrixScorer(np.asarray([[10.0, 20.0, 30.0]], dtype=np.float32)),
-        config=HybridTemporalConfig(),
+        config=HybridTemporalConfig(fusion_mode="legacy"),
     )
 
     result = scorer.score_events(
@@ -72,7 +73,7 @@ def test_both_off_and_event_mismatch_are_rejected() -> None:
         visual_index=FakeIndex(),
         dense=MatrixScorer(np.zeros((1, 3), dtype=np.float32)),
         bm25=MatrixScorer(np.zeros((1, 3), dtype=np.float32)),
-        config=HybridTemporalConfig(),
+        config=HybridTemporalConfig(fusion_mode="legacy"),
     )
 
     with pytest.raises(ValueError, match="at least one"):
@@ -82,6 +83,27 @@ def test_both_off_and_event_mismatch_are_rejected() -> None:
     with pytest.raises(ValueError, match="event counts"):
         scorer.score_events(
             ("vi", "vi2"), ("en",), caption_events=("en",), use_dense=True, use_bm25=False
+        )
+
+
+def test_missing_bm25_degrades_instead_of_failing() -> None:
+    """A missing BM25 artifact must fall back to Dense, not raise."""
+
+    scorer = TemporalEvidenceScorer(
+        visual_index=FakeIndex(),
+        dense=MatrixScorer(np.asarray([[0.2, 0.4, 0.8]], dtype=np.float32)),
+        bm25=None,
+        config=HybridTemporalConfig(fusion_mode="legacy"),
+    )
+
+    result = scorer.score_events(
+        ("vi",), ("retrieval",), caption_events=("caption",), use_dense=True, use_bm25=True
+    )
+
+    np.testing.assert_allclose(_matrix(result), [[0.2, 0.4, 0.8]])
+    with pytest.raises(ValueError, match="at least one"):
+        scorer.score_events(
+            ("vi",), ("en",), caption_events=("en",), use_dense=False, use_bm25=True
         )
 
 
@@ -120,3 +142,25 @@ def test_adaptive_fusion_mode_runs_successfully() -> None:
     matrix = _matrix(result)
     assert matrix.shape == (1, 3)
     assert np.all(np.isfinite(matrix))
+
+def test_config_reassignment_reaches_adaptive_fusion() -> None:
+    """Swapping config after construction must re-route adaptive fusion, not use stale settings."""
+
+    scorer = TemporalEvidenceScorer(
+        visual_index=FakeIndex(),
+        dense=ComponentScorer("visual_dense", np.asarray([[0.2, 0.4, 0.8]], dtype=np.float32)),
+        bm25=ComponentScorer("bm25_caption", np.asarray([[10.0, 20.0, 30.0]], dtype=np.float32)),
+        config=HybridTemporalConfig(fusion_mode="adaptive_p0"),
+    )
+    events = (("vi",), ("retrieval",))
+    routed = _matrix(scorer.score_events(*events, caption_events=("caption",), use_dense=True, use_bm25=True))
+
+    scorer.config = HybridTemporalConfig(
+        fusion_mode="adaptive_p0",
+        adaptive=AdaptiveTemporalFusionConfig(base_component_weights={"visual_dense": 1.0}),
+    )
+    visual_only = _matrix(
+        scorer.score_events(*events, caption_events=("caption",), use_dense=True, use_bm25=True)
+    )
+
+    assert not np.allclose(routed, visual_only)

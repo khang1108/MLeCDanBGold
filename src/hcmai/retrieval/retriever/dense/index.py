@@ -383,14 +383,24 @@ class DenseIndex:
 
         Returns:
             Array of shape (Q, len(positions)), column ``j`` for ``positions[j]``.
+
+        An ascending run of positions is read as a slice: fancy indexing a
+        memmap gathers row by row, which dominates full-corpus scoring.
         """
         queries = np.ascontiguousarray(query_vectors, dtype=np.float32).reshape(-1, self.index.d)
         positions = np.ascontiguousarray(positions, dtype=np.int64)
         scores = np.empty((len(queries), len(positions)), dtype=np.float32)
+        run = len(positions) > 0 and bool(
+            np.array_equal(positions, np.arange(positions[0], positions[0] + len(positions)))
+        )
         for start in range(0, len(positions), chunk_size):
             chunk = positions[start : start + chunk_size]
-            vectors = np.asarray(self.vectors[chunk], dtype=np.float32)
-            scores[:, start : start + len(chunk)] = queries @ vectors.T
+            rows = (
+                self.vectors[chunk[0] : chunk[0] + len(chunk)] if run else self.vectors[chunk]
+            )
+            scores[:, start : start + len(chunk)] = queries @ np.asarray(
+                rows, dtype=np.float32
+            ).T
         return scores
 
     def video_positions(self, video_id: str) -> np.ndarray:

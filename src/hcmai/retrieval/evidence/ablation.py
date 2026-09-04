@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
-from hcmai.common.config import HybridTemporalConfig
+from hcmai.common.config import AlignmentConfig, HybridTemporalConfig
 
 if TYPE_CHECKING:
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
@@ -23,6 +23,7 @@ class AblationRunConfig:
     interval_projection: bool
     use_dense: bool = True
     use_bm25: bool = True
+    alignment: AlignmentConfig = field(default_factory=AlignmentConfig)
 
     def apply_to(self, baseline: HybridTemporalConfig) -> HybridTemporalConfig:
         """Apply this run's switches without resetting baseline weights or boosts."""
@@ -111,12 +112,119 @@ ABLATION_RUNS: dict[str, AblationRunConfig] = {
         use_dense=True,
         use_bm25=False,
     ),
+    "P2_paths2_sep30s": AblationRunConfig(
+        name="P2_paths2_sep30s",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(paths_per_video=2, path_min_separation_ms=30000),
+    ),
+    "P3_paths3_sep30s": AblationRunConfig(
+        name="P3_paths3_sep30s",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(paths_per_video=3, path_min_separation_ms=30000),
+    ),
+    "P5_paths5_sep30s": AblationRunConfig(
+        name="P5_paths5_sep30s",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(paths_per_video=5, path_min_separation_ms=30000),
+    ),
+    "P3_paths3_sep10s": AblationRunConfig(
+        name="P3_paths3_sep10s",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(paths_per_video=3, path_min_separation_ms=10000),
+    ),
+    "G0_lambda_0": AblationRunConfig(
+        name="G0_lambda_0",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(lambda_gap=0.0),
+    ),
+    "G1_lambda_1e6": AblationRunConfig(
+        name="G1_lambda_1e6",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(lambda_gap=1e-06),
+    ),
+    "G2_lambda_1e4": AblationRunConfig(
+        name="G2_lambda_1e4",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(lambda_gap=0.0001),
+    ),
+    "G3_lambda_1e3": AblationRunConfig(
+        name="G3_lambda_1e3",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(lambda_gap=0.001),
+    ),
+    "C1_paths3_sep10s_g1e6": AblationRunConfig(
+        name="C1_paths3_sep10s_g1e6",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(
+            lambda_gap=1e-06, paths_per_video=3, path_min_separation_ms=10000
+        ),
+    ),
+    "C2_paths5_sep10s_g1e6": AblationRunConfig(
+        name="C2_paths5_sep10s_g1e6",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(
+            lambda_gap=1e-06, paths_per_video=5, path_min_separation_ms=10000
+        ),
+    ),
+    "C3_paths5_sep5s_g1e6": AblationRunConfig(
+        name="C3_paths5_sep5s_g1e6",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        alignment=AlignmentConfig(
+            lambda_gap=1e-06, paths_per_video=5, path_min_separation_ms=5000
+        ),
+    ),
 }
 
 # A1 componentized-legacy is a regression test, not a runtime condition.
 # B0-B6 are performance experiments whose flat-component baseline is allowed
 # to differ from the legacy fusion equation.
-_SHORT_KEY_MAP = {f"B{i}": name for i, name in enumerate(ABLATION_RUNS.keys())}
+_SHORT_KEY_MAP = {
+    name.split("_", 1)[0]: name for name in ABLATION_RUNS if name.startswith("B")
+}
 
 
 def resolve_ablation_run(key: str) -> AblationRunConfig:

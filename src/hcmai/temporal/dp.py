@@ -80,12 +80,17 @@ def align_video(
     paths: int = 1,
     event_power: float = 1.0,
     cluster_delta: float = 0.0,
+    min_separation_ms: int = 0,
 ) -> list[DPPath]:
     """Return the highest-scoring strict chronological paths for one video.
 
     ``VideoEventScores`` columns must already be in canonical frame order. The
     recurrence selects one later column for every successive event and applies
     the configured time-gap penalty without changing any supplied identity.
+
+    A positive ``min_separation_ms`` suppresses alternatives whose final event
+    lands near an already accepted path, so extra rows are distinct moments
+    rather than neighbouring frames of the same one.
     """
 
     scores = np.asarray(video.scores, dtype=np.float64)
@@ -140,11 +145,21 @@ def align_video(
         )
         back[event] = np.where(reachable, argmax[source], 0)
 
+    timestamps = np.asarray(video.timestamps_ms, dtype=np.int64)
     results = []
-    for endpoint in np.argsort(-current)[:paths]:
+    accepted: list[int] = []
+    for endpoint in np.argsort(-current):
+        if len(results) >= paths:
+            break
         if not np.isfinite(current[endpoint]):
             break
         position = int(endpoint)
+        if any(
+            abs(int(timestamps[position]) - taken) < min_separation_ms
+            for taken in accepted
+        ):
+            continue
+        accepted.append(int(timestamps[position]))
         path = [position]
 
         # Follow one stored predecessor for each earlier event, then reverse
@@ -170,12 +185,15 @@ def rank_paths(
     max_rows: int = 100,
     event_power: float = 1.0,
     cluster_delta: float = 0.0,
+    paths_per_video: int = 1,
+    path_min_separation_ms: int = 0,
 ) -> list[DPPath]:
     """Rank bounded paths while preferring each video's best row first.
 
     Diversifying the first ranking level across videos matches the current
     TRAKE behavior and avoids consuming the whole result budget with one
-    video's closely related alternatives.
+    video's closely related alternatives. ``paths_per_video`` above one lets a
+    video offer further separated moments once every video has placed its best.
     """
 
     if not videos:
@@ -183,11 +201,29 @@ def rank_paths(
 
     # Ask every video for enough alternatives that taking rows level-by-level
     # can fill ``max_rows`` even when some videos have no valid path.
-    depth = math.ceil(max_rows / len(videos))
+    depth = max(paths_per_video, math.ceil(max_rows / len(videos)))
     per_video = [
-        align_video(video, lambda_gap, depth, event_power, cluster_delta)
+        align_video(
+            video,
+            lambda_gap,
+            depth,
+            event_power,
+            cluster_delta,
+            path_min_separation_ms,
+        )
         for video in videos
     ]
+    if paths_per_video > 1:
+        # Level-wise ranking reserves level zero for one row per video, so with
+        # far more videos than ``max_rows`` a second moment can never surface.
+        # Ranking every retained alternative by score is what lets one video
+        # offer an alternative moment, bounded by ``paths_per_video``.
+        return sorted(
+            (path for paths in per_video for path in paths),
+            key=lambda path: path.score,
+            reverse=True,
+        )[:max_rows]
+
     rows: list[DPPath] = []
     for level in range(depth):
         # Level zero contains each video's best path, level one its second

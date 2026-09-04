@@ -30,6 +30,8 @@ def test_alignment_config_keeps_only_full_corpus_decoder_fields() -> None:
         "event_power",
         "chunk_size",
         "cluster_delta",
+        "paths_per_video",
+        "path_min_separation_ms",
     }
 
 

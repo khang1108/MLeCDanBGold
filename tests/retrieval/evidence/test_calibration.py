@@ -168,3 +168,16 @@ def test_top_k_is_bounded_by_top_k_max() -> None:
     cfg = RobustCalibrationConfig(top_fraction=0.1, top_k_max=64)
     result = calibrate_component(raw, cfg)
     assert 0.0 <= result.reliability[0] <= 1.0
+
+
+def test_default_calibration_preserves_the_top_ranking() -> None:
+    """Calibration must not flatten the upper tail the ranking is read from."""
+
+    rng = np.random.default_rng(0)
+    raw = rng.normal(0.3, 0.05, size=(1, 470_804)).astype(np.float32)
+    raw[0, 12_345] = 0.95
+
+    calibrated = calibrate_component(raw, RobustCalibrationConfig()).scores[0]
+
+    assert int(np.argmax(calibrated)) == 12_345
+    assert int((calibrated >= calibrated.max() - 1e-6).sum()) == 1

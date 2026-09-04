@@ -24,6 +24,7 @@ from hcmai.retrieval.evidence.ablation import (
     resolve_ablation_run,
 )
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
+from hcmai.temporal import plan_query_events, split_query_events
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,6 +56,12 @@ def parse_args() -> argparse.Namespace:
         help="Number of paths to rank in DP alignment (default: 300)",
     )
     parser.add_argument(
+        "--record-paths",
+        type=int,
+        default=50,
+        help="Number of ranked paths written per query for offline scoring (default: 50)",
+    )
+    parser.add_argument(
         "--use-dense",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -66,10 +73,15 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Enable BM25 scoring",
     )
+    parser.add_argument(
+        "--legacy-planner",
+        action="store_true",
+        help="Split events by sentence only, skipping the P2 query planner",
+    )
     return parser.parse_args()
 
 
-def load_queries(path: Path) -> list[dict[str, Any]]:
+def load_queries(path: Path, *, legacy_planner: bool = False) -> list[dict[str, Any]]:
     """Load query items from YAML or JSON."""
 
     with open(path, encoding="utf-8") as f:
@@ -88,7 +100,11 @@ def load_queries(path: Path) -> list[dict[str, Any]]:
     for idx, item in enumerate(items):
         raw_query = item.get("query", "")
         if isinstance(raw_query, str):
-            orig_events = [line.strip() for line in raw_query.strip().splitlines() if line.strip()]
+            orig_events = (
+                list(split_query_events(raw_query))
+                if legacy_planner
+                else list(plan_query_events(raw_query))
+            )
         elif isinstance(raw_query, list):
             orig_events = [str(x).strip() for x in raw_query if str(x).strip()]
         else:
@@ -120,7 +136,7 @@ def main() -> int:
         print(f"Error: query file not found: {args.queries_file}", file=sys.stderr)
         return 1
 
-    queries = load_queries(args.queries_file)
+    queries = load_queries(args.queries_file, legacy_planner=args.legacy_planner)
     if not queries:
         print(f"Error: no queries found in {args.queries_file}", file=sys.stderr)
         return 1
@@ -150,6 +166,8 @@ def main() -> int:
         )
         return 1
 
+    deployed_config = temporal_evidence.config
+
     args.output_file.parent.mkdir(parents=True, exist_ok=True)
 
     results: list[dict[str, Any]] = []
@@ -167,6 +185,7 @@ def main() -> int:
         temporal_search.evidence = run_scorer
         run_use_dense = args.use_dense and run_kw.get("use_dense", True)
         run_use_bm25 = args.use_bm25 and run_kw.get("use_bm25", True)
+        temporal_search.config = run_cfg.alignment
 
         for q in queries:
             search_result = temporal_search.search(
@@ -207,6 +226,18 @@ def main() -> int:
                 "top_10_videos": top_10_videos,
                 "retrieval_ms": round(search_result.retrieval_ms, 2),
                 "alignment_ms": round(search_result.alignment_ms, 2),
+                "paths": [
+                    {
+                        "video_id": path.video_id,
+                        "frame_idxs": [
+                            int(x)
+                            for x in getattr(path, "frame_idxs", getattr(path, "frame_idx", ()))
+                        ],
+                        "timestamps_ms": [int(x) for x in getattr(path, "timestamps_ms", ())],
+                        "score": round(float(path.score), 4),
+                    }
+                    for path in paths[: args.record_paths]
+                ],
             }
             if target_video_id:
                 row["target_video_id"] = target_video_id

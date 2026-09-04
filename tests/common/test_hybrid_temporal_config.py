@@ -3,7 +3,13 @@
 from pathlib import Path
 
 import pytest
-from hcmai.common.config import AppConfig, HybridTemporalConfig, IndexConfig, SearchConfig
+from hcmai.common.config import (
+    AdaptiveTemporalFusionConfig,
+    AppConfig,
+    HybridTemporalConfig,
+    IndexConfig,
+    SearchConfig,
+)
 from hcmai.retrieval.models import RetrievalSource
 from pydantic import ValidationError
 
@@ -45,6 +51,16 @@ def test_baseline_exposes_bm25_artifact_path() -> None:
     config = AppConfig.from_yaml("configs/baseline.yaml")
 
     assert config.index.bm25_path.as_posix() == "artifacts/indexes/bm25"
+
+
+def test_baseline_declares_every_adaptive_component_weight() -> None:
+    """A partial mapping replaces the defaults, silently zeroing the omitted components."""
+
+    config = AppConfig.from_yaml("configs/baseline.yaml")
+    weights = config.search.hybrid_temporal.adaptive.base_component_weights
+
+    assert set(weights) == set(AdaptiveTemporalFusionConfig().base_component_weights)
+    assert weights["bm25_asr"] == 0.06
 
 
 def test_index_config_uses_segment_asr_without_frame_native_asr_path() -> None:
