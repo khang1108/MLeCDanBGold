@@ -541,6 +541,8 @@
   border-radius: var(--rounded-xl);
   border: 1px dashed var(--color-hairline);
   min-height: 220px;
+  /* Match the other result pages: empty results begin at the top, not center. */
+  margin: 0;
 }
 
 .filter-empty-icon {
