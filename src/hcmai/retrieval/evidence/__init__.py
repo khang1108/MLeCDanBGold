@@ -17,6 +17,7 @@ from hcmai.retrieval.evidence.diagnostics import (
 )
 from hcmai.retrieval.evidence.fusion import EventModalityRouter, TemporalFusionScorer
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
+from hcmai.retrieval.evidence.literal import LiteralTextIndex
 from hcmai.retrieval.evidence.normalization import minmax_rows
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "ComponentEventDebug",
     "DenseTemporalScorer",
     "EventModalityRouter",
+    "LiteralTextIndex",
     "SegmentProjectedASRIndex",
     "TemporalEvidenceDebugResult",
     "TemporalEvidenceScorer",

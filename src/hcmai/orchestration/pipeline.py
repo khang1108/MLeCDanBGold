@@ -7,6 +7,9 @@ from time import perf_counter
 from typing import Any, TYPE_CHECKING, cast
 
 from hcmai.api.contracts import (
+    FilterRequest,
+    FilterResponse,
+    FilterResult,
     QueryCandidateResponse,
     QueryCandidatesRequest,
     QueryCandidatesResponse,
@@ -34,6 +37,7 @@ from hcmai.temporal.planner import split_query_events
 if TYPE_CHECKING:
     from hcmai.query_preparation.service import QueryPreparationService
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
+    from hcmai.retrieval.evidence.literal import LiteralTextIndex
     from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
     from hcmai.retrieval.retriever.pipeline import RetrievalService
     from llm.pipeline import LLMService
@@ -67,7 +71,7 @@ class SearchServiceUnavailableError(RuntimeError):
 
 
 class SearchService:
-    """Expose image, KIS, and TRAKE search over shared runtime services."""
+    """Expose image, KIS, TRAKE, and literal search over shared runtime data."""
 
     def __init__(
         self,
@@ -79,6 +83,7 @@ class SearchService:
         temporal_evidence: TemporalEvidenceScorer | None | object = _UNSET,
         image_encoder: ImageEmbeddingAdapter | None = None,
         api_config: ApiConfig | None = None,
+        literal_text: LiteralTextIndex | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
@@ -87,6 +92,7 @@ class SearchService:
         self.config = config or SearchConfig()
         self.llm = llm
         self.query_preparation = query_preparation
+        self.literal_text = literal_text
         self.temporal_evidence = (
             _LegacyDenseEvidenceAdapter(retrieval)
             if temporal_evidence is _UNSET and retrieval is not None
@@ -261,6 +267,10 @@ class SearchService:
                 "bm25": bm25_ready,
                 "hybrid_temporal": dense_temporal_ready and bm25_ready,
                 "query_preparation": self.query_preparation is not None,
+                "filter": bool(
+                    self.literal_text is not None
+                    and self.literal_text.available_sources
+                ),
                 "remote_inference": remote_capabilities,
                 "frame_assets": asset_status["ready"],
                 "frame_asset_status": asset_status,
@@ -307,6 +317,49 @@ class SearchService:
             payload,
             content_type=content_type,
             top_k=top_k,
+        )
+
+    def filter_frames(self, request: FilterRequest) -> FilterResponse:
+        """Search raw evidence text without semantic retrieval or reranking."""
+
+        if self.corpus is None or self.literal_text is None:
+            raise SearchServiceUnavailableError("Literal filter is unavailable")
+        try:
+            total, hits = self.literal_text.search(
+                request.query,
+                folder_id=request.folder_id,
+                video_id=request.video_id,
+                page_id=request.page_id,
+                page_size=request.frames_per_pages,
+            )
+        except RuntimeError as error:
+            raise SearchServiceUnavailableError(str(error)) from error
+
+        results = [
+            FilterResult(
+                frame_id=frame.frame_id,
+                video_id=frame.video_id,
+                frame_idx=frame.frame_idx,
+                timestamp_ms=frame.timestamp_ms,
+                fps=frame.fps,
+                folder_id=frame.video_id.partition("_")[0],
+                title=metadata.get("title"),
+                caption=metadata.get("caption"),
+                ocr=metadata.get("ocr"),
+                objects=self.corpus.object_counts(frame.frame_id),
+                asr=metadata.get("asr"),
+                matches=matches,
+            )
+            for frame, metadata, matches in hits
+        ]
+        page_size = request.frames_per_pages
+        return FilterResponse(
+            page_id=request.page_id,
+            frames_per_pages=page_size,
+            total_pages=(total + page_size - 1) // page_size,
+            total_results=total,
+            available_sources=list(self.literal_text.available_sources),
+            results=results,
         )
 
     def generate_query_candidates(self, request: QueryCandidatesRequest) -> QueryCandidatesResponse:
