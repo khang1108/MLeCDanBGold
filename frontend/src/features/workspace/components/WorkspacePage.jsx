@@ -2,8 +2,9 @@
  * Workspace page for persisted Query history, manual video inspection, and
  * the shared submission filename worktree.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { getQueryHistory } from '../../../api/workspace';
+import { resolveFrameAtTimestamp } from '../../../api/frames';
 import SubmissionWorktree from '../../submission/components/SubmissionWorktree';
 
 const WorkspacePage = ({
@@ -19,7 +20,9 @@ const WorkspacePage = ({
   const [videoId, setVideoId] = useState('');
   const [timestampText, setTimestampText] = useState('');
   const [videoError, setVideoError] = useState(null);
+  const [isOpeningVideo, setIsOpeningVideo] = useState(false);
   const [eventRefreshToken, setEventRefreshToken] = useState(0);
+  const viewerRequestRef = useRef(null);
 
   const loadHistory = useCallback((signal) => {
     const trimmedUserId = userId.trim();
@@ -56,8 +59,15 @@ const WorkspacePage = ({
     }
   }, [userId]);
 
-  const handleManualVideoSubmit = (event) => {
+  useEffect(() => () => {
+    viewerRequestRef.current?.abort();
+    viewerRequestRef.current = null;
+  }, []);
+
+  const handleManualVideoSubmit = async (event) => {
     event.preventDefault();
+    if (isOpeningVideo) return;
+
     const trimmedVideoId = videoId.trim();
     const timestamp = Number(timestampText.trim());
     if (!trimmedVideoId) {
@@ -69,7 +79,32 @@ const WorkspacePage = ({
       return;
     }
     setVideoError(null);
-    onOpenManualVideo?.({ video_id: trimmedVideoId, timestamp_ms: timestamp });
+    viewerRequestRef.current?.abort();
+    const controller = new AbortController();
+    viewerRequestRef.current = controller;
+    setIsOpeningVideo(true);
+
+    try {
+      const frame = await resolveFrameAtTimestamp({
+        videoId: trimmedVideoId,
+        timestampMs: timestamp,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      onOpenManualVideo?.({
+        frame,
+        requestedTimestampMs: frame.requested_timestamp_ms,
+      });
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        setVideoError(error.message || 'Could not resolve canonical frame metadata.');
+      }
+    } finally {
+      if (viewerRequestRef.current === controller) {
+        viewerRequestRef.current = null;
+        setIsOpeningVideo(false);
+      }
+    }
   };
 
   return (
@@ -146,7 +181,9 @@ const WorkspacePage = ({
                 />
               </label>
               {videoError && <p className="workspace-form-error" role="alert">{videoError}</p>}
-              <button type="submit" className="btn-primary">Open in viewer</button>
+              <button type="submit" className="btn-primary" disabled={isOpeningVideo}>
+                {isOpeningVideo ? 'Opening…' : 'Open in viewer'}
+              </button>
             </form>
           </section>
           {isActive && <SubmissionWorktree />}

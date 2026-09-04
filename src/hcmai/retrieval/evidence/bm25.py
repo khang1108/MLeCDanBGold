@@ -154,10 +154,10 @@ class BM25TemporalScorer:
         """Sum precomputed sparse columns for query terms present in one field."""
 
         vocabulary = self._vocabularies[field]
+        matrix = cast(Any, self._matrices[field])
         columns = [vocabulary[token] for token in tokens if token in vocabulary]
         if not columns:
-            return np.zeros(self._matrices[field].shape[0], dtype=np.float32)
-        matrix = cast(Any, self._matrices[field])
+            return np.zeros(int(matrix.shape[0]), dtype=np.float32)
         values = np.asarray(matrix[:, columns].sum(axis=1)).reshape(-1)
         return values.astype(np.float32, copy=False)
 

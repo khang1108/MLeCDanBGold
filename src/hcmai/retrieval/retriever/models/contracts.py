@@ -28,8 +28,11 @@ class Retriever(Protocol):
 class VectorRetriever(Retriever, Protocol):
     """Retriever accepted by the concurrent RRF vector-search path."""
 
-    source: RetrievalSource
-    source_family: SourceFamily
+    @property
+    def source(self) -> RetrievalSource: ...
+
+    @property
+    def source_family(self) -> SourceFamily: ...
 
     def encode(self, query_texts: list[str]) -> QueryEmbeddingBatch: ...
 

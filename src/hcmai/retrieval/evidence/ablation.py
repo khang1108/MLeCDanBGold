@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Literal
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
-from hcmai.common.config import (
-    AdaptiveTemporalFusionConfig,
-    AlignmentConfig,
-    HybridTemporalConfig,
-)
+from hcmai.common.config import HybridTemporalConfig
+
+if TYPE_CHECKING:
+    from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 
 
 @dataclass(frozen=True)
@@ -22,80 +21,106 @@ class AblationRunConfig:
     confidence_gating: bool
     event_routing: bool
     interval_projection: bool
-    alignment: AlignmentConfig = field(default_factory=AlignmentConfig)
+    use_dense: bool = True
+    use_bm25: bool = True
 
-    def to_hybrid_config(self) -> HybridTemporalConfig:
-        """Convert ablation settings into a concrete HybridTemporalConfig."""
+    def apply_to(self, baseline: HybridTemporalConfig) -> HybridTemporalConfig:
+        """Apply this run's switches without resetting baseline weights or boosts."""
 
-        return HybridTemporalConfig(
-            fusion_mode=self.fusion_mode,
-            adaptive=AdaptiveTemporalFusionConfig(
-                robust_calibration=self.robust_calibration,
-                confidence_gating=self.confidence_gating,
-                event_routing=self.event_routing,
-            ),
+        adaptive = baseline.adaptive.model_copy(
+            update={
+                "robust_calibration": self.robust_calibration,
+                "confidence_gating": self.confidence_gating,
+                "event_routing": self.event_routing,
+                "asr_interval_projection": self.interval_projection,
+            }
+        )
+        return baseline.model_copy(
+            update={"fusion_mode": self.fusion_mode, "adaptive": adaptive}
         )
 
 
 ABLATION_RUNS: dict[str, AblationRunConfig] = {
-    "A0_legacy_v9": AblationRunConfig(
-        name="A0_legacy_v9",
+    "B0_legacy_v9": AblationRunConfig(
+        name="B0_legacy_v9",
         fusion_mode="legacy",
         robust_calibration=False,
         confidence_gating=False,
         event_routing=False,
         interval_projection=False,
+        use_dense=True,
+        use_bm25=True,
     ),
-    "A1_components_fixed": AblationRunConfig(
-        name="A1_components_fixed",
+    "B1_flat_components": AblationRunConfig(
+        name="B1_flat_components",
         fusion_mode="adaptive_p0",
         robust_calibration=False,
         confidence_gating=False,
         event_routing=False,
         interval_projection=False,
+        use_dense=True,
+        use_bm25=True,
     ),
-    "A2_robust_calibration": AblationRunConfig(
-        name="A2_robust_calibration",
+    "B2_asr_interval": AblationRunConfig(
+        name="B2_asr_interval",
+        fusion_mode="adaptive_p0",
+        robust_calibration=False,
+        confidence_gating=False,
+        event_routing=False,
+        interval_projection=True,
+        use_dense=True,
+        use_bm25=True,
+    ),
+    "B3_robust_calibration": AblationRunConfig(
+        name="B3_robust_calibration",
         fusion_mode="adaptive_p0",
         robust_calibration=True,
         confidence_gating=False,
         event_routing=False,
-        interval_projection=False,
+        interval_projection=True,
+        use_dense=True,
+        use_bm25=True,
     ),
-    "A3_confidence_gating": AblationRunConfig(
-        name="A3_confidence_gating",
-        fusion_mode="adaptive_p0",
-        robust_calibration=True,
-        confidence_gating=True,
-        event_routing=False,
-        interval_projection=False,
-    ),
-    "A4_asr_interval": AblationRunConfig(
-        name="A4_asr_interval",
+    "B4_confidence_gating": AblationRunConfig(
+        name="B4_confidence_gating",
         fusion_mode="adaptive_p0",
         robust_calibration=True,
         confidence_gating=True,
         event_routing=False,
         interval_projection=True,
+        use_dense=True,
+        use_bm25=True,
     ),
-    "A5_adaptive_p0": AblationRunConfig(
-        name="A5_adaptive_p0",
+    "B5_adaptive_p0": AblationRunConfig(
+        name="B5_adaptive_p0",
         fusion_mode="adaptive_p0",
         robust_calibration=True,
         confidence_gating=True,
         event_routing=True,
         interval_projection=True,
+        use_dense=True,
+        use_bm25=True,
+    ),
+    "B6_dense_only": AblationRunConfig(
+        name="B6_dense_only",
+        fusion_mode="adaptive_p0",
+        robust_calibration=True,
+        confidence_gating=True,
+        event_routing=True,
+        interval_projection=True,
+        use_dense=True,
+        use_bm25=False,
     ),
 }
 
-# Alias short names A0-A5
-_SHORT_KEY_MAP = {
-    f"A{i}": name for i, name in enumerate(ABLATION_RUNS.keys())
-}
+# A1 componentized-legacy is a regression test, not a runtime condition.
+# B0-B6 are performance experiments whose flat-component baseline is allowed
+# to differ from the legacy fusion equation.
+_SHORT_KEY_MAP = {f"B{i}": name for i, name in enumerate(ABLATION_RUNS.keys())}
 
 
 def resolve_ablation_run(key: str) -> AblationRunConfig:
-    """Resolve an ablation run by full name or short alias (e.g. 'A0' -> 'A0_legacy_v9')."""
+    """Resolve an ablation run by full name or short alias (for example, ``B0``)."""
 
     if key in ABLATION_RUNS:
         return ABLATION_RUNS[key]
@@ -104,3 +129,31 @@ def resolve_ablation_run(key: str) -> AblationRunConfig:
         return ABLATION_RUNS[_SHORT_KEY_MAP[upper_key]]
     valid = ", ".join(list(ABLATION_RUNS.keys()) + list(_SHORT_KEY_MAP.keys()))
     raise KeyError(f"Unknown ablation run '{key}'. Valid options: {valid}")
+
+
+def make_ablation_scorer(
+    baseline_scorer: TemporalEvidenceScorer,
+    run_key: str,
+) -> tuple[TemporalEvidenceScorer, dict[str, Any]]:
+    """Derive an isolated ablation scorer from a baseline scorer.
+
+    Preserves runtime base weights and config while applying only the
+    isolated parameters for the specified ablation run.
+    """
+
+    run_cfg = resolve_ablation_run(run_key)
+    run_hybrid = run_cfg.apply_to(baseline_scorer.config)
+    cloned_scorer = baseline_scorer.with_config(run_hybrid)
+    run_kwargs: dict[str, Any] = {
+        "use_dense": run_cfg.use_dense,
+        "use_bm25": run_cfg.use_bm25,
+    }
+    return cloned_scorer, run_kwargs
+
+
+__all__ = [
+    "ABLATION_RUNS",
+    "AblationRunConfig",
+    "make_ablation_scorer",
+    "resolve_ablation_run",
+]

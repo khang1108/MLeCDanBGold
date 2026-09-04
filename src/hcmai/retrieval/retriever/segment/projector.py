@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from numbers import Integral
 from collections import defaultdict
-from collections.abc import Sequence
-from typing import Literal, Mapping
+from collections.abc import Iterable, Sequence
+from typing import Any, Literal, Mapping, cast
 
 from hcmai.corpus.models import Frame
 
@@ -50,7 +50,7 @@ class SegmentFrameProjector:
             or max_projection_gap_ms < 0
         ):
             raise ValueError("max_projection_gap_ms must be a non-negative integer")
-        records = getattr(frames, "iter_frames", lambda: frames)()
+        records = cast(Iterable[Any], getattr(frames, "iter_frames", lambda: frames)())
         grouped: defaultdict[str, list[Frame]] = defaultdict(list)
         for frame in records:
             grouped[frame.video_id].append(frame)

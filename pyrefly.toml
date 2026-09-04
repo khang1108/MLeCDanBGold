@@ -1,0 +1,28 @@
+project-includes = ["src", "scripts"]
+project-excludes = ["aic", "artifacts", "data", "runs", "tests"]
+search-path = ["src", "."]
+python-version = "3.14.0"
+python-interpreter-path = "aic/bin/python"
+
+[errors]
+implicit-bool = "ignore"
+unknown-argument-type = "ignore"
+implicit-any = "ignore"
+implicit-any-attribute = "ignore"
+implicit-any-empty-container = "ignore"
+implicit-any-lambda = "ignore"
+implicit-any-parameter = "ignore"
+unnecessary-type-conversion = "ignore"
+explicit-any = "ignore"
+deprecated = "ignore"
+missing-override-decorator = "ignore"
+missing-super-call = "ignore"
+no-any-return = "ignore"
+no-any-return-explicit = "ignore"
+no-any-return-implicit = "ignore"
+redundant-cast = "ignore"
+unannotated-return = "ignore"
+unknown-variable-type = "ignore"
+untyped-import = "ignore"
+unused-call-result = "ignore"
+unused-ignore = "ignore"

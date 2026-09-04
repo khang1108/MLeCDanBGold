@@ -144,6 +144,34 @@ def test_get_many_preserves_order_and_duplicates(metadata_path: Path) -> None:
     assert [frame.frame_id for frame in store.get_many(requested)] == requested
 
 
+def test_get_nearest_by_video_preserves_canonical_identity(
+    metadata_path: Path,
+) -> None:
+    """Resolve a viewer timestamp without inventing a frame identifier."""
+
+    store = FrameStore(metadata_path)
+
+    exact = store.get_nearest_by_video("L21_V001", timestamp_ms=1_000)
+    nearest = store.get_nearest_by_video("L21_V001", timestamp_ms=1_200)
+    tied = store.get_nearest_by_video("L21_V001", timestamp_ms=700)
+
+    # Duplicate canonical timestamps use the lower organizer frame_idx. An
+    # equidistant requested time prefers the earlier canonical keyframe.
+    assert exact.frame_id == "L21_V001_00000020"
+    assert nearest.frame_id == "L21_V001_00000020"
+    assert tied.frame_id == "L21_V001_00000010"
+
+
+def test_get_nearest_by_video_rejects_unknown_video(metadata_path: Path) -> None:
+    """Do not manufacture a frame when a manually entered video is absent."""
+
+    with pytest.raises(KeyError, match="UNKNOWN_VIDEO"):
+        FrameStore(metadata_path).get_nearest_by_video(
+            "UNKNOWN_VIDEO",
+            timestamp_ms=1_000,
+        )
+
+
 def test_get_neighbors_stays_in_video_and_sorts_by_time(
     metadata_path: Path,
 ) -> None:

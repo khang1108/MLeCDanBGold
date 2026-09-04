@@ -340,6 +340,7 @@ class RobustCalibrationConfig(BaseModel):
     q_low: float = Field(default=0.05, ge=0.0, lt=1.0)
     q_high: float = Field(default=0.95, gt=0.0, le=1.0)
     top_fraction: float = Field(default=0.01, gt=0.0, le=0.25)
+    top_k_max: int = Field(default=128, ge=1)
     eps: float = Field(default=1e-6, gt=0.0)
 
     @model_validator(mode="after")
@@ -369,6 +370,7 @@ class AdaptiveTemporalFusionConfig(BaseModel):
     robust_calibration: bool = True
     confidence_gating: bool = True
     event_routing: bool = True
+    asr_interval_projection: bool = True
     base_component_weights: dict[str, float] = Field(
         default_factory=lambda: {
             "visual_dense": 0.35,

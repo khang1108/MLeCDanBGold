@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from types import SimpleNamespace
+from typing import Any, cast
 
 from hcmai.corpus.models import Frame
 from hcmai.retrieval.retriever.dense.index import DenseIndex
@@ -261,7 +262,7 @@ def test_projected_asr_rejects_stale_projector_identity(
         SegmentProjectedASRIndex(
             segment_index=_segment_index(),
             canonical_index=_canonical_index(),
-            projector=projector,
+            projector=cast(Any, projector),
         )
 
 

@@ -69,7 +69,18 @@ def build_evidence_diagnostics(
         for name, component in bundle.components.items():
             raw = component.raw_scores[event_index]
             raw_max = float(raw.max()) if len(raw) else 0.0
-            raw_median = float(np.median(raw)) if len(raw) else 0.0
+
+            if component.coverage is not None:
+                supported_mask = component.coverage
+            elif name.startswith("bm25_"):
+                supported_mask = raw > 0.0
+            else:
+                supported_mask = None
+
+            if supported_mask is not None and np.any(supported_mask):
+                raw_median = float(np.median(raw[supported_mask]))
+            else:
+                raw_median = float(np.median(raw)) if len(raw) else 0.0
 
             cal = calibrated[name]
             cal_scores = cal.scores[event_index]

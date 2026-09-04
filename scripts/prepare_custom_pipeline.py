@@ -32,7 +32,7 @@ import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal, cast
 from urllib.request import Request, urlopen
 import zipfile
 
@@ -249,9 +249,9 @@ def _write_video_projection(table: pd.DataFrame, frame_ids: list[str], output: P
     """Write one exact per-video specialist projection for the native handoff."""
 
     order = {frame_id: index for index, frame_id in enumerate(frame_ids)}
-    selected = table[table["frame_id"].astype(str).isin(order)].copy()
-    selected["_order"] = selected["frame_id"].astype(str).map(order)
-    selected = selected.sort_values("_order").drop(columns="_order")
+    selected = cast(pd.DataFrame, table[table["frame_id"].astype(str).isin(list(order))].copy())
+    selected["_order"] = pd.Series(selected["frame_id"].astype(str)).map(order)
+    selected = selected.sort_values(by="_order").drop(columns="_order")
     if selected["frame_id"].astype(str).tolist() != frame_ids:
         raise ValueError("specialist projection changed per-video frame identity")
     atomic_write(output, lambda path: write_parquet(selected, path, index=False))
@@ -268,10 +268,10 @@ def _load_or_empty(path: Path, columns: list[str]) -> pd.DataFrame:
 
 def _materialize_frames_for_videos(
     run_root: Path,
-    video_ids: list[str],
+    video_ids: Sequence[str],
     output: Path,
     *,
-    image_variant: str,
+    image_variant: Literal["durable", "enrichment"],
 ) -> Path:
     """Publish a deterministic per-batch FrameStore slice over selected bundles."""
 
@@ -413,7 +413,7 @@ def _build_run_identity(args: argparse.Namespace, plan: ArchivePlan) -> RunIdent
 
 def _make_produce_batch_artifacts(
     args: argparse.Namespace, state_store: PipelineStateStore
-) -> Callable[[str, list[str], list[Path]], BatchArtifacts]:
+) -> Callable[[str, Sequence[str], Sequence[Path]], BatchArtifacts]:
     """Build the callback that runs real local stages for one batch.
 
     Runs native extraction, then Caption/OCR/Objects as isolated
@@ -429,7 +429,7 @@ def _make_produce_batch_artifacts(
     visual_encoder_config = _load_encoder_config(args.config, "visual_embedding")
     context_encoder_config = _load_encoder_config(args.config, "evidence_embedding")
 
-    def _produce(batch_id: str, video_ids: list[str], source_paths: list[Path]) -> BatchArtifacts:
+    def _produce(batch_id: str, video_ids: Sequence[str], source_paths: Sequence[Path]) -> BatchArtifacts:
         for video_id in video_ids:
             state_store.advance_video(video_id, VideoStage.SOURCE_READY)
 
@@ -580,7 +580,7 @@ def _make_produce_batch_artifacts(
             cleanup_video(native_executable, run_root, video_id)
 
         return BatchArtifacts(
-            frames_table=base,
+            frames_table=cast(pd.DataFrame, base),
             frame_native_tables=frame_native_tables,
             child_tables=child_tables,
             visual_vectors=visual_vectors,

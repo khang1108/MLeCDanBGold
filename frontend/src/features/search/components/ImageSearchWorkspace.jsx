@@ -3,32 +3,15 @@
  *
  * Reuses the layout, result presentation, and canonical frame submission
  * behaviour of SearchWorkspace while replacing the text input with an image upload.
+ * It intentionally does not create or update query-history records.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { searchFramesByImage } from '../../../api/search';
-import {
-  createQueryHistory,
-  markFrameViewed,
-} from '../../../api/workspace';
 import FramesBox from '../../frames/components/FramesBox';
 import ToolBox from '../../search-controls/components/ToolBox';
 import GifLoaderOverlay from './GifLoaderOverlay';
 import { displayVideoId } from '../../frames/videoSource';
 import { useSubmissionDialog } from '../../submission/contexts/SubmissionDialogContext';
-import {
-  buildKisSnapshot,
-  normalizeFrameActivity,
-  withViewedFrame,
-  withSubmittedFrames,
-  activityStateForFrame,
-} from '../../workspace/queryHistory';
-
-const createClientQueryId = () => {
-  if (typeof window !== 'undefined' && typeof window.crypto?.randomUUID === 'function') {
-    return window.crypto.randomUUID();
-  }
-  return `img-query-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-};
 
 const formatFileSize = (bytes) => {
   if (!bytes || bytes <= 0) return '0 B';
@@ -42,9 +25,6 @@ const ImageSearchWorkspace = ({
   topK = 20,
   setTopK,
   onFrameClick,
-  userId,
-  onFocusUserId,
-  onHistoryRefresh,
 }) => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -54,11 +34,9 @@ const ImageSearchWorkspace = ({
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
-  const [activeQuerySession, setActiveQuerySession] = useState(null);
 
   const fileInputRef = useRef(null);
   const requestRef = useRef(null);
-  const viewedPatchRef = useRef(new Set());
   const { requestSubmission } = useSubmissionDialog();
 
   // Manage thumbnail object URL
@@ -82,64 +60,20 @@ const ImageSearchWorkspace = ({
   // Clean up abort controller on unmount
   useEffect(() => () => requestRef.current?.abort(), []);
 
-  // Listen for history submission changes
-  useEffect(() => {
-    const handleHistoryChanged = (event) => {
-      const { queryId, frameIds } = event?.detail || {};
-      if (!queryId || !Array.isArray(frameIds) || frameIds.length === 0) return;
-      setActiveQuerySession((current) => {
-        if (!current || current.queryId !== queryId) return current;
-        return {
-          ...current,
-          frameActivity: withSubmittedFrames(current.frameActivity, frameIds),
-        };
-      });
-    };
-    window.addEventListener('hcmai:history-changed', handleHistoryChanged);
-    return () => window.removeEventListener('hcmai:history-changed', handleHistoryChanged);
-  }, []);
-
-  const historyForSession = useCallback((session, frameIds) => {
-    if (!session?.queryId) return undefined;
-    return { queryId: session.queryId, frameIds };
-  }, []);
-
-  const recordViewed = useCallback((frame) => {
-    const frameId = frame?.frame_id;
-    const session = activeQuerySession;
-    if (!frameId || !session?.queryId) return;
-    const patchKey = `${session.queryId}:${frameId}`;
-    if (viewedPatchRef.current.has(patchKey)) return;
-    viewedPatchRef.current.add(patchKey);
-    setActiveQuerySession((current) => (current
-      ? { ...current, frameActivity: withViewedFrame(current.frameActivity, frameId) }
-      : current));
-    markFrameViewed({ queryId: session.queryId, frameId }).catch((patchError) => {
-      viewedPatchRef.current.delete(patchKey);
-      setWarnings((current) => Array.from(new Set([
-        ...current,
-        `History view state was not recorded: ${patchError.message || 'request failed'}`,
-      ])));
-    });
-  }, [activeQuerySession]);
-
   const openCanonicalFrame = useCallback((frame, submissionMode = 'kis') => {
-    recordViewed(frame);
     onFrameClick?.({
       frame,
       submissionMode,
-      history: historyForSession(activeQuerySession, [frame.frame_id]),
     });
-  }, [activeQuerySession, historyForSession, onFrameClick, recordViewed]);
+  }, [onFrameClick]);
 
   const handleFrameSubmit = useCallback((frame) => {
     const vid = displayVideoId(frame.video_id);
     requestSubmission({
       line: `${vid},${frame.frame_idx}`,
       source: 'Image search frame',
-      history: historyForSession(activeQuerySession, [frame.frame_id]),
     });
-  }, [activeQuerySession, historyForSession, requestSubmission]);
+  }, [requestSubmission]);
 
   const handleFileSelect = useCallback((file) => {
     if (!file) return;
@@ -209,24 +143,15 @@ const ImageSearchWorkspace = ({
     event?.preventDefault?.();
     if (!selectedFile || isSearching) return;
 
-    if (typeof userId === 'string' && !userId.trim()) {
-      setError('Enter a User ID before searching.');
-      onFocusUserId?.();
-      return;
-    }
-
-    const capturedUserId = typeof userId === 'string' ? userId.trim() : null;
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    const queryId = capturedUserId ? createClientQueryId() : null;
 
     setIsSearching(true);
     setError(null);
     setWarnings([]);
     setFrames([]);
     setSearchLatencyMs(null);
-    setActiveQuerySession(null);
 
     try {
       const response = await searchFramesByImage({
@@ -237,42 +162,9 @@ const ImageSearchWorkspace = ({
 
       if (controller.signal.aborted) return;
 
-      const snapshotOptions = {
-        events: [],
-        latency: response.latency,
-        warnings: response.warnings || [],
-      };
-      const snapshot = buildKisSnapshot(response.results || [], snapshotOptions);
-
       setFrames(response.results || []);
       setSearchLatencyMs(response.latency);
       setWarnings(response.warnings || []);
-
-      if (queryId) {
-        try {
-          await createQueryHistory({
-            queryId,
-            userId: capturedUserId,
-            queryText: `[Image] ${selectedFile.name}`,
-            resultSnapshot: snapshot,
-            signal: controller.signal,
-          });
-          if (controller.signal.aborted) return;
-          viewedPatchRef.current = new Set();
-          setActiveQuerySession({
-            queryId,
-            ownerUserId: capturedUserId,
-            queryText: `[Image] ${selectedFile.name}`,
-            resultSnapshot: snapshot,
-            frameActivity: normalizeFrameActivity(),
-            source: 'image-search',
-          });
-          onHistoryRefresh?.();
-        } catch (historyError) {
-          if (historyError.name === 'AbortError') return;
-          setWarnings((current) => [...current, `History was not saved: ${historyError.message || 'request failed'}`]);
-        }
-      }
     } catch (requestError) {
       if (requestError.name === 'AbortError') return;
       setError(requestError.message || 'Failed to contact search API');
@@ -282,7 +174,7 @@ const ImageSearchWorkspace = ({
         setIsSearching(false);
       }
     }
-  }, [isSearching, onFocusUserId, onHistoryRefresh, selectedFile, topK, userId]);
+  }, [isSearching, selectedFile, topK]);
 
   const handleNewSearch = useCallback(() => {
     requestRef.current?.abort();
@@ -294,17 +186,7 @@ const ImageSearchWorkspace = ({
     setWarnings([]);
     setError(null);
     setSearchLatencyMs(null);
-    setActiveQuerySession(null);
   }, []);
-
-  const getFrameClassName = useCallback(
-    (frameOrId) => {
-      const frameId = typeof frameOrId === 'string' ? frameOrId : frameOrId?.frame_id;
-      if (!frameId) return '';
-      return activityStateForFrame(frameId, activeQuerySession?.frameActivity);
-    },
-    [activeQuerySession?.frameActivity],
-  );
 
   return (
     <div className="adhoc-workspace search-workspace">
@@ -401,7 +283,6 @@ const ImageSearchWorkspace = ({
               events={[]}
               onFrameClick={openCanonicalFrame}
               onSubmit={handleFrameSubmit}
-              getFrameClassName={getFrameClassName}
             />
           )}
         </div>

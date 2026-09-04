@@ -223,7 +223,7 @@ def _normalize_text(text: str) -> str:
     return normalized
 
 
-def _encoder_revision(encoder: TextEmbeddingAdapter) -> str | None:
+def _encoder_revision(encoder: TextEmbeddingAdapter | ImageEmbeddingAdapter) -> str | None:
     value = getattr(encoder, "resolved_revision", None)
     if value is None:
         value = getattr(encoder, "revision", None)

@@ -38,7 +38,7 @@ import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
 import pandas as pd
 from tqdm import tqdm
@@ -101,7 +101,7 @@ def _find_file(root: Path, relative_paths: Sequence[str]) -> Path | None:
     return None
 
 
-def _load_objects_map(artifacts_root: Path, video_filter: set[str] | None) -> dict[str, dict[str, int]]:
+def _load_objects_map(artifacts_root: Path, video_filter: Sequence[str] | None) -> dict[str, dict[str, int]]:
     """Load object counts per frame_id from detections or frames parquet."""
     objects_by_frame: dict[str, dict[str, int]] = defaultdict(dict)
 
@@ -118,12 +118,12 @@ def _load_objects_map(artifacts_root: Path, video_filter: set[str] | None) -> di
         logger.info("Loading object counts from: %s", frames_obj_path)
         df_obj = pd.read_parquet(frames_obj_path, columns=["frame_id", "video_id", "counts_json"])
         if video_filter is not None:
-            df_obj = df_obj[df_obj["video_id"].isin(video_filter)]
+            df_obj = df_obj[df_obj["video_id"].isin(list(video_filter))]
         for _, row in df_obj.iterrows():
             fid = str(row["frame_id"])
-            if pd.notna(row.get("counts_json")):
+            if bool(pd.notna(row.get("counts_json"))):
                 try:
-                    counts = json.loads(row["counts_json"])
+                    counts = json.loads(str(row["counts_json"]))
                     if isinstance(counts, dict):
                         objects_by_frame[fid] = {str(k): int(v) for k, v in counts.items()}
                 except Exception:
@@ -143,7 +143,7 @@ def _load_objects_map(artifacts_root: Path, video_filter: set[str] | None) -> di
         logger.info("Loading object counts from detections: %s", detections_path)
         det_df = pd.read_parquet(detections_path, columns=["frame_id", "video_id", "label"])
         if video_filter is not None:
-            det_df = det_df[det_df["video_id"].isin(video_filter)]
+            det_df = det_df[det_df["video_id"].isin(list(video_filter))]
         
         for frame_id, group in det_df.groupby("frame_id", sort=False):
             counts: dict[str, int] = {}
@@ -159,7 +159,7 @@ def _load_objects_map(artifacts_root: Path, video_filter: set[str] | None) -> di
 
 def _load_transcripts(
     transcripts_root: Path,
-    video_filter: set[str] | None,
+    video_filter: Sequence[str] | None,
 ) -> dict[str, list[tuple[int, int, str]]]:
     """Load transcript segments (start_ms, end_ms, text) grouped by video_id."""
     transcripts_by_video: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
@@ -170,9 +170,10 @@ def _load_transcripts(
     transcript_files = list(transcripts_root.rglob("*.parquet"))
     logger.info("Scanning %d transcript files from %s", len(transcript_files), transcripts_root)
 
+    filter_set = set(video_filter) if video_filter is not None else None
     for f in transcript_files:
         video_id = f.stem
-        if video_filter is not None and video_id not in video_filter:
+        if filter_set is not None and video_id not in filter_set:
             continue
         try:
             df = pd.read_parquet(f)
@@ -181,10 +182,10 @@ def _load_transcripts(
             segments = []
             for _, row in df.iterrows():
                 text = row.get("text")
-                if pd.notna(text) and str(text).strip():
+                if bool(pd.notna(text)) and str(text).strip():
                     segments.append((
-                        int(row.get("start_ms", 0)),
-                        int(row.get("end_ms", 0)),
+                        int(cast(Any, row.get("start_ms", 0))),
+                        int(cast(Any, row.get("end_ms", 0))),
                         str(text).strip(),
                     ))
             segments.sort(key=lambda s: (s[0], s[1]))
@@ -251,7 +252,7 @@ def export_corpus_jsonl(
     if limit_videos and limit_videos > 0:
         all_videos = all_videos[:limit_videos]
 
-    video_filter = set(all_videos)
+    video_filter = list(dict.fromkeys(all_videos))
     frames_df = frames_df[frames_df["video_id"].isin(video_filter)]
     logger.info("Processing %d videos (%d total frames)", len(all_videos), len(frames_df))
 
@@ -289,7 +290,7 @@ def export_corpus_jsonl(
         ocr_df = pd.read_parquet(ocr_path, columns=actual_cols)
         ocr_df = ocr_df[ocr_df["video_id"].isin(video_filter)]
         for _, row in ocr_df.iterrows():
-            txt = row.get("normalized_text") if pd.notna(row.get("normalized_text")) else row.get("raw_text")
+            txt = row.get("normalized_text") if bool(pd.notna(row.get("normalized_text"))) else row.get("raw_text")
             ocr_map[str(row["frame_id"])] = _clean_ocr(txt)
 
     # 4. Load Objects
@@ -311,7 +312,7 @@ def export_corpus_jsonl(
     for _, row in tqdm(frames_df.iterrows(), total=len(frames_df), desc="Formatting frames"):
         vid = str(row["video_id"])
         fid = str(row["frame_id"])
-        ts_ms = int(row.get("timestamp_ms", 0))
+        ts_ms = int(cast(Any, row.get("timestamp_ms", 0)))
         ts_sec = round(ts_ms / 1000.0, 4)
 
         # Match ASR
@@ -320,7 +321,7 @@ def export_corpus_jsonl(
 
         frame_data = {
             "frame_id": fid,
-            "frame_idx": int(row.get("frame_idx", 0)),
+            "frame_idx": int(cast(Any, row.get("frame_idx", 0))),
             "video_id": vid,
             "timestamp": ts_sec,
             "metadata": {
@@ -339,7 +340,7 @@ def export_corpus_jsonl(
             folder_id = vid.split("_")[0] if "_" in vid else vid
             info = media_info_map.get(vid, {})
             # Read fps from first frame of video
-            v_frames = frames_df[frames_df["video_id"] == vid]
+            v_frames = cast(pd.DataFrame, frames_df[frames_df["video_id"] == vid])
             fps_val = float(v_frames.iloc[0].get("fps", 25.0)) if len(v_frames) > 0 else 25.0
             
             header[vid] = {

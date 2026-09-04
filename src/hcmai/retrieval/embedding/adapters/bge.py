@@ -37,7 +37,7 @@ class BGEAdapter:
         if loader is None:
             loader = SentenceTransformer
 
-        options = {"device": self.config.device}
+        options: dict[str, Any] = {"device": self.config.device}
         if self.config.revision is not None:
             options["revision"] = self.config.revision
 

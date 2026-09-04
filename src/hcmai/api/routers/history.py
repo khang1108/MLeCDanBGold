@@ -117,15 +117,21 @@ def _validate_snapshot(container: dict[str, Any], data: QueryHistoryCreate) -> N
     key = keys[0]
 
     for item in items:
-        frame_ids = item.get("frame_ids") if isinstance(item, dict) else None
-        if not isinstance(frame_ids, list) or not all(
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Snapshot items must be objects",
+            )
+        raw_frame_ids = item.get("frame_ids")
+        if not isinstance(raw_frame_ids, list) or not all(
             isinstance(frame_id, str) and frame_id.strip()
-            for frame_id in frame_ids
+            for frame_id in raw_frame_ids
         ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Snapshot frame_ids must be an array of strings",
             )
+        frame_ids: list[str] = [str(fid) for fid in raw_frame_ids]
 
         if key == "results":
             representative = item.get("frame_id")
@@ -180,7 +186,8 @@ async def _run_file_command(
 ) -> dict[str, object]:
     """Validate and commit one submission-file WebSocket command."""
 
-    model = COMMANDS.get(payload.get("type"))
+    command_type = payload.get("type")
+    model = COMMANDS.get(str(command_type)) if command_type is not None else None
     if model is None:
         raise ValueError("Unknown submission file command")
     command = model.model_validate(payload)
@@ -315,7 +322,10 @@ def create_workspace_router(service_container: dict[str, Any]) -> APIRouter:
         deleted_names = await run_in_threadpool(
             _workspace_store(service_container).clear_submission_files
         )
-        event = {"type": "submission_file.cleared", "deleted_names": deleted_names}
+        event: dict[str, object] = {
+            "type": "submission_file.cleared",
+            "deleted_names": deleted_names,
+        }
         await connections.broadcast(event)
         return event
 

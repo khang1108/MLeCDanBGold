@@ -21,6 +21,7 @@ from hcmai.api.contracts.database import (
     DatabaseTable,
 )
 from hcmai.api.contracts.history import (
+    FrameActivity,
     QueryHistoryCreate,
     QueryHistoryRecord,
     SubmissionFile,
@@ -502,10 +503,10 @@ def _history_record(row: sqlite3.Row) -> QueryHistoryRecord:
         query_text=row["query_text"],
         submission_files=_array(row["submission_file_names_json"]),
         result_snapshot=json.loads(row["result_snapshot_json"]),
-        frame_activity={
-            "viewed_frame_ids": _array(row["viewed_frame_ids_json"]),
-            "submitted_frame_ids": _array(row["submitted_frame_ids_json"]),
-        },
+        frame_activity=FrameActivity(
+            viewed_frame_ids=_array(row["viewed_frame_ids_json"]),
+            submitted_frame_ids=_array(row["submitted_frame_ids_json"]),
+        ),
     )
 
 

@@ -51,6 +51,33 @@ def test_visual_action_event_boosts_visual_components() -> None:
     assert weights["context_dense"] > AdaptiveTemporalFusionConfig().base_component_weights["context_dense"]
 
 
+def test_token_boundary_prevents_accidental_substring_matches() -> None:
+    """Substrings like 'xem' or 'design' must not trigger 'xe' or 'sign' cues."""
+
+    router = EventModalityRouter(AdaptiveTemporalFusionConfig())
+    # "xem" contains "xe", "design" contains "sign"
+    weights = router.multipliers(
+        "Khán giả đang xem một tiết mục.",
+        "The audience watches a design performance.",
+    )
+    base = AdaptiveTemporalFusionConfig().base_component_weights
+    # Neither visual action cue 'xe' nor OCR cue 'sign' should trigger!
+    assert weights["visual_dense"] == base["visual_dense"]
+    assert weights["bm25_ocr"] == base["bm25_ocr"]
+
+
+def test_generic_question_intent_does_not_trigger_cues() -> None:
+    """Events without modality cues retain default base component weights."""
+
+    router = EventModalityRouter(AdaptiveTemporalFusionConfig())
+    weights = router.multipliers(
+        "Sự việc diễn ra vào thời điểm nào?",
+        "At what time does the event take place?",
+    )
+    base = AdaptiveTemporalFusionConfig().base_component_weights
+    assert weights == base
+
+
 def test_fusion_renormalizes_when_asr_has_no_frame_coverage() -> None:
     """When ASR has no coverage on a frame, remaining components renormalize to 1.0."""
 
@@ -148,3 +175,68 @@ def test_event_count_mismatch_raises_value_error() -> None:
             retrieval_events=["e1", "e2"],
             bundle=bundle,
         )
+
+
+def test_stateless_scorer_and_cloned_scorers_reflect_config_changes() -> None:
+    """Cloned scorers and stateless config changes produce different fused matrices."""
+    from hcmai.common.config import HybridTemporalConfig
+    from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
+    from tests.retrieval.evidence.fakes import FakeEncoder, FakeIndex
+
+    visual = FakeIndex(np.asarray([[0.2, 0.4, 0.8]], dtype=np.float32))
+    encoder = FakeEncoder(np.asarray([[1.0, 0.0]], dtype=np.float32))
+
+    class MockDense:
+        def score_components(self, events, *, asr_interval_projection=True):
+            del events, asr_interval_projection
+            return TemporalScoreBundle(
+                {
+                    "visual_dense": TemporalScoreComponent(
+                        "visual_dense", np.asarray([[0.1, 0.5, 0.9]], dtype=np.float32)
+                    ),
+                    "asr_dense": TemporalScoreComponent(
+                        "asr_dense",
+                        np.asarray([[0.9, 0.5, 0.1]], dtype=np.float32),
+                        coverage=np.asarray([True, True, True]),
+                    ),
+                }
+            )
+
+    base_config = HybridTemporalConfig(
+        fusion_mode="adaptive_p0",
+        adaptive=AdaptiveTemporalFusionConfig(event_routing=False, confidence_gating=False),
+    )
+    scorer1 = TemporalEvidenceScorer(
+        visual_index=visual,
+        dense=MockDense(),
+        bm25=None,
+        config=base_config,
+    )
+
+    # Scorer 2 enables event routing where speech cue heavily boosts asr_dense
+    routing_config = base_config.model_copy(
+        update={
+            "adaptive": base_config.adaptive.model_copy(update={"event_routing": True})
+        }
+    )
+    scorer2 = scorer1.with_config(routing_config)
+
+    res1 = scorer1.score_events(
+        ["Người phụ nữ nói chuyện"],
+        ["The woman speaks"],
+        caption_events=None,
+        use_dense=True,
+        use_bm25=False,
+    )
+    res2 = scorer2.score_events(
+        ["Người phụ nữ nói chuyện"],
+        ["The woman speaks"],
+        caption_events=None,
+        use_dense=True,
+        use_bm25=False,
+    )
+
+    # Scorer 1 (equal/base weights) and Scorer 2 (speech-boosted ASR) must differ!
+    assert not np.allclose(res1[0].scores, res2[0].scores)
+    # Under speech boost, frame 0 (high ASR score 0.9) must have higher score in res2 than in res1
+    assert res2[0].scores[0, 0] > res1[0].scores[0, 0]

@@ -59,7 +59,8 @@ def test_build_evidence_diagnostics_coverage_and_positions() -> None:
     assert row.component == "asr_dense"
     assert row.event_index == 0
     assert pytest.approx(row.raw_max, abs=1e-5) == 0.9
-    assert pytest.approx(row.raw_median, abs=1e-5) == 0.4
+    # Raw median over supported frames ([0.9]) is 0.9
+    assert pytest.approx(row.raw_median, abs=1e-5) == 0.9
     assert pytest.approx(row.calibrated_max, abs=1e-5) == 1.0
     assert pytest.approx(row.reliability, abs=1e-5) == 0.8
     assert pytest.approx(row.coverage_ratio, abs=1e-5) == 1.0 / 3.0

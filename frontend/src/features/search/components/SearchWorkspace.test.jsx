@@ -153,11 +153,11 @@ test('TRAKE renders same-video backend paths independently and submits only the 
     expect.objectContaining({ events: ['first event', 'second event'], topK: 20 }),
   ));
   expect(searchFrames).not.toHaveBeenCalled();
-  expect(await screen.findAllByText(/V01/)).toHaveLength(2);
+  expect(document.querySelectorAll('.trake-video-group')).toHaveLength(2);
   expect(screen.getByAltText('Frame a1')).toBeTruthy();
   expect(screen.getByAltText('Frame b1')).toBeTruthy();
 
-  fireEvent.click(screen.getAllByRole('button', { name: /submit this path/i })[1]);
+  fireEvent.click(screen.getAllByRole('button', { name: /submit trake path for V01/i })[1]);
   expect(await screen.findByText('V01,30,40')).toBeTruthy();
   expect(screen.queryByText('V01,10,20,30,40')).toBeNull();
 });
@@ -182,7 +182,7 @@ test('TRAKE accepts one labeled event and opens its frame as read-only', async (
   await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
     expect.objectContaining({ events: ['only one event'], topK: 20 }),
   ));
-  fireEvent.click(await screen.findByRole('button', { name: /view event E1/i }));
+  fireEvent.click(await screen.findByAltText('Frame f1'));
 
   expect(onFrameClick).toHaveBeenCalledWith({
     frame: expect.objectContaining({ frame_id: 'f1', frame_idx: 10 }),

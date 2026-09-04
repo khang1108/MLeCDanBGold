@@ -9,19 +9,22 @@ import {
 
 // The player page endpoint returns HTML, so the inspector uses the raw MP4
 // stream and seeks native media time to the selected canonical timestamp.
-const ImageModal = ({ frame = {}, query, onSubmit, onClose }) => {
+const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }) => {
   const modalCardRef = React.useRef(null);
   const videoRef = React.useRef(null);
   const [videoError, setVideoError] = useState(null);
   const [videoDuration, setVideoDuration] = useState(0);
   const targetTime = useMemo(
     () => {
-      const timestampMs = Number(frame.timestamp_ms);
+      const requestedTimestamp = Number(initialTimestampMs);
+      const timestampMs = Number.isInteger(requestedTimestamp) && requestedTimestamp >= 0
+        ? requestedTimestamp
+        : Number(frame.timestamp_ms);
       return Number.isInteger(timestampMs) && timestampMs >= 0
         ? timestampMs / 1000
         : null;
     },
-    [frame.timestamp_ms],
+    [frame.timestamp_ms, initialTimestampMs],
   );
   const streamUrl = useMemo(
     () => getStreamVideoUrl(frame.video_id, frame.timestamp_ms),

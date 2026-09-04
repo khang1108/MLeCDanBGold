@@ -133,14 +133,12 @@ test('submitting search calls searchFramesByImage and renders results with laten
     latency: { query_ms: 12, retrieval_ms: 30, alignment_ms: 0, materialization_ms: 5, total_ms: 47 },
   });
 
-  const onHistoryRefresh = jest.fn();
   const onFrameClick = jest.fn();
 
   renderImageSearch({
     topK: 15,
     setTopK: jest.fn(),
     userId: 'team-a',
-    onHistoryRefresh,
     onFrameClick,
   });
 
@@ -162,28 +160,28 @@ test('submitting search calls searchFramesByImage and renders results with laten
     expect(document.querySelector('.latency-summary')?.textContent).toMatch(/Found\s+1\s+frames in\s+47ms/);
   });
 
-  expect(createQueryHistory).toHaveBeenCalledWith(expect.objectContaining({
-    userId: 'team-a',
-    queryText: '[Image] chef.jpg',
-  }));
-  expect(onHistoryRefresh).toHaveBeenCalled();
+  expect(createQueryHistory).not.toHaveBeenCalled();
+  expect(markFrameViewed).not.toHaveBeenCalled();
 
   // Click frame
   const frameCard = screen.getByText(/L01_V001/).closest('.frame-card');
   fireEvent.click(frameCard);
-  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
+  expect(onFrameClick).toHaveBeenCalledWith({
     frame: mockResults[0],
     submissionMode: 'kis',
-  }));
+  });
 });
 
-test('prompts for User ID when searching without one', async () => {
-  const onFocusUserId = jest.fn();
+test('searches without a User ID and does not create history', async () => {
+  searchFramesByImage.mockResolvedValue({
+    results: [],
+    latency: { total_ms: 20 },
+  });
+
   renderImageSearch({
     topK: 20,
     setTopK: jest.fn(),
     userId: '',
-    onFocusUserId,
   });
 
   const fileInput = document.querySelector('input[type="file"]');
@@ -192,9 +190,15 @@ test('prompts for User ID when searching without one', async () => {
 
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-  expect(onFocusUserId).toHaveBeenCalled();
-  expect(searchFramesByImage).not.toHaveBeenCalled();
-  expect(screen.getByText(/Enter a User ID before searching/i)).toBeTruthy();
+  await waitFor(() => {
+    expect(searchFramesByImage).toHaveBeenCalledWith({
+      imageFile: file,
+      topK: 20,
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  expect(createQueryHistory).not.toHaveBeenCalled();
 });
 
 test('handles search API error gracefully', async () => {

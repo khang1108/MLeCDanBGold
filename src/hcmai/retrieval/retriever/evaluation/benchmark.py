@@ -95,8 +95,8 @@ class RetrievalBenchmark:
                     {
                         "query_id": query.query_id,
                         "query": query.query,
-                        "task_type": query.task_type.value,
-                        "difficulty": query.difficulty.value,
+                        "task_type": str(query.task_type),
+                        "difficulty": str(query.difficulty.value),
                         "num_gold": len(gold),
                         "num_retrieved": len(retrieved_ids),
                     }
@@ -106,8 +106,8 @@ class RetrievalBenchmark:
                 {
                     "query_id": query.query_id,
                     "query": query.query,
-                    "task_type": query.task_type.value,
-                    "difficulty": query.difficulty.value,
+                    "task_type": str(query.task_type),
+                    "difficulty": str(query.difficulty.value),
                     "first_gold_rank": first_gold_rank,
                     "query_encoding_ms": result.trace.duration_for(
                         "query_encoding"

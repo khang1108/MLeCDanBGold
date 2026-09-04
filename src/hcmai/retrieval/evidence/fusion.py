@@ -10,6 +10,9 @@ locally over modalities actually available and covering each frame.
 from __future__ import annotations
 
 from collections.abc import Sequence
+import re
+from typing import Literal
+import unicodedata
 import numpy as np
 
 from hcmai.common.config import AdaptiveTemporalFusionConfig
@@ -17,7 +20,10 @@ from hcmai.retrieval.evidence.calibration import (
     CalibratedComponent,
     calibrate_component,
 )
-from hcmai.retrieval.evidence.components import TemporalScoreBundle
+from hcmai.retrieval.evidence.components import (
+    TemporalScoreBundle,
+    TemporalScoreComponent,
+)
 from hcmai.retrieval.evidence.normalization import minmax_rows
 
 SPEECH_CUES: tuple[str, ...] = (
@@ -32,6 +38,14 @@ VISUAL_CUES: tuple[str, ...] = (
     "mặc", "cầm", "đặt", "đứng", "ngồi", "chạy", "xe", "đĩa", "màu",
     "wearing", "holds", "places", "stands", "sits", "runs", "plate", "color",
 )
+
+
+def _cue_matches(text: str, tokens: set[str], cue: str) -> bool:
+    """Match single-word cues on token boundaries, and multi-word cues as exact phrases."""
+    cue_clean = " ".join(cue.strip().lower().split())
+    if " " in cue_clean:
+        return f" {cue_clean} " in f" {text} "
+    return cue_clean in tokens
 
 
 class EventModalityRouter:
@@ -59,19 +73,22 @@ class EventModalityRouter:
         if not self.config.event_routing:
             return weights
 
-        combined = f"{original_event.lower()} {retrieval_event.lower()}"
+        raw_combined = f"{original_event} {retrieval_event}"
+        normalized = unicodedata.normalize("NFKC", raw_combined).lower()
+        cleaned_text = " ".join(re.sub(r"[^\w\s]", " ", normalized).split())
+        tokens = set(cleaned_text.split())
 
-        if any(cue in combined for cue in SPEECH_CUES):
+        if any(_cue_matches(cleaned_text, tokens, cue) for cue in SPEECH_CUES):
             if "asr_dense" in weights:
                 weights["asr_dense"] *= self.config.speech_boost
             if "bm25_asr" in weights:
                 weights["bm25_asr"] *= self.config.speech_boost
 
-        if any(cue in combined for cue in OCR_CUES):
+        if any(_cue_matches(cleaned_text, tokens, cue) for cue in OCR_CUES):
             if "bm25_ocr" in weights:
                 weights["bm25_ocr"] *= self.config.ocr_boost
 
-        if any(cue in combined for cue in VISUAL_CUES):
+        if any(_cue_matches(cleaned_text, tokens, cue) for cue in VISUAL_CUES):
             if "visual_dense" in weights:
                 weights["visual_dense"] *= self.config.visual_boost
             if "context_dense" in weights:
@@ -87,15 +104,54 @@ class TemporalFusionScorer:
         self.config = config
         self.router = EventModalityRouter(config)
 
-    def _calibrate(self, raw_scores: np.ndarray) -> CalibratedComponent:
+    def _calibrate(
+        self,
+        name: str,
+        component: TemporalScoreComponent,
+    ) -> CalibratedComponent:
         """Calibrate component scores using configured robust or minmax calibration."""
 
+        if component.coverage is not None:
+            support = np.broadcast_to(component.coverage, component.raw_scores.shape)
+        elif name.startswith("bm25_"):
+            support = component.raw_scores > 0.0
+        else:
+            support = None
+
+        reliability_mode: Literal["contrast", "binary"] = (
+            "binary" if name.startswith("bm25_") else "contrast"
+        )
+
         if self.config.robust_calibration:
-            return calibrate_component(raw_scores, self.config.calibration)
+            return calibrate_component(
+                component.raw_scores,
+                self.config.calibration,
+                support=support,
+                reliability_mode=reliability_mode,
+            )
+
+        if support is not None:
+            calibrated = np.zeros_like(component.raw_scores, dtype=np.float32)
+            reliability = np.zeros(component.raw_scores.shape[0], dtype=np.float32)
+            for e in range(component.raw_scores.shape[0]):
+                indices = np.flatnonzero(support[e])
+                if len(indices) == 0:
+                    continue
+                vals = component.raw_scores[e, indices]
+                low = float(vals.min())
+                high = float(vals.max())
+                span = high - low
+                if span > self.config.calibration.eps:
+                    calibrated[e, indices] = (vals - low) / span
+                    reliability[e] = 1.0
+                elif high > 0.0:
+                    calibrated[e, indices] = 1.0
+                    reliability[e] = 1.0
+            return CalibratedComponent(scores=calibrated, reliability=reliability)
 
         # Fallback to minmax normalization with binary reliability
-        scores = minmax_rows(raw_scores)
-        spans = np.ptp(raw_scores, axis=1) if raw_scores.ndim == 2 else np.asarray([])
+        scores = minmax_rows(component.raw_scores)
+        spans = np.ptp(component.raw_scores, axis=1) if component.raw_scores.ndim == 2 else np.asarray([])
         reliability = np.where(spans > self.config.calibration.eps, 1.0, 0.0).astype(np.float32)
         return CalibratedComponent(scores=scores, reliability=reliability)
 
@@ -106,7 +162,7 @@ class TemporalFusionScorer:
         """Calibrate all components in a score bundle using configured calibration parameters."""
 
         return {
-            name: self._calibrate(component.raw_scores)
+            name: self._calibrate(name, component)
             for name, component in bundle.components.items()
         }
 

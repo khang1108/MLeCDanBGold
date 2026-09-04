@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Run P0 temporal evidence ablations (A0-A5) and record ranking telemetry.
+"""Run P0 temporal evidence experiments (B0-B6) and record ranking telemetry.
 
 Usage:
     PYTHONPATH=src:. aic/bin/python scripts/evaluate_temporal_p0.py \\
         --queries-file tests/fixtures/l26_v254_query.yaml \\
-        --runs A0 A1 A2 A3 A4 A5 \\
+        --runs B0 B1 B2 B3 B4 B5 B6 \\
         --output-file artifacts/p0_ablation_results.jsonl
 """
 
@@ -19,8 +19,8 @@ import yaml
 
 from hcmai.orchestration.setup import load_search_service
 from hcmai.retrieval.evidence.ablation import (
-    ABLATION_RUNS,
     AblationRunConfig,
+    make_ablation_scorer,
     resolve_ablation_run,
 )
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
@@ -28,7 +28,7 @@ from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run P0 temporal evidence ablation matrix A0-A5"
+        description="Run P0 temporal evidence experiment matrix B0-B6"
     )
     parser.add_argument(
         "--queries-file",
@@ -39,8 +39,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--runs",
         nargs="+",
-        default=["A0", "A1", "A2", "A3", "A4", "A5"],
-        help="List of ablation runs to execute (e.g. A0 A1 ... or full names)",
+        default=["B0", "B1", "B2", "B3", "B4", "B5", "B6"],
+        help="List of experiment runs to execute (e.g. B0 B1 ... or full names)",
     )
     parser.add_argument(
         "--output-file",
@@ -161,17 +161,12 @@ def main() -> int:
     )
     print("-" * 105)
 
+    baseline_scorer = temporal_evidence
     for run_cfg in runs:
-        # Apply run configuration to temporal evidence scorer
-        temporal_evidence.config = run_cfg.to_hybrid_config()
-
-        # Update ASR index interval projection setting
-        asr_index = getattr(temporal_evidence.dense, "asr_index", None)
-        if asr_index is not None and hasattr(asr_index, "interval_projection"):
-            asr_index.interval_projection = run_cfg.interval_projection
-
-        # Apply alignment config (ensuring identity across all stages)
-        temporal_search.config = run_cfg.alignment
+        run_scorer, run_kw = make_ablation_scorer(baseline_scorer, run_cfg.name)
+        temporal_search.evidence = run_scorer
+        run_use_dense = args.use_dense and run_kw.get("use_dense", True)
+        run_use_bm25 = args.use_bm25 and run_kw.get("use_bm25", True)
 
         for q in queries:
             search_result = temporal_search.search(
@@ -179,8 +174,8 @@ def main() -> int:
                 retrieval_events=q["retrieval_events"],
                 caption_events=q["caption_events"],
                 top_k=args.top_k,
-                use_dense=args.use_dense,
-                use_bm25=args.use_bm25,
+                use_dense=run_use_dense,
+                use_bm25=run_use_bm25,
             )
 
             paths = search_result.paths
@@ -217,7 +212,7 @@ def main() -> int:
                 row["target_video_id"] = target_video_id
                 if target_rank is not None:
                     row["target_rank"] = target_rank
-                    row["target_score"] = round(target_score, 4)
+                    row["target_score"] = round(target_score, 4) if target_score is not None else None
                     row["score_gap"] = score_gap
                     row["target_frame_indices"] = target_frames
 

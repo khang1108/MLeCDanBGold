@@ -73,6 +73,31 @@ test('seeks the raw stream to the selected source timestamp after metadata loads
   expect(screen.getByText('5000 ms')).toBeTruthy();
 });
 
+test('keeps canonical metadata while seeking manual inspection to the requested time', async () => {
+  render(
+    <ImageModal
+      frame={{ ...frame, timestamp_ms: 5_000, metadata: { caption: 'Canonical evidence' } }}
+      initialTimestampMs={12_000}
+      onClose={jest.fn()}
+    />,
+  );
+
+  const video = await screen.findByLabelText('Video for L21_V001');
+  let currentTime = 0;
+  Object.defineProperty(video, 'duration', { configurable: true, value: 30 });
+  Object.defineProperty(video, 'currentTime', {
+    configurable: true,
+    get: () => currentTime,
+    set: (value) => { currentTime = value; },
+  });
+
+  fireEvent.loadedMetadata(video);
+
+  expect(currentTime).toBe(12);
+  expect(screen.getByText('L21_V001 · 125')).toBeTruthy();
+  expect(screen.getByText('Canonical evidence')).toBeTruthy();
+});
+
 test('keeps metadata on playback time while hover preview stays non-seeking', async () => {
   render(<ImageModal frame={{ ...frame, timestamp_ms: 2_000 }} onClose={jest.fn()} />);
 

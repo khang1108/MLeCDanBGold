@@ -485,6 +485,8 @@ def _download_s3_inputs(
         ),
     )
     for label, prefix, destination in inputs:
+        if destination is None or prefix is None:
+            continue
         stats = download_prefix(
             client,
             bucket,
@@ -1130,7 +1132,7 @@ def build_context(
     frames = FrameStore(projected_frames)
     contexts = FrameContextStore(config.dataset.context_path)
     index = build_context_index(
-        frames,
+        cast(Any, frames),
         contexts,
         selected,
         config.indexes.context,
@@ -1173,7 +1175,7 @@ def build_asr(
     if not lineage_files:
         raise ValueError("Transcript artifact contains no lineage files")
     index = build_asr_segment_index(
-        TranscriptStore(config.dataset.transcripts_path),
+        cast(Any, TranscriptStore(config.dataset.transcripts_path)),
         selected,
         config.indexes.asr_segments,
         embeddings_filename="asr_embeddings.npy",
@@ -1298,7 +1300,7 @@ def _validate_segment_identity(index: Any, transcripts_path: Path) -> None:
     records = {
         segment.segment_id: segment
         for segment in TranscriptStore(transcripts_path).iter_records()
-        if segment.status is ProcessingStatus.COMPLETED and segment.text.strip()
+        if getattr(segment, "status", ProcessingStatus.COMPLETED) is ProcessingStatus.COMPLETED and segment.text.strip()
     }
     indexed_ids = set(index.mapping["segment_id"].astype(str))
     if indexed_ids != set(records):

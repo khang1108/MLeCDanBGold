@@ -1,18 +1,21 @@
 import React, { useId, useLayoutEffect, useRef } from 'react';
 
+
 const TEXT_FIELDS = [
-  { key: 'title', label: 'Title', icon: '📝', placeholder: 'Video title keywords…' },
-  { key: 'caption', label: 'Caption', icon: '💬', placeholder: 'Visual caption keywords…' },
-  { key: 'ocr', label: 'OCR', icon: '🔤', placeholder: 'On-screen text keywords…' },
-  { key: 'asr', label: 'ASR / Transcript', icon: '🎙️', placeholder: 'Spoken transcript keywords…' },
+  { key: 'title', label: 'Title', placeholder: 'Video title keywords…' },
+  { key: 'asr', label: 'ASR / Transcript', placeholder: 'Spoken transcript keywords…' },
+  { key: 'caption', label: 'Caption', placeholder: 'Visual caption keywords…' },
+  { key: 'ocr', label: 'OCR', placeholder: 'On-screen text keywords…' },
 ];
+
 
 const resizeTextArea = (textArea) => {
   textArea.style.height = '0px';
   textArea.style.height = `${Math.max(textArea.scrollHeight, 36)}px`;
 };
 
-/** Compact metadata-only filter form. Scope controls live beside the result view. */
+
+/** Render source-specific literal inputs and repeatable object thresholds. */
 const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
   const formId = useId();
   const textAreaRefs = useRef({});
@@ -21,28 +24,24 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
     Object.values(textAreaRefs.current).forEach(resizeTextArea);
   }, [values]);
 
-  const updateText = (field, event) => {
-    onChange({ ...values, [field]: event.target.value });
+  const updateText = (field, value) => {
+    onChange({ ...values, [field]: value });
   };
 
-  const updateObject = (rowId, event) => {
+  const updateObject = (rowId, value) => {
     onChange({
       ...values,
       objects: values.objects.map((row) => (
-        row.id === rowId ? { ...row, value: event.target.value } : row
+        row.id === rowId ? { ...row, value } : row
       )),
     });
   };
 
   const addObject = () => {
-    const usedIds = new Set(values.objects.map((row) => row.id));
-    let nextIndex = values.objects.length + 1;
-    while (usedIds.has(`${formId}-object-${nextIndex}`)) {
-      nextIndex += 1;
-    }
+    const nextNumber = values.objects.length + 1;
     onChange({
       ...values,
-      objects: [...values.objects, { id: `${formId}-object-${nextIndex}`, value: '' }],
+      objects: [...values.objects, { id: `${formId}-object-${nextNumber}`, value: '' }],
     });
   };
 
@@ -56,14 +55,11 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
   return (
     <form className="filter-form" onSubmit={onSubmit}>
       <div className="filter-text-grid">
-        {TEXT_FIELDS.map(({ key, label, icon, placeholder }) => {
+        {TEXT_FIELDS.map(({ key, label, placeholder }) => {
           const inputId = `${formId}-${key}`;
           return (
             <div className="filter-field-col" key={key}>
-              <label className="filter-field-label" htmlFor={inputId}>
-                <span className="filter-field-icon" aria-hidden="true">{icon}</span>
-                {label}
-              </label>
+              <label className="filter-field-label" htmlFor={inputId}>{label}</label>
               <textarea
                 id={inputId}
                 aria-label={label}
@@ -74,7 +70,7 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
                 }}
                 rows="1"
                 value={values[key]}
-                onChange={(event) => updateText(key, event)}
+                onChange={(event) => updateText(key, event.target.value)}
                 onInput={(event) => resizeTextArea(event.currentTarget)}
                 placeholder={placeholder}
               />
@@ -85,25 +81,22 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
 
       <section className="filter-objects-section" aria-label="Object filters">
         <div className="filter-objects-group">
-          <span className="filter-objects-title">
-            <span className="filter-field-icon" aria-hidden="true">📦</span>
-            Detected Objects
-          </span>
+          <span className="filter-objects-title">Detected Objects</span>
           <div className="filter-object-list">
             {values.objects.map((row, index) => {
-              const value = row.value ?? '';
+              const value = row.value || '';
               return (
                 <div className="filter-object-row" key={row.id}>
                   <label className="filter-object-name-field">
-                    <span className="sr-only">Object {index + 1} name</span>
+                    <span className="sr-only">Object {index + 1} minimum count</span>
                     <input
                       className="filter-object-input"
                       type="text"
                       value={value}
-                      onChange={(event) => updateObject(row.id, event)}
+                      onChange={(event) => updateObject(row.id, event.target.value)}
                       placeholder="name: count"
                       aria-label={`Object ${index + 1}, format name colon count`}
-                      style={{ width: `${Math.max(9, value.length + 2)}ch` }}
+                      style={{ width: `${Math.max(10, value.length + 2)}ch` }}
                     />
                   </label>
                   <button
@@ -111,7 +104,6 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
                     className="filter-remove-object-btn"
                     onClick={() => removeObject(row.id)}
                     aria-label={`Remove object ${index + 1}`}
-                    title="Remove object"
                   >
                     ×
                   </button>
@@ -123,7 +115,6 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
               className="filter-add-object-btn"
               onClick={addObject}
               aria-label="Add object filter"
-              title="Add object filter"
             >
               + Add object
             </button>
@@ -142,5 +133,6 @@ const FilterForm = ({ values, onChange, onSubmit, onReset, isLoading }) => {
     </form>
   );
 };
+
 
 export default FilterForm;
