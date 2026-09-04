@@ -1,6 +1,6 @@
 @media (max-width: 850px) {
-  .app-container {
-    padding: var(--spacing-md);
+  .app-container.adhoc-app {
+    padding: var(--spacing-xs) var(--spacing-md) 0;
   }
 
   .adhoc-workspace-body {
