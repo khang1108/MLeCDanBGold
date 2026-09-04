@@ -126,6 +126,7 @@ docs/template/
 .codex/
 .claude/
 .agents/
+.worktrees/
 artifact*/
 /youtube-check/output/
 
