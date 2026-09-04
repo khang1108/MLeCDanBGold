@@ -1,34 +1,46 @@
-import { requestJson, resolveApiUrl } from './client';
-import { keyframeUrl } from './keyframes';
+/** Resolve a manually entered video moment to canonical frame inspection data. */
 
-/**
- * Fetch the additive detail contract for one canonical frame.
- *
- * Filter requests use this endpoint for every frame in the current page. The
- * caller controls when to fetch it; the endpoint itself remains reusable by
- * the shared frame viewer.
- */
-export const getFrameDetail = async ({ frameId, signal } = {}) => {
-  if (typeof frameId !== 'string' || !frameId.trim()) {
-    throw new Error('Frame detail request requires a canonical frame_id');
+import { requestJson } from './client';
+
+
+const hasNonNegativeInteger = (value) => Number.isSafeInteger(value) && value >= 0;
+
+
+const validateFrameInspection = (payload) => {
+  if (
+    !payload
+    || typeof payload !== 'object'
+    || typeof payload.frame_id !== 'string'
+    || !payload.frame_id.trim()
+    || typeof payload.video_id !== 'string'
+    || !payload.video_id.trim()
+    || !hasNonNegativeInteger(payload.requested_timestamp_ms)
+    || !hasNonNegativeInteger(payload.frame_idx)
+    || !hasNonNegativeInteger(payload.timestamp_ms)
+    || !payload.metadata
+    || typeof payload.metadata !== 'object'
+    || Array.isArray(payload.metadata)
+  ) {
+    throw new Error('Frame resolver returned an invalid response contract');
+  }
+  return payload;
+};
+
+
+/** Fetch canonical frame identity and source evidence for a video timestamp. */
+export const resolveFrameAtTimestamp = async ({ videoId, timestampMs, signal } = {}) => {
+  const normalizedVideoId = String(videoId || '').trim();
+  if (!normalizedVideoId) {
+    throw new Error('videoId must be a non-blank string');
+  }
+  if (!hasNonNegativeInteger(timestampMs)) {
+    throw new Error('timestampMs must be a non-negative integer');
   }
 
-  const payload = await requestJson(
-    `/api/v1/frames/${encodeURIComponent(frameId)}`,
-    { signal },
-  );
-  if (!payload || payload.frame_id !== frameId) {
-    throw new Error('Frame detail response changed canonical frame identity');
-  }
-
-  const frameUrl = payload.frame_url
-    ? resolveApiUrl(payload.frame_url)
-    : keyframeUrl(frameId);
-  return {
-    ...payload,
-    ...(payload.timestamp_ms === undefined && payload.timestamp !== undefined
-      ? { timestamp_ms: payload.timestamp }
-      : {}),
-    frame_url: frameUrl,
-  };
+  const query = new URLSearchParams({
+    video_id: normalizedVideoId,
+    timestamp_ms: String(timestampMs),
+  });
+  const payload = await requestJson(`/api/v1/frames/resolve?${query}`, { signal });
+  return validateFrameInspection(payload);
 };

@@ -65,8 +65,12 @@ const AppContent = () => {
     setModalQuery('');
   };
 
-  const handleManualVideo = (frame) => {
-    setSelectedFrame({ frame, submissionMode: 'none' });
+  const handleManualVideo = ({ frame, requestedTimestampMs }) => {
+    setSelectedFrame({
+      frame,
+      initialTimestampMs: requestedTimestampMs,
+      submissionMode: 'none',
+    });
     setModalQuery('');
   };
 
@@ -129,12 +133,9 @@ const AppContent = () => {
         <div className="workspace-panel" hidden={activePage !== 'image-search'}>
           <ImageSearchWorkspace
             isActive={activePage === 'image-search'}
-            userId={userId}
             topK={topK}
             setTopK={setTopK}
             onFrameClick={handleQueryFrameClick}
-            onFocusUserId={handleFocusUserId}
-            onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
           />
         </div>
         <div className="workspace-panel" hidden={activePage !== 'filter'}>
@@ -158,6 +159,7 @@ const AppContent = () => {
         <ImageModal
           frame={selectedFrame.frame}
           query={modalQuery}
+          initialTimestampMs={selectedFrame.initialTimestampMs}
           onSubmit={selectedFrame.submissionMode === 'kis' ? handleInspectorSubmit : undefined}
           onClose={() => setSelectedFrame(null)}
         />

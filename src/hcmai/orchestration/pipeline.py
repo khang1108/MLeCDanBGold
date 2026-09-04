@@ -10,6 +10,7 @@ from hcmai.api.contracts import (
     FilterRequest,
     FilterResponse,
     FilterResult,
+    FrameInspectionResponse,
     QueryCandidateResponse,
     QueryCandidatesRequest,
     QueryCandidatesResponse,
@@ -28,6 +29,7 @@ from hcmai.common.utils.video import official_frame_idx
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
 from hcmai.orchestration.workflows.image_search import ImageSearchService
+from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
@@ -129,7 +131,7 @@ class SearchService:
         temporal = (
             TemporalSearchService(
                 self.corpus,
-                cast(TemporalEvidenceScorer, self.temporal_evidence),
+                cast("TemporalEvidenceScorer", self.temporal_evidence),
                 self.config.alignment,
                 self.config.max_temporal_event_count,
             )
@@ -162,6 +164,33 @@ class SearchService:
         if self.corpus is None:
             raise SearchServiceUnavailableError("Frame store not loaded")
         return self.corpus.frame(frame_id)
+
+    def inspect_frame_at_timestamp(
+        self,
+        video_id: str,
+        timestamp_ms: int,
+    ) -> FrameInspectionResponse:
+        """Resolve one viewer moment and materialize its canonical evidence.
+
+        The requested timestamp is retained separately from the resolved frame's
+        timestamp so the frontend can seek precisely without corrupting
+        canonical identity or pretending an arbitrary video time has a frame ID.
+        """
+
+        if self.corpus is None:
+            raise SearchServiceUnavailableError("Frame store not loaded")
+
+        frame = self.corpus.frame_at_timestamp(video_id, timestamp_ms)
+        metadata = SearchMaterializer(self.corpus).build_frame_metadata(frame)
+        return FrameInspectionResponse(
+            requested_timestamp_ms=timestamp_ms,
+            frame_id=frame.frame_id,
+            video_id=frame.video_id,
+            frame_idx=frame.frame_idx,
+            timestamp_ms=frame.timestamp_ms,
+            fps=frame.fps,
+            metadata=metadata,
+        )
 
     def submission(self, frame_id: str) -> SubmissionResult:
         """Build the official submission identity for one canonical frame."""

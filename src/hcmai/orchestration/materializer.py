@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from hcmai.api.contracts import SearchResult, SearchResultMetadata
 from hcmai.corpus import Corpus
+from hcmai.corpus.models import Frame
 from hcmai.temporal import AlignedPath
 
 
@@ -50,18 +51,6 @@ class SearchMaterializer:
         if frame.timestamp_ms != path.timestamps_ms[representative]:
             raise ValueError("aligned timestamp disagrees with canonical frame")
 
-        # A one-millisecond half-open range retains Phase A's point-containment
-        # semantics without treating nearby timeline speech as frame evidence.
-        title = self.corpus.title(frame.video_id)
-        caption = self.corpus.caption(frame.frame_id)
-        ocr = self.corpus.ocr(frame.frame_id)
-        objects = list(self.corpus.objects(frame.frame_id))
-        asr = self.corpus.transcript(
-            frame.video_id,
-            frame.timestamp_ms,
-            frame.timestamp_ms + 1,
-        )
-
         return SearchResult(
             frame_id=frame.frame_id,
             video_id=frame.video_id,
@@ -71,11 +60,26 @@ class SearchMaterializer:
             frame_ids=list(path.frame_ids),
             timestamps_ms=list(path.timestamps_ms),
             fps=frame.fps,
-            metadata=SearchResultMetadata(
-                title=title,
-                caption=caption,
-                ocr=ocr,
-                objects=objects,
-                asr=asr,
+            metadata=self.build_frame_metadata(frame),
+        )
+
+    def build_frame_metadata(self, frame: Frame) -> SearchResultMetadata:
+        """Materialize one canonical frame's specialist evidence for inspection.
+
+        This is shared by ranked Search results and direct viewer resolution so
+        both surfaces expose the same source evidence for the same frame ID.
+        """
+
+        # A one-millisecond half-open range retains Phase A's point-containment
+        # semantics without treating nearby timeline speech as frame evidence.
+        return SearchResultMetadata(
+            title=self.corpus.title(frame.video_id),
+            caption=self.corpus.caption(frame.frame_id),
+            ocr=self.corpus.ocr(frame.frame_id),
+            objects=list(self.corpus.objects(frame.frame_id)),
+            asr=self.corpus.transcript(
+                frame.video_id,
+                frame.timestamp_ms,
+                frame.timestamp_ms + 1,
             ),
         )

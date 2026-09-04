@@ -62,7 +62,17 @@ jest.mock("./features/workspace/components/WorkspacePage", () => (
         </button>
         <button
           type="button"
-          onClick={() => onOpenManualVideo?.({ video_id: 'V01', timestamp_ms: 1000 })}
+          onClick={() => onOpenManualVideo?.({
+            frame: {
+              frame_id: 'V01_00000025',
+              video_id: 'V01',
+              frame_idx: 25,
+              timestamp_ms: 1040,
+              fps: 25,
+              metadata: { caption: 'Resolved evidence' },
+            },
+            requestedTimestampMs: 1000,
+          })}
         >
           Open manual video
         </button>
@@ -142,7 +152,8 @@ test('opens manual video inspection without exposing a fake frame submission', (
   fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
   fireEvent.click(screen.getByRole('button', { name: 'Open manual video' }));
 
-  expect(screen.getByText('V01 · 1000 ms')).toBeTruthy();
+  expect(screen.getByText('V01 · 25')).toBeTruthy();
+  expect(screen.getByText('Resolved evidence')).toBeTruthy();
   expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
 });
 

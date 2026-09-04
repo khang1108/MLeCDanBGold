@@ -28,6 +28,7 @@ Typical usage::
 
 from __future__ import annotations
 
+from bisect import bisect_left
 import math
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
@@ -254,6 +255,49 @@ class FrameStore:
         """
 
         return self._records_by_video.get(video_id, ())
+
+    def get_nearest_by_video(self, video_id: str, *, timestamp_ms: int) -> Frame:
+        """Return the canonical keyframe nearest to a video timestamp.
+
+        Exact timestamp matches retain the first canonical frame ordered by
+        ``(timestamp_ms, frame_idx, frame_id)``. When a requested time falls
+        between keyframes, an equidistant choice prefers the earlier timestamp
+        before applying the same canonical tie-break. This lets viewer clients
+        resolve a frame ID without deriving one from decode position or FPS.
+        """
+
+        if timestamp_ms < 0:
+            raise ValueError("timestamp_ms must be greater than or equal to zero")
+
+        records = self.get_by_video(video_id)
+        if not records:
+            raise KeyError(f"Unknown video_id {video_id!r} in {self.metadata_path}")
+
+        # ``bisect_left`` returns the first frame at a timestamp. When looking
+        # backward, seek to the first duplicate timestamp as well so a duplicate
+        # keyframe time still follows the canonical frame_idx/frame_id ordering.
+        next_position = bisect_left(records, timestamp_ms, key=lambda frame: frame.timestamp_ms)
+        candidates: list[Frame] = []
+        if next_position < len(records):
+            candidates.append(records[next_position])
+        if next_position > 0:
+            previous_timestamp = records[next_position - 1].timestamp_ms
+            previous_position = bisect_left(
+                records,
+                previous_timestamp,
+                key=lambda frame: frame.timestamp_ms,
+            )
+            candidates.append(records[previous_position])
+
+        return min(
+            candidates,
+            key=lambda frame: (
+                abs(frame.timestamp_ms - timestamp_ms),
+                frame.timestamp_ms,
+                frame.frame_idx,
+                frame.frame_id,
+            ),
+        )
 
     def get_neighbors(
         self,

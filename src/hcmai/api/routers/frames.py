@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
-from hcmai.api.contracts import SubmissionResult
+from hcmai.api.contracts import FrameInspectionResponse, SubmissionResult
 from hcmai.corpus.models import Frame
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.common.utils.logging import get_logger
@@ -30,6 +30,29 @@ def create_frames_router(service_container: dict[str, Any]) -> APIRouter:
     """Create metadata, keyframe asset, and submission routes."""
 
     router = APIRouter()
+
+    @router.get("/api/v1/frames/resolve", response_model=FrameInspectionResponse)
+    async def resolve_frame_at_timestamp(
+        video_id: Annotated[str, Query(min_length=1)],
+        timestamp_ms: Annotated[int, Query(ge=0)],
+    ) -> FrameInspectionResponse:
+        """Resolve canonical frame evidence for one manually opened video time."""
+
+        try:
+            return _search_service(service_container).inspect_frame_at_timestamp(
+                video_id,
+                timestamp_ms,
+            )
+        except SearchServiceUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(error),
+            ) from error
+        except (KeyError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(error),
+            ) from error
 
     @router.get("/api/v1/frames/{frame_id}", response_model=Frame)
     async def get_frame(frame_id: str) -> Frame:

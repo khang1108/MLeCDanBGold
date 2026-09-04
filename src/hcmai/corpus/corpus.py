@@ -138,6 +138,19 @@ class Corpus:
 
         return self._frames.get(frame_id)
 
+    def frame_at_timestamp(self, video_id: str, timestamp_ms: int) -> Frame:
+        """Resolve a manual viewer timestamp to one canonical keyframe.
+
+        The returned frame retains its stored identity and may have a different
+        timestamp from the requested viewer position when no exact keyframe
+        exists. Callers must keep the requested playback timestamp separate.
+        """
+
+        return self._frames.get_nearest_by_video(
+            video_id,
+            timestamp_ms=timestamp_ms,
+        )
+
     def __len__(self) -> int:
         """Return the number of canonical frames loaded for runtime search."""
 

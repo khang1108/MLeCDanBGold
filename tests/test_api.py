@@ -46,6 +46,15 @@ class MockFrameStore:
 
     frame = get
 
+    def frame_at_timestamp(self, video_id: str, timestamp_ms: int) -> Frame:
+        """Resolve the fixture's only canonical frame for its source video."""
+
+        if video_id != self.record.video_id:
+            raise KeyError(f"Video ID {video_id!r} not found")
+        if timestamp_ms < 0:
+            raise ValueError("timestamp_ms must be non-negative")
+        return self.record
+
     def __len__(self) -> int:
         return len(self._records)
 
@@ -335,6 +344,50 @@ def test_get_frame_endpoint(api_app: FastAPI) -> None:
 
     not_found_response = request(api_app, "GET", "/api/v1/frames/UNKNOWN_FRAME")
     assert not_found_response.status_code == 404
+
+
+def test_resolve_frame_endpoint_materializes_inspector_metadata() -> None:
+    """Resolve a manual timestamp to canonical identity and Search-like evidence."""
+
+    stores = {
+        RetrievalSource.CAPTION: MockEvidenceStore("A traffic scene."),
+        RetrievalSource.OCR: MockEvidenceStore("HCM CITY"),
+        RetrievalSource.ASR: MockEvidenceStore("Traffic is heavy today."),
+    }
+    service = SearchService(
+        cast(Corpus, MockFrameStore(stores)),
+        cast(RetrievalService, MockRetriever()),
+    )
+    app = create_app(search_service=service)
+
+    response = request(
+        app,
+        "GET",
+        "/api/v1/frames/resolve?video_id=L21_V001&timestamp_ms=3600",
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["requested_timestamp_ms"] == 3600
+    assert data["frame_id"] == "L21_V001_00000090"
+    assert data["video_id"] == "L21_V001"
+    assert data["frame_idx"] == 90
+    assert data["timestamp_ms"] == 3600
+    assert data["fps"] == 29.97
+    assert data["metadata"] == {
+        "title": None,
+        "caption": "A traffic scene.",
+        "ocr": "HCM CITY",
+        "objects": [],
+        "asr": "Traffic is heavy today.",
+    }
+
+    missing = request(
+        app,
+        "GET",
+        "/api/v1/frames/resolve?video_id=UNKNOWN_VIDEO&timestamp_ms=3600",
+    )
+    assert missing.status_code == 404
 
 
 def test_missing_required_config_aborts_startup(
