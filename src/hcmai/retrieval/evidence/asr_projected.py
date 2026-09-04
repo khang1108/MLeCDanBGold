@@ -79,7 +79,8 @@ class SegmentProjectedASRIndex:
         self.timestamps = timestamps
         self.metadata = segment_index.metadata
         self._segment_vectors = segment_vectors
-        self.interval_projection = interval_projection
+        self._interval_projection = interval_projection
+        self._canonical_index = canonical_index
         self.segment_frame_positions = self._build_segment_frame_positions(
             projector,
             canonical_frame_ids,
@@ -110,6 +111,8 @@ class SegmentProjectedASRIndex:
         canonical_index: DenseIndex,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Precompute canonical frame intervals per segment and total coverage."""
+
+        canonical_index = self._canonical_index
 
         offsets = [0]
         flattened_positions: list[int] = []

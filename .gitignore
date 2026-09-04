@@ -137,3 +137,4 @@ artifact*/
 *.sqlite3-shm
 *.sqlite3-wal
 SETUP.md
+llm/scripts/run_local_cpu_cloudflared.sh

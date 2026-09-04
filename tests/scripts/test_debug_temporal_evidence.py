@@ -15,6 +15,7 @@ def _baseline_scorer() -> TemporalEvidenceScorer:
     """Build a scorer whose non-default values reveal accidental config resets."""
 
     config = HybridTemporalConfig(
+        fusion_mode="legacy",
         dense_weight=0.7,
         bm25_weight=0.3,
         adaptive=AdaptiveTemporalFusionConfig(

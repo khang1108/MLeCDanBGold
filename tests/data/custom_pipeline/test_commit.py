@@ -16,20 +16,20 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from hcmai.data.custom_pipeline.asr import ASRReuseBundle
-from hcmai.data.custom_pipeline.commit import (
+from offline.ingestion.custom_pipeline.asr import ASRReuseBundle
+from offline.ingestion.custom_pipeline.commit import (
     BatchValidationError,
     build_batch_inventory,
     cleanup_ephemeral_batch,
     commit_local_batch,
     validate_local_batch,
 )
-from hcmai.data.custom_pipeline.shards import (
+from offline.ingestion.custom_pipeline.shards import (
     build_batch_index_bundle,
     split_batch_artifacts_by_video,
     write_video_shard,
 )
-from hcmai.data.custom_pipeline.state import BatchStage, PipelineStateStore, VideoStage
+from offline.ingestion.custom_pipeline.state import BatchStage, PipelineStateStore, VideoStage
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
 _VIDEO_A = "L01_V001"
@@ -68,7 +68,7 @@ def _asr_bundle(index_root: Path) -> ASRReuseBundle:
         "end_ms": 500,
     },])
     index = SegmentDenseIndex.build(
-        np.eye(2, dtype=np.float32), mapping, dataset_version="v1", model_name="test"
+        np.eye(2, dtype=np.float32), mapping, dataset_version="v1", model_name="bge-test"
     )
     index.save(index_root)
     return ASRReuseBundle(

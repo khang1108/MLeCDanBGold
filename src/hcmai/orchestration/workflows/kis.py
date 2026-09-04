@@ -15,7 +15,7 @@ from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
-from hcmai.temporal import split_query_events
+from hcmai.temporal import plan_query_events
 
 if TYPE_CHECKING:
     from hcmai.query_preparation.service import QueryPreparationService
@@ -73,7 +73,7 @@ class KISPipeline:
         if self.temporal is None:
             raise RuntimeError("temporal search service is not loaded")
 
-        events = split_query_events(request.query)
+        events = plan_query_events(request.query)
         if len(events) > self.max_temporal_event_count:
             raise ValueError(
                 f"requests may contain at most {self.max_temporal_event_count} temporal events"

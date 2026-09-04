@@ -6,6 +6,8 @@ import pytest
 
 from hcmai.common.config import (
     AdaptiveTemporalFusionConfig,
+    AlignmentConfig,
+    AppConfig,
     HybridTemporalConfig,
     RobustCalibrationConfig,
 )
@@ -27,7 +29,7 @@ def test_ablation_matrix_all_runs_present() -> None:
         "B5_adaptive_p0",
         "B6_dense_only",
     ]
-    assert list(ABLATION_RUNS.keys()) == expected_keys
+    assert list(ABLATION_RUNS.keys())[: len(expected_keys)] == expected_keys
 
     for i, full_name in enumerate(expected_keys):
         short_key = f"B{i}"
@@ -36,10 +38,13 @@ def test_ablation_matrix_all_runs_present() -> None:
         assert resolve_ablation_run(full_name).name == full_name
 
 
-def test_runs_do_not_own_or_replace_loaded_alignment_config() -> None:
-    """Emission experiments must leave the service's loaded DP config untouched."""
+def test_fusion_ladder_runs_leave_the_loaded_alignment_config_untouched() -> None:
+    """A fusion-ladder stage must vary fusion only, so its DP settings stay default."""
 
-    assert all(not hasattr(run, "alignment") for run in ABLATION_RUNS.values())
+    default = AlignmentConfig()
+    for name, run in ABLATION_RUNS.items():
+        if name.startswith("B"):
+            assert run.alignment == default, name
 
 
 def test_single_feature_delta_between_ablation_stages() -> None:
@@ -114,6 +119,7 @@ def test_apply_to_preserves_all_baseline_weights_and_boosts() -> None:
 
     a5 = ABLATION_RUNS["B5_adaptive_p0"]
     baseline = HybridTemporalConfig(
+        fusion_mode="legacy",
         dense_weight=0.7,
         bm25_weight=0.3,
         adaptive=AdaptiveTemporalFusionConfig(
@@ -151,6 +157,18 @@ def test_apply_to_preserves_all_baseline_weights_and_boosts() -> None:
     a0 = ABLATION_RUNS["B0_legacy_v9"]
     hybrid_a0 = a0.apply_to(baseline)
     assert hybrid_a0.fusion_mode == "legacy"
+
+
+def test_every_run_keeps_the_deployed_weights() -> None:
+    """An ablation stage varies its own flags, never the weights the system ships."""
+
+    base = AppConfig.from_yaml("configs/baseline.yaml").search.hybrid_temporal
+
+    for run in ABLATION_RUNS.values():
+        hybrid = run.apply_to(base)
+        assert hybrid.adaptive.base_component_weights == base.adaptive.base_component_weights
+        assert hybrid.bm25_fields == base.bm25_fields
+        assert hybrid.dense == base.dense
 
 
 def test_resolve_ablation_run_unknown_key() -> None:

@@ -311,6 +311,8 @@ class AlignmentConfig(BaseModel):
     event_power: float = Field(default=1.0, gt=0.0, le=1.0)
     chunk_size: int = Field(default=65_536, ge=1)
     cluster_delta: float = Field(default=0.0, ge=0.0)
+    paths_per_video: int = Field(default=1, ge=1)
+    path_min_separation_ms: int = Field(default=0, ge=0)
 
 
 class DenseTemporalWeights(BaseModel):
@@ -338,7 +340,7 @@ class RobustCalibrationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     q_low: float = Field(default=0.05, ge=0.0, lt=1.0)
-    q_high: float = Field(default=0.95, gt=0.0, le=1.0)
+    q_high: float = Field(default=1.0, gt=0.0, le=1.0)
     top_fraction: float = Field(default=0.01, gt=0.0, le=0.25)
     top_k_max: int = Field(default=128, ge=1)
     eps: float = Field(default=1e-6, gt=0.0)
@@ -404,7 +406,7 @@ class HybridTemporalConfig(BaseModel):
     bm25_fields: BM25FieldWeights = Field(default_factory=BM25FieldWeights)
     dense_weight: float = Field(default=0.5, ge=0)
     bm25_weight: float = Field(default=0.5, ge=0)
-    fusion_mode: Literal["legacy", "adaptive_p0"] = "legacy"
+    fusion_mode: Literal["legacy", "adaptive_p0"] = "adaptive_p0"
     adaptive: AdaptiveTemporalFusionConfig = Field(default_factory=AdaptiveTemporalFusionConfig)
 
     @model_validator(mode="after")

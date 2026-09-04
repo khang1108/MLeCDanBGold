@@ -1,5 +1,3 @@
-FRAME_NATIVE_TABLES = "frame_native_tables"
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,8 +8,8 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from hcmai.data.custom_pipeline.asr import ASRReuseBundle
-from hcmai.data.custom_pipeline.shards import (
+from offline.ingestion.custom_pipeline.asr import ASRReuseBundle
+from offline.ingestion.custom_pipeline.shards import (
     VideoShardError,
     build_batch_index_bundle,
     split_batch_artifacts_by_video,
@@ -20,6 +18,8 @@ from hcmai.data.custom_pipeline.shards import (
 
 from hcmai.retrieval.retriever.dense.index import DenseIndex
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
+
+FRAME_NATIVE_TABLES = "frame_native_tables"
 
 _VIDEO_A = "L01_V001"
 _VIDEO_B = "L01_V002"
@@ -195,7 +195,9 @@ def _build_asr_bundle(index_root: Path) -> ASRReuseBundle:
         "end_ms": 500,
     },])
     vectors = np.eye(3, dtype=np.float32)
-    index = SegmentDenseIndex.build(vectors, mapping, dataset_version="v1", model_name="test")
+    index = SegmentDenseIndex.build(
+        vectors, mapping, dataset_version="v1", model_name="bge-test"
+    )
     index.save(index_root)
     return ASRReuseBundle(
         transcripts_root=str(index_root.parent / "transcripts"),

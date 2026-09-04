@@ -19,14 +19,14 @@ import pytest
 
 pytest.importorskip("faiss")
 
-from hcmai.data.custom_pipeline.asr import ASRReuseBundle
-from hcmai.data.custom_pipeline.config import (
+from offline.ingestion.custom_pipeline.asr import ASRReuseBundle
+from offline.ingestion.custom_pipeline.config import (
     ArchivePlan,
     ArchiveWorkWindow,
     DiskBudgetConfig,
     SchedulingConfig,
 )
-from hcmai.data.custom_pipeline.runner import (
+from offline.ingestion.custom_pipeline.runner import (
     BatchArtifacts,
     RunnerContext,
     finalize_pipeline,
@@ -34,7 +34,7 @@ from hcmai.data.custom_pipeline.runner import (
     preflight_pipeline,
     process_archive,
 )
-from hcmai.data.custom_pipeline.state import ArchiveStage, PipelineStateStore, VideoStage
+from offline.ingestion.custom_pipeline.state import ArchiveStage, PipelineStateStore, VideoStage
 from hcmai.retrieval.retriever.segment.index import SegmentDenseIndex
 
 
@@ -89,7 +89,7 @@ def _asr_bundle_factory(index_root: Path) -> callable:
             ]
         )
         index = SegmentDenseIndex.build(
-            np.eye(len(video_ids), dtype=np.float32), mapping, dataset_version="v1", model_name="asr-test"
+            np.eye(len(video_ids), dtype=np.float32), mapping, dataset_version="v1", model_name="bge-test"
         )
         index.save(index_root / "-".join(video_ids))
         return ASRReuseBundle(
@@ -290,7 +290,7 @@ def test_finalize_pipeline_produces_a_report(fake_curl: Path, tmp_path: Path) ->
 
 
 def _identity(plan: ArchivePlan):
-    from hcmai.data.custom_pipeline.contracts import RunIdentity
+    from offline.ingestion.custom_pipeline.contracts import RunIdentity
 
     return RunIdentity(
         version="dataset_v1",

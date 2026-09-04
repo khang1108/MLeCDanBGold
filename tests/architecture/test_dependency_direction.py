@@ -134,6 +134,7 @@ def test_package_exports_are_minimal_and_one_way() -> None:
         "AlignedPath",
         "align_video",
         "cluster_starts",
+        "plan_query_events",
         "rank_paths",
         "split_query_events",
     }

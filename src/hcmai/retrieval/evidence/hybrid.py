@@ -71,6 +71,11 @@ class TemporalEvidenceScorer:
             asr_dense_ready=self.asr_dense_ready,
         )
 
+    def _available(self, *, use_dense: bool, use_bm25: bool) -> tuple[bool, bool]:
+        """Drop requested sources whose index is absent so search degrades instead of failing."""
+
+        return use_dense and self.dense is not None, use_bm25 and self.bm25 is not None
+
     def _score_legacy(
         self,
         original_events: Sequence[str],
@@ -171,8 +176,9 @@ class TemporalEvidenceScorer:
     ) -> list[VideoEventScores]:
         """Score enabled sources over every frame and split by canonical video."""
 
+        use_dense, use_bm25 = self._available(use_dense=use_dense, use_bm25=use_bm25)
         if not use_dense and not use_bm25:
-            raise ValueError("at least one temporal evidence source must be enabled")
+            raise ValueError("at least one temporal evidence source must be enabled and available")
         event_count = len(original_events)
         if not event_count or len(retrieval_events) != event_count:
             raise ValueError("original and retrieval event counts must match")
@@ -213,8 +219,9 @@ class TemporalEvidenceScorer:
     ) -> TemporalEvidenceDebugResult:
         """Score full corpus and return component-level diagnostic telemetry."""
 
+        use_dense, use_bm25 = self._available(use_dense=use_dense, use_bm25=use_bm25)
         if not use_dense and not use_bm25:
-            raise ValueError("at least one temporal evidence source must be enabled")
+            raise ValueError("at least one temporal evidence source must be enabled and available")
         event_count = len(original_events)
         if not event_count or len(retrieval_events) != event_count:
             raise ValueError("original and retrieval event counts must match")

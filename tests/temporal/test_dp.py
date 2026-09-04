@@ -99,3 +99,40 @@ def test_rank_paths_takes_first_level_across_videos_before_second_level() -> Non
     rows = rank_paths([v1, v2], lambda_gap=0.0, max_rows=2)
 
     assert [row.video_id for row in rows] == ["v1", "v2"]
+
+
+def test_separated_alternatives_are_distinct_moments_not_neighbouring_frames() -> None:
+    """A positive separation replaces a near-duplicate row with a later moment."""
+
+    video = video_scores(
+        "v1",
+        [
+            [9.0, 8.0, 0.0, 0.0, 0.0, 0.0, 7.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 9.0, 8.0, 0.0, 0.0, 0.0, 0.0, 7.0, 0.0],
+        ],
+    )
+
+    adjacent = align_video(video, lambda_gap=0.0, paths=2)
+    separated = align_video(video, lambda_gap=0.0, paths=2, min_separation_ms=5_000)
+
+    assert [path.frame_idx[-1] for path in adjacent] == [2, 3]
+    assert [path.frame_idx[-1] for path in separated] == [2, 8]
+
+
+def test_a_second_moment_surfaces_only_when_paths_per_video_allows_it() -> None:
+    """With more videos than rows, level ranking never reaches a second row."""
+
+    v1 = video_scores("v1", [[10.0, 0.0, 9.0, 0.0], [0.0, 10.0, 0.0, 9.0]])
+    others = [video_scores(f"v{i}", [[5.0, 0.0], [0.0, 5.0]]) for i in range(2, 5)]
+
+    single = rank_paths([v1, *others], lambda_gap=0.0, max_rows=3)
+    doubled = rank_paths(
+        [v1, *others],
+        lambda_gap=0.0,
+        max_rows=3,
+        paths_per_video=2,
+        path_min_separation_ms=2_000,
+    )
+
+    assert [row.video_id for row in single] == ["v1", "v2", "v3"]
+    assert [row.video_id for row in doubled] == ["v1", "v1", "v2"]

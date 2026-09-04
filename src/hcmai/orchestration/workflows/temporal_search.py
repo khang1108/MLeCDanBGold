@@ -144,6 +144,8 @@ class TemporalSearchService:
             max_rows=top_k,
             event_power=self.config.event_power,
             cluster_delta=self.config.cluster_delta,
+            paths_per_video=self.config.paths_per_video,
+            path_min_separation_ms=self.config.path_min_separation_ms,
         )
 
         # =================================================================

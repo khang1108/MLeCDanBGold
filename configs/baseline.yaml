@@ -48,12 +48,23 @@ search:
       asr_weight: 1.0
     dense_weight: 0.5
     bm25_weight: 0.5
+    adaptive:
+      base_component_weights:
+        visual_dense: 0.35
+        context_dense: 0.35
+        asr_dense: 0.08
+        bm25_title: 0.02
+        bm25_caption: 0.10
+        bm25_ocr: 0.04
+        bm25_asr: 0.06
 
   alignment:
     lambda_gap: 0.00001
     event_power: 1.0
     chunk_size: 65536
     cluster_delta: 0.0
+    paths_per_video: 5
+    path_min_separation_ms: 30000
 
   cache:
     enabled: true
