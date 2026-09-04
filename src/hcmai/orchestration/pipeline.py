@@ -320,13 +320,14 @@ class SearchService:
         )
 
     def filter_frames(self, request: FilterRequest) -> FilterResponse:
-        """Search raw evidence text without semantic retrieval or reranking."""
+        """Filter raw evidence without semantic retrieval or reranking."""
 
         if self.corpus is None or self.literal_text is None:
             raise SearchServiceUnavailableError("Literal filter is unavailable")
         try:
             total, hits = self.literal_text.search(
-                request.query,
+                text_filters=request.metadata_filters.populated_text(),
+                object_filters=request.metadata_filters.objects,
                 folder_id=request.folder_id,
                 video_id=request.video_id,
                 page_id=request.page_id,

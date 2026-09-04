@@ -6,7 +6,16 @@ import { useSubmissionDialog } from '../../submission/contexts/SubmissionDialogC
 import { displayVideoId } from '../../frames/videoSource';
 import FilterForm from './FilterForm';
 import FilterPagination from './FilterPagination';
-import { DEFAULT_FRAMES_PER_PAGE, resolveFramesPerPage } from '../filterPagination';
+import { FRAMES_PER_PAGE } from '../filterPagination';
+
+
+const createInitialFilterValues = () => ({
+  title: '',
+  asr: '',
+  caption: '',
+  ocr: '',
+  objects: [{ id: 'object-1', value: '' }],
+});
 
 
 const MatchedFrame = ({ frame, onFrameClick, onSubmit }) => (
@@ -17,13 +26,15 @@ const MatchedFrame = ({ frame, onFrameClick, onSubmit }) => (
       onClick={() => onFrameClick?.(frame)}
       onSubmit={onSubmit}
     />
-    <div className="filter-match-list">
-      {Object.entries(frame.matches || {}).map(([source, text]) => (
-        <p className="filter-match-text" key={source} title={text}>
-          <strong>{source}</strong>: {text}
-        </p>
-      ))}
-    </div>
+    {Object.keys(frame.matches || {}).length > 0 && (
+      <div className="filter-match-list">
+        {Object.entries(frame.matches).map(([source, text]) => (
+          <p className="filter-match-text" key={source} title={text}>
+            <strong>{source}</strong>: {text}
+          </p>
+        ))}
+      </div>
+    )}
   </div>
 );
 
@@ -31,12 +42,10 @@ const MatchedFrame = ({ frame, onFrameClick, onSubmit }) => (
 const FilterResults = ({
   results,
   totalResults,
-  availableSources,
   hasFiltered,
   error,
   onFrameClick,
   onSubmit,
-  containerRef,
   currentPage,
   totalPages,
   isLoading,
@@ -44,43 +53,52 @@ const FilterResults = ({
 }) => {
   if (error) {
     return (
-      <section ref={containerRef} className="frames-container filter-results" aria-label="Filter results">
+      <section className="frames-container filter-results" aria-label="Filter results">
         <div className="error-alert" role="alert">{error}</div>
       </section>
     );
   }
 
-  if (!hasFiltered || !results.length) {
+  if (!hasFiltered) {
     return (
-      <section ref={containerRef} className="frames-container filter-results" aria-label="Filter results">
+      <section className="frames-container filter-results" aria-label="Filter results">
         <div className="frames-empty-state filter-empty-state">
-          <p className="body-md frames-empty-text">
-            {hasFiltered ? 'No matching frames' : 'Search text evidence directly'}
-          </p>
+          <div className="filter-empty-icon" aria-hidden="true">🎯</div>
+          <p className="body-md frames-empty-text">Welcome to HCMAI Frame Search</p>
           <p className="caption frames-empty-subtext">
-            {hasFiltered
-              ? 'Try another keyword or remove the folder/video scope.'
-              : 'One keyword checks Title, Caption, OCR, ASR, and Objects.'}
+            Enter source-specific keywords above to query the video corpus.
           </p>
         </div>
-        {hasFiltered && totalPages > 0 && (
-          <FilterPagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            isLoading={isLoading}
-            onPageChange={onPageChange}
-          />
-        )}
+      </section>
+    );
+  }
+
+  if (!results.length) {
+    return (
+      <section className="frames-container filter-results" aria-label="Filter results">
+        <div className="frames-empty-state filter-empty-state">
+          <div className="filter-empty-icon" aria-hidden="true">🔍</div>
+          <p className="body-md frames-empty-text">No matching frames</p>
+          <p className="caption frames-empty-subtext">
+            Try adjusting your Title, ASR, Caption, OCR, or Object filters.
+          </p>
+        </div>
+        <FilterPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          isLoading={isLoading}
+          onPageChange={onPageChange}
+        />
       </section>
     );
   }
 
   return (
-    <section ref={containerRef} className="frames-container filter-results" aria-label="Filter results">
+    <section className="frames-container filter-results" aria-label="Filter results">
       <div className="filter-result-toolbar">
         <div className="filter-result-summary">
-          <strong>{totalResults}</strong> matches
-          {availableSources.length ? ` · ${availableSources.join(', ')}` : ''}
+          <strong>{totalResults}</strong> matching frame{totalResults === 1 ? '' : 's'}
+          {' · '}{FRAMES_PER_PAGE} per page
         </div>
       </div>
       <div className="frames-scroll-region">
@@ -106,14 +124,14 @@ const FilterResults = ({
 };
 
 
-/** Search raw corpus text with optional free-text folder and video scopes. */
+/** Own the source-specific Filter form and backend-owned result pages. */
 const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
-  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState(createInitialFilterValues);
+  const [appliedFilters, setAppliedFilters] = useState(null);
   const [folderId, setFolderId] = useState('');
   const [videoId, setVideoId] = useState('');
-  const [applied, setApplied] = useState(null);
+  const [appliedScope, setAppliedScope] = useState(null);
   const [results, setResults] = useState([]);
-  const [availableSources, setAvailableSources] = useState([]);
   const [totalResults, setTotalResults] = useState(0);
   const [pageId, setPageId] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -121,15 +139,9 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
   const [isFiltering, setIsFiltering] = useState(false);
   const [error, setError] = useState(null);
   const requestRef = useRef(null);
-  const resultsViewportRef = useRef(null);
   const { requestSubmission } = useSubmissionDialog();
 
   useEffect(() => () => requestRef.current?.abort(), []);
-
-  const pageSize = useCallback(() => resolveFramesPerPage('auto', {
-    width: resultsViewportRef.current?.clientWidth,
-    height: resultsViewportRef.current?.clientHeight,
-  }), []);
 
   const requestPage = useCallback(async (parameters) => {
     requestRef.current?.abort();
@@ -142,10 +154,9 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     try {
       const response = await filterFrames({ ...parameters, signal: controller.signal });
       setResults(response.results || []);
-      setAvailableSources(response.available_sources || []);
       setTotalResults(response.total_results || 0);
       setPageId(response.page_id);
-      setTotalPages(response.total_pages);
+      setTotalPages(response.total_pages || 0);
     } catch (requestError) {
       if (requestError.name !== 'AbortError') {
         setResults([]);
@@ -161,22 +172,23 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
 
   const handleFilter = useCallback((event) => {
     event.preventDefault();
-    if (isFiltering || !query.trim()) return;
-    const parameters = {
-      query,
-      folderId,
-      videoId,
-      framesPerPage: pageSize() || DEFAULT_FRAMES_PER_PAGE,
-      pageId: 1,
-    };
-    setApplied(parameters);
+    if (isFiltering) return;
+
+    const parameters = { filters, folderId, videoId, pageId: 1 };
+    setAppliedFilters(filters);
+    setAppliedScope({ folderId, videoId });
     requestPage(parameters);
-  }, [folderId, isFiltering, pageSize, query, requestPage, videoId]);
+  }, [filters, folderId, isFiltering, requestPage, videoId]);
 
   const handlePageChange = useCallback((nextPage) => {
-    if (!applied || isFiltering || nextPage < 1 || nextPage > totalPages) return;
-    requestPage({ ...applied, pageId: nextPage });
-  }, [applied, isFiltering, requestPage, totalPages]);
+    if (!appliedFilters || isFiltering || nextPage < 1 || nextPage > totalPages) return;
+    requestPage({
+      filters: appliedFilters,
+      folderId: appliedScope?.folderId,
+      videoId: appliedScope?.videoId,
+      pageId: nextPage,
+    });
+  }, [appliedFilters, appliedScope, isFiltering, requestPage, totalPages]);
 
   const handleFrameSubmit = useCallback((frame) => {
     requestSubmission({
@@ -219,23 +231,21 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
 
         <div className="filter-main-column">
           <FilterForm
-            query={query}
-            onChange={setQuery}
+            values={filters}
+            onChange={setFilters}
             onSubmit={handleFilter}
-            onReset={() => setQuery('')}
+            onReset={() => setFilters(createInitialFilterValues())}
             isLoading={isFiltering}
           />
           <div className="filter-results-shell">
-            {isFiltering && <div className="filter-loading" role="status">Searching text…</div>}
+            {isFiltering && <div className="filter-loading" role="status">Filtering evidence…</div>}
             <FilterResults
               results={results}
               totalResults={totalResults}
-              availableSources={availableSources}
               hasFiltered={hasFiltered}
               error={error}
               onFrameClick={onFrameClick}
               onSubmit={handleFrameSubmit}
-              containerRef={resultsViewportRef}
               currentPage={pageId}
               totalPages={totalPages}
               isLoading={isFiltering}

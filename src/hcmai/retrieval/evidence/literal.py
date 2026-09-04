@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from collections import defaultdict
+from collections.abc import Mapping
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -54,33 +55,56 @@ class LiteralTextIndex:
             source: normalize_literal_text(items)
             for source, items in self._raw.items()
         }
+        self._normalized_object_counts = self._object_count_projection(corpus)
         self.available_sources = tuple(
             source for source in _SOURCES if source in self._raw
         )
 
     def search(
         self,
-        query: str,
         *,
+        text_filters: Mapping[str, str],
+        object_filters: Mapping[str, int],
         folder_id: str | None,
         video_id: str | None,
         page_id: int,
         page_size: int,
     ) -> tuple[int, list[tuple[Frame, dict[str, str | None], dict[str, str]]]]:
-        """Return one canonical-order page with raw metadata and matched sources."""
+        """Return one canonical-order page satisfying every active predicate.
+
+        A predicate for a globally unavailable evidence source is omitted. A
+        predicate for an available source is strict: missing evidence on a
+        frame cannot satisfy it. Object labels use normalized exact equality
+        and their counts must meet the requested minimum.
+        """
 
         if not self.available_sources:
             raise RuntimeError("Literal text sources are unavailable")
 
-        needle = normalize_literal_text(pa.array([query]))[0].as_py()
-        if not needle:
-            return 0, []
-        mask = pa.array([False] * len(self.frames))
+        mask = pa.array([True] * len(self.frames))
         source_masks: dict[str, pa.Array] = {}
-        for source, values in self._normalized.items():
+        for source, query in text_filters.items():
+            values = self._normalized.get(source)
+            if values is None:
+                continue
+            needle = normalize_literal_text(pa.array([query]))[0].as_py()
+            if not needle:
+                continue
             source_mask = pc.match_substring(values, pattern=needle)
             source_masks[source] = source_mask
-            mask = pc.or_(mask, source_mask)
+            mask = pc.and_(mask, source_mask)
+
+        if object_filters and "objects" in self._raw:
+            normalized_filters = self._normalize_object_filters(object_filters)
+            object_mask = pa.array([
+                all(
+                    label in counts and counts[label] >= minimum_count
+                    for label, minimum_count in normalized_filters.items()
+                )
+                for counts in self._normalized_object_counts
+            ])
+            source_masks["objects"] = object_mask
+            mask = pc.and_(mask, object_mask)
 
         if folder_id:
             mask = pc.and_(mask, pc.equal(self._folder_ids, folder_id))
@@ -98,10 +122,65 @@ class LiteralTextIndex:
             matches = {
                 source: metadata[source]
                 for source in self.available_sources
-                if source_masks[source][index].as_py() and metadata[source]
+                if source in source_masks
+                and source_masks[source][index].as_py()
+                and metadata[source]
             }
             hits.append((self.frames[index], metadata, matches))
         return len(indices), hits
+
+    def _object_count_projection(self, corpus: Corpus) -> tuple[dict[str, int], ...]:
+        """Materialize normalized exact-label object counts beside frame order."""
+
+        if not corpus.has_object_counts():
+            return tuple({} for _ in self.frames)
+
+        return tuple(
+            self._normalize_object_counts(corpus.object_counts(frame.frame_id))
+            for frame in self.frames
+        )
+
+    @staticmethod
+    def _normalize_object_counts(
+        object_filters: Mapping[str, int],
+    ) -> dict[str, int]:
+        """Normalize stored labels and preserve total multiplicity after collisions."""
+
+        if not object_filters:
+            return {}
+
+        raw_labels = [str(label) for label in object_filters]
+        normalized_labels = normalize_literal_text(pa.array(raw_labels)).to_pylist()
+        normalized_counts: dict[str, int] = {}
+        for raw_label, normalized_label in zip(raw_labels, normalized_labels, strict=True):
+            if not normalized_label:
+                continue
+            normalized_counts[normalized_label] = (
+                normalized_counts.get(normalized_label, 0)
+                + int(object_filters[raw_label])
+            )
+        return normalized_counts
+
+    @staticmethod
+    def _normalize_object_filters(
+        object_filters: Mapping[str, int],
+    ) -> dict[str, int]:
+        """Normalize request labels and retain their strictest minimum count."""
+
+        if not object_filters:
+            return {}
+
+        raw_labels = [str(label) for label in object_filters]
+        normalized_labels = normalize_literal_text(pa.array(raw_labels)).to_pylist()
+        normalized_filters: dict[str, int] = {}
+        for raw_label, normalized_label in zip(raw_labels, normalized_labels, strict=True):
+            if not normalized_label:
+                continue
+            normalized_filters[normalized_label] = max(
+                normalized_filters.get(normalized_label, 0),
+                int(object_filters[raw_label]),
+            )
+        return normalized_filters
 
     def _source_values(self, corpus: Corpus) -> dict[str, list[str | None]]:
         """Read configured evidence while retaining raw text for result display."""

@@ -82,96 +82,156 @@ class _Corpus:
         return self.counts.get(frame_id, {})
 
 
-def test_literal_filter_uses_or_across_sources_and_preserves_order() -> None:
-    """Match accents and case without changing raw display text or identity."""
+def test_literal_filter_ands_populated_text_sources_and_preserves_order() -> None:
+    """Require every source predicate while retaining raw evidence and identity."""
 
     index = LiteralTextIndex(_Corpus())
-
     total, hits = index.search(
-        "AO do",
+        text_filters={"title": "ban tin", "caption": "AO do"},
+        object_filters={},
         folder_id=None,
         video_id=None,
         page_id=1,
-        page_size=12,
+        page_size=20,
     )
 
-    assert total == 2
-    assert [frame.frame_id for frame, _, _ in hits] == [
-        "L21_V001_f0",
-        "L21_V001_f2",
-    ]
-    assert hits[0][2] == {"caption": "Người mặc áo đỏ"}
-    assert hits[1][2] == {"ocr": "ÁO ĐỎ - BIỂN BÁO"}
+    assert total == 1
+    assert [frame.frame_id for frame, _, _ in hits] == ["L21_V001_f0"]
+    assert hits[0][2] == {
+        "title": "Bản tin sáng",
+        "caption": "Người mặc áo đỏ",
+    }
 
 
 def test_literal_filter_projects_asr_by_half_open_segment_time() -> None:
     """Attach ASR at its start boundary but not at its end boundary."""
 
-    index = LiteralTextIndex(_Corpus())
-
-    _, hits = index.search(
-        "xin chao",
+    _, hits = LiteralTextIndex(_Corpus()).search(
+        text_filters={"title": "ban tin", "asr": "xin chao"},
+        object_filters={},
         folder_id=None,
         video_id=None,
         page_id=1,
-        page_size=12,
+        page_size=20,
     )
 
     assert [frame.frame_id for frame, _, _ in hits] == ["L21_V001_f1"]
-    assert hits[0][2] == {"asr": "Xin chào lớp học"}
+    assert hits[0][2] == {
+        "title": "Bản tin sáng",
+        "asr": "Xin chào lớp học",
+    }
 
 
 @pytest.mark.parametrize(
-    ("query", "frame_id", "source"),
+    ("text_filters", "frame_id", "source"),
     [
-        ("ban tin", "L21_V001_f0", "title"),
-        ("blue bicycle", "L22_V002_f0", "caption"),
-        ("bien bao", "L21_V001_f2", "ocr"),
-        ("xin chao", "L21_V001_f1", "asr"),
-        ("person", "L22_V002_f0", "objects"),
+        ({"title": "ban tin"}, "L21_V001_f0", "title"),
+        ({"caption": "blue bicycle"}, "L22_V002_f0", "caption"),
+        ({"ocr": "bien bao"}, "L21_V001_f2", "ocr"),
+        ({"asr": "xin chao"}, "L21_V001_f1", "asr"),
     ],
 )
-def test_literal_filter_searches_each_available_source(
-    query: str,
+def test_literal_filter_searches_each_available_text_source(
+    text_filters: dict[str, str],
     frame_id: str,
     source: str,
 ) -> None:
-    """Treat every configured text source as an OR branch."""
+    """Apply each configured text matcher to its corresponding source only."""
 
     _, hits = LiteralTextIndex(_Corpus()).search(
-        query,
+        text_filters=text_filters,
+        object_filters={},
         folder_id=None,
         video_id=None,
         page_id=1,
-        page_size=1,
+        page_size=20,
     )
 
     assert hits[0][0].frame_id == frame_id
     assert source in hits[0][2]
 
 
-def test_literal_filter_combines_scopes_and_paginates() -> None:
-    """Apply folder and video scopes with AND before slicing a result page."""
+def test_literal_filter_requires_exact_object_name_and_minimum_count() -> None:
+    """Keep object names exact while accepting counts at or above the threshold."""
 
     index = LiteralTextIndex(_Corpus())
     total, hits = index.search(
-        "ao do",
+        text_filters={},
+        object_filters={"person": 2, "bicycle": 1},
+        folder_id=None,
+        video_id=None,
+        page_id=1,
+        page_size=20,
+    )
+    insufficient_total, _ = index.search(
+        text_filters={},
+        object_filters={"person": 3},
+        folder_id=None,
+        video_id=None,
+        page_id=1,
+        page_size=20,
+    )
+    wrong_label_total, _ = index.search(
+        text_filters={},
+        object_filters={"people": 1},
+        folder_id=None,
+        video_id=None,
+        page_id=1,
+        page_size=20,
+    )
+
+    assert total == 1
+    assert hits[0][0].frame_id == "L22_V002_f0"
+    assert hits[0][2] == {"objects": "bicycle: 1, person: 2"}
+    assert insufficient_total == 0
+    assert wrong_label_total == 0
+
+
+def test_literal_filter_combines_backend_scopes_and_paginates() -> None:
+    """Apply backend-only scopes with AND before slicing a result page."""
+
+    index = LiteralTextIndex(_Corpus())
+    total, hits = index.search(
+        text_filters={"caption": "ao do"},
+        object_filters={},
         folder_id="L21",
         video_id="L21_V001",
         page_id=2,
         page_size=1,
     )
     empty_total, _ = index.search(
-        "ao do",
+        text_filters={"caption": "ao do"},
+        object_filters={},
         folder_id="L21",
         video_id="L22_V002",
         page_id=1,
-        page_size=12,
+        page_size=20,
     )
 
-    assert total == 2
-    assert hits[0][0].frame_id == "L21_V001_f2"
+    assert total == 1
+    assert hits == []
     assert empty_total == 0
+
+
+def test_literal_filter_returns_all_frames_without_evidence_predicates() -> None:
+    """Allow browsing canonical frames when no evidence field is populated."""
+
+    total, hits = LiteralTextIndex(_Corpus()).search(
+        text_filters={},
+        object_filters={},
+        folder_id=None,
+        video_id=None,
+        page_id=1,
+        page_size=20,
+    )
+
+    assert total == 4
+    assert [frame.frame_id for frame, _, _ in hits] == [
+        "L21_V001_f0",
+        "L21_V001_f1",
+        "L21_V001_f2",
+        "L22_V002_f0",
+    ]
 
 
 def test_filter_service_applies_scope_pagination_and_complete_metadata() -> None:
@@ -185,9 +245,9 @@ def test_filter_service_applies_scope_pagination_and_complete_metadata() -> None
     )
 
     response = service.filter_frames(FilterRequest(
-        query="person",
+        metadata_filters={"objects": {"person": 2}},
         folder_id="L22",
-        frames_per_pages=1,
+        frames_per_pages=20,
         page_id=1,
     ))
 

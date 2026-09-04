@@ -51,24 +51,36 @@ def _post(service: _Service, payload: dict[str, object]) -> httpx.Response:
     return asyncio.run(send())
 
 
-def test_filter_route_uses_the_new_literal_contract() -> None:
-    """Delegate the keyword, free scopes, and pagination unchanged."""
+def test_filter_route_delegates_source_filters_and_backend_scopes() -> None:
+    """Delegate separate evidence predicates, scopes, and fixed page size."""
 
     service = _Service()
     response = _post(service, {
-        "query": "ao do",
+        "metadata_filters": {
+            "title": "ban tin",
+            "asr": "xin chao",
+            "caption": None,
+            "ocr": "bien bao",
+            "objects": {"person": 2},
+        },
         "folder_id": "L21",
         "video_id": "L21_V001",
-        "frames_per_pages": 12,
+        "frames_per_pages": 20,
         "page_id": 2,
     })
 
     assert response.status_code == 200
     assert service.request == FilterRequest(
-        query="ao do",
+        metadata_filters={
+            "title": "ban tin",
+            "asr": "xin chao",
+            "caption": None,
+            "ocr": "bien bao",
+            "objects": {"person": 2},
+        },
         folder_id="L21",
         video_id="L21_V001",
-        frames_per_pages=12,
+        frames_per_pages=20,
         page_id=2,
     )
     assert response.json()["available_sources"] == ["caption"]
@@ -77,6 +89,17 @@ def test_filter_route_uses_the_new_literal_contract() -> None:
 def test_filter_route_returns_503_without_text_sources() -> None:
     """Keep degraded startup explicit when no literal projection can be built."""
 
-    response = _post(_Service(available=False), {"query": "hello"})
+    response = _post(_Service(available=False), {"metadata_filters": {}})
 
     assert response.status_code == 503
+
+
+def test_filter_route_rejects_any_page_size_other_than_twenty() -> None:
+    """Keep the Filter page size fixed even for direct API callers."""
+
+    response = _post(_Service(), {
+        "metadata_filters": {},
+        "frames_per_pages": 12,
+    })
+
+    assert response.status_code == 422
