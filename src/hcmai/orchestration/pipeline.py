@@ -129,7 +129,7 @@ class SearchService:
         temporal = (
             TemporalSearchService(
                 self.corpus,
-                cast(TemporalEvidenceScorer, self.temporal_evidence),
+                cast("TemporalEvidenceScorer", self.temporal_evidence),
                 self.config.alignment,
                 self.config.max_temporal_event_count,
             )

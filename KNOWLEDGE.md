@@ -14,13 +14,21 @@
 - **VERIFIED (C2 & C7):** Masked ASR interval projection initialized with $-\infty$ accurately scatters cosine similarities across sampled canonical frames inside speech segments without zero-clipping negative cosine similarities.
 - **VERIFIED (C3):** Exact v9 legacy scoring equivalence is preserved via dedicated `score_subset_legacy()`.
 - **VERIFIED (C4 & C5):** Stateless adaptive scorers and `with_config` cloning prevent config mutation leakage across ablation runs.
-- **VERIFIED (Decision Gate):** On target query `L26_V254_cooking`, legacy v9 ($A0$) failed to retrieve the target video ($>300$). Decomposed component scoring ($A1$) improved target rank to **88** with ground-truth frame alignments `[425, 450, 475, 550]`. Dense-only adaptive ($A6$) narrowed the top-1 score gap to **0.062** (target score 3.908 vs top score 3.970).
+- **REJECTED (Decision Gate):** The historical A-series report is not a clean
+  ablation. A1 changed the fusion equation, the evaluator replaced the loaded
+  DP configuration, event 2 localized before its plate region, and A3/A4/A6
+  localized around frames 3525-3600 outside the known relevant region.
+- **SOURCE:** Equal-strength sparse BM25 hits now remain calibrated as positive
+  evidence, and ASR interval projection follows the half-open `[start_ms,
+  end_ms)` contract.
 
 ### Status
-VERIFIED
+SOURCE-IMPLEMENTED / EVALUATION PENDING
 
 ### Decision
-P0 emission scoring quality is confirmed sufficient for P1 DP work. Maintain conservative speech/OCR boosts in runtime configurations to prevent conversational distractors from degrading high-precision visual signals.
+Do not start P1 based on the historical A-series artifact. Rerun B0-B6 with
+the loaded DP configuration held fixed, then diagnose B3 calibration and B5
+routing against the known shell, plate, and dialogue regions.
 
 
 ## Disk-backed exact metadata filtering under a shared FAISS RAM budget
@@ -418,17 +426,23 @@ multi-crop query embeddings before adopting any more complex method.
 
 ### Findings
 - **SOURCE:** Pre-P0 temporal evidence conflated unbounded BM25 scores with bounded cosine dense scores and treated missing ASR speech coverage as zero-similarity negative evidence.
-- **SOURCE / EXPERIMENT:** Evaluating the A0-A5 ablation matrix on the reference L26_V254 query revealed that interval ASR projection and robust row calibration significantly improved individual event score emissions (Event 1: 0.764 -> 0.861, Event 2: 0.702 -> 0.825).
-- **SOURCE / EXPERIMENT:** Despite improved evidence emissions, the global path ranking remained at rank 11 because the target video's ground-truth event windows overlap in time, which the strictly monotonic DP recurrence (`t1 < t2`) pruned out. This definitively verified **Case B**.
+- **REJECTED:** The earlier A0-A5 interpretation did not isolate componentized
+  legacy scoring from a new flat-fusion equation and did not preserve the
+  application's loaded alignment configuration.
+- **PROPOSED:** Strict monotonic chronology may still contribute to failures,
+  but current evidence does not isolate it from calibration, routing, and
+  localization regressions. Case B is not yet verified.
 
 ### Relevance to HCMAI
-- Event-adaptive fusion and interval ASR projection provide reliable, calibrated frame-level evidence.
+- Interval ASR and componentized evidence remain useful infrastructure, but
+  adaptive emission quality requires a clean B-series rerun.
 - Safe production configuration maintains `fusion_mode="legacy"` by default with `--fusion-mode adaptive` available for testing.
-- Overlapping temporal events cannot be solved by tuning evidence scores alone; resolving Case B requires a relaxed/interval DP formulation in future temporal planning work.
+- A relaxed/interval DP formulation should be considered only after correct
+  evidence is strong in the relevant regions under fixed DP settings.
 
 ### Status
-VERIFIED / IMPLEMENTED
+IMPLEMENTED / EVALUATION PENDING
 
 ### Decision or Experiment
-Preserve legacy default scoring in production while supporting calibrated adaptive fusion. Advance the resolution of Case B to future temporal DP planning research.
-
+Preserve legacy default scoring. Do not advance to P1 until B0-B6 separates
+emission failures from DP failures on reproducible localization evidence.

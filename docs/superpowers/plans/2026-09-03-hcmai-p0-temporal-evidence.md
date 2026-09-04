@@ -1552,6 +1552,7 @@ positions = np.argsort(-calibrated_scores[event_index], kind="stable")[:top_k]
 `scripts/debug_temporal_evidence.py` accepts:
 
 ```text
+--run B3                  adaptive B-series stage to inspect (B1-B6)
 --query-file PATH          YAML containing `query` and `retrieval_events`
 --video-id L26_V254        repeatable
 --top-frames 10
@@ -1602,6 +1603,7 @@ In the competition environment where artifacts are mounted:
 
 ```bash
 PYTHONPATH=src python scripts/debug_temporal_evidence.py \
+  --run B3 \
   --query-file tests/fixtures/l26_v254_query.yaml \
   --video-id L26_V254 \
   --top-frames 12 \
@@ -1615,6 +1617,9 @@ Record for each event:
 - BM25 field peaks;
 - reliability per component;
 - final adaptive fused top frame indices.
+
+Run the same command for B1, B3, and B5 to isolate flat fusion, robust
+calibration, and event routing without mutating the loaded baseline scorer.
 
 Expected qualitative check from known artifacts: shell/plate evidence should appear around frame indices ~300-525 and dialogue evidence later around ~550-950. Do not require exact score values in a unit test because the deployed model/index artifacts are external to the source archive.
 
@@ -1637,7 +1642,7 @@ git commit -m "chore(temporal): add component evidence diagnostics"
 - Modify: `src/hcmai/common/config.py` only if an independent flag is missing.
 
 **Interfaces:**
-- The evaluation script runs the same query set under named configurations A0-A5.
+- The evaluation script runs the same query set under named performance configurations B0-B6.
 - It must not change query text between ablations.
 - It records result ranks and timing, not just top-1 screenshots.
 
@@ -1651,42 +1656,50 @@ confidence_gating: bool = True
 event_routing: bool = True
 ```
 
-In `TemporalFusionScorer`, centralize component calibration in `_calibrate(raw_scores)`. When `robust_calibration=True`, call `calibrate_component()`. When false, return `minmax_rows(raw_scores)` with reliability equal to `1.0` for nonconstant rows and `0.0` for constant rows. This creates the A1 fixed-component baseline without changing DP or component extraction.
+In `TemporalFusionScorer`, centralize component calibration in `_calibrate(raw_scores)`. When `robust_calibration=True`, call `calibrate_component()`. When false, return `minmax_rows(raw_scores)` with reliability equal to `1.0` for nonconstant rows and `0.0` for constant rows. This creates the B1 flat-component baseline without changing DP or component extraction.
 
 ASR interval projection is a data semantics change inside the ASR adapter. For ablation, add a runtime constructor flag `interval_projection: bool = True` to `SegmentProjectedASRIndex`; when false, execute the original one-point projection without the old floor-fill. This isolates interval spread from coverage semantics without restoring the misleading floor behavior.
 
 - [ ] **Step 2: Define the exact ablation matrix**
 
+Exact componentized-legacy recombination is an A1 regression test and must be
+numerically equal to legacy scoring. It is not a runtime performance condition.
+
 `scripts/evaluate_temporal_p0.py` must support these named runs:
 
 ```text
-A0 legacy_v9
+B0 legacy_v9
    legacy minmax + fixed Dense + fixed BM25 hybrid
 
-A1 components_fixed
-   separated components, but minmax-style calibration and fixed configured weights
+B1 flat_components
+   separated components with flat minmax-style fusion; intentionally a new equation
 
-A2 robust_calibration
-   A1 + robust quantile calibration, confidence gating OFF, event routing OFF
+B2 asr_interval
+   B1 + interval ASR coverage
 
-A3 confidence_gating
-   A2 + reliability gating
+B3 robust_calibration
+   B2 + robust quantile calibration, confidence gating OFF, event routing OFF
 
-A4 asr_interval
-   A3 + interval ASR coverage
+B4 confidence_gating
+   B3 + reliability gating
 
-A5 adaptive_p0
-   A4 + event cue routing
+B5 adaptive_p0
+   B4 + event cue routing
+
+B6 dense_only
+   B5 without BM25 components
 ```
 
-Do not alter DP settings between A0-A5.
+Do not alter DP settings between B0-B6. Use the `TemporalSearchService` alignment
+configuration loaded by application setup; run definitions must not own a fresh
+default `AlignmentConfig`.
 
 - [ ] **Step 3: Write an ablation-config regression test**
 
 Create a test that constructs all six named configs and asserts:
 - `fusion_mode` is correct;
 - only the intended feature differs from the prior stage;
-- `AlignmentConfig` is identical across all stages.
+- the evaluator never replaces the loaded alignment configuration.
 
 This prevents accidental "P0 gain" from a hidden DP parameter change.
 
@@ -1696,7 +1709,7 @@ For each query/run, write one JSONL row:
 
 ```json
 {
-  "run": "A5_adaptive_p0",
+  "run": "B5_adaptive_p0",
   "query_id": "q17",
   "target_video_id": "L26_V254",
   "target_rank": 4,
@@ -1711,7 +1724,7 @@ If a query has no known target label, omit `target_rank` and still record top vi
 
 - [ ] **Step 5: Evaluate the known `L26_V254` case first**
 
-Run A0-A5 with the frozen query bundle and record:
+Run B0-B6 with the frozen query bundle and record:
 - rank of `L26_V254`;
 - top 10 video IDs;
 - score gap between target and rank 1;
@@ -1724,7 +1737,7 @@ Stop and inspect if any stage makes the target materially worse before running t
 
 For the 50 organizer queries without complete labels:
 - prepare/freeze each query once using the ChatGPT skill;
-- never regenerate it between A0-A5;
+- never regenerate it between B0-B6;
 - manually tag each query as `visual`, `speech`, `ocr`, or `mixed` for analysis only;
 - compare top-result relevance and path coherence side by side.
 
@@ -1782,7 +1795,8 @@ Do not start P1 soft-monotonic DP work until every item below is answered with e
 - [ ] `TemporalSearchService` still receives the same `list[VideoEventScores]` contract.
 - [ ] `src/hcmai/temporal/dp.py` is byte-for-byte behaviorally unchanged.
 - [ ] The `L26_V254` diagnostic explains which component supports each event and whether the target is lost before or during DP.
-- [ ] A0-A5 ablations are recorded with identical prepared queries and identical DP settings.
+- [ ] A1 componentized-legacy recombination equals legacy scoring numerically.
+- [ ] B0-B6 experiments are recorded with identical prepared queries and the loaded DP settings.
 
 ## Expected Outcome of P0
 

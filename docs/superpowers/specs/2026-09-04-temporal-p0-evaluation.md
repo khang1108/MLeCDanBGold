@@ -1,4 +1,4 @@
-# HCM-AI v10 P0 Temporal Evidence Evaluation Report
+# HCM-AI v10 P0 Temporal Evidence Preliminary Evaluation (Invalidated)
 
 **Date:** 2026-09-04  
 **Target Query:** `L26_V254_cooking`  
@@ -6,16 +6,26 @@
 **Evaluation Script:** `scripts/evaluate_temporal_p0.py`  
 **Results Artifact:** `artifacts/p0_ablation_results.jsonl`
 
+**B-series rerun status:** Blocked on 2026-09-04 because the configured remote
+embedding service was unavailable at `/v1/embeddings/text`. No B-series metric
+was recorded, and the historical A-series artifact was left unchanged.
+
 ---
 
 ## 1. Executive Summary
 
-This evaluation characterizes the multimodal emission scoring matrix $S[e, f]$ across 7 strictly isolated ablation conditions ($A0 \dots A6$) on the Ho Chi Minh City AI Challenge multimodal corpus.
+This artifact preserves the first P0 run, but its rollout verdict is invalidated.
+The conditions called A0-A6 were not strictly isolated: A1 changed the fusion
+equation rather than merely exposing components, and the evaluator replaced the
+loaded DP configuration with a fresh default `AlignmentConfig`. Runtime
+experiments are now named B0-B6; exact componentized-legacy equivalence is a
+regression test rather than a performance condition.
 
 ### Key Takeaways:
+
 1. **v9 Legacy Baseline ($A0$) fails to retrieve the target video:** In $A0$, `L26_V254` is ranked $>300$ and does not appear in candidate alignment paths.
-2. **Component Evidence ($A1$) brings the target video to Rank 88:** Splitting into structured components and uncorrupted scaling dramatically elevates the target video from $>300$ to **Rank 88** (score gap $0.188$) with ground-truth aligned frames `[425, 450, 475, 550]`.
-3. **Dense-only Adaptive ($A6$) achieves the narrowest score gap ($0.062$):** Target video ranks at $116$ with target score $3.908$ vs top-1 score $3.970$.
+2. **Flat component fusion (historical $A1$) brings the target video to Rank 88**, but this is not an isolated componentization gain and frame 450 misses the event-2 plate region.
+3. **Dense-only Adaptive (historical $A6$) has a narrow score gap ($0.062$), but localization at frames 3525-3600 is outside the known relevant region.**
 4. **BM25 ASR Speech Boost Trade-off ($A3 \dots A5$):** Applying an aggressive static multiplier ($5.0\times$) to BM25 ASR on conversational queries elevates speech-heavy distractor videos in long corpora, causing target rank to degrade back towards $>300$.
 
 ---
@@ -37,7 +47,9 @@ This evaluation characterizes the multimodal emission scoring matrix $S[e, f]$ a
 ## 3. Findings & Diagnostic Verification
 
 ### Alignment with Target Regions in $A1$ and $A2$:
+
 Target regions defined for query `L26_V254_cooking`:
+
 - `hold_two_X`: frames $[300, 475]$
 - `plate_X`: frames $[500, 525]$
 - `dialogue`: frames $[550, 950]$
@@ -48,14 +60,17 @@ The aligned path materialized under $A1$ and $A2$ is `[425, 450, 475, 550]`:
 - Event 3: Frame 475 (boundary of $[300, 475]$)
 - Event 4: Frame 550 (start of $[550, 950]$)
 
-This strictly validates that:
-1. Canonical frame identity mappings (`frame_ids`, `frame_idx`, timestamps) are preserved end-to-end.
-2. Temporal monotonicity is preserved by the shared DP engine.
-3. Component-level evidence in Visual and Context dense modalities correctly captures the fine-grained visual actions and transitions.
+This path is monotonic, but it does not validate semantic localization. Event 2
+should localize to the plate region $[500, 525]$ and instead lands at frame 450
+inside the earlier holding region. The paths at frames 3525-3600 in A3, A4,
+and A6 are clear localization failures despite their target-video ranks.
 
 ### Decision Gate Verdict:
-- **Condition A (GO) is met for P0:** Target retrieval improved from $>300$ in legacy v9 to Rank 88 ($A1$) and Rank 116 ($A6$ with score gap $0.062$), producing valid target region alignment.
-- Emission quality is sufficient to proceed to P1 DP work.
-- **Guidance for P1/Online Serving:**
-  - When lexical ASR is enabled, keep speech boost conservative ($1.2\times - 1.5\times$ rather than $5.0\times$) to prevent distractors from dominating.
-  - Keep `A0_legacy_v9` as a verified rollback path.
+
+- **NO-GO for P1.** Full adaptive P0 ranked the target below 300 and robust
+  calibration coincided with a severe localization regression.
+- Rerun B0-B6 with the loaded DP configuration held fixed after correcting
+  sparse lexical calibration and half-open ASR interval coverage.
+- Diagnose B3 calibration and B5 routing at the known shell, plate, and dialogue
+  regions before claiming that DP is the remaining bottleneck.
+- Keep legacy fusion as the verified rollback path.
