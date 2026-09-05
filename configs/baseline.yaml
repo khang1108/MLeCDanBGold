@@ -63,8 +63,8 @@ search:
     event_power: 1.0
     chunk_size: 65536
     cluster_delta: 0.0
-    paths_per_video: 5
-    path_min_separation_ms: 30000
+    paths_per_video: 9
+    path_min_separation_ms: 10000
 
   cache:
     enabled: true

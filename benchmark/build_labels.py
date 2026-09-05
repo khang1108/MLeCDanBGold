@@ -13,6 +13,7 @@ import pandas as pd
 import yaml
 
 FRAMES = Path("artifacts/custom-raw1fps-v1/frame_store/frames.parquet")
+GROUND_TRUTH = Path("benchmark/grouth_truth")
 
 
 class FrameLookup:
@@ -45,6 +46,12 @@ class FrameLookup:
         }
 
 
+def _round_tag(path: Path) -> str:
+    """Name the exam round owning one submission file."""
+
+    return path.parents[2].name.split("-", 1)[0]
+
+
 def _read_rows(path: Path) -> list[list[str]]:
     """Read non-empty CSV rows from one submission file."""
 
@@ -57,8 +64,10 @@ def _label(
 ) -> dict[str, Any] | None:
     """Build one label record from a submission file."""
 
-    query_id = path.stem
-    task = query_id.rsplit("-", 1)[1]
+    # Rounds reuse the same query-p2-N-kis names for different questions, so the
+    # round has to be part of the identity or later rounds silently replace earlier ones.
+    query_id = f"{_round_tag(path)}:{path.stem}"
+    task = path.stem.rsplit("-", 1)[1]
     rows = _read_rows(path)[:top_k]
     if not rows:
         return None
@@ -121,7 +130,9 @@ def write_queries(labels: list[dict[str, Any]], directories: list[Path], output:
     texts: dict[str, str] = {}
     for directory in directories:
         for path in sorted(directory.parents[1].glob("query-*.txt")):
-            texts[path.stem] = path.read_text(encoding="utf-8").strip()
+            texts[f"{path.parent.name.split('-', 1)[0]}:{path.stem}"] = path.read_text(
+                encoding="utf-8"
+            ).strip()
     items = [
         {
             "query_id": label["query_id"],
@@ -145,25 +156,27 @@ def main() -> None:
     parser.add_argument(
         "--curated",
         type=Path,
-        default=Path("SOTUYEN1-bo-de-thi/submission_final/submission"),
+        default=GROUND_TRUTH / "SOTUYEN1-bo-de-thi/submission_final/submission",
         help="submissions whose every row is a verified answer",
     )
     parser.add_argument(
         "--ranked",
         type=Path,
-        default=Path("SOTUYEN2-bo-de-thi/submission_final/submission"),
+        nargs="+",
+        default=[
+            GROUND_TRUTH / "SOTUYEN2-bo-de-thi/submission_final/submission",
+            GROUND_TRUTH / "SOTUYEN3-bo-de-thi/submission_final/submission",
+        ],
         help="shotgun submissions; only the first --top-k rows are kept",
     )
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--output", type=Path, default=Path("benchmark/labels.jsonl"))
     parser.add_argument("--queries-out", type=Path, default=Path("benchmark/queries.yaml"))
     arguments = parser.parse_args()
-    sources: list[tuple[Path, str, int | None]] = [
-        (arguments.curated, "curated", None),
-        (arguments.ranked, "top10", arguments.top_k),
-    ]
+    sources: list[tuple[Path, str, int | None]] = [(arguments.curated, "curated", None)]
+    sources += [(path, "top10", arguments.top_k) for path in arguments.ranked]
     labels = build(arguments.frames, sources, arguments.output)
-    queries = write_queries(labels, [arguments.curated, arguments.ranked], arguments.queries_out)
+    queries = write_queries(labels, [path for path, _, _ in sources], arguments.queries_out)
 
     counts: dict[tuple[str, str], int] = {}
     for label in labels:

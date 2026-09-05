@@ -1,31 +1,31 @@
 queries:
-- query_id: query-p1-1-kis
+- query_id: SOTUYEN1:query-p1-1-kis
   query: Cảnh quay một nhóm hơn 5 người xếp thành hàng tập thể dục, cùng thực hiện
     động tác hai tay chạm mũi chân. Trong nhóm chỉ có một người đeo kính và ba người
     đội nón có màu đỏ.
   target_video_id: L30_V046
-- query_id: query-p1-10-kis
+- query_id: SOTUYEN1:query-p1-10-kis
   query: Hành động cắt chùm nho bằng kéo từ giàn nho bằng một chiếc kéo màu đen. Có
     thể thấy có một sợi dây màu xanh dương được buộc vào cuống của chùm nho này trước
     khi nó được cắt.
   target_video_id: L29_V013
-- query_id: query-p1-11-kis
+- query_id: SOTUYEN1:query-p1-11-kis
   query: Cảnh quay chậm tại vị trí vạch đích của cuộc đua xe đạp. Góc máy sát mặt
     đường bắt trọn khoảnh khắc về đích theo thứ tự nhất, nhì, ba lần lượt là 1 tay
     đua áo vàng quần đen, 1 tay đua áo xanh dương quần đen và 1 tay đua áo xanh dương
     quần đỏ
   target_video_id: L23_V021
-- query_id: query-p1-12-kis
+- query_id: SOTUYEN1:query-p1-12-kis
   query: Có thể thấy trong cảnh quay có 4 tài xế xe ôm công nghệ trong trạm xăng,
     trong đó 3 người đứng đợi còn 1 người lái xe từ trái sang phải khung hình. Trước
     đó là cảnh một người đậy nắp bình xăng xe máy của họ. Có thông tin về giá dầu
     mazut được hiển thị trong khung hình.
   target_video_id: L22_V001
-- query_id: query-p1-13-kis
+- query_id: SOTUYEN1:query-p1-13-kis
   query: Một người đứng dưới nước và rọi đèn. Tiếp theo là cảnh người này kéo lưới
     cá lúc bình minh, sau đó được một nhóm người khác tiến đến dùng máy quay ghi hình.
   target_video_id: L29_V021
-- query_id: query-p1-14-kis
+- query_id: SOTUYEN1:query-p1-14-kis
   query: 'Người đầu bếp lần lượt đặt các miếng nguyên liệu dạng thanh và những lát
     cắt hình hoa vào một đĩa đang được hấp trong nồi.
 
@@ -37,13 +37,13 @@ queries:
     Phần nguyên liệu này được đặt vào giữa đĩa, xung quanh là các miếng dạng thanh
     và hình hoa đã được sắp xếp trước đó.'
   target_video_id: L26_V171
-- query_id: query-p1-15-qa
+- query_id: SOTUYEN1:query-p1-15-qa
   query: Bản đồ phân bố động đất tại một vùng trên thế giới, với một bảng chú giải
     phía bên trái gồm các kí hiệu nhiều màu sắc tương ứng với các vị trí tâm chấn
     có cấp độ động đất khác nhau. Không tính bảng chú giải, có bao nhiêu vị trí ghi
     nhận động đất cấp độ 4?
   target_video_id: L21_V010
-- query_id: query-p1-16-trake
+- query_id: SOTUYEN1:query-p1-16-trake
   query: 'Đoạn video bắt đầu bằng ảnh cận đầu một con lân trắng, mũi đỏ, bên cạnh
     lá cờ trắng viền đỏ.
 
@@ -54,7 +54,7 @@ queries:
 
     E3 Khoảnh khắc đầu tiên dùi chạm vào kẻng đồng múa lân.'
   target_video_id: L24_V024
-- query_id: query-p1-17-qa
+- query_id: SOTUYEN1:query-p1-17-qa
   query: Đoạn clip mô tả hậu quả của hiện tượng sạt lở đất nghiêm trọng, đất đá tràn
     xuống gây tắc nghẽn hoàn toàn một đoạn đường đèo. Trong một cảnh quay cận, có
     thể thấy một cột mốc đường bộ với phần đỉnh màu đỏ chỉ còn lộ ra phần trên, phần
@@ -62,7 +62,7 @@ queries:
     điều khiển phương tiện vượt qua khu vực bùn lầy, trên chiếc xe máy có treo một
     vật màu xanh lá. Tên của con đèo là gì?
   target_video_id: L22_V008
-- query_id: query-p1-18-kis
+- query_id: SOTUYEN1:query-p1-18-kis
   query: Cảnh quay cho thấy hành động trình bày món ăn sau khi hoàn thành giai đoạn
     chế biến. Bún được cho đầu tiên vào một chén rỗng, sau đó đầu bếp lần lượt cho
     từng vá nước dùng cùng các nguyên liệu như thịt gà, cà rốt, sả, nấm mèo vào chén
@@ -70,35 +70,35 @@ queries:
     là cảnh zoom xa dần chén bún, ta thấy bên cạnh chén bún còn có 1 chén nước chấm
     nhỏ với 2 miếng ớt.
   target_video_id: L26_V389
-- query_id: query-p1-19-kis
+- query_id: SOTUYEN1:query-p1-19-kis
   query: Con lân do hai người điều khiển đang đứng thẳng và xoay vòng trên đỉnh cột.
     Sau vài giây nghỉ, con lân bất ngờ nhảy qua hai chiếc cột kế bên, chúi đầu xuống
     ngoạm lấy quả bí đỏ kèm bông hoa màu vàng. Cảnh quay kết thúc khi con lân tiếp
     tục nhảy sang các cột tiếp theo.
   target_video_id: L24_V035
-- query_id: query-p1-2-kis
+- query_id: SOTUYEN1:query-p1-2-kis
   query: Đoạn phim bắt đầu bằng một bản đồ, trên đó một loại công trình thủy lợi lần
     lượt xuất hiện bốn lần. Sau đó chuyển sang cảnh một con đập được quay từ trên
     cao, tiếp đến là cảnh cận con đập dưới trời mưa.
   target_video_id: L28_V018
-- query_id: query-p1-20-kis
+- query_id: SOTUYEN1:query-p1-20-kis
   query: Ba người đang đi bộ xuống một con dốc trong cơn mưa, có 2 người cầm dù, trong
     đó người cầm dù đi sau lại mặc một chiếc áo mưa có in hình con gấu ở sau lưng.
     Sau đó ta thấy nhiều người đang cùng nhau bước về hướng một căn nhà thông qua
     một con đường đất, bên cạnh là một cái ao.
   target_video_id: L21_V026
-- query_id: query-p1-21-kis
+- query_id: SOTUYEN1:query-p1-21-kis
   query: Cảnh quay bắt đầu bằng cảnh những con tôm đã được lột vỏ và nấu chín đang
     nằm trên dĩa, phía sau là người đầu bếp đang đặt 3 ổ bánh mì lên bàn. Sau đó là
     cảnh quay các đầu bếp, có người thì trang trí món ăn, có người thì chế biến món
     ăn. Những con tôm được cắt làm đôi và được nướng trên bếp.
   target_video_id: L22_V011
-- query_id: query-p1-22-kis
+- query_id: SOTUYEN1:query-p1-22-kis
   query: Người phụ nữ mặc áo dài màu hồng, đeo kính đang giảng giải về các trường
     hợp sử dụng khác nhau của động từ 'remember' dựa trên mốc thời gian của hành động
     được nhắc tới.
   target_video_id: L25_V041
-- query_id: query-p1-23-kis
+- query_id: SOTUYEN1:query-p1-23-kis
   query: 'Hình ảnh giáo viên nam mặc sơ mi trắng, thắt cà vạt tối màu, nổi bật trên
     phông nền xanh dương đậm có hoa văn mờ.
 
@@ -116,34 +116,34 @@ queries:
 
     Tầng 3: 2 khối hộp được bao bởi 1 khối hộp xanh lá cây.'
   target_video_id: L25_V060
-- query_id: query-p1-24-kis
+- query_id: SOTUYEN1:query-p1-24-kis
   query: 'Đoạn clip được cắt từ một phóng sự về một nhóm các nghệ nhân làm nghề đan
     lát các sản phẩm thủ công từ cây lục bình. Đầu tiên là một cảnh lia cam duy nhất
     từ trái sang phải, theo thứ tự ta thấy 4 sản phẩm: túi xách, chậu hoa, bộ ấm tách
     trà và túi xách. Ngay sau cảnh này, người phụ nữ bên trái lấy một tách trà trong
     bộ ấm tách và nâng niu trong khi nghe người phụ nữ bên phải trò chuyện.'
   target_video_id: L29_V001
-- query_id: query-p1-25-kis
+- query_id: SOTUYEN1:query-p1-25-kis
   query: Hai bạn học sinh mặc đồng phục áo trắng, quần xanh, quàng khăn đỏ đang làm
     MC trên một sân khấu tại trường học, phía sau là một bộ trống cơ màu đỏ và một
     cây đàn piano.
   target_video_id: L30_V003
-- query_id: query-p1-3-qa
+- query_id: SOTUYEN1:query-p1-3-qa
   query: Hình ảnh một con cá được đặt lên cân, sau đó có cảnh một con cá khác cùng
     loại bị một người cầm đuôi. Con số hiển thị cuối cùng trên cân là bao nhiêu?
   target_video_id: L21_V023
-- query_id: query-p1-4-kis
+- query_id: SOTUYEN1:query-p1-4-kis
   query: Một đàn sư tử đang nghỉ ngơi và leo trèo trên các bục gỗ trong khu nuôi dưỡng,
     phía trước có bảng thông tin của London Zoo phục vụ công tác theo dõi và bảo tồn
     động vật.. Sau đó có cảnh hai nhân viên mặc áo xanh lá đang cân và ghi nhận số
     liệu của một con vật trong khuôn viên sở thú.
   target_video_id: L22_V021
-- query_id: query-p1-5-kis
+- query_id: SOTUYEN1:query-p1-5-kis
   query: Đoạn clip bắt đầu bằng việc đậu hà lan được bỏ vào với mực đang được xào
     trên chảo, bên cạnh là đĩa hành tây và ớt đỏ thái lát chuẩn bị cho vào món ăn.
     Đoạn clip kết thúc với khung quay chậm (slow motion) cảnh lắc chảo trên bếp lửa.
   target_video_id: L26_V035
-- query_id: query-p1-6-kis
+- query_id: SOTUYEN1:query-p1-6-kis
   query: 'Mẩu tin bắt đầu với hình ảnh nột người đàn ông mặc vest xanh đậm, sơ mi
     trắng và cà vạt, đang ngồi trên một chiếc ghế lớn. Ông cầm bằng hai tay một khối
     đá quý thô khá lớn, đưa lên gần mặt để quan sát.
@@ -153,14 +153,14 @@ queries:
     một mỏ đá quý lộ thiên quy mô lớn với hố khai thác sâu nhiều tầng và hệ thống
     đường vận chuyển bao quanh.'
   target_video_id: L22_V023
-- query_id: query-p1-7-kis
+- query_id: SOTUYEN1:query-p1-7-kis
   query: "Đoạn clip bắt đầu bằng cảnh cà rốt cắt hình ngôi sao đang được luộc trong\
     \ nồi nước sôi, đặt trong rổ lưới kim loại và được đảo bằng đôi đũa gỗ. \nĐoạn\
     \ clip kết thúc bằng hình ảnh đĩa rau củ luộc và đồ chiên được trình bày đẹp mắt,\
     \ gồm đậu bắp, súp lơ, cà rốt hình ngôi sao, bí xanh, chén nước chấm màu hồng\
     \ ở giữa và đôi đũa màu hồng nhạt đặt bên phải"
   target_video_id: L26_V041
-- query_id: query-p1-8-kis
+- query_id: SOTUYEN1:query-p1-8-kis
   query: 'Người đầu bếp lần lượt đặt các miếng nguyên liệu dạng thanh và những lát
     cắt hình hoa vào một đĩa đang được hấp trong nồi.
 
@@ -172,17 +172,17 @@ queries:
     Phần nguyên liệu này được đặt vào giữa đĩa, xung quanh là các miếng dạng thanh
     và hình hoa đã được sắp xếp trước đó.'
   target_video_id: L26_V171
-- query_id: query-p1-9-qa
+- query_id: SOTUYEN1:query-p1-9-qa
   query: Đoạn phim ghi lại cảnh những chiếc xe ô tô lội nước, chiếc xe màu vàng, màu
     đỏ và màu đen lần lượt chuẩn bị đi qua cầu. Con số được ghi trên biển báo bên
     trái của cây cầu là bao nhiêu?
   target_video_id: L21_V003
-- query_id: query-p2-1-kis
+- query_id: SOTUYEN2:query-p2-1-kis
   query: Nhóm 5 người đang chơi đùa bên cạnh một con vật màu vàng. Một trong số đó
     đã mang một vật trông như trái bí đỏ đi giấu. Người đàn ông thức dậy không thấy
     quả bí đỏ đâu nên đánh thức con vật dậy.
   target_video_id: L24_V035
-- query_id: query-p2-10-kis
+- query_id: SOTUYEN2:query-p2-10-kis
   query: 'Một đầu bếp chế biến món ăn trong chảo, với các miếng dồi trường màu trắng
     và rau xanh.
 
@@ -195,7 +195,7 @@ queries:
     Máy quay chuyển sang cận cảnh chảo khi đầu bếp tiếp tục xào và trộn hai nguyên
     liệu.'
   target_video_id: L26_V120
-- query_id: query-p2-11-kis
+- query_id: SOTUYEN2:query-p2-11-kis
   query: 'Trong video, người đầu bếp cầm một nguyên liệu dài đã được xiên que và lăn
     qua hỗn hợp màu xanh lá cây và màu đỏ đã băm nhỏ.
 
@@ -206,54 +206,54 @@ queries:
     Cuối cùng, nguyên liệu đã được phủ kín một lớp bột trắng và đặt riêng sang một
     chiếc đĩa.'
   target_video_id: L26_V392
-- query_id: query-p2-12-qa
+- query_id: SOTUYEN2:query-p2-12-qa
   query: Đoạn video mô tả quá trình làm bánh, bánh được tạo ra có màu tím, nguyên
     liệu bên trong có giá, cà rốt, và bên trong mỗi bánh đều có 1 hạt sen. Mỗi lần
     khuôn này làm được bao nhiêu cái bánh?
   target_video_id: L26_V192
-- query_id: query-p2-13-kis
+- query_id: SOTUYEN2:query-p2-13-kis
   query: Người đầu bếp đảo đều một hỗn hợp các nguyên liệu trong chảo, nhìn bằng mắt
     thường có thể thấy một số nguyên liệu như thịt gà, ớt đỏ, ớt xanh, đậu phộng và
     hành tím. Sau đó cô ấy tắt lửa, cho thêm vỏ chanh và nước cốt chanh vào chảo trước
     khi trút hỗn hợp thức ăn này ra đĩa.
   target_video_id: L26_V422
-- query_id: query-p2-14-kis
+- query_id: SOTUYEN2:query-p2-14-kis
   query: Cận cảnh một nhóm 3 vận động viên đua xe đạp đang di chuyển sát nhau, hai
     tay đua mặc áo xanh biển đội mũ bảo hiểm đỏ và trắng, bên cạnh có một tay đua
     mặc áo vàng đang đua cùng. Bên dưới quai mũ của tay đua nón đỏ có một sợi dây
     màu trắng treo lủng xuống gần cổ.
   target_video_id: L23_V010
-- query_id: query-p2-15-kis
+- query_id: SOTUYEN2:query-p2-15-kis
   query: 'Cảnh phim lần lượt giới thiệu các nguyên liệu của món ăn qua 3 chuyển cảnh:
     máy quay chéo lên và kết thúc ở nguyên liệu hải sản đầu tiên; quay từ trên xuống
     cận cảnh nguyên liệu hải sản thứ hai rồi chuyển sang các nguyên liệu nhiều màu
     sắc; cuối cùng là cú máy tĩnh toàn cảnh toàn bộ nguyên liệu.'
   target_video_id: L26_V074
-- query_id: query-p2-16-kis
+- query_id: SOTUYEN2:query-p2-16-kis
   query: Trong một ngôi nhà nông thôn có cửa sổ lớn, hai người phụ nữ đang làm thủ
     công trên một bộ ván ngựa, phía sau là một dãy khoảng 10 thớt gỗ được treo thành
     một hàng ngang.
   target_video_id: L29_V014
-- query_id: query-p2-17-kis
+- query_id: SOTUYEN2:query-p2-17-kis
   query: 'Sân khấu với dòng chữ nổi 3D to, ánh kim phủ kim tuyến có nội dung: “SẮC
     CỔ ...” đặt ở mép trước sân khấu.'
   target_video_id: L30_V026
-- query_id: query-p2-18-kis
+- query_id: SOTUYEN2:query-p2-18-kis
   query: Đoạn phim quay từ phía sau nhóm dẫn đầu, gồm 1 tay đua dẫn trước và 3 tay
     đua bám phía sau, khi cả nhóm rẽ phải vào đường Hồ Tùng Mậu tại giao lộ có đèn
     xanh đang đếm ngược đến 13 giây.
   target_video_id: L23_V017
-- query_id: query-p2-19-qa
+- query_id: SOTUYEN2:query-p2-19-qa
   query: Đoạn phim ghi lại cảnh mạnh thường quân hỗ trợ một quán trọ dành cho người
     cao tuổi, sau đó chuyển sang cảnh một cụ ông trò chuyện với nhóm người nước ngoài.
     Hỏi quán trọ được nhắc đến trong đoạn phim nằm trên đường nào?
   target_video_id: L30_V043
-- query_id: query-p2-2-kis
+- query_id: SOTUYEN2:query-p2-2-kis
   query: Đoạn clip bắt đầu với cảnh một người đang dùng điện thoại chụp ảnh bức tranh
     hình tê giác trên tường. Đoạn clip kết thúc với cảnh một người chụp ảnh các hình
     graffiti 3 chú khỉ trên một cây cầu
   target_video_id: L21_V013
-- query_id: query-p2-20-kis
+- query_id: SOTUYEN2:query-p2-20-kis
   query: 'Clip bài giảng môn Địa lí, có 1 bảng số liệu về mạng lưới đô thị ở Việt
     Nam. Bảng này thể hiện sự khác nhau về phân bố đô thị giữa các vùng bằng màu sắc:
     3 vùng có nhiều đô thị nhất thì con số thể hiện số lượng đô thị được in màu đỏ,
@@ -261,26 +261,26 @@ queries:
     ta còn có thể thấy rằng vùng có ít đô thị nhất lại là vùng có dân số đô thi cao
     nhất.'
   target_video_id: L25_V060
-- query_id: query-p2-21-trake
+- query_id: SOTUYEN2:query-p2-21-trake
   query: "4 cảnh này xảy ra liên tiếp nhau. \nCảnh 1: Hai người phụ nữ cùng nhau dán\
     \ niêm phong một thùng carton.\nCảnh 2: Các thùng mì tôm và bọc bánh mì được sắp\
     \ xếp ngay ngắn.\nCảnh 3: Một người đàn ông nhấc thùng mì tôm lên và xếp lên trên\
     \ chồng thùng mì.\nCảnh 4: Cảnh quay cận cảnh các thùng mì được xếp chồng trên\
     \ xe tải."
   target_video_id: L30_V031
-- query_id: query-p2-22-kis
+- query_id: SOTUYEN2:query-p2-22-kis
   query: Trong video nấu ăn, một loại nguyên liệu hải sản màu trắng được khứa theo
     những đường thẳng vuông góc nhau, trên cả 2 bề mặt của nguyên liệu này. Nguyên
     liệu sau đó được cắt thành từng que và cho vào tô, trước khi được trộn đều với
     các gia vị gồm rượu, tiêu và hạt nêm.
   target_video_id: L26_V470
-- query_id: query-p2-23-qa
+- query_id: SOTUYEN2:query-p2-23-qa
   query: Câu hỏi môn Sinh học nằm ở số thứ tự 11 trong đề thi THPTQG 2022. Trong câu
     hỏi có một biểu đồ đưa ra sự so sánh tốc độ sinh trưởng của các loài thực vật
     trong các hệ sinh thái ven biển. Hãy cho biết loài cây (II) đạt được tốc độ sinh
     trưởng tốt nhất khi môi trường sống có độ mặn là bao nhiêu phần nghìn?
   target_video_id: L25_V012
-- query_id: query-p2-24-kis
+- query_id: SOTUYEN2:query-p2-24-kis
   query: Đoạn clip ghi lại khoảnh khắc về đích của một chặng đua xe đạp diễn ra tại
     thành phố thuộc tỉnh Quảng Nam (cũ, trước ngày 01/7/2025). Vận động viên người
     Estonia mặc áo xanh nước biển dẫn đầu đoàn. Khi chỉ còn cách đích một đoạn ngắn,
@@ -288,7 +288,7 @@ queries:
     trong khi xe vẫn tiến về phía trước. Ngay phía sau anh là một vận động viên mặc
     áo vàng và một vận động viên mặc áo cam đang lần lượt lao về đích.
   target_video_id: L23_V013
-- query_id: query-p2-25-kis
+- query_id: SOTUYEN2:query-p2-25-kis
   query: 'Cảnh giáo viên nam đeo kính, mặc áo sơ mi kẻ sọc ngắn tay, xuất hiện ở góc
     dưới bên trái và dùng hai tay làm cử chỉ minh họa khi đang giảng bài.
 
@@ -297,7 +297,7 @@ queries:
     ngồi khoanh chân trên ghế sofa màu xám vừa cầm cốc nước vừa nhìn vào laptop mở
     trên đùi.'
   target_video_id: L25_V045
-- query_id: query-p2-26-kis
+- query_id: SOTUYEN2:query-p2-26-kis
   query: 'Đây là một đoạn trong bài giảng. Trên slide bao gồm:
 
     - Một nhóm nhân vật người 3D màu trắng vây quanh một nhân vật màu đỏ ở chính giữa.
@@ -306,20 +306,20 @@ queries:
     - Hai nhân vật hoạt hình nam đang trong tư thế thi đấu kéo co, đối đầu nhau với
     sợi dây thừng.'
   target_video_id: L25_V062
-- query_id: query-p2-27-qa
+- query_id: SOTUYEN2:query-p2-27-qa
   query: Cảnh quay một chú lân đang biểu diễn từ đầu video, các cột để chú lân biểu
     diễn được dán những con số. Phía sau có 1 mô hình con rồng uốn lượn hình xoắn
     ốc. Trong các số từ 16 giây đầu tiên của video, số nào không được nhìn thấy từ
     góc nhìn của camera trong các số từ 1-8.
   target_video_id: L24_V029
-- query_id: query-p2-28-qa
+- query_id: SOTUYEN2:query-p2-28-qa
   query: Cảnh quay một tô cháo đã được nấu và trang trí hoàn chỉnh (đã xong các giai
     đoạn trang trí). Kế bên tô cháo có 1 chén nhỏ màu đen, để chứa 1 loại topping
     màu cam kết cấu hơi giống những sợi nhỏ. Loại topping này trước đó đã được rắc
     lên tô cháo. Xung quanh topping là các loại rau, hành,... Hỏi topping trong video
     là thịt của con gì?
   target_video_id: L26_V450
-- query_id: query-p2-29-qa
+- query_id: SOTUYEN2:query-p2-29-qa
   query: Cảnh quay liệt kê các nguyên liệu để nấu một món ăn. Ảnh nền bao gồm dĩa
     thịt, bó lá tươi xanh đặt ở góc bên trái, một gói hạt nêm, hũ thủy tinh nhỏ đựng
     nước cốt dừa, bột cà ri, nấm mèo (mộc nhĩ) khô đặt phía dưới chén gia vị, sả cây
@@ -327,40 +327,40 @@ queries:
     phần cụ thể. Hỏi phần thịt có trọng lượng bao nhiêu trong bảng nguyên liệu (số
     và đơn vị được ghi trong bảng)?
   target_video_id: L26_V439
-- query_id: query-p2-3-kis
+- query_id: SOTUYEN2:query-p2-3-kis
   query: Một chú lân (hay rồng/sư tử?) màu vàng nhảy hay rơi từ trên cao xuống, gần
     với mô hình chiếc tàu thủy nhỏ màu xanh dương.
   target_video_id: L24_V044
-- query_id: query-p2-30-qa
+- query_id: SOTUYEN2:query-p2-30-qa
   query: Một cô gái đeo tạp dề màu trắng, bên cạnh là một lọ hoa riềng tía. Sau đó
     cô gái này đặt lên 1 dĩa trắng 4 con X, được biết X là nguyên liệu cho món ăn
     trong tập này. Sau đó người này lại cầm lên 2 con X. Sau đó người này đối thoại
     với một người đối diện để xem hôm nay nấu món gì. Hỏi X là con gì?
   target_video_id: L26_V254
-- query_id: query-p2-4-kis
+- query_id: SOTUYEN2:query-p2-4-kis
   query: Hai bạn trẻ đang treo băng-rôn lớn có tông màu xanh dương, được trang trí
     bằng hình ảnh núi, mây và một con đường dẫn tới trường học. Trên băng rôn còn
     có hình ảnh 02 em bé vùng khó khăn đang mặc áo màu vàng.
   target_video_id: L30_V072
-- query_id: query-p2-5-kis
+- query_id: SOTUYEN2:query-p2-5-kis
   query: Một người áo đỏ, đội nón màu trắng, đang lấy nước rưới vào mặt của mình.
     Khung hình có hai người đi xe đạp, người mặc áo xanh đậm đang đuổi theo người
     mặc áo đen phối cam.
   target_video_id: L21_V022
-- query_id: query-p2-6-kis
+- query_id: SOTUYEN2:query-p2-6-kis
   query: Đoạn video do người đi đường phía sau ghi lại cho thấy 2 thanh niên điều
     khiển xe máy bất ngờ nằm dài trên yên và phóng với tốc độ cao. Xuất hiện trong
     khung hình còn có một chiếc ô tô màu xanh cùng một người đi xe máy mặc áo xanh
     khác. Có 2 vòng tròn màu đỏ xuất hiện để khoanh vùng vị trí 2 thanh niên này.
   target_video_id: L22_V024
-- query_id: query-p2-7-qa
+- query_id: SOTUYEN2:query-p2-7-qa
   query: Đoạn clip được quay từ bên trong một chiếc xe ô tô tự lái, có thể thấy rõ
     vô lăng được xoay để chiếc xe rẽ sang phải. Sau đó, góc quay chuyển ra ngoài,
     bắt trọn cảnh chiếc xe màu trắng rẽ trái, và ở góc trên khung hình có một dưới
     một biển hiệu đỏ gồm 6 ký tự chữ Hán. Con số được viết trên phần hông xe màu trắng
     là số mấy?
   target_video_id: L21_V009
-- query_id: query-p2-8-trake
+- query_id: SOTUYEN2:query-p2-8-trake
   query: 'Video về một khu vườn cây ăn trái ở miền Tây Nam Bộ. Đây là chuỗi liên tiếp
     các cảnh quay về 4 loại trái cây trong vườn.
 
@@ -372,8 +372,270 @@ queries:
 
     E4: Cảnh đầu tiên có trái dâu bòn bon.'
   target_video_id: L27_V011
-- query_id: query-p2-9-qa
+- query_id: SOTUYEN2:query-p2-9-qa
   query: Trong video hướng dẫn nấu ăn, người đầu bếp lần lượt cho các loại hương liệu
     gồm tiêu xanh, lá chanh và sả vào bên trong bụng của tổng cộng 4 con cá. Đây là
     loài cá gì?
   target_video_id: L26_V161
+- query_id: SOTUYEN3:query-p2-1-kis
+  query: 'Một chén trứng gà đã đánh tan được đổ vào nồi nước súp đang nấu.
+
+    Trong nồi có các nguyên liệu được cắt thành sợi, gồm nấm và măng.
+
+    Người đầu bếp dùng dao cắt đậu hũ thành từng miếng nhỏ ngay phía trên nồi.
+
+    Đậu hũ được cho trực tiếp vào nồi rồi các nguyên liệu được khuấy đều với nhau.'
+  target_video_id: L26_V424
+- query_id: SOTUYEN3:query-p2-10-kis
+  query: Đoạn video ghi lại cuộc diễu hành của những chiếc xe lội nước độc đáo, có
+    hình dáng như ô tô cổ điển nhưng có thể di chuyển trực tiếp trên mặt nước. Những
+    chiếc xe lần lượt xuống kênh, chạy qua các cây cầu giữa sự theo dõi của đông đảo
+    người dân đứng hai bên bờ. Nhiều mẫu xe với màu sắc và kiểu dáng khác nhau cùng
+    di chuyển trên kênh, tạo nên một khung cảnh vừa lạ mắt vừa sôi động
+  target_video_id: L21_V003
+- query_id: SOTUYEN3:query-p2-11-kis
+  query: Người phụ nữ đang lấy 1 thành phẩm từ trong đồ vật màu đỏ, và cho lần lượt
+    nguyên liệu vào tiếp, thành phầm có màu trắng, được nở to hơn ban đầu, có hình
+    thù giống các sợi que dính với nhau. Các thành phẩm được bày trí trên 1 vật liệu
+    màu trắng.
+  target_video_id: L26_V483
+- query_id: SOTUYEN3:query-p2-12-kis
+  query: Một người đang đổ 1 chất lỏng đựng trong bát màu trắng vào chiếc chảo màu
+    đỏ, sau khi chất lỏng được xóc đều cùng các thực phẩm có sẵn trong chảo, tạo 1
+    hiện tượng bốc lên trong chảo có màu hồng. Sau đó. chuyển từ nồi to qua nồi nhỏ
+    hơn, công đoạn tương tự, khi chất lỏng tiếp xúc lửa trên bếp đều tạo chung 1 hiện
+    tượng.
+  target_video_id: L26_V484
+- query_id: SOTUYEN3:query-p2-13-kis
+  query: Hàng trăm chiếc lờ/lợp bắt cá bằng tre đan được tập kết thành từng dãy lớn
+    bên bờ sông. Khung cảnh bờ sông miền Tây rợp bóng những hàng dừa, với ghe neo
+    sát mép nước và rất nhiều cần xé tre được tập kết dưới các gốc dừa, tạo nên nét
+    sinh hoạt làng nghề mộc mạc, đặc trưng vùng sông nước.
+  target_video_id: L29_V014
+- query_id: SOTUYEN3:query-p2-14-qa
+  query: Một bé gái mặc áo bơi họa tiết hoa lá đang trả lời phỏng vấn bên cạnh một
+    hồ bơi. Tiếp theo là hình ảnh cháu bé bơi trong hồ nước, đội mũ bơi màu tím. Hãy
+    cho biết bé gái này sắp lên học lớp mấy (đáp án chỉ ghi 1 chữ số)
+  target_video_id: L30_V047
+- query_id: SOTUYEN3:query-p2-15-kis
+  query: Đoạn video ghi lại cảnh 1 người đầu bếp đã sơ chế thực phẩm với nước lạnh
+    và để ráo nước. Sau đó, đầu bếp sử dụng 1 loạt bột nhào chung với thực phẩm, để
+    qua một bên và chuẩn bị các loại gia vị khác. Tiếp theo, đầu bếp cho 1 miếng nguyên
+    liệu màu xanh lá cây kết hợp 2 miếng màu vàng vào 1 chảo màu đỏ đã đổ dầu ăn trước
+    khi chiên thực phẩm chính.
+  target_video_id: L26_V480
+- query_id: SOTUYEN3:query-p2-16-kis
+  query: Một người đang đổ 1 nguyên liệu vào trong 1 nồi thủy tinh, sau đó, sử dụng
+    1 đôi đũa để đảo nguyên liệu màu đỏ có chút màu xanh lá cây. Sau khi, nguyên liệu
+    đã biến đổi màu, người đàn ông đổ thêm 1.5L nguyên liệu dạng lỏng, 1/2 muỗng (cà
+    phê) nguyên liệu trắng có vị mặn, 1/2 muỗng nguyên liệu trắng có vị ngọt, 2 muỗng
+    hạt nguyên liệu có vị từ xương hầm
+  target_video_id: L26_V481
+- query_id: SOTUYEN3:query-p2-17-kis
+  query: Một nguyên liệu đã được chiên sơ, được sơ chế cắt làm 2 nửa (không để 2 nửa
+    tách rời). Tiếp theo, người đàn ông sử dụng 1 công cụ để tách phần lõi và lớp
+    vỏ của nguyên liệu. Sau đó, đặt phần nguyên liệu vừa sơ chế trên 1 loại công cụ
+    có màu trắng.
+  target_video_id: L26_V482
+- query_id: SOTUYEN3:query-p2-18-qa
+  query: Các cảnh quay nối tiếp nhau từ nhiều góc máy trong một lớp học tại một thời
+    điểm. Cảnh đầu tiên là cảnh một sư cô ân cần quan sát một cậu bé áo xanh lá ngồi
+    học bài. Sau đó là cảnh quay cận trang vở môn Toán, ghi lại các nét chữ mà học
+    sinh đang ghi chép. Trong lớp học này, giáo viên nữ trong trang phục màu hồng
+    đứng lớp chính, còn sư cô di chuyển xung quanh lớp học để hỗ trợ các em. Các giáo
+    viên tham gia giảng dạy tại lớp học này là giáo viên dạy chính ở trường tiểu học
+    nào?
+  target_video_id: L30_V010
+- query_id: SOTUYEN3:query-p2-19-kis
+  query: Sau khi lướt qua các cọc trụ, chú lân vàng đứng thăng bằng bằng ba chân trên
+    ba đỉnh trụ, trước khi khéo léo đặt nốt chân còn lại lên trụ thứ tư. Chú lân cúi
+    đầu ngoạm lấy cành hoa màu tím rồi xoay người quay lưng lại. Theo từng tiếng chập
+    cheng vang lên, lân mở rồi đóng hàm đúng 4 nhịp, rồi nhả cành hoa rơi xuống đất.
+  target_video_id: L24_V032
+- query_id: SOTUYEN3:query-p2-2-kis
+  query: 'Một nhóm đông học sinh mặc đồng phục tập trung thành nhiều hàng trước khu
+    vực trường học.
+
+    Phía trước mỗi hàng có người cầm bảng ghi số lớp để phân chia các nhóm học sinh.
+
+    Sau đó, các hàng học sinh lần lượt di chuyển vào bên trong khuôn viên trường dưới
+    sự hướng dẫn của giáo viên.
+
+    Cuối đoạn, học sinh nối thành hàng dài, đi qua hành lang và lên cầu thang của
+    tòa nhà.'
+  target_video_id: L22_V026
+- query_id: SOTUYEN3:query-p2-20-kis
+  query: Slide bài giảng về một nhóm hợp chất hữu cơ. Trong slide có 2 hình đặt cạnh
+    nhau là hai biến thể của cùng 1 loại hạt lương thực, và ở nửa dưới là một sơ đồ
+    phân loại của nhóm hợp chất ấy. Đáng chú ý có một phân loại được mô tả bởi cấu
+    trúc phân tử là những dải hình tròn dài được bắc cầu với nhau bằng những cặp hình
+    tròn màu tím.
+  target_video_id: L25_V021
+- query_id: SOTUYEN3:query-p2-21-trake
+  query: 'Một món ăn làm từ tôm và các loại gia vị.
+
+    E1: Khoảnh khắc người đầu bếp bắt đầu trộn hỗn hợp nước xốt, trong nước xốt này
+    có 2 thành phần là nước cam và vỏ cam.
+
+    E2: Khoảnh khắc người đầu bếp bắt đầu cắt bỏ đầu tôm.
+
+    E3: Người đầu bếp cho tôm ra dĩa. Hãy chọn khoảnh khắc con tôm đầu tiên chạm vào
+    dĩa.
+
+    E4: Khoảnh khắc tép cam thứ 4 được xếp lên dĩa khi trang trí món ăn.'
+  target_video_id: L26_V156
+- query_id: SOTUYEN3:query-p2-22-kis
+  query: Một phương tiện giao thông trên không chạy bằng điện đang bay thử nghiệm
+    phía trên khuôn viên rộng lớn với những khu vườn xanh được cắt tỉa theo hình học
+    và các công trình kiến trúc cổ kính. Phần phía trên thiết bị bay có dạng khung
+    tròn lớn. Đây là việc thử nghiệm thiết bị bay này ở một nước Tây Âu
+  target_video_id: L21_V012
+- query_id: SOTUYEN3:query-p2-23-kis
+  query: Trong clip có cảnh 3 cặp trâu nước đang được điều khiển chạy đua trên ruộng
+    bùn ở 1 quốc gia Đông Nam Á. Sau đó có cảnh 1 cặp trâu màu trắng (màu sáng) chạy
+    đua.
+  target_video_id: L21_V005
+- query_id: SOTUYEN3:query-p2-24-qa
+  query: 'Một đầu bếp đang chuẩn bị một món ăn từ một miếng thực phẩm màu cam. Người
+    này băm nhỏ một số nguyên liệu, tách các hạt nhỏ khỏi cành rồi trộn chúng thành
+    hỗn hợp gia vị. Sau đó, nhiều loại gia vị được lần lượt thêm vào và hỗn hợp được
+    phủ lên cả hai mặt của nguyên liệu chính trước khi thêm một chất lỏng.
+
+    Trong quá trình nêm gia vị, lượng nước tương được sử dụng là bao nhiêu?'
+  target_video_id: L26_V448
+- query_id: SOTUYEN3:query-p2-25-kis
+  query: Một người dùng vá nhúng những lát thịt mỏng vào nồi nước đang sôi. Thịt sau
+    đó được cho vào tô có sẵn sợi trắng cùng với cà chua và một số nguyên liệu khác.
+    Cuối cùng, nước dùng nóng được chan vào tô.
+  target_video_id: L26_V155
+- query_id: SOTUYEN3:query-p2-26-kis
+  query: Một bài giảng chuyển qua nhiều sơ đồ hình học không gian. Các hình ban đầu
+    gồm một đường xiên đi qua một hình phẳng và hai hình phẳng giao nhau. Tiếp đó
+    xuất hiện một điểm phía trên một hình phẳng có đoạn thẳng nối vuông góc xuống
+    dưới. Cuối cùng là một khối gồm bốn đỉnh, sau đó được bổ sung thêm các đường nét
+    đứt, điểm và ký hiệu vuông góc.
+  target_video_id: L25_V043
+- query_id: SOTUYEN3:query-p2-27-qa
+  query: Cảnh quay 2 người đang nắn những cục bột nhỏ thành hình dẹt. 1 người nắn
+    cục bột màu trắng, người còn lại nắn cục bột màu khác. Sau đó họ đặt nhân vào
+    phần giữa và cuộn lớp bột bao quanh phần nhân. Trước khi đặt lên dĩa, họ đặt thành
+    phẩm lên 1 miếng lá nhỏ. Hỏi trên dĩa có mấy  màu bột khác nhau?
+  target_video_id: L26_V351
+- query_id: SOTUYEN3:query-p2-28-kis
+  query: Cảnh quay phỏng vấn một người phụ nữ, đeo kính gọng đen, tay đang ôm một
+    bao đồ như quần áo. Xung quanh đó có những bao đồ khác. Bao đồ trên tay người
+    phụ nữ có màu trắng vào có 1 logo màu xanh lá cây.
+  target_video_id: L30_V091
+- query_id: SOTUYEN3:query-p2-29-kis
+  query: Một người đang múc canh từ trong nồi qua một tô nhỏ hơn. Chiếc tô này đang
+    đặt trên 1 tấm vải có sọc trắng và đặt trên một khay gỗ. Tổng số lần quay được
+    của người này múc canh ra tô là 2 lần.
+  target_video_id: L26_V051
+- query_id: SOTUYEN3:query-p2-3-kis
+  query: 'Người đầu bếp lần lượt cho nhiều loại nguyên liệu vào một nồi nước dùng
+    đang sôi.
+
+    Đầu tiên, một loại rau củ màu cam được cho vào nồi.
+
+    Sau đó, một loại nguyên liệu dạng ống nhỏ được đổ từ đĩa vào nồi.
+
+    Tiếp theo, các loại rau củ và nấm được cho vào, gồm những miếng màu xanh và các
+    lát nấm màu nâu.
+
+    Cuối cùng, một đĩa thịt đã cắt thành từng miếng mỏng được đổ vào nồi để nấu cùng
+    các nguyên liệu trước đó.'
+  target_video_id: L26_V390
+- query_id: SOTUYEN3:query-p2-30-kis
+  query: Đoạn clip bắt đầu khi có 1 người đang phất cờ về đích đến trong chặng đua
+    xe đạp quanh hồ. Ngay sau đó, một đoàn đông vận động viên xe đạp đang vào cua
+    giữa khung cảnh đường phố rợp bóng cây. Một người đứng bên đường, tay trái cầm
+    điện thoại để ghi hình, còn tay phải cầm một cây gậy có gắn thiết bị quay ở đầu
+    hướng về phía đoàn đua.
+  target_video_id: L23_V005
+- query_id: SOTUYEN3:query-p2-31-kis
+  query: Điểm thú vị trong cảnh là một bạn trẻ có mái tóc sáng màu, trông có vẻ là
+    người nước ngoài, đang ngồi xếp  bằng cùng người dân địa phương và trực tiếp tham
+    gia đóng gói những chiếc bánh gói lá. Trong cảnh có chiếc quạt máy với cánh quạt
+    màu xanh lá cây
+  target_video_id: L30_V023
+- query_id: SOTUYEN3:query-p2-32-kis
+  query: Đoạn phim bắt đầu với cảnh hai mẹ con cầm điện thoại trò chuyện, sau đó chuyển
+    sang cảnh người con trả lời phỏng vấn, phía sau có một phụ nữ da đen đang bước
+    qua.
+  target_video_id: L21_V010
+- query_id: SOTUYEN3:query-p2-33-kis
+  query: Cảnh quay slow motion từ flycam ghi lại màn nước rút của hai tay đua dẫn
+    đầu, trong đó tay đua mũ đen được cho là đuối sức hơn tay đua mũ trắng và để thua
+    ở đoạn cuối.
+  target_video_id: L23_V009
+- query_id: SOTUYEN3:query-p2-34-trake
+  query: 'Con lân màu đỏ đang biểu diễn trên các cột trụ.
+
+
+    E1: Con lân treo hai chân trước vào phần dưới thân của hai trụ gần cuối (gần trụ
+    cuối cùng cao nhất).
+
+    E2: Con lân đứng thẳng sau khi di chuyển từ cuối dãy trụ về, hai chân đứng trên
+    hai trụ khác nhau và một chân trước co lên.
+
+    E3: Khoảnh khắc con lân hoàn tất động tác ngoảnh mặt theo hướng ngược lại.
+
+    E4: Khoảnh khắc đầu tiên con lân ngậm một thanh trụ.'
+  target_video_id: L24_V013
+- query_id: SOTUYEN3:query-p2-35-qa
+  query: Giải đề THPTQG 2018 tại nhóm X. Nhóm này gồm 4 câu hỏi trắc nghiệm 4 đáp
+    án A, B, C, D, trong đó đáp án 4 câu không trùng nhau và đều chứa chữ số 0. Hỏi
+    X là số mấy?
+  target_video_id: L25_V014
+- query_id: SOTUYEN3:query-p2-36-kis
+  query: Camera lia chậm trên mặt bàn làm việc, bắt đầu từ một bức ảnh/tranh một người
+    đang bắt tay với Bác Hồ, sau đó chuyển sang phần bên phải là tay nghệ nhân đang
+    vẽ lại chân dung người bắt tay Bác. Người nghệ nhân này vẽ bằng một cây bút đặc
+    biệt trên một chất liệu đặc biệt.
+  target_video_id: L28_V010
+- query_id: SOTUYEN3:query-p2-4-kis
+  query: 'Một giáo viên nữ ngồi bên phải màn hình và giảng bài Tiếng Anh.
+
+    Trên bảng xanh lần lượt xuất hiện hai câu ví dụ, một câu nói về việc đi bảo tàng
+    vào tuần trước, câu còn lại nói về thói quen chơi bóng đá khi còn trẻ.
+
+    Sau đó, nội dung trên bảng bổ sung phần giải thích chức năng của hai ví dụ và
+    cuối cùng xuất hiện công thức ngữ pháp tương ứng.'
+  target_video_id: L25_V075
+- query_id: SOTUYEN3:query-p2-5-qa
+  query: 'Một giáo viên nam đứng bên trái màn hình giảng bài ôn tập môn Địa lí. Nội
+    dung trình chiếu giới thiệu khái quát một vùng kinh tế, sau đó chuyển sang vị
+    trí địa lí, phạm vi lãnh thổ và ý nghĩa phát triển. Ở phần sau, một bản đồ khí
+    hậu Việt Nam được đưa lên để minh họa cho bài giảng.
+
+    Theo nội dung bài giảng, vùng được nhắc đến gồm bao nhiêu tỉnh, thành?'
+  target_video_id: L25_V016
+- query_id: SOTUYEN3:query-p2-6-qa
+  query: 'Một giáo viên nam đứng bên trái màn hình và giảng bài trước một máy tính.
+
+    Trên màn hình lớn hiển thị hướng dẫn chấm điểm, trong đó phần a đề cập đến cấu
+    trúc của bài nghị luận văn học gồm mở bài, thân bài và kết bài.
+
+    Nội dung bài giảng liên quan đến một tác phẩm văn học và yêu cầu phân tích nhân
+    vật.
+
+    Phía dưới màn hình xuất hiện dòng chữ giới thiệu chương trình ôn thi môn Ngữ văn.
+
+    Tác giả được giới thiệu là người có duyên nợ gắn bó với đề tài miền núi nào?'
+  target_video_id: L25_V027
+- query_id: SOTUYEN3:query-p2-7-kis
+  query: Đoạn phim ghi lại cảnh giao thông trên đường phố, trong đó hai thanh niên
+    chạy xe với tư thế bất cẩn trên làn ô tô, tiềm ẩn nguy cơ gây tai nạn giao thông.
+  target_video_id: L21_V018
+- query_id: SOTUYEN3:query-p2-8-qa
+  query: Đoạn phim ghi lại cuộc phỏng vấn một người đàn ông đam mê sưu tầm game, chia
+    sẻ rằng niềm đam mê của anh được truyền cảm hứng từ món đồ chơi của bà mình. Trong
+    đoạn phỏng vấn xuất hiện một dòng chữ neon phát sáng. Dòng chữ đó là gì?
+  target_video_id: L21_V018
+- query_id: SOTUYEN3:query-p2-9-kis
+  query: Đoạn clip bắt đầu  với các người mẫu trình diễn những bộ trang phục màu kem
+    dáng rộng, được điểm xuyết bằng các mảng vải nhiều màu sắc và họa tiết hình học.
+    Nhiều tác phẩm đầy màu sắc được trưng bày trên thảm cỏ ngoài trời, thu hút đông
+    đảo người dân và du khách tham quan. Những món đồ thủ công như búp bê và quả cầu
+    được tạo nên từ nhiều mảnh vải màu sắc, hoa văn khác nhau.
+  target_video_id: L22_V007
