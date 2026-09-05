@@ -110,20 +110,13 @@ def load_queries(path: Path, *, legacy_planner: bool = False) -> list[dict[str, 
         else:
             orig_events = []
 
-        ret_events = item.get("retrieval_events", orig_events)
-        cap_events = item.get("caption_events", orig_events)
-        target_video = item.get("target_video_id")
-        if not target_video and "l26_v254" in str(path).lower():
-            target_video = "L26_V254"
-
-        query_id = item.get("query_id", f"q{idx + 1}")
         parsed.append(
             {
-                "query_id": query_id,
+                "query_id": item.get("query_id", f"q{idx + 1}"),
                 "original_events": orig_events,
-                "retrieval_events": ret_events,
-                "caption_events": cap_events,
-                "target_video_id": target_video,
+                "retrieval_events": item.get("retrieval_events", orig_events),
+                "caption_events": item.get("caption_events", orig_events),
+                "target_video_id": item.get("target_video_id"),
             }
         )
     return parsed
@@ -150,13 +143,8 @@ def main() -> int:
     for msg in messages:
         print(f"[{msg}]", file=sys.stderr)
 
-    temporal_evidence = getattr(service, "temporal_evidence", None)
-    temporal_search = (
-        getattr(service, "temporal_search", None)
-        or getattr(service, "temporal", None)
-        or (getattr(service.trake, "temporal", None) if hasattr(service, "trake") else None)
-        or (getattr(service.kis, "temporal", None) if hasattr(service, "kis") else None)
-    )
+    temporal_evidence = service.temporal_evidence
+    temporal_search = service.trake.temporal
 
     if not isinstance(temporal_evidence, TemporalEvidenceScorer) or temporal_search is None:
         print(
@@ -165,8 +153,6 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-
-    deployed_config = temporal_evidence.config
 
     args.output_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -212,8 +198,7 @@ def main() -> int:
                     if path.video_id == target_video_id:
                         target_rank = rank
                         target_score = float(path.score)
-                        raw_frames = getattr(path, "frame_idxs", getattr(path, "frame_idx", ()))
-                        target_frames = [int(x) for x in raw_frames]
+                        target_frames = [int(x) for x in path.frame_idxs]
                         break
 
             score_gap = round(top_score - target_score, 4) if target_score is not None else None
@@ -229,11 +214,8 @@ def main() -> int:
                 "paths": [
                     {
                         "video_id": path.video_id,
-                        "frame_idxs": [
-                            int(x)
-                            for x in getattr(path, "frame_idxs", getattr(path, "frame_idx", ()))
-                        ],
-                        "timestamps_ms": [int(x) for x in getattr(path, "timestamps_ms", ())],
+                        "frame_idxs": [int(x) for x in path.frame_idxs],
+                        "timestamps_ms": [int(x) for x in path.timestamps_ms],
                         "score": round(float(path.score), 4),
                     }
                     for path in paths[: args.record_paths]

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
 import math
 from pathlib import Path
 from typing import Sequence
 
 from hcmai.common.config import resolve_dataset_root, resolve_repository_path
 from hcmai.common.utils.logging import configure_logging, get_logger
-from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
+from offline.enrichment.dataset_cli import (
+    add_dataset_arguments,
+    apply_overrides,
+    dataset_overrides,
+)
 from offline.enrichment.object_detection import run_yoloe
 from offline.enrichment.pipeline import EnrichmentJobConfig
 
@@ -96,33 +99,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parse_args(argv)
     configure_logging(args.log_level)
-    dataset = dataset_overrides(args)
-    job = (
-        EnrichmentJobConfig.from_yaml(args.config, dataset=dataset)
-        if dataset is not None
-        else EnrichmentJobConfig.from_yaml(args.config)
-    )
-    config = replace(
+    job = EnrichmentJobConfig.from_yaml(args.config, dataset=dataset_overrides(args))
+    config = apply_overrides(
         job.objects,
-        **{
-            name: value
-            for name, value in {
-                "model": args.model,
-                "vocab_path": (
-                    str(resolve_repository_path(args.vocab))
-                    if args.vocab is not None
-                    else None
-                ),
-                "min_confidence": args.min_confidence,
-                "top_k": args.top_k,
-                "batch_size": args.batch_size,
-                "device": args.device,
-                "artifact_version": args.artifact_version,
-                "summary_min_confidence": args.summary_min_confidence,
-                "max_summary_labels": args.max_summary_labels,
-            }.items()
-            if value is not None
-        },
+        model=args.model,
+        vocab_path=(
+            str(resolve_repository_path(args.vocab)) if args.vocab is not None else None
+        ),
+        min_confidence=args.min_confidence,
+        top_k=args.top_k,
+        batch_size=args.batch_size,
+        device=args.device,
+        artifact_version=args.artifact_version,
+        summary_min_confidence=args.summary_min_confidence,
+        max_summary_labels=args.max_summary_labels,
     )
     frames = resolve_repository_path(args.frames or job.frames_path)
     output = resolve_repository_path(args.output or job.object_output_dir)

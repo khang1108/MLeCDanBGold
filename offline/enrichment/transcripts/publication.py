@@ -1,11 +1,4 @@
-"""Xuất bản và lưu trữ Transcript.
-
-Đảm nhiệm việc định dạng lại kết quả lời thoại đã nhận diện và lưu trữ chúng cố định.
-
-Các tính năng chính:
-1. Tạo file Artifact: Ghi kết quả ASR và Diarization ra file JSON/Parquet chuẩn.
-2. Export S3/Disk: Đẩy dữ liệu transcript lên hệ thống lưu trữ lâu dài.
-3. Đồng bộ Catalog: Cập nhật hệ thống dữ liệu rằng Transcript cho video này đã sẵn sàng sử dụng."""
+"""Atomic publication of transcript artifacts and their manifest."""
 
 from __future__ import annotations
 

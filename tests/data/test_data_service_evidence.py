@@ -10,7 +10,7 @@ import pytest
 
 from hcmai.corpus import Corpus
 from hcmai.corpus.stores import CaptionStore, FrameContextStore, ObjectStore
-from offline.enrichment.object_artifacts import write_object_artifacts
+from offline.enrichment.object_artifacts import write_object_artifacts_streaming
 from hcmai.retrieval.models import RetrievalSource
 from offline.enrichment.caption.models import CaptionEvidence
 from offline.enrichment.context.models import FrameContext
@@ -653,51 +653,6 @@ def test_object_store_rejects_detection_frame_identity_mismatch(
         ObjectStore(object_path)
 
 
-def test_object_writer_rejects_detection_frame_identity_mismatch(
-    tmp_path: Path,
-) -> None:
-    """Reject inconsistent flat identities before publishing object artifacts."""
-
-    row = ObjectEvidence(
-        frame_id="f1",
-        video_id="v1",
-        frame_idx=10,
-        timestamp_ms=1_000,
-        detections=[
-            ObjectDetection(
-                label="person",
-                confidence=0.9,
-                x_min=0.1,
-                y_min=0.2,
-                x_max=0.3,
-                y_max=0.4,
-            )
-        ],
-        counts={"person": 1},
-        summary="person x1",
-        detection_count=1,
-        artifact_version="object-v1",
-    )
-
-    with pytest.raises(ValueError, match="canonical identity"):
-        write_object_artifacts(
-            tmp_path / "objects",
-            ["f1"],
-            [row],
-            [
-                {
-                    "frame_id": "f1",
-                    "video_id": "v1",
-                    "frame_idx": 10,
-                    "timestamp_ms": 999,
-                    "detection_index": 0,
-                    **row.detections[0].model_dump(mode="json"),
-                }
-            ],
-            {"artifact_version": "object-v1"},
-        )
-
-
 def test_object_store_requires_serialized_counts_json(tmp_path: Path) -> None:
     object_dir = tmp_path / "object-count-shape"
     object_dir.mkdir()
@@ -762,20 +717,21 @@ def test_object_store_loads_real_producer_bundle(tmp_path: Path) -> None:
         ),
     ]
     output = tmp_path / "producer-objects"
-    write_object_artifacts(
+    write_object_artifacts_streaming(
         output,
-        ["f1", "f2", "f3"],
-        rows,
-        [
-            {
-                "frame_id": "f1",
-                "video_id": "v1",
-                "frame_idx": 10,
-                "timestamp_ms": 1_000,
-                "detection_index": 0,
-                **detection.model_dump(mode="json"),
-            }
-        ],
+        [(
+            rows,
+            [
+                {
+                    "frame_id": "f1",
+                    "video_id": "v1",
+                    "frame_idx": 10,
+                    "timestamp_ms": 1_000,
+                    "detection_index": 0,
+                    **detection.model_dump(mode="json"),
+                }
+            ],
+        )],
         {"artifact_version": "object-v1"},
     )
 

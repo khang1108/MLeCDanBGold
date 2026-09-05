@@ -20,6 +20,13 @@ from offline.ingestion.custom_pipeline.disk import (
 )
 
 
+def _sparse_file(path: Path, size: int) -> None:
+    """Report ``size`` through st_size without allocating the bytes."""
+
+    with open(path, "wb") as handle:
+        handle.truncate(size)
+
+
 # ---------------------------------------------------------------------------
 # measure_tree_bytes: hard-link accounting
 # ---------------------------------------------------------------------------
@@ -100,7 +107,7 @@ def test_write_capacity_accepts_exact_active_cap_boundary(
     active_root.mkdir()
     estimated_bytes = 10
     remaining_capacity = budget.max_active_bytes - estimated_bytes
-    (active_root / "existing.bin").write_bytes(b"0" * remaining_capacity)
+    _sparse_file(active_root / "existing.bin", remaining_capacity)
     _patch_disk_usage(monkeypatch, budget.min_free_bytes + 1_000_000)
 
     require_write_capacity(budget, tmp_path, active_root, estimated_bytes, operation="test")
@@ -114,7 +121,7 @@ def test_write_capacity_rejects_one_byte_over_active_cap(
     active_root.mkdir()
     estimated_bytes = 10
     remaining_capacity = budget.max_active_bytes - estimated_bytes + 1
-    (active_root / "existing.bin").write_bytes(b"0" * remaining_capacity)
+    _sparse_file(active_root / "existing.bin", remaining_capacity)
     _patch_disk_usage(monkeypatch, budget.min_free_bytes + 1_000_000)
 
     with pytest.raises(DiskAdmissionError, match="exceeds max_active_bytes cap"):

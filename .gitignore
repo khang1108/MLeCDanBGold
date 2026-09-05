@@ -138,3 +138,9 @@ artifact*/
 *.sqlite3-wal
 SETUP.md
 llm/scripts/run_local_cpu_cloudflared.sh
+
+# Local-only: exam ground truth and working notes
+benchmark/grouth_truth/
+run.md
+PLAN.md
+.omo/

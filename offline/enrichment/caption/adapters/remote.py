@@ -1,11 +1,4 @@
-"""Adapter cho mô hình Captioning qua API (Remote).
-
-Giao tiếp với các dịch vụ hoặc mô hình tạo mô tả ảnh chạy từ xa (Remote endpoint).
-
-Các tính năng chính:
-1. Đóng gói Request: Gửi ảnh (Base64/URL) qua REST API hoặc gRPC đến server backend.
-2. Cơ chế Retry: Tự động thử lại (retry) khi gặp lỗi mạng hoặc API rate limit.
-3. Xử lý phản hồi: Parse chuỗi JSON trả về từ server thành định dạng Caption mong muốn."""
+"""Caption adapter that delegates generation to the hosted inference gateway."""
 
 from __future__ import annotations
 

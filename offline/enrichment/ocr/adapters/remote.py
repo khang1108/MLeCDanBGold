@@ -18,9 +18,7 @@ class OCRClient(Protocol):
 
 
 class RemoteOCRAdapter:
-    """Gọi remote worker (thông qua InferenceClientPool) để trích xuất văn bản từ hình ảnh.
-    Adapter này đảm bảo kiểm tra cấu hình model (checkpoint, revision) khớp với thiết lập cục bộ.
-    """
+    """Read frame text through the hosted inference pool at the pinned checkpoint."""
 
     def __init__(self, client: OCRClient, config: OCRConfig) -> None:
         self.client = client

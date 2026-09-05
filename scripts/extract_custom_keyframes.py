@@ -36,14 +36,7 @@ def _positive_int(value: str) -> int:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse paths, lineage, and an explicit bounded video selection.
-
-    Args:
-        argv: Optional argument sequence for tests; ``None`` reads process args.
-
-    Returns:
-        Validated argparse namespace. Exactly one selection mode is required.
-    """
+    """Parse paths, lineage, and an explicit bounded video selection."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -235,14 +228,8 @@ def _prepare_enrichment_tables(run_root: Path, video_id: str) -> dict[str, str]:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    """Prepare metadata, run bounded native extraction, and return readiness.
+    """Prepare metadata, run bounded native extraction, and return readiness."""
 
-    Args:
-        args: Validated extraction command arguments.
-
-    Returns:
-        JSON-safe extraction and enrichment-input summary.
-    """
     native_executable = _resolve_executable(
         args.native_executable,
         label="native extractor",

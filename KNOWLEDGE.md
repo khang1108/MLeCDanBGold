@@ -7,7 +7,8 @@
 
 ### Sources
 - Live service empirical benchmark on 470,804 frames across 5 narrative queries (`docs/research/2026-09-04-temporal-quality-failure-analysis.md`, `docs/research/2026-09-04-benchmark-diagnostics.json`).
-- Diagnostic script: `scripts/diagnose_temporal_quality.py`.
+- Diagnostic script (deleted after the findings were recorded; it depended on the
+  removed `.worktrees/p1a-soft-order` checkout).
 
 ### Findings
 - **VERIFIED (Category A - Narrative Inversion):** Users frequently describe events non-chronologically (e.g., $E_2$ theft at $365\text{s}$ before $E_3$ waking at $22\text{s}$ in `L24_V035`; or $E_2$ plate at $500\text{s}$ before $E_3$ hold at $300\text{s}$ in `L26_V254`). Strict monotonic DP ($t_1 < t_2 < \dots < t_N$) mathematically fails, forcing selection of near-zero frames and dropping rank past 80 to >100.

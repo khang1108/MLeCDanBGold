@@ -1,7 +1,6 @@
-"""Dịch caption tiếng Anh sang tiếng Việt bằng Qwen3 chạy cục bộ qua vLLM.
+"""Translate English captions to Vietnamese with Qwen3 served locally by vLLM.
 
-Bỏ qua file đã có sẵn ở thư mục output, nên chạy lại là tiếp tục dở dang.
-"""
+Caption files already present in the output directory are skipped, so a rerun resumes."""
 
 from __future__ import annotations
 
@@ -39,7 +38,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def pending(table: pa.Table) -> list[int]:
-    """Chỉ số các dòng caption hoàn chỉnh, bỏ dòng lỗi và dòng rỗng."""
+    """Return the row indexes of completed, non-empty captions."""
 
     statuses = table.column("status").to_pylist()
     texts = table.column("text").to_pylist()
@@ -51,7 +50,7 @@ def pending(table: pa.Table) -> list[int]:
 
 
 def merge(texts: Sequence[str], picked: Sequence[int], values: Sequence[str]) -> list[str]:
-    """Đặt bản dịch vào đúng vị trí, giữ nguyên các dòng không dịch."""
+    """Place each translation at its own row, leaving untranslated rows unchanged."""
 
     if len(picked) != len(values):
         raise ValueError("số bản dịch không khớp số dòng đã gửi")
@@ -62,7 +61,7 @@ def merge(texts: Sequence[str], picked: Sequence[int], values: Sequence[str]) ->
 
 
 def rewrite(table: pa.Table, translated: Sequence[str], revision: str | None) -> pa.Table:
-    """Thay cột text và ghi lại lineage sang model đã dịch."""
+    """Replace the text column and rewrite lineage to the translating model."""
 
     replacements = {
         "text": list(translated),
@@ -79,7 +78,7 @@ def rewrite(table: pa.Table, translated: Sequence[str], revision: str | None) ->
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Dịch từng file caption chưa có kết quả rồi ghi ra thư mục output."""
+    """Translate every caption file without a result and write it to the output tree."""
 
     args = parse_args(argv)
     root = args.captions

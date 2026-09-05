@@ -1,9 +1,27 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
+
+from hcmai.common import environment
+
+
+@pytest.fixture(autouse=True)
+def _isolate_repository_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Point repository .env discovery at an empty directory.
+
+    ``load_repository_environment`` loads that file with ``override=True``, so
+    without this the app under test discards every monkeypatched HCMAI_* path
+    and boots the developer's real corpus index and metadata into memory. Tests
+    that exercise .env loading override ``REPOSITORY_ROOT`` again themselves.
+    """
+
+    monkeypatch.setattr(environment, "REPOSITORY_ROOT", tmp_path)
 
 
 @pytest.fixture

@@ -7,18 +7,16 @@ CLIs. Model policies and stage output policies remain in ``prepare.yaml``.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeVar
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
+
+_ConfigT = TypeVar("_ConfigT", bound="DataclassInstance")
 
 
-_DATASET_FIELDS = (
-    "version",
-    "source",
-    "frame_store_id",
-    "data_root",
-    "frames_path",
-    "frame_store_output",
-)
 _CLI_NAMES = {
     "version": "--version",
     "source": "--source",
@@ -116,6 +114,13 @@ def dataset_overrides(args: argparse.Namespace) -> dict[str, Any] | None:
     return values
 
 
+def apply_overrides(config: _ConfigT, **values: Any) -> _ConfigT:
+    """Replace only the stage-config fields whose CLI override was supplied."""
+
+    supplied = {name: value for name, value in values.items() if value is not None}
+    return replace(config, **supplied) if supplied else config
+
+
 def merge_dataset_values(
     raw: dict[str, Any],
     overrides: dict[str, Any] | None,
@@ -135,6 +140,7 @@ def merge_dataset_values(
 
 __all__ = [
     "add_dataset_arguments",
+    "apply_overrides",
     "dataset_overrides",
     "merge_dataset_values",
 ]

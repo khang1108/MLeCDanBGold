@@ -18,7 +18,7 @@ ASR_SEGMENT_ARTIFACT_VERSION = "asr-segment-v1"
 
 
 class AudioReferenceProvider(Protocol):
-    """Giao thức định nghĩa cách cấp quyền truy cập file audio cho worker remote (VD: qua S3 URL)."""
+    """Grant a remote worker access to one audio file, for example through an S3 URL."""
 
     def reference(
         self, video_path: Path, video_id: str, sample_rate: int
@@ -38,9 +38,7 @@ class TranscriptClient(Protocol):
 
 
 class RemoteASRAdapter:
-    """Gửi đường dẫn audio tới remote worker để chạy ASR (VD: Whisper).
-    Nhận về danh sách TranscriptSegment (đoạn thoại được bóc tách).
-    """
+    """Run ASR on a remote worker and return the resulting transcript segments."""
 
     def __init__(
         self,
@@ -79,10 +77,7 @@ class RemoteASRAdapter:
 
 
 class RemoteDiarizationAdapter:
-    """Gửi đường dẫn audio và danh sách transcript hiện có tới remote worker.
-    Worker sẽ phân tách người nói (Speaker Diarization) và gán nhãn cho từng segment.
-    Đảm bảo tính toàn vẹn của transcript (không thay đổi text, chỉ thêm metadata speaker).
-    """
+    """Add speaker labels on a remote worker without altering transcript text."""
 
     def __init__(
         self,

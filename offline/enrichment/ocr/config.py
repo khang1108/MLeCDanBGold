@@ -1,6 +1,4 @@
-"""Cấu hình cho hệ thống OCR.
-
-Chứa các tham số để cấu hình mô hình nhận diện chữ viết (ví dụ: kích thước ảnh, tham số cho Florence-2)."""
+"""Configuration for one reproducible OCR enrichment run."""
 
 from __future__ import annotations
 

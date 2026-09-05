@@ -1,6 +1,4 @@
-"""Cấu hình cho quá trình Captioning (Mô tả ảnh).
-
-Chứa các thiết lập (ví dụ: batch size, tên mô hình, đường dẫn) để điều khiển quá trình tạo caption cho các frames."""
+"""Configuration for one reproducible caption enrichment run."""
 
 from __future__ import annotations
 

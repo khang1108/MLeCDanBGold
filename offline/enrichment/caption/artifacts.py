@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-from numbers import Integral
 from pathlib import Path
 from typing import Any
 
@@ -17,13 +15,13 @@ from hcmai.common.utils.io import (
     write_json,
     write_parquet,
 )
-from offline.enrichment.bundle import publish_staged_bundle
-
-
-def _null_scalar(value: object) -> bool:
-    return value is None or value is pd.NA or (
-        isinstance(value, float) and math.isnan(value)
-    )
+from offline.enrichment.bundle import (
+    canonical_identity,
+    null_safe,
+    publish_staged_bundle,
+    staged_records,
+    validate_bundle_lineage,
+)
 
 
 def valid_caption(
@@ -36,30 +34,9 @@ def valid_caption(
     """Return a reusable completed ``CaptionEvidence`` row, if valid."""
 
     try:
-        if (
-            not isinstance(data.get("frame_id"), str)
-            or not data["frame_id"]
-            or data["frame_id"].strip() != data["frame_id"]
-            or not isinstance(data.get("video_id"), str)
-            or not data["video_id"]
-            or data["video_id"].strip() != data["video_id"]
-            or isinstance(data.get("frame_idx"), bool)
-            or not isinstance(data.get("frame_idx"), Integral)
-            or isinstance(data.get("timestamp_ms"), bool)
-            or not isinstance(data.get("timestamp_ms"), Integral)
-        ):
+        if not canonical_identity(data):
             return None
-        values = dict(data)
-        for field in (
-            "text",
-            "frame_store_id",
-            "model_revision",
-            "error_code",
-            "error_message",
-        ):
-            if _null_scalar(values.get(field)):
-                values[field] = None
-        row = CaptionEvidence.model_validate(values)
+        row = CaptionEvidence.model_validate(null_safe(data))
     except Exception:
         return None
 
@@ -140,43 +117,26 @@ def write_caption_artifacts(
         )
         atomic_write(staged[3], lambda path: write_json(manifest, path))
 
-        staged_frames = pd.read_parquet(staged[0])
-        staged_projection = pd.read_parquet(staged[2])
-        if staged_frames.columns.tolist() != list(CaptionEvidence.model_fields):
-            raise ValueError("staged Caption evidence has an invalid schema")
-        if staged_projection.columns.tolist() != list(FrameEnrichment.model_fields):
-            raise ValueError("staged Caption projection has an invalid schema")
-        if staged_frames["frame_id"].tolist() != order:
-            raise ValueError("staged Caption rows changed canonical order")
-        if staged_projection["frame_id"].tolist() != order:
-            raise ValueError("staged Caption projection changed canonical order")
-
-        for data in staged_frames.astype(object).where(
-            staged_frames.notna(), None
-        ).to_dict(orient="records"):
+        for data in staged_records(
+            staged[0],
+            CaptionEvidence.model_fields,
+            "Caption evidence",
+            expected_order=order,
+        ):
             CaptionEvidence.model_validate(data)
-        for data in staged_projection.astype(object).where(
-            staged_projection.notna(), None
-        ).to_dict(orient="records"):
-            objects = data.get("objects")
-            to_list = getattr(objects, "tolist", None)
-            if callable(to_list):
-                data["objects"] = to_list()
+        for data in staged_records(
+            staged[2],
+            FrameEnrichment.model_fields,
+            "Caption projection",
+            expected_order=order,
+        ):
             FrameEnrichment.model_validate(data)
         if read_json(staged[1]) != failure_rows:
             raise ValueError("staged Caption failures failed validation")
         if read_json(staged[3]) != manifest:
             raise ValueError("staged Caption manifest failed validation")
 
-        versions = {row.artifact_version for row in rows.values()}
-        lineages = {row.frame_store_id for row in rows.values()}
-        if len(versions) > 1 or len(lineages) > 1:
-            raise ValueError("Caption bundle has mixed version or lineage")
-        if versions and manifest.get("artifact_version") not in versions:
-            raise ValueError("Caption manifest artifact_version mismatch")
-        if lineages and manifest.get("frame_store_id") not in lineages:
-            raise ValueError("Caption manifest frame_store_id mismatch")
-
+        validate_bundle_lineage(rows.values(), manifest, "Caption")
         publish_staged_bundle(staged, published)
     finally:
         for path in staged:

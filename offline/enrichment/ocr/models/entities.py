@@ -1,6 +1,4 @@
-"""Định nghĩa các Thực thể (Entities) cho dữ liệu OCR.
-
-Chứa các dataclass hoặc cấu trúc dữ liệu mô tả kết quả OCR (như tọa độ bounding box, văn bản nhận diện được)."""
+"""Value objects describing one OCR result and its regions."""
 
 from __future__ import annotations
 

@@ -1,11 +1,4 @@
-"""Quản lý Manifest cho Transcript.
-
-Tạo và duy trì danh sách (manifest) các file/video đã hoặc đang được xử lý lời thoại.
-
-Các tính năng chính:
-1. Theo dõi tiến độ: Ghi nhận trạng thái hoàn thành (Done/Failed) của từng video.
-2. Phục hồi an toàn (Resume): Bỏ qua các video đã xử lý xong khi pipeline khởi động lại.
-3. Toàn vẹn dữ liệu: Cảnh báo nếu phát hiện thiếu hụt kết quả so với danh sách đầu vào."""
+"""Transcript manifest tracking per-video completion for resumable runs."""
 
 from __future__ import annotations
 

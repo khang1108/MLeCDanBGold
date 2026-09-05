@@ -1,6 +1,4 @@
-"""Định nghĩa giao ước (Contracts) cho OCR.
-
-Quy định interface đầu vào/đầu ra mà các mô hình OCR cần phải trả về để tương thích với pipeline chính."""
+"""Protocols an OCR model must satisfy to join the pipeline."""
 
 from __future__ import annotations
 

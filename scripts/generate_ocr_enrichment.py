@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
 import os
 from pathlib import Path
 
 from hcmai.common.config import AppConfig
 from hcmai.common.utils.logging import configure_logging, get_logger
-from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
+from llm.pipeline import LLMService
+from offline.enrichment.dataset_cli import (
+    add_dataset_arguments,
+    apply_overrides,
+    dataset_overrides,
+)
+from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
 from offline.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 
 logger = get_logger(__name__)
@@ -41,23 +46,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     configure_logging(args.log_level)
 
-    dataset = dataset_overrides(args)
-    job = (
-        EnrichmentJobConfig.from_yaml(args.config, dataset=dataset)
-        if dataset is not None
-        else EnrichmentJobConfig.from_yaml(args.config)
-    )
-    config = (
-        replace(job.ocr, batch_size=args.batch_size)
-        if args.batch_size is not None
-        else job.ocr
-    )
+    job = EnrichmentJobConfig.from_yaml(args.config, dataset=dataset_overrides(args))
+    config = apply_overrides(job.ocr, batch_size=args.batch_size)
     app_path = Path(args.app_config)
     settings = AppConfig.from_yaml(app_path) if app_path.is_file() else AppConfig()
     base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
-    from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
-    from llm.pipeline import LLMService
-
     service = LLMService.remote(base_url, settings.inference)
     engine = RemoteOCRAdapter(service, config)
     logger.info("Using OCR inference gateway at %s", base_url)

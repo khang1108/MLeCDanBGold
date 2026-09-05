@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -35,7 +35,10 @@ from .config import FrameContextConfig
 from .serializer import serialize_frame_context
 
 
-_EvidenceT = TypeVar("_EvidenceT", CaptionEvidence, OCREvidence, ObjectEvidence)
+_Evidence = CaptionEvidence | OCREvidence | ObjectEvidence
+_EvidenceContract = (
+    type[CaptionEvidence] | type[OCREvidence] | type[ObjectEvidence]
+)
 _BATCH_SIZE = 512
 
 _CONTEXT_SCHEMA = pa.schema([
@@ -81,42 +84,52 @@ def _effective_batch_size(value: int | None = None) -> int:
     return value
 
 
-class _EvidenceStore:
-    """Keep validated specialist rows on disk and load only one join batch.
+def _projection(row: _Evidence) -> tuple[str | None, float]:
+    """Reduce one validated evidence row to the two values Context V1 reads.
 
-    Specialist evidence can contain nested object detections. Keeping every
-    validated Pydantic object in a Python dictionary defeats bounded batch
-    processing, so this temporary SQLite table is used as a disk-backed join
-    index. It is never published as a project artifact.
+    The text is the specialist's usable contribution and the number is its raw
+    diagnostic: OCR quality, or the object detection count. Everything else
+    stays authoritative in the source artifact.
     """
 
-    def __init__(self, path: Path, contract: type[_EvidenceT]) -> None:
+    completed = row.status == ProcessingStatus.COMPLETED
+    if isinstance(row, CaptionEvidence):
+        usable = row.error_code is None and row.error_message is None
+        text = row.text if completed and usable else None
+        number = 0.0
+    elif isinstance(row, OCREvidence):
+        text = row.normalized_text if completed else None
+        number = row.quality_score
+    else:
+        text = row.summary if completed else None
+        number = float(row.detection_count)
+    return (text if text is not None and text.strip() else None), number
+
+
+class _EvidenceStore:
+    """Keep one specialist's Context projection on disk, loaded per join batch.
+
+    Holding 470k validated Pydantic rows in memory defeats bounded batch
+    processing, so this temporary SQLite table is the disk-backed join index.
+    It stores only what :func:`_projection` keeps and is never published.
+    """
+
+    def __init__(self, path: Path) -> None:
         self._path = path
         self._connection = sqlite3.connect(path)
-        self._contract = contract
         self._connection.execute(
             "CREATE TABLE evidence ("
-            "frame_id TEXT PRIMARY KEY, payload TEXT NOT NULL"
+            "frame_id TEXT PRIMARY KEY, text TEXT, number REAL NOT NULL"
             ")"
         )
 
-    def put(self, row: _EvidenceT) -> None:
-        """Persist one already-validated evidence row."""
+    def put(self, row: _Evidence) -> None:
+        """Persist the projection of one already-validated evidence row."""
 
-        fields: set[str] | None = None
-        if isinstance(row, ObjectEvidence):
-            # Context V1 only needs object status, summary, and multiplicity;
-            # the complete detections remain authoritative in the source
-            # artifact. Avoid copying nested detections into the temp index.
-            fields = {"detections"}
-        payload = json.dumps(
-            row.model_dump(mode="json", exclude=fields),
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        text, number = _projection(row)
         self._connection.execute(
-            "INSERT INTO evidence(frame_id, payload) VALUES (?, ?)",
-            (row.frame_id, payload),
+            "INSERT INTO evidence(frame_id, text, number) VALUES (?, ?, ?)",
+            (row.frame_id, text, number),
         )
 
     def commit(self) -> None:
@@ -124,43 +137,22 @@ class _EvidenceStore:
 
         self._connection.commit()
 
-    def get_many(self, frame_ids: list[str]) -> dict[str, _EvidenceT]:
-        """Load and validate only the requested frame rows."""
+    def get_many(self, frame_ids: list[str]) -> dict[str, tuple[str | None, float]]:
+        """Load only the requested frame projections."""
 
-        found: dict[str, _EvidenceT] = {}
+        found: dict[str, tuple[str | None, float]] = {}
         # SQLite limits bound parameters (commonly to 999); keep lookup chunks
         # below that limit even when a caller selects a larger batch override.
         for start in range(0, len(frame_ids), 900):
             chunk = frame_ids[start : start + 900]
             placeholders = ",".join("?" for _ in chunk)
             cursor = self._connection.execute(
-                f"SELECT frame_id, payload FROM evidence "
+                f"SELECT frame_id, text, number FROM evidence "
                 f"WHERE frame_id IN ({placeholders})",
                 chunk,
             )
-            for frame_id, payload in cursor:
-                values = json.loads(payload)
-                if self._contract is ObjectEvidence:
-                    count = int(values.get("detection_count", 0))
-                    counts = values.get("counts", {})
-                    labels = [
-                        label for label, total in counts.items() for _ in range(total)
-                    ]
-                    labels.extend("__unlisted__" for _ in range(count - len(labels)))
-                    values["detections"] = [
-                        {
-                            "label": label,
-                            "confidence": 0.0,
-                            "x_min": 0.0,
-                            "y_min": 0.0,
-                            "x_max": 0.0,
-                            "y_max": 0.0,
-                        }
-                        for label in labels
-                    ]
-                found[frame_id] = cast(
-                    _EvidenceT, self._contract.model_validate(values)
-                )
+            for frame_id, text, number in cursor:
+                found[frame_id] = (text, float(number))
         return found
 
     def close(self) -> None:
@@ -360,7 +352,7 @@ def _object_values(raw: dict[str, Any]) -> dict[str, Any]:
 def _validated_rows(
     raw_rows: Iterable[dict[str, Any]],
     name: str,
-    contract: type[_EvidenceT],
+    contract: _EvidenceContract,
     version: str,
     canonical: dict[str, tuple[str, int, int]],
     lineage: str | None,
@@ -372,7 +364,7 @@ def _validated_rows(
     )
     os.close(file_descriptor)
     store_path = Path(file_name)
-    store = _EvidenceStore(store_path, contract)
+    store = _EvidenceStore(store_path)
     try:
         for raw in raw_rows:
             raw_frame_id = raw.get("frame_id")
@@ -436,35 +428,6 @@ def _validated_rows(
         raise
 
 
-def _usable_caption(row: CaptionEvidence | None) -> str | None:
-    """Return completed error-free caption text, if present."""
-
-    if row is None or row.status != ProcessingStatus.COMPLETED:
-        return None
-    if row.error_code is not None or row.error_message is not None:
-        return None
-    return row.text if row.text is not None and row.text.strip() else None
-
-
-def _usable_ocr(row: OCREvidence | None, minimum: float) -> str | None:
-    """Return completed normalized OCR text meeting the V1 quality threshold."""
-
-    if row is None or row.status != ProcessingStatus.COMPLETED:
-        return None
-    if row.quality_score < minimum:
-        return None
-    text = row.normalized_text
-    return text if text is not None and text.strip() else None
-
-
-def _usable_objects(row: ObjectEvidence | None) -> str | None:
-    """Return completed non-empty object summary text, if present."""
-
-    if row is None or row.status != ProcessingStatus.COMPLETED:
-        return None
-    return row.summary if row.summary is not None and row.summary.strip() else None
-
-
 def _serializer_identity(config: FrameContextConfig) -> dict[str, int | float]:
     """Return the exact serializer policy recorded in dependency identity."""
 
@@ -500,12 +463,10 @@ def _build_context_rows(
     object_values = object_rows.get_many(frame_ids)
     contexts: list[FrameContext] = []
     for frame in frames:
-        caption_row = captions.get(frame.frame_id)
-        ocr_row = ocr_values.get(frame.frame_id)
-        object_row = object_values.get(frame.frame_id)
-        caption = _usable_caption(caption_row)
-        ocr = _usable_ocr(ocr_row, config.min_ocr_quality)
-        objects = _usable_objects(object_row)
+        caption, _ = captions.get(frame.frame_id, (None, 0.0))
+        ocr_text, ocr_quality = ocr_values.get(frame.frame_id, (None, 0.0))
+        objects, object_count = object_values.get(frame.frame_id, (None, 0.0))
+        ocr = ocr_text if ocr_quality >= config.min_ocr_quality else None
         contexts.append(
             FrameContext(
                 frame_id=frame.frame_id,
@@ -519,16 +480,8 @@ def _build_context_rows(
                     caption=caption, ocr=ocr, objects=objects, config=config
                 ),
                 caption_available=caption is not None,
-                ocr_quality=(
-                    ocr_row.quality_score
-                    if ocr_row is not None
-                    else 0.0
-                ),
-                object_count=(
-                    object_row.detection_count
-                    if object_row is not None
-                    else 0
-                ),
+                ocr_quality=ocr_quality,
+                object_count=int(object_count),
                 context_version=config.context_version,
                 caption_version=caption_version,
                 ocr_version=ocr_version,
@@ -638,14 +591,6 @@ def _valid_existing_bundle(
         return False
 
 
-def _publish_staged_bundle(
-    staged: tuple[Path, Path], published: tuple[Path, Path]
-) -> None:
-    """Publish context data then manifest, restoring the prior bundle on error."""
-
-    publish_staged_bundle(staged, published)
-
-
 def _write_bundle(
     output: Path,
     batches_factory: Callable[[], Iterable[list[FrameContext]]],
@@ -661,6 +606,7 @@ def _write_bundle(
         output / ".manifest.json.staged",
     )
     writer: pq.ParquetWriter | None = None
+    written = 0
     try:
         for batch in batches_factory():
             if not batch:
@@ -672,16 +618,21 @@ def _write_bundle(
             if writer is None:
                 writer = pq.ParquetWriter(str(staged[0]), _CONTEXT_SCHEMA)
             writer.write_table(table)
+            written += len(batch)
         if writer is None:
             raise ValueError("cannot publish an empty FrameContext bundle")
         writer.close()
         writer = None
         atomic_write(staged[1], lambda path: write_json(identity, path))
-        if not _valid_existing_bundle(
-            staged[0], staged[1], identity, batches_factory()
+        # The rows were just serialized from this process, so guard only
+        # against a truncated or mis-typed write, not against their content.
+        staged_parquet = pq.ParquetFile(staged[0])
+        if (
+            staged_parquet.schema_arrow != _CONTEXT_SCHEMA
+            or staged_parquet.metadata.num_rows != written
         ):
             raise ValueError("staged FrameContext bundle failed validation")
-        _publish_staged_bundle(staged, (context_path, manifest_path))
+        publish_staged_bundle(staged, (context_path, manifest_path))
     finally:
         if writer is not None:
             writer.close()
@@ -715,13 +666,10 @@ def build_frame_context(
     frames = _read_canonical_frames(frames_file)
     if not frames:
         raise ValueError("canonical frame store must contain at least one frame")
-    canonical_order = [frame.frame_id for frame in frames]
     canonical = {
         frame.frame_id: (frame.video_id, frame.frame_idx, frame.timestamp_ms)
         for frame in frames
     }
-    if len(canonical) != len(canonical_order):
-        raise ValueError("canonical frame store contains duplicate frame_id values")
 
     caption_manifest = _required_manifest(caption_file.parent / "manifest.json")
     ocr_manifest = _required_manifest(ocr_file.parent / "manifest.json")

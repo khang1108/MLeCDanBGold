@@ -1,11 +1,4 @@
-"""Chuẩn bị dữ liệu cho quá trình trích xuất Transcript.
-
-Thực hiện các công việc tiền xử lý video/audio (như tách âm thanh) trước khi gọi AI.
-
-Các tính năng chính:
-1. Audio Extraction: Dùng FFmpeg tách file âm thanh (mp3/wav) từ các video định dạng mp4.
-2. Chuẩn hoá tần số: Chuyển sample rate về chuẩn 16kHz thường được các mô hình ASR yêu cầu.
-3. Quản lý Cache: Lưu tạm file âm thanh đã tách để tránh phải chạy lại nếu pipeline gặp sự cố."""
+"""Audio extraction and normalization performed before ASR."""
 
 from __future__ import annotations
 

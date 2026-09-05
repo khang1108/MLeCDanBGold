@@ -19,6 +19,7 @@ import pandas as pd
 from PIL import Image
 from tqdm import tqdm
 
+from offline.enrichment.bundle import canonical_identity, null_safe
 from offline.enrichment.ocr.models import OCREvidence, OCRRegion
 from hcmai.common.utils.image import load_image
 from hcmai.common.utils.io import read_json
@@ -52,26 +53,9 @@ def _consistent_regions(
     parsed: list[OCRRegion] = []
     try:
         for candidate in candidates:
-            if (
-                not isinstance(candidate.get("frame_id"), str)
-                or not candidate["frame_id"]
-                or candidate["frame_id"].strip() != candidate["frame_id"]
-                or not isinstance(candidate.get("video_id"), str)
-                or not candidate["video_id"]
-                or candidate["video_id"].strip() != candidate["video_id"]
-                or isinstance(candidate.get("frame_idx"), bool)
-                or not isinstance(candidate.get("frame_idx"), Integral)
-                or isinstance(candidate.get("timestamp_ms"), bool)
-                or not isinstance(candidate.get("timestamp_ms"), Integral)
-            ):
+            if not canonical_identity(candidate):
                 return None
-            values = {
-                key: None
-                if isinstance(value, float) and pd.isna(value)
-                else value
-                for key, value in candidate.items()
-            }
-            parsed.append(OCRRegion.model_validate(values))
+            parsed.append(OCRRegion.model_validate(null_safe(candidate)))
     except Exception:
         return None
 

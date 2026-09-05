@@ -20,14 +20,7 @@ from offline.ingestion.custom_frames import (
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse custom FrameStore materialization arguments.
-
-    Args:
-        argv: Optional test argument sequence; ``None`` reads process arguments.
-
-    Returns:
-        Namespace containing native run, output, lineage, and optional ID filters.
-    """
+    """Parse native run, output, lineage, and optional video-ID filters."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, required=True)
@@ -43,35 +36,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _published_video_ids(run_root: Path) -> tuple[str, ...]:
-    """Discover a deterministic full-corpus selection from published directories.
-
-    Args:
-        run_root: Existing native lifecycle root.
-
-    Returns:
-        Sorted tuple of published directory names.
-
-    Raises:
-        ValueError: If no published directories are available.
-    """
+    """Discover a deterministic full-corpus selection from published directories."""
 
     published_root = run_root / "published"
-    video_ids = tuple(sorted(path.name for path in published_root.iterdir() if path.is_dir())) \
-        if published_root.is_dir() else ()
+    video_ids = (
+        tuple(sorted(path.name for path in published_root.iterdir() if path.is_dir()))
+        if published_root.is_dir()
+        else ()
+    )
     if not video_ids:
         raise ValueError("run_root contains no published video bundles")
     return video_ids
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Materialize selected native bundles and print a JSON summary.
-
-    Args:
-        argv: Optional test argument sequence; ``None`` reads process arguments.
-
-    Returns:
-        Zero after one complete atomic custom FrameStore publication.
-    """
+    """Materialize selected native bundles and print a JSON summary."""
 
     args = parse_args(argv)
     selected_video_ids = tuple(args.video_id) or _published_video_ids(args.run_root)

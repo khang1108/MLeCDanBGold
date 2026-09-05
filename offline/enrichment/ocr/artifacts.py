@@ -20,7 +20,13 @@ from hcmai.common.utils.io import (
     write_json,
     write_parquet,
 )
-from offline.enrichment.bundle import publish_staged_bundle
+from offline.enrichment.bundle import (
+    canonical_identity,
+    null_safe,
+    publish_staged_bundle,
+    staged_records,
+    validate_bundle_lineage,
+)
 from offline.enrichment.models import FrameEnrichment, ProcessingStatus
 from offline.enrichment.ocr.models import OCREvidence, OCRRegion
 
@@ -103,24 +109,9 @@ def valid_ocr(
     """Return a completed frame row only when all reusable lineage matches."""
 
     try:
-        if (
-            not isinstance(data.get("frame_id"), str)
-            or not data["frame_id"]
-            or data["frame_id"].strip() != data["frame_id"]
-            or not isinstance(data.get("video_id"), str)
-            or not data["video_id"]
-            or data["video_id"].strip() != data["video_id"]
-            or isinstance(data.get("frame_idx"), bool)
-            or not isinstance(data.get("frame_idx"), Integral)
-            or isinstance(data.get("timestamp_ms"), bool)
-            or not isinstance(data.get("timestamp_ms"), Integral)
-        ):
+        if not canonical_identity(data):
             return None
-        values = {
-            key: None if isinstance(value, float) and math.isnan(value) else value
-            for key, value in dict(data).items()
-        }
-        row = OCREvidence.model_validate(values)
+        row = OCREvidence.model_validate(null_safe(data))
     except Exception:
         return None
 
@@ -315,32 +306,18 @@ def write_ocr_artifacts(
         atomic_write(staged[4], lambda path: write_json(report, path))
         atomic_write(staged[5], lambda path: write_json(manifest, path))
 
-        staged_frames = pd.read_parquet(staged[0])
-        staged_regions = pd.read_parquet(staged[1])
-        staged_projection = pd.read_parquet(staged[3])
-        if staged_frames.columns.tolist() != list(OCREvidence.model_fields):
-            raise ValueError("staged OCR frames have an invalid schema")
-        if staged_regions.columns.tolist() != list(OCRRegion.model_fields):
-            raise ValueError("staged OCR regions have an invalid schema")
-        if staged_projection.columns.tolist() != list(FrameEnrichment.model_fields):
-            raise ValueError("staged OCR projection has an invalid schema")
-
         expected_order = [frame_id for frame_id in order if frame_id in rows]
-        if staged_frames["frame_id"].tolist() != expected_order:
-            raise ValueError("staged OCR frames changed canonical order")
-        if staged_projection["frame_id"].tolist() != expected_order:
-            raise ValueError("staged OCR projection changed canonical order")
-
         parsed_frames: dict[str, OCREvidence] = {}
-        for data in staged_frames.astype(object).where(
-            staged_frames.notna(), None
-        ).to_dict(orient="records"):
+        for data in staged_records(
+            staged[0],
+            OCREvidence.model_fields,
+            "OCR frames",
+            expected_order=expected_order,
+        ):
             row = OCREvidence.model_validate(data)
             parsed_frames[row.frame_id] = row
         parsed_regions: dict[str, list[OCRRegion]] = {}
-        for data in staged_regions.astype(object).where(
-            staged_regions.notna(), None
-        ).to_dict(orient="records"):
+        for data in staged_records(staged[1], OCRRegion.model_fields, "OCR regions"):
             region = OCRRegion.model_validate(data)
             parsed_regions.setdefault(region.frame_id, []).append(region)
         for frame_id, row in parsed_frames.items():
@@ -363,13 +340,12 @@ def write_ocr_artifacts(
         if set(parsed_regions).difference(parsed_frames):
             raise ValueError("staged OCR regions reference an unknown frame")
 
-        for data in staged_projection.astype(object).where(
-            staged_projection.notna(), None
-        ).to_dict(orient="records"):
-            objects = data.get("objects")
-            to_list = getattr(objects, "tolist", None)
-            if callable(to_list):
-                data["objects"] = to_list()
+        for data in staged_records(
+            staged[3],
+            FrameEnrichment.model_fields,
+            "OCR projection",
+            expected_order=expected_order,
+        ):
             FrameEnrichment.model_validate(data)
         if read_json(staged[2]) != failure_rows:
             raise ValueError("staged OCR failures failed validation")
@@ -378,15 +354,7 @@ def write_ocr_artifacts(
         if read_json(staged[5]) != manifest:
             raise ValueError("staged OCR manifest failed validation")
 
-        versions = {row.artifact_version for row in rows.values()}
-        lineages = {row.frame_store_id for row in rows.values()}
-        if len(versions) > 1 or len(lineages) > 1:
-            raise ValueError("OCR bundle has mixed version or lineage")
-        if versions and manifest.get("artifact_version") not in versions:
-            raise ValueError("OCR manifest artifact_version mismatch")
-        if lineages and manifest.get("frame_store_id") not in lineages:
-            raise ValueError("OCR manifest frame_store_id mismatch")
-
+        validate_bundle_lineage(rows.values(), manifest, "OCR")
         publish_staged_bundle(staged, published)
     finally:
         for path in staged:

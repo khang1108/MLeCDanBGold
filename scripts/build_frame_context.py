@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
-from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
+from offline.enrichment.dataset_cli import (
+    add_dataset_arguments,
+    apply_overrides,
+    dataset_overrides,
+)
 from offline.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 
 
@@ -36,25 +39,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Build configuration and delegate context materialization to the service."""
 
     args = parse_args(argv)
-    dataset = dataset_overrides(args)
-    job = (
-        EnrichmentJobConfig.from_yaml(args.config, dataset=dataset)
-        if dataset is not None
-        else EnrichmentJobConfig.from_yaml(args.config)
-    )
-    config = replace(
+    job = EnrichmentJobConfig.from_yaml(args.config, dataset=dataset_overrides(args))
+    config = apply_overrides(
         job.context,
-        **{
-            name: value
-            for name, value in {
-                "context_version": args.context_version,
-                "caption_token_budget": args.caption_token_budget,
-                "ocr_token_budget": args.ocr_token_budget,
-                "object_token_budget": args.object_token_budget,
-                "min_ocr_quality": args.min_ocr_quality,
-            }.items()
-            if value is not None
-        },
+        context_version=args.context_version,
+        caption_token_budget=args.caption_token_budget,
+        ocr_token_budget=args.ocr_token_budget,
+        object_token_budget=args.object_token_budget,
+        min_ocr_quality=args.min_ocr_quality,
     )
     EnrichmentService.build_frame_context(
         args.frames or job.frames_path,

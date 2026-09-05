@@ -1,11 +1,4 @@
-"""Adapter cho mô hình Diarization (Phân biệt người nói).
-
-Giao tiếp với mô hình phân tách giọng nói để đánh dấu (tag) người phát biểu.
-
-Các tính năng chính:
-1. Phân mảnh (Segmentation): Chia audio thành các phần theo sự thay đổi giọng người nói.
-2. Gán nhãn (Clustering): Gán định danh (Speaker 1, Speaker 2) cho từng phân mảnh.
-3. Ghép nối ASR: Hỗ trợ gộp kết quả người nói vào chung với văn bản (Transcript) đã trích xuất."""
+"""Diarization adapter tagging transcript segments with a speaker."""
 
 from __future__ import annotations
 

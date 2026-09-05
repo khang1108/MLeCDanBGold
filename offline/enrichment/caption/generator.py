@@ -1,11 +1,4 @@
-"""Bộ sinh (Generator) Caption.
-
-Quản lý toàn bộ quá trình chạy mô hình sinh mô tả ảnh (captioning) cho các frames.
-
-Các tính năng chính:
-1. Lấy dữ liệu: Lấy danh sách các frames cần xử lý hình ảnh dựa trên manifest đầu vào.
-2. Điều khiển Batch (Batching): Gom nhóm nhiều frames (vd: batch=32) để xử lý trên GPU nhanh hơn.
-3. Ghi nhận kết quả: Lưu văn bản mô tả thu được vào các artifacts với cơ chế chống mất dữ liệu."""
+"""Batched caption generation over canonical frames with resumable artifacts."""
 
 from __future__ import annotations
 
@@ -90,7 +83,6 @@ def generate_captions(
         "frame_store_id": frame_store_id,
     }
 
-    # Xử lý từng batch
     failures: dict[str, dict[str, str]] = {}
     latencies = run_batches(
         todo,

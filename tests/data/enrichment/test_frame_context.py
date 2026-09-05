@@ -355,7 +355,7 @@ def test_matching_identity_reuses_and_policy_or_upstream_version_rebuilds(
         raise AssertionError("matching bundle should not be republished")
 
     monkeypatch.setattr(
-        "offline.enrichment.context.builder._publish_staged_bundle",
+        "offline.enrichment.context.builder.publish_staged_bundle",
         unexpected_write,
     )
     frames = tmp_path / "frames.parquet"
