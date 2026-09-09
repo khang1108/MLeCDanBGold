@@ -1,0 +1,115 @@
+% Shared typography and figure vocabulary for the HCMAI technical report.
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,top=16mm,bottom=18mm,left=16mm,right=16mm,columnsep=6mm]{geometry}
+\usepackage{amsmath,amssymb,bm,mathtools}
+\usepackage{booktabs,tabularx,array,multirow,longtable}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,backgrounds,calc,decorations.pathreplacing,fit,matrix,positioning,shapes.geometric}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{balance}
+\usepackage{etoolbox}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+% Validated light-mode categorical palette from the report visualization system.
+% Every colored object also carries a text label or distinct shape.
+\definecolor{ReportBlue}{HTML}{2A78D6}
+\definecolor{ReportOrange}{HTML}{EB6834}
+\definecolor{ReportAqua}{HTML}{1BAF7A}
+\definecolor{ReportInk}{HTML}{0B0B0B}
+\definecolor{ReportSecondary}{HTML}{52514E}
+\definecolor{ReportMuted}{HTML}{898781}
+\definecolor{ReportGrid}{HTML}{E1E0D9}
+\definecolor{ReportSurface}{HTML}{FCFCFB}
+\definecolor{ReportBlueTint}{HTML}{EAF3FD}
+\definecolor{ReportOrangeTint}{HTML}{FDEEE8}
+\definecolor{ReportAquaTint}{HTML}{E7F7F1}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=ReportBlue,
+  citecolor=ReportBlue,
+  urlcolor=ReportBlue,
+  pdftitle={HCMAI 2026 Multimodal Video Retrieval Technical Report},
+  pdfsubject={System architecture, retrieval, temporal alignment, interface, and deployment}
+}
+
+\setlength{\parindent}{0.9em}
+\setlength{\parskip}{0pt}
+\setlength{\columnsep}{6mm}
+\setlength{\abovedisplayskip}{4pt plus 1pt minus 1pt}
+\setlength{\belowdisplayskip}{4pt plus 1pt minus 1pt}
+\setlength{\abovedisplayshortskip}{2pt plus 1pt}
+\setlength{\belowdisplayshortskip}{3pt plus 1pt}
+\setlist{nosep,leftmargin=*,topsep=2pt}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\titlespacing*{\section}{0pt}{5.5pt plus 1pt minus 1pt}{2.5pt}
+\titlespacing*{\subsection}{0pt}{4pt plus 1pt minus 1pt}{1.5pt}
+\titleformat{\section}{\bfseries\normalsize}{\thesection.}{0.45em}{}
+\titleformat{\subsection}{\bfseries\small}{\thesubsection}{0.4em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize HCMAI 2026 Technical Report}
+\fancyhead[R]{\footnotesize \ReportRevision}
+\fancyfoot[C]{\footnotesize \thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\setlength{\headheight}{11pt}
+
+\newcommand{\systemname}{\textsc{HCMAI}}
+\newcommand{\FrameContext}{\textsc{FrameContext}}
+\newcommand{\KIS}{\textsc{KIS}}
+\newcommand{\TRAKE}{\textsc{TRAKE}}
+\newcommand{\FAISS}{\textsc{Faiss}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\pathcode}[1]{\nolinkurl{#1}}
+\newcommand{\vect}[1]{\bm{#1}}
+\newcommand{\R}{\mathbb{R}}
+
+% Figure/table guard: the four-page body is intentionally text and equations only.
+\newif\ifreportappendix
+\reportappendixfalse
+\newcommand{\RequireReportAppendix}{%
+  \ifreportappendix\else
+    \PackageError{hcmai-report}{Figures and tables are restricted to the appendix}%
+      {Move this float after \string\appendix.}%
+  \fi
+}
+\AtBeginEnvironment{figure}{\RequireReportAppendix}
+\AtBeginEnvironment{figure*}{\RequireReportAppendix}
+\AtBeginEnvironment{table}{\RequireReportAppendix}
+\AtBeginEnvironment{table*}{\RequireReportAppendix}
+
+% TikZ vocabulary. Color is never the only carrier: every node is labeled and
+% each layer uses a distinct shape/border treatment.
+\tikzset{
+  flowarrow/.style={-{Latex[length=2.1mm,width=1.4mm]},line width=0.75pt,draw=ReportSecondary},
+  dataarrow/.style={flowarrow,dashed},
+  layer/.style={draw=ReportGrid,rounded corners=2pt,fill=ReportSurface,inner sep=4pt},
+  client/.style={draw=ReportBlue,line width=0.9pt,rounded corners=2pt,fill=ReportBlueTint,align=center,minimum height=8mm,font=\small\bfseries},
+  service/.style={draw=ReportOrange,line width=0.9pt,rounded corners=2pt,fill=ReportOrangeTint,align=center,minimum height=8mm,font=\small\bfseries},
+  artifact/.style={draw=ReportAqua,line width=0.9pt,fill=ReportAquaTint,align=center,minimum height=8mm,font=\small\bfseries},
+  process/.style={draw=ReportSecondary,line width=0.75pt,rounded corners=2pt,fill=white,align=center,minimum height=7mm,font=\small},
+  note/.style={align=left,font=\footnotesize,text=ReportSecondary},
+  callout/.style={circle,fill=ReportBlue,draw=white,line width=0.8pt,text=white,font=\bfseries\scriptsize,minimum size=5.2mm,inner sep=0pt}
+}
+
+\newcommand{\screenshotplaceholder}[2]{%
+  \IfFileExists{#1}{\includegraphics[width=#2]{#1}}{%
+    \fcolorbox{ReportGrid}{ReportSurface}{%
+      \parbox[c][0.46\textwidth][c]{#2}{\centering\small\color{ReportMuted}
+        Live screenshot pending\\[2pt]\code{#1}}}%
+  }%
+}
+
+\newcommand{\calloutlabel}[1]{\textbf{[#1]}}

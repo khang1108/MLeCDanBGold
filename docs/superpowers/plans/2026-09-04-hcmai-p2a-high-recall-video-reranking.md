@@ -1,3 +1,4 @@
+
 # HCMAI P2a High-Recall Video-Level Reranking Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -174,6 +175,7 @@ src/hcmai/retrieval/reranking/adapters/*
 **Purpose:** Introduce a feature-flagged P2a configuration without changing the default v16 search path.
 
 **Files:**
+
 - Modify: `src/hcmai/common/config.py:419-433`
 - Modify: `tests/test_config.py`
 
@@ -360,6 +362,7 @@ git commit -m "feat(search): add high-recall video reranking config"
 **Purpose:** Candidate union must not be gated by the current temporal Top-K, while KIS still requires a valid event-aligned path for every emitted result. Expose one best path for every alignable video using the existing score matrices and decoder.
 
 **Files:**
+
 - Modify: `src/hcmai/orchestration/workflows/temporal_search.py`
 - Modify or create live equivalent: `tests/unit/orchestration/test_temporal_search.py`
 
@@ -597,6 +600,7 @@ git commit -m "feat(temporal): expose best aligned path per video"
 **Purpose:** Build the recall reservoir independently of reranker/model behavior so candidate Recall@200 can be tested by itself.
 
 **Files:**
+
 - Create: `src/hcmai/orchestration/workflows/video_reranking.py`
 - Create: `tests/unit/orchestration/test_video_reranking.py`
 
@@ -821,6 +825,7 @@ stop at candidate_max_videos
 ```
 
 When a video already exists:
+
 - update its provenance;
 - do not increase reservoir length.
 
@@ -852,6 +857,7 @@ git commit -m "feat(search): add deterministic high-recall video union"
 **Purpose:** P2a must reuse the existing VLM reranker but must not lose a whole candidate reservoir because one representative image is missing or one model batch fails.
 
 **Files:**
+
 - Modify: `src/hcmai/retrieval/reranking/pipeline.py`
 - Modify: `tests/test_reranker.py`
 
@@ -931,6 +937,7 @@ Use a fake adapter that returns:
 for three prepared items.
 
 Assert:
+
 - first and third survive;
 - second is recorded as `"invalid_score"`;
 - no surviving candidate has a non-finite score.
@@ -1045,6 +1052,7 @@ Do not mutate input candidates.
 Run the complete reranker test module.
 
 Required:
+
 - old strict behavior tests PASS;
 - new partial tests PASS.
 
@@ -1064,6 +1072,7 @@ git commit -m "feat(reranking): add fail-open partial frame scoring"
 **Purpose:** Compose global visual retrieval, event retrieval, temporal paths, candidate union, two-frame reranking, `max` aggregation, and fallback ordering in one task-agnostic service.
 
 **Files:**
+
 - Modify: `src/hcmai/orchestration/workflows/video_reranking.py`
 - Modify: `src/hcmai/orchestration/workflows/__init__.py`
 - Extend: `tests/unit/orchestration/test_video_reranking.py`
@@ -1150,6 +1159,7 @@ global_dense_query = "\n".join(retrieval_events)
 ```
 
 This preserves all prepared retrieval events while presenting one full semantic query to SigLIP/dense retrieval.
+
 - event retrieval uses each `retrieval_event` independently.
 - temporal search keeps the existing original/retrieval/caption event split.
 
@@ -1209,6 +1219,7 @@ temporal.search_best_per_video(...)
 is called once.
 
 Its sorted paths are used:
+
 - as temporal candidate source;
 - as `temporal_path` lookup for global/event videos.
 
@@ -1444,6 +1455,7 @@ git commit -m "feat(search): add shared video candidate reranking service"
 **Purpose:** KIS ordering becomes video-reranker ordering, but its public response still contains one aligned temporal frame per event.
 
 **Files:**
+
 - Modify: `src/hcmai/orchestration/materializer.py:24-64`
 - Modify: `src/hcmai/orchestration/workflows/kis.py`
 - Modify: `tests/unit/orchestration/test_kis_pipeline.py`
@@ -1564,6 +1576,7 @@ video_reranking=None
 ```
 
 and assert:
+
 - `temporal.search(... top_k=request.top_k)` is called as before;
 - `SearchMaterializer.build_kis_result(path)` is used without override;
 - result equality matches the existing fixture/golden path.
@@ -1610,6 +1623,7 @@ temporal_path is None
 KIS cannot emit it because `SearchResponse` requires one aligned frame per event.
 
 KIS must:
+
 - skip such a candidate at materialization;
 - continue to the next ranked video;
 - return up to `request.top_k` candidates with valid paths.
@@ -1705,6 +1719,7 @@ git commit -m "feat(kis): rank videos with shared visual reranker"
 **Purpose:** TRAKE shares P2a candidate/reranking evidence but preserves every path's temporal coordinates and raw path score.
 
 **Files:**
+
 - Modify: `src/hcmai/orchestration/workflows/trake.py`
 - Modify: `tests/unit/orchestration/test_trake_pipeline.py`
 
@@ -1815,6 +1830,7 @@ Do not replace the path score with reranker score.
 - [ ] **Step 7: Preserve latency response schema**
 
 Use the same mapping as KIS:
+
 - retrieval includes candidate retrieval + reranker;
 - alignment is temporal work;
 - materialization is response projection.
@@ -1845,6 +1861,7 @@ git commit -m "feat(trake): reuse high-recall video reranking order"
 **Purpose:** Restore reranking as an explicit optional runtime dependency, created once at application startup, while keeping disabled mode identical to v16.
 
 **Files:**
+
 - Modify: `src/hcmai/orchestration/setup.py:40-99`
 - Modify: `src/hcmai/orchestration/pipeline.py:78-151, 207-308`
 - Modify: `tests/unit/orchestration/test_registry.py`
@@ -2038,11 +2055,13 @@ truthful again when enabled.
 - [ ] **Step 8: Test enabled-without-model fail-open wiring**
 
 Construct `SearchService` with:
+
 - feature enabled;
 - corpus/retrieval/temporal available;
 - `reranking=None`.
 
 Assert:
+
 - `service.video_reranking is not None`;
 - KIS/TRAKE share it;
 - requests return union fallback rather than raising because the model is absent.
@@ -2076,6 +2095,7 @@ git commit -m "feat(search): wire optional shared video reranking runtime"
 **Purpose:** Measure whether candidate union and VLM reranking actually improve Recall@20 before enabling P2a.
 
 **Files:**
+
 - Create: `scripts/evaluate_p2a_recall.py`
 - Create: `tests/unit/orchestration/test_p2a_evaluation.py` or nearest existing evaluation-test location.
 - Runtime output only after execution:
@@ -2100,6 +2120,7 @@ Use a labeled JSONL file independent of `query.zip`:
 ```
 
 If `retrieval_events` is absent:
+
 - split the query with the current deterministic KIS parser;
 - use the resulting events as retrieval events.
 
@@ -2228,6 +2249,7 @@ recall_r4_20 > recall_r2_20
 ```
 
 and list:
+
 - R4 wins;
 - R4 regressions;
 - unchanged queries.
@@ -2273,6 +2295,7 @@ git commit -m "chore(eval): add P2a recall ablation harness"
 **Purpose:** Prove that P2a can be merged safely before it is enabled and that its HTTP response contracts remain valid.
 
 **Files:**
+
 - Create: `tests/integration/test_p2a_high_recall_reranking.py`
 - Modify live integration tests only where the feature flag requires dependency setup.
 
@@ -2289,6 +2312,7 @@ SearchConfig(
 Run the existing KIS golden fixture.
 
 Assert exact equality to the current v16 expected:
+
 - result video order;
 - representative frame IDs;
 - path arrays;
@@ -2299,12 +2323,14 @@ This is the rollback contract.
 - [ ] **Step 2: Add enabled KIS integration fixture**
 
 Use:
+
 - three candidate videos;
 - duplicate raw frames from one false-positive video;
 - one correct video found by global/event/temporal;
 - fake reranker scores making the correct visual scene win.
 
 Assert:
+
 - one video cannot occupy multiple Top-20 slots;
 - final rank follows video reranker score;
 - KIS representative equals winner frame;
@@ -2333,6 +2359,7 @@ Do not special-case title/OCR strings in production logic. The test behavior mus
 Fake reranker returns no successful frame scores.
 
 Assert:
+
 - no candidate disappears solely because reranking failed;
 - KIS still returns candidate-union results;
 - TRAKE still returns temporal paths.
@@ -2445,6 +2472,7 @@ search:
 ```
 
 Compare pre-P2a branch vs P2a branch:
+
 - KIS video IDs;
 - KIS representative frames;
 - KIS temporal arrays;
@@ -2462,6 +2490,7 @@ From `query.zip`, manually prepare at least the queries for which a reliable `gt
 Do not infer labels automatically.
 
 Prioritize:
+
 - dense-good / temporal-bad failures;
 - temporal-good narrative queries;
 - simple single-scene KIS queries;
@@ -2511,6 +2540,7 @@ P2a should not be enabled if the two-frame reranker systematically hurts easy gl
 - [ ] **Step 10: Inspect query-level regressions**
 
 For every R4 regression:
+
 - GT global rank;
 - GT event rank;
 - GT temporal rank;
@@ -2630,6 +2660,7 @@ Those scales are not assumed calibrated.
 That is intentional in P2a.
 
 The result still carries:
+
 - a valid `N`-frame temporal path;
 - a representative frame from the same video.
 
@@ -2638,6 +2669,7 @@ Do not rewrite path arrays to pretend the global representative is one of the ev
 ## 5. Do not synthesize temporal paths
 
 If a video has no valid temporal path:
+
 - it may remain in candidate diagnostics/reranking;
 - it cannot be emitted by current KIS/TRAKE public contracts;
 - task heads skip it and backfill with the next ranked alignable video.
@@ -2663,6 +2695,7 @@ Do not overwrite TRAKE path score with VLM score.
 ## 7. Exact duplicate frame is scored once
 
 If the same canonical frame is both global and temporal representative:
+
 - make one temporary `RetrievalCandidate`;
 - retain both source roles in metadata;
 - reuse its one score for both roles.
@@ -2676,6 +2709,7 @@ Candidate deletion based on a tuned threshold is P2b/research scope.
 ## 9. Keep R0-R4 inputs frozen per query
 
 For one query:
+
 - perform candidate collection once;
 - derive R0/R1/R2 source order from that collection;
 - rerank the same R2 candidates for R3/R4.

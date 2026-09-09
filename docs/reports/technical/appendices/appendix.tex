@@ -1,0 +1,393 @@
+\section{Architecture and Component Map}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[x=1mm,y=1mm]
+  % Operator and serving boundary.
+  \node[client,minimum width=40mm] (browser) at (24,58)
+    {React 19 browser UI\\search, inspection, workspace};
+  \node[service,minimum width=50mm] (api) at (104,58)
+    {FastAPI orchestration\\KIS / TRAKE / media / workspace};
+  \node[artifact,minimum width=39mm] (state) at (165,58)
+    {Canonical local state\\FrameStore / indexes / SQLite};
+
+  % Canonical online execution path.
+  \node[process,minimum width=31mm] (corpus) at (25,35)
+    {Corpus and identity\\assets + evidence};
+  \node[process,minimum width=33mm] (retrieval) at (65,35)
+    {Multimodal retrieval\\FAISS + BM25 + fusion};
+  \node[process,minimum width=35mm] (temporal) at (104,35)
+    {Temporal alignment\\planner + monotonic DP};
+  \node[process,minimum width=34mm] (materialize) at (144,35)
+    {Task materialization\\KIS frame / TRAKE path};
+
+  % Replaceable compute and artifact-publication boundary.
+  \node[service,minimum width=48mm] (gpu) at (30,7)
+    {Optional private inference\\SigLIP2 / BGE-M3 / Qwen / Florence-2};
+  \node[service,minimum width=50mm] (offline) at (105,7)
+    {Offline preparation worker\\FFmpeg + GPU enrichment / indexing};
+  \node[artifact,minimum width=34mm] (s3) at (165,7)
+    {S3 artifact transport\\versioned bundles};
+
+  \draw[flowarrow] (browser) -- (api);
+  \draw[flowarrow] (api) -- (state);
+  \draw[flowarrow] (api.south) -- (temporal.north);
+  \draw[flowarrow] (corpus) -- (retrieval);
+  \draw[flowarrow] (retrieval) -- (temporal);
+  \draw[flowarrow] (temporal) -- (materialize);
+
+  \draw[dataarrow] ([xshift=-15mm]api.south) -- ++(0,-6mm)
+    -| ([xshift=14mm]gpu.north);
+  \draw[dataarrow] (offline) -- (gpu);
+  \draw[dataarrow] (offline) -- (s3);
+  \draw[dataarrow] (s3.north) -- (state.south);
+
+  \begin{scope}[on background layer]
+    \node[layer,fit=(corpus)(retrieval)(temporal)(materialize),
+      label={[font=\footnotesize\bfseries,text=ReportSecondary]
+      below:Canonical retrieval and temporal path}] {};
+  \end{scope}
+\end{tikzpicture}%
+}
+\caption{System architecture and trust boundary. Solid arrows are online control/data flow; dashed arrows are optional inference or artifact transport. Retrieval state is local and canonical; the GPU service is replaceable. Every box has a distinct label and border in addition to color.}
+\label{fig:architecture}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Implemented model and algorithm inventory. ``Active'' means present in the documented preparation or online path; optional services are never implied to be mandatory at serving time.}
+\label{tab:models}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.15\textwidth}p{0.26\textwidth}Xp{0.12\textwidth}@{}}
+\toprule
+Capability & Model / algorithm & Produced evidence and downstream use & Status \\
+\midrule
+Caption & Qwen/Qwen3-VL-8B-Instruct & Frame caption; first \FrameContext{} section and inspectable specialist artifact & Offline active \\
+Visible text & Florence-2-base-ft & OCR regions, frame summary, quality; gated \FrameContext{} section and BM25 OCR field & Offline active \\
+Objects & YOLOE-26l-seg & Detections and normalized object summary; \FrameContext{} section and literal filter & Offline active \\
+Speech & Qwen3-ASR-1.7B-hf & Timestamped transcript segments; BGE-M3 segment index and BM25 ASR field & Offline active \\
+Speakers & pyannote community-1 & Diarization attached to transcript segments & Configurable \\
+Visual encoder & SigLIP2 base patch16-224 & 768-D image vectors and visual-language query vectors & Active \\
+Text encoder & BAAI/bge-m3 & 1024-D \FrameContext{} and ASR-segment vectors & Active \\
+Dense search & FAISS \code{IndexFlatIP} & Exact inner product over L2-normalized vectors; cosine-equivalent ranking & Active \\
+Lexical search & Fielded BM25 & Title/caption/OCR/ASR literal evidence & Active \\
+Query preparation & Qwen/Qwen3-4B & Five optional candidate rewrites selected explicitly by the client & Optional \\
+Temporal decoding & Prefix-max monotonic DP & Strict same-video event paths, alternatives, and canonical backpointers & KIS/TRAKE active \\
+VLM reranking & Qwen3-VL reranker adapter & Experimental package capability; absent from public request contract and UI & Not wired \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\clearpage
+\section{Offline Preparation and Index Construction}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[x=1mm,y=1mm]
+  % A compact tree uses vertical space so every stage remains readable and
+  % connectors never pass through another node.
+  \node[service,minimum width=28mm] (raw) at (15,55) {Raw videos};
+  \node[service,minimum width=28mm] (provided) at (15,38) {Organizer keyframes\\+ mapping};
+  \node[process,minimum width=30mm] (extract) at (55,55)
+    {C++/FFmpeg sampler\\nearest frame at $k\!\times\!1$ s};
+  \node[process,minimum width=30mm] (import) at (55,38)
+    {Order-preserving import\\mapped IDs and times};
+  \node[artifact,minimum width=30mm] (frame) at (95,46.5)
+    {Canonical FrameStore\\IDs, time, assets};
+
+  \node[process,minimum width=26mm] (siglip) at (130,57) {SigLIP2\\image encoding};
+  \node[artifact,minimum width=29mm] (vindex) at (165,57) {Visual FAISS\\768-D frames};
+  \node[process,minimum width=30mm,minimum height=13mm] (specialists) at (130,40)
+    {Qwen3-VL caption\\Florence-2 OCR\\YOLOE objects};
+  \node[artifact,minimum width=28mm] (context) at (165,40)
+    {FrameContext\\caption / text / objects};
+
+  \node[artifact,minimum width=32mm] (bm25) at (120,23)
+    {Fielded BM25\\title / caption / OCR / ASR};
+  \node[process,minimum width=25mm] (contextbge) at (165,23)
+    {BGE-M3\\text encoding};
+  \node[artifact,minimum width=29mm] (cindex) at (165,6)
+    {Context FAISS\\1024-D frames};
+
+  \node[process,minimum width=30mm] (asr) at (50,6)
+    {Qwen3-ASR + pyannote\\timestamped segments};
+  \node[process,minimum width=25mm] (asrbge) at (85,6)
+    {BGE-M3\\segment encoding};
+  \node[artifact,minimum width=29mm] (aindex) at (120,6)
+    {ASR FAISS\\1024-D segments};
+
+  \draw[flowarrow] (raw) -- (extract);
+  \draw[flowarrow] (extract) -- (frame);
+  \draw[flowarrow] (provided) -- (import);
+  \draw[flowarrow] (import) -- (frame);
+
+  \draw[flowarrow] (frame) -- (siglip);
+  \draw[flowarrow] (siglip) -- (vindex);
+  \draw[flowarrow] (frame) -- (specialists);
+  \draw[flowarrow] (specialists) -- (context);
+  \draw[flowarrow] (context) -- (contextbge);
+  \draw[flowarrow] (contextbge) -- (cindex);
+
+  \draw[flowarrow] (raw.west) -- ++(-4mm,0) |- (asr.west);
+  \draw[flowarrow] (asr) -- (asrbge);
+  \draw[flowarrow] (asrbge) -- (aindex);
+
+  \draw[dataarrow] (frame.south) -- ++(0,-12mm)
+    -| node[pos=0.70,above,font=\scriptsize]{title metadata}
+    ([xshift=-7mm]bm25.north);
+  \draw[dataarrow] (context.south) -- ++(0,-4mm)
+    -| ([xshift=7mm]bm25.north);
+  \draw[dataarrow] (asr.north) -- ++(0,5mm) -| (bm25.south);
+\end{tikzpicture}%
+}
+\caption{Two ingestion routes converge on one canonical frame identity. Solid arrows show model or encoding stages; dashed arrows feed the fielded lexical index. The frame-native visual/context indexes and segment-native ASR index preserve their native evidence geometry rather than forcing all sources into one lossy representation.}
+\label{fig:preparation}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Observed materialized artifact snapshot. Counts document system scale, not retrieval effectiveness. Missing provenance fields are reported rather than inferred.}
+\label{tab:artifacts}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.20\textwidth}p{0.15\textwidth}p{0.20\textwidth}X@{}}
+\toprule
+Artifact & Entities & Representation & Observed contract / caveat \\
+\midrule
+Canonical FrameStore & 873 videos; 470{,}804 frames & Parquet + manifest; 1-s targets & \code{custom-raw1fps-v1}; no duplicate submission-coordinate groups \\
+Caption / OCR / objects / context & 470{,}804 rows each & Specialist Parquet + deterministic \FrameContext{} & 2{,}689{,}621 OCR regions and 5{,}654{,}993 object detections \\
+Visual index & 470{,}804 frames & 768-D float32, L2, flat IP & Model name recorded; serialized model revision/source/config fingerprints absent \\
+Vietnamese context index & 470{,}804 frames & 1024-D float32, L2, flat IP & Dataset label differs from FrameStore; revision/retrieval-source/fingerprints absent \\
+ASR segment index & 40{,}156 intervals & 1024-D float32, L2, flat IP & BGE-M3 revision recorded; half-open temporal geometry retained \\
+BM25 index & 470{,}804 documents & Four sparse field matrices & $k_1=1.5$, $b=0.75$; current caption vocabulary size is zero \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Key deterministic policies and defaults used in this report.}
+\label{tab:parameters}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.18\textwidth}p{0.26\textwidth}X@{}}
+\toprule
+Stage & Parameter & Policy \\
+\midrule
+Sampling & $\Delta=1000$ ms & Select nearest decoded timestamp; ties choose preceding frame; targets lie in $[0,D)$ \\
+FrameContext & budgets $80/80/40$; OCR $\geq0.5$ & Ordered caption, visible-text, object sections; preserve lineage and availability \\
+Dense bundles & float32, L2, flat IP & Exact cosine-equivalent search; vectors, mappings, postings, and timestamps stored together \\
+ASR projection & maximum gap 5000 ms & Prefer frames inside $[a,b)$; otherwise nearest midpoint within bound for detached search \\
+Detached fusion & RRF constant 60 & Weighted union of modality top-$K$ lists; visual source required \\
+Temporal fusion & adaptive, coverage-aware & Quantile calibration, reliability gating, cue routing, per-frame renormalization \\
+Alignment & $\lambda=10^{-5}$; power 1 & Strict monotonic path; prefix-max recurrence; latest predecessor on ties \\
+Alternatives & 5 paths/video; 30 s separation & Suppress near-duplicate final-event moments before global ranking \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\clearpage
+\section{Online Fusion and Temporal Task Orchestration}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[node distance=6mm and 7mm,scale=0.95,transform shape]
+  \node[client,minimum width=29mm] (query) {Query input\\plain KIS or E1..En};
+  \node[process,minimum width=31mm,right=8mm of query] (plan) {Planner / optional\\selected rewrite};
+
+  \node[process,minimum width=27mm,right=9mm of plan,yshift=19mm] (visual) {SigLIP2\\visual scores};
+  \node[process,minimum width=27mm,right=9mm of plan,yshift=6mm] (context) {BGE-M3\\context scores};
+  \node[process,minimum width=27mm,right=9mm of plan,yshift=-7mm] (asr) {BGE-M3\\ASR interval scores};
+  \node[process,minimum width=27mm,right=9mm of plan,yshift=-20mm] (lexical) {BM25\\field scores};
+
+  \node[service,minimum width=36mm,right=11mm of context,yshift=-6mm] (fusion) {Calibration + routing\\reliability $\times$ coverage};
+  \node[artifact,minimum width=31mm,right=10mm of fusion] (matrix) {Per-video matrix\\$F_{e,t}$};
+  \node[service,minimum width=35mm,right=10mm of matrix] (dp) {Prefix-max DP\\strict chronological paths};
+
+  \node[client,minimum width=30mm,below=13mm of dp,xshift=-19mm] (kis) {KIS output\\representative frame + path};
+  \node[client,minimum width=30mm,right=8mm of kis] (trake) {TRAKE output\\complete ordered path};
+
+  \draw[flowarrow] (query) -- (plan);
+  \draw[flowarrow] (plan) -- (visual);
+  \draw[flowarrow] (plan) -- (context);
+  \draw[flowarrow] (plan) -- (asr);
+  \draw[flowarrow] (plan) -- (lexical);
+  \draw[flowarrow] (visual) -- (fusion);
+  \draw[flowarrow] (context) -- (fusion);
+  \draw[flowarrow] (asr) -- (fusion);
+  \draw[flowarrow] (lexical) -- (fusion);
+  \draw[flowarrow] (fusion) -- (matrix);
+  \draw[flowarrow] (matrix) -- (dp);
+  \draw[flowarrow] (dp) -- (kis);
+  \draw[flowarrow] (dp) -- (trake);
+
+  \node[note,below=5mm of fusion,align=center] {Full-corpus score fusion (not top-$K$ RRF)};
+\end{tikzpicture}%
+}
+\caption{Shared KIS/TRAKE online path. Original event text remains available to lexical scoring; any rewrite is explicit. Component support and confidence are applied before the same monotonic decoder produces task-specific materializations.}
+\label{fig:temporal}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=12mm,y=9mm]
+  \foreach \x/\lab in {0/$t_0$,1/$t_1$,2/$t_2$,3/$t_3$,4/$t_4$,5/$t_5$,6/$t_6$,7/$t_7$}
+    \node[font=\scriptsize,text=ReportSecondary] at (\x,-0.55) {\lab};
+  \foreach \y/\event in {0/$E_1$,1/$E_2$,2/$E_3$}
+    \node[font=\small\bfseries,anchor=east] at (-0.45,\y) {\event};
+  \foreach \x in {0,...,7}
+    \foreach \y in {0,...,2}
+      \node[draw=ReportGrid,circle,minimum size=4.5mm,inner sep=0pt,fill=white] (n\y\x) at (\x,\y) {};
+  \node[draw=ReportBlue,fill=ReportBlueTint,circle,minimum size=5.4mm,inner sep=0pt] (p00) at (1,0) {};
+  \node[draw=ReportBlue,fill=ReportBlueTint,circle,minimum size=5.4mm,inner sep=0pt] (p11) at (4,1) {};
+  \node[draw=ReportBlue,fill=ReportBlueTint,circle,minimum size=5.4mm,inner sep=0pt] (p22) at (6,2) {};
+  \draw[flowarrow,draw=ReportBlue,line width=1.2pt] (p00) -- node[above,sloped,font=\scriptsize]{$u<t$} (p11);
+  \draw[flowarrow,draw=ReportBlue,line width=1.2pt] (p11) -- node[above,sloped,font=\scriptsize]{$u<t$} (p22);
+  \draw[decorate,decoration={brace,amplitude=3pt,mirror},draw=ReportOrange]
+    (1,-0.92) -- node[below=3pt,font=\scriptsize,text=ReportSecondary]{gap penalty $\lambda(\tau_t-\tau_u)$} (4,-0.92);
+  \node[note,anchor=west] at (8.0,1.55) {Selected nodes maximize\\event evidence plus the best\\valid prefix predecessor.};
+  \node[note,anchor=west] at (8.0,0.25) {Backpointers recover one\\strict same-video path.};
+\end{tikzpicture}
+\caption{Dynamic-programming interpretation. Each event selects a strictly later canonical frame. Prefix maxima replace an all-pairs predecessor search, while backpointers preserve exact frame identity.}
+\label{fig:dp-explainer}
+\end{figure}
+
+\clearpage
+\section{Live Operator Interface}
+
+The screenshots below were captured from the running React/FastAPI application at
+1440$\times$900. To keep this capture isolated and reproducible on the report host,
+the runtime used an identity-preserving subset of 21 videos and 3{,}807 frames from
+the documented corpus, together with their original visual vectors and specialist
+evidence; only visual dense retrieval was enabled in this capture profile. Because
+the original source video was unavailable locally, inspector playback uses a
+clearly scoped proxy assembled from the canonical 1-FPS frames of
+\code{L30\_V060}; it exercises the real range-streaming and timeline code but is not
+presented as the source video. Corpus totals and algorithms elsewhere in this report
+come from the full artifact manifests, not from this UI fixture. Numbered markers,
+component borders, and captions make the evidence readable without relying on color
+alone.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+  \node[anchor=south west,inner sep=0] (image) at (0,0)
+    {\screenshotplaceholder{figures/screenshots/kis-results.png}{0.96\textwidth}};
+  \begin{scope}[x={(image.south east)},y={(image.north west)}]
+    \node[callout] at (0.18,0.88) {1};
+    \node[callout] at (0.09,0.67) {2};
+    \node[callout] at (0.61,0.80) {3};
+    \node[callout] at (0.31,0.38) {4};
+  \end{scope}
+\end{tikzpicture}
+\caption{KIS retrieval workspace. \calloutlabel{1} Natural-language query and mode-sensitive input; \calloutlabel{2} Top-$K$, dense/BM25 controls, and shared answer files; \calloutlabel{3} latency and result summary; \calloutlabel{4} canonical result cards with an expanded event alignment and submission action.}
+\label{fig:ui-kis}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+  \node[anchor=south west,inner sep=0] (image) at (0,0)
+    {\screenshotplaceholder{figures/screenshots/trake-results.png}{0.96\textwidth}};
+  \begin{scope}[x={(image.south east)},y={(image.north west)}]
+    \node[callout] at (0.24,0.87) {1};
+    \node[callout] at (0.48,0.58) {2};
+    \node[callout] at (0.28,0.77) {3};
+  \end{scope}
+\end{tikzpicture}
+\caption{TRAKE ordered-event retrieval. \calloutlabel{1} Sequential \code{E1..En} specification; \calloutlabel{2} one same-video path displayed in event order; \calloutlabel{3} path-level submission action, which emits one ordered multi-frame CSV row rather than independent frame submissions.}
+\label{fig:ui-trake}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+  \node[anchor=south west,inner sep=0] (image) at (0,0)
+    {\screenshotplaceholder{figures/screenshots/video-inspector.png}{0.96\textwidth}};
+  \begin{scope}[x={(image.south east)},y={(image.north west)}]
+    \node[callout] at (0.34,0.56) {1};
+    \node[callout] at (0.30,0.10) {2};
+    \node[callout] at (0.80,0.70) {3};
+    \node[callout] at (0.82,0.40) {4};
+  \end{scope}
+\end{tikzpicture}
+\caption{Video evidence inspector. \calloutlabel{1} media preview positioned at the retrieved moment; \calloutlabel{2} custom timeline and precise seek controls; \calloutlabel{3} live canonical/submission coordinates; \calloutlabel{4} available caption, OCR, object, and other inspectable evidence used for human verification.}
+\label{fig:ui-player}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+  \node[anchor=south west,inner sep=0] (image) at (0,0)
+    {\screenshotplaceholder{figures/screenshots/collaborative-workspace.png}{0.96\textwidth}};
+  \begin{scope}[x={(image.south east)},y={(image.north west)}]
+    \node[callout] at (0.30,0.72) {1};
+    \node[callout] at (0.82,0.78) {2};
+    \node[callout] at (0.82,0.59) {3};
+    \node[callout] at (0.82,0.48) {4};
+  \end{scope}
+\end{tikzpicture}
+\caption{Collaborative Workspace. \calloutlabel{1} user-scoped query history and replay; \calloutlabel{2} manual video/timestamp opening; \calloutlabel{3} shared SQLite-backed submission files with distinct validated and filled states; \calloutlabel{4} multi-file CSV ZIP export.}
+\label{fig:ui-workspace}
+\end{figure}
+
+\clearpage
+\section{Traceability and Deployment Evidence}
+
+\begin{table}[htbp]
+\centering
+\caption{Coverage matrix for every subsystem presented in the four-page body. UI behavior is evidenced by a live capture; nonvisual computation is evidenced by a diagram and/or manifest table.}
+\label{tab:coverage}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.22\textwidth}Xp{0.30\textwidth}@{}}
+\toprule
+Presented subsystem & Appendix evidence & Primary implementation boundary \\
+\midrule
+End-to-end architecture / services & Fig.~\ref{fig:architecture}; Table~\ref{tab:models} & \pathcode{src/hcmai/orchestration}, \pathcode{src/hcmai/app.py}, \pathcode{llm/} \\
+Keyframe ingestion / identity & Fig.~\ref{fig:preparation}; Table~\ref{tab:parameters} & \pathcode{offline/keyframes}, \pathcode{offline/ingestion} \\
+Caption, OCR, objects, ASR, FrameContext & Fig.~\ref{fig:preparation}; Tables~\ref{tab:models}--\ref{tab:artifacts} & \pathcode{offline/enrichment/context} \\
+FAISS / BM25 / fusion & Figs.~\ref{fig:preparation} and~\ref{fig:temporal}; Tables~\ref{tab:artifacts}--\ref{tab:parameters} & \pathcode{src/hcmai/retrieval} \\
+Temporal DP / KIS / TRAKE & Figs.~\ref{fig:temporal} and~\ref{fig:dp-explainer} & \pathcode{src/hcmai/temporal}, \pathcode{orchestration/workflows} \\
+KIS operator flow & Fig.~\ref{fig:ui-kis} & \pathcode{frontend/src/features/search} \\
+TRAKE operator flow & Fig.~\ref{fig:ui-trake} & \pathcode{frontend/src/features/search/Trake*} \\
+Video preview / evidence inspection & Fig.~\ref{fig:ui-player} & \pathcode{frontend/src/features/frames} \\
+Collaborative workspace / submissions & Fig.~\ref{fig:ui-workspace} & \pathcode{frontend/src/features/workspace}, \pathcode{features/submission} \\
+Thunder Compute / S3 execution & Fig.~\ref{fig:architecture}; text below & \pathcode{scripts/build_retrieval_indexes.py}, \pathcode{llm/server} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[node distance=8mm and 10mm]
+  \node[artifact,minimum width=35mm] (s3in) {S3 inputs\\frames, context, transcripts};
+  \node[service,minimum width=41mm,right=12mm of s3in] (a6000) {Ephemeral Thunder worker\\one RTX A6000 build profile};
+  \node[process,minimum width=34mm,right=12mm of a6000] (validate) {Identity, coverage,\\bundle validation};
+  \node[artifact,minimum width=40mm,right=12mm of validate] (s3out) {Versioned S3 publication\\indexes + passed report};
+  \draw[flowarrow] (s3in) -- node[above,font=\scriptsize]{selective download} (a6000);
+  \draw[flowarrow] (a6000) -- (validate);
+  \draw[flowarrow] (validate) -- node[above,font=\scriptsize]{publish only on pass} (s3out);
+
+  \node[service,minimum width=41mm,below=14mm of a6000] (vm) {Optional disposable GPU VM\\Uvicorn inference API :8100};
+  \node[process,minimum width=34mm,right=12mm of vm] (edge) {Private Cloudflare\\operator endpoint};
+  \node[client,minimum width=40mm,right=12mm of edge] (local) {Local FastAPI + React\\canonical indexes retained};
+  \draw[dataarrow] (vm) -- (edge);
+  \draw[dataarrow] (edge) -- node[above,font=\scriptsize]{model requests} (local);
+  \draw[dataarrow] (s3out.south) |- (local.north);
+  \node[note,below=5mm of vm,anchor=north] {Manual lifecycle: create $\rightarrow$ upload $\rightarrow$ health check $\rightarrow$ delete.};
+\end{tikzpicture}%
+}
+\caption{Thunder Compute execution modes. Index construction and optional online inference are separate lifecycles. Canonical serving artifacts are versioned outside the VM, so deleting a GPU instance does not delete retrieval state.}
+\label{fig:thunder}
+\end{figure}
+
+\paragraph{Release note.}
+The runbook's pass-gated publication contract is the intended deployment policy.
+The local snapshot documented in Table~\ref{tab:artifacts} does not contain the
+promoted build report and has incomplete visual/context provenance fields; those
+must be reconciled before an official immutable-bundle claim. The inference
+example also demonstrates an L40 while the index-build profile specifies an
+A6000. Figure~\ref{fig:thunder} therefore labels GPU choice by workflow rather
+than conflating the examples.
