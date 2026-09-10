@@ -4,10 +4,16 @@ PYTHON ?= python3
 BUILD_DIR := build
 MAIN := main.tex
 PDF := $(BUILD_DIR)/main.pdf
+ARTIFACTS_ROOT ?= ../../../artifacts
+STATISTICS_DIR := generated
 
-.PHONY: all pdf check clean distclean
+.PHONY: all statistics pdf check clean distclean
 
 all: check
+
+statistics:
+	$(PYTHON) tools/summarize_artifacts.py --artifacts-root $(ARTIFACTS_ROOT) \
+		--output-dir $(STATISTICS_DIR) --batch-size 8192
 
 pdf:
 	mkdir -p $(BUILD_DIR)

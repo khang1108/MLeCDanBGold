@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import re
 import struct
@@ -17,6 +18,11 @@ REQUIRED_SCREENSHOTS = (
     "figures/screenshots/video-inspector.png",
     "figures/screenshots/collaborative-workspace.png",
 )
+REQUIRED_GENERATED_INPUTS = (
+    "generated/artifact-statistics.json",
+    "generated/artifact-statistics.tex",
+)
+ARTIFACT_STATISTICS_LABEL = "fig:artifact-statistics"
 
 
 def arguments() -> argparse.Namespace:
@@ -67,6 +73,42 @@ def main() -> int:
     body_source = (root / "sections/main-body.tex").read_text(encoding="utf-8")
     if re.search(r"\\begin\{(?:figure|table)\*?\}", body_source):
         failures.append("a figure/table float appears in sections/main-body.tex")
+
+    generated_paths = [root / relative for relative in REQUIRED_GENERATED_INPUTS]
+    for relative, path in zip(REQUIRED_GENERATED_INPUTS, generated_paths, strict=True):
+        if not path.is_file() or path.stat().st_size == 0:
+            failures.append(f"missing generated report input: {relative}")
+
+    statistics_path = generated_paths[0]
+    if statistics_path.is_file():
+        try:
+            statistics = json.loads(statistics_path.read_text(encoding="utf-8"))
+            method = statistics["method"]
+            if method.get("reader") != "pyarrow.parquet.ParquetFile.iter_batches":
+                failures.append("artifact statistics do not record the bounded-batch reader")
+            batch_size = method.get("batch_size")
+            if not isinstance(batch_size, int) or not 1 <= batch_size <= 8_192:
+                failures.append("artifact-statistics batch size is absent or exceeds 8,192")
+            if method.get("use_threads") is not False:
+                failures.append("artifact statistics must record use_threads=false")
+        except (AttributeError, KeyError, TypeError, json.JSONDecodeError, OSError) as error:
+            failures.append(f"invalid generated artifact statistics JSON: {error}")
+
+    appendix_path = root / "appendices/appendix.tex"
+    if not appendix_path.is_file():
+        failures.append("missing appendix source: appendices/appendix.tex")
+    else:
+        appendix_source = appendix_path.read_text(encoding="utf-8")
+        required_fragments = (
+            r"\input{generated/artifact-statistics}",
+            rf"\label{{{ARTIFACT_STATISTICS_LABEL}}}",
+            rf"\ref{{{ARTIFACT_STATISTICS_LABEL}}}",
+        )
+        for fragment in required_fragments:
+            if fragment not in appendix_source:
+                failures.append(f"appendix is missing artifact-chart fragment: {fragment}")
+    if rf"\newlabel{{{ARTIFACT_STATISTICS_LABEL}}}" not in aux_text:
+        failures.append("compiled auxiliary file is missing the artifact-statistics chart label")
 
     log_text = args.log.read_text(encoding="utf-8", errors="replace")
     warning_patterns = (

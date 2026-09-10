@@ -1,3 +1,5 @@
+\input{generated/artifact-statistics}
+
 \section{Architecture and Component Map}
 
 \begin{figure}[htbp]
@@ -50,13 +52,17 @@
   \end{scope}
 \end{tikzpicture}%
 }
-\caption{System architecture and trust boundary. Solid arrows are online control/data flow; dashed arrows are optional inference or artifact transport. Retrieval state is local and canonical; the GPU service is replaceable. Every box has a distinct label and border in addition to color.}
+\caption{System architecture and execution boundaries. Solid arrows show online
+control and data flow; dashed arrows show optional inference or artifact transport.
+Canonical retrieval state stays local, and the GPU service is replaceable. Labels
+and borders duplicate every color cue.}
 \label{fig:architecture}
 \end{figure}
 
 \begin{table}[htbp]
 \centering
-\caption{Implemented model and algorithm inventory. ``Active'' means present in the documented preparation or online path; optional services are never implied to be mandatory at serving time.}
+\caption{Model and algorithm inventory. Status marks each component as active in
+the offline or online path, configurable, optional, or not wired.}
 \label{tab:models}
 \small
 \begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.15\textwidth}p{0.26\textwidth}Xp{0.12\textwidth}@{}}
@@ -86,42 +92,39 @@ VLM reranking & Qwen3-VL reranker adapter & Experimental package capability; abs
 \centering
 \resizebox{0.98\textwidth}{!}{%
 \begin{tikzpicture}[x=1mm,y=1mm]
-  % A compact tree uses vertical space so every stage remains readable and
-  % connectors never pass through another node.
-  \node[service,minimum width=28mm] (raw) at (15,55) {Raw videos};
-  \node[service,minimum width=28mm] (provided) at (15,38) {Organizer keyframes\\+ mapping};
-  \node[process,minimum width=30mm] (extract) at (55,55)
-    {C++/FFmpeg sampler\\nearest frame at $k\!\times\!1$ s};
-  \node[process,minimum width=30mm] (import) at (55,38)
-    {Order-preserving import\\mapped IDs and times};
-  \node[artifact,minimum width=30mm] (frame) at (95,46.5)
-    {Canonical FrameStore\\IDs, time, assets};
+  % Active self-extraction path: sample competition videos before enrichment
+  % and index construction.
+  \node[service,minimum width=28mm] (raw) at (14,61) {Raw videos};
+  \node[process,minimum width=34mm] (extract) at (50,61)
+    {C++/FFmpeg extraction\\nearest frame at $k\!\times\!1$ s};
+  \node[artifact,minimum width=32mm] (frame) at (90,61)
+    {Canonical FrameStore\\IDs / time / assets};
 
-  \node[process,minimum width=26mm] (siglip) at (130,57) {SigLIP2\\image encoding};
-  \node[artifact,minimum width=29mm] (vindex) at (165,57) {Visual FAISS\\768-D frames};
-  \node[process,minimum width=30mm,minimum height=13mm] (specialists) at (130,40)
-    {Qwen3-VL caption\\Florence-2 OCR\\YOLOE objects};
-  \node[artifact,minimum width=28mm] (context) at (165,40)
-    {FrameContext\\caption / text / objects};
+  \node[process,minimum width=28mm] (siglip) at (130,74)
+    {SigLIP2\\image encoding};
+  \node[artifact,minimum width=30mm] (vindex) at (174,74)
+    {Visual FAISS\\768-D frames};
+  \node[process,minimum width=32mm,minimum height=14mm] (specialists) at (130,52)
+    {Specialist enrichment\\Qwen3-VL / Florence-2\\YOLOE};
+  \node[artifact,minimum width=36mm,minimum height=15mm] (context) at (174,52)
+    {FrameContext\\caption / visible text\\objects};
 
-  \node[artifact,minimum width=32mm] (bm25) at (120,23)
+  \node[artifact,minimum width=42mm] (bm25) at (121,29)
     {Fielded BM25\\title / caption / OCR / ASR};
-  \node[process,minimum width=25mm] (contextbge) at (165,23)
+  \node[process,minimum width=27mm] (contextbge) at (174,29)
     {BGE-M3\\text encoding};
-  \node[artifact,minimum width=29mm] (cindex) at (165,6)
+  \node[artifact,minimum width=31mm] (cindex) at (174,8)
     {Context FAISS\\1024-D frames};
 
-  \node[process,minimum width=30mm] (asr) at (50,6)
+  \node[process,minimum width=33mm] (asr) at (45,8)
     {Qwen3-ASR + pyannote\\timestamped segments};
-  \node[process,minimum width=25mm] (asrbge) at (85,6)
+  \node[process,minimum width=27mm] (asrbge) at (84,8)
     {BGE-M3\\segment encoding};
-  \node[artifact,minimum width=29mm] (aindex) at (120,6)
+  \node[artifact,minimum width=31mm] (aindex) at (121,8)
     {ASR FAISS\\1024-D segments};
 
   \draw[flowarrow] (raw) -- (extract);
   \draw[flowarrow] (extract) -- (frame);
-  \draw[flowarrow] (provided) -- (import);
-  \draw[flowarrow] (import) -- (frame);
 
   \draw[flowarrow] (frame) -- (siglip);
   \draw[flowarrow] (siglip) -- (vindex);
@@ -134,40 +137,106 @@ VLM reranking & Qwen3-VL reranker adapter & Experimental package capability; abs
   \draw[flowarrow] (asr) -- (asrbge);
   \draw[flowarrow] (asrbge) -- (aindex);
 
-  \draw[dataarrow] (frame.south) -- ++(0,-12mm)
-    -| node[pos=0.70,above,font=\scriptsize]{title metadata}
-    ([xshift=-7mm]bm25.north);
-  \draw[dataarrow] (context.south) -- ++(0,-4mm)
-    -| ([xshift=7mm]bm25.north);
-  \draw[dataarrow] (asr.north) -- ++(0,5mm) -| (bm25.south);
+  \draw[dataarrow] (frame.south) -- ++(0,-18mm)
+    -| ([xshift=-11mm]bm25.north);
+  \draw[dataarrow] ([xshift=-10mm]context.south) -- ++(0,-7mm)
+    -| ([xshift=12mm]bm25.north);
+  \draw[dataarrow] (asr.north) -- ++(0,7mm) -| (bm25.south);
 \end{tikzpicture}%
 }
-\caption{Two ingestion routes converge on one canonical frame identity. Solid arrows show model or encoding stages; dashed arrows feed the fielded lexical index. The frame-native visual/context indexes and segment-native ASR index preserve their native evidence geometry rather than forcing all sources into one lossy representation.}
+\caption{Offline preparation from C++/FFmpeg self-extracted 1-FPS frames. Solid
+arrows show model and encoding stages; dashed arrows feed the lexical index.
+Visual and context indexes remain frame-native, while the ASR index remains
+segment-native.}
 \label{fig:preparation}
+\end{figure}
+
+\subsection{Corpus Statistics}
+
+The reporting tool behind Fig.~\ref{fig:artifact-statistics} scans one lightweight
+identity column at a time in batches of at most 8{,}192 rows. It excludes
+intermediate batch shards and never loads a complete Parquet table. Before
+rendering the chart, it checks streamed totals against Parquet footers and the
+frame-preparation manifest.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[x=1mm,y=1mm]
+  % Headline corpus counts.
+  \foreach \x/\value/\label in {
+    17/{\ArtifactVideoCount}/{videos},
+    55/{\ArtifactFrameCount}/{frames, 1 FPS $\cdot$ \ArtifactSampledHours{} h},
+    93/{\ArtifactOCRRegionCount}/{OCR regions},
+    131/{\ArtifactObjectDetectionCount}/{object detections},
+    169/{\ArtifactASRSegmentCount}/{ASR segments}}
+  {
+    \node[
+      draw=ReportBlue,
+      fill=ReportBlueTint,
+      line width=0.75pt,
+      rounded corners=1.5pt,
+      minimum width=34mm,
+      minimum height=16mm,
+      align=center
+    ] at (\x,65) {\large\bfseries \value\\[-1pt]
+      \scriptsize\normalfont\color{ReportSecondary}\label};
+  }
+  \node[anchor=west,font=\small\bfseries,text=ReportInk] at (0,52)
+    {Extracted frames by collection};
+
+  % Shared zero-based frame-count axis.
+  \foreach \x/\tick in {20/0,43.75/50k,67.5/100k,91.25/150k}
+  {
+    \draw[draw=ReportGrid,line width=0.35pt] (\x,-2) -- (\x,47);
+    \node[anchor=north,font=\scriptsize,text=ReportSecondary] at (\x,-3) {\tick};
+  }
+  \draw[draw=ReportSecondary,line width=0.55pt] (20,-2) -- (95,-2);
+
+  \newcommand{\ArtifactCollectionBar}[5]{%
+    \node[anchor=e,font=\small\bfseries,text=ReportInk] at (17,#1) {#2};%
+    \draw[
+      draw=ReportBlue,
+      fill=ReportBlueTint,
+      line width=0.75pt,
+      rounded corners=1pt
+    ] (20,{#1-1.55}) rectangle ++(#4,3.1);%
+    \node[anchor=west,font=\scriptsize,text=ReportSecondary] at (100,#1)
+      {#5 frames \textbullet\ #3 videos};%
+  }
+  \ArtifactCollectionBars
+\end{tikzpicture}%
+}
+\caption{Corpus summary streamed in bounded batches from finalized artifacts.
+All bars share a zero-based frame-count axis and include exact frame and video
+labels. At one frame per second, \ArtifactFrameCount{} frames span approximately
+\ArtifactSampledHours{} sampled timeline hours.}
+\label{fig:artifact-statistics}
 \end{figure}
 
 \begin{table}[htbp]
 \centering
-\caption{Observed materialized artifact snapshot. Counts document system scale, not retrieval effectiveness. Missing provenance fields are reported rather than inferred.}
+\caption{Generated corpus and index counts. They document system scale, not
+retrieval effectiveness.}
 \label{tab:artifacts}
 \small
 \begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.20\textwidth}p{0.15\textwidth}p{0.20\textwidth}X@{}}
 \toprule
 Artifact & Entities & Representation & Observed contract / caveat \\
 \midrule
-Canonical FrameStore & 873 videos; 470{,}804 frames & Parquet + manifest; 1-s targets & \code{custom-raw1fps-v1}; no duplicate submission-coordinate groups \\
-Caption / OCR / objects / context & 470{,}804 rows each & Specialist Parquet + deterministic \FrameContext{} & 2{,}689{,}621 OCR regions and 5{,}654{,}993 object detections \\
-Visual index & 470{,}804 frames & 768-D float32, L2, flat IP & Model name recorded; serialized model revision/source/config fingerprints absent \\
-Vietnamese context index & 470{,}804 frames & 1024-D float32, L2, flat IP & Dataset label differs from FrameStore; revision/retrieval-source/fingerprints absent \\
-ASR segment index & 40{,}156 intervals & 1024-D float32, L2, flat IP & BGE-M3 revision recorded; half-open temporal geometry retained \\
-BM25 index & 470{,}804 documents & Four sparse field matrices & $k_1=1.5$, $b=0.75$; current caption vocabulary size is zero \\
+Extracted frame corpus & \ArtifactVideoCount{} videos; \ArtifactFrameCount{} frames & C++/FFmpeg sampling at 1 FPS & Per-video and aggregate frame counts validated before indexing \\
+Caption / OCR / objects / context & \ArtifactCaptionCount{} frame-aligned rows per artifact & Specialist Parquet + deterministic \FrameContext{} & \ArtifactOCRRegionCount{} OCR regions and \ArtifactObjectDetectionCount{} object detections \\
+Visual index & \ArtifactFrameCount{} frames & 768-D float32, L2, flat IP & Model name recorded; serialized model revision/source/config fingerprints absent \\
+Vietnamese context index & \ArtifactContextCount{} frames & 1024-D float32, L2, flat IP & Frame-aligned context vectors; revision/retrieval-source fingerprints remain to be finalized \\
+ASR segment index & \ArtifactASRSegmentCount{} intervals & 1024-D float32, L2, flat IP & BGE-M3 revision recorded; half-open temporal geometry retained \\
+BM25 index & \ArtifactFrameCount{} documents & Four sparse field matrices & $k_1=1.5$, $b=0.75$; current caption vocabulary size is zero \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \begin{table}[H]
 \centering
-\caption{Key deterministic policies and defaults used in this report.}
+\caption{Deterministic retrieval policies and defaults.}
 \label{tab:parameters}
 \small
 \begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.18\textwidth}p{0.26\textwidth}X@{}}
@@ -225,7 +294,9 @@ Alternatives & 5 paths/video; 30 s separation & Suppress near-duplicate final-ev
   \node[note,below=5mm of fusion,align=center] {Full-corpus score fusion (not top-$K$ RRF)};
 \end{tikzpicture}%
 }
-\caption{Shared KIS/TRAKE online path. Original event text remains available to lexical scoring; any rewrite is explicit. Component support and confidence are applied before the same monotonic decoder produces task-specific materializations.}
+\caption{Shared \KIS/\TRAKE{} temporal path. Explicit rewrites leave original
+text available to lexical scoring. Reliability and coverage modify component
+scores before monotonic decoding and task-specific materialization.}
 \label{fig:temporal}
 \end{figure}
 
@@ -249,25 +320,24 @@ Alternatives & 5 paths/video; 30 s separation & Suppress near-duplicate final-ev
   \node[note,anchor=west] at (8.0,1.55) {Selected nodes maximize\\event evidence plus the best\\valid prefix predecessor.};
   \node[note,anchor=west] at (8.0,0.25) {Backpointers recover one\\strict same-video path.};
 \end{tikzpicture}
-\caption{Dynamic-programming interpretation. Each event selects a strictly later canonical frame. Prefix maxima replace an all-pairs predecessor search, while backpointers preserve exact frame identity.}
+\caption{Monotonic dynamic programming. Each event selects a strictly later
+canonical frame. Prefix maxima replace all-pairs predecessor search, and
+backpointers retain exact frame identities.}
 \label{fig:dp-explainer}
 \end{figure}
 
 \clearpage
 \section{Live Operator Interface}
 
-The screenshots below were captured from the running React/FastAPI application at
-1440$\times$900. To keep this capture isolated and reproducible on the report host,
-the runtime used an identity-preserving subset of 21 videos and 3{,}807 frames from
-the documented corpus, together with their original visual vectors and specialist
-evidence; only visual dense retrieval was enabled in this capture profile. Because
-the original source video was unavailable locally, inspector playback uses a
-clearly scoped proxy assembled from the canonical 1-FPS frames of
-\code{L30\_V060}; it exercises the real range-streaming and timeline code but is not
-presented as the source video. Corpus totals and algorithms elsewhere in this report
-come from the full artifact manifests, not from this UI fixture. Numbered markers,
-component borders, and captions make the evidence readable without relying on color
-alone.
+These 1440$\times$900 screenshots come from the running React/FastAPI
+application. An isolated, identity-preserving capture profile loaded 21 videos
+and 3{,}807 frames from the documented corpus, together with their original visual
+vectors and specialist evidence; only visual dense retrieval was enabled. Because
+the original \code{L30\_V060} video was unavailable locally, the inspector uses a
+playback proxy assembled from its canonical 1-FPS frames. The proxy exercises the
+real range-streaming and timeline code but is not the source video. Corpus counts and
+algorithm descriptions elsewhere refer to the full artifact manifests, not this
+fixture. Numbered callouts and component borders duplicate color cues.
 
 \begin{figure}[htbp]
 \centering
@@ -281,7 +351,10 @@ alone.
     \node[callout] at (0.31,0.38) {4};
   \end{scope}
 \end{tikzpicture}
-\caption{KIS retrieval workspace. \calloutlabel{1} Natural-language query and mode-sensitive input; \calloutlabel{2} Top-$K$, dense/BM25 controls, and shared answer files; \calloutlabel{3} latency and result summary; \calloutlabel{4} canonical result cards with an expanded event alignment and submission action.}
+\caption{\KIS{} retrieval workspace: \calloutlabel{1} natural-language query;
+\calloutlabel{2} Top-$K$ and dense/BM25 controls beside shared answer files;
+\calloutlabel{3} latency and result summary; \calloutlabel{4} canonical result
+cards with an expanded event alignment and submission action.}
 \label{fig:ui-kis}
 \end{figure}
 
@@ -296,7 +369,9 @@ alone.
     \node[callout] at (0.28,0.77) {3};
   \end{scope}
 \end{tikzpicture}
-\caption{TRAKE ordered-event retrieval. \calloutlabel{1} Sequential \code{E1..En} specification; \calloutlabel{2} one same-video path displayed in event order; \calloutlabel{3} path-level submission action, which emits one ordered multi-frame CSV row rather than independent frame submissions.}
+\caption{\TRAKE{} ordered-event retrieval: \calloutlabel{1} sequential
+\code{E1..En} input; \calloutlabel{2} same-video path in event order;
+\calloutlabel{3} path-level action that writes one ordered multi-frame CSV row.}
 \label{fig:ui-trake}
 \end{figure}
 
@@ -312,7 +387,10 @@ alone.
     \node[callout] at (0.82,0.40) {4};
   \end{scope}
 \end{tikzpicture}
-\caption{Video evidence inspector. \calloutlabel{1} media preview positioned at the retrieved moment; \calloutlabel{2} custom timeline and precise seek controls; \calloutlabel{3} live canonical/submission coordinates; \calloutlabel{4} available caption, OCR, object, and other inspectable evidence used for human verification.}
+\caption{Video evidence inspector: \calloutlabel{1} preview at the retrieved
+moment; \calloutlabel{2} custom timeline and precise seek controls;
+\calloutlabel{3} live canonical and submission coordinates; \calloutlabel{4}
+available caption, OCR, object, and other evidence for human verification.}
 \label{fig:ui-player}
 \end{figure}
 
@@ -328,7 +406,10 @@ alone.
     \node[callout] at (0.82,0.48) {4};
   \end{scope}
 \end{tikzpicture}
-\caption{Collaborative Workspace. \calloutlabel{1} user-scoped query history and replay; \calloutlabel{2} manual video/timestamp opening; \calloutlabel{3} shared SQLite-backed submission files with distinct validated and filled states; \calloutlabel{4} multi-file CSV ZIP export.}
+\caption{Collaborative workspace: \calloutlabel{1} user-scoped query history and
+replay; \calloutlabel{2} manual video/timestamp opening; \calloutlabel{3} shared
+SQLite-backed submission files with distinct validated and filled states;
+\calloutlabel{4} multi-file CSV ZIP export.}
 \label{fig:ui-workspace}
 \end{figure}
 
@@ -337,7 +418,9 @@ alone.
 
 \begin{table}[htbp]
 \centering
-\caption{Coverage matrix for every subsystem presented in the four-page body. UI behavior is evidenced by a live capture; nonvisual computation is evidenced by a diagram and/or manifest table.}
+\caption{Traceability from body subsystems to appendix evidence and
+implementation boundaries. UI rows cite live captures; computational rows cite
+diagrams or manifest tables.}
 \label{tab:coverage}
 \small
 \begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.22\textwidth}Xp{0.30\textwidth}@{}}
@@ -353,7 +436,7 @@ KIS operator flow & Fig.~\ref{fig:ui-kis} & \pathcode{frontend/src/features/sear
 TRAKE operator flow & Fig.~\ref{fig:ui-trake} & \pathcode{frontend/src/features/search/Trake*} \\
 Video preview / evidence inspection & Fig.~\ref{fig:ui-player} & \pathcode{frontend/src/features/frames} \\
 Collaborative workspace / submissions & Fig.~\ref{fig:ui-workspace} & \pathcode{frontend/src/features/workspace}, \pathcode{features/submission} \\
-Thunder Compute / S3 execution & Fig.~\ref{fig:architecture}; text below & \pathcode{scripts/build_retrieval_indexes.py}, \pathcode{llm/server} \\
+Thunder Compute / S3 execution & Fig.~\ref{fig:architecture}; text below & \pathcode{scripts/indexing/build_retrieval_indexes.py}, \pathcode{llm/server} \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -366,28 +449,31 @@ Thunder Compute / S3 execution & Fig.~\ref{fig:architecture}; text below & \path
   \node[service,minimum width=41mm,right=12mm of s3in] (a6000) {Ephemeral Thunder worker\\one RTX A6000 build profile};
   \node[process,minimum width=34mm,right=12mm of a6000] (validate) {Identity, coverage,\\bundle validation};
   \node[artifact,minimum width=40mm,right=12mm of validate] (s3out) {Versioned S3 publication\\indexes + passed report};
-  \draw[flowarrow] (s3in) -- node[above,font=\scriptsize]{selective download} (a6000);
+  \draw[flowarrow] (s3in) -- node[above=0.5mm,align=center,font=\tiny]
+    {selective\\download} (a6000);
   \draw[flowarrow] (a6000) -- (validate);
-  \draw[flowarrow] (validate) -- node[above,font=\scriptsize]{publish only on pass} (s3out);
+  \draw[flowarrow] (validate) -- node[above=0.5mm,align=center,font=\tiny]
+    {publish\\only on\\pass} (s3out);
 
   \node[service,minimum width=41mm,below=14mm of a6000] (vm) {Optional disposable GPU VM\\Uvicorn inference API :8100};
   \node[process,minimum width=34mm,right=12mm of vm] (edge) {Private Cloudflare\\operator endpoint};
   \node[client,minimum width=40mm,right=12mm of edge] (local) {Local FastAPI + React\\canonical indexes retained};
   \draw[dataarrow] (vm) -- (edge);
-  \draw[dataarrow] (edge) -- node[above,font=\scriptsize]{model requests} (local);
+  \draw[dataarrow] (edge) -- node[above=0.5mm,align=center,font=\tiny]
+    {model\\requests} (local);
   \draw[dataarrow] (s3out.south) |- (local.north);
   \node[note,below=5mm of vm,anchor=north] {Manual lifecycle: create $\rightarrow$ upload $\rightarrow$ health check $\rightarrow$ delete.};
 \end{tikzpicture}%
 }
-\caption{Thunder Compute execution modes. Index construction and optional online inference are separate lifecycles. Canonical serving artifacts are versioned outside the VM, so deleting a GPU instance does not delete retrieval state.}
+\caption{Separate Thunder Compute lifecycles for index construction and optional
+online inference. Versioned serving artifacts remain outside the VM and survive
+instance deletion.}
 \label{fig:thunder}
 \end{figure}
 
 \paragraph{Release note.}
-The runbook's pass-gated publication contract is the intended deployment policy.
-The local snapshot documented in Table~\ref{tab:artifacts} does not contain the
-promoted build report and has incomplete visual/context provenance fields; those
-must be reconciled before an official immutable-bundle claim. The inference
-example also demonstrates an L40 while the index-build profile specifies an
-A6000. Figure~\ref{fig:thunder} therefore labels GPU choice by workflow rather
-than conflating the examples.
+The runbook requires a passing build report before publication. The local bundle
+in Table~\ref{tab:artifacts} lacks the promoted build report and complete
+visual/context provenance fields; an official release must reconcile both. The
+inference example uses an L40, while the index-build profile specifies an A6000.
+Figure~\ref{fig:thunder} labels each GPU by workflow.

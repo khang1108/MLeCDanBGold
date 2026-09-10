@@ -21,8 +21,7 @@
 \usepackage{xcolor}
 \usepackage[hidelinks]{hyperref}
 
-% Validated light-mode categorical palette from the report visualization system.
-% Every colored object also carries a text label or distinct shape.
+% Light-mode categorical palette; text labels and shapes duplicate color cues.
 \definecolor{ReportBlue}{HTML}{2A78D6}
 \definecolor{ReportOrange}{HTML}{EB6834}
 \definecolor{ReportAqua}{HTML}{1BAF7A}
@@ -76,7 +75,7 @@
 \newcommand{\vect}[1]{\bm{#1}}
 \newcommand{\R}{\mathbb{R}}
 
-% Figure/table guard: the four-page body is intentionally text and equations only.
+% Keep figures and tables out of the four-page prose-and-equation body.
 \newif\ifreportappendix
 \reportappendixfalse
 \newcommand{\RequireReportAppendix}{%
@@ -90,8 +89,7 @@
 \AtBeginEnvironment{table}{\RequireReportAppendix}
 \AtBeginEnvironment{table*}{\RequireReportAppendix}
 
-% TikZ vocabulary. Color is never the only carrier: every node is labeled and
-% each layer uses a distinct shape/border treatment.
+% TikZ vocabulary: labels and shapes duplicate every color cue.
 \tikzset{
   flowarrow/.style={-{Latex[length=2.1mm,width=1.4mm]},line width=0.75pt,draw=ReportSecondary},
   dataarrow/.style={flowarrow,dashed},

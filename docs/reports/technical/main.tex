@@ -5,7 +5,7 @@
 
 \begin{document}
 
-% A compact full-width title and abstract; both count toward the four-page body.
+% The full-width title and abstract count toward the four-page body.
 \twocolumn[
   \begin{center}
     {\LARGE\bfseries \ReportTitle\par}
@@ -21,36 +21,33 @@
     \textbf{Abstract---}
     We present an interactive multimodal video-retrieval system for Known Item
     Search (\KIS) and Temporal Retrieval and Alignment of Key Events (\TRAKE).
-    The system converts a canonical keyframe corpus into complementary visual,
-    scene-context, transcript, and lexical evidence. SigLIP2 represents images
-    and visual-language queries; Qwen3-VL, Florence-2, YOLOE, Qwen3-ASR, and
-    pyannote enrich frames and time intervals; BGE-M3 embeds serialized
-    \FrameContext{} and speech segments. L2-normalized vectors are stored in
-    exact inner-product \FAISS{} indexes, while a fielded BM25 index preserves
-    literal title, caption, OCR, and ASR matches. Detached frame retrieval uses
-    weighted reciprocal-rank fusion. In contrast, \KIS{} and \TRAKE{} construct
-    full-corpus event--frame score matrices, calibrate and fuse available
-    evidence per event and frame, and decode strict chronological paths with a
-    linear-time monotonic dynamic program. A React interface supports search,
-    evidence inspection, frame-accurate video navigation, history replay, and a
+    A C++/FFmpeg sampler extracts a canonical 1-FPS frame corpus, which specialist
+    models enrich with scene context, visible text, objects, speech, and speakers.
+    Qwen3-VL, Florence-2, YOLOE, Qwen3-ASR, and pyannote produce this evidence;
+    SigLIP2 embeds images and visual-language queries, and BGE-M3 embeds serialized
+    \FrameContext{} and speech segments. Exact inner-product \FAISS{} indexes store
+    L2-normalized visual, context, and ASR vectors. A fielded BM25 index retains
+    literal title, caption, OCR, and ASR matches. Detached frame search combines
+    returned lists with weighted reciprocal-rank fusion. \KIS{} and \TRAKE{} instead
+    score each event against the full corpus, calibrate and fuse available evidence
+    at each frame, then decode strict chronological paths with a linear-time
+    monotonic dynamic program. The React client provides search, evidence
+    inspection, frame-accurate video navigation, history replay, and a
     revision-aware shared submission workspace. Offline GPU jobs and optional
-    inference services can run on disposable Thunder Compute instances while
-    canonical metadata, indexes, and collaborative state remain local or in S3.
-    The appendix provides the architecture, artifact/model inventory, and live
-    interface evidence; the first four pages deliberately contain only prose
-    and equations.
+    inference services run on disposable Thunder Compute instances; canonical
+    metadata, indexes, and collaborative state remain local or in S3.
   \end{minipage}
   \vspace{5pt}
 ]
 
 \label{body:first}
 \input{sections/main-body}
-\vspace{-1pt}
+\vspace{-4pt}
 \balance
 \label{body:last}
 
-% The title-through-body requirement is at most four A4 pages. This check fires
-% before references and the appendix force a new page.
+% Enforce the four-page title-through-body limit before references and the
+% appendix begin on a new page.
 \ifnum\value{page}>4
   \PackageError{hcmai-report}{Main body exceeds the four-page limit}%
     {Shorten sections/main-body.tex; references and appendices are excluded.}%

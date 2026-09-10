@@ -1,90 +1,85 @@
-% Main-body claims are grounded in the current implementation and materialized
-% manifests. Figures and tables are intentionally deferred to the appendix.
+% Main-body claims follow the current implementation and materialized manifests.
+% Figures and tables appear in the appendix.
 
 \section{System Overview}
 
-\textbf{MLeCDanBGold} is organized around a canonical frame corpus rather than around its
-user interface (Appendix Fig.~\ref{fig:architecture}). Offline preparation imports
-or extracts keyframes, enriches them with specialist evidence, constructs dense and
-sparse indexes, validates identity/coverage, and publishes immutable bundles. The
-online backend opens those artifacts once and composes retrieval, temporal decoding,
-canonical materialization, filtering, media resolution, and operator state. The
-React application is intentionally a thin inspection and submission client; it does
-not own embeddings, corpus identity, ranking, or competition-coordinate conversion.
+\textbf{MLeCDanBGold} anchors every layer to a canonical frame corpus
+(Appendix Fig.~\ref{fig:architecture}). Offline preparation extracts one frame per
+second, adds specialist evidence, builds dense and sparse indexes, validates
+identity and coverage, and publishes immutable bundles. The online backend opens
+these artifacts once, then handles retrieval, temporal decoding, canonical
+materialization, filtering, media resolution, and operator state. The React
+application handles inspection and submission; embeddings, corpus identity,
+ranking, and competition-coordinate conversion remain in the backend.
 
-The design keeps representation, scoring, and task semantics separate. The corpus
-layer is authoritative for frames and evidence; modality retrievers own encoders and
-index-native search; evidence scorers construct calibrated event--frame matrices;
-the temporal package decodes numerical paths; and KIS/TRAKE workflows decide how a
-path becomes a response. Consequently a decoder cannot invent a frame, a model
-adapter cannot rewrite \code{frame\_idx}, and an unavailable optional modality is
-reported as reduced capability rather than replaced by an implicit online rebuild.
+The corpus layer owns frame and evidence authority. Modality retrievers own their
+encoders and index-native search; evidence scorers construct calibrated
+event--frame matrices; the temporal package decodes numerical paths; and
+\KIS/\TRAKE{} workflows materialize task-specific responses. Canonical resolvers
+reject decoder positions absent from the corpus and prevent model adapters from
+rewriting \code{frame\_idx}. A missing optional modality reduces the reported
+capability and never triggers an implicit online rebuild.
 
-The current materialized snapshot is \code{custom-raw1fps-v1}: 873 videos and
-470{,}804 canonical frames sampled at one-second targets. It includes 470{,}804
-caption, OCR-summary, object-summary, and \FrameContext{} rows; 2{,}689{,}621 OCR
-regions; 5{,}654{,}993 object detections; and 40{,}156 speech segments. These are
-artifact counts, not retrieval-quality measurements. The same frame contract can
-instead ingest organizer-provided keyframes and their authoritative mapping
-without re-extraction. In either route, \code{video\_id}, internal
-\code{frame\_id}, submission coordinate \code{frame\_idx}, and
-\code{timestamp\_ms} remain distinct. No layer derives a competition coordinate
-from filename order or a vector-array position.
+A C++/FFmpeg pipeline prepares the corpus directly from competition videos by
+selecting one representative frame at each one-second target. The preparation job
+records aggregate and per-video frame counts in a generated summary and validates
+coverage before indexing. Caption, OCR, object, and speech stages then attach
+searchable evidence to the extracted timeline. Throughout preparation,
+\code{video\_id}, internal \code{frame\_id}, submission coordinate
+\code{frame\_idx}, and \code{timestamp\_ms} remain distinct. No layer derives a
+competition coordinate from filename order or a vector-array position.
 
 Appendix Table~\ref{tab:models} lists the model roles. Qwen3-VL-8B produces
 captions; Florence-2 reads visible text; YOLOE detects open-vocabulary objects;
-Qwen3-ASR-1.7B and pyannote provide timestamped speech and speakers. Retrieval
-uses SigLIP2 for images and visual text, and BGE-M3 for context and ASR
+Qwen3-ASR-1.7B and pyannote provide timestamped speech and speakers. SigLIP2
+encodes images and visual text, while BGE-M3 encodes context and ASR
 text~\cite{qwen3vlcard,florence2,yoloe,qwen3asrcard,pyannote,siglip2,bgem3}.
-Qwen3-4B optionally prepares query candidates~\cite{qwen34bcard}; candidate
-selection is an explicit client step, not an implicit mutation of a submitted
-query. Although the inference package contains an experimental VLM reranker, it
-is not wired into the current public \KIS/\TRAKE{} request path and is therefore
-not presented as an active stage.
+Qwen3-4B can prepare query candidates~\cite{qwen34bcard}, but the client must
+select one explicitly. An experimental VLM reranker also exists in the inference
+package; the current public \KIS/\TRAKE{} path does not call it, so we do not
+report it as an active stage.
 
 \section{Backend Construction and Execution}
 
-The backend is assembled once from checked configuration and typed artifact
-contracts. Startup first opens the canonical \code{frames.parquet} and available
-caption, OCR, object, transcript, and media metadata; it then loads the required
-visual index and independently attempts the frame-context, ASR-segment, and BM25
-bundles. Compatibility checks compare embedding dimensions, canonical mappings,
-dataset identities, and model contracts before a source can participate. The
-resulting capability map distinguishes frame-native dense evidence, interval-native
-speech evidence, and field-native lexical evidence. Large corpus preparation and
-index construction never occur in this serving process.
+At startup, the backend validates configuration and typed artifact contracts,
+then opens canonical \code{frames.parquet} plus available caption, OCR, object,
+transcript, and media metadata. It requires the visual index and attempts to load
+the frame-context, ASR-segment, and BM25 bundles independently. Before admitting
+a source, compatibility checks compare embedding dimensions, canonical mappings,
+dataset identities, and model contracts. A capability map records frame-native
+dense, interval-native speech, and field-native lexical evidence. The serving
+process never prepares the corpus or builds indexes.
 
-A single \code{SearchService} owns the resulting object graph. Its retrieval service
-binds each index to the matching query encoder, projection rule, cache, and fusion
-configuration. Its temporal evidence service reuses those bindings to score complete
-canonical matrices rather than detached shortlists. Deterministic planners and task
-workflows sit above those numerical services, while canonical corpus resolvers and
-materializers sit below the response boundary. Filtering is backed by a separate
-literal-evidence view, and media/history/submission state cannot alter ranking
-artifacts. This composition avoids reopening multi-gigabyte bundles per request and
-keeps every transformation testable at a typed boundary.
+A single \code{SearchService} owns the loaded object graph. Its retrieval service
+binds each index to its query encoder, projection rule, cache, and fusion
+configuration. The temporal evidence service reuses those bindings to score
+complete canonical matrices. Deterministic planners and task workflows sit above
+the numerical services; canonical corpus resolvers and materializers control the
+response boundary. A separate literal-evidence view handles filtering, and
+media, history, or submission state cannot alter ranking artifacts. Loading the
+bundles once avoids reopening multi-gigabyte files per request.
 
-Execution follows one auditable sequence. Input is validated and converted to one
-or more ordered event queries; an explicitly chosen rewrite may change encoder text,
-but the original remains available to lexical scoring and explanation. Compatible
-queries are batch-encoded, independent components may score concurrently, and all
-results retain source identity and coverage. Detached search projects results to
-canonical frames before rank fusion. Temporal tasks instead form per-event full-corpus
-scores, partition them by video, decode and rank paths, and only then materialize
-human-readable evidence and submission coordinates from the FrameStore. Bounded
-embedding/thumbnail caches reduce repeated model and image work without caching
-mutable response objects or changing deterministic ordering.
+Each request begins with validation and conversion into one or more ordered event
+queries. An explicitly selected rewrite may change encoder text, while lexical
+scoring and explanations retain the original. Compatible queries are
+batch-encoded, and independent components may score concurrently. Their results
+retain source identity and coverage. Detached search projects results to canonical
+frames before rank fusion. Temporal tasks
+form full-corpus scores for each event, partition them by video, decode and rank
+paths, and finally materialize evidence and submission coordinates from the
+FrameStore. Bounded embedding and thumbnail caches reduce repeated model and
+image work without caching mutable response objects or changing deterministic
+ordering.
 
 \section{Retrieval System}
 
 \subsection{Canonical preparation and FrameContext}
 
-For raw video, the C++/FFmpeg sampler defines target time
-$T_k=k\Delta$ with $\Delta=1000\,$ms and $0\leq T_k<D$. When decoding crosses
-$T_k$, it emits whichever of the preceding and current decoded timestamps is
-closer; a tie selects the preceding frame. Thus a video of duration $D$ yields
-$\lceil D/\Delta\rceil$ samples without assuming constant decode cadence. The
-custom submission coordinate is
+For raw video, the C++/FFmpeg sampler sets target times $T_k=k\Delta$, where
+$\Delta=1000\,$ms and $0\leq T_k<D$. At each target, it chooses the closer of the
+preceding and current decoded timestamps; exact ties choose the preceding frame.
+A video of duration $D$ yields $\lceil D/\Delta\rceil$ samples even when
+decode cadence varies. The competition submission coordinate is
 \begin{equation}
  f_k=\left\lfloor \left\lceil\overline{r}\right\rceil
                  \frac{T_k}{1000}\right\rfloor ,
@@ -92,36 +87,32 @@ custom submission coordinate is
 \end{equation}
 where $\overline{r}$ is average FPS. Extraction validates counts and identity,
 then atomically publishes durable 1024-pixel JPEGs and higher-quality enrichment
-images. Organizer data follows a separate lossless route: supplied keyframes are
-sorted by mapping order and
-$\texttt{timestamp\_ms}=\operatorname{round}(1000\,\texttt{pts\_time})$;
-supplied \code{frame\_idx} remains authoritative. Both routes
-converge on the same canonical schema (Appendix Fig.~\ref{fig:preparation}).
+images. The extracted records populate the canonical schema illustrated in
+Appendix Fig.~\ref{fig:preparation}.
 
-Custom preparation is resumable and batch-bounded. A sorted source manifest and
-extraction configuration receive a SHA-256 identity before work starts. Each
-batch stages source/archive data, extracts frames, runs caption/OCR/object
-specialists, builds \FrameContext, encodes visual/context vectors, validates or
-reuses timestamped ASR, projects per-video artifacts, and atomically commits a
-three-index handoff before scratch cleanup. Durable images feed captioning,
-objects, and visual embeddings; the higher-quality enrichment variant feeds OCR.
-A batch is not marked enriched merely because files exist: specialist tables must
-cover the expected canonical frames and pass identity checks. This order avoids
-publishing embeddings whose text or image lineage cannot be reconstructed.
+Preparation runs in resumable, bounded batches. Before processing, the pipeline
+hashes the sorted source manifest and extraction configuration with SHA-256. Each
+batch stages its source or archive, extracts frames, runs caption/OCR/object
+specialists, builds \FrameContext, encodes visual and context vectors, validates
+or reuses timestamped ASR, and projects per-video artifacts. It commits the
+three-index handoff atomically before clearing scratch data. Durable images feed
+captioning, object detection, and visual embeddings; the higher-quality variant
+feeds OCR. Completion requires specialist tables to cover the expected canonical
+frames and pass identity checks. These checks prevent publication until each
+embedding has traceable text and image lineage.
 
-Caption, OCR, and object stages retain their specialist artifacts. A deterministic
-\FrameContext{} view serializes only valid evidence in the order
-\code{[CAPTION]}, \code{[VISIBLE\_TEXT]}, \code{[OBJECTS]}, separated by blank
-lines. Budgets are 80, 80, and 40 whitespace tokens, respectively; OCR text is
-included only when quality is at least 0.5. Captions must be complete and
-error-free, OCR must additionally be non-empty and pass that quality gate, and
-objects require a completed non-empty summary. Raw OCR quality and object count
-remain recorded even when their text is excluded. Availability, OCR quality, object
-count, source versions, and frame-store lineage remain typed fields even when a
-text section is omitted. The builder performs a bounded SQLite join, checks
-source manifests and canonical identities, and atomically publishes Parquet plus
-manifest output. Consequently the combined text can be rebuilt without
-sacrificing source-level inspection.
+Caption, OCR, and object stages retain separate specialist artifacts. A
+deterministic \FrameContext{} view serializes valid evidence as \code{[CAPTION]},
+\code{[VISIBLE\_TEXT]}, and \code{[OBJECTS]}, in that order and separated by blank
+lines. Their whitespace-token budgets are 80, 80, and 40. Caption evidence must
+be complete and error-free. OCR must also be non-empty and reach quality 0.5;
+objects require a completed, non-empty summary. Raw OCR quality and object count
+remain recorded when their text is excluded. Typed fields preserve availability,
+OCR quality, object count, source versions, and frame-store lineage for omitted
+and included sections alike. The builder joins sources through bounded SQLite,
+checks manifests and canonical identities, and atomically publishes Parquet plus
+its manifest. Retaining source fields lets the system rebuild the combined text
+and inspect each contribution separately.
 
 \subsection{Indexes and two fusion regimes}
 
@@ -140,16 +131,16 @@ The ASR index is segment-native: a half-open interval $[a,b)$ contributes its
 maximum score to covered canonical frames, with a bounded nearest-midpoint
 fallback only in detached top-$K$ projection.
 
-A dense bundle is self-describing: \code{dense.index} is accompanied by
-\code{vectors.npy}, canonical frame or segment mapping, metadata, timestamps, and
-compact per-video posting offsets/positions. Build preflight checks frame-store
-authority, expected coverage, model/index contracts, and source lineage before
-encoding. Online top-$K$ search delegates to \FAISS; full-corpus or video-subset
-temporal scoring deliberately reads the normalized vector matrix and computes
-Eq.~\ref{eq:dense-score} in bounded chunks. This avoids approximating event
-alignment from a shortlist and lets the same canonical ordering split scores by
-video without a second identity join. Queries sharing an encoder family are
-batch-encoded, while independent modality searches can run concurrently.
+Each dense bundle stores \code{dense.index}, \code{vectors.npy}, canonical frame
+or segment mappings, metadata, timestamps, and compact per-video posting
+offsets/positions. Build preflight verifies FrameStore authority, expected
+coverage, model/index contracts, and source lineage before encoding. Online
+top-$K$ search uses \FAISS. Full-corpus or video-subset temporal scoring reads the
+normalized vector matrix and computes Eq.~\ref{eq:dense-score} in bounded chunks.
+The complete score matrix preserves candidates that shortlist alignment would
+discard and splits into videos in canonical order without another identity join.
+Queries that share an encoder family are batch-encoded; independent modalities
+may score concurrently.
 
 For segment search, results first retain the strongest segment contribution per
 frame. Canonical frames inside $[a,b)$ are preferred; only an empty interval uses
@@ -176,76 +167,75 @@ following the probabilistic relevance framework~\cite{bm25}. The current snapsho
 has populated title, OCR, and ASR vocabularies; its serialized BM25 caption field
 is empty, while semantic caption evidence remains present through
 \FrameContext{}. Appendix Table~\ref{tab:artifacts} records this manifest state.
-Sparse scoring sums the selected query-token columns rather than densifying the
+Sparse scoring sums the selected query-token columns instead of densifying the
 entire vocabulary. Original event text queries title, OCR, and ASR fields;
-caption-oriented retrieval text may address the caption field. This separation
-retains literal names, signs, and spoken phrases that a dense embedding can
-smooth over, while preventing a synthetic combined context string from being
-misreported as a source caption.
+caption-oriented retrieval text may address the caption field. Source-specific
+fields retain literal names, signs, and spoken phrases that dense embeddings may
+smooth over, and they keep synthetic combined context from being reported as a
+source caption.
 
-The implementation deliberately has two non-interchangeable fusion regimes.
-For detached nearest-neighbor frame search, modality lists are combined by
-weighted reciprocal-rank fusion~\cite{rrf}:
+Detached and temporal search use different fusion rules. Detached
+nearest-neighbor frame search combines modality lists by weighted reciprocal-rank
+fusion~\cite{rrf}:
 \begin{equation}
  R(i)=\sum_{m\in\mathcal{M}_i}\frac{w_m}{60+\operatorname{rank}_m(i)}.
  \label{eq:rrf}
 \end{equation}
-This is rank-only, works on the union of returned frame IDs, and preserves source
+RRF uses only rank over the union of returned frame IDs and preserves source
 provenance. One-based ranks, active-weight normalization, a required visual
-source, and deterministic tie-breaking (fused score, best source rank, then frame
-ID) make repeated queries stable. ASR segments are projected before fusion, so
-all list members already carry canonical frame identity. RRF should not be
-described as the temporal \KIS/\TRAKE{} scorer.
+source, and deterministic tie-breaking by fused score, best source rank, then
+frame ID make repeated queries stable. ASR segments are projected before fusion,
+so every list member already has a canonical frame identity. The \KIS/\TRAKE{}
+temporal scorer operates on calibrated full-corpus scores.
 
-Temporal search instead scores every event against every canonical frame. For
+Temporal search scores every event against every canonical frame. For
 component $m$ and event $e$, supported values are quantile-clipped and min--max
 mapped to $\widehat{S}_{met}\in[0,1]$. Dense reliability measures upper-tail
-contrast,
+contrast:
 \begin{equation}
  z_{me}=\frac{\max(\mu^{\mathrm{top}}_{me}-\operatorname{med}_{me},0)}
  {\operatorname{IQR}_{me}+\varepsilon},\qquad
- \rho_{me}=\frac{z_{me}}{1+z_{me}},
+ \rho_{me}=\frac{z_{me}}{1+z_{me}}.
  \label{eq:reliability}
 \end{equation}
-whereas a lexical row has binary reliability when any exact match exists. A
-deterministic cue router adjusts base weights for speech, visible-text, or visual
-language. Coverage $c_{met}\in\{0,1\}$ then prevents absent segment/evidence data
-from diluting a score:
+A lexical row receives binary reliability when any exact match exists. A
+deterministic cue router adjusts base weights for speech, visible text, or visual
+language. Coverage $c_{met}\in\{0,1\}$ excludes absent segment or evidence data
+from the fused score:
 \begin{equation}
  F_{et}=\frac{\sum_m w_{me}\rho_{me}c_{met}\widehat{S}_{met}}
                    {\sum_m w_{me}\rho_{me}c_{met}},
  \quad w_{me}=w_m^{0}\,g_m(q_e).
  \label{eq:adaptive-fusion}
 \end{equation}
-If no nonvisual component covers a frame, calibrated visual evidence supplies the
-fallback. The robust defaults use the 5th percentile and maximum as calibration
-bounds, the strongest one percent capped at 128 frames for $\mu^{\mathrm{top}}$,
-and $\varepsilon=10^{-6}$. Base masses are 0.35 visual, 0.35 context, 0.08 dense
-ASR, and 0.02/0.10/0.04/0.06 for title/caption/OCR/ASR BM25. Cue multipliers are
-1.4 for visual language, 5.0 for speech, and 3.0 for visible text; Eq.~\ref{eq:adaptive-fusion}
-renormalizes the resulting positive mass at every frame. These are deterministic
-policies, not learned weights.
-
-This local renormalization makes missing evidence distinct from weak
-evidence and produces one fused event--frame matrix per video.
+When no nonvisual component covers a frame, calibrated visual evidence supplies
+the fallback. Calibration uses the 5th percentile and maximum as bounds, the
+strongest one percent capped at 128 frames for $\mu^{\mathrm{top}}$, and
+$\varepsilon=10^{-6}$. Base masses are 0.35 visual, 0.35 context, 0.08 dense ASR,
+and 0.02/0.10/0.04/0.06 for title/caption/OCR/ASR BM25. Cue multipliers are 1.4
+for visual language, 5.0 for speech, and 3.0 for visible text.
+Eq.~\ref{eq:adaptive-fusion} renormalizes positive mass at every frame. These
+values are deterministic configuration policies, not learned weights. Per-frame
+renormalization distinguishes missing evidence from weak evidence and yields one
+fused event--frame matrix per video.
 
 \subsection{KIS/TRAKE temporal orchestration}
 
-\KIS{} first converts a natural-language description into ordered moments using
-a deterministic Vietnamese-aware planner; explicitly selected query-preparation
-candidates may replace only retrieval text, while original text remains available
-to BM25. \TRAKE{} accepts the ordered events directly. Both call the same temporal
-service: build component matrices, calibrate and fuse them, split the canonical
-matrix by video, decode paths, and revalidate every identity before response
+\KIS{} converts a natural-language description into ordered moments with a
+deterministic Vietnamese-aware planner. An explicitly selected query-preparation
+candidate may replace only retrieval text; BM25 and explanations retain the
+original. \TRAKE{} accepts ordered events directly. Both invoke the same temporal
+service to build component matrices, calibrate and fuse them, split canonical
+positions by video, decode paths, and revalidate identities before response
 materialization (Appendix Fig.~\ref{fig:temporal}).
 
-The planner prefers non-empty lines, then sentence boundaries; removes a trailing
-question; folds attribute/enumeration sentences into the preceding moment; and
-recognizes Vietnamese/English transition cues. A ``before that'' moment is moved
-before the event it references, whereas later cues preserve forward order. The
-planner is intentionally deterministic so UI replay and lexical evidence can show
-exactly what was aligned. Request validation bounds the event count at 32 and
-rejects an empty sequence before allocating a full-corpus matrix.
+The planner prefers non-empty lines, then sentence boundaries. It removes a
+trailing question, folds attribute or enumeration sentences into the preceding
+moment, and recognizes Vietnamese and English transition cues. A ``before that''
+moment moves before its referent; later cues preserve forward order.
+Deterministic planning lets UI replay and lexical evidence display the exact
+aligned text. Request validation caps the sequence at 32 events and rejects an
+empty sequence before allocating a full-corpus matrix.
 
 For one video, let $F_{et}$ be the fused score for event $e$ at frame $t$ and
 $\tau_t$ its timestamp. Strict chronological alignment uses
@@ -262,69 +252,129 @@ events without imposing a fixed window. Rewriting the predecessor term as
  \max_{u<t}\left(D_{e-1,u}+\lambda\tau_u\right)
  \label{eq:prefix-dp}
 \end{equation}
-permits a prefix maximum and backpointer scan in $O(ET)$ time and $O(ET)$
-backpointer space, rather than $O(ET^2)$. At each position, cumulative maxima
-store both the best shifted predecessor value and its canonical position; equal
-values deliberately keep the latest position. Endpoints with non-finite state are
-unreachable, and a video with fewer admissible frames/score clusters than events
-returns no path. If configured, non-negative event scores are exponentiated by an
-\code{event\_power} before decoding; the active value 1.0 leaves them unchanged.
-Ties choose the latest valid
-predecessor. Optional score-profile clusters prevent multiple events from using a
-near-identical region. The runtime retains up to five alternatives per video and
-suppresses final-event alternatives within 30 seconds before global ranking.
+permits a prefix-maximum and backpointer scan in $O(ET)$ time and $O(ET)$
+backpointer space instead of $O(ET^2)$. At each position, cumulative maxima store
+the best shifted predecessor value and its canonical position; equal values keep
+the latest position. Endpoints with non-finite state are unreachable, and a video
+with fewer admissible frames or score clusters than events returns no path. If
+configured, \code{event\_power} exponentiates non-negative scores before decoding;
+the active value 1.0 leaves them unchanged. Optional score-profile clusters keep
+multiple events out of a near-identical region. The runtime retains up to five
+alternatives per video and suppresses final-event alternatives within 30 seconds
+before global ranking.
 
-\KIS{} materializes the upper-middle aligned event,
-$\lfloor |P|/2\rfloor$, as the representative result while retaining the complete
-path for explanation and navigation. \TRAKE{} returns every ordered canonical
-frame/timestamp sequence and submits the entire path as one row. This shared
-optimizer guarantees consistent temporal semantics between tasks while their
-output contracts remain different. Before returning either response, the temporal
-service resolves every DP position through the canonical FrameStore and verifies
-video ID, frame ID, frame index, and timestamp arrays. \KIS{} then attaches the
-representative frame's inspectable metadata plus the full event/frame/timestamp
-alignment. \TRAKE{} preserves arrays for every path unchanged. The API therefore
-returns competition-facing coordinates and human-readable evidence without
-allowing the optimizer's array offsets to escape as identities.
+\KIS{} uses the upper-middle aligned event, $\lfloor |P|/2\rfloor$, as its
+representative result and retains the complete path for explanation and
+navigation. \TRAKE{} returns every ordered canonical frame/timestamp sequence and
+submits the entire path as one row. Before materialization, the shared temporal
+service resolves every DP position through the FrameStore and verifies its video
+ID, frame ID, frame index, and timestamp. \KIS{} attaches inspectable evidence for
+the representative frame plus the full alignment; \TRAKE{} preserves every
+returned path array unchanged. Responses expose competition-facing coordinates
+and evidence, while optimizer array offsets remain internal.
+
+\section{Architectural Evolution}
+
+Version 1 kept temporal alignment outside the KIS and question-style retrieval
+paths. Each path ran dense nearest-neighbor search over visual frames,
+\FrameContext{}, and ASR segments, then applied shallow alignment to the returned
+candidates. Sequence reasoning saw only this shortlist. It could not recover a
+frame that scored weakly for an isolated event but completed a coherent
+multi-event path, and separate task paths could encode different temporal
+assumptions.
+
+Version 2 routes every competition retrieval workflow through the shared
+\pathcode{src/hcmai/temporal} pipeline. Once input becomes ordered events, the
+pipeline scores complete modality matrices, calibrates and fuses covered
+evidence, partitions canonical positions by video, and runs monotonic DP before
+final truncation. \KIS{} and \TRAKE{} now use the same optimizer and canonical
+backpointers. \KIS{} accepts natural-language input and presents one
+representative frame while retaining its path; \TRAKE{} accepts explicit ordered
+events, then presents and submits the complete path. Detached dense retrieval
+remains an inspection utility. The team observed a substantial qualitative
+improvement in practical multi-event retrieval after this change. Quantitative
+evaluation remains outside this report.
+
+\section{Representative Query Analysis}
+
+\subsection{Map and four hydraulic-structure appearances}
+
+\emph{Query: ``Find the clip that begins with a map, after which one type of
+hydraulic structure appears four times in sequence.''}
+
+This query combines an opening anchor, event order, same-video continuity, and an
+exact recurrence count. In v1, the team searched for each scene independently and
+merged the Top-$K$ lists. Returned frames often came from different videos or
+appeared out of order. A weak intermediate occurrence could also fall outside its
+shortlist and break the entire sequence.
+
+In v2, the team encodes the description as ordered events. The temporal service
+scores each event over the full timeline, partitions frames by video, and runs
+monotonic DP before selecting Top-$K$ paths. The returned paths preserve the
+requested progression instead of matching isolated frames. The result view shows
+the complete alignment and opens each moment in the video inspector, allowing
+members to verify the sequence against the timeline.
+
+The exact-four condition still needs manual review because the evidence pipeline
+does not count intermittent reappearances reliably. Team members must inspect the
+returned path and video timeline to confirm all four occurrences. Temporal DP
+enforces order and same-video continuity, but it does not solve cardinality.
+
+\subsection{Cycling formation, street name, and countdown}
+
+\emph{Query: ``Find a rear-view shot of the lead group, with one rider ahead and
+three following, as they turn right onto Ho Tung Mau Street at an intersection
+whose green signal is counting down to 13 seconds.''}
+
+The rider formation and turn are visual-semantic cues; the street name and the
+number 13 are decisive literal cues. Dense retrieval matched broad concepts such
+as a cycling group and an intersection, but the proper noun and numeral were
+diluted in the embedding. The team combined dense evidence with fielded BM25
+over title, OCR, and ASR. These fields can promote rare terms from road signs and
+speech, while the inspector exposes their source evidence to the operator.
+
+The case still failed. ASR mistranscribed ``Ho Tung Mau,'' and OCR did not extract
+13, leaving BM25 without either decisive token. The visible OCR and ASR fields
+helped the team diagnose the miss but could not recover the absent evidence.
+BM25 can rank only terms present in its index; it cannot repair upstream OCR or
+ASR errors. Evidence extraction was the limiting stage for this query.
 
 \section{Operator Interface (Brief)}
 
-The interface exposes the backend's task semantics without duplicating them.
-Plain text starts \KIS; explicit \code{E1:}, \code{E2:}, \ldots lines start
-\TRAKE. Operators select Top-$K$ and dense/lexical families, inspect result cards
-and complete alignments, then open a video at the retrieved timestamp with caption,
-OCR, object, ASR, and canonical-coordinate evidence beside it. Appendix
-Figs.~\ref{fig:ui-kis}--\ref{fig:ui-player} show these interactions directly.
+The interface maps plain text to \KIS{} and explicit \code{E1:}, \code{E2:},
+\ldots{} lines to \TRAKE. Operators select Top-$K$ and dense or lexical families,
+inspect result cards and complete alignments, then open video at the retrieved
+timestamp. Caption, OCR, object, ASR, and canonical-coordinate evidence appear
+beside the video. Appendix Figs.~\ref{fig:ui-kis}--\ref{fig:ui-player} show these
+interactions.
 
-A compact collaborative workspace provides user-scoped query replay, manual
-video/timestamp opening, and shared CSV answer files (Fig.~\ref{fig:ui-workspace}).
-SQLite stores revisions and committed rows; synchronization distributes only
-revision-aware file commands. \KIS{} appends one video/frame pair, whereas
-\TRAKE{} appends the complete ordered path as one row. The UI supports editing,
-validation, and ZIP export, but does not claim chat, shared cursors, or presence.
+The collaborative workspace stores user-scoped query replay, manual
+video/timestamp opening, and shared CSV answer files
+(Fig.~\ref{fig:ui-workspace}). SQLite records revisions and committed rows;
+synchronization distributes revision-aware file commands. \KIS{} appends one
+video/frame pair, while \TRAKE{} appends a complete ordered path as one row. The
+UI supports editing, validation, and ZIP export. Chat, shared cursors, and
+presence are outside the implemented workspace.
 
 \section{Thunder Compute Execution Boundary}
 
-The maintained index-build runbook uses one RTX A6000 as an ephemeral worker.
-It inventories or downloads only canonical frames, keyframes, \FrameContext{},
-and transcripts from S3; produces visual, context, and ASR-segment bundles; runs
-coverage/identity validation; and publishes a checksummed version only when its
-build report passes. Separately, an operator may create a disposable GPU VM,
-copy the selected inference package, run one Uvicorn worker on private port 8100,
-and expose it through a protected Cloudflare endpoint. GPU SKU is an operational
-choice (the checked-in example uses an L40), not a retrieval invariant. No
-tracked launcher claims automatic lifecycle management: instance creation,
-upload, health checking, and deletion remain explicit operator steps. The local
-FastAPI service and S3 artifacts therefore survive VM teardown~\cite{thunder}.
+The index-build runbook assigns one RTX A6000 ephemeral worker. It inventories or
+downloads only canonical frames, keyframes, \FrameContext{}, and transcripts from
+S3; builds visual, context, and ASR-segment bundles; validates coverage and
+identity; and publishes a checksummed version after its build report passes. For
+online inference, an operator can create a disposable GPU VM, copy the selected
+package, run one Uvicorn worker on private port 8100, and expose a protected
+Cloudflare endpoint. The GPU SKU remains an operational choice: the checked-in
+inference example uses an L40. Instance creation, upload, health checks, and
+deletion are manual operator steps. VM teardown leaves local FastAPI state and S3
+artifacts intact~\cite{thunder}.
 
 \section{Scope and Reproducibility}
 
-This report describes the current implementation and materialized custom-corpus
-snapshot, not the proposed VLM-reranking design or a quantitative benchmark.
-Configuration pins model revisions, but the checked-out visual/context index
-metadata omit some revision or source/config fingerprints, and no promoted
-\code{build\_report.json} accompanies this local bundle. Those omissions do not
-change the algorithms above; they do mean an official release should regenerate
-or reconcile manifests before claiming immutable end-to-end provenance. The
-appendix records the exact observed state and maps each presented subsystem to a
-diagram, table, or live UI capture.
+This report covers the current implementation and its C++/FFmpeg 1-FPS corpus;
+it excludes the proposed VLM reranker and quantitative evaluation. Configuration
+pins model revisions. The checked-out visual/context index metadata omit some
+revision or source/config fingerprints, and this local bundle has no promoted
+\code{build\_report.json}. These gaps do not alter the algorithms described
+above. Before claiming immutable end-to-end provenance for an official release,
+regenerate or reconcile the manifests.
