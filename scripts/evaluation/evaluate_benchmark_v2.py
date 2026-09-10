@@ -123,12 +123,20 @@ def trake_hits(
     labels: list[tuple[str, ...]],
     fps_map: dict[str, float],
     tolerance_ms: float,
+    expected_event_count: int,
 ) -> tuple[bool, list[bool], bool]:
-    """Return video, per-event, and all-event path relevance for TRAKE."""
+    """Return independent video and full-path TRAKE relevance flags."""
 
     video = str(candidate.get("video_id", ""))
+    video_hit = any(row and row[0] == video for row in labels)
     values = [int(value) for value in candidate.get("frame_idxs", [])]
-    rows = [row for row in labels if len(row) == len(values) + 1 and row[0] == video]
+    if len(values) != expected_event_count:
+        return video_hit, [False] * expected_event_count, False
+    rows = [
+        row
+        for row in labels
+        if len(row) == expected_event_count + 1 and row[0] == video
+    ]
 
     def close(value: int, target: int) -> bool:
         if tolerance_ms == 0:
@@ -137,13 +145,30 @@ def trake_hits(
 
     event_hits = [any(close(value, int(row[index + 1])) for row in rows) for index, value in enumerate(values)]
     all_hit = any(all(close(values[index], int(row[index + 1])) for index in range(len(values))) for row in rows)
-    return bool(rows), event_hits, all_hit
+    return video_hit, event_hits, all_hit
+
+
+def load_responses(path: Path) -> list[dict[str, Any]]:
+    """Load historical response lists or a versioned baseline run envelope."""
+
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(value, list):
+        responses = value
+    elif isinstance(value, dict) and isinstance(value.get("responses"), list):
+        responses = value["responses"]
+    else:
+        raise ValueError(
+            "response JSON must be a list or an object containing a responses list"
+        )
+    if any(not isinstance(item, dict) for item in responses):
+        raise ValueError("responses must contain JSON objects")
+    return responses
 
 
 def evaluate(response_path: Path, query_root: Path, metadata_path: Path, tolerance_seconds: float) -> dict[str, Any]:
-    """Evaluate one raw-response JSON file."""
+    """Evaluate one raw-response JSON file or baseline run envelope."""
 
-    responses = json.loads(response_path.read_text(encoding="utf-8"))
+    responses = load_responses(response_path)
     frame_map, fps_map = load_frame_maps(metadata_path)
     tolerance_ms = tolerance_seconds * 1000.0
     rows: list[dict[str, Any]] = []
@@ -162,13 +187,21 @@ def evaluate(response_path: Path, query_root: Path, metadata_path: Path, toleran
         body = item.get("response") or {}
         kind = str(item.get("type", "kis"))
         candidates = body.get("paths", []) if kind == "trake" else body.get("results", [])
+        response_event_count = len(body.get("events", []))
         video_flags: list[bool] = []
         representative_flags: list[bool] = []
         path_flags: list[bool] = []
         event_matrix: list[list[bool]] = []
         for candidate in candidates:
             if kind == "trake":
-                video_hit, event_hit, all_hit = trake_hits(candidate, labels, fps_map, tolerance_ms)
+                expected_event_count = response_event_count or len(candidate.get("frame_idxs", []))
+                video_hit, event_hit, all_hit = trake_hits(
+                    candidate,
+                    labels,
+                    fps_map,
+                    tolerance_ms,
+                    expected_event_count,
+                )
                 video_flags.append(video_hit)
                 representative_flags.append(all_hit)
                 path_flags.append(all_hit)

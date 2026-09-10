@@ -13,7 +13,7 @@ from offline.enrichment.object_detection import (
     load_vocab,
     run_yoloe,
 )
-from scripts.detect_objects import parse_args
+from scripts.enrichment.detect_objects import parse_args
 
 
 @pytest.mark.parametrize("option", ("--top-k", "--batch-size", "--limit"))

@@ -11,7 +11,7 @@ from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overri
 from offline.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 
 
-DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/prepare.yaml"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "configs/prepare.yaml"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

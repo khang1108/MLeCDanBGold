@@ -103,7 +103,7 @@ def test_btc_import_does_not_require_preprocessing_fields(tmp_path):
 def test_ingestion_cli_delegates_to_reusable_importer(
     tmp_path, monkeypatch, capsys
 ):
-    import scripts.ingest_btc_keyframes as cli
+    import scripts.corpus.ingest_btc_keyframes as cli
 
     captured = []
     expected_output = tmp_path / "out" / "frames.parquet"

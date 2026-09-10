@@ -2,7 +2,7 @@
 """Run P0 temporal evidence experiments (B0-B6) and record ranking telemetry.
 
 Usage:
-    PYTHONPATH=src:. aic/bin/python scripts/evaluate_temporal_p0.py \\
+    PYTHONPATH=src:. aic/bin/python -m scripts.evaluation.evaluate_temporal_p0 \\
         --queries-file tests/fixtures/l26_v254_query.yaml \\
         --runs B0 B1 B2 B3 B4 B5 B6 \\
         --output-file artifacts/p0_ablation_results.jsonl

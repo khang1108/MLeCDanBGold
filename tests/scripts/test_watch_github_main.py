@@ -11,7 +11,7 @@ import subprocess
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = PROJECT_ROOT / "scripts" / "watch_github_main.sh"
+SCRIPT = PROJECT_ROOT / "scripts" / "automation" / "watch_github_main.sh"
 
 
 def _git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -31,6 +31,15 @@ def _git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str
         capture_output=True,
         text=True,
     )
+
+
+def test_moved_script_resolves_repository_root_by_default() -> None:
+    """The added automation directory must not change the default repository."""
+
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert '"${SCRIPT_DIR}/../.."' in source
+    assert "scripts/automation/${SCRIPT_NAME}" in source
 
 
 def test_help_documents_safe_update_policy() -> None:

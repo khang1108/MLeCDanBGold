@@ -5,7 +5,7 @@ from __future__ import annotations
 import pyarrow as pa
 import pytest
 
-from scripts.translate import merge, pending, rewrite
+from scripts.enrichment.translate import merge, pending, rewrite
 
 
 def _table() -> pa.Table:

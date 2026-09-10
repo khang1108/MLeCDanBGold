@@ -10,8 +10,8 @@ import pytest
 
 from offline.enrichment.ocr.config import OCRConfig
 from offline.enrichment.object_detection import ObjectDetectionConfig
-from scripts import detect_objects as object_cli
-from scripts import generate_ocr_enrichment as ocr_cli
+from scripts.enrichment import detect_objects as object_cli
+from scripts.enrichment import generate_ocr_enrichment as ocr_cli
 
 
 def _job(tmp_path: Path) -> SimpleNamespace:

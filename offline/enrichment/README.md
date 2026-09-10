@@ -66,25 +66,25 @@ DATASET_ARGS=(
   --frame-store-output artifacts/frame_store
 )
 
-PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.ingest_btc_keyframes \
   --btc-root data --data-root data \
   --output-root artifacts/frame_store \
   --frame-store-id btc-keyframes-v1
 
-PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.generate_enrichment \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
-PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.generate_ocr_enrichment \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
-PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.detect_objects \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
-PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.prepare_transcripts \
   --config configs/prepare.yaml --videos-root data/videos \
   "${DATASET_ARGS[@]}"
 
-PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.build_frame_context \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 ```
 

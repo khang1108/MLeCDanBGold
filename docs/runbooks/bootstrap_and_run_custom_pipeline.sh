@@ -171,17 +171,17 @@ done
 [[ -z "$ZIP_LIMIT" ]] || PIPELINE_ARGS+=(--limit "$ZIP_LIMIT")
 
 echo "==> preflight"
-PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py preflight "${PIPELINE_ARGS[@]}"
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.prepare_custom_pipeline preflight "${PIPELINE_ARGS[@]}"
 
 echo "==> process-archive (offset=$ZIP_OFFSET limit=${ZIP_LIMIT:-<all remaining>})"
-PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py process-archive "${PIPELINE_ARGS[@]}"
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.prepare_custom_pipeline process-archive "${PIPELINE_ARGS[@]}"
 
 echo "==> status"
-PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py status "${PIPELINE_ARGS[@]}"
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.prepare_custom_pipeline status "${PIPELINE_ARGS[@]}"
 
 if [[ -z "$ZIP_LIMIT" ]]; then
   echo "==> finalize (full archive plan)"
-  PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py finalize "${PIPELINE_ARGS[@]}"
+  PYTHONPATH=.:src aic/bin/python -m scripts.corpus.prepare_custom_pipeline finalize "${PIPELINE_ARGS[@]}"
 else
   echo "==> ZIP_LIMIT=$ZIP_LIMIT set; skipping finalize until the full archive plan is cleaned"
 fi

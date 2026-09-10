@@ -1,7 +1,22 @@
-# Root scripts
+# Domain-oriented scripts
 
-These thin CLIs call reusable code from `src/hcmai`. Run them from the
-repository root with the `aic/` virtual environment.
+These thin CLIs call reusable code from `src/hcmai`. Python entry points are
+organized by ownership and run as importable modules from the repository root
+with the `aic/` virtual environment:
+
+| Domain | Responsibility |
+| --- | --- |
+| `corpus` | Corpus ingestion, extraction, materialization, export, and orchestration |
+| `enrichment` | Caption, OCR, object, transcript, translation, and FrameContext evidence |
+| `indexing` | Retrieval-index construction and validation |
+| `evaluation` | Benchmark execution and metrics |
+| `diagnostics` | Retrieval and temporal-quality inspection |
+| `review` | Human-review artifacts and manual labels |
+| `automation` | Repository shell automation |
+
+Use `PYTHONPATH=.:src aic/bin/python -m scripts.<domain>.<module>`. Shell
+automation remains path-based under `scripts/automation/`; no flat compatibility
+wrappers are retained.
 
 Scripts use the owning public service in each component's `pipeline.py`:
 `DataService`, `EmbeddingService`, `EnrichmentService`, `RetrievalService`, or
@@ -64,30 +79,30 @@ DATASET_ARGS=(
 )
 
 # BTC frame-store ingest
-PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.ingest_btc_keyframes \
   --btc-root data --data-root data \
   --output-root artifacts/frame_store \
   --frame-store-id btc-keyframes-v1
 
 # Caption
-PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.generate_enrichment \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # OCR
-PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.generate_ocr_enrichment \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # YOLOE objects; publishes raw JSON plus canonical object Parquet artifacts.
-PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.detect_objects \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # Timestamped ASR segments; change data/videos if the source lives elsewhere.
-PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.prepare_transcripts \
   --config configs/prepare.yaml --videos-root data/videos \
   "${DATASET_ARGS[@]}"
 
 # Deterministic Caption + OCR + Object context; ASR is excluded.
-PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.build_frame_context \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 ```
 
@@ -115,7 +130,7 @@ the native yt-dlp/FFmpeg lifecycle and emits per-video FrameRecord tables ready
 for Caption, OCR, Objects, ASR, and visual enrichment:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/extract_custom_keyframes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.extract_custom_keyframes \
   --media-info-dir data/media-info-aic25-b1/media-info \
   --run-root runs/custom-raw1fps-v1 \
   --native-executable build/keyframes-extraction/keyframe_extractor \
@@ -137,7 +152,7 @@ ASR, embeddings, and FAISS remain explicit stages coordinated sequentially:
 ```bash
 aic/bin/python -m pip install -e ".[pipeline]"
 
-PYTHONPATH=.:src aic/bin/python scripts/prepare_custom_pipeline.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.prepare_custom_pipeline \
   --run-root runs/custom-raw1fps-v1 \
   --output-root artifacts/custom-raw1fps-v1 \
   --native-executable build/keyframes-extraction/keyframe_extractor \
@@ -203,13 +218,13 @@ DATASET_ARGS=(
 
 # Detect and publish; the run resumes from raw JSON. --limit is a degraded
 # smoke artifact and should not be used for a final corpus.
-PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.detect_objects \
   --config configs/prepare.yaml --limit 200 "${DATASET_ARGS[@]}"
-PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.detect_objects \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # Context rebuild. CLI flags remain available for measured experiments.
-PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.build_frame_context \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 ```
 
@@ -239,13 +254,13 @@ INDEX_DATASET_ARGS=(
   --expected-frame-count 177321
 )
 
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --stage preflight \
   --config configs/prepare.yaml \
   --model-config configs/prepare.yaml \
   "${INDEX_DATASET_ARGS[@]}"
 
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --stage all \
   --config configs/prepare.yaml \
   --model-config configs/prepare.yaml \
@@ -265,7 +280,7 @@ pinned model/revisions before it starts an embedding stage, while local file
 I/O, FAISS publication, and validation remain local:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --stage all \
   --config configs/prepare.yaml \
   --model-config configs/prepare.yaml \
@@ -288,7 +303,7 @@ The `latest.json` pointer is advanced last, so an interrupted build is never
 advertised as serving data:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --s3 \
   --stage all \
   --config configs/prepare.yaml \

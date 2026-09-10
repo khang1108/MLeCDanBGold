@@ -1,5 +1,6 @@
 """Combine review sheets into a compact visual overview."""
 
+import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -7,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 def main() -> None:
     """Write one overview image for quick manual screening."""
 
+    argparse.ArgumentParser(description=__doc__).parse_args()
     root = Path("artifacts/benchmark/2026-09-06/review_sheets")
     files = sorted(root.glob("*.jpg"))
     font = ImageFont.load_default()

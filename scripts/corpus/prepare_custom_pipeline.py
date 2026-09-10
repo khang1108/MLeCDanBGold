@@ -63,10 +63,10 @@ from offline.ingestion import (
     mark_video_published,
     write_enrichment_handoff,
 )
-from scripts import extract_custom_keyframes
+from scripts.corpus import extract_custom_keyframes
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "prepare.yaml"
 DEFAULT_APP_CONFIG = PROJECT_ROOT / "configs" / "baseline.yaml"
 DEFAULT_MEDIA_INFO_URL = "https://aic-data.ledo.io.vn/media-info-aic25-b1.zip"
@@ -195,8 +195,8 @@ def _resolve_media_info_dir(media_info_dir: Path | None, media_info_url: str, ru
 # ---------------------------------------------------------------------------
 
 
-def _run_python(script: str, arguments: Sequence[str]) -> None:
-    """Run one model-heavy stage in an isolated Python process."""
+def _run_python(module_name: str, arguments: Sequence[str]) -> None:
+    """Run one model-heavy stage as a module in an isolated Python process."""
 
     import os
 
@@ -205,7 +205,7 @@ def _run_python(script: str, arguments: Sequence[str]) -> None:
     repository_paths = f"{PROJECT_ROOT}:{PROJECT_ROOT / 'src'}"
     environment["PYTHONPATH"] = f"{repository_paths}:{current}" if current else repository_paths
     subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "scripts" / script), *arguments],
+        [sys.executable, "-m", module_name, *arguments],
         cwd=PROJECT_ROOT,
         env=environment,
         check=True,
@@ -472,7 +472,7 @@ def _make_produce_batch_artifacts(
 
         common = _dataset_arguments(args, durable_frames, frame_store_root)
         _run_python(
-            "generate_enrichment.py",
+            "scripts.enrichment.generate_enrichment",
             [
                 "--config", str(args.config),
                 "--app-config", str(args.app_config),
@@ -488,7 +488,7 @@ def _make_produce_batch_artifacts(
         # execution backend; this still requires a reachable inference
         # gateway (see --app-config) until that CLI is updated.
         _run_python(
-            "generate_ocr_enrichment.py",
+            "scripts.enrichment.generate_ocr_enrichment",
             [
                 "--config", str(args.config),
                 "--app-config", str(args.app_config),
@@ -500,7 +500,7 @@ def _make_produce_batch_artifacts(
             state_store.advance_video(video_id, VideoStage.OCR_COMPLETE)
 
         _run_python(
-            "detect_objects.py",
+            "scripts.enrichment.detect_objects",
             ["--config", str(args.config), "--output", str(object_root), *common],
         )
         for video_id in video_ids:
@@ -511,7 +511,7 @@ def _make_produce_batch_artifacts(
         object_table = _require_complete_frame_artifact(object_root / "frames.parquet", frame_ids, "Object")
 
         _run_python(
-            "build_frame_context.py",
+            "scripts.enrichment.build_frame_context",
             [
                 "--config", str(args.config),
                 "--captions", str(caption_root / "captions.parquet"),

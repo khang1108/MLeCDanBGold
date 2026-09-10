@@ -36,7 +36,7 @@ from offline.ingestion.custom_state import (
     mark_video_published,
 )
 from hcmai.corpus.stores.frame import FrameStore
-from scripts import (
+from scripts.corpus import (
     extract_custom_keyframes,
     materialize_custom_frames,
 )

@@ -32,7 +32,7 @@ score nor a penalty.
 
 Embedding and index construction belongs to `offline.embeddings` and
 `offline.indexes`. The operator-facing command is
-`scripts/build_retrieval_indexes.py`; it validates inputs, builds the
+`scripts/indexing/build_retrieval_indexes.py`; it validates inputs, builds the
 configured bundles, and checks that every mapping remains aligned with the
 canonical corpus. The runtime only loads the resulting existing artifacts.
 
@@ -65,5 +65,5 @@ PYTHONPATH=.:src aic/bin/python -m pytest \
   tests/retrieval/test_segment_dense_index.py
 ```
 
-Use `PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py --help`
+Use `PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes --help`
 to inspect the non-serving build command without starting artifact work.

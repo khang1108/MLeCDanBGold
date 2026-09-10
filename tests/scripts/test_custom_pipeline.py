@@ -11,7 +11,7 @@ import zipfile
 import pandas as pd
 import pytest
 
-from scripts import prepare_custom_pipeline as pipeline
+from scripts.corpus import prepare_custom_pipeline as pipeline
 from tests.data.test_custom_frames import write_valid_native_bundle
 
 
@@ -265,28 +265,28 @@ def test_custom_pipeline_coordinates_every_local_artifact_stage(
         arguments = list(raw_arguments)  # type: ignore[arg-type]
         events.append(script)
         frames = pd.read_parquet(_argument_value(arguments, "--frames"))
-        if script == "generate_enrichment.py":
+        if script == "scripts.enrichment.generate_enrichment":
             output = _argument_value(arguments, "--output")
             output.mkdir(parents=True, exist_ok=True)
             frames.assign(
                 frame_store_id="custom-v1",
                 status="completed",
             ).to_parquet(output / "captions.parquet", index=False)
-        elif script == "generate_ocr_enrichment.py":
+        elif script == "scripts.enrichment.generate_ocr_enrichment":
             output = _argument_value(arguments, "--output")
             output.mkdir(parents=True, exist_ok=True)
             frames.assign(
                 frame_store_id="custom-v1",
                 status="completed",
             ).to_parquet(output / "frames.parquet", index=False)
-        elif script == "detect_objects.py":
+        elif script == "scripts.enrichment.detect_objects":
             output = _argument_value(arguments, "--output")
             output.mkdir(parents=True, exist_ok=True)
             frames.assign(
                 frame_store_id="custom-v1",
                 status="completed",
             ).to_parquet(output / "frames.parquet", index=False)
-        elif script == "prepare_transcripts.py":
+        elif script == "scripts.enrichment.prepare_transcripts":
             output = _argument_value(arguments, "--output") / "L01"
             output.mkdir(parents=True, exist_ok=True)
             transcript = output / f"{video_id}.parquet"
@@ -296,11 +296,11 @@ def test_custom_pipeline_coordinates_every_local_artifact_stage(
             transcript.with_suffix(".manifest.json").write_text(
                 json.dumps({"video_id": video_id}), encoding="utf-8"
             )
-        elif script == "build_frame_context.py":
+        elif script == "scripts.enrichment.build_frame_context":
             output = _argument_value(arguments, "--output")
             output.mkdir(parents=True, exist_ok=True)
             (output / "frame_context_v1.parquet").write_bytes(b"context")
-        elif script == "build_retrieval_indexes.py":
+        elif script == "scripts.indexing.build_retrieval_indexes":
             output = _argument_value(arguments, "--output-root")
             output.mkdir(parents=True, exist_ok=True)
             (output / "build_report.json").write_text(
@@ -347,12 +347,12 @@ def test_custom_pipeline_coordinates_every_local_artifact_stage(
     assert report["status"] == "passed"
     assert report["frame_count"] == 2
     assert events == [
-        "generate_enrichment.py",
-        "generate_ocr_enrichment.py",
-        "detect_objects.py",
-        "prepare_transcripts.py",
-        "build_frame_context.py",
-        "build_retrieval_indexes.py",
+        "scripts.enrichment.generate_enrichment",
+        "scripts.enrichment.generate_ocr_enrichment",
+        "scripts.enrichment.detect_objects",
+        "scripts.enrichment.prepare_transcripts",
+        "scripts.enrichment.build_frame_context",
+        "scripts.indexing.build_retrieval_indexes",
     ]
     assert (output_root / "frame_store" / "frames.parquet").is_file()
     assert (output_root / "prepare_report.json").is_file()

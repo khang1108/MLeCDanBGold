@@ -13,7 +13,7 @@ from offline.enrichment.transcripts.materialize import (
 )
 from offline.enrichment.transcripts.pipeline import TranscriptService
 
-DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/prepare.yaml"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "configs/prepare.yaml"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

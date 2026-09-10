@@ -53,7 +53,7 @@ pip install -e '.[transcripts]'
 
 export HF_TOKEN="hf_..."
 
-PYTHONPATH=.:src python scripts/prepare_transcripts.py \
+PYTHONPATH=.:src python -m scripts.enrichment.prepare_transcripts \
   --videos-root /path/to/dataset \
   --config configs/prepare.yaml \
   --version <dataset-version> \

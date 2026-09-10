@@ -15,7 +15,7 @@ from offline.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 logger = get_logger(__name__)
 
 
-DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs/prepare.yaml"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "configs/prepare.yaml"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

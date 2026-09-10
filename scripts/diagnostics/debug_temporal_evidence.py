@@ -2,7 +2,7 @@
 """CLI utility to inspect component-level temporal evidence and calibration.
 
 Usage:
-    PYTHONPATH=src:. aic/bin/python scripts/debug_temporal_evidence.py \\
+    PYTHONPATH=src:. aic/bin/python -m scripts.diagnostics.debug_temporal_evidence \\
         --query-file tests/fixtures/l26_v254_query.yaml \\
         --run B3 \\
         --video-id L26_V254 \\

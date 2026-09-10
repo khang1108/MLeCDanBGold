@@ -35,7 +35,7 @@ from offline.ingestion.custom_pipeline.shards import (
     split_batch_artifacts_by_video,
 )
 from offline.ingestion.custom_pipeline import runner
-from scripts import prepare_custom_pipeline as prepare_pipeline
+from scripts.corpus import prepare_custom_pipeline as prepare_pipeline
 
 
 _VIDEO_ID = "L01_V001"

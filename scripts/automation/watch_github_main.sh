@@ -7,7 +7,7 @@ IFS=$'\n\t'
 
 readonly SCRIPT_NAME="$(basename -- "${BASH_SOURCE[0]}")"
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly DEFAULT_REPO_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
+readonly DEFAULT_REPO_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 
 REPO_DIR="${DEFAULT_REPO_DIR}"
 REMOTE="origin"
@@ -48,9 +48,9 @@ Safety:
   - Updates must be fast-forward-only.
 
 Examples:
-  scripts/${SCRIPT_NAME}
-  scripts/${SCRIPT_NAME} --interval 15
-  scripts/${SCRIPT_NAME} --once
+  scripts/automation/${SCRIPT_NAME}
+  scripts/automation/${SCRIPT_NAME} --interval 15
+  scripts/automation/${SCRIPT_NAME} --once
 
 Stop continuous watching with Ctrl+C.
 EOF

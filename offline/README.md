@@ -75,32 +75,32 @@ DATASET_ARGS=(
 )
 
 # 1. Import organizer keyframes as the canonical frame store.
-PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.ingest_btc_keyframes \
   --btc-root data \
   --data-root data \
   --output-root artifacts/frame_store \
   --frame-store-id btc-keyframes-v1
 
 # 2. Generate captions.
-PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.generate_enrichment \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # 3. Generate structured OCR evidence.
-PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.generate_ocr_enrichment \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # 4. Run YOLOE object detection and publish canonical object artifacts.
-PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.detect_objects \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 
 # 5. Generate timestamped ASR segments from the source videos.
-PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.prepare_transcripts \
   --config configs/prepare.yaml \
   --videos-root data/videos \
   "${DATASET_ARGS[@]}"
 
 # 6. Build FrameContext only from the existing specialist artifacts.
-PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.build_frame_context \
   --config configs/prepare.yaml "${DATASET_ARGS[@]}"
 ```
 
@@ -137,7 +137,7 @@ source, extract 1-FPS frames, validate its native bundle, and create the
 durable/OCR frame-artifact tables in one resumable command:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/extract_custom_keyframes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.extract_custom_keyframes \
   --media-info-dir data/media-info-aic25-b1/media-info \
   --run-root runs/custom-raw1fps-v1 \
   --native-executable build/keyframes-extraction/keyframe_extractor \
@@ -203,7 +203,7 @@ corpus.
 Finally materialize only selected validated published bundles:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/materialize_custom_frames.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.materialize_custom_frames \
   --run-root runs/custom-raw1fps-v1 \
   --output-root runs/custom-raw1fps-v1/corpus \
   --frame-store-id custom-raw1fps-v1 \

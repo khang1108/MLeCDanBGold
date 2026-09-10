@@ -83,7 +83,7 @@ Start with an inventory-only check, then run the complete local GPU build and
 S3 publication:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --s3 \
   --s3-dry-run \
   --config configs/prepare.yaml \
@@ -91,7 +91,7 @@ PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
   --s3-config configs/prepare.yaml \
   "${INDEX_DATASET_ARGS[@]}"
 
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --s3 \
   --stage all \
   --config configs/prepare.yaml \
@@ -149,7 +149,7 @@ the `models` section of `configs/prepare.yaml` on `/ready`.
 ```bash
 export HCMAI_INFERENCE_BASE_URL="https://<private-api-hostname>"
 
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --stage all \
   --config configs/prepare.yaml \
   --model-config configs/prepare.yaml \
@@ -180,12 +180,12 @@ loads positive-duration unique transcript segments. Duplicate
 `frame_id` is the internal identity.
 
 ```bash
-python scripts/build_retrieval_indexes.py --stage preflight --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python -m scripts.indexing.build_retrieval_indexes --stage preflight --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
 nvidia-smi
-python scripts/build_retrieval_indexes.py --stage visual --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
-python scripts/build_retrieval_indexes.py --stage context --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
-python scripts/build_retrieval_indexes.py --stage asr --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
-python scripts/build_retrieval_indexes.py --stage validate --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python -m scripts.indexing.build_retrieval_indexes --stage visual --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python -m scripts.indexing.build_retrieval_indexes --stage context --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python -m scripts.indexing.build_retrieval_indexes --stage asr --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python -m scripts.indexing.build_retrieval_indexes --stage validate --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
 ```
 
 The stages publish to:
@@ -208,7 +208,7 @@ builds Visual first, releases its GPU model/cache, then reuses one BGE-M3
 adapter for Context and ASR:
 
 ```bash
-python scripts/build_retrieval_indexes.py --stage all --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
+python -m scripts.indexing.build_retrieval_indexes --stage all --config configs/prepare.yaml --model-config configs/prepare.yaml "${INDEX_DATASET_ARGS[@]}"
 ```
 
 Visual embedding displays a canonical-frame progress bar. Context and ASR show
@@ -255,7 +255,7 @@ source-dependent validator:
 
 ```bash
 cd "$HCMAI_LOCAL_ROOT"
-aic/bin/python scripts/build_retrieval_indexes.py \
+aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --stage validate \
   --config configs/prepare.yaml \
   --model-config configs/prepare.yaml

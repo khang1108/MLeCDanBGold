@@ -5,6 +5,8 @@ and http://127.0.0.1:8100 (Embeddings), slices mmap vectors (<2MB RAM),
 and computes R0, R1, R2 diagnostics across 5 benchmark queries.
 """
 
+import argparse
+import importlib
 import json
 import math
 import os
@@ -13,8 +15,6 @@ import time
 import urllib.request
 import numpy as np
 
-sys.path.insert(0, ".worktrees/p1a-soft-order/src")
-from hcmai.temporal.soft_order import align_video_soft_order, SoftOrderParams
 from hcmai.temporal.dp import align_video
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
@@ -120,6 +120,13 @@ def embed_texts_siglip(texts):
         return np.array(res["embeddings"], dtype=np.float32)
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.parse_args()
+    sys.path.insert(0, ".worktrees/p1a-soft-order/src")
+    soft_order = importlib.import_module("hcmai.temporal.soft_order")
+    align_video_soft_order = soft_order.align_video_soft_order
+    SoftOrderParams = soft_order.SoftOrderParams
+
     print("Loading posting index metadata...")
     with open("artifacts/indexes/visual/posting_video_ids.json") as f:
         video_ids = json.load(f)

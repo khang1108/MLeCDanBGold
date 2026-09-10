@@ -57,13 +57,13 @@ Run commands from the repository root. Their defaults remain in
 work.
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/ingest_btc_keyframes.py --help
-PYTHONPATH=.:src aic/bin/python scripts/generate_enrichment.py --help
-PYTHONPATH=.:src aic/bin/python scripts/generate_ocr_enrichment.py --help
-PYTHONPATH=.:src aic/bin/python scripts/detect_objects.py --help
-PYTHONPATH=.:src aic/bin/python scripts/prepare_transcripts.py --help
-PYTHONPATH=.:src aic/bin/python scripts/build_frame_context.py --help
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py --help
+PYTHONPATH=.:src aic/bin/python -m scripts.corpus.ingest_btc_keyframes --help
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.generate_enrichment --help
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.generate_ocr_enrichment --help
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.detect_objects --help
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.prepare_transcripts --help
+PYTHONPATH=.:src aic/bin/python -m scripts.enrichment.build_frame_context --help
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes --help
 ```
 
 The optional custom-video extractor is configured and built from

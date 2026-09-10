@@ -7,7 +7,7 @@ import pytest
 
 from hcmai.common.config import AdaptiveTemporalFusionConfig, HybridTemporalConfig
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
-from scripts.debug_temporal_evidence import _configure_debug_run, parse_args
+from scripts.diagnostics.debug_temporal_evidence import _configure_debug_run, parse_args
 from tests.retrieval.evidence.fakes import FakeIndex
 
 

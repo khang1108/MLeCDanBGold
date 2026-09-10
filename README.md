@@ -311,14 +311,14 @@ INDEX_DATASET_ARGS=(
   --expected-frame-count 177321
 )
 
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --s3 --s3-dry-run \
   --config configs/prepare.yaml \
   --model-config configs/prepare.yaml \
   --s3-config configs/prepare.yaml \
   "${INDEX_DATASET_ARGS[@]}"
 
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --s3 --stage all \
   --config configs/prepare.yaml \
   --model-config configs/prepare.yaml \
@@ -375,7 +375,7 @@ map keyframe, FrameContext và transcript nguồn, chạy validator trước khi
 bundle:
 
 ```bash
-PYTHONPATH=.:src aic/bin/python scripts/build_retrieval_indexes.py \
+PYTHONPATH=.:src aic/bin/python -m scripts.indexing.build_retrieval_indexes \
   --stage validate \
   --config configs/prepare.yaml \
   --model-config configs/prepare.yaml \

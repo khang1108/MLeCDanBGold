@@ -395,7 +395,7 @@ def test_offline_index_cli_all_runs_strict_sequential_stages(
 ) -> None:
     """Build all corpora in GPU-safe order and validate only after publication."""
 
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
 
     events: list[str] = []
     projected_frames = tmp_path / "projected.parquet"
@@ -450,7 +450,7 @@ def test_s3_index_cli_downloads_builds_validates_then_publishes(
 ) -> None:
     """Publish only after every local batch stage and validation succeeds."""
 
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
 
     events: list[str] = []
     projection = tmp_path / "projected.parquet"
@@ -547,7 +547,7 @@ def test_offline_index_cli_all_uses_explicit_remote_embedding_adapters(
     from hcmai.common.config import InferenceConfig
     from llm.pipeline import LLMService
     from hcmai.retrieval.embedding.pipeline import EmbeddingService
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
 
     events: list[str] = []
     projected_frames = tmp_path / "projected.parquet"
@@ -680,7 +680,7 @@ def test_offline_index_cli_does_not_read_remote_url_from_environment(
     """Keep the no-flag workflow local even if another process set an endpoint."""
 
     from llm.pipeline import LLMService
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
 
     events: list[str] = []
     projected_frames = tmp_path / "projected.parquet"
@@ -749,7 +749,7 @@ def test_remote_embedding_readiness_stops_before_preflight(
     """Fail before corpus work when the endpoint lacks the required BGE model."""
 
     from llm.pipeline import LLMService
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
 
     events: list[str] = []
     config = SimpleNamespace(projected_frames_path=tmp_path / "projected.parquet")
@@ -797,7 +797,7 @@ def test_offline_index_cli_context_does_not_build_other_modalities(
 ) -> None:
     """Permit one text-index rebuild without loading Visual or ASR builders."""
 
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
 
     events: list[str] = []
     projected_frames = tmp_path / "projected.parquet"
@@ -820,7 +820,7 @@ def test_offline_projection_resolves_relative_keyframe_root_once(
 ) -> None:
     """Keep a config-relative keyframe path directly readable by the builder."""
 
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
     from offline.embeddings.artifacts import EmbeddingArtifactBuilder
 
     monkeypatch.chdir(tmp_path)
@@ -860,7 +860,7 @@ def test_custom_projection_uses_canonical_paths_without_btc_mapping(
 ) -> None:
     """Custom extraction needs neither keyframe order nor organizer CSV data."""
 
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
 
     image = tmp_path / "published" / "v1" / "images" / "000000000.jpg"
     image.parent.mkdir(parents=True)
@@ -890,7 +890,7 @@ def test_custom_projection_uses_canonical_paths_without_btc_mapping(
 def test_offline_model_config_rejects_mutable_revisions(tmp_path: Path) -> None:
     """Refuse branch aliases that cannot reproduce a published index."""
 
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
 
     models = tmp_path / "models.yaml"
     models.write_text(
@@ -913,7 +913,7 @@ evidence_embedding:
 def test_offline_preflight_rejects_evidence_with_no_usable_corpus() -> None:
     """Stop before model loading when Context and transcript builders would fail."""
 
-    from scripts import build_retrieval_indexes as workflow
+    from scripts.indexing import build_retrieval_indexes as workflow
     from offline.enrichment.models import ProcessingStatus
 
     context = SimpleNamespace(frame_id="f1")
