@@ -1,6 +1,22 @@
 """Tests for deterministic conversion from query text to ordered events."""
 
-from hcmai.temporal.planner import plan_query_events, split_query_events
+import pytest
+
+from hcmai.temporal.planner import normalize_event_texts, plan_query_events, split_query_events
+
+
+def test_normalize_event_texts() -> None:
+    """Normalize each explicit event without changing positional cardinality."""
+
+    assert normalize_event_texts(["  A  B ", " C\nD"]) == ("A B", "C D")
+
+
+@pytest.mark.parametrize("events", [[], [" "], ["A", ""], [None], "ABC"])
+def test_normalize_event_texts_rejects_invalid_events(events: object) -> None:
+    """Reject malformed explicit event arrays instead of silently dropping entries."""
+
+    with pytest.raises(ValueError):
+        normalize_event_texts(events)  # type: ignore[arg-type]
 
 
 def test_multiline_query_prefers_lines() -> None:

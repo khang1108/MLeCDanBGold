@@ -44,6 +44,13 @@ def _valid_output(token: str = "X") -> tuple[tuple[str, ...], tuple[tuple[str, .
     )
 
 
+def test_query_preparation_translates_invalid_explicit_events() -> None:
+    """Expose malformed explicit-event input through the service error boundary."""
+
+    with pytest.raises(QueryPreparationError, match="non-string sequence"):
+        _service(ScriptedAdapter()).translate_literal("not an event sequence")
+
+
 def test_generate_candidates_retries_once_then_succeeds() -> None:
     """Retry one malformed candidate response and cache only the valid result."""
 

@@ -10,6 +10,7 @@ import re
 from collections.abc import Sequence
 
 from hcmai.common.config import QueryPreparationConfig
+from hcmai.temporal.planner import normalize_event_texts
 from hcmai.query_preparation.cache import QueryPreparationCache, cache_key
 from hcmai.query_preparation.models import (
     QueryCandidate,
@@ -101,16 +102,12 @@ class QueryPreparationService:
 
 
 def _normalize_events(events: Sequence[str]) -> tuple[str, ...]:
-    """Collapse whitespace and reject empty or non-string events."""
+    """Translate shared explicit-event validation into the service error boundary."""
 
-    if not events:
-        raise QueryPreparationError("events must not be empty")
-    if any(not isinstance(event, str) for event in events):
-        raise QueryPreparationError("events must contain strings")
-    normalized = tuple(" ".join(event.split()) for event in events)
-    if any(not event for event in normalized):
-        raise QueryPreparationError("events must contain non-empty strings")
-    return normalized
+    try:
+        return normalize_event_texts(events)
+    except ValueError as error:
+        raise QueryPreparationError(str(error)) from error
 
 
 def _build_candidate_set(

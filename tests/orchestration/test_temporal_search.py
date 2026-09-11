@@ -27,6 +27,30 @@ class FakeRetrieval:
         return self.scores
 
 
+class FakeModernRetrieval:
+    """Capture modern retrieval inputs while returning deterministic scores."""
+
+    def __init__(self, scores: list[VideoEventScores]) -> None:
+        self.scores = scores
+        self.calls: list[tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...] | None]] = []
+
+    def score_events(
+        self,
+        original_events,
+        retrieval_events,
+        *,
+        caption_events,
+        use_dense,
+        use_bm25,
+    ) -> list[VideoEventScores]:
+        """Capture normalized event bundles for the modern evidence interface."""
+
+        self.calls.append(
+            (tuple(original_events), tuple(retrieval_events), caption_events)
+        )
+        return self.scores
+
+
 class FakeData:
     """Expose canonical frame records for path materialization."""
 
@@ -73,6 +97,23 @@ def _service(scores: list[VideoEventScores]) -> TemporalSearchService:
         FakeRetrieval(scores),
         AlignmentConfig(lambda_gap=0.0, chunk_size=123),
     )
+
+
+def test_temporal_search_rejects_blank_retrieval_event_without_shifting_alignment() -> None:
+    """Reject blank retrieval entries rather than letting their indices drift."""
+
+    service = TemporalSearchService(
+        FakeData(),
+        FakeModernRetrieval([_scores()]),
+        AlignmentConfig(lambda_gap=0.0, chunk_size=123),
+    )
+
+    with pytest.raises(ValueError, match="non-empty"):
+        service.search(
+            ["first", "second"],
+            retrieval_events=["first", " "],
+            top_k=2,
+        )
 
 
 def test_temporal_search_returns_canonical_paths_and_timings() -> None:

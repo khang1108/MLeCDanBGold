@@ -31,6 +31,22 @@ _EARLIER = re.compile(r"^trước đó\b", re.IGNORECASE)
 _LATER = re.compile(r"\b(tiếp theo|sau đó|kế tiếp|ngay sau|cuối cùng là)\b", re.IGNORECASE)
 
 
+def normalize_event_texts(events: Sequence[str]) -> tuple[str, ...]:
+    """Normalize a complete explicit event sequence without changing its alignment."""
+
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise ValueError("events must be a non-string sequence")
+    if not events:
+        raise ValueError("events must not be empty")
+    if any(not isinstance(event, str) for event in events):
+        raise ValueError("events must contain strings")
+
+    normalized = tuple(" ".join(event.split()) for event in events)
+    if any(not event for event in normalized):
+        raise ValueError("events must contain non-empty strings")
+    return normalized
+
+
 def split_query_events(query: str) -> tuple[str, ...]:
     """Split one query into deterministic ordered event text.
 

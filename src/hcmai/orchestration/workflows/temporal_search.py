@@ -15,6 +15,7 @@ from typing import Any, TYPE_CHECKING, cast
 from hcmai.common.config import AlignmentConfig, DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+from hcmai.temporal.planner import normalize_event_texts
 from hcmai.temporal.dp import AlignedPath, DPPath, rank_paths
 
 if TYPE_CHECKING:
@@ -77,9 +78,7 @@ class TemporalSearchService:
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero")
 
-        original = tuple(" ".join(event.split()) for event in original_events if event.strip())
-        if not original:
-            raise ValueError("events must not be empty")
+        original = normalize_event_texts(original_events)
         if len(original) > self.max_temporal_event_count:
             raise ValueError(
                 f"requests may contain at most {self.max_temporal_event_count} temporal events"
@@ -87,7 +86,7 @@ class TemporalSearchService:
         retrieval = (
             original
             if retrieval_events is None
-            else tuple(" ".join(event.split()) for event in retrieval_events)
+            else normalize_event_texts(retrieval_events)
         )
         captions = (
             None
