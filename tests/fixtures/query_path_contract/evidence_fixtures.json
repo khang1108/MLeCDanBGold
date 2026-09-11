@@ -21,11 +21,12 @@
         "status": "NOT_EVALUATED"
       },
       "failed_enrichment": {
-        "raw_counts": null,
+        "raw_counts": {},
         "expected_optional": null,
         "expected_fallback": {},
         "status": "FAILED"
       }
+
     }
   },
   "asr_boundary_contract": {
