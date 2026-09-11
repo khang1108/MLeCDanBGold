@@ -55,15 +55,15 @@ def _service() -> tuple[SearchService, RecordingPreparationService]:
     return service, preparation
 
 
-def test_kis_query_uses_deterministic_event_splitter() -> None:
-    """Split raw KIS text before generation and return five candidates."""
+def test_kis_query_uses_semantic_event_planner() -> None:
+    """Plan raw KIS text before generation rather than preserving sentence order."""
 
     service, preparation = _service()
 
-    response = _post(service, {"query": "mot. hai."})
+    response = _post(service, {"query": "first action. Trước đó second action."})
 
     assert response.status_code == 200
-    assert preparation.calls == [("mot", "hai")]
+    assert preparation.calls == [("Trước đó second action", "first action")]
     assert len(response.json()["candidates"]) == 5
 
 

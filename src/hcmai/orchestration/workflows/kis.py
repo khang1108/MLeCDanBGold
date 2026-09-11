@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from hcmai.api.contracts import SearchLatency, SearchRequest, SearchResponse
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
+from hcmai.orchestration.errors import InvalidQueryInputError
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.temporal import plan_query_events
@@ -82,7 +83,7 @@ class KISPipeline:
             tuple(request.retrieval_events) if request.retrieval_events is not None else events
         )
         if len(retrieval_events) != len(events):
-            raise ValueError("retrieval_events must match the original event count")
+            raise InvalidQueryInputError("retrieval_events must match the original event count")
         # The published context corpus is Vietnamese. Candidate rewrites may
         # improve Dense recall, but must not replace the literal BM25 query.
         caption_events = events if request.use_bm25 else None

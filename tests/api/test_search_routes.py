@@ -18,6 +18,7 @@ from hcmai.api.contracts import (
     SearchResponse,
 )
 from hcmai.api.routers.search import create_search_router
+from hcmai.orchestration.errors import InvalidQueryInputError
 from hcmai.orchestration.pipeline import SearchService
 
 pytestmark = pytest.mark.usefixtures("inline_router_threadpool")
@@ -45,11 +46,19 @@ class _Service:
         )
 
 
-def _post(app: FastAPI, payload: dict[str, object]) -> httpx.Response:
+def _post(
+    app: FastAPI,
+    payload: dict[str, object],
+    *,
+    raise_app_exceptions: bool = True,
+) -> httpx.Response:
     """Send one request through ASGI without starting repository services."""
 
     async def send() -> httpx.Response:
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(
+            app=app,
+            raise_app_exceptions=raise_app_exceptions,
+        )
         async with httpx.AsyncClient(
             transport=transport,
             base_url="http://testserver",
@@ -103,6 +112,40 @@ def test_search_route_calls_explicit_kis_method() -> None:
     assert response.status_code == 200
     assert service.requests == [SearchRequest(query="chef cooks", top_k=3)]
     assert "query_type" not in response.json()
+
+
+def test_search_route_maps_invalid_query_input_to_422() -> None:
+    """Return a client error only for the explicit workflow input failure."""
+
+    class InvalidInputService:
+        def search_kis(self, request: SearchRequest) -> SearchResponse:
+            raise InvalidQueryInputError("retrieval_events must match the original event count")
+
+    app = FastAPI()
+    app.include_router(create_search_router({"service": InvalidInputService()}))
+
+    response = _post(app, {"query": "chef cooks", "top_k": 3})
+
+    assert response.status_code == 422
+
+
+def test_search_route_does_not_map_canonical_corruption_to_422() -> None:
+    """Keep untyped data-corruption failures visible as server errors."""
+
+    class CorruptService:
+        def search_kis(self, request: SearchRequest) -> SearchResponse:
+            raise ValueError("canonical frame identity conflict")
+
+    app = FastAPI()
+    app.include_router(create_search_router({"service": CorruptService()}))
+
+    response = _post(
+        app,
+        {"query": "chef cooks", "top_k": 3},
+        raise_app_exceptions=False,
+    )
+
+    assert response.status_code == 500
 
 
 def test_search_route_keeps_pydantic_validation() -> None:

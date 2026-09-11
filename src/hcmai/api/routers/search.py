@@ -16,6 +16,7 @@ from hcmai.api.contracts import (
     SearchResponse,
 )
 from hcmai.common.utils.logging import get_logger
+from hcmai.orchestration.errors import InvalidQueryInputError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.orchestration.workflows.image_search import (
     ImageQueryTooLargeError,
@@ -42,6 +43,11 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
             )
         try:
             return await run_in_threadpool(service.search_kis, request)
+        except InvalidQueryInputError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(error),
+            ) from error
         except KeyError as error:
             logger.warning("API search request failed error=%s", error)
             raise HTTPException(

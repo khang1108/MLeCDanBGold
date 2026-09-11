@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from hcmai.api.contracts import SearchRequest
+from hcmai.api.contracts import QueryCandidatesRequest, SearchRequest
 from hcmai.corpus import Frame
+from hcmai.orchestration.errors import InvalidQueryInputError
+from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchResult
 from hcmai.orchestration.workflows.kis import KISPipeline
+from hcmai.query_preparation.models import QueryCandidate, QueryCandidateSet
 from hcmai.temporal import AlignedPath
 
 
@@ -40,6 +43,111 @@ class FakeAlignment:
             retrieval_ms=12.5,
             alignment_ms=7.25,
         )
+
+
+class RecordingPreparationService:
+    """Capture the candidate-generation event sequence without model calls."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, ...]] = []
+
+    def generate_candidates(self, events: tuple[str, ...]) -> QueryCandidateSet:
+        """Return five aligned candidate bundles for the captured input."""
+
+        self.calls.append(events)
+        return QueryCandidateSet(
+            original_events=events,
+            literal_en=events,
+            candidates=tuple(
+                QueryCandidate(index=index, events=events)
+                for index in range(1, 6)
+            ),
+        )
+
+
+class ParityAlignment:
+    """Materialize one canonical path whose length follows planned events."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[tuple[str, ...], int]] = []
+
+    def search(
+        self,
+        events: tuple[str, ...],
+        *,
+        top_k: int,
+        **_: object,
+    ) -> TemporalSearchResult:
+        """Capture planned events and return a matching synthetic path."""
+
+        self.calls.append((events, top_k))
+        positions = tuple(range(len(events)))
+        return TemporalSearchResult(
+            paths=(
+                AlignedPath(
+                    video_id="V02",
+                    score=1.0,
+                    frame_ids=tuple(f"p{position}" for position in positions),
+                    frame_idxs=positions,
+                    timestamps_ms=tuple(position * 1_000 for position in positions),
+                ),
+            ),
+            retrieval_ms=0.0,
+            alignment_ms=0.0,
+        )
+
+
+class ParityCorpus:
+    """Expose canonical data for a variable-length parity path."""
+
+    @staticmethod
+    def frame(frame_id: str) -> Frame:
+        """Resolve a synthetic canonical frame from its numeric suffix."""
+
+        index = int(frame_id[1:])
+        return Frame(
+            frame_id=frame_id,
+            video_id="V02",
+            frame_idx=index,
+            timestamp_ms=index * 1_000,
+            image_path=f"{frame_id}.jpg",
+        )
+
+    @staticmethod
+    def title(video_id: str) -> None:
+        """Return no optional title evidence for synthetic frames."""
+
+        assert video_id == "V02"
+        return None
+
+    @staticmethod
+    def caption(frame_id: str) -> None:
+        """Return no optional caption evidence for synthetic frames."""
+
+        assert frame_id.startswith("p")
+        return None
+
+    @staticmethod
+    def ocr(frame_id: str) -> None:
+        """Return no optional OCR evidence for synthetic frames."""
+
+        assert frame_id.startswith("p")
+        return None
+
+    @staticmethod
+    def objects(frame_id: str) -> tuple[str, ...]:
+        """Return no object labels for synthetic frames."""
+
+        assert frame_id.startswith("p")
+        return ()
+
+    @staticmethod
+    def transcript(video_id: str, start_ms: int, end_ms: int) -> None:
+        """Return no transcript evidence for synthetic frames."""
+
+        assert video_id == "V02"
+        assert end_ms == start_ms + 1
+        return None
 
 
 class FakeCorpus:
@@ -88,6 +196,42 @@ class FakeCorpus:
         return "Cooking Episode"
 
 
+def test_query_candidates_and_kis_share_semantic_raw_query_planning() -> None:
+    """Send the same semantic event order to candidate generation and KIS."""
+
+    query = (
+        "Người đàn ông cầm một khối đá quý. "
+        "Trước đó là cảnh người mở cửa. "
+        "Bên phải là một phụ nữ mỉm cười. "
+        "Tiếp theo có hình ảnh toàn cảnh một mỏ đá. "
+        "Số nào?"
+    )
+    expected = (
+        "Trước đó là cảnh người mở cửa",
+        "Người đàn ông cầm một khối đá quý Bên phải là một phụ nữ mỉm cười",
+        "Tiếp theo có hình ảnh toàn cảnh một mỏ đá",
+    )
+    preparation = RecordingPreparationService()
+    candidates = SearchService(
+        corpus=None,
+        retrieval=None,
+        query_preparation=preparation,  # type: ignore[arg-type]
+    )
+    alignment = ParityAlignment()
+
+    candidate_response = candidates.generate_query_candidates(
+        QueryCandidatesRequest(query=query)
+    )
+    search_response = KISPipeline(ParityCorpus(), alignment).execute(
+        SearchRequest(query=query, use_bm25=False, top_k=1)
+    )
+
+    assert candidate_response.original_events == list(expected)
+    assert search_response.events == list(expected)
+    assert preparation.calls == [expected]
+    assert alignment.calls == [(expected, 1)]
+
+
 def test_kis_projects_middle_frame_and_materializes_representative_metadata() -> None:
     """Keep every aligned path entry while showing the middle moment of the path."""
 
@@ -114,6 +258,20 @@ def test_kis_projects_middle_frame_and_materializes_representative_metadata() ->
     assert response.latency.retrieval_ms == pytest.approx(12.5)
     assert response.latency.alignment_ms == pytest.approx(7.25)
     assert alignment.calls == [(("e1", "e2", "e3", "e4", "e5"), 1)]
+
+
+def test_kis_raises_typed_error_for_retrieval_event_count_mismatch() -> None:
+    """Classify an explicit user override mismatch before temporal search."""
+
+    with pytest.raises(InvalidQueryInputError, match="retrieval_events"):
+        KISPipeline(FakeCorpus(), FakeAlignment()).execute(
+            SearchRequest(
+                query="first action\nsecond action",
+                retrieval_events=["one override"],
+                use_bm25=False,
+                top_k=1,
+            )
+        )
 
 
 def test_kis_rejects_whitespace_query_before_pipeline_execution() -> None:

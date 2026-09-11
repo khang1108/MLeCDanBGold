@@ -34,7 +34,7 @@ from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.retrieval.models import RetrievalSource
-from hcmai.temporal.planner import split_query_events
+from hcmai.temporal.planner import plan_query_events
 
 if TYPE_CHECKING:
     from hcmai.query_preparation.service import QueryPreparationService
@@ -400,7 +400,7 @@ class SearchService:
         events = (
             tuple(request.events)
             if request.events is not None
-            else split_query_events(request.query or "")
+            else plan_query_events(request.query or "")
         )
         started = perf_counter()
         result = self.query_preparation.generate_candidates(events)
