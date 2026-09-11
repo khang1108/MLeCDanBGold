@@ -1,0 +1,45 @@
+{
+  "attribute_sentence": {
+    "description": "An attribute sentence describing the same visual moment folds into that moment rather than creating a separate frame requirement.",
+    "input_query": "Hành động cắt chùm nho bằng kéo từ giàn nho. Có thể thấy có một sợi dây màu xanh dương được buộc vào cuống.",
+    "expected_events": [
+      "Hành động cắt chùm nho bằng kéo từ giàn nho Có thể thấy có một sợi dây màu xanh dương được buộc vào cuống"
+    ],
+
+    "expected_count": 1
+  },
+  "trailing_question": {
+    "description": "Trailing question asking for reviewer QA verification is dropped from retrieval moments.",
+    "input_query": "Hình ảnh một con cá được đặt lên cân, sau đó có cảnh một con cá khác cùng loại bị một người cầm đuôi. Con số hiển thị cuối cùng trên cân là bao nhiêu?",
+    "expected_events": [
+      "Hình ảnh một con cá được đặt lên cân, sau đó có cảnh một con cá khác cùng loại bị một người cầm đuôi"
+    ],
+    "expected_count": 1,
+    "forbidden_substring": "bao nhiêu"
+  },
+  "truoc_do_temporal_order": {
+    "description": "'Trước đó' indicates an earlier event in chronological timeline; planner restores chronological order.",
+    "input_query": "Có 4 tài xế xe ôm trong trạm xăng. Trước đó là cảnh một người đậy nắp bình xăng.",
+    "expected_events": [
+      "Trước đó là cảnh một người đậy nắp bình xăng",
+      "Có 4 tài xế xe ôm trong trạm xăng"
+    ],
+    "expected_count": 2,
+    "first_event_prefix": "Trước",
+    "second_event_prefix": "Có"
+  },
+  "explicit_trake_sequence": {
+    "description": "Explicit TRAKE event sequences must preserve items and order without re-splitting or dropping.",
+    "input_events": [
+      "người phụ nữ bước vào cửa hàng",
+      "chọn một món đồ trên kệ",
+      "thanh toán tại quầy thu ngân"
+    ],
+    "expected_events": [
+      "người phụ nữ bước vào cửa hàng",
+      "chọn một món đồ trên kệ",
+      "thanh toán tại quầy thu ngân"
+    ],
+    "expected_count": 3
+  }
+}

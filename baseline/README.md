@@ -195,9 +195,18 @@ PYTHONPATH=.:src aic/bin/python -m baseline.run_global_query \
 
 ## Evaluation
 
-The evaluator accepts both historical response lists and the versioned baseline envelope:
+The evaluator accepts both historical response lists and the versioned baseline envelope, supporting either the authoritative fixture via `--test-set` or raw query directories via `--query-root`:
 
 ```bash
+# Evaluate with frozen test-set fixture (recommended, supports KIS, QA retrieval-only, TRAKE)
+PYTHONPATH=.:src aic/bin/python -m scripts.evaluation.evaluate_benchmark_v2 \
+  --responses artifacts/baselines/dante_style_unary_dp.json \
+  --test-set artifacts/evaluation/query_002.json \
+  --metadata artifacts/frame_store/frames.parquet \
+  --tolerance-seconds 5 \
+  --output artifacts/baselines/dante_style_unary_dp.metrics.json
+
+# Legacy directory evaluation fallback
 PYTHONPATH=.:src aic/bin/python -m scripts.evaluation.evaluate_benchmark_v2 \
   --responses artifacts/baselines/dante_style_unary_dp.json \
   --query-root artifacts/query \
@@ -207,3 +216,32 @@ PYTHONPATH=.:src aic/bin/python -m scripts.evaluation.evaluate_benchmark_v2 \
 ```
 
 For a global TRAKE result, video recall is valid, while event recall and AllHit remain false because the method emits only one frame. Compare event grounding only among methods that emit one assignment for every original event.
+
+## Compatibility Notes & Contract Invariants
+
+During and after the query-to-path contract cleanup (Task 0+):
+
+1. **Canonical Identity Invariants:**
+   - Evaluator and runner pipelines must preserve canonical `video_id`, `frame_id`, `frame_idx`, and `timestamp_ms`.
+   - Modality fusion, lattice construction, and DP decoders must never mutate, invent, or drop canonical IDs.
+   - Decoded results maintain exact equality with historical baseline runs:
+     ```python
+     assert after.video_id == before.video_id
+     assert after.frame_ids == before.frame_ids
+     assert after.frame_idxs == before.frame_idxs
+     assert after.timestamps_ms == before.timestamps_ms
+     assert after.score == before.score
+     ```
+
+2. **Score and Metric Integrity:**
+   - Numerical kernels and decoder weights remain unchanged. Exact float scores are expected; tolerance must not be loosened.
+   - In research extensions, additional verifier scores must be recorded in sidecars or distinct fields (`decoder_score` vs `verifier_score`) without overwriting baseline `score`.
+
+3. **Query Event Planning:**
+   - Raw KIS and QA queries use `plan_query_events` to fold attribute sentences, drop trailing questions, and restore chronological order.
+   - Explicit TRAKE event lines (`E<n>:` or explicit event arrays) are preserved exactly without splitting or reordering.
+
+4. **Memory and Resource Guardrails:**
+   - Avoid loading full parquet tables, massive image datasets, or FAISS indices simultaneously into memory during automated tests or local benchmarks.
+   - Use targeted test paths (`tests/architecture/test_query_path_contract.py`, `tests/temporal`, `tests/orchestration`, `tests/api`) with synthetic fixtures to prevent out-of-memory (OOM) conditions.
+

@@ -1,0 +1,64 @@
+{
+  "manifest_version": "1.0.0",
+  "created_at": "2026-09-12T00:40:00+07:00",
+  "base_git_revision": "753b0770288d181059721a4b80fd377b3aceec83",
+  "branch": "feat/contract-cleanup",
+  "source_fingerprints": {
+    "src/hcmai/temporal/planner.py": "9a48c080297b3ee53b5216a8295829131fafe3786cbeeaa0269335313a7f515e",
+    "src/hcmai/temporal/dp.py": "55261b5341d8bedbabca34580facae904653ae31d9252c0d89d14d3d09cb72b0",
+    "src/hcmai/orchestration/materializer.py": "d7711dd0233a6fff1f37302f1ea9418b2a8e87de7ea5284691c981d86af15276",
+    "src/hcmai/corpus/corpus.py": "7714a9786751e7240ad894957028ded4acd4c6b0cc0c67602bb9357208024d78",
+    "baseline/runner.py": "093e8c9b7c7b20a802b4b243a888ad62a780d2a12d7146f50ebe4cdd1fd47560",
+    "baseline/contracts.py": "a4c26b5432f20f9dbb2a6927896d4751a9775008a8b7cf1193a38874a5ac27b7"
+  },
+  "baseline_outputs": [
+    {
+      "method": "global_query",
+      "path": "artifacts/baselines/global_query.json",
+      "sha256": "ac65aa11e61b284c2d22d7a706cc0a731a282baa1e4f4fa54a84ce4edeb7c0be",
+      "queries_count": 30
+    },
+    {
+      "method": "independent_events",
+      "path": "artifacts/baselines/independent_events.json",
+      "sha256": "a9b123c40734eaf23830c222193947ea60486b34c3aa4dfc8d83636f7c3b0b36",
+      "queries_count": 30
+    },
+    {
+      "method": "dante_style_unary_dp",
+      "path": "artifacts/baselines/dante_style_unary_dp.json",
+      "sha256": "2aae46c8a515125b50d3afb9787e43c2d3176ee33348d559338c2a1123125840",
+      "queries_count": 30
+    },
+    {
+      "method": "unary_candidate_lattice",
+      "path": "artifacts/baselines/unary_candidate_lattice.json",
+      "sha256": "902983e4e32022cadca387c082e8e9031c4a1c5a62ff50cb929888d6404a9e9b",
+      "queries_count": 30
+    },
+    {
+      "method": "unary_bounded_order",
+      "path": "artifacts/baselines/unary_bounded_order.json",
+      "sha256": "dcc1a58b646174e1a20ca9e9aa199ccf187733387fd27b64ee1e31275582a2a4",
+      "queries_count": 30
+    }
+  ],
+  "contract_semantics": {
+    "canonical_identities": [
+      "video_id",
+      "frame_id",
+      "frame_idx",
+      "timestamp_ms"
+    ],
+    "identity_invariants": "Must remain byte-for-byte identical through decoding, materialization, and API projection.",
+    "score_precision": "Exact IEEE 754 float comparison; no tolerance expansion permitted in cleanup.",
+    "time_units": "Milliseconds integer for all timestamps (timestamp_ms, start_ms, end_ms).",
+    "asr_interval": "Half-open [start_ms, end_ms).",
+    "objects_evidence": "dict[str, int] for completed detections (including {} for 0 objects), None for missing or uncompleted store."
+  },
+  "safe_test_commands": {
+    "architecture_contract": "PYTHONPATH=. .venv/bin/pytest tests/architecture/test_query_path_contract.py -v",
+    "targeted_characterization": "PYTHONPATH=. .venv/bin/pytest tests/temporal tests/query_preparation tests/orchestration tests/api tests/corpus -q",
+    "memory_guardrail": "Do NOT run broad repository-wide pytest without directory filters; broad imports load multiple PyTorch/Transformers models simultaneously causing OOM."
+  }
+}
