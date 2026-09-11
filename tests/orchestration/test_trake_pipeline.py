@@ -4,9 +4,27 @@ from __future__ import annotations
 
 import pytest
 from hcmai.api.contracts import TRAKERequest
+from hcmai.corpus import Frame
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchResult
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.temporal import AlignedPath
+
+
+class FakeCorpus:
+    """Resolve the canonical frame metadata retained by synthetic paths."""
+
+    @staticmethod
+    def frame(frame_id: str) -> Frame:
+        """Return a minimal canonical record inferred from a frame suffix."""
+
+        index = int(frame_id.replace("f", "").replace(" ", ""))
+        return Frame(
+            frame_id=frame_id,
+            video_id="v1",
+            frame_idx=(index + 1) * 10,
+            timestamp_ms=(index + 1) * 1_000,
+            image_path=f"{frame_id}.jpg",
+        )
 
 
 class FakeAlignment:
@@ -15,6 +33,7 @@ class FakeAlignment:
     def __init__(self) -> None:
         """Initialize a call log for the shared-service boundary assertion."""
 
+        self.corpus = FakeCorpus()
         self.calls: list[tuple[tuple[str, ...], int]] = []
 
     def search(
@@ -90,6 +109,8 @@ def test_trake_returns_empty_paths_for_valid_unalignable_events() -> None:
     class EmptyAlignment:
         """Return a valid empty temporal-search result."""
 
+        corpus = FakeCorpus()
+
         def search(
             self,
             events: list[str],
@@ -111,3 +132,41 @@ def test_trake_returns_empty_paths_for_valid_unalignable_events() -> None:
     )
 
     assert response.paths == []
+
+
+def test_trake_validates_every_path_entry_before_projection() -> None:
+    """Reject a later canonical mismatch rather than serializing it to TRAKE."""
+
+    class InvalidAlignment:
+        """Return a path whose first frame is canonical but second frame is not."""
+
+        corpus = FakeCorpus()
+
+        def search(
+            self,
+            events: list[str],
+            *,
+            top_k: int,
+            **_: object,
+        ) -> TemporalSearchResult:
+            """Return one path with a later frame-index mismatch."""
+
+            del events, top_k
+            return TemporalSearchResult(
+                paths=(
+                    AlignedPath(
+                        video_id="v1",
+                        score=1.0,
+                        frame_ids=("f0", "f1"),
+                        frame_idxs=(10, 99),
+                        timestamps_ms=(1_000, 2_000),
+                    ),
+                ),
+                retrieval_ms=0.0,
+                alignment_ms=0.0,
+            )
+
+    with pytest.raises(ValueError, match="frame_idx"):
+        TRAKEPipeline(InvalidAlignment()).execute(
+            TRAKERequest(events=["e1", "e2"], use_bm25=False, top_k=1)
+        )

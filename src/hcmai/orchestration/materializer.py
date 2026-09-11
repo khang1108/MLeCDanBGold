@@ -7,7 +7,7 @@ client-facing keyframe URLs.
 
 from __future__ import annotations
 
-from hcmai.api.contracts import SearchResult, SearchResultMetadata
+from hcmai.api.contracts import SearchResult, SearchResultMetadata, TRAKEPath
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
 from hcmai.temporal import AlignedPath
@@ -21,13 +21,8 @@ class SearchMaterializer:
 
         self.corpus = corpus
 
-    def build_kis_result(self, path: AlignedPath) -> SearchResult:
-        """Project one aligned path to its upper-middle canonical frame.
-
-        Metadata comes only from the selected representative frame and its
-        transcript segments at the representative timestamp. The complete
-        aligned frame and timestamp arrays remain untouched in the result.
-        """
+    def validate_aligned_path(self, path: AlignedPath) -> None:
+        """Reject a path whose canonical identity disagrees with the corpus."""
 
         if not path.frame_ids:
             raise ValueError("aligned path must contain at least one frame")
@@ -38,18 +33,35 @@ class SearchMaterializer:
         ):
             raise ValueError("aligned path arrays must have equal lengths")
 
+        for frame_id, frame_idx, timestamp_ms in zip(
+            path.frame_ids,
+            path.frame_idxs,
+            path.timestamps_ms,
+            strict=True,
+        ):
+            frame = self.corpus.frame(frame_id)
+            if frame.frame_id != frame_id:
+                raise ValueError("aligned frame_id disagrees with canonical frame")
+            if frame.video_id != path.video_id:
+                raise ValueError("aligned video_id disagrees with canonical frame")
+            if frame.frame_idx != frame_idx:
+                raise ValueError("aligned frame_idx disagrees with canonical frame")
+            if frame.timestamp_ms != timestamp_ms:
+                raise ValueError("aligned timestamp disagrees with canonical frame")
+
+    def build_kis_result(self, path: AlignedPath) -> SearchResult:
+        """Project one aligned path to its upper-middle canonical frame.
+
+        Metadata comes only from the selected representative frame and its
+        transcript segments at the representative timestamp. The complete
+        aligned frame and timestamp arrays remain untouched in the result.
+        """
+
+        self.validate_aligned_path(path)
+
         representative = len(path.frame_ids) // 2
         frame_id = path.frame_ids[representative]
         frame = self.corpus.frame(frame_id)
-
-        # The organizer-provided coordinate is submission-critical. A path
-        # may not silently replace it with keyframe order or any local index.
-        if frame.frame_idx != path.frame_idxs[representative]:
-            raise ValueError("aligned frame_idx disagrees with canonical frame")
-        if frame.video_id != path.video_id:
-            raise ValueError("aligned video_id disagrees with canonical frame")
-        if frame.timestamp_ms != path.timestamps_ms[representative]:
-            raise ValueError("aligned timestamp disagrees with canonical frame")
 
         return SearchResult(
             frame_id=frame.frame_id,
@@ -61,6 +73,18 @@ class SearchMaterializer:
             timestamps_ms=list(path.timestamps_ms),
             fps=frame.fps,
             metadata=self.build_frame_metadata(frame),
+        )
+
+    @staticmethod
+    def build_trake_path(path: AlignedPath) -> TRAKEPath:
+        """Project one already validated aligned path into the TRAKE response shape."""
+
+        return TRAKEPath(
+            video_id=path.video_id,
+            score=path.score,
+            frame_ids=list(path.frame_ids),
+            frame_idxs=list(path.frame_idxs),
+            timestamps_ms=list(path.timestamps_ms),
         )
 
     def build_frame_metadata(self, frame: Frame) -> SearchResultMetadata:

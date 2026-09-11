@@ -14,6 +14,7 @@ from typing import Any, TYPE_CHECKING, cast
 
 from hcmai.common.config import AlignmentConfig, DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
+from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.planner import normalize_event_texts
 from hcmai.temporal.dp import AlignedPath, DPPath, rank_paths
@@ -52,6 +53,7 @@ class TemporalSearchService:
         """Bind canonical data access, retrieval scoring, and DP settings."""
 
         self.corpus = corpus
+        self.materializer = SearchMaterializer(corpus)
         self.evidence = evidence
         self.config = config
         self.max_temporal_event_count = max_temporal_event_count
@@ -224,24 +226,15 @@ class TemporalSearchService:
             if int(video.frame_idx[position]) != frame_idx:
                 raise ValueError("decoded path frame_idx conflicts with score metadata")
 
-            frame = self.corpus.frame(frame_id)
-            timestamp_ms = round(float(video.timestamps_ms[position]))
-            if frame.video_id != row.video_id:
-                raise ValueError("decoded path frame has mixed canonical video identity")
-            if frame.frame_id != frame_id:
-                raise ValueError("decoded path frame_id conflicts with canonical data")
-            if frame.frame_idx != frame_idx:
-                raise ValueError("decoded path frame_idx conflicts with canonical data")
-            if frame.timestamp_ms != timestamp_ms:
-                raise ValueError("decoded path timestamp conflicts with canonical data")
+            frame_idxs.append(frame_idx)
+            timestamps_ms.append(round(float(video.timestamps_ms[position])))
 
-            frame_idxs.append(frame.frame_idx)
-            timestamps_ms.append(frame.timestamp_ms)
-
-        return AlignedPath(
+        path = AlignedPath(
             video_id=row.video_id,
             score=row.score,
             frame_ids=row.frame_ids,
             frame_idxs=tuple(frame_idxs),
             timestamps_ms=tuple(timestamps_ms),
         )
+        self.materializer.validate_aligned_path(path)
+        return path

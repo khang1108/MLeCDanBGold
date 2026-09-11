@@ -11,16 +11,11 @@ from __future__ import annotations
 from time import perf_counter
 from typing import TYPE_CHECKING
 
-from hcmai.api.contracts import (
-    SearchLatency,
-    TRAKEPath,
-    TRAKERequest,
-    TRAKEResponse,
-)
+from hcmai.api.contracts import SearchLatency, TRAKERequest, TRAKEResponse
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.common.utils.logging import get_logger
+from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
-from hcmai.temporal import AlignedPath
 
 if TYPE_CHECKING:
     from hcmai.query_preparation.service import QueryPreparationService
@@ -78,7 +73,11 @@ class TRAKEPipeline:
         )
 
         materialization_started = perf_counter()
-        paths = [self._build_path(path) for path in search.paths]
+        materializer = SearchMaterializer(self.temporal.corpus)
+        paths = []
+        for path in search.paths:
+            materializer.validate_aligned_path(path)
+            paths.append(SearchMaterializer.build_trake_path(path))
         materialization_ms = (perf_counter() - materialization_started) * 1_000
         total_ms = (perf_counter() - started) * 1_000
 
@@ -103,15 +102,3 @@ class TRAKEPipeline:
                 materialization_ms=materialization_ms,
                 total_ms=total_ms,
         ),)
-
-    @staticmethod
-    def _build_path(path: AlignedPath) -> TRAKEPath:
-        """Convert one canonical aligned path without changing its coordinates."""
-        frame_ids = list(path.frame_ids)
-        return TRAKEPath(
-            video_id=path.video_id,
-            score=path.score,
-            frame_ids=frame_ids,
-            frame_idxs=list(path.frame_idxs),
-            timestamps_ms=list(path.timestamps_ms),
-        )
