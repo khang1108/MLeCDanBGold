@@ -141,12 +141,10 @@ class SearchService:
         self.kis = KISPipeline(
             self.corpus,
             temporal,
-            query_preparation,
             self.config.max_temporal_event_count,
         )
         self.trake = TRAKEPipeline(
             temporal,
-            query_preparation,
             self.config.max_temporal_event_count,
         )
 

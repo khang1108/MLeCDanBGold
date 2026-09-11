@@ -9,7 +9,6 @@ canonical alignment identity.
 from __future__ import annotations
 
 from time import perf_counter
-from typing import TYPE_CHECKING
 
 from hcmai.api.contracts import SearchLatency, TRAKERequest, TRAKEResponse
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
@@ -17,8 +16,6 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 
-if TYPE_CHECKING:
-    from hcmai.query_preparation.service import QueryPreparationService
 
 logger = get_logger(__name__)
 
@@ -29,13 +26,11 @@ class TRAKEPipeline:
     def __init__(
         self,
         temporal: TemporalSearchService | None,
-        query_preparation: QueryPreparationService | None = None,
         max_temporal_event_count: int = DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
     ) -> None:
         """Bind the shared temporal-search service used by this task head."""
 
         self.temporal = temporal
-        self.query_preparation = query_preparation
         self.max_temporal_event_count = max_temporal_event_count
 
     def execute(self, request: TRAKERequest) -> TRAKEResponse:

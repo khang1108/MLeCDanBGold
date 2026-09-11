@@ -8,7 +8,6 @@ frame. It does not own retrieval, reranking, task dispatch, or trace payloads.
 from __future__ import annotations
 
 from time import perf_counter
-from typing import TYPE_CHECKING
 
 from hcmai.api.contracts import SearchLatency, SearchRequest, SearchResponse
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
@@ -18,9 +17,6 @@ from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.temporal import plan_query_events
 
-if TYPE_CHECKING:
-    from hcmai.query_preparation.service import QueryPreparationService
-
 
 class KISPipeline:
     """Project aligned paths into deterministic KIS representative results."""
@@ -29,14 +25,12 @@ class KISPipeline:
         self,
         corpus: Corpus | None,
         temporal: TemporalSearchService | None,
-        query_preparation: QueryPreparationService | None = None,
         max_temporal_event_count: int = DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
     ) -> None:
         """Bind canonical materialization and the shared temporal service."""
 
         self.corpus = corpus
         self.temporal = temporal
-        self.query_preparation = query_preparation
         self.max_temporal_event_count = max_temporal_event_count
         self.materializer = SearchMaterializer(corpus) if corpus is not None else None
 
