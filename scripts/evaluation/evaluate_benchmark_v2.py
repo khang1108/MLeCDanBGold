@@ -85,6 +85,11 @@ def candidate_frames(candidate: dict[str, Any], frame_map: dict[str, tuple[str, 
     representative = frame_map.get(str(candidate.get("frame_id", "")))
     if representative is not None:
         values.insert(0, representative)
+    elif "video_id" in candidate and "frame_idx" in candidate:
+        vid = str(candidate["video_id"])
+        f_idx = int(candidate["frame_idx"])
+        t_ms = int(candidate.get("timestamp_ms", 0))
+        values.insert(0, (vid, f_idx, t_ms))
     return values
 
 
@@ -94,6 +99,7 @@ def kis_hits(
     frame_map: dict[str, tuple[str, int, int]],
     fps_map: dict[str, float],
     tolerance_ms: float,
+    gt_entries: list[dict[str, Any]] | None = None,
 ) -> tuple[bool, bool, bool]:
     """Return video, representative, and any-path-frame relevance flags."""
 
@@ -104,7 +110,29 @@ def kis_hits(
     ]
     frames = candidate_frames(candidate, frame_map)
     video = str(candidate.get("video_id", ""))
-    video_hit = video in {item[0] for item in positives}
+    target_videos = {item[0] for item in positives}
+    if gt_entries:
+        target_videos |= {str(gt.get("video_id", "")) for gt in gt_entries if "video_id" in gt}
+    video_hit = video in target_videos
+
+    windowed_entries = [gt for gt in (gt_entries or []) if "time_windows_ms" in gt or "frame_windows" in gt]
+
+    def frame_matches_window(frame: tuple[str, int, int], gt: dict[str, Any]) -> bool:
+        if frame[0] != gt.get("video_id"):
+            return False
+        if "time_windows_ms" in gt:
+            for win in gt["time_windows_ms"]:
+                start_ms, end_ms = win[0], win[1]
+                if (start_ms - tolerance_ms) <= frame[2] <= (end_ms + tolerance_ms):
+                    return True
+        if "frame_windows" in gt:
+            fps = fps_map.get(frame[0], 30.0)
+            tol_frames = int(round(tolerance_ms * fps / 1000.0)) if tolerance_ms > 0 else 0
+            for win in gt["frame_windows"]:
+                start_idx, end_idx = win[0], win[1]
+                if (start_idx - tol_frames) <= frame[1] <= (end_idx + tol_frames):
+                    return True
+        return False
 
     def matches(frame: tuple[str, int, int], positive: tuple[str, int]) -> bool:
         if frame[0] != positive[0]:
@@ -113,8 +141,18 @@ def kis_hits(
             return frame[1] == positive[1]
         return abs(frame[2] - label_ms(positive[0], positive[1], fps_map)) <= tolerance_ms
 
-    representative_hit = bool(frames) and any(matches(frames[0], positive) for positive in positives)
-    path_hit = any(matches(frame, positive) for frame in frames for positive in positives)
+    if windowed_entries:
+        representative_hit = bool(frames) and any(
+            frame_matches_window(frames[0], gt) for gt in windowed_entries
+        )
+        path_hit = any(
+            frame_matches_window(frame, gt)
+            for frame in frames
+            for gt in windowed_entries
+        )
+    else:
+        representative_hit = bool(frames) and any(matches(frames[0], positive) for positive in positives)
+        path_hit = any(matches(frame, positive) for frame in frames for positive in positives)
     return video_hit, representative_hit, path_hit
 
 
@@ -124,14 +162,48 @@ def trake_hits(
     fps_map: dict[str, float],
     tolerance_ms: float,
     expected_event_count: int,
+    gt_entries: list[dict[str, Any]] | None = None,
 ) -> tuple[bool, list[bool], bool]:
     """Return independent video and full-path TRAKE relevance flags."""
 
     video = str(candidate.get("video_id", ""))
-    video_hit = any(row and row[0] == video for row in labels)
+    target_videos = {row[0] for row in labels if row}
+    if gt_entries:
+        target_videos |= {str(gt.get("video_id", "")) for gt in gt_entries if "video_id" in gt}
+    video_hit = video in target_videos
+
     values = [int(value) for value in candidate.get("frame_idxs", [])]
+    timestamps = [int(t) for t in candidate.get("timestamps_ms", [])]
     if len(values) != expected_event_count:
         return video_hit, [False] * expected_event_count, False
+
+    windowed_trake = [gt for gt in (gt_entries or []) if "event_windows" in gt and gt.get("video_id") == video]
+    if windowed_trake:
+        for entry in windowed_trake:
+            ews = entry["event_windows"]
+            if len(ews) != expected_event_count:
+                continue
+            event_hits = []
+            for i in range(expected_event_count):
+                ew = ews[i]
+                val = values[i]
+                t_val = timestamps[i] if i < len(timestamps) else label_ms(video, val, fps_map)
+                hit = False
+                if "time_window_ms" in ew:
+                    s_ms, e_ms = ew["time_window_ms"][0], ew["time_window_ms"][1]
+                    if (s_ms - tolerance_ms) <= t_val <= (e_ms + tolerance_ms):
+                        hit = True
+                if not hit and "frame_window" in ew:
+                    fps = fps_map.get(video, 30.0)
+                    tol_f = int(round(tolerance_ms * fps / 1000.0)) if tolerance_ms > 0 else 0
+                    s_f, e_f = ew["frame_window"][0], ew["frame_window"][1]
+                    if (s_f - tol_f) <= val <= (e_f + tol_f):
+                        hit = True
+                event_hits.append(hit)
+            chronological = tuple(sorted(values)) == tuple(values)
+            all_hit = all(event_hits) and chronological
+            return video_hit, event_hits, all_hit
+
     rows = [
         row
         for row in labels
@@ -165,27 +237,79 @@ def load_responses(path: Path) -> list[dict[str, Any]]:
     return responses
 
 
-def evaluate(response_path: Path, query_root: Path, metadata_path: Path, tolerance_seconds: float) -> dict[str, Any]:
+from scripts.evaluation.query_test_set import load_query_test_set
+
+
+def evaluate(
+    response_path: Path,
+    query_root: Path | None,
+    metadata_path: Path,
+    tolerance_seconds: float,
+    *,
+    test_set_path: Path | None = None,
+) -> dict[str, Any]:
     """Evaluate one raw-response JSON file or baseline run envelope."""
 
     responses = load_responses(response_path)
     frame_map, fps_map = load_frame_maps(metadata_path)
     tolerance_ms = tolerance_seconds * 1000.0
+
+    test_set_cases: dict[str, dict[str, Any]] = {}
+    if test_set_path is not None:
+        test_set = load_query_test_set(Path(test_set_path))
+        for case in test_set["cases"]:
+            test_set_cases[case["query_id"]] = case
+            test_set_cases[case["source_query_file"]] = case
+            test_set_cases[Path(case["source_query_file"]).name] = case
+
     rows: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for item in responses:
-        query_file = str(item.get("query_file", ""))
+        raw_query_file = str(item.get("query_file", ""))
+        query_id = str(item.get("query_id") or Path(raw_query_file).stem)
+        query_file = raw_query_file or query_id
+
         if item.get("status_code") != 200:
             skipped.append({"query_file": query_file, "reason": "request_failed"})
             continue
-        source = Path(query_file)
-        gt = query_root / source.parent.name / "ground_truth" / f"{source.stem}.csv"
-        if not gt.is_file():
-            skipped.append({"query_file": query_file, "reason": "no_ground_truth"})
-            continue
-        labels = labels_from(gt)
+
+        case: dict[str, Any] | None = None
+        if test_set_path is not None:
+            case = (
+                test_set_cases.get(query_id)
+                or test_set_cases.get(raw_query_file)
+                or test_set_cases.get(Path(raw_query_file).name)
+            )
+            if case is None:
+                skipped.append({"query_file": query_file, "reason": "no_ground_truth"})
+                continue
+            kind = str(case["kind"])
+            if kind == "trake":
+                labels = [
+                    (entry["video_id"], *(str(idx) for idx in entry.get("frame_idxs", [])))
+                    for entry in case["ground_truth"]
+                    if "frame_idxs" in entry
+                ]
+            else:
+                labels = [
+                    (entry["video_id"], str(entry["frame_idxs"][0]))
+                    for entry in case["ground_truth"]
+                    if "frame_idxs" in entry and entry["frame_idxs"]
+                ]
+        else:
+            if not query_root:
+                skipped.append({"query_file": query_file, "reason": "no_ground_truth"})
+                continue
+            source = Path(query_file)
+            gt = Path(query_root) / source.parent.name / "ground_truth" / f"{source.stem}.csv"
+            if not gt.is_file():
+                skipped.append({"query_file": query_file, "reason": "no_ground_truth"})
+                continue
+            labels = labels_from(gt)
+            kind = str(item.get("type", "kis"))
+
+        gt_entries = case.get("ground_truth") if case is not None else None
         body = item.get("response") or {}
-        kind = str(item.get("type", "kis"))
         candidates = body.get("paths", []) if kind == "trake" else body.get("results", [])
         response_event_count = len(body.get("events", []))
         video_flags: list[bool] = []
@@ -194,20 +318,27 @@ def evaluate(response_path: Path, query_root: Path, metadata_path: Path, toleran
         event_matrix: list[list[bool]] = []
         for candidate in candidates:
             if kind == "trake":
-                expected_event_count = response_event_count or len(candidate.get("frame_idxs", []))
+                expected_event_count = (
+                    len(case["events"])
+                    if case is not None
+                    else (response_event_count or len(candidate.get("frame_idxs", [])))
+                )
                 video_hit, event_hit, all_hit = trake_hits(
                     candidate,
                     labels,
                     fps_map,
                     tolerance_ms,
                     expected_event_count,
+                    gt_entries=gt_entries,
                 )
                 video_flags.append(video_hit)
                 representative_flags.append(all_hit)
                 path_flags.append(all_hit)
                 event_matrix.append(event_hit)
             else:
-                video_hit, representative_hit, path_hit = kis_hits(candidate, labels, frame_map, fps_map, tolerance_ms)
+                video_hit, representative_hit, path_hit = kis_hits(
+                    candidate, labels, frame_map, fps_map, tolerance_ms, gt_entries=gt_entries
+                )
                 video_flags.append(video_hit)
                 representative_flags.append(representative_hit)
                 path_flags.append(path_hit)
@@ -272,14 +403,34 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--responses", required=True)
+    parser.add_argument(
+        "--test-set",
+        type=Path,
+        default=None,
+        help="Path to validated query test-set JSON fixture (preferred over --query-root).",
+    )
     parser.add_argument("--query-root", default="artifacts/query")
     parser.add_argument("--metadata", default="artifacts/frame_store/frames.parquet")
     parser.add_argument("--output", required=True)
     parser.add_argument("--tolerance-seconds", type=float, default=5.0)
     args = parser.parse_args()
+    query_root = Path(args.query_root) if args.query_root else None
+    test_set_path = Path(args.test_set) if args.test_set else None
     result = {
-        "exact": evaluate(Path(args.responses), Path(args.query_root), Path(args.metadata), 0.0),
-        f"relaxed_{args.tolerance_seconds:g}s": evaluate(Path(args.responses), Path(args.query_root), Path(args.metadata), args.tolerance_seconds),
+        "exact": evaluate(
+            Path(args.responses),
+            query_root,
+            Path(args.metadata),
+            0.0,
+            test_set_path=test_set_path,
+        ),
+        f"relaxed_{args.tolerance_seconds:g}s": evaluate(
+            Path(args.responses),
+            query_root,
+            Path(args.metadata),
+            args.tolerance_seconds,
+            test_set_path=test_set_path,
+        ),
     }
     Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     for mode, value in result.items():
@@ -291,3 +442,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

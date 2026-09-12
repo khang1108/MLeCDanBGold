@@ -419,24 +419,23 @@ SQLite-backed submission files with distinct validated and filled states;
 \begin{table}[htbp]
 \centering
 \caption{Traceability from body subsystems to appendix evidence and
-implementation boundaries. UI rows cite live captures; computational rows cite
-diagrams or manifest tables.}
+technique boundaries.}
 \label{tab:coverage}
 \small
 \begin{tabularx}{\textwidth}{@{}>{\bfseries}p{0.22\textwidth}Xp{0.30\textwidth}@{}}
 \toprule
-Presented subsystem & Appendix evidence & Primary implementation boundary \\
+Presented subsystem & Appendix evidence & Technique / method boundary \\
 \midrule
-End-to-end architecture / services & Fig.~\ref{fig:architecture}; Table~\ref{tab:models} & \pathcode{src/hcmai/orchestration}, \pathcode{src/hcmai/app.py}, \pathcode{llm/} \\
-Keyframe ingestion / identity & Fig.~\ref{fig:preparation}; Table~\ref{tab:parameters} & \pathcode{offline/keyframes}, \pathcode{offline/ingestion} \\
-Caption, OCR, objects, ASR, FrameContext & Fig.~\ref{fig:preparation}; Tables~\ref{tab:models}--\ref{tab:artifacts} & \pathcode{offline/enrichment/context} \\
-FAISS / BM25 / fusion & Figs.~\ref{fig:preparation} and~\ref{fig:temporal}; Tables~\ref{tab:artifacts}--\ref{tab:parameters} & \pathcode{src/hcmai/retrieval} \\
-Temporal DP / KIS / TRAKE & Figs.~\ref{fig:temporal} and~\ref{fig:dp-explainer} & \pathcode{src/hcmai/temporal}, \pathcode{orchestration/workflows} \\
-KIS operator flow & Fig.~\ref{fig:ui-kis} & \pathcode{frontend/src/features/search} \\
-TRAKE operator flow & Fig.~\ref{fig:ui-trake} & \pathcode{frontend/src/features/search/Trake*} \\
-Video preview / evidence inspection & Fig.~\ref{fig:ui-player} & \pathcode{frontend/src/features/frames} \\
-Collaborative workspace / submissions & Fig.~\ref{fig:ui-workspace} & \pathcode{frontend/src/features/workspace}, \pathcode{features/submission} \\
-Thunder Compute / S3 execution & Fig.~\ref{fig:architecture}; text below & \pathcode{scripts/indexing/build_retrieval_indexes.py}, \pathcode{llm/server} \\
+End-to-end architecture / services & Fig.~\ref{fig:architecture}; Table~\ref{tab:models} & Orchestration, task routing, and model coordination \\
+Keyframe ingestion / identity & Fig.~\ref{fig:preparation}; Table~\ref{tab:parameters} & C++/FFmpeg 1-FPS sampling, canonical identity schema \\
+Caption, OCR, objects, ASR, FrameContext & Fig.~\ref{fig:preparation}; Tables~\ref{tab:models}--\ref{tab:artifacts} & Specialist enrichment and deterministic context serialization \\
+FAISS / BM25 / fusion & Figs.~\ref{fig:preparation} and~\ref{fig:temporal}; Tables~\ref{tab:artifacts}--\ref{tab:parameters} & Dense/sparse indexing, RRF and adaptive evidence fusion \\
+Temporal DP / KIS / TRAKE & Figs.~\ref{fig:temporal} and~\ref{fig:dp-explainer} & Prefix-max monotonic DP, calibration, cue routing \\
+KIS operator flow & Fig.~\ref{fig:ui-kis} & Natural-language planner, representative frame selection \\
+TRAKE operator flow & Fig.~\ref{fig:ui-trake} & Ordered-event input, complete same-video path submission \\
+Video preview / evidence inspection & Fig.~\ref{fig:ui-player} & Frame-accurate seek, specialist evidence overlay \\
+Collaborative workspace / submissions & Fig.~\ref{fig:ui-workspace} & Revision-aware shared answer files, query history replay \\
+Thunder Compute / S3 execution & Fig.~\ref{fig:architecture}; text below & Ephemeral GPU build, versioned artifact publication \\
 \bottomrule
 \end{tabularx}
 \end{table}

@@ -33,6 +33,18 @@ def test_load_query_cases_parses_kis_and_trake_deterministically(tmp_path: Path)
     assert cases[1].events == ("first event", "second event")
 
 
+def test_load_query_cases_keeps_raw_qa_but_omits_question_from_retrieval(tmp_path: Path) -> None:
+    root = tmp_path / "queries"
+    raw_query = "Cảnh đầu bếp nhồi gia vị vào bốn con cá. Đây là loài cá gì?"
+    _write(root / "002" / "a-qa.txt", raw_query)
+
+    cases = load_query_cases(root, ["002"], {"qa"}, None)
+
+    assert cases[0].raw_query == raw_query
+    assert cases[0].events == ("Cảnh đầu bếp nhồi gia vị vào bốn con cá",)
+    assert cases[0].retrieval_query == "Cảnh đầu bếp nhồi gia vị vào bốn con cá"
+
+
 def test_load_query_cases_filters_before_applying_max_queries(tmp_path: Path) -> None:
     root = tmp_path / "queries"
     _write(root / "001" / "a-kis.txt", "ignored split")

@@ -42,15 +42,15 @@ report it as an active stage.
 \section{Backend Construction and Execution}
 
 At startup, the backend validates configuration and typed artifact contracts,
-then opens canonical \code{frames.parquet} plus available caption, OCR, object,
-transcript, and media metadata. It requires the visual index and attempts to load
+then opens the canonical frame metadata plus available caption, OCR, object,
+transcript, and media artifacts. It requires the visual index and attempts to load
 the frame-context, ASR-segment, and BM25 bundles independently. Before admitting
 a source, compatibility checks compare embedding dimensions, canonical mappings,
 dataset identities, and model contracts. A capability map records frame-native
 dense, interval-native speech, and field-native lexical evidence. The serving
 process never prepares the corpus or builds indexes.
 
-A single \code{SearchService} owns the loaded object graph. Its retrieval service
+A unified search coordinator owns the loaded object graph. Its retrieval service
 binds each index to its query encoder, projection rule, cache, and fusion
 configuration. The temporal evidence service reuses those bindings to score
 complete canonical matrices. Deterministic planners and task workflows sit above
@@ -131,7 +131,7 @@ The ASR index is segment-native: a half-open interval $[a,b)$ contributes its
 maximum score to covered canonical frames, with a bounded nearest-midpoint
 fallback only in detached top-$K$ projection.
 
-Each dense bundle stores \code{dense.index}, \code{vectors.npy}, canonical frame
+Each dense bundle stores the serialized index, normalized vector matrix, canonical frame
 or segment mappings, metadata, timestamps, and compact per-video posting
 offsets/positions. Build preflight verifies FrameStore authority, expected
 coverage, model/index contracts, and source lineage before encoding. Online
@@ -256,9 +256,9 @@ permits a prefix-maximum and backpointer scan in $O(ET)$ time and $O(ET)$
 backpointer space instead of $O(ET^2)$. At each position, cumulative maxima store
 the best shifted predecessor value and its canonical position; equal values keep
 the latest position. Endpoints with non-finite state are unreachable, and a video
-with fewer admissible frames or score clusters than events returns no path. If
-configured, \code{event\_power} exponentiates non-negative scores before decoding;
-the active value 1.0 leaves them unchanged. Optional score-profile clusters keep
+with fewer admissible frames or score clusters than events returns no path. An optional
+score exponent raises non-negative values before decoding; the default 1.0
+leaves scores unchanged. Optional score-profile clusters keep
 multiple events out of a near-identical region. The runtime retains up to five
 alternatives per video and suppresses final-event alternatives within 30 seconds
 before global ranking.
@@ -284,7 +284,7 @@ multi-event path, and separate task paths could encode different temporal
 assumptions.
 
 Version 2 routes every competition retrieval workflow through the shared
-\pathcode{src/hcmai/temporal} pipeline. Once input becomes ordered events, the
+temporal alignment pipeline. Once input becomes ordered events, the
 pipeline scores complete modality matrices, calibrates and fuses covered
 evidence, partitions canonical positions by video, and runs monotonic DP before
 final truncation. \KIS{} and \TRAKE{} now use the same optimizer and canonical
@@ -363,18 +363,9 @@ downloads only canonical frames, keyframes, \FrameContext{}, and transcripts fro
 S3; builds visual, context, and ASR-segment bundles; validates coverage and
 identity; and publishes a checksummed version after its build report passes. For
 online inference, an operator can create a disposable GPU VM, copy the selected
-package, run one Uvicorn worker on private port 8100, and expose a protected
+model package, start the inference API, and expose a protected
 Cloudflare endpoint. The GPU SKU remains an operational choice: the checked-in
 inference example uses an L40. Instance creation, upload, health checks, and
 deletion are manual operator steps. VM teardown leaves local FastAPI state and S3
 artifacts intact~\cite{thunder}.
 
-\section{Scope and Reproducibility}
-
-This report covers the current implementation and its C++/FFmpeg 1-FPS corpus;
-it excludes the proposed VLM reranker and quantitative evaluation. Configuration
-pins model revisions. The checked-out visual/context index metadata omit some
-revision or source/config fingerprints, and this local bundle has no promoted
-\code{build\_report.json}. These gaps do not alter the algorithms described
-above. Before claiming immutable end-to-end provenance for an official release,
-regenerate or reconcile the manifests.

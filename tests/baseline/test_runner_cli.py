@@ -110,7 +110,7 @@ def _options(method: str, *, use_bm25: bool = False) -> RunOptions:
     )
 
 
-def test_global_runner_scores_one_raw_query_but_preserves_event_count() -> None:
+def test_global_runner_scores_retrieval_query_but_preserves_raw_query_and_events() -> None:
     service = _Service()
     case = QueryCase("q-trake.txt", "trake", "header\nE1: alpha\nE2: beta", ("alpha", "beta"))
 
@@ -118,8 +118,8 @@ def test_global_runner_scores_one_raw_query_but_preserves_event_count() -> None:
 
     assert service.temporal_evidence.calls == [
         {
-            "original_events": (case.raw_query,),
-            "retrieval_events": (case.raw_query,),
+            "original_events": (case.retrieval_query,),
+            "retrieval_events": (case.retrieval_query,),
             "caption_events": None,
             "use_dense": True,
             "use_bm25": False,
@@ -127,6 +127,8 @@ def test_global_runner_scores_one_raw_query_but_preserves_event_count() -> None:
     ]
     item = run["responses"][0]  # type: ignore[index]
     assert item["status_code"] == 200
+    assert item["response"]["raw_query"] == case.raw_query
+    assert item["response"]["retrieval_query"] == "alpha beta"
     assert item["response"]["events"] == ["alpha", "beta"]
     assert len(item["response"]["paths"][0]["frame_ids"]) == 1
 

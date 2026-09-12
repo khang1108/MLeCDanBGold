@@ -52,7 +52,9 @@ def run_cases(
         started = perf_counter()
         try:
             scoring_events = (
-                (case.raw_query,) if options.method == "global_query" else case.events
+                (case.retrieval_query,)
+                if options.method == "global_query"
+                else case.events
             )
             caption_events = scoring_events if options.use_bm25 else None
             retrieval_started = perf_counter()
@@ -169,6 +171,8 @@ def _response_body(
 ) -> dict[str, object]:
     candidates = [_serialize_path(path, representative=case.kind != "trake") for path in paths]
     body: dict[str, object] = {
+        "raw_query": case.raw_query,
+        "retrieval_query": case.retrieval_query,
         "events": list(case.events),
         "scoring_events": list(scoring_events),
         "dense_events": list(scoring_events) if options.use_dense else None,
@@ -187,7 +191,7 @@ def _response_body(
     if case.kind == "trake":
         body["paths"] = candidates
     else:
-        body["query"] = case.raw_query
+        body["query"] = case.retrieval_query
         body["results"] = candidates
     return body
 

@@ -45,6 +45,14 @@ class QueryCase:
         if not self.events or any(not event.strip() for event in self.events):
             raise ValueError("events must contain non-empty text")
 
+    @property
+    def retrieval_query(self) -> str:
+        """Return text safe for single-query retrieval without QA leakage."""
+
+        if self.kind == "kis":
+            return self.raw_query
+        return " ".join(self.events)
+
 
 @dataclass(frozen=True, slots=True)
 class BaselinePath:

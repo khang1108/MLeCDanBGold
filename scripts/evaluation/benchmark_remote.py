@@ -22,24 +22,74 @@ from pathlib import Path
 import httpx
 
 
-def build_items(root: Path, split: str) -> list[tuple[Path, dict[str, object], str]]:
-    """Load KIS and TRAKE query payloads from one artifact split."""
+from scripts.evaluation.query_test_set import load_query_test_set
+from hcmai.temporal.planner import plan_query_events
 
-    items: list[tuple[Path, dict[str, object], str]] = []
-    for path in sorted((root / split).glob("*.txt")):
-        if path.name.endswith("-kis.txt") or path.name.endswith("-qa.txt"):
+
+def build_items_from_test_set(
+    test_set_path: Path,
+    allowed_kinds: set[str] | None = None,
+) -> list[tuple[str, str, dict[str, object], str]]:
+    """Load retrieval-safe query payloads from a validated test-set fixture."""
+
+    test_set = load_query_test_set(test_set_path)
+    items: list[tuple[str, str, dict[str, object], str]] = []
+    for case in test_set["cases"]:
+        kind = case["kind"]
+        if allowed_kinds is not None and kind not in allowed_kinds:
+            continue
+        query_id = case["query_id"]
+        query_file = case["source_query_file"]
+        if kind == "trake":
             payload: dict[str, object] = {
-                "query": path.read_text(encoding="utf-8").strip(),
+                "events": list(case["events"]),
                 "top_k": 100,
                 "use_dense": True,
                 "use_bm25": True,
             }
-            kind = "qa" if path.name.endswith("-qa.txt") else "kis"
-            items.append((path, payload, kind))
+        else:
+            payload = {
+                "query": case["retrieval_query"],
+                "top_k": 100,
+                "use_dense": True,
+                "use_bm25": True,
+            }
+        items.append((query_id, query_file, payload, kind))
+    return items
+
+
+def build_items(root: Path, split: str) -> list[tuple[str, str, dict[str, object], str]]:
+    """Load KIS and TRAKE query payloads from one artifact split."""
+
+    items: list[tuple[str, str, dict[str, object], str]] = []
+    for path in sorted((root / split).glob("*.txt")):
+        raw_text = path.read_text(encoding="utf-8-sig").strip()
+        query_id = path.stem
+        query_file = str(path)
+        if path.name.endswith("-kis.txt"):
+            payload: dict[str, object] = {
+                "query": raw_text,
+                "top_k": 100,
+                "use_dense": True,
+                "use_bm25": True,
+            }
+            items.append((query_id, query_file, payload, "kis"))
+        elif path.name.endswith("-qa.txt"):
+            events = [
+                event.rstrip(".!?").rstrip()
+                for event in plan_query_events(raw_text)
+            ]
+            payload = {
+                "query": " ".join(events),
+                "top_k": 100,
+                "use_dense": True,
+                "use_bm25": True,
+            }
+            items.append((query_id, query_file, payload, "qa"))
         elif path.name.endswith("-trake.txt"):
             events = [
                 match.group(1).strip()
-                for line in path.read_text(encoding="utf-8").splitlines()
+                for line in raw_text.splitlines()
                 if (match := re.match(r"^(?:E\d+|Cảnh\s*\d+)\s*:?\s*(.+)$", line.strip(), re.IGNORECASE))
             ]
             payload = {
@@ -48,23 +98,26 @@ def build_items(root: Path, split: str) -> list[tuple[Path, dict[str, object], s
                 "use_dense": True,
                 "use_bm25": True,
             }
-            items.append((path, payload, "trake"))
+            items.append((query_id, query_file, payload, "trake"))
     return items
 
 
 async def run(args: argparse.Namespace) -> None:
     """Execute all selected requests with bounded concurrency."""
 
-    root = Path(args.query_root)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     allowed_kinds = set(args.kinds)
-    items = [
-        item
-        for split in args.splits
-        for item in build_items(root, split)
-        if item[2] in allowed_kinds
-    ]
+    if args.test_set is not None:
+        items = build_items_from_test_set(Path(args.test_set), allowed_kinds)
+    else:
+        root = Path(args.query_root)
+        items = [
+            item
+            for split in args.splits
+            for item in build_items(root, split)
+            if item[3] in allowed_kinds
+        ]
     semaphore = asyncio.Semaphore(args.concurrency)
     timeout = httpx.Timeout(args.timeout, connect=20.0)
     async with httpx.AsyncClient(
@@ -76,7 +129,12 @@ async def run(args: argparse.Namespace) -> None:
         ),
     ) as client:
 
-        async def one(path: Path, payload: dict[str, object], kind: str) -> dict[str, object]:
+        async def one(
+            query_id: str,
+            query_file: str,
+            payload: dict[str, object],
+            kind: str,
+        ) -> dict[str, object]:
             async with semaphore:
                 started = time.perf_counter()
                 endpoint = "/api/v1/trake" if kind == "trake" else "/api/v1/search"
@@ -93,9 +151,10 @@ async def run(args: argparse.Namespace) -> None:
                         retryable = response.status_code in (408, 429) or response.status_code >= 500
                         if not retryable or attempts > args.retries:
                             elapsed = time.perf_counter() - started
-                            print(path.name, response.status_code, f"{elapsed:.1f}s", f"attempts={attempts}", flush=True)
+                            print(query_id, response.status_code, f"{elapsed:.1f}s", f"attempts={attempts}", flush=True)
                             return {
-                                "query_file": str(path),
+                                "query_id": query_id,
+                                "query_file": query_file,
                                 "type": kind,
                                 "payload": payload,
                                 "status_code": response.status_code,
@@ -109,9 +168,10 @@ async def run(args: argparse.Namespace) -> None:
                         errors.append(repr(error))
                         if attempts > args.retries:
                             elapsed = time.perf_counter() - started
-                            print(path.name, "ERROR", repr(error), f"attempts={attempts}", flush=True)
+                            print(query_id, "ERROR", repr(error), f"attempts={attempts}", flush=True)
                             return {
-                                "query_file": str(path),
+                                "query_id": query_id,
+                                "query_file": query_file,
                                 "type": kind,
                                 "payload": payload,
                                 "status_code": 0,
@@ -132,6 +192,12 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="https://backend.iamphuckhang.dev")
+    parser.add_argument(
+        "--test-set",
+        type=Path,
+        default=None,
+        help="Path to compiled query test-set JSON fixture (overrides --query-root).",
+    )
     parser.add_argument("--query-root", default="artifacts/query")
     parser.add_argument("--splits", nargs="+", default=["002"])
     parser.add_argument("--output", default="artifacts/benchmark/2026-09-06/split002_results.json")
