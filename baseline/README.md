@@ -224,7 +224,7 @@ During and after the query-to-path contract cleanup (Task 0+):
 1. **Canonical Identity Invariants:**
    - Evaluator and runner pipelines must preserve canonical `video_id`, `frame_id`, `frame_idx`, and `timestamp_ms`.
    - Modality fusion, lattice construction, and DP decoders must never mutate, invent, or drop canonical IDs.
-   - Decoded results maintain exact equality with historical baseline runs:
+   - Decoded results maintain exact equality with the pre-cleanup result when replayed from the same unary score matrices:
      ```python
      assert after.video_id == before.video_id
      assert after.frame_ids == before.frame_ids
@@ -234,7 +234,9 @@ During and after the query-to-path contract cleanup (Task 0+):
      ```
 
 2. **Score and Metric Integrity:**
-   - Numerical kernels and decoder weights remain unchanged. Exact float scores are expected; tolerance must not be loosened.
+   - Given byte-identical unary score matrices, numerical kernels and decoder weights remain unchanged, so decoder scores must compare exactly; tolerance must not be loosened.
+   - Run `PYTHONPATH=.:src uv run pytest tests/baseline/test_method_replay.py -q` to replay all five methods against fixed matrices with exact identity, ordering, and score assertions.
+   - A real-corpus rerun is same-matrix evidence only when query embeddings and numerical-runtime provenance are also fixed. Report upstream float drift separately from decoder regressions.
    - In research extensions, additional verifier scores must be recorded in sidecars or distinct fields (`decoder_score` vs `verifier_score`) without overwriting baseline `score`.
 
 3. **Query Event Planning:**
@@ -245,3 +247,7 @@ During and after the query-to-path contract cleanup (Task 0+):
    - Avoid loading full parquet tables, massive image datasets, or FAISS indices simultaneously into memory during automated tests or local benchmarks.
    - Use targeted test paths (`tests/architecture/test_query_path_contract.py`, `tests/temporal`, `tests/orchestration`, `tests/api`) with synthetic fixtures to prevent out-of-memory (OOM) conditions.
 
+5. **Frozen Output Boundaries:**
+   - HTTP KIS and TRAKE keep their established response schemas; baseline runs keep the `hcmai-baseline-run-v1` evaluator envelope.
+   - Research output must use a sidecar keyed by run, query, video, and ordered frame IDs. It must not overwrite existing `.metrics.json` artifacts or baseline `score` values.
+   - Requested and effective source readiness plus fusion mode belong to experiment metadata, not production HTTP fields.

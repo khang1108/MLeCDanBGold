@@ -26,7 +26,6 @@ from hcmai.app import create_app
 from hcmai.corpus import Corpus
 from hcmai.corpus.stores import ObjectCountsStore
 from hcmai.orchestration.materializer import SearchMaterializer
-from hcmai.retrieval.models import RetrievalSource
 from hcmai.temporal.dp import AlignedPath
 from hcmai.temporal.planner import plan_query_events
 from offline.enrichment.models import ProcessingStatus
@@ -194,20 +193,10 @@ def test_api_schema_surface_matches_golden_contract() -> None:
     app = create_app()
     openapi = app.openapi()
     paths = openapi.get("paths", {})
+    actual_endpoints = {path: paths.get(path) for path in expected_endpoints}
 
-    for endpoint_path, expected_spec in expected_endpoints.items():
-        assert endpoint_path in paths, f"Expected endpoint {endpoint_path} missing from app"
-        actual_methods = paths[endpoint_path]
-        for method, method_spec in expected_spec.items():
-            assert method in actual_methods, (
-                f"Method {method.upper()} missing from {endpoint_path}"
-            )
-            expected_responses = set(method_spec.get("responses", {}).keys())
-            actual_responses = set(actual_methods[method].get("responses", {}).keys())
-            assert expected_responses.issubset(actual_responses), (
-                f"Missing expected response codes for {endpoint_path}: "
-                f"{expected_responses - actual_responses}"
-            )
+    assert actual_endpoints == expected_endpoints
+    assert openapi.get("components") == golden["components"]
 
 
 # -----------------------------------------------------------------------------

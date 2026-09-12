@@ -13,6 +13,7 @@ import numpy as np
 from hcmai.common.config import DenseTemporalWeights
 from hcmai.retrieval.evidence.components import TemporalScoreBundle, TemporalScoreComponent
 from hcmai.retrieval.evidence.normalization import minmax_rows
+from hcmai.temporal.planner import normalize_event_texts
 
 
 class DenseTemporalScorer:
@@ -50,9 +51,7 @@ class DenseTemporalScorer:
     ) -> TemporalScoreBundle:
         """Score raw components for each enabled expert without row normalization."""
 
-        events = [" ".join(event.split()) for event in retrieval_events]
-        if not events or any(not event for event in events):
-            raise ValueError("retrieval events must contain non-empty strings")
+        events = list(normalize_event_texts(retrieval_events))
 
         visual_vectors = np.asarray(self.visual_encoder.encode_text(events), dtype=np.float32)
         positions = np.arange(len(self.visual_index.frame_ids), dtype=np.int64)
@@ -102,9 +101,7 @@ class DenseTemporalScorer:
         if self.context_index is None or self.asr_index is None:
             raise RuntimeError("legacy Dense temporal fusion requires Visual, Context, and ASR")
 
-        events = [" ".join(event.split()) for event in retrieval_events]
-        if not events or any(not event for event in events):
-            raise ValueError("retrieval events must contain non-empty strings")
+        events = list(normalize_event_texts(retrieval_events))
 
         visual_vectors = np.asarray(self.visual_encoder.encode_text(events), dtype=np.float32)
         positions = np.arange(len(self.visual_index.frame_ids), dtype=np.int64)

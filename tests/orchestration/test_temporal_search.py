@@ -116,6 +116,23 @@ def test_temporal_search_rejects_blank_retrieval_event_without_shifting_alignmen
         )
 
 
+def test_temporal_search_rejects_blank_caption_event_without_shifting_alignment() -> None:
+    """Reject blank caption entries before BM25 receives a shifted event bundle."""
+
+    service = TemporalSearchService(
+        FakeData(),
+        FakeModernRetrieval([_scores()]),
+        AlignmentConfig(lambda_gap=0.0, chunk_size=123),
+    )
+
+    with pytest.raises(ValueError, match="non-empty"):
+        service.search(
+            ["first", "second"],
+            caption_events=["first", " "],
+            top_k=2,
+        )
+
+
 def test_temporal_search_returns_canonical_paths_and_timings() -> None:
     """Materialize aligned paths without recomputing canonical identity."""
 

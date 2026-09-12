@@ -1,8 +1,8 @@
-"""Materialize KIS HTTP results from canonical aligned paths.
+"""Validate and materialize HTTP results from canonical aligned paths.
 
-This module resolves representative-frame metadata from loaded data stores.
-It does not retrieve, rerank, alter temporal alignment paths, or construct
-client-facing keyframe URLs.
+This module validates canonical path identity and resolves representative-frame
+metadata from loaded data stores. It does not retrieve, rerank, alter temporal
+alignment paths, or construct client-facing keyframe URLs.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from hcmai.temporal import AlignedPath
 
 
 class SearchMaterializer:
-    """Resolve aligned KIS paths into public representative-frame results."""
+    """Validate canonical paths and project public KIS or TRAKE results."""
 
     def __init__(self, corpus: Corpus) -> None:
         """Retain the read-only Corpus facade used for materialization."""

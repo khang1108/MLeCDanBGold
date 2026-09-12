@@ -74,7 +74,7 @@ class TemporalSearchService:
         # STEP 1: VALIDATION & INPUT NORMALIZATION
         # =================================================================
         # - Kiểm tra giới hạn top_k > 0
-        # - Chuẩn hóa khoảng trắng cho từng sự kiện và loại bỏ sự kiện rỗng
+        # - Chuẩn hóa khoảng trắng và từ chối mọi vị trí sự kiện rỗng
         # - Đảm bảo số lượng sự kiện không vượt quá cấu hình tối đa
         # - Khởi tạo các biến sự kiện phục vụ cho Dense và BM25 retrieval
         if top_k <= 0:
@@ -93,7 +93,7 @@ class TemporalSearchService:
         captions = (
             None
             if caption_events is None
-            else tuple(" ".join(event.split()) for event in caption_events)
+            else normalize_event_texts(caption_events)
         )
 
         # =================================================================

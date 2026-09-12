@@ -16,9 +16,9 @@
    - Modality fusion, rerankers, and decoders must NEVER overwrite, invent, or drop canonical identifiers.
 
 2. **Zero API Surface Growth for Production:**
-   - Existing HTTP endpoints (`/search/kis`, `/search/trake`, `/search/query-candidates`) maintain wire compatibility.
+   - Existing HTTP endpoints (`/api/v1/search`, `/api/v1/trake`, `/api/v1/query-candidates`) maintain wire compatibility.
    - No public HTTP endpoints added in cleanup.
-   - Client errors must produce HTTP 422 (Unprocessable Entity) with explicit typed domain errors (`InvalidQueryInputError`), while internal server/canonical corruption must produce 500.
+   - The workflow input-mismatch error `InvalidQueryInputError` maps to HTTP 422, while an untyped canonical-corruption `ValueError` remains a 500 server failure.
 
 3. **Evidence Integrity:**
    - Missing evidence is NOT negative evidence (distinguish absent store/record from zero score/empty counts).
@@ -82,12 +82,12 @@
 ## 4. Evidence Access & Optionality
 
 1. **Object Counts Evidence:**
-   - `Corpus.object_counts_optional(frame_id: str) -> dict[str, int] | None`
-     - Returns `None` if object store is unavailable, frame record is missing, or status is failed.
-     - Returns `{}` if store recorded completed detection with zero detected objects.
-     - Returns defensive copy of count dictionary if objects are present.
-   - `Corpus.object_counts(frame_id: str) -> dict[str, int]`
-     - Delegates to `object_counts_optional(frame_id) or {}` for backward compatibility.
+   - `ObjectCountsStore.get_counts(frame_id)` is the current optionality owner:
+     - Returns `None` if the frame record is missing or its status is not completed.
+     - Returns `{}` if completed detection found zero objects.
+     - Returns a defensive copy when counts are present.
+   - `Corpus.object_counts(frame_id)` retains the existing `{}` fallback for current consumers.
+   - `Corpus.object_counts_optional(frame_id)` is deferred until a collector or another real consumer is ready; introducing and consuming it belongs in one focused follow-up change rather than this cleanup freeze.
 
 2. **ASR Evidence:**
    - Timestamped intervals `[start_ms, end_ms)`.
@@ -102,9 +102,9 @@
 | Explicit events do not silently drop | `normalize_event_texts` rejects empty / whitespace items with `ValueError` | Query prep → temporal search pipeline | Exact event list preserved in order |
 | Candidate vs. KIS planner parity | Same planned events from identical raw input | API fake adapters | Known divergent queries produce identical planned events |
 | User error 422 vs. server corruption 500 | `InvalidQueryInputError` mapped to 422 in router | TestClient error responses | Internal ValueError remains 500 |
-| Same-video canonical path | `validate_aligned_path` rejects cross-video or non-monotonic frames | Temporal search → materializer | All frame IDs match video canonical records |
-| Score semantics preserved | Exact numeric output from `SearchMaterializer` | KIS & TRAKE workflows | 5 baseline outputs match existing scores |
+| Same-video canonical path | `validate_aligned_path` rejects cross-video identity or coordinate drift | Temporal search → materializer | All frame IDs match video canonical records |
+| Score semantics preserved | Exact numeric output from `SearchMaterializer` | KIS & TRAKE workflows | All 5 baseline methods match exactly on fixed score matrices |
 | ASR half-open interval | Transcript tests | Materializer / evidence collector | Exact `[start_ms, end_ms)` fixtures |
-| Empty vs. unavailable object counts | `Corpus.object_counts_optional` unit tests | Collector / filter | `{}` vs. `None` preserved in evidence packet |
+| Empty vs. unavailable object counts | `ObjectCountsStore.get_counts` unit tests | Existing `Corpus.object_counts` fallback remains compatible | Optional Corpus access waits for a real collector consumer |
 | No API surface growth | Schema tests on FastAPI app | OpenAPI diff verification | Endpoint path set & schemas match golden contract |
 | Single scoring pass | Call counter on scorers | Runner execution | `call_count == 1` per evaluation run |

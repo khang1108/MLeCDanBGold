@@ -175,6 +175,26 @@ def test_dense_reuses_one_visual_and_one_text_encoding_batch() -> None:
     np.testing.assert_allclose(scores[0], [0.0, 0.5, 1.0])
 
 
+@pytest.mark.parametrize("method_name", ["score_components", "score_events"])
+def test_dense_rejects_raw_string_as_explicit_event_sequence(
+    method_name: str,
+) -> None:
+    """Enforce the shared explicit-event contract at both Dense entry points."""
+
+    indexes = [FakeIndex(1.0), FakeIndex(2.0), FakeIndex(3.0)]
+    scorer = DenseTemporalScorer(
+        visual_index=indexes[0],
+        context_index=indexes[1],
+        asr_index=indexes[2],
+        visual_encoder=FakeEncoder(1.0),
+        text_encoder=FakeEncoder(2.0),
+        weights=DenseTemporalWeights(),
+    )
+
+    with pytest.raises(ValueError, match="non-string sequence"):
+        getattr(scorer, method_name)("one event")
+
+
 def test_dense_rejects_identity_mismatch() -> None:
     """Require all three indexes to use identical canonical frame order."""
 

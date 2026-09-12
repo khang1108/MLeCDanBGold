@@ -1,5 +1,7 @@
 """Tests for the bounded process-local query-preparation cache."""
 
+import pytest
+
 from hcmai.query_preparation.cache import QueryPreparationCache, cache_key
 
 
@@ -20,6 +22,19 @@ def test_cache_key_separates_operation_and_preserves_named_token_case() -> None:
     assert translate != candidates
     assert translate != lowercase
     assert "giữ X" in translate
+
+
+def test_cache_key_rejects_blank_explicit_event() -> None:
+    """Use the shared explicit-event contract before constructing cache identity."""
+
+    with pytest.raises(ValueError, match="non-empty"):
+        cache_key(
+            operation="translate",
+            events=("valid", " "),
+            model_name="qwen",
+            model_revision="a" * 40,
+            prompt_version="v1",
+        )
 
 
 def test_cache_expires_and_evicts_least_recently_used_entry() -> None:

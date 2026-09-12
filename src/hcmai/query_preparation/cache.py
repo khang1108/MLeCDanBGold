@@ -10,6 +10,8 @@ from threading import RLock
 from time import monotonic
 from typing import Any
 
+from hcmai.temporal.planner import normalize_event_texts
+
 CacheKey = tuple[str, ...]
 
 
@@ -23,7 +25,7 @@ def cache_key(
 ) -> CacheKey:
     """Build a deterministic key while preserving case-sensitive tokens."""
 
-    normalized_events = tuple(" ".join(event.split()) for event in events)
+    normalized_events = normalize_event_texts(events)
     return (
         operation,
         model_name,
