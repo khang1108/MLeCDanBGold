@@ -34,7 +34,8 @@ subset, not an interaction benchmark.
 Known-answer queries used for development or demo must be marked separately
 and excluded from confirmatory participant claims. Self-created temporal
 queries are **synthetic development queries**. TRAKE is an internal task, not
-a VBS task; never infer HCMAI benchmark accuracy as VBS accuracy.
+a VBS task; never infer HCMAI benchmark accuracy as VBS accuracy, and never
+infer HCMAI accuracy as V3C accuracy.
 
 Choose one equal human time budget before collection and write its integer
 value into every run. This protocol intentionally does not prescribe a VBS
