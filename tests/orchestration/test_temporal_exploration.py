@@ -463,6 +463,38 @@ def test_close_checks_revision_then_releases_branch_state() -> None:
         branch.close(expected_revision=before.revision)
 
 
+def test_old_requests_cannot_affect_reopened_branch() -> None:
+    branch, _, _ = _new_branch()
+    old_revision = branch.current().revision
+    branch.close(expected_revision=old_revision)
+    branch.open(_binding(), "v", (0, 40))
+    reopened = branch.current()
+
+    with pytest.raises(ExplorationConflict, match="revision"):
+        branch.apply(
+            expected_revision=old_revision,
+            event_version="events-1",
+            scoring_revision="scores-1",
+            action="reject",
+            event_index=0,
+            interval=(10, 20),
+        )
+    with pytest.raises(ExplorationConflict, match="revision"):
+        branch.undo(
+            expected_revision=old_revision,
+            event_version="events-1",
+            scoring_revision="scores-1",
+        )
+    with pytest.raises(ExplorationConflict, match="revision"):
+        branch.close(expected_revision=old_revision)
+
+    assert reopened.revision > old_revision
+    assert branch.current() == reopened
+    branch.close(expected_revision=reopened.revision)
+    with pytest.raises(ExplorationUnavailable):
+        branch.current()
+
+
 def test_undo_with_empty_history_is_noop() -> None:
     """Avoid reevaluation and revision changes when nothing can be undone."""
 

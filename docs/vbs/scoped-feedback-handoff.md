@@ -38,8 +38,7 @@ or DRES logging.
 `QueryBinding` fields are `query`, `event_version`, normalized `events`,
 normalized `retrieval_events`, optional normalized `caption_events`,
 `use_dense`, `use_bm25`, and backend-owned `scoring_revision`. The event arrays
-must have matching lengths. `open()` starts revision 1 and rejects an already
-active branch; one branch has one `video_id` and one explicit `Interval`.
+must have matching lengths. The first successful open starts at revision 1. Later opens on the same instance continue increasing the revision; close does not reset it. Requests from a closed lifecycle must not mutate or close a reopened branch.
 
 `apply()` accepts only `confirm`, `reject`, `window`, or `unknown`. Every
 mutation checks exploration revision, event version, and scoring revision
@@ -57,9 +56,7 @@ not `video_valid` verdicts. Known scoring/evaluation I/O failures raise
 
 `AlignedPath` is the canonical handoff result: `video_id`, `score`,
 `frame_ids`, `frame_idxs`, and `timestamps_ms`. Preserve `video_id`, `frame_id`,
-`frame_idx`, and `timestamp_ms` through every UI action. `frame_idx` is the
-competition coordinate; it is not keyframe order, filename numbering, array
-position, or timestamp. `changed_event_indices` compares `(frame_id,
+`frame_idx`, and `timestamp_ms` through every UI action. `frame_idx` preserves the original HCMAI frame coordinate as metadata. VBS/DRES submissions use the organizer media-ID mapping and the selected `timestamp_ms`, with equal start/end under the agreed point-answer contract. Never derive the submission timestamp from `frame_idx`. `changed_event_indices` compares `(frame_id,
 timestamp_ms)` pairs, not scores, so a confirmed interval can retain its badge
 while its selected frame moves.
 
@@ -67,6 +64,7 @@ while its selected frame moves.
 
 - Allocate one exploration handle per tab/session identity. It is independent
   of whether a DRES connection exists.
+- When the integration layer creates a new exploration instance, issue a fresh handle and retire the old handle. Do not bind delayed requests from an old handle to the current instance. Responses are matched by handle and revision.
 - Remove handles on close, disconnect, or expiry using the integration
   infrastructure. Bound active sessions and enforce one matrix/video/active
   branch per handle; this is a capacity bound, not an optimized throughput

@@ -140,10 +140,11 @@ class TemporalExploration:
                     "temporal exploration scoring is unavailable"
                 ) from error
 
+            revision = self._revision + 1
             view = self._make_view(
                 binding=binding,
                 video_id=video_id,
-                revision=1,
+                revision=revision,
                 conditions=conditions,
                 status=status,
                 paths=paths,
@@ -156,7 +157,7 @@ class TemporalExploration:
             self._video = frozen
             self._decoder_config = decoder_config
             self._conditions = conditions
-            self._revision = 1
+            self._revision = revision
             self._view = view
             return view
 
@@ -261,7 +262,6 @@ class TemporalExploration:
             self._decoder_config = None
             self._conditions = None
             self._history.clear()
-            self._revision = 0
             self._view = None
 
     def current(self) -> ExplorationView:
