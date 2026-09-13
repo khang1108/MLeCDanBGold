@@ -23,6 +23,13 @@ from hcmai.temporal.constraints import (
 from hcmai.temporal.dp import AlignedPath
 from hcmai.temporal.planner import normalize_event_texts
 
+ExplorationStatus = Literal[
+    "ok",
+    "contradictory_conditions",
+    "no_indexed_frames",
+    "no_valid_path",
+]
+
 
 @dataclass(frozen=True, slots=True)
 class QueryBinding:
@@ -46,7 +53,7 @@ class ExplorationView:
     event_version: str
     video_id: str
     conditions: Conditions
-    status: str
+    status: ExplorationStatus
     paths: tuple[AlignedPath, ...]
     changed_event_indices: tuple[int, ...]
     comparison_available: bool
@@ -115,7 +122,7 @@ class TemporalExploration:
                         "selected video scoring is unavailable"
                     )
                 frozen = _freeze_video(selected)
-                status, paths = self._evaluate(frozen, conditions)
+                status, paths = self._evaluate_video(frozen, conditions)
             except OSError as error:
                 raise ExplorationUnavailable(
                     "temporal exploration scoring is unavailable"
@@ -129,6 +136,7 @@ class TemporalExploration:
                 status=status,
                 paths=paths,
                 can_undo=False,
+                previous=None,
             )
 
             # Publish only after score acquisition and initial evaluation succeed.
@@ -167,7 +175,8 @@ class TemporalExploration:
             if new is old or new == old:
                 return previous
 
-            status, paths = self._evaluate_available(video, new)
+            # Evaluate before mutation so infrastructure failures keep history intact.
+            status, paths = self._evaluate_available(new)
             revision = self._revision + 1
             view = self._make_view(
                 binding=binding,
@@ -177,6 +186,7 @@ class TemporalExploration:
                 status=status,
                 paths=paths,
                 can_undo=True,
+                previous=previous,
             )
 
             self._history.append(old)
@@ -205,7 +215,7 @@ class TemporalExploration:
                 return previous
 
             restored = self._history[-1]
-            status, paths = self._evaluate_available(video, restored)
+            status, paths = self._evaluate_available(restored)
             revision = self._revision + 1
             view = self._make_view(
                 binding=binding,
@@ -215,6 +225,7 @@ class TemporalExploration:
                 status=status,
                 paths=paths,
                 can_undo=len(self._history) > 1,
+                previous=previous,
             )
 
             self._conditions = restored
@@ -331,10 +342,20 @@ class TemporalExploration:
 
     def _evaluate(
         self,
+        conditions: Conditions,
+    ) -> tuple[ExplorationStatus, tuple[AlignedPath, ...]]:
+        """Evaluate active cached scores without changing branch state."""
+
+        if self._video is None:
+            raise ExplorationUnavailable("temporal exploration is not open")
+        return self._evaluate_video(self._video, conditions)
+
+    def _evaluate_video(
+        self,
         video: VideoEventScores,
         conditions: Conditions,
-    ) -> tuple[str, tuple[AlignedPath, ...]]:
-        """Build the mask and decode one video without changing branch state."""
+    ) -> tuple[ExplorationStatus, tuple[AlignedPath, ...]]:
+        """Build the mask and decode one supplied selected-video snapshot."""
 
         allowed, status = build_mask(video.timestamps_ms, conditions)
         if status != "ready":
@@ -344,13 +365,12 @@ class TemporalExploration:
 
     def _evaluate_available(
         self,
-        video: VideoEventScores,
         conditions: Conditions,
-    ) -> tuple[str, tuple[AlignedPath, ...]]:
+    ) -> tuple[ExplorationStatus, tuple[AlignedPath, ...]]:
         """Map only known I/O/timeout failures at the evaluation boundary."""
 
         try:
-            return self._evaluate(video, conditions)
+            return self._evaluate(conditions)
         except OSError as error:
             raise ExplorationUnavailable(
                 "temporal exploration evaluation is unavailable"
@@ -363,11 +383,14 @@ class TemporalExploration:
         video_id: str,
         revision: int,
         conditions: Conditions,
-        status: str,
+        status: ExplorationStatus,
         paths: tuple[AlignedPath, ...],
         can_undo: bool,
+        previous: ExplorationView | None,
     ) -> ExplorationView:
-        """Build a view without claiming an unevaluated path comparison."""
+        """Build a view with a canonical best-path comparison when possible."""
+
+        changed, comparison_available = _path_diff(previous, paths)
 
         return ExplorationView(
             revision=revision,
@@ -376,10 +399,39 @@ class TemporalExploration:
             conditions=conditions,
             status=status,
             paths=paths,
-            changed_event_indices=(),
-            comparison_available=False,
+            changed_event_indices=changed,
+            comparison_available=comparison_available,
             can_undo=can_undo,
         )
+
+
+def _path_diff(
+    previous: ExplorationView | None,
+    paths: tuple[AlignedPath, ...],
+) -> tuple[tuple[int, ...], bool]:
+    """Compare best paths by canonical frame identity and timestamp pairs."""
+
+    if previous is None:
+        return (), False
+    comparison_available = bool(previous.paths and paths)
+    # Empty transitions have no comparable hypothesis, not an unchanged path.
+    if not comparison_available:
+        return (), False
+
+    before = previous.paths[0]
+    after = paths[0]
+    changed = tuple(
+        event_index
+        for event_index, (before_pair, after_pair) in enumerate(
+            zip(
+                zip(before.frame_ids, before.timestamps_ms, strict=True),
+                zip(after.frame_ids, after.timestamps_ms, strict=True),
+                strict=True,
+            )
+        )
+        if before_pair != after_pair
+    )
+    return changed, True
 
 
 def _freeze_video(video: VideoEventScores) -> VideoEventScores:

@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from threading import Barrier
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
+from hcmai.common.config import AlignmentConfig
+from hcmai.corpus import Frame
 from hcmai.orchestration.workflows.temporal_exploration import (
     ExplorationConflict,
     ExplorationUnavailable,
+    ExplorationView,
     QueryBinding,
     TemporalExploration,
 )
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.dp import AlignedPath
 
@@ -84,6 +90,78 @@ def _apply(branch: TemporalExploration, action: str, **kwargs: object):
         action=action,
         **kwargs,
     )
+
+
+class _ReplayCorpus:
+    """Provide canonical frame records to the real path materializer."""
+
+    frames = {
+        f"f{position}": Frame(
+            f"f{position}",
+            "v",
+            position,
+            timestamp_ms,
+            f"f{position}.jpg",
+        )
+        for position, timestamp_ms in enumerate((10, 20, 30, 40, 50))
+    }
+
+    def frame(self, frame_id: str) -> Frame:
+        """Return one canonical replay record by internal frame identity."""
+
+        return self.frames[frame_id]
+
+
+def _replay_branch(
+    scores: np.ndarray | None = None,
+) -> tuple[TemporalExploration, TemporalSearchService, Mock, VideoEventScores]:
+    """Open the mandatory three-event replay through the real decoder."""
+
+    matrix = (
+        np.asarray(
+            [
+                [9, 8, 0, 0, 0],
+                [0, 9, 8, 0, 0],
+                [0, 0, 0, 9, 8],
+            ],
+            dtype=float,
+        )
+        if scores is None
+        else scores
+    )
+    video = VideoEventScores(
+        video_id="v",
+        frame_ids=np.asarray(["f0", "f1", "f2", "f3", "f4"], dtype=object),
+        frame_idx=np.arange(5),
+        timestamps_ms=np.asarray([10, 20, 30, 40, 50]),
+        scores=matrix,
+    )
+    scorer = Mock(return_value=(video,))
+    evidence = SimpleNamespace(score_events=scorer)
+    temporal = TemporalSearchService(
+        _ReplayCorpus(),
+        evidence,
+        AlignmentConfig(lambda_gap=0, event_power=1, cluster_delta=0),
+    )
+    binding = QueryBinding(
+        "A then B then C",
+        "events-1",
+        ("A", "B", "C"),
+        ("A", "B", "C"),
+        None,
+        True,
+        False,
+        "scores-1",
+    )
+    branch = TemporalExploration(temporal)
+    branch.open(binding, "v", (0, 60))
+    return branch, temporal, scorer, video
+
+
+def _positions(view: ExplorationView) -> tuple[int, ...]:
+    """Return fixture frame positions from the best canonical path."""
+
+    return view.paths[0].frame_idxs
 
 
 def test_feedback_then_undo_reuses_scores_and_preserves_source() -> None:
@@ -476,3 +554,200 @@ def test_failed_open_scoring_maps_known_io_error_without_state() -> None:
     service.decode_video.assert_not_called()
     with pytest.raises(ExplorationUnavailable):
         branch.current()
+
+
+def test_real_decoder_replays_feedback_undo_statuses_and_canonical_diff() -> None:
+    """Replay confirm, reject, window failure, and undo without rescoring."""
+
+    branch, _, scorer, source = _replay_branch()
+    original_scores = source.scores.copy()
+    cached_scores = branch._video.scores.copy()
+    opened = branch.current()
+
+    confirmed = _apply(branch, "confirm", event_index=0, interval=(10, 20))
+    rejected = _apply(branch, "reject", event_index=2, interval=(40, 40))
+    reject_undone = branch.undo(
+        expected_revision=rejected.revision,
+        event_version="events-1",
+        scoring_revision="scores-1",
+    )
+    reconfirmed = _apply(branch, "confirm", event_index=0, interval=(20, 20))
+    narrowed = _apply(branch, "window", interval=(0, 15))
+    window_undone = branch.undo(
+        expected_revision=narrowed.revision,
+        event_version="events-1",
+        scoring_revision="scores-1",
+    )
+
+    assert _positions(opened) == (0, 1, 3)
+    assert _positions(confirmed) == (0, 1, 3)
+    assert _positions(rejected) == (0, 1, 4)
+    assert _positions(reject_undone) == (0, 1, 3)
+    assert _positions(reconfirmed) == (1, 2, 3)
+    assert narrowed.status == "contradictory_conditions"
+    assert narrowed.paths == ()
+    assert _positions(window_undone) == (1, 2, 3)
+
+    views = (
+        opened,
+        confirmed,
+        rejected,
+        reject_undone,
+        reconfirmed,
+        narrowed,
+        window_undone,
+    )
+    assert tuple(view.revision for view in views) == tuple(range(1, 8))
+    assert tuple(view.can_undo for view in views) == (
+        False,
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+    )
+    assert tuple(view.comparison_available for view in views) == (
+        False,
+        True,
+        True,
+        True,
+        True,
+        False,
+        False,
+    )
+    assert tuple(view.changed_event_indices for view in views) == (
+        (),
+        (),
+        (2,),
+        (2,),
+        (0, 1),
+        (),
+        (),
+    )
+    assert reconfirmed.conditions.confirmed == ((20, 20), None, None)
+    assert scorer.call_count == 1
+    np.testing.assert_array_equal(source.scores, original_scores)
+    np.testing.assert_array_equal(branch._video.scores, cached_scores)
+
+
+def test_statuses_distinguish_unsampled_domain_from_impossible_order() -> None:
+    """Keep no-frame and strict-order failures distinct from contradiction."""
+
+    sampled_branch, _, _ = _new_branch()
+
+    unsampled = _apply(
+        sampled_branch,
+        "confirm",
+        event_index=0,
+        interval=(25, 25),
+    )
+    assert unsampled.status == "no_indexed_frames"
+    assert unsampled.paths == ()
+
+    branch, _, _, _ = _replay_branch()
+    later_first = _apply(
+        branch,
+        "confirm",
+        event_index=0,
+        interval=(30, 30),
+    )
+    impossible = _apply(
+        branch,
+        "confirm",
+        event_index=1,
+        interval=(10, 10),
+    )
+
+    assert later_first.status == "ok"
+    assert impossible.status == "no_valid_path"
+    assert impossible.paths == ()
+    assert impossible.conditions.confirmed[:2] == ((30, 30), (10, 10))
+
+
+def test_path_diff_uses_canonical_pairs_and_strict_event_zip() -> None:
+    """Reject malformed comparisons and ignore scores when identity is stable."""
+
+    stable = _path()
+    changed_score = replace(stable, score=999.0)
+    changed_timestamp = _path(first_timestamp=11)
+    malformed = replace(stable, frame_ids=("a",))
+    video = _video()
+    service = SimpleNamespace(
+        score_videos=Mock(return_value=((video,), 1.0)),
+        decode_video=Mock(
+            side_effect=[
+                (stable,),
+                (changed_score,),
+                (changed_timestamp,),
+                (malformed,),
+            ]
+        ),
+    )
+    branch = TemporalExploration(service)
+    opened = branch.open(_binding(), "v", (0, 40))
+
+    unchanged = _apply(branch, "confirm", event_index=0, interval=(10, 20))
+    retimed = _apply(branch, "confirm", event_index=0, interval=(10, 10))
+    before = branch.current()
+    history_before = tuple(branch._history)
+    with pytest.raises(ValueError):
+        _apply(branch, "confirm", event_index=0, interval=(20, 20))
+
+    assert opened.paths[0].score != unchanged.paths[0].score
+    assert unchanged.comparison_available is True
+    assert unchanged.changed_event_indices == ()
+    assert retimed.changed_event_indices == (0,)
+    assert branch.current() == before
+    assert tuple(branch._history) == history_before
+
+
+def test_real_materializer_unavailability_keeps_branch_transactional() -> None:
+    """Map known materializer failure without committing feedback state."""
+
+    branch, temporal, scorer, _ = _replay_branch()
+    before = branch.current()
+    history_before = tuple(branch._history)
+    temporal.materializer.validate_aligned_path = Mock(
+        side_effect=FileNotFoundError("canonical store unavailable")
+    )
+
+    with pytest.raises(ExplorationUnavailable) as captured:
+        _apply(branch, "confirm", event_index=0, interval=(20, 20))
+
+    assert isinstance(captured.value.__cause__, FileNotFoundError)
+    assert branch.current() == before
+    assert tuple(branch._history) == history_before
+    assert scorer.call_count == 1
+
+
+def test_shared_expected_revision_allows_at_most_one_racing_mutation() -> None:
+    """Serialize concurrent feedback so one request becomes stale."""
+
+    branch, service, _ = _new_branch()
+    expected = branch.current().revision
+    gate = Barrier(2)
+
+    def mutate(event_index: int) -> object:
+        """Release two requests together with one shared revision."""
+
+        gate.wait()
+        try:
+            return branch.apply(
+                expected_revision=expected,
+                event_version="events-1",
+                scoring_revision="scores-1",
+                action="confirm",
+                event_index=event_index,
+                interval=(10, 20),
+            )
+        except ExplorationConflict as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = tuple(executor.map(mutate, (0, 1)))
+
+    assert sum(isinstance(value, ExplorationConflict) for value in outcomes) == 1
+    assert branch.current().revision == expected + 1
+    assert len(branch._history) == 1
+    assert service.decode_video.call_count == 2
