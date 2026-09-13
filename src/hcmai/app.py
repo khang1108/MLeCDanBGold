@@ -28,6 +28,10 @@ from hcmai.api.routers import (
     create_video_router,
     create_workspace_router,
 )
+from hcmai.api.routers.exploration import (
+    ExplorationRegistry,
+    create_exploration_router,
+)
 from hcmai.common.environment import load_repository_environment
 from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
@@ -69,6 +73,8 @@ def create_app(
         "video_catalog": video_catalog,
         "video_cache_control": "public, max-age=3600",
         "startup_messages": [],
+        # Exploration branches are deliberately process-local for this MVP.
+        "exploration_registry": ExplorationRegistry(),
     }
 
     @asynccontextmanager
@@ -178,6 +184,7 @@ def create_app(
     app.include_router(create_search_router(service_container))
     app.include_router(create_query_candidates_router(service_container))
     app.include_router(create_trake_router(service_container))
+    app.include_router(create_exploration_router(service_container))
     app.include_router(create_frames_router(service_container))
     app.include_router(create_database_router(service_container))
     app.include_router(create_workspace_router(service_container))
