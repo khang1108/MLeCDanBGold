@@ -24,10 +24,10 @@ or DRES logging.
 | User flow | Backend mapping | Integration owner / rule |
 | --- | --- | --- |
 | Open selected result | Build `QueryBinding` from the search response event/scoring snapshot; call `open(binding, video_id, window)` with an explicit integer-ms window. | Frontend retains the global search response. Backend supplies `event_version` and `scoring_revision`. |
-| Confirm/reject | Call `apply(expected_revision, event_version, scoring_revision, action="confirm"|"reject", event_index, interval)`. | Controls call only after explicit user action. Stale guards reject old work. |
-| Search around timestamp | Call `apply(..., action="window", event_index=None, interval=...)`. | Show bounds. This changes the window only; it does not confirm an event. |
-| Unknown | Call `apply(..., action="unknown", event_index=...)`, or do not mutate. | Unknown is distinct from negative/reject. Any interaction log needs its own label. |
-| Undo | Call `undo(expected_revision, event_version, scoring_revision)`. | Use the current exploration binding/revision. Never use `AnswerWorkspace` revision. |
+| Confirm/reject | Call `apply(expected_revision=..., event_version=..., scoring_revision=..., action="confirm", event_index=..., interval=...)` or the same call with `action="reject"`. | Controls call only after explicit user action. Stale guards reject old work. |
+| Search around timestamp | Call `apply(expected_revision=..., event_version=..., scoring_revision=..., action="window", event_index=None, interval=...)`. | Show bounds. This changes the window only; it does not confirm an event. |
+| Unknown | Call `apply(expected_revision=..., event_version=..., scoring_revision=..., action="unknown", event_index=...)`, or do not mutate. | Unknown is distinct from negative/reject. Any interaction log needs its own label. |
+| Undo | Call `undo(expected_revision=..., event_version=..., scoring_revision=...)`. | Use the current exploration binding/revision. Never use `AnswerWorkspace` revision. |
 | Query/decomposition refresh | Preserve the old view for comparison, call `close(expected_revision=...)`, then `open()` with a new binding. | Do not remap old feedback by event index. |
 | Return global results | Call `close(expected_revision=...)`, then restore the retained global snapshot. | Do not call the retriever merely to restore the UI. |
 | Select answer | Pass the canonical exploration result/inspector selection into the existing editable candidate dialog. | Core performs no workspace mutation and no auto-submit. |
@@ -137,4 +137,3 @@ integration and end-to-end rehearsal are not complete here.
 - [ ] Reuse the shared result logger; verify DRES/logging failure isolation.
 - [ ] Run existing backend contracts plus frontend/DRES tests after merge;
       report UI and transport gaps separately from Task 5 functional evidence.
-
