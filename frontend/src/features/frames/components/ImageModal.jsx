@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import FrameMetadata from "./FrameMetadata";
 import VideoTimeline from "./VideoTimeline";
+import ExplorationPanel from "../../alignment/components/ExplorationPanel";
 import {
   displayVideoId,
   getStreamVideoUrl,
@@ -9,7 +10,7 @@ import {
 
 // The player page endpoint returns HTML, so the inspector uses the raw MP4
 // stream and seeks native media time to the selected canonical timestamp.
-const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }) => {
+const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose, exploration }) => {
   const modalCardRef = React.useRef(null);
   const videoRef = React.useRef(null);
   const [videoError, setVideoError] = useState(null);
@@ -76,7 +77,10 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }
       : targetTime;
     video.currentTime = seekTime;
     updatePlaybackTime(seekTime);
-  }, [targetTime, updatePlaybackTime]);
+    if (exploration?.open && Number.isFinite(duration) && duration > 0 && !exploration.session) {
+      exploration.open(duration);
+    }
+  }, [exploration, targetTime, updatePlaybackTime]);
 
   const handleVideoTimeUpdate = useCallback((event) => {
     updatePlaybackTime(event.currentTarget.currentTime);
@@ -222,6 +226,21 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }
           </div>
           <div className="inspector-content">
             <FrameMetadata frame={frame} playbackTime={playbackTime} />
+            {exploration && (
+              <ExplorationPanel
+                events={exploration.session?.events || exploration.session?.view?.events || []}
+                session={exploration.session}
+                pending={exploration.pending}
+                error={exploration.error}
+                readCurrentTimeMs={() => videoRef.current?.currentTime}
+                onApprove={(payload) => exploration.act?.({ action: "confirm", ...payload })}
+                onDecline={(payload) => exploration.act?.({ action: "reject", ...payload })}
+                onSearchRange={(payload) => exploration.act?.({ action: "window", ...payload })}
+                onUndo={exploration.undo}
+                onBack={exploration.onBack}
+                onSeek={handleVideoSeek}
+              />
+            )}
           </div>
         </div>
         </div>

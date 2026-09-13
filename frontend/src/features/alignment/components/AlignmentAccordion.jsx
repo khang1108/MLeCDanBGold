@@ -17,7 +17,7 @@ export const formatTimestampMs = (timestampMs) => {
     : `${twoDigits(minutes)}:${twoDigits(seconds)}.${millisecondsText}`;
 };
 
-const AlignmentAccordion = ({ events, frameIds, timestampsMs }) => {
+const AlignmentAccordion = ({ events, frameIds, timestampsMs, onSeek }) => {
   const [isOpen, setIsOpen] = useState(false);
   const hasAlignment = (
     Array.isArray(events)
@@ -51,9 +51,13 @@ const AlignmentAccordion = ({ events, frameIds, timestampsMs }) => {
             <li className="alignment-accordion-row" key={`${frameIds[index]}-${index}`}>
               <span className="alignment-event-label">E{index + 1}</span>
               <span className="alignment-event-text">{event}</span>
-              <time className="alignment-timestamp">
-                {formatTimestampMs(timestampsMs[index])}
-              </time>
+              {onSeek ? (
+                <button type="button" className="alignment-timestamp" onClick={() => onSeek(timestampsMs[index])}>
+                  {formatTimestampMs(timestampsMs[index])}
+                </button>
+              ) : (
+                <time className="alignment-timestamp">{formatTimestampMs(timestampsMs[index])}</time>
+              )}
               <img
                 className="alignment-thumbnail"
                 src={keyframeUrl(frameIds[index])}
