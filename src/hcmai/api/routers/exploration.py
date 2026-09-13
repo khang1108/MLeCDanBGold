@@ -44,6 +44,7 @@ class _RegistryEntry:
     scoring_revision: str
     last_access: datetime
     active_operations: int = 0
+    closing: bool = False
 
 
 class ExplorationRegistry:
@@ -103,7 +104,7 @@ class ExplorationRegistry:
         with self._lock:
             self._expire_idle_locked()
             entry = self._entries.get(key)
-            if entry is None or entry.branch is None:
+            if entry is None or entry.branch is None or entry.closing:
                 raise KeyError(key)
             entry.active_operations += 1
             entry.last_access = datetime.now(UTC)
@@ -114,19 +115,39 @@ class ExplorationRegistry:
                 entry.active_operations -= 1
                 entry.last_access = datetime.now(UTC)
 
-    def remove(self, handle: UUID) -> bool:
-        """Remove an idle branch, preserving an in-flight operation's branch."""
+    def close(self, handle: UUID, expected_revision: int) -> None:
+        """Close and remove one idle branch as one handle lifecycle operation."""
 
         key = str(handle)
         with self._lock:
             self._expire_idle_locked()
             entry = self._entries.get(key)
-            if entry is None:
-                return False
-            if entry.active_operations:
+            if entry is None or entry.branch is None:
+                raise KeyError(key)
+            if entry.active_operations or entry.closing:
                 raise ExplorationConflict("exploration handle is busy")
-            del self._entries[key]
-            return True
+
+            # Mark closing before releasing the registry lock so another
+            # request cannot borrow a branch after its core has been closed.
+            entry.active_operations += 1
+            entry.closing = True
+            branch = entry.branch
+
+        try:
+            branch.close(expected_revision=expected_revision)
+        except BaseException:
+            with self._lock:
+                if self._entries.get(key) is entry:
+                    entry.active_operations -= 1
+                    entry.closing = False
+                    entry.last_access = datetime.now(UTC)
+            raise
+
+        with self._lock:
+            # Removal happens in this same operation, after a successful core
+            # close, so an unreachable closed branch cannot remain registered.
+            if self._entries.get(key) is entry:
+                del self._entries[key]
 
     def _expire_idle_locked(self) -> None:
         """Lazily remove inactive, idle branches while retaining active work.
@@ -239,9 +260,7 @@ def create_exploration_router(service_container: dict[str, Any]) -> APIRouter:
         """Close an idle branch after its revision guard succeeds."""
 
         try:
-            with registry.borrow(handle) as entry:
-                await run_in_threadpool(_close, entry.branch, expected_revision)
-            registry.remove(handle)
+            await run_in_threadpool(registry.close, handle, expected_revision)
         except KeyError as error:
             raise _missing_handle(str(handle)) from error
         except ExplorationConflict as error:
@@ -315,14 +334,6 @@ def _apply_action(
         event_index=request.event_index,
         interval=request.interval,
     )
-
-
-def _close(branch: TemporalExploration | None, expected_revision: int) -> None:
-    """Close one borrowed branch in the worker thread."""
-
-    if branch is None:
-        raise ExplorationUnavailable("temporal exploration is not open")
-    branch.close(expected_revision=expected_revision)
 
 
 def _envelope(

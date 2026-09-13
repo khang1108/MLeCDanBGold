@@ -13,6 +13,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     StringConstraints,
     field_validator,
     model_validator,
@@ -37,8 +38,8 @@ class ExplorationOpenRequest(BaseModel):
     events: list[_NonBlankString] = Field(min_length=1)
     retrieval_events: list[_NonBlankString] = Field(min_length=1)
     caption_events: list[_NonBlankString] | None
-    use_dense: bool
-    use_bm25: bool
+    use_dense: StrictBool
+    use_bm25: StrictBool
     video_id: _NonBlankString
     window: _Interval
 

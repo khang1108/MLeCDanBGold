@@ -98,6 +98,22 @@ def test_exploration_route_open_confirm_undo_delete_and_old_handle_not_found() -
             transport=transport,
             base_url="http://testserver",
         ) as client:
+            for invalid_flag in ("false", 1):
+                invalid = await client.post(
+                    "/api/v1/exploration",
+                    json={
+                        "query": "person enters then leaves",
+                        "events": ["person enters", "person leaves"],
+                        "retrieval_events": ["person enters", "person leaves"],
+                        "caption_events": None,
+                        "use_dense": invalid_flag,
+                        "use_bm25": False,
+                        "video_id": "video-1",
+                        "window": [0, 3_000],
+                    },
+                )
+                assert invalid.status_code == 422
+
             opened = await client.post(
                 "/api/v1/exploration",
                 json={
@@ -128,21 +144,36 @@ def test_exploration_route_open_confirm_undo_delete_and_old_handle_not_found() -
                 },
             )
             assert confirmed.status_code == 200
+            confirmed_envelope = confirmed.json()
+            assert confirmed_envelope["view"]["revision"] == 2
+            assert confirmed_envelope["view"]["can_undo"] is True
+            assert confirmed_envelope["view"]["conditions"]["confirmed"] == [
+                [1_000, 1_000],
+                None,
+            ]
 
             undone = await client.post(
                 f"/api/v1/exploration/{envelope['handle']}/actions",
                 json={
-                    "expected_revision": confirmed.json()["view"]["revision"],
+                    "expected_revision": confirmed_envelope["view"]["revision"],
                     "event_version": envelope["view"]["event_version"],
                     "scoring_revision": envelope["scoring_revision"],
                     "action": "undo",
                 },
             )
             assert undone.status_code == 200
+            undone_envelope = undone.json()
+            assert undone_envelope["view"]["revision"] == 3
+            assert undone_envelope["view"]["can_undo"] is False
+            assert undone_envelope["view"]["conditions"] == {
+                "window": [0, 3_000],
+                "confirmed": [None, None],
+                "rejected": [[], []],
+            }
 
             deleted = await client.delete(
                 f"/api/v1/exploration/{envelope['handle']}",
-                params={"expected_revision": undone.json()["view"]["revision"]},
+                params={"expected_revision": undone_envelope["view"]["revision"]},
             )
             assert deleted.status_code == 204
 
