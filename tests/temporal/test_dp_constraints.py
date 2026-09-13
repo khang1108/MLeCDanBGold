@@ -117,22 +117,22 @@ def test_unmasked_characterization_fixture() -> None:
 @pytest.mark.parametrize(
     "scores, allowed, expected",
     [
-            ([[0.1, 0.8]], [[False, True]], (1,)),
-            (
-                [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
-                [[True, True], [True, True], [True, True]],
-                None,
-            ),
+        ([[0.1, 0.8]], [[False, True]], (1,)),
+        (
+            [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
+            [[True, True], [True, True], [True, True]],
+            None,
+        ),
         ([[1.0, 0.0], [0.0, 1.0]], [[False, False], [True, True]], None),
-            (
-                [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
-                [[True, False, False], [False, False, True]],
-                (0, 2),
-            ),
+        (
+            [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+            [[True, False, False], [False, False, True]],
+            (0, 2),
+        ),
     ],
 )
 def test_mask_edge_shapes_and_order(scores, allowed, expected) -> None:
-    """Cover one event, too few frames, empty rows, and reversed choices."""
+    """Cover one event, too few frames, empty rows, and feasible order."""
 
     paths = align_video(
         make_video(scores), lambda_gap=0.0, allowed=np.asarray(allowed, dtype=bool)
@@ -142,6 +142,15 @@ def test_mask_edge_shapes_and_order(scores, allowed, expected) -> None:
         assert paths == []
     else:
         assert paths[0].frame_idx == expected
+
+
+def test_reversed_admissible_order_has_no_strict_path() -> None:
+    """Reject masks whose only event choices run backward in time."""
+
+    video = make_video([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    allowed = np.array([[False, False, True], [True, False, False]])
+
+    assert align_video(video, lambda_gap=0.0, allowed=allowed) == []
 
 
 @pytest.mark.parametrize(
