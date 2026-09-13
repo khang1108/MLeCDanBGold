@@ -10,6 +10,7 @@ import { useHealthCheck } from './features/health';
 import { useVimMode, TopKPromptModal, VimHelpModal } from './features/vim';
 import { ApiDocsModal } from './features/docs';
 import { SubmissionProvider, SubmissionDialogProvider, useSubmissionDialog } from './features/submission';
+import { useTemporalExploration } from './features/alignment/hooks/useTemporalExploration';
 
 const USER_ID_STORAGE_KEY = 'hcmai_user_id';
 
@@ -49,6 +50,7 @@ const AppContent = () => {
   const queryInputRef = useRef(null);
   const { isHealthy, healthData } = useHealthCheck();
   const { requestSubmission } = useSubmissionDialog();
+  const exploration = useTemporalExploration();
   const vim = useVimMode({
     onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
@@ -56,16 +58,19 @@ const AppContent = () => {
   });
 
   const handleQueryFrameClick = (selection) => {
+    if (!selection.explorationSnapshot) exploration.close();
     setSelectedFrame(selection);
     setModalQuery(activeQuery);
   };
 
   const handleFilterFrameClick = (frame) => {
+    exploration.close();
     setSelectedFrame({ frame, submissionMode: 'kis' });
     setModalQuery('');
   };
 
   const handleManualVideo = ({ frame, requestedTimestampMs }) => {
+    exploration.close();
     setSelectedFrame({
       frame,
       initialTimestampMs: requestedTimestampMs,
@@ -75,6 +80,7 @@ const AppContent = () => {
   };
 
   const handleReplay = (historyItem) => {
+    exploration.close();
     replayTokenRef.current += 1;
     setReplayRequest({ item: historyItem, token: replayTokenRef.current });
     setActivePage('query');
@@ -128,6 +134,7 @@ const AppContent = () => {
             onFocusUserId={handleFocusUserId}
             onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
             replayRequest={replayRequest}
+            onExplorationInvalidated={exploration.close}
           />
         </div>
         <div className="workspace-panel" hidden={activePage !== 'image-search'}>
@@ -162,6 +169,23 @@ const AppContent = () => {
           initialTimestampMs={selectedFrame.initialTimestampMs}
           onSubmit={selectedFrame.submissionMode === 'kis' ? handleInspectorSubmit : undefined}
           onClose={() => setSelectedFrame(null)}
+          exploration={selectedFrame.explorationSnapshot ? {
+            session: exploration.session,
+            pending: exploration.pending,
+            error: exploration.error,
+            open: (durationSeconds) => exploration.open({
+              snapshot: selectedFrame.explorationSnapshot,
+              videoId: selectedFrame.frame.video_id,
+              durationSeconds,
+            }),
+            act: exploration.act,
+            undo: exploration.undo,
+            refresh: exploration.refresh,
+            onBack: async () => {
+              await exploration.close();
+              setSelectedFrame(null);
+            },
+          } : undefined}
         />
       )}
       <TopKPromptModal

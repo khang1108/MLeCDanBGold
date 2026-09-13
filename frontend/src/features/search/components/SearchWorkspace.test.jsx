@@ -229,6 +229,49 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   });
 });
 
+test('passes the immutable live KIS scoring snapshot when opening a result', async () => {
+  const onFrameClick = jest.fn();
+  const response = {
+    results: [{
+      frame_id: 'frame-explore',
+      video_id: 'V01',
+      frame_idx: 125,
+      timestamp_ms: 10_010,
+      fps: 29.97,
+      caption: 'A red boat',
+      scores: { final: 0.91 },
+    }],
+    events: ['red boat'],
+    dense_events: ['dense red boat'],
+    bm25_caption_events: ['caption red boat'],
+    use_dense: true,
+    use_bm25: true,
+    warnings: [],
+    latency: SEARCH_LATENCY,
+  };
+  searchFrames.mockResolvedValueOnce(response);
+  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick });
+  submit('red boat');
+
+  fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
+    target: { value: 'a different draft query' },
+  });
+  fireEvent.click(await screen.findByAltText('Frame frame-explore'));
+
+  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
+    frame: expect.objectContaining({ frame_id: 'frame-explore', video_id: 'V01' }),
+    submissionMode: 'kis',
+    explorationSnapshot: expect.objectContaining({
+      query: 'red boat',
+      events: ['red boat'],
+      dense_events: ['dense red boat'],
+      bm25_caption_events: ['caption red boat'],
+      use_dense: true,
+      use_bm25: true,
+    }),
+  }));
+});
+
 test('does not render the retired query-helper control', () => {
   renderSearch({ topK: 20, setTopK: jest.fn() });
   expect(screen.queryByRole('button', { name: /suggest query/i })).toBeNull();

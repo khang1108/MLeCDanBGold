@@ -67,6 +67,7 @@ const SearchWorkspace = ({
   onFocusUserId,
   onHistoryRefresh,
   replayRequest,
+  onExplorationInvalidated,
 }) => {
   const [eventDescription, setEventDescription] = useState('');
   const [useDense, setUseDense] = useState(true);
@@ -86,6 +87,7 @@ const SearchWorkspace = ({
   const requestRef = useRef(null);
   const viewedPatchRef = useRef(new Set());
   const lastReplayTokenRef = useRef(null);
+  const liveKisSnapshotRef = useRef(null);
   const { requestSubmission } = useSubmissionDialog();
 
   const setQueryTextareaRef = useCallback((node) => {
@@ -145,6 +147,9 @@ const SearchWorkspace = ({
       frame,
       submissionMode,
       history: historyForSession(activeQuerySession, [frame.frame_id]),
+      ...(submissionMode === 'kis' && liveKisSnapshotRef.current
+        ? { explorationSnapshot: liveKisSnapshotRef.current }
+        : {}),
     });
   }, [activeQuerySession, historyForSession, onFrameClick, recordViewed]);
 
@@ -198,6 +203,8 @@ const SearchWorkspace = ({
     if (lastReplayTokenRef.current === token) return;
     lastReplayTokenRef.current = token;
     requestRef.current?.abort();
+    liveKisSnapshotRef.current = null;
+    onExplorationInvalidated?.();
     setIsSearching(false);
     setError(null);
     setWarnings([]);
@@ -226,7 +233,7 @@ const SearchWorkspace = ({
       setResultType(null);
       setError(replayError.message);
     }
-  }, [replayRequest, userId]);
+  }, [onExplorationInvalidated, replayRequest, userId]);
 
   const submit = useCallback(async (event) => {
     event.preventDefault();
@@ -243,6 +250,8 @@ const SearchWorkspace = ({
     const isTrakeMode = events !== null;
     const retrieval = isTrakeMode ? null : parseRetrievalDescription(rawEventText);
     requestRef.current?.abort();
+    liveKisSnapshotRef.current = null;
+    onExplorationInvalidated?.();
     const controller = new AbortController();
     requestRef.current = controller;
     const queryId = capturedUserId ? createClientQueryId() : null;
@@ -288,6 +297,30 @@ const SearchWorkspace = ({
         setPaths(response.paths || []);
         setTrakeEvents(response.events || events);
       } else {
+        // This preserves the result's scoring source fields even if the user
+        // edits the query before opening the inspector.
+        const snapshot = {
+          ...response,
+          query: response.query || rawEventText,
+          events: response.events || [],
+          dense_events: response.dense_events,
+          bm25_caption_events: response.bm25_caption_events,
+          use_dense: typeof response.use_dense === 'boolean' ? response.use_dense : useDense,
+          use_bm25: typeof response.use_bm25 === 'boolean' ? response.use_bm25 : useBm25,
+        };
+        // Older/replayed response shapes cannot safely reconstruct source
+        // events, so they intentionally do not expose Explore.
+        const sourcesComplete = Array.isArray(snapshot.events)
+          && snapshot.events.length > 0
+          && (!snapshot.use_dense || (
+            Array.isArray(snapshot.dense_events)
+            && snapshot.dense_events.length === snapshot.events.length
+          ))
+          && (!snapshot.use_bm25 || (
+            Array.isArray(snapshot.bm25_caption_events)
+            && snapshot.bm25_caption_events.length === snapshot.events.length
+          ));
+        liveKisSnapshotRef.current = sourcesComplete ? snapshot : null;
         setResultType('retrieval');
         setFrames(response.results || []);
         setKisEvents(response.events || []);
@@ -334,6 +367,7 @@ const SearchWorkspace = ({
     isSearching,
     onFocusUserId,
     onHistoryRefresh,
+    onExplorationInvalidated,
     topK,
     useBm25,
     useDense,
@@ -343,6 +377,8 @@ const SearchWorkspace = ({
   const handleNewSearch = useCallback(() => {
     requestRef.current?.abort();
     requestRef.current = null;
+    liveKisSnapshotRef.current = null;
+    onExplorationInvalidated?.();
     setIsSearching(false);
     setEventDescription('');
     setFrames([]);
@@ -356,7 +392,7 @@ const SearchWorkspace = ({
     setReplaySnapshot(null);
     setActiveQuerySession(null);
     lastReplayTokenRef.current = null;
-  }, []);
+  }, [onExplorationInvalidated]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
