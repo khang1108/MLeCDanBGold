@@ -81,6 +81,8 @@ def align_video(
     event_power: float = 1.0,
     cluster_delta: float = 0.0,
     min_separation_ms: int = 0,
+    *,
+    allowed: np.ndarray | None = None,
 ) -> list[DPPath]:
     """Return the highest-scoring strict chronological paths for one video.
 
@@ -91,10 +93,18 @@ def align_video(
     A positive ``min_separation_ms`` suppresses alternatives whose final event
     lands near an already accepted path, so extra rows are distinct moments
     rather than neighbouring frames of the same one.
+
+    ``allowed`` optionally supplies a boolean event-by-frame admissibility
+    mask. It constrains recurrence states without changing canonical metadata.
     """
 
     scores = np.asarray(video.scores, dtype=np.float64)
     n_events, n_frames = scores.shape
+
+    if allowed is not None and (
+        allowed.dtype != np.bool_ or allowed.shape != scores.shape
+    ):
+        raise ValueError("allowed must be a boolean event-by-frame mask")
 
     if n_frames < n_events:
         return []
@@ -110,6 +120,13 @@ def align_video(
         if cluster_delta > 0.0
         else frames
     )
+
+    if allowed is not None:
+        # Transform and cluster on baseline scores first; admissibility must
+        # not manufacture score clusters by replacing values with -inf.
+        # Copy before masking so future in-place recurrence changes cannot
+        # mutate the caller-owned score array.
+        scores = np.where(allowed, scores.copy(), -np.inf)
 
     if int(np.count_nonzero(starts == frames)) < n_events:
         return []
