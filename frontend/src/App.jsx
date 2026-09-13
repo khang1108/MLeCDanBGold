@@ -186,6 +186,7 @@ const AppContent = () => {
           onSubmit={selectedFrame.submissionMode === 'kis' ? handleInspectorSubmit : undefined}
           onClose={() => setSelectedFrame(null)}
           exploration={selectedFrame.explorationSnapshot ? {
+            events: selectedFrame.explorationSnapshot.events,
             session: exploration.session,
             pending: exploration.pending,
             error: exploration.error,

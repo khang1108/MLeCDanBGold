@@ -15,16 +15,22 @@ const ExplorationPanel = ({
   const [selectedEvent, setSelectedEvent] = React.useState(0);
   const [draft, setDraft] = React.useState({ start: null, end: null });
   const [searchDraft, setSearchDraft] = React.useState({ start: null, end: null });
+  const [captureError, setCaptureError] = React.useState(null);
 
   React.useEffect(() => {
     setSelectedEvent(0);
     setDraft({ start: null, end: null });
-  }, [events.length, session?.handle]);
+    const window = session?.view?.conditions?.window;
+    setSearchDraft({
+      start: validTime(window?.[0]) ? Math.round(window[0]) : null,
+      end: validTime(window?.[1]) ? Math.round(window[1]) : null,
+    });
+  }, [events.length, session?.handle, session?.view?.revision, session?.view?.conditions?.window]);
 
   if (!session || !view) return null;
   const eventList = Array.isArray(view.events) ? view.events : events;
   const paths = Array.isArray(view.paths) ? view.paths : [];
-  const currentPath = paths[selectedEvent] || paths[0];
+  const currentPath = paths[0];
   const approvedRanges = view.conditions?.approved_ranges || view.conditions?.confirmed || [];
   const declinedRanges = view.conditions?.declined_ranges || view.conditions?.rejected || [];
   const intervalValid = validTime(draft.start) && validTime(draft.end) && draft.start <= draft.end;
@@ -32,7 +38,11 @@ const ExplorationPanel = ({
     && validTime(searchDraft.end) && searchDraft.start <= searchDraft.end;
   const capture = (end) => {
     const seconds = Number(readCurrentTimeMs?.());
-    if (!validTime(seconds)) return;
+    if (!validTime(seconds)) {
+      setCaptureError("Current player time is unavailable.");
+      return;
+    }
+    setCaptureError(null);
     setDraft((previous) => ({ ...previous, [end]: Math.round(seconds * 1000) }));
   };
   const selectEvent = (index) => {
@@ -71,6 +81,7 @@ const ExplorationPanel = ({
         <button type="button" onClick={() => capture("start")}>Use current time as start</button>
         <button type="button" onClick={() => capture("end")}>Use current time as end</button>
       </div>
+      {captureError && <p role="status">{captureError}</p>}
       <div className="exploration-feedback-actions">
         <button type="button" disabled={!intervalValid || pending} onClick={() => onApprove?.({ event_index: selectedEvent, interval: [draft.start, draft.end] })}>Approve</button>
         <button type="button" disabled={!intervalValid || pending} onClick={() => onDecline?.({ event_index: selectedEvent, interval: [draft.start, draft.end] })}>Decline</button>
@@ -86,7 +97,9 @@ const ExplorationPanel = ({
       {view.conditions && <div className="exploration-conditions">Conditions: {JSON.stringify(view.conditions)}</div>}
       {approvedRanges.length > 0 && <div>Approved range: {JSON.stringify(approvedRanges)}</div>}
       {declinedRanges.length > 0 && <div>Declined ranges: {JSON.stringify(declinedRanges)}</div>}
-      {currentPath && <div className="exploration-path">{currentPath.frame_ids?.map((_, index) => renderPath(currentPath, index))}</div>}
+      {currentPath?.frame_ids?.[selectedEvent] && validTime(currentPath?.timestamps_ms?.[selectedEvent])
+        ? <div className="exploration-path">{renderPath(currentPath, selectedEvent)}</div>
+        : <p role="status">No aligned path or frame is available.</p>}
     </section>
   );
 };

@@ -13,6 +13,7 @@ const FrameCard = ({
   className = '',
   onClick,
   onSubmit,
+  onSeek,
 }) => {
   const displayFrame = detail ? { ...frame, ...detail } : frame;
   const frameId = displayFrame.frame_id;
@@ -90,6 +91,7 @@ const FrameCard = ({
         events={events}
         frameIds={displayFrame.frame_ids}
         timestampsMs={displayFrame.timestamps_ms}
+        onSeek={onSeek}
       />
     </div>
   );

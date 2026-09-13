@@ -228,7 +228,7 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose, 
             <FrameMetadata frame={frame} playbackTime={playbackTime} />
             {exploration && (
               <ExplorationPanel
-                events={exploration.session?.events || exploration.session?.view?.events || []}
+                events={exploration.events || exploration.session?.events || exploration.session?.view?.events || []}
                 session={exploration.session}
                 pending={exploration.pending}
                 error={exploration.error}
@@ -238,7 +238,10 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose, 
                 onSearchRange={(payload) => exploration.act?.({ action: "window", ...payload })}
                 onUndo={exploration.undo}
                 onBack={exploration.onBack}
-                onSeek={handleVideoSeek}
+                onSeek={(timestampMs) => {
+                  const milliseconds = Number(timestampMs);
+                  if (Number.isFinite(milliseconds) && milliseconds >= 0) handleVideoSeek(milliseconds / 1000);
+                }}
               />
             )}
           </div>
