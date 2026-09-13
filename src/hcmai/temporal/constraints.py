@@ -105,10 +105,16 @@ def build_mask(
     if np.any(timestamps_ms < 0) or np.any(timestamps_ms[1:] < timestamps_ms[:-1]):
         raise ValueError("timestamps_ms must be non-negative and nondecreasing")
 
-    domains = []
-    for confirmation, rejected in zip(conditions.confirmed, conditions.rejected):
+    merged_rejections = []
+    for rejected in conditions.rejected:
         if not isinstance(rejected, tuple):
             raise ValueError("each rejected event value must be a tuple")
+        merged_rejections.append(merge_intervals(rejected))
+
+    domains = []
+    for confirmation, rejected in zip(
+        conditions.confirmed, merged_rejections, strict=True
+    ):
         if confirmation is not None:
             validate_interval(confirmation)
             domain = (

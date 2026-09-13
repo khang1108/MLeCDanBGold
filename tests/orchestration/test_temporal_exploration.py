@@ -13,6 +13,7 @@ import pytest
 
 from hcmai.common.config import AlignmentConfig
 from hcmai.corpus import Frame
+from hcmai.orchestration.workflows import temporal_search
 from hcmai.orchestration.workflows.temporal_exploration import (
     ExplorationConflict,
     ExplorationUnavailable,
@@ -22,7 +23,7 @@ from hcmai.orchestration.workflows.temporal_exploration import (
 )
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
-from hcmai.temporal.dp import AlignedPath
+from hcmai.temporal.dp import AlignedPath, DPPath
 
 
 def _video() -> VideoEventScores:
@@ -455,6 +456,7 @@ def test_close_checks_revision_then_releases_branch_state() -> None:
     assert branch.current() == before
 
     branch.close(expected_revision=before.revision)
+    assert branch._decoder_config is None
     with pytest.raises(ExplorationUnavailable):
         branch.current()
     with pytest.raises(ExplorationUnavailable):
@@ -534,8 +536,81 @@ def test_failed_open_evaluation_never_publishes_partial_state() -> None:
 
     with pytest.raises(ExplorationUnavailable):
         branch.open(_binding(), "v", (0, 40))
+    assert branch._decoder_config is None
     with pytest.raises(ExplorationUnavailable):
         branch.current()
+
+
+def test_branch_retains_decoder_values_across_config_mutations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bind every branch decode and undo to the config values used at open."""
+
+    video = VideoEventScores(
+        video_id="v",
+        frame_ids=np.asarray(["f0", "f1", "f2", "f3", "f4"], dtype=object),
+        frame_idx=np.arange(5),
+        timestamps_ms=np.asarray([10, 20, 30, 40, 50]),
+        scores=np.ones((3, 5)),
+    )
+    evidence = SimpleNamespace(score_events=Mock(return_value=(video,)))
+    initial_config = AlignmentConfig(
+        lambda_gap=0.125,
+        event_power=0.5,
+        cluster_delta=0.25,
+        path_min_separation_ms=42,
+    )
+    temporal = TemporalSearchService(_ReplayCorpus(), evidence, initial_config)
+    decode = Mock(return_value=[DPPath("v", 3.0, (0, 1, 3), ("f0", "f1", "f3"))])
+    monkeypatch.setattr(temporal_search, "align_video", decode)
+    branch = TemporalExploration(temporal)
+    binding = replace(
+        _binding(),
+        events=("A", "B", "C"),
+        retrieval_events=("A", "B", "C"),
+    )
+
+    branch.open(binding, "v", (0, 60))
+    initial_config.lambda_gap = 9.0
+    initial_config.event_power = 0.25
+    initial_config.cluster_delta = 8.0
+    initial_config.path_min_separation_ms = 900
+    confirmed = _apply(branch, "confirm", event_index=0, interval=(10, 20))
+
+    temporal.config = AlignmentConfig(
+        lambda_gap=7.0,
+        event_power=0.75,
+        cluster_delta=6.0,
+        path_min_separation_ms=700,
+    )
+    rejected = _apply(branch, "reject", event_index=2, interval=(40, 40))
+    branch.undo(
+        expected_revision=rejected.revision,
+        event_version="events-1",
+        scoring_revision="scores-1",
+    )
+
+    assert confirmed.status == "ok"
+    assert len(decode.call_args_list) == 4
+    assert [
+        {
+            name: call.kwargs[name]
+            for name in (
+                "lambda_gap",
+                "event_power",
+                "cluster_delta",
+                "min_separation_ms",
+            )
+        }
+        for call in decode.call_args_list
+    ] == [
+        {
+            "lambda_gap": 0.125,
+            "event_power": 0.5,
+            "cluster_delta": 0.25,
+            "min_separation_ms": 42,
+        }
+    ] * 4
 
 
 def test_failed_open_scoring_maps_known_io_error_without_state() -> None:

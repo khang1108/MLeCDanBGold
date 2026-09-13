@@ -65,6 +65,19 @@ def test_REQ_005_confirmation_outside_window_is_contradiction():
     assert not mask.any()
 
 
+def test_REQ_005_invalid_rejection_precedes_confirmation_contradiction():
+    """Validate every rejection before returning a known contradiction."""
+
+    conditions = Conditions(
+        window=(0, 10),
+        confirmed=((20, 30),),
+        rejected=(((True, 2),),),
+    )
+
+    with pytest.raises(ValueError):
+        build_mask(np.array([0, 10]), conditions)
+
+
 def test_REQ_006_closed_boundaries_are_accepted():
     conditions = Conditions(window=(10, 20), confirmed=((10, 20),), rejected=((),))
 

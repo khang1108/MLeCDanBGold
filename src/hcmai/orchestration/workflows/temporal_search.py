@@ -38,6 +38,16 @@ class TemporalSearchResult:
     alignment_ms: float
 
 
+@dataclass(frozen=True, slots=True)
+class DecoderConfigSnapshot:
+    """Immutable values that determine selected-video decoder semantics."""
+
+    lambda_gap: float
+    event_power: float
+    cluster_delta: float
+    path_min_separation_ms: int
+
+
 # =====================================================================
 # 2. TEMPORAL SEARCH SERVICE: CORE ORCHESTRATION FACADE
 # =====================================================================
@@ -170,19 +180,40 @@ class TemporalSearchService:
         video: VideoEventScores,
         *,
         allowed: np.ndarray,
+        decoder_config: DecoderConfigSnapshot | None = None,
     ) -> tuple[AlignedPath, ...]:
-        """Decode one scored video under an event-by-frame admissibility mask."""
+        """Decode one scored video under a mask and optional config snapshot.
+
+        Without a snapshot, existing callers continue to use the service's
+        current alignment configuration.
+        """
+
+        config = (
+            self.snapshot_decoder_config()
+            if decoder_config is None
+            else decoder_config
+        )
 
         rows = align_video(
             video,
-            lambda_gap=self.config.lambda_gap,
+            lambda_gap=config.lambda_gap,
             paths=1,
-            event_power=self.config.event_power,
-            cluster_delta=self.config.cluster_delta,
-            min_separation_ms=self.config.path_min_separation_ms,
+            event_power=config.event_power,
+            cluster_delta=config.cluster_delta,
+            min_separation_ms=config.path_min_separation_ms,
             allowed=allowed,
         )
         return tuple(self._materialize_aligned_path(row, video) for row in rows)
+
+    def snapshot_decoder_config(self) -> DecoderConfigSnapshot:
+        """Copy all selected-video decoder settings into an immutable value."""
+
+        return DecoderConfigSnapshot(
+            lambda_gap=self.config.lambda_gap,
+            event_power=self.config.event_power,
+            cluster_delta=self.config.cluster_delta,
+            path_min_separation_ms=self.config.path_min_separation_ms,
+        )
 
     def _validate_video_scores(
         self,

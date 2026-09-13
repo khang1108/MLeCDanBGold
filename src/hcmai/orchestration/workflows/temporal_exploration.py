@@ -11,7 +11,10 @@ from numbers import Integral
 from threading import RLock
 from typing import Literal
 
-from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.temporal_search import (
+    DecoderConfigSnapshot,
+    TemporalSearchService,
+)
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.constraints import (
     Conditions,
@@ -77,6 +80,7 @@ class TemporalExploration:
         self._temporal = temporal
         self._binding: QueryBinding | None = None
         self._video: VideoEventScores | None = None
+        self._decoder_config: DecoderConfigSnapshot | None = None
         self._conditions: Conditions | None = None
         self._history: list[Conditions] = []
         self._revision = 0
@@ -122,7 +126,15 @@ class TemporalExploration:
                         "selected video scoring is unavailable"
                     )
                 frozen = _freeze_video(selected)
-                status, paths = self._evaluate_video(frozen, conditions)
+                snapshot = getattr(
+                    self._temporal, "snapshot_decoder_config", None
+                )
+                decoder_config = snapshot() if callable(snapshot) else None
+                status, paths = self._evaluate_video(
+                    frozen,
+                    conditions,
+                    decoder_config,
+                )
             except OSError as error:
                 raise ExplorationUnavailable(
                     "temporal exploration scoring is unavailable"
@@ -142,6 +154,7 @@ class TemporalExploration:
             # Publish only after score acquisition and initial evaluation succeed.
             self._binding = binding
             self._video = frozen
+            self._decoder_config = decoder_config
             self._conditions = conditions
             self._revision = 1
             self._view = view
@@ -245,6 +258,7 @@ class TemporalExploration:
 
             self._binding = None
             self._video = None
+            self._decoder_config = None
             self._conditions = None
             self._history.clear()
             self._revision = 0
@@ -348,19 +362,31 @@ class TemporalExploration:
 
         if self._video is None:
             raise ExplorationUnavailable("temporal exploration is not open")
-        return self._evaluate_video(self._video, conditions)
+        return self._evaluate_video(
+            self._video,
+            conditions,
+            self._decoder_config,
+        )
 
     def _evaluate_video(
         self,
         video: VideoEventScores,
         conditions: Conditions,
+        decoder_config: DecoderConfigSnapshot | None,
     ) -> tuple[ExplorationStatus, tuple[AlignedPath, ...]]:
         """Build the mask and decode one supplied selected-video snapshot."""
 
         allowed, status = build_mask(video.timestamps_ms, conditions)
         if status != "ready":
             return status, ()
-        paths = self._temporal.decode_video(video, allowed=allowed)
+        if decoder_config is None:
+            paths = self._temporal.decode_video(video, allowed=allowed)
+        else:
+            paths = self._temporal.decode_video(
+                video,
+                allowed=allowed,
+                decoder_config=decoder_config,
+            )
         return ("ok", paths) if paths else ("no_valid_path", ())
 
     def _evaluate_available(
