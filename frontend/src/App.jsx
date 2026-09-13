@@ -1,5 +1,5 @@
 /** Application shell composed from modular feature components. */
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { AppHeader } from './features/header';
 import { ImageModal } from './features/frames';
 import { SearchWorkspace, ImageSearchWorkspace } from './features/search';
@@ -34,6 +34,12 @@ const persistUserId = (val) => {
   }
 };
 
+const explorationSelectionKey = (selection) => {
+  const query = selection?.explorationSnapshot?.query;
+  const videoId = selection?.frame?.video_id;
+  return query && videoId ? `${query}\u0000${videoId}` : null;
+};
+
 const AppContent = () => {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
@@ -46,31 +52,41 @@ const AppContent = () => {
   const [replayRequest, setReplayRequest] = useState(null);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
   const replayTokenRef = useRef(0);
+  const explorationKeyRef = useRef(null);
   const userIdInputRef = useRef(null);
   const queryInputRef = useRef(null);
   const { isHealthy, healthData } = useHealthCheck();
   const { requestSubmission } = useSubmissionDialog();
   const exploration = useTemporalExploration();
+  const { close: closeTemporalExploration } = exploration;
   const vim = useVimMode({
     onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
     enableTopK: activePage === 'query' || activePage === 'image-search',
   });
 
+  const closeExploration = useCallback(async () => {
+    explorationKeyRef.current = null;
+    await closeTemporalExploration({ suppressError: true });
+  }, [closeTemporalExploration]);
+
   const handleQueryFrameClick = (selection) => {
-    if (!selection.explorationSnapshot) exploration.close();
+    const nextKey = explorationSelectionKey(selection);
+    if (!nextKey || (explorationKeyRef.current && explorationKeyRef.current !== nextKey)) {
+      closeExploration();
+    }
     setSelectedFrame(selection);
     setModalQuery(activeQuery);
   };
 
   const handleFilterFrameClick = (frame) => {
-    exploration.close();
+    closeExploration();
     setSelectedFrame({ frame, submissionMode: 'kis' });
     setModalQuery('');
   };
 
   const handleManualVideo = ({ frame, requestedTimestampMs }) => {
-    exploration.close();
+    closeExploration();
     setSelectedFrame({
       frame,
       initialTimestampMs: requestedTimestampMs,
@@ -80,7 +96,7 @@ const AppContent = () => {
   };
 
   const handleReplay = (historyItem) => {
-    exploration.close();
+    closeExploration();
     replayTokenRef.current += 1;
     setReplayRequest({ item: historyItem, token: replayTokenRef.current });
     setActivePage('query');
@@ -134,7 +150,7 @@ const AppContent = () => {
             onFocusUserId={handleFocusUserId}
             onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
             replayRequest={replayRequest}
-            onExplorationInvalidated={exploration.close}
+            onExplorationInvalidated={closeExploration}
           />
         </div>
         <div className="workspace-panel" hidden={activePage !== 'image-search'}>
@@ -173,16 +189,19 @@ const AppContent = () => {
             session: exploration.session,
             pending: exploration.pending,
             error: exploration.error,
-            open: (durationSeconds) => exploration.open({
-              snapshot: selectedFrame.explorationSnapshot,
-              videoId: selectedFrame.frame.video_id,
-              durationSeconds,
-            }),
+            open: (durationSeconds) => {
+              explorationKeyRef.current = explorationSelectionKey(selectedFrame);
+              return exploration.open({
+                snapshot: selectedFrame.explorationSnapshot,
+                videoId: selectedFrame.frame.video_id,
+                durationSeconds,
+              });
+            },
             act: exploration.act,
             undo: exploration.undo,
             refresh: exploration.refresh,
             onBack: async () => {
-              await exploration.close();
+              await closeExploration();
               setSelectedFrame(null);
             },
           } : undefined}

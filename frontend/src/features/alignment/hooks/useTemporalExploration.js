@@ -13,7 +13,37 @@ import {
 } from '../../../api/exploration';
 
 const isNotFound = (error) => error?.status === 404;
-const needsReconciliation = (error) => error?.status === 409 || error?.name === 'TimeoutError';
+const isTimeout = (error) => error?.name === 'TimeoutError';
+const needsReconciliation = (error) => error?.status === 409 || isTimeout(error);
+export const EXPLORATION_REQUEST_TIMEOUT_MS = 15_000;
+
+/** Abort a transport after the client-side deadline while preserving late-open cleanup. */
+const requestWithTimeout = (request, controller, onLateSuccess) => new Promise((resolve, reject) => {
+  let settled = false;
+  const timer = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    controller.abort();
+    const error = new Error('Exploration request timed out');
+    error.name = 'TimeoutError';
+    reject(error);
+  }, EXPLORATION_REQUEST_TIMEOUT_MS);
+
+  request.then((value) => {
+    if (settled) {
+      onLateSuccess?.(value);
+      return;
+    }
+    settled = true;
+    clearTimeout(timer);
+    resolve(value);
+  }, (error) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    reject(error);
+  });
+});
 
 const validSnapshot = (snapshot) => (
   snapshot
@@ -98,7 +128,10 @@ export const useTemporalExploration = () => {
     pendingRef.current = true;
     setPending(true);
     try {
-      const refreshed = await getExploration(current.handle, { signal: controller.signal });
+      const refreshed = await requestWithTimeout(
+        getExploration(current.handle, { signal: controller.signal }),
+        controller,
+      );
       if (
         generation !== generationRef.current
         || sessionRef.current?.handle !== current.handle
@@ -109,7 +142,7 @@ export const useTemporalExploration = () => {
       setError(null);
       return refreshed;
     } catch (refreshError) {
-      if (controller.signal.aborted) return null;
+      if (controller.signal.aborted && !isTimeout(refreshError)) return null;
       if (
         generation === generationRef.current
         && sessionRef.current?.handle === current.handle
@@ -118,6 +151,7 @@ export const useTemporalExploration = () => {
         if (isNotFound(refreshError)) {
           setCurrentSession(null);
           unsyncedRef.current = false;
+          setError(null);
         } else {
           unsyncedRef.current = true;
           setError(`Exploration is not synchronized: ${refreshError.message || 'refresh failed'}`);
@@ -133,7 +167,7 @@ export const useTemporalExploration = () => {
     }
   }, [setCurrentSession]);
 
-  const close = useCallback(async () => {
+  const close = useCallback(async ({ suppressError = false } = {}) => {
     const current = sessionRef.current;
     invalidate();
     const generation = generationRef.current;
@@ -143,7 +177,7 @@ export const useTemporalExploration = () => {
       await closeExploration(current.handle, current.view.revision);
     } catch (closeError) {
       // A stale/missing close still must not revive a discarded local branch.
-      if (!isNotFound(closeError) && generation === generationRef.current) {
+      if (!suppressError && !isNotFound(closeError) && generation === generationRef.current) {
         setError(`Could not close exploration: ${closeError.message || 'request failed'}`);
       }
     }
@@ -171,7 +205,11 @@ export const useTemporalExploration = () => {
     pendingRef.current = true;
     setPending(true);
     try {
-      const opened = await openExploration(body, { signal: controller.signal });
+      const opened = await requestWithTimeout(
+        openExploration(body, { signal: controller.signal }),
+        controller,
+        cleanupLateOpen,
+      );
       if (generation !== generationRef.current || controller.signal.aborted) {
         cleanupLateOpen(opened);
         return null;
@@ -180,7 +218,7 @@ export const useTemporalExploration = () => {
       setError(null);
       return opened;
     } catch (openError) {
-      if (!controller.signal.aborted && generation === generationRef.current) {
+      if ((!controller.signal.aborted || isTimeout(openError)) && generation === generationRef.current) {
         setError(openError.message || 'Could not open exploration');
       }
       return null;
@@ -206,14 +244,14 @@ export const useTemporalExploration = () => {
     pendingRef.current = true;
     setPending(true);
     try {
-      const next = await actOnExploration(current.handle, {
+      const next = await requestWithTimeout(actOnExploration(current.handle, {
         expected_revision: revision,
         event_version: eventVersion,
         scoring_revision: current.scoring_revision,
         action,
         ...(eventIndex === undefined ? {} : { event_index: eventIndex }),
         ...(interval === undefined ? {} : { interval }),
-      }, { signal: controller.signal });
+      }, { signal: controller.signal }), controller);
       if (
         generation !== generationRef.current
         || sessionRef.current?.handle !== current.handle
@@ -223,7 +261,7 @@ export const useTemporalExploration = () => {
       setError(null);
       return next;
     } catch (actionError) {
-      if (controller.signal.aborted) return null;
+      if (controller.signal.aborted && !isTimeout(actionError)) return null;
       if (
         generation === generationRef.current
         && sessionRef.current?.handle === current.handle
