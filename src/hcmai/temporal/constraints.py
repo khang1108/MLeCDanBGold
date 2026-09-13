@@ -16,7 +16,11 @@ DomainStatus = Literal["ready", "contradictory_conditions", "no_indexed_frames"]
 
 @dataclass(frozen=True, slots=True)
 class Conditions:
-    """Per-event confirmation and rejection intervals within one query window."""
+    """Closed integer-ms window with aligned per-event interval rows.
+
+    ``confirmed`` and ``rejected`` contain the same non-empty number of event
+    rows; each confirmation is optional, while each rejection row is a tuple.
+    """
 
     window: Interval
     confirmed: tuple[Interval | None, ...]
@@ -119,12 +123,16 @@ def build_mask(
         domains.append(remaining_intervals(domain, rejected))
 
     mask = np.zeros((event_count, timestamps_ms.size), dtype=bool)
-    if any(not domain for domain in domains):
-        # Contradiction outranks sampling availability across event rows.
-        return mask, "contradictory_conditions"
-    indexed = False
+    has_contradiction = any(not domain for domain in domains)
+    has_unindexed = False
     for event_index, domain_parts in enumerate(domains):
+        if not domain_parts:
+            continue
         for start_ms, end_ms in domain_parts:
             mask[event_index] |= (timestamps_ms >= start_ms) & (timestamps_ms <= end_ms)
-        indexed |= bool(mask[event_index].any())
-    return mask, "ready" if indexed else "no_indexed_frames"
+        if not mask[event_index].any():
+            has_unindexed = True
+    if has_contradiction:
+        # Contradiction outranks sampling availability across event rows.
+        return mask, "contradictory_conditions"
+    return mask, "no_indexed_frames" if has_unindexed else "ready"

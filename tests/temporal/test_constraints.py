@@ -121,3 +121,45 @@ def test_REQ_009_invalid_timestamp_shapes_raise_value_error(timestamps):
 
     with pytest.raises(ValueError):
         build_mask(timestamps, conditions)
+
+
+def test_REQ_009_mixed_contradiction_preserves_valid_row():
+    conditions = Conditions(
+        window=(0, 20),
+        confirmed=(None, (5, 10)),
+        rejected=((), ((5, 10),)),
+    )
+
+    mask, status = build_mask(np.array([0, 5, 10, 20]), conditions)
+
+    assert status == "contradictory_conditions"
+    np.testing.assert_array_equal(mask, [[True, True, True, True], [False] * 4])
+
+
+def test_REQ_009_mixed_unindexed_event_reports_no_indexed_frames():
+    conditions = Conditions(
+        window=(0, 20),
+        confirmed=(None, (7, 7)),
+        rejected=((), ()),
+    )
+
+    mask, status = build_mask(np.array([0, 10, 20]), conditions)
+
+    assert status == "no_indexed_frames"
+    np.testing.assert_array_equal(mask, [[True, True, True], [False] * 3])
+
+
+@pytest.mark.parametrize("interval", [(1,), (1, 2, 3), "12", None])
+def test_REQ_009_malformed_interval_lengths_raise_value_error(interval):
+    with pytest.raises(ValueError):
+        validate_interval(interval)
+
+
+def test_REQ_009_duplicate_timestamps_are_accepted_and_output_is_bool():
+    conditions = Conditions(window=(0, 1), confirmed=(None,), rejected=((),))
+
+    mask, status = build_mask(np.array([0, 0, 1], dtype=np.int64), conditions)
+
+    assert status == "ready"
+    assert mask.dtype == np.dtype(bool)
+    np.testing.assert_array_equal(mask, [[True, True, True]])
