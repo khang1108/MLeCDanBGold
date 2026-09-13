@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import numpy as np
 import pytest
 
 from hcmai.common.config import AlignmentConfig
 from hcmai.corpus import Frame
+from hcmai.orchestration.workflows import temporal_search
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+from hcmai.temporal.dp import DPPath
 
 
 def _video() -> VideoEventScores:
@@ -74,6 +76,65 @@ def test_score_videos_normalizes_and_preserves_modern_source_inputs() -> None:
     )
     assert videos == ()
     assert elapsed >= 0
+
+
+def test_score_videos_forwards_bm25_only_source_flags() -> None:
+    """Preserve disabled Dense routing for valid BM25-only scoring."""
+
+    scorer = Mock(return_value=[])
+    service = object.__new__(TemporalSearchService)
+    service.max_temporal_event_count = 8
+    service.config = SimpleNamespace(chunk_size=64)
+    service.evidence = SimpleNamespace(score_events=scorer)
+    service._validate_video_scores = Mock()
+
+    service.score_videos(
+        ["mở tủ"],
+        caption_events=["mở tủ"],
+        use_dense=False,
+        use_bm25=True,
+    )
+
+    scorer.assert_called_once_with(
+        ("mở tủ",),
+        ("mở tủ",),
+        caption_events=("mở tủ",),
+        use_dense=False,
+        use_bm25=True,
+    )
+
+
+def test_score_videos_timing_excludes_post_score_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stop retrieval timing before canonical score validation begins."""
+
+    scored_video = _video()
+    scorer = Mock(return_value=[scored_video])
+    service = object.__new__(TemporalSearchService)
+    service.max_temporal_event_count = 8
+    service.config = SimpleNamespace(chunk_size=64)
+    service.evidence = SimpleNamespace(score_events=scorer)
+    validation_clock_reads: list[float] = []
+
+    def validate(event_count: int, video: VideoEventScores) -> None:
+        """Read the patched clock only after score timing has ended."""
+
+        assert event_count == 2
+        assert video is scored_video
+        validation_clock_reads.append(temporal_search.perf_counter())
+
+    service._validate_video_scores = validate
+    monkeypatch.setattr(
+        temporal_search,
+        "perf_counter",
+        Mock(side_effect=[10.0, 10.25, 100.0]),
+    )
+
+    _, elapsed = service.score_videos(["first", "second"])
+
+    assert elapsed == pytest.approx(250.0)
+    assert validation_clock_reads == [100.0]
 
 
 @pytest.mark.parametrize(
@@ -159,6 +220,46 @@ def test_decode_video_materializes_canonical_identity() -> None:
     assert paths[0].timestamps_ms == (1_000, 3_000)
 
 
+def test_decode_video_forwards_baseline_config_and_materializes_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delegate one masked decode with every baseline setting intact."""
+
+    video = _video()
+    allowed = np.asarray([[True, False, False], [False, False, True]])
+    row = DPPath("v1", 1.2, (10, 30), ("f0", "f2"))
+    expected = object()
+    decode = Mock(return_value=[row])
+    materialize = Mock(return_value=expected)
+    service = object.__new__(TemporalSearchService)
+    service.config = AlignmentConfig(
+        lambda_gap=0.25,
+        event_power=0.5,
+        cluster_delta=0.75,
+        path_min_separation_ms=42,
+    )
+    service._materialize_aligned_path = materialize
+    monkeypatch.setattr(temporal_search, "align_video", decode)
+
+    paths = service.decode_video(video, allowed=allowed)
+
+    assert paths == (expected,)
+    assert decode.call_args.args == (video,)
+    assert {
+        name: value
+        for name, value in decode.call_args.kwargs.items()
+        if name != "allowed"
+    } == {
+        "lambda_gap": 0.25,
+        "paths": 1,
+        "event_power": 0.5,
+        "cluster_delta": 0.75,
+        "min_separation_ms": 42,
+    }
+    assert decode.call_args.kwargs["allowed"] is allowed
+    assert materialize.call_args_list == [call(row, video)]
+
+
 def test_search_keeps_deterministic_baseline_paths_after_scoring_split() -> None:
     """Keep the established ranking and canonical path output unchanged."""
 
@@ -175,13 +276,14 @@ def test_search_keeps_deterministic_baseline_paths_after_scoring_split() -> None
     ]
 
 
-def test_search_rejects_nonpositive_top_k_before_scoring() -> None:
+@pytest.mark.parametrize("top_k", [0, -1])
+def test_search_rejects_nonpositive_top_k_before_scoring(top_k: int) -> None:
     """Retain search's boundary validation before any retrieval work."""
 
     service = _service(SimpleNamespace())
     service.score_videos = Mock()
 
     with pytest.raises(ValueError, match="top_k"):
-        service.search(["event"], top_k=0)
+        service.search(["event"], top_k=top_k)
 
     service.score_videos.assert_not_called()
