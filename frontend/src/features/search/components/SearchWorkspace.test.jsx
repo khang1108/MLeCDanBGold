@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { searchFrames, searchFramesByImage } from '../../../api/search';
+import { searchFramesByImage } from '../../../api/search';
+import { searchKis } from '../../../api/kis';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
 import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
 import { filterFrames } from '../../../api/filter';
@@ -9,7 +10,13 @@ import {
   markFrameViewed,
 } from '../../../api/history';
 
-jest.mock('../../../api/search');
+jest.mock('../../../api/search', () => ({
+  ...jest.requireActual('../../../api/search'),
+  searchFramesByImage: jest.fn(),
+}));
+jest.mock('../../../api/kis', () => ({
+  searchKis: jest.fn(),
+}));
 jest.mock('../../../api/filter', () => ({
   filterFrames: jest.fn(),
 }));
@@ -24,7 +31,7 @@ const renderSearch = (props) => render(
 );
 
 beforeEach(() => {
-  searchFrames.mockReset();
+  searchKis.mockReset();
   searchFramesByImage.mockReset();
   filterFrames.mockReset();
   createQueryHistory.mockResolvedValue({});
@@ -38,6 +45,30 @@ const SEARCH_LATENCY = {
   materialization_ms: 1,
   total_ms: 7,
 };
+
+const mockKisResponse = ({
+  results = [],
+  inputs = ['test'],
+  events = [{ id: 'E1', text: 'test' }],
+  queryText = 'test',
+  revision = 1,
+  warnings = [],
+  latency = SEARCH_LATENCY,
+} = {}) => ({
+  intent: {
+    revision,
+    inputs,
+    language: 'en',
+    query_text: queryText,
+    entities: [],
+    events,
+    temporal_edges: [],
+  },
+  results,
+  warnings,
+  latency,
+});
+
 const submit = (eventDescription) => {
   fireEvent.change(document.getElementById('event-query'), {
     target: { value: eventDescription },
@@ -52,47 +83,47 @@ test.each([
   description,
   query,
 ) => {
-  searchFrames.mockResolvedValueOnce({
-    results: [], warnings: [], latency: SEARCH_LATENCY,
-  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({ inputs: [query], queryText: query }));
   renderSearch({ topK: 20, setTopK: jest.fn() });
   submit(description);
 
-  await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
-    expect.objectContaining({ query, topK: 20 }),
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
+    expect.objectContaining({ inputs: [{ text: query }], topK: 20 }),
   ));
   expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
 });
 
 test('Enter submits E1-prefixed text while Shift+Enter stays in the textarea', async () => {
-  searchFrames.mockResolvedValueOnce({
-    results: [], warnings: [], latency: SEARCH_LATENCY,
-  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    inputs: ['E1: a person enters the room'],
+    queryText: 'E1: a person enters the room',
+  }));
   renderSearch({ topK: 20, setTopK: jest.fn() });
   const textarea = document.getElementById('event-query');
   fireEvent.change(textarea, { target: { value: 'E1: a person enters the room' } });
 
   expect(fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', shiftKey: true })).toBe(true);
-  expect(searchFrames).not.toHaveBeenCalled();
+  expect(searchKis).not.toHaveBeenCalled();
   expect(fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', shiftKey: false })).toBe(false);
 
-  await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
-    expect.objectContaining({ query: 'E1: a person enters the room', topK: 20 }),
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
+    expect.objectContaining({ inputs: [{ text: 'E1: a person enters the room' }], topK: 20 }),
   ));
 });
 
 test('sends the selected Dense and BM25 modes with KIS search', async () => {
-  searchFrames.mockResolvedValueOnce({
-    results: [], warnings: [], latency: SEARCH_LATENCY,
-  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    inputs: ['a lexical-only query'],
+    queryText: 'a lexical-only query',
+  }));
   renderSearch({ topK: 20, setTopK: jest.fn() });
 
   fireEvent.click(screen.getByRole('switch', { name: /use dense retrieval/i }));
   submit('a lexical-only query');
 
-  await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
     expect.objectContaining({
-      query: 'a lexical-only query',
+      inputs: [{ text: 'a lexical-only query' }],
       topK: 20,
       useDense: false,
       useBm25: true,
@@ -108,7 +139,9 @@ test('defaults plain descriptions to KIS', () => {
 
 test('active KIS results preserve backend fps when the user opens a frame', async () => {
   const onFrameClick = jest.fn();
-  searchFrames.mockResolvedValueOnce({
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    inputs: ['red boat'],
+    queryText: 'red boat',
     results: [{
       rank: 1,
       frame_id: 'frame-kis',
@@ -120,9 +153,7 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
       caption: 'A red boat',
       scores: { final: 0.91 },
     }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
+  }));
   renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick });
   submit('red boat');
 
@@ -141,24 +172,26 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
 test('passes the immutable live KIS scoring snapshot when opening a result', async () => {
   const onFrameClick = jest.fn();
   const response = {
-    results: [{
-      frame_id: 'frame-explore',
-      video_id: 'V01',
-      frame_idx: 125,
-      timestamp_ms: 10_010,
-      fps: 29.97,
-      caption: 'A red boat',
-      scores: { final: 0.91 },
-    }],
-    events: ['red boat'],
+    ...mockKisResponse({
+      inputs: ['red boat'],
+      queryText: 'red boat',
+      events: [{ id: 'E1', text: 'red boat' }],
+      results: [{
+        frame_id: 'frame-explore',
+        video_id: 'V01',
+        frame_idx: 125,
+        timestamp_ms: 10_010,
+        fps: 29.97,
+        caption: 'A red boat',
+        scores: { final: 0.91 },
+      }],
+    }),
     dense_events: ['dense red boat'],
-    bm25_caption_events: ['caption red boat'],
+    bm25_events: ['caption red boat'],
     use_dense: true,
     use_bm25: true,
-    warnings: [],
-    latency: SEARCH_LATENCY,
   };
-  searchFrames.mockResolvedValueOnce(response);
+  searchKis.mockResolvedValueOnce(response);
   renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick });
   submit('red boat');
 
@@ -212,7 +245,9 @@ test('renders the shared answer workspace in the KIS sidebar', () => {
 
 test('adds a result frame using its exact timestamp when frame_idx differs', async () => {
   const onAddCandidate = jest.fn();
-  searchFrames.mockResolvedValueOnce({
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    inputs: ['boat'],
+    queryText: 'boat',
     results: [{
       frame_id: 'search-time-frame',
       video_id: 'V01',
@@ -222,9 +257,7 @@ test('adds a result frame using its exact timestamp when frame_idx differs', asy
       timestamps_ms: [12_345],
       scores: { final: 0.9 },
     }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
+  }));
   renderSearch({ topK: 20, setTopK: jest.fn(), onAddCandidate });
   submit('boat');
 
@@ -234,14 +267,15 @@ test('adds a result frame using its exact timestamp when frame_idx differs', asy
 
 test('keeps local retrieval available while no VBS participant is connected', async () => {
   const onFocusUserId = jest.fn();
-  searchFrames.mockResolvedValueOnce({
-    results: [], warnings: [], latency: SEARCH_LATENCY,
-  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    inputs: ['a red vehicle passes'],
+    queryText: 'a red vehicle passes',
+  }));
   renderSearch({ topK: 20, setTopK: jest.fn(), userId: '  ', onFocusUserId });
   submit('a red vehicle passes');
 
-  await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
-    expect.objectContaining({ query: 'a red vehicle passes', userId: '' }),
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
+    expect.objectContaining({ inputs: [{ text: 'a red vehicle passes' }], userId: '' }),
   ));
   expect(onFocusUserId).not.toHaveBeenCalled();
   expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
@@ -249,7 +283,7 @@ test('keeps local retrieval available while no VBS participant is connected', as
 });
 
 test('keeps disconnected retrieval in the draft user history without sending the DRES header', async () => {
-  const { searchFrames: realSearchFrames } = jest.requireActual('../../../api/search');
+  const { searchKis: realSearchKis } = jest.requireActual('../../../api/kis');
   const frame = {
     frame_id: 'disconnected-frame',
     video_id: 'V01',
@@ -260,15 +294,15 @@ test('keeps disconnected retrieval in the draft user history without sending the
     scores: { final: 0.8 },
     caption: 'A boat crosses the scene',
   };
-  searchFrames.mockImplementation(realSearchFrames);
+  searchKis.mockImplementation(realSearchKis);
   const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
     ok: true,
     status: 200,
-    json: jest.fn().mockResolvedValue({
-      events: [],
+    json: jest.fn().mockResolvedValue(mockKisResponse({
+      inputs: ['a boat crosses the scene'],
+      queryText: 'a boat crosses the scene',
       results: [frame],
-      latency: SEARCH_LATENCY,
-    }),
+    })),
   });
   renderSearch({
     topK: 20,
@@ -283,8 +317,8 @@ test('keeps disconnected retrieval in the draft user history without sending the
     userId: 'team-a',
     queryText: 'a boat crosses the scene',
   })));
-  expect(searchFrames).toHaveBeenCalledWith(expect.objectContaining({ userId: '' }));
-  const searchCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/api/v1/search'));
+  expect(searchKis).toHaveBeenCalledWith(expect.objectContaining({ userId: '' }));
+  const searchCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/api/v1/kis/search'));
   expect(searchCall[1].headers['X-VBS-User-ID']).toBeUndefined();
 
   fireEvent.click(resultImage);
@@ -296,7 +330,10 @@ test('keeps disconnected retrieval in the draft user history without sending the
 });
 
 test('persists a successful KIS search as a full replay snapshot', async () => {
-  searchFrames.mockResolvedValueOnce({
+  const kisResponse = mockKisResponse({
+    inputs: ['red boat'],
+    queryText: 'red boat',
+    events: [{ id: 'E1', text: 'red boat' }],
     results: [{
       frame_id: 'frame-kis',
       video_id: 'V01',
@@ -316,17 +353,16 @@ test('persists a successful KIS search as a full replay snapshot', async () => {
         asr: 'A boat is moving',
       },
     }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
   });
+  searchKis.mockResolvedValueOnce(kisResponse);
   renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
   submit('red boat');
 
   await waitFor(() => expect(createQueryHistory).toHaveBeenCalledWith(expect.objectContaining({
     userId: 'team-a',
     queryText: 'red boat',
-    resultSnapshot: {
-      events: [],
+    resultSnapshot: expect.objectContaining({
+      intent: kisResponse.intent,
       latency: SEARCH_LATENCY,
       warnings: [],
       results: [{
@@ -349,7 +385,7 @@ test('persists a successful KIS search as a full replay snapshot', async () => {
           asr: 'A boat is moving',
         },
       }],
-    },
+    }),
     signal: expect.any(AbortSignal),
   })));
   expect(createQueryHistory.mock.calls[0][0].queryId).toMatch(/^query-/);
@@ -364,7 +400,9 @@ test('persists a successful KIS search as a full replay snapshot', async () => {
 
 test('keeps live results visible but creates no active history session when history persistence fails', async () => {
   createQueryHistory.mockRejectedValueOnce(new Error('history unavailable'));
-  searchFrames.mockResolvedValueOnce({
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    inputs: ['red boat'],
+    queryText: 'red boat',
     results: [{
       frame_id: 'frame-kis',
       video_id: 'V01',
@@ -374,9 +412,7 @@ test('keeps live results visible but creates no active history session when hist
       timestamps_ms: [1000],
       scores: { final: 0.5 },
     }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
+  }));
   renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
   submit('red boat');
 
@@ -388,7 +424,9 @@ test('keeps live results visible but creates no active history session when hist
 
 test('keeps the viewed color while allowing a failed activity patch to retry', async () => {
   markFrameViewed.mockRejectedValueOnce(new Error('activity unavailable'));
-  searchFrames.mockResolvedValueOnce({
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    inputs: ['red boat'],
+    queryText: 'red boat',
     results: [{
       frame_id: 'frame-kis',
       video_id: 'V01',
@@ -398,9 +436,7 @@ test('keeps the viewed color while allowing a failed activity patch to retry', a
       timestamps_ms: [1000],
       scores: { final: 0.5 },
     }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
+  }));
   renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
   submit('red boat');
 
@@ -453,10 +489,10 @@ test('detects uploaded image and executes image search API on submit', async () 
   // Preview badge should now be visible with filename
   expect(await screen.findByText('query_photo.jpg')).toBeTruthy();
   // Search button should now be enabled
-  expect(searchBtn.disabled).toBe(false);
+  expect(screen.getByRole('button', { name: 'Search' }).disabled).toBe(false);
 
   // Submit search
-  fireEvent.click(searchBtn);
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
   // It should automatically detect image search and call searchFramesByImage
   await waitFor(() => expect(searchFramesByImage).toHaveBeenCalledWith(
@@ -466,7 +502,7 @@ test('detects uploaded image and executes image search API on submit', async () 
       userId: 'team-a',
     }),
   ));
-  expect(searchFrames).not.toHaveBeenCalled();
+  expect(searchKis).not.toHaveBeenCalled();
 
   // Results should render in FramesBox
   expect(await screen.findByAltText('Frame img-result-1')).toBeTruthy();

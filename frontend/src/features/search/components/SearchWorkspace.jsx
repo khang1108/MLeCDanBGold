@@ -5,7 +5,17 @@
  * adds only history persistence, canonical activity tracking, and Replay.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { searchFrames, searchFramesByImage } from '../../../api/search';
+import { searchFramesByImage } from '../../../api/search';
+import { searchKis } from '../../../api/kis';
+import KisPanel from '../../kis/components/KisPanel';
+import {
+  createInitialKisSessionState,
+  setDraft,
+  prepareSearchRequest,
+  commitSearchSuccess,
+  commitSearchFailure,
+  resetKisSession,
+} from '../../kis/session';
 import { filterFrames } from '../../../api/filter';
 import FilterPagination from '../../filter/components/FilterPagination';
 import {
@@ -70,7 +80,8 @@ const SearchWorkspace = ({
   const historyIdentity = typeof historyUserId === 'string'
     ? historyUserId.trim()
     : typeof userId === 'string' ? userId.trim() : '';
-  const [eventDescription, setEventDescription] = useState('');
+  const [kisSession, setKisSession] = useState(createInitialKisSessionState);
+  const eventDescription = kisSession.draft;
   const [useDense, setUseDense] = useState(true);
   const [useBm25, setUseBm25] = useState(true);
   const [resultType, setResultType] = useState(null);
@@ -258,7 +269,7 @@ const SearchWorkspace = ({
     setFrames([]);
     setKisEvents([]);
     setSearchLatencyMs(null);
-    setEventDescription(item.query_text || '');
+    setKisSession(setDraft(createInitialKisSessionState(), item.query_text || ''));
     try {
       const kind = getSnapshotKind(item.result_snapshot);
       const normalizedActivity = normalizeFrameActivity(item.frame_activity);
@@ -333,11 +344,20 @@ const SearchWorkspace = ({
       return submitImageSearch(event);
     }
 
-    const rawEventText = eventDescription.trim();
+    const rawEventText = (kisSession.draft || '').trim();
     if (!rawEventText) return;
 
+    let prepared;
+    try {
+      prepared = prepareSearchRequest(kisSession);
+    } catch {
+      return;
+    }
+
+    const { nextState, requestPayload } = prepared;
+    setKisSession(nextState);
+
     const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
-    const retrieval = parseRetrievalDescription(rawEventText);
     requestRef.current?.abort();
     liveKisSnapshotRef.current = null;
     onExplorationInvalidated?.();
@@ -355,8 +375,9 @@ const SearchWorkspace = ({
     setActiveQuerySession(null);
     lastReplayTokenRef.current = null;
     try {
-      const response = await searchFrames({
-        query: retrieval.query,
+      const response = await searchKis({
+        inputs: requestPayload.inputs,
+        expectedRevision: requestPayload.expectedRevision,
         topK,
         useDense,
         useBm25,
@@ -364,8 +385,16 @@ const SearchWorkspace = ({
         userId: capturedUserId,
       });
       if (controller.signal.aborted) return;
+
+      setKisSession((prev) => commitSearchSuccess(prev, response));
+
+      const eventTexts = Array.isArray(response.intent?.events)
+        ? response.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
+        : [];
+      const queryText = response.intent?.query_text || rawEventText;
+
       const snapshotOptions = {
-        events: response.events || [],
+        intent: response.intent,
         latency: response.latency,
         warnings: response.warnings || [],
       };
@@ -374,10 +403,10 @@ const SearchWorkspace = ({
       // query draft changes before the user opens the frame inspector.
       const explorationSnapshot = {
         ...response,
-        query: response.query || rawEventText,
-        events: response.events || [],
+        query: queryText,
+        events: eventTexts,
         dense_events: response.dense_events,
-        bm25_caption_events: response.bm25_caption_events,
+        bm25_caption_events: response.bm25_events,
         use_dense: typeof response.use_dense === 'boolean' ? response.use_dense : useDense,
         use_bm25: typeof response.use_bm25 === 'boolean' ? response.use_bm25 : useBm25,
       };
@@ -394,10 +423,9 @@ const SearchWorkspace = ({
           && explorationSnapshot.bm25_caption_events.length === explorationSnapshot.events.length
         ));
       liveKisSnapshotRef.current = sourcesComplete ? explorationSnapshot : null;
-      const snapshot = buildKisSnapshot(response.results || [], snapshotOptions);
       setResultType('retrieval');
       setFrames(response.results || []);
-      setKisEvents(response.events || []);
+      setKisEvents(eventTexts);
       setSearchLatencyMs(response.latency);
       setWarnings(response.warnings || []);
       if (queryId) {
@@ -405,7 +433,7 @@ const SearchWorkspace = ({
           await createQueryHistory({
             queryId,
             userId: historyIdentity,
-            queryText: rawEventText,
+            queryText,
             resultSnapshot: historySnapshot,
             signal: controller.signal,
           });
@@ -414,7 +442,7 @@ const SearchWorkspace = ({
           setActiveQuerySession({
             queryId,
             ownerUserId: historyIdentity,
-            queryText: rawEventText,
+            queryText,
             resultSnapshot: historySnapshot,
             frameActivity: normalizeFrameActivity(),
             source: 'live-search',
@@ -427,8 +455,9 @@ const SearchWorkspace = ({
       }
     } catch (requestError) {
       if (requestError.name === 'AbortError') return;
+      setKisSession((prev) => commitSearchFailure(prev, requestError));
       setResultType('retrieval');
-      setError(requestError.message || 'Failed to contact search API');
+      setError(requestError.message || 'Search failed');
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null;
@@ -436,9 +465,9 @@ const SearchWorkspace = ({
       }
     }
   }, [
-    eventDescription,
     historyIdentity,
     isSearching,
+    kisSession,
     onExplorationInvalidated,
     onHistoryRefresh,
     selectedImageFile,
@@ -552,7 +581,7 @@ const SearchWorkspace = ({
     liveKisSnapshotRef.current = null;
     onExplorationInvalidated?.();
     setIsSearching(false);
-    setEventDescription('');
+    setKisSession(resetKisSession());
     setSelectedImageFile(null);
     if (imageInputRef.current) imageInputRef.current.value = '';
     handleClearFilter();
@@ -626,14 +655,14 @@ const SearchWorkspace = ({
   return (
     <div className="adhoc-workspace search-workspace">
       <form className="search-query-form" onSubmit={submit}>
-        <div className="search-query-row">
-          <div
-            className="query-input-wrapper"
-            onDragOver={handleImageDragOver}
-            onDragLeave={handleImageDragLeave}
-            onDrop={handleImageDrop}
-          >
-            {selectedImageFile ? (
+        {selectedImageFile ? (
+          <div className="search-query-row">
+            <div
+              className="query-input-wrapper"
+              onDragOver={handleImageDragOver}
+              onDragLeave={handleImageDragLeave}
+              onDrop={handleImageDrop}
+            >
               <div className="query-image-preview-bar">
                 {imagePreviewUrl && (
                   <img
@@ -656,61 +685,108 @@ const SearchWorkspace = ({
                   ✕
                 </button>
               </div>
-            ) : (
+            </div>
+            <div className="search-query-actions">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="image-file-hidden-input"
+                data-testid="image-search-file-input"
+                onChange={(e) => handleImageFileSelect(e.target.files?.[0])}
+              />
+              <button
+                type="submit"
+                className="btn-primary query-submit-btn"
+                disabled={isSearching}
+              >
+                {isSearching ? 'Searching…' : 'Search'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary search-action-btn"
+                onClick={() => imageInputRef.current?.click()}
+                title="Upload image"
+              >
+                Upload
+              </button>
+              <button
+                type="button"
+                className="btn-secondary search-action-btn"
+                onClick={handleNewSearch}
+                title="Shortcut: N"
+              >
+                New Search
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="search-query-row">
+            <div
+              className="query-input-wrapper"
+              onDragOver={handleImageDragOver}
+              onDragLeave={handleImageDragLeave}
+              onDrop={handleImageDrop}
+            >
               <textarea
                 ref={setQueryTextareaRef}
                 id="event-query"
-                className={`input-text query-input-field ${isImageDragOver ? 'drag-over' : ''}`}
+                className="input-text query-input-field"
                 rows={1}
                 value={eventDescription}
-                onChange={(event) => setEventDescription(event.target.value)}
-                placeholder="Describe a video moment to find"
+                onChange={(e) => {
+                  setKisSession((prev) => setDraft(prev, e.target.value));
+                  onQueryChange?.(e.target.value);
+                }}
+                placeholder="Search or add another clue…"
                 onFocus={onFocusQueryInput}
                 onBlur={onBlurQueryInput}
                 disabled={isSearching}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    submit(event);
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!isSearching && eventDescription.trim()) {
+                      submit(e);
+                    }
                   }
                 }}
               />
-            )}
+            </div>
+            <div className="search-query-actions">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="image-file-hidden-input"
+                data-testid="image-search-file-input"
+                onChange={(e) => handleImageFileSelect(e.target.files?.[0])}
+              />
+              <button
+                type="submit"
+                className="btn-primary query-submit-btn"
+                disabled={isSearching || (!eventDescription.trim() && !selectedImageFile)}
+              >
+                {isSearching ? 'Searching…' : 'Search'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary search-action-btn"
+                onClick={() => imageInputRef.current?.click()}
+                title="Upload image"
+              >
+                Upload
+              </button>
+              <button
+                type="button"
+                className="btn-secondary search-action-btn"
+                onClick={handleNewSearch}
+                title="Shortcut: N"
+              >
+                New Search
+              </button>
+            </div>
           </div>
-          <div className="search-query-actions">
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="image-file-hidden-input"
-              data-testid="image-search-file-input"
-              onChange={(e) => handleImageFileSelect(e.target.files?.[0])}
-            />
-            <button
-              type="submit"
-              className="btn-primary query-submit-btn"
-              disabled={isSearching || (!eventDescription.trim() && !selectedImageFile)}
-            >
-              {isSearching ? 'Searching…' : 'Search'}
-            </button>
-            <button
-              type="button"
-              className="btn-secondary search-action-btn"
-              onClick={() => imageInputRef.current?.click()}
-              title="Upload image"
-            >
-              Upload
-            </button>
-            <button
-              type="button"
-              className="btn-secondary search-action-btn"
-              onClick={handleNewSearch}
-              title="Shortcut: N"
-            >
-              New Search
-            </button>
-          </div>
-        </div>
+        )}
         <div className="search-filter-row">
           <div className="search-filter-inputs-wrapper">
             <input
@@ -841,6 +917,24 @@ const SearchWorkspace = ({
           <GifLoaderOverlay isVisible={isSearching} />
           {!isSearching && renderResults()}
         </div>
+        <aside className="kis-chat-sidebar" aria-label="KIS Chat Assistant">
+          <KisPanel
+            sessionState={{
+              ...kisSession,
+              isSearching: isSearching || kisSession.isSearching,
+              error: error || kisSession.error,
+            }}
+            onDraftChange={(val) => {
+              setKisSession((prev) => setDraft(prev, val));
+              onQueryChange?.(val);
+            }}
+            onSubmit={submit}
+            onReset={handleNewSearch}
+            disabled={isSearching}
+            submitLabel="Send"
+            resetLabel="Reset"
+          />
+        </aside>
       </div>
     </div>
   );

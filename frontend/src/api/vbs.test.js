@@ -1,5 +1,6 @@
 import { connectVbsSession, disconnectVbsSession, getVbsSessionStatus } from './vbs';
-import { searchFrames, searchFramesByImage } from './search';
+import { searchFramesByImage } from './search';
+import { searchKis } from './kis';
 import { filterFrames } from './filter';
 
 const response = (payload, status = 200) => ({
@@ -37,15 +38,17 @@ test('status and disconnect address an encoded participant ID without exposing c
 
 test('text and image search attach only a connected participant ID', async () => {
   const searchResponse = {
-    events: [], results: [], latency: { total_ms: 1 },
+    intent: { revision: 1, inputs: ['boat'], events: [{ id: 'E1', text: 'boat' }] },
+    results: [],
+    latency: { total_ms: 1 },
   };
   jest.spyOn(global, 'fetch')
     .mockResolvedValueOnce(response(searchResponse))
     .mockResolvedValueOnce(response(searchResponse))
-    .mockResolvedValueOnce(response(searchResponse));
+    .mockResolvedValueOnce(response({ results: [], latency: { total_ms: 1 } }));
 
-  await searchFrames({ query: 'boat', topK: 3, userId: 'team-a' });
-  await searchFrames({ query: 'boat', topK: 3, userId: '' });
+  await searchKis({ inputs: ['boat'], topK: 3, userId: 'team-a' });
+  await searchKis({ inputs: ['boat'], topK: 3, userId: '' });
   const file = new File(['image'], 'boat.png', { type: 'image/png' });
   await searchFramesByImage({ imageFile: file, topK: 3, userId: 'team-a' });
 
