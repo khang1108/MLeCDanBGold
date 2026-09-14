@@ -10,7 +10,6 @@ from hcmai.api.routers.system import create_system_router
 from hcmai.api.routers.trake import create_trake_router
 from hcmai.api.routers.videos import create_video_router
 from hcmai.api.routers.vbs import create_vbs_router
-from hcmai.api.routers.workspace import create_answer_workspace_router
 
 
 __all__ = [
@@ -23,6 +22,5 @@ __all__ = [
     "create_trake_router",
     "create_video_router",
     "create_history_router",
-    "create_answer_workspace_router",
     "create_vbs_router",
 ]

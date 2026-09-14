@@ -15,8 +15,8 @@ const ImageModal = ({
   query,
   onClose,
   exploration,
-  workspaceAction,
-  onAddCandidate,
+  onOpenSubmission,
+  isSubmissionOpening = false,
 }) => {
   const modalCardRef = React.useRef(null);
   const videoRef = React.useRef(null);
@@ -82,14 +82,14 @@ const ImageModal = ({
     updatePlaybackTime(seekTime);
   }, [targetTime, updatePlaybackTime]);
 
-  const addCurrentVideoMoment = useCallback(() => {
+  const openCurrentVideoMoment = useCallback(() => {
     const video = videoRef.current;
-    if (!video || typeof onAddCandidate !== 'function') return;
+    if (!video || typeof onOpenSubmission !== 'function') return;
     const currentTime = video.currentTime;
     if (!Number.isFinite(currentTime) || currentTime < 0) return;
     const timestampMs = Math.round(video.currentTime * 1000);
-    onAddCandidate({ kind: 'FRAME', videoId: frame.video_id, timestampMs });
-  }, [frame.video_id, onAddCandidate]);
+    onOpenSubmission({ videoId: frame.video_id, startMs: timestampMs, endMs: timestampMs });
+  }, [frame.video_id, onOpenSubmission]);
 
   const handleVideoTimeUpdate = useCallback((event) => {
     updatePlaybackTime(event.currentTarget.currentTime);
@@ -203,16 +203,16 @@ const ImageModal = ({
       {videoLabel} · {Number.isFinite(frame.frame_idx) ? frame.frame_idx : `${frame.timestamp_ms} ms`}
             </span>
             <div className="inspector-header-actions">
-              {workspaceAction === 'add-candidate' && (
+              {typeof onOpenSubmission === 'function' && (
                 <button
                   type="button"
-                  className="inspector-add-answer-button"
-                  onClick={addCurrentVideoMoment}
-                  disabled={!isVideoReady || Boolean(videoError)}
-                  aria-label="Add current video moment to answer workspace"
-                  title="Add the current video time to the answer workspace"
+                  className="inspector-submit-answer-button"
+                  onClick={openCurrentVideoMoment}
+                  disabled={!isVideoReady || Boolean(videoError) || isSubmissionOpening}
+                  aria-label="Submit current video moment to DRES"
+                  title={isSubmissionOpening ? 'Loading the current DRES task' : 'Prepare this exact player time for DRES'}
                 >
-                  ＋ Answer
+                  ↗ Submit
                 </button>
               )}
               <button

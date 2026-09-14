@@ -21,6 +21,7 @@ const Probe = () => {
       <output data-testid="draft">{session.draftUserId}</output>
       <output data-testid="connected">{session.connectedUserId}</output>
       <button type="button" onClick={() => session.connect()}>Connect participant</button>
+      <button type="button" onClick={() => session.invalidateSession('team-a')}>Invalidate cached session</button>
     </div>
   );
 };
@@ -73,4 +74,19 @@ test('retains a previously handshaken identity for history when reconnect fails'
   expect(screen.getByTestId('connected').textContent).toBe('');
   expect(screen.getByTestId('draft').textContent).toBe('team-a');
   expect(localStorage.getItem('hcmai_user_id')).toBe('team-a');
+});
+
+test('invalidates a rejected participant session and requires a later explicit connect', async () => {
+  localStorage.setItem('hcmai_user_id', 'team-a');
+  getVbsSessionStatus.mockResolvedValueOnce({ user_id: 'team-a', connected: true });
+  render(<VbsSessionProvider><Probe /></VbsSessionProvider>);
+
+  await waitFor(() => expect(screen.getByTestId('connected').textContent).toBe('team-a'));
+  expect(connectVbsSession).not.toHaveBeenCalled();
+  act(() => window.vbsSessionProbe.invalidateSession('team-a'));
+
+  expect(screen.getByTestId('connected').textContent).toBe('');
+  expect(screen.getByTestId('state').textContent).toBe('editing');
+  expect(localStorage.getItem('hcmai_user_id')).toBeNull();
+  expect(connectVbsSession).not.toHaveBeenCalled();
 });

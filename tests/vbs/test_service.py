@@ -105,7 +105,7 @@ class _Client:
 
 
 def _service(client: _Client, *, evaluation_id: str | None = None) -> DresService:
-    """Create one service with a single private member mapping."""
+    """Create one service with two independent private participant mappings."""
 
     settings = DresSettings(
         base_url="https://dres.test",
@@ -114,6 +114,10 @@ def _service(client: _Client, *, evaluation_id: str | None = None) -> DresServic
             "member-1": DresCredential(
                 username="real-dres-user",
                 password=SecretStr("private-password"),
+            ),
+            "member-2": DresCredential(
+                username="other-dres-user",
+                password=SecretStr("other-private-password"),
             ),
         },
     )
@@ -231,22 +235,27 @@ def test_dres_401_relogs_once_and_retries_with_new_private_session() -> None:
     asyncio.run(exercise())
 
 
-def test_submit_401_relogs_once_and_retries_with_new_private_session() -> None:
-    """Retry one submission only after a definitive expired-session response."""
+def test_submit_401_is_not_replayed_and_evicts_only_the_rejected_user() -> None:
+    """Do not duplicate a POST; invalidate only the participant's old token."""
 
     async def exercise() -> None:
         client = _Client()
         client.submit_errors = [DresAuthenticationError("expired session")]
         service = _service(client, evaluation_id="eval-1")
         await service.connect("member-1")
+        await service.connect("member-2")
         payload = ApiClientSubmission.model_validate({
             "answerSets": [{"taskName": "KIS task", "answers": [{"text": "answer"}]}],
         })
 
-        result = await service.submit("member-1", "eval-1", payload)
+        with pytest.raises(DresAuthenticationError, match="expired session"):
+            await service.submit("member-1", "eval-1", payload)
 
+        assert [session for _evaluation, session, _payload in client.submissions] == ["session-1"]
+        assert service.session_status("member-1")["connected"] is False
+        assert service.session_status("member-2")["connected"] is True
+        result = await service.submit("member-2", "eval-1", payload)
         assert result.status is True
-        assert result.submission == "CORRECT"
         assert [session for _evaluation, session, _payload in client.submissions] == [
             "session-1",
             "session-2",
@@ -437,6 +446,33 @@ def test_temporal_answer_preserves_exact_milliseconds_and_never_uses_frame_index
         "start": 12_346,
         "end": 12_346,
     }
+
+
+def test_temporal_range_answer_preserves_both_exact_interval_bounds() -> None:
+    """Keep the submitted event interval instead of collapsing it to a point."""
+
+    service = _service(_Client())
+
+    answer = service.temporal_range_answer("video.with.dots", 1_234, 5_678)
+
+    assert answer.model_dump(by_alias=True, exclude_none=True) == {
+        "mediaItemName": "video.with.dots",
+        "start": 1_234,
+        "end": 5_678,
+    }
+
+
+@pytest.mark.parametrize(
+    "start_ms,end_ms",
+    [(-1, 0), (0, -1), (True, 1), (1, 2.5), (2, 1)],
+)
+def test_temporal_range_answer_rejects_invalid_interval(start_ms, end_ms) -> None:
+    """Reject non-integer, negative, and reversed milliseconds before posting."""
+
+    service = _service(_Client())
+
+    with pytest.raises(ValueError):
+        service.temporal_range_answer("video-a", start_ms, end_ms)
 
 
 @pytest.mark.parametrize("video_id", ["", "  ", "."])

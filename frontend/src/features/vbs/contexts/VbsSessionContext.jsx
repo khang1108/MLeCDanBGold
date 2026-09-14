@@ -98,6 +98,19 @@ export const VbsSessionProvider = ({ children }) => {
     }
   }, [connectedUserId]);
 
+  const invalidateSession = useCallback((userId) => {
+    const rejectedUserId = typeof userId === 'string' ? userId.trim() : '';
+    if (!rejectedUserId || rejectedUserId !== connectedUserId) return false;
+
+    ++requestGenerationRef.current;
+    setConnectedUserId('');
+    setConnectionState('editing');
+    setDresLogStatus(null);
+    setError('DRES rejected this cached session. Connect the participant again before submitting.');
+    writeStoredUserId('');
+    return true;
+  }, [connectedUserId]);
+
   useEffect(() => {
     const handleDresLogStatus = (event) => {
       const { userId, status } = event.detail || {};
@@ -155,7 +168,8 @@ export const VbsSessionProvider = ({ children }) => {
     dresLogStatus,
     connect,
     disconnect,
-  }), [draftUserId, setDraftUserId, connectedUserId, connectionState, error, dresLogStatus, connect, disconnect]);
+    invalidateSession,
+  }), [draftUserId, setDraftUserId, connectedUserId, connectionState, error, dresLogStatus, connect, disconnect, invalidateSession]);
 
   return <VbsSessionContext.Provider value={value}>{children}</VbsSessionContext.Provider>;
 };

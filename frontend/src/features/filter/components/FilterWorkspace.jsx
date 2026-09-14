@@ -4,7 +4,6 @@ import FrameCard from '../../frames/components/FrameCard';
 import FilterForm from './FilterForm';
 import FilterPagination from './FilterPagination';
 import { FRAMES_PER_PAGE } from '../filterPagination';
-import AnswerWorkspace from '../../answer-workspace/components/AnswerWorkspace';
 
 
 const createInitialFilterValues = () => ({
@@ -16,14 +15,14 @@ const createInitialFilterValues = () => ({
 });
 
 
-const MatchedFrame = ({ frame, onFrameClick, onAddCandidate }) => (
+const MatchedFrame = ({ frame, onFrameClick, onOpenSubmission, isSubmissionOpening }) => (
   <div className="filter-result-card">
     <FrameCard
       frame={frame}
       imageLoading="eager"
       onClick={() => onFrameClick?.(frame)}
-      workspaceAction="add-candidate"
-      onAddCandidate={onAddCandidate}
+      onOpenSubmission={onOpenSubmission}
+      isSubmissionOpening={isSubmissionOpening}
     />
     {Object.keys(frame.matches || {}).length > 0 && (
       <div className="filter-match-list">
@@ -44,7 +43,8 @@ const FilterResults = ({
   hasFiltered,
   error,
   onFrameClick,
-  onAddCandidate,
+  onOpenSubmission,
+  isSubmissionOpening = false,
   currentPage,
   totalPages,
   isLoading,
@@ -107,7 +107,8 @@ const FilterResults = ({
               key={frame.frame_id}
               frame={frame}
               onFrameClick={onFrameClick}
-              onAddCandidate={onAddCandidate}
+              onOpenSubmission={onOpenSubmission}
+              isSubmissionOpening={isSubmissionOpening}
             />
           ))}
         </div>
@@ -124,7 +125,7 @@ const FilterResults = ({
 
 
 /** Own the source-specific Filter form and backend-owned result pages. */
-const FilterWorkspace = ({ isActive = true, onFrameClick, onAddCandidate, userId }) => {
+const FilterWorkspace = ({ onFrameClick, onOpenSubmission, isSubmissionOpening = false, userId }) => {
   const [filters, setFilters] = useState(createInitialFilterValues);
   const [appliedFilters, setAppliedFilters] = useState(null);
   const [folderId, setFolderId] = useState('');
@@ -217,7 +218,6 @@ const FilterWorkspace = ({ isActive = true, onFrameClick, onAddCandidate, userId
               />
             </label>
           </div>
-          <AnswerWorkspace isActive={isActive} />
         </aside>
 
         <div className="filter-main-column">
@@ -236,7 +236,8 @@ const FilterWorkspace = ({ isActive = true, onFrameClick, onAddCandidate, userId
               hasFiltered={hasFiltered}
               error={error}
               onFrameClick={onFrameClick}
-              onAddCandidate={onAddCandidate}
+              onOpenSubmission={onOpenSubmission}
+              isSubmissionOpening={isSubmissionOpening}
               currentPage={pageId}
               totalPages={totalPages}
               isLoading={isFiltering}

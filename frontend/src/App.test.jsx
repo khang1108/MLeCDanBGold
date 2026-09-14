@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
-import { answerWorkspaceWebSocketUrl, getAnswerWorkspace } from "./api/answerWorkspace";
+import { getCurrentDresTask, submitDresAnswer } from "./api/submissions";
 
 const jsonResponse = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -10,7 +10,7 @@ const jsonResponse = (payload, status = 200) => ({
 });
 
 jest.mock("./features/search/components/SearchWorkspace", () => (
-  function FakeUnifiedWorkspace({ onFrameClick, onAddCandidate, replayRequest, userId, historyUserId }) {
+  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, replayRequest, userId, historyUserId }) {
     const frame = {
       frame_id: "f1",
       video_id: "V01",
@@ -28,9 +28,9 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
         </button>
         <button
           type="button"
-          onClick={() => onAddCandidate?.({ kind: 'FRAME', videoId: 'V01', timestampMs: 5000 })}
+          onClick={() => onOpenSubmission?.({ videoId: 'V01', startMs: 5000, endMs: 5000 })}
         >
-          Add result to answer workspace
+          Submit result to DRES
         </button>
         <output data-testid="replay-request">
           {replayRequest?.item?.query_id || ''}
@@ -84,12 +84,9 @@ jest.mock("./features/database", () => ({
     return <div data-testid="database-page">Database Page (active: {String(isActive)})</div>;
   },
 }));
-jest.mock("./api/answerWorkspace", () => ({
-  getAnswerWorkspace: jest.fn(),
-  answerWorkspaceWebSocketUrl: jest.fn((userId) => (
-    `ws://example.test/api/v1/answer-workspace/ws?user_id=${encodeURIComponent(userId)}`
-  )),
-  normalizeAnswerWorkspace: jest.requireActual("./api/answerWorkspace").normalizeAnswerWorkspace,
+jest.mock("./api/submissions", () => ({
+  getCurrentDresTask: jest.fn(),
+  submitDresAnswer: jest.fn(),
 }));
 jest.mock("./features/health/hooks/useHealthCheck", () => ({
   useHealthCheck: () => ({ isHealthy: true, healthData: {} }),
@@ -107,37 +104,16 @@ jest.mock("./features/vim/hooks/useVimMode", () => ({
   }),
 }));
 
-class MockWebSocket {
-  static instances = [];
-  constructor(url) {
-    this.url = url;
-    this.readyState = 0;
-    MockWebSocket.instances.push(this);
-  }
-  close() { this.readyState = 3; this.onclose?.(); }
-}
-
 beforeEach(() => {
   localStorage.clear();
-  MockWebSocket.instances = [];
-  window.WebSocket = MockWebSocket;
-  answerWorkspaceWebSocketUrl.mockImplementation((userId) => (
-    `ws://example.test/api/v1/answer-workspace/ws?user_id=${encodeURIComponent(userId)}`
-  ));
-  getAnswerWorkspace.mockResolvedValue({
-    avs_enabled: false,
+  getCurrentDresTask.mockReset().mockResolvedValue({
+    user_id: 'team-a',
     evaluation_id: 'eval-1',
     task_scope_key: 'dres-task-v1:key-1',
-    task_name: 'KIS task',
-    revision: 0,
-    updated_by_user_id: '',
-    updated_at_ms: 0,
-    candidates: [],
-    pending_submission: null,
-    active_evaluation_id: 'eval-1',
-    active_task_scope_key: 'dres-task-v1:key-1',
-    active_task_name: 'KIS task',
-    task_scope_mismatch: false,
+    task_name: 'KIS task', task_group: 'KIS', task_type: 'KIS', duration: 300,
+  });
+  submitDresAnswer.mockReset().mockResolvedValue({
+    state: 'RECORDED', recorded: true, verdict: 'CORRECT', message: 'Recorded by DRES.',
   });
   jest.spyOn(global, 'fetch').mockImplementation(async (_url, options = {}) => {
     if (String(_url).includes('/api/v1/vbs/session/')) {
@@ -148,7 +124,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete window.WebSocket;
   jest.restoreAllMocks();
 });
 
@@ -157,6 +132,7 @@ test("mounts one shared search workspace without task tabs", () => {
 
   expect(screen.getByText("Unified search workspace")).toBeTruthy();
   expect(screen.queryByRole("navigation", { name: "Task selection" })).toBeNull();
+  expect(screen.getByText(/connect a VBS participant before submitting/i)).toBeTruthy();
 });
 
 test("the frame inspector has no direct legacy submission action", () => {
@@ -166,7 +142,7 @@ test("the frame inspector has no direct legacy submission action", () => {
   expect(screen.queryByRole("button", { name: /submit current frame/i })).toBeNull();
 });
 
-test('opens the editable frame candidate dialog only after the participant handshake', async () => {
+test('opens the editable direct-submission popup after participant connection and sends once', async () => {
   render(<App />);
   const userId = screen.getByLabelText('User ID');
   fireEvent.change(userId, { target: { value: 'team-a' } });
@@ -174,11 +150,45 @@ test('opens the editable frame candidate dialog only after the participant hands
   await screen.findByRole('button', { name: 'OK' });
   await waitFor(() => expect(screen.getByTestId('query-user-id').textContent).toBe('team-a'));
 
-  fireEvent.click(screen.getByRole('button', { name: 'Add result to answer workspace' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Submit result to DRES' }));
 
-  expect(screen.getByRole('dialog', { name: 'Add FRAME answer' })).toBeTruthy();
-  expect(screen.getByLabelText('Video ID').value).toBe('V01');
-  expect(screen.getByLabelText('Timestamp (ms)').value).toBe('5000');
+  const dialog = await screen.findByRole('dialog', { name: 'Submit one answer' });
+  const answer = screen.getByRole('textbox', { name: 'Answer' });
+  expect(answer.value).toBe('V01,5000,5000');
+  expect(screen.queryByText(/Submit all/i)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+  await waitFor(() => expect(submitDresAnswer).toHaveBeenCalledTimes(1));
+  expect(submitDresAnswer).toHaveBeenCalledWith({
+    userId: 'team-a',
+    expectedTaskScopeKey: 'dres-task-v1:key-1',
+    answer: { kind: 'TEMPORAL', video_id: 'V01', start_ms: 5000, end_ms: 5000 },
+  });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(dialog).toBeTruthy();
+});
+
+test('clears the connected participant after DRES rejects the private session', async () => {
+  submitDresAnswer.mockResolvedValueOnce({
+    state: 'NOT_RECORDED',
+    recorded: false,
+    verdict: null,
+    reason: 'DRES_AUTH_REJECTED',
+    message: 'DRES rejected this participant session; reconnect before submitting again',
+  });
+  render(<App />);
+  const userId = screen.getByLabelText('User ID');
+  fireEvent.change(userId, { target: { value: 'team-a' } });
+  fireEvent.keyDown(userId, { key: 'Enter', code: 'Enter' });
+  await screen.findByRole('button', { name: 'OK' });
+  fireEvent.click(screen.getByRole('button', { name: 'Submit result to DRES' }));
+  await screen.findByRole('dialog', { name: 'Submit one answer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+  await screen.findByText(/rejected this participant session/i);
+  await waitFor(() => expect(userId.disabled).toBe(false));
+  expect(localStorage.getItem('hcmai_user_id')).toBeNull();
+  expect(screen.getByText(/connect a VBS participant before submitting/i)).toBeTruthy();
 });
 
 test('persists and locks the User ID only after the backend handshake', async () => {

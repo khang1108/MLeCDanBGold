@@ -1,28 +1,19 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import FrameCard, { getAnswerFrameClassName } from './FrameCard';
-import { useOptionalAnswerWorkspace } from '../../answer-workspace/contexts/AnswerWorkspaceContext';
+import FrameCard from './FrameCard';
 
-jest.mock('../../answer-workspace/contexts/AnswerWorkspaceContext', () => ({
-  useOptionalAnswerWorkspace: jest.fn(),
-}));
-
-beforeEach(() => {
-  useOptionalAnswerWorkspace.mockReturnValue(null);
-});
-
-test('does not expose a direct submission action on a result card', () => {
+test('does not expose submission while the participant is disconnected', () => {
   const frame = {
     frame_id: 'internal-frame-1',
     video_id: 'L21_V001',
     frame_idx: 17794,
     caption: 'A sample frame',
   };
-  const onSubmit = jest.fn();
-  render(<FrameCard frame={frame} onClick={jest.fn()} onSubmit={onSubmit} />);
+  const onOpenSubmission = jest.fn();
+  render(<FrameCard frame={frame} onClick={jest.fn()} />);
 
-  expect(screen.queryByRole('button', { name: /submit/i })).toBeNull();
-  expect(onSubmit).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: /submit this frame/i })).toBeNull();
+  expect(onOpenSubmission).not.toHaveBeenCalled();
 });
 
 test('shows the raw alignment score and representative alignment path', () => {
@@ -65,126 +56,64 @@ test('shows a loading placeholder while page details are fetched', () => {
   expect(screen.getByText('Loading frame…')).toBeTruthy();
 });
 
-test('does not render a submitted control from query-history styling', () => {
+test('does not add answer-derived styling to a card', () => {
   const frame = {
     frame_id: 'internal-frame-1',
     video_id: 'L21_V001',
     frame_idx: 17794,
     caption: 'A sample frame',
   };
-  render(<FrameCard frame={frame} className="submitted" onClick={jest.fn()} onSubmit={jest.fn()} />);
+  const { container } = render(<FrameCard frame={frame} className="viewed" onClick={jest.fn()} />);
 
-  expect(screen.queryByRole('button', { name: /submit/i })).toBeNull();
+  expect(container.querySelector('.frame-card').className).toBe('frame-card viewed');
 });
 
-test('answer-workspace membership adds a candidate class without implying submission', () => {
-  const frame = {
-    frame_id: 'workspace-frame',
-    video_id: 'V01',
-    timestamp_ms: 12_345,
-  };
-  const candidate = {
-    kind: 'FRAME',
-    source_frame_id: 'workspace-frame',
-    video_id: 'V01',
-    timestamp_ms: 12_345,
-  };
-
-  expect(getAnswerFrameClassName(frame, [candidate])).toBe('candidate');
-  expect(getAnswerFrameClassName(frame, [{ ...candidate, source_frame_id: 'different-frame' }]))
-    .toBe('');
-});
-
-test('DRES submitted styling comes from answer-workspace submission state', () => {
-  const frame = { frame_id: 'workspace-frame', video_id: 'V01', timestamp_ms: 12_345 };
-  const candidate = {
-    kind: 'FRAME',
-    source_frame_id: 'workspace-frame',
-    video_id: 'V01',
-    timestamp_ms: 12_345,
-    submitted_at_ms: 1_700_000_000_000,
-    submitted_by_user_id: 'team-a',
-    dres_status: 'SUBMITTED',
-  };
-
-  expect(getAnswerFrameClassName(frame, [candidate])).toBe('submitted');
-});
-
-test('FrameCard combines viewed history styling with current answer-workspace candidate state', () => {
-  useOptionalAnswerWorkspace.mockReturnValue({
-    candidates: [{
-      kind: 'FRAME',
-      source_frame_id: 'workspace-frame',
-      video_id: 'V01',
-      timestamp_ms: 12_345,
-    }],
-  });
-  const { rerender } = render(
-    <FrameCard
-      frame={{ frame_id: 'workspace-frame', video_id: 'V01', timestamp_ms: 12_345 }}
-      className="viewed"
-    />,
-  );
-  const card = screen.getByText('No caption available').closest('.frame-card');
-  expect(card.className).toContain('viewed');
-  expect(card.className).toContain('candidate');
-  expect(card.className).not.toContain('submitted');
-
-  useOptionalAnswerWorkspace.mockReturnValue({
-    candidates: [{
-      kind: 'FRAME',
-      source_frame_id: 'workspace-frame',
-      video_id: 'V01',
-      timestamp_ms: 12_345,
-      submitted_at_ms: 1_700_000_000_000,
-    }],
-  });
-  rerender(
-    <FrameCard
-      frame={{ frame_id: 'workspace-frame', video_id: 'V01', timestamp_ms: 12_345 }}
-      className="viewed"
-    />,
-  );
-  expect(screen.getByText('No caption available').closest('.frame-card').className)
-    .toContain('submitted');
-});
-
-test('adds the exact result timestamp to the review workspace without using frame_idx', () => {
+test('opens direct submission with the canonical frame time and stops card propagation', () => {
   const frame = {
     frame_id: 'internal-frame-12000',
     video_id: 'V01',
     frame_idx: 4,
     timestamp_ms: 12_000,
   };
-  const onAddCandidate = jest.fn();
+  const onOpenSubmission = jest.fn();
   const onClick = jest.fn();
   render(
     <FrameCard
       frame={frame}
-      workspaceAction="add-candidate"
-      onAddCandidate={onAddCandidate}
+      onOpenSubmission={onOpenSubmission}
       onClick={onClick}
     />,
   );
 
-  fireEvent.click(screen.getByRole('button', { name: 'Add frame to answer workspace' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Submit this frame to DRES' }));
 
-  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'V01', timestampMs: 12_000 });
+  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'V01', startMs: 12_000, endMs: 12_000 });
   expect(onClick).not.toHaveBeenCalled();
 });
 
-test('keeps the original frame timestamp when fetched display details differ', () => {
+test('disables the frame action while the active DRES task is loading', () => {
+  render(
+    <FrameCard
+      frame={{ frame_id: 'f1', video_id: 'V01', timestamp_ms: 500 }}
+      isSubmissionOpening
+      onOpenSubmission={jest.fn()}
+    />,
+  );
+
+  expect(screen.getByRole('button', { name: 'Submit this frame to DRES' }).disabled).toBe(true);
+});
+
+test('freezes the canonical video and timestamp when display details differ', () => {
   const frame = { frame_id: 'canonical-frame', video_id: 'V01', frame_idx: 3, timestamp_ms: 12_345 };
-  const onAddCandidate = jest.fn();
+  const onOpenSubmission = jest.fn();
   render(
     <FrameCard
       frame={frame}
       detail={{ video_id: 'V99', timestamp_ms: 99_000 }}
-      workspaceAction="add-candidate"
-      onAddCandidate={onAddCandidate}
+      onOpenSubmission={onOpenSubmission}
     />,
   );
 
-  fireEvent.click(screen.getByRole('button', { name: 'Add frame to answer workspace' }));
-  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'V01', timestampMs: 12_345 });
+  fireEvent.click(screen.getByRole('button', { name: 'Submit this frame to DRES' }));
+  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'V01', startMs: 12_345, endMs: 12_345 });
 });

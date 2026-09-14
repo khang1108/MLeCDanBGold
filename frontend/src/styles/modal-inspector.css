@@ -284,7 +284,7 @@
   gap: 8px;
 }
 
-.inspector-submit-btn {
+.inspector-submit-answer-button {
   min-height: 30px;
   padding: 5px 12px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-hairline));
@@ -297,15 +297,9 @@
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.inspector-submit-btn:hover {
+.inspector-submit-answer-button:hover {
   border-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
-}
-
-.inspector-submit-btn.submitted {
-  border-color: #10b981;
-  background: #ecfdf5;
-  color: #047857;
 }
 
 .inspector-close-btn {

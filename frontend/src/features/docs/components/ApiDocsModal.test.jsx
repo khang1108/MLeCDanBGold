@@ -26,15 +26,17 @@ describe('ApiDocsModal component', () => {
     expect(screen.getByText('/api/v1/kis/search')).toBeTruthy();
   });
 
-  test('documents VBS sessions, KIS/VQA/AVS, the answer workspace, and log status without retired workflows', () => {
+  test('documents private VBS sessions and direct one-answer submission without retired workflows', () => {
     render(<ApiDocsModal isOpen onClose={jest.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /endpoints quick reference/i }));
 
     expect(screen.getByText('/api/v1/vbs/session/connect')).toBeTruthy();
-    expect(screen.getByText('/api/v1/vbs/submit/kis')).toBeTruthy();
-    expect(screen.getByText('/api/v1/vbs/submit/vqa')).toBeTruthy();
-    expect(screen.getByText('/api/v1/vbs/submit/avs')).toBeTruthy();
-    expect(screen.getByText('/api/v1/answer-workspace')).toBeTruthy();
+    expect(screen.getByText('/api/v1/vbs/task/{user_id}')).toBeTruthy();
+    expect(screen.getByText('/api/v1/vbs/submit')).toBeTruthy();
+    expect(document.body.textContent).toContain('one temporal answer');
+    expect(document.body.textContent).toContain('one text answer');
+    expect(document.body.textContent).not.toContain('answer-workspace');
+    expect(document.body.textContent).not.toMatch(/submit all|candidate_id|submission-attempts/i);
     expect(document.body.textContent).toContain('task_scope_key');
     expect(document.body.textContent).not.toContain(`"${['task', 'id'].join('_')}"`);
     expect(screen.getByText(/X-DRES-Log-Status/i)).toBeTruthy();

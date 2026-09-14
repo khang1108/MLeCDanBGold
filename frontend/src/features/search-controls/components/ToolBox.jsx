@@ -1,6 +1,4 @@
 import React, { useEffect, useId, useState } from "react";
-import AnswerWorkspace from '../../answer-workspace/components/AnswerWorkspace';
-
 const TOP_K_MIN = 1;
 const NOOP = () => {};
 
@@ -28,7 +26,6 @@ const ToolBox = ({
   useBm25 = true,
   setUseBm25 = NOOP,
   showRetrievalSources = true,
-  isActive = true,
 }) => {
   const topKInputId = useId();
   const datasetSelectId = useId();
@@ -153,7 +150,6 @@ const ToolBox = ({
         </fieldset>
       )}
       </aside>
-      <AnswerWorkspace isActive={isActive} />
     </div>
   );
 };

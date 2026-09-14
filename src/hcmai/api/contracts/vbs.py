@@ -1,19 +1,19 @@
-"""Browser-safe session and DRES submission contracts.
+"""Browser-safe private DRES session and one-answer submission contracts.
 
-Only VBS participant IDs and reviewed candidate revisions cross this API.
-DRES credentials, sessions, and transport error bodies remain backend-only.
+Only a participant ID, frozen task-scope key, and one answer cross the API.
+DRES credentials, session values, workspace state, and attempt identifiers stay
+outside these contracts.
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-
-from hcmai.api.contracts.workspace import AnswerWorkspaceSnapshot
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+DresVerdict = Literal["CORRECT", "WRONG", "INDETERMINATE", "UNDECIDABLE"]
 
 
 class VbsSessionConnectRequest(BaseModel):
@@ -25,7 +25,7 @@ class VbsSessionConnectRequest(BaseModel):
 
 
 class VbsSessionStatus(BaseModel):
-    """Return session connectivity without a DRES token or username."""
+    """Return participant connectivity without exposing a DRES token."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -33,66 +33,115 @@ class VbsSessionStatus(BaseModel):
     connected: bool
 
 
-class VbsCandidateRevision(BaseModel):
-    """One frozen workspace candidate ID and optimistic revision."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    candidate_id: NonBlank
-    expected_revision: int = Field(ge=1, strict=True)
-
-
-class VbsSingleSubmissionRequest(BaseModel):
-    """One reviewed KIS FRAME or VQA TEXT submission request."""
+class VbsTaskResponse(BaseModel):
+    """Expose safe active-task metadata and its opaque frozen-scope key."""
 
     model_config = ConfigDict(extra="forbid")
 
     user_id: NonBlank
+    evaluation_id: NonBlank
     task_scope_key: NonBlank
-    expected_workspace_revision: int = Field(ge=0, strict=True)
-    candidate_id: NonBlank
-    expected_revision: int = Field(ge=1, strict=True)
+    task_name: NonBlank
+    task_group: NonBlank
+    task_type: NonBlank
+    duration: int | None = Field(default=None, ge=0, strict=True)
 
 
-class VbsAvsSubmissionRequest(BaseModel):
-    """One deterministic, complete AVS FRAME collection."""
+class VbsTemporalAnswer(BaseModel):
+    """One canonical video interval expressed in competition milliseconds."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["TEMPORAL"]
+    video_id: NonBlank
+    start_ms: int = Field(ge=0, strict=True)
+    end_ms: int = Field(ge=0, strict=True)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> "VbsTemporalAnswer":
+        """Reject reversed intervals before they can reach the DRES client."""
+
+        if self.end_ms < self.start_ms:
+            raise ValueError("end_ms must be greater than or equal to start_ms")
+        return self
+
+
+class VbsTextAnswer(BaseModel):
+    """One non-blank text answer for a VQA task."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["TEXT"]
+    text: NonBlank
+
+
+VbsAnswer = Annotated[
+    VbsTemporalAnswer | VbsTextAnswer,
+    Field(discriminator="kind"),
+]
+
+
+class VbsDirectSubmissionRequest(BaseModel):
+    """Submit one answer against the task scope frozen by the open popup."""
 
     model_config = ConfigDict(extra="forbid")
 
     user_id: NonBlank
-    task_scope_key: NonBlank
-    expected_workspace_revision: int = Field(ge=0, strict=True)
-    candidates: list[VbsCandidateRevision] = Field(min_length=1)
+    expected_task_scope_key: NonBlank
+    answer: VbsAnswer
 
 
-class VbsSubmissionResolutionRequest(BaseModel):
-    """Operator-reviewed outcome for the currently reserved UNKNOWN attempt."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    user_id: NonBlank
-    outcome: Literal["accepted", "not_accepted"]
-
-
-class VbsSubmissionResponse(BaseModel):
-    """Safe status returned after an accepted, rejected, or ambiguous send."""
+class VbsDirectSubmissionRecorded(BaseModel):
+    """A DRES 2xx delivery with its official judge verdict."""
 
     model_config = ConfigDict(extra="forbid")
 
-    attempt_id: NonBlank
-    state: Literal["ACCEPTED", "NOT_ACCEPTED", "UNKNOWN"]
-    accepted: bool | None
-    verdict: Literal["CORRECT", "WRONG", "INDETERMINATE", "UNDECIDABLE"] | None = None
-    message: str
-    workspace: AnswerWorkspaceSnapshot
+    state: Literal["RECORDED"]
+    recorded: Literal[True]
+    verdict: DresVerdict
+    message: NonBlank
+
+
+class VbsDirectSubmissionNotRecorded(BaseModel):
+    """A definitive DRES rejection that the participant may review manually."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["NOT_RECORDED"]
+    recorded: Literal[False]
+    verdict: None
+    reason: Literal["DRES_REJECTED", "DRES_AUTH_REJECTED"]
+    message: NonBlank
+
+
+class VbsDirectSubmissionUnknown(BaseModel):
+    """An ambiguous transport outcome that must never be replayed silently."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["UNKNOWN"]
+    recorded: None
+    verdict: None
+    message: NonBlank
+
+
+VbsDirectSubmissionOutcome = Annotated[
+    VbsDirectSubmissionRecorded
+    | VbsDirectSubmissionNotRecorded
+    | VbsDirectSubmissionUnknown,
+    Field(discriminator="state"),
+]
 
 
 __all__ = [
-    "VbsAvsSubmissionRequest",
-    "VbsCandidateRevision",
+    "VbsDirectSubmissionNotRecorded",
+    "VbsDirectSubmissionOutcome",
+    "VbsDirectSubmissionRecorded",
+    "VbsDirectSubmissionRequest",
+    "VbsDirectSubmissionUnknown",
     "VbsSessionConnectRequest",
     "VbsSessionStatus",
-    "VbsSingleSubmissionRequest",
-    "VbsSubmissionResolutionRequest",
-    "VbsSubmissionResponse",
+    "VbsTaskResponse",
+    "VbsTemporalAnswer",
+    "VbsTextAnswer",
 ]

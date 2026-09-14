@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { searchFramesByImage } from '../../../api/search';
 import { searchKis } from '../../../api/kis';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
-import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
 import { filterFrames } from '../../../api/filter';
 import {
   createQueryHistory,
@@ -24,11 +23,7 @@ jest.mock('../../../api/history', () => ({
   createQueryHistory: jest.fn(),
   markFrameViewed: jest.fn(),
 }));
-const renderSearch = (props) => render(
-  <AnswerWorkspaceProvider connectedUserId="">
-    <SearchWorkspace {...props} />
-  </AnswerWorkspaceProvider>,
-);
+const renderSearch = (props) => render(<SearchWorkspace {...props} />);
 
 beforeEach(() => {
   searchKis.mockReset();
@@ -244,14 +239,14 @@ test('does not render the retired query-helper control', () => {
   expect(screen.queryByRole('button', { name: /suggest query/i })).toBeNull();
 });
 
-test('renders the shared answer workspace in the KIS sidebar', () => {
+test('does not render a shared answer workspace in the search sidebar', () => {
   renderSearch({ topK: 20, setTopK: jest.fn() });
 
-  expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: /answer workspace/i })).toBeNull();
 });
 
-test('adds a result frame using its exact timestamp when frame_idx differs', async () => {
-  const onAddCandidate = jest.fn();
+test('opens one direct answer from a result frame using its exact timestamp', async () => {
+  const onOpenSubmission = jest.fn();
   searchKis.mockResolvedValueOnce(mockKisResponse({
     inputs: ['boat'],
     queryText: 'boat',
@@ -265,11 +260,11 @@ test('adds a result frame using its exact timestamp when frame_idx differs', asy
       scores: { final: 0.9 },
     }],
   }));
-  renderSearch({ topK: 20, setTopK: jest.fn(), onAddCandidate });
+  renderSearch({ topK: 20, setTopK: jest.fn(), onOpenSubmission });
   submit('boat');
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Add frame to answer workspace' }));
-  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'V01', timestampMs: 12_345 });
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit this frame to DRES' }));
+  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'V01', startMs: 12_345, endMs: 12_345 });
 });
 
 test('keeps local retrieval available while no VBS participant is connected', async () => {

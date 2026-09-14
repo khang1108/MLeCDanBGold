@@ -2,18 +2,13 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FilterWorkspace from './FilterWorkspace';
 import { filterFrames } from '../../../api/filter';
-import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
 
 
 jest.mock('../../../api/filter');
 
 
 const renderWorkspace = async (props = {}) => {
-  const result = render(
-    <AnswerWorkspaceProvider connectedUserId="">
-      <FilterWorkspace {...props} />
-    </AnswerWorkspaceProvider>,
-  );
+  const result = render(<FilterWorkspace {...props} />);
   await act(async () => Promise.resolve());
   return result;
 };
@@ -155,14 +150,14 @@ test('does not render the legacy submission-file panel in the Filter sidebar', a
   expect(screen.queryByRole('region', { name: 'Shared submission files' })).toBeNull();
 });
 
-test('renders the shared answer workspace in the Filter sidebar', async () => {
+test('does not render a shared answer workspace in the Filter sidebar', async () => {
   await renderWorkspace();
 
-  expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: /answer workspace/i })).toBeNull();
 });
 
-test('adds a filtered frame using the exact backend timestamp', async () => {
-  const onAddCandidate = jest.fn();
+test('opens direct submission from a filtered frame using its exact backend timestamp', async () => {
+  const onOpenSubmission = jest.fn();
   const frame = {
     frame_id: 'filter-time-frame',
     video_id: 'V03',
@@ -177,9 +172,9 @@ test('adds a filtered frame using the exact backend timestamp', async () => {
     total_results: 1,
     results: [frame],
   });
-  await renderWorkspace({ onAddCandidate });
+  await renderWorkspace({ onOpenSubmission });
   fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Add frame to answer workspace' }));
-  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'V03', timestampMs: 56_789 });
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit this frame to DRES' }));
+  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'V03', startMs: 56_789, endMs: 56_789 });
 });

@@ -5,8 +5,6 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from hcmai.api.contracts.workspace import AnswerAddFrame, AnswerCandidate, AnswerUpdateFrame
-
 from hcmai.vbs.models import (
     ApiClientAnswer,
     ApiClientAnswerSet,
@@ -188,53 +186,5 @@ def test_successful_submission_response_requires_and_preserves_verdict() -> None
 def test_dres_contracts_forbid_unknown_or_missing_fields(model, payload) -> None:
     """Catch accidental internal fields and incomplete DRES JSON at the edge."""
 
-    with pytest.raises(ValidationError):
-        model.model_validate(payload)
-
-
-@pytest.mark.parametrize(
-    "model,payload",
-    [
-        (
-            AnswerCandidate,
-            {
-                "candidate_id": "candidate-1",
-                "kind": "FRAME",
-                "video_id": "video-1",
-                "timestamp_ms": 0,
-                "contributed_by_user_id": "member-1",
-                "created_at_ms": 1,
-                "revision": 1,
-                "evaluation_id": "eval-1",
-                "task_id": "task-1",
-            },
-        ),
-        (
-            AnswerAddFrame,
-            {
-                "type": "answer.add_frame",
-                "expected_workspace_revision": 0,
-                "video_id": "video-1",
-                "timestamp_ms": 0,
-            },
-        ),
-        (
-            AnswerUpdateFrame,
-            {
-                "type": "answer.update_frame",
-                "expected_workspace_revision": 0,
-                "candidate_id": "candidate-1",
-                "expected_candidate_revision": 1,
-                "video_id": "video-1",
-                "timestamp_ms": 0,
-            },
-        ),
-    ],
-)
-@pytest.mark.parametrize("bad_timestamp", [12.5, "12", True])
-def test_workspace_timestamps_require_exact_integer_milliseconds(model, payload, bad_timestamp) -> None:
-    """Never coerce non-integer JSON into a different competition point."""
-
-    payload["timestamp_ms"] = bad_timestamp
     with pytest.raises(ValidationError):
         model.model_validate(payload)

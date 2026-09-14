@@ -10,10 +10,7 @@ import { useVimMode, TopKPromptModal, VimHelpModal } from './features/vim';
 import { ApiDocsModal } from './features/docs';
 import { useTemporalExploration } from './features/alignment/hooks/useTemporalExploration';
 import { VbsSessionProvider, useVbsSession } from './features/vbs/contexts/VbsSessionContext';
-import AnswerWorkspaceProvider, {
-  useAnswerWorkspace,
-} from './features/answer-workspace/contexts/AnswerWorkspaceContext';
-import AnswerCandidateDialog from './features/answer-workspace/components/AnswerCandidateDialog';
+import { SubmissionDialog, useDirectSubmission } from './features/submission';
 
 const explorationSelectionKey = (selection) => {
   const query = selection?.explorationSnapshot?.query;
@@ -21,7 +18,7 @@ const explorationSelectionKey = (selection) => {
   return query && videoId ? `${query}\u0000${videoId}` : null;
 };
 
-const AppShell = ({ connectedUserId, draftUserId }) => {
+const AppShell = ({ connectedUserId, draftUserId, invalidateSession }) => {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
   const [activePage, setActivePage] = useState('query');
@@ -30,9 +27,6 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [replayRequest, setReplayRequest] = useState(null);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
-  const [candidateDraft, setCandidateDraft] = useState(null);
-  const [candidateDialogError, setCandidateDialogError] = useState('');
-  const [isSavingCandidate, setIsSavingCandidate] = useState(false);
   const replayTokenRef = useRef(0);
   const explorationKeyRef = useRef(null);
   const userIdInputRef = useRef(null);
@@ -40,7 +34,10 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
   const { isHealthy, healthData } = useHealthCheck();
   const exploration = useTemporalExploration();
   const { close: closeTemporalExploration } = exploration;
-  const answerWorkspace = useAnswerWorkspace();
+  const submission = useDirectSubmission({
+    userId: connectedUserId,
+    onSessionRejected: invalidateSession,
+  });
   const vim = useVimMode({
     onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
@@ -62,38 +59,6 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
   };
 
 
-
-  const handleAddAnswerCandidate = (initialValue) => {
-    if (!connectedUserId) return;
-    setCandidateDialogError('');
-    setCandidateDraft({ kind: 'FRAME', initialValue });
-  };
-
-  const handleSaveAnswerCandidate = async (value) => {
-    if (!connectedUserId || isSavingCandidate) return;
-    setIsSavingCandidate(true);
-    setCandidateDialogError('');
-    try {
-      const nextWorkspace = value.kind === 'FRAME'
-        ? await answerWorkspace.addFrame({ videoId: value.videoId, timestampMs: value.timestampMs })
-        : await answerWorkspace.addText({ text: value.text });
-      const candidate = nextWorkspace?.candidates?.find((item) => item.kind === value.kind && (
-        value.kind === 'FRAME'
-          ? item.video_id === value.videoId && item.timestamp_ms === value.timestampMs
-          : item.text === value.text
-      ));
-      if (candidate?.candidate_id) {
-        window.dispatchEvent(new CustomEvent('answer-workspace-focus-candidate', {
-          detail: { candidateId: candidate.candidate_id },
-        }));
-      }
-      setCandidateDraft(null);
-    } catch (error) {
-      setCandidateDialogError(error.message || 'Could not add the answer to the shared workspace.');
-    } finally {
-      setIsSavingCandidate(false);
-    }
-  };
 
   const handleManualVideo = ({ frame, requestedTimestampMs }) => {
     closeExploration();
@@ -123,12 +88,18 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
         activePage={activePage}
         onSelectPage={setActivePage}
       />
+      {!connectedUserId && (
+        <p className="submission-connect-hint" role="status">
+          Connect a VBS participant before submitting answers.
+        </p>
+      )}
 
       <main className="app-container adhoc-app">
         <div className="workspace-panel" hidden={activePage !== 'query'}>
           <SearchWorkspace
             isActive={activePage === 'query'}
-            onAddCandidate={connectedUserId ? handleAddAnswerCandidate : undefined}
+            onOpenSubmission={connectedUserId ? submission.open : undefined}
+            isSubmissionOpening={submission.opening}
             userId={connectedUserId}
             historyUserId={draftUserId}
             topK={topK}
@@ -162,8 +133,8 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
           frame={selectedFrame.frame}
           query={modalQuery}
           initialTimestampMs={selectedFrame.initialTimestampMs}
-          workspaceAction={connectedUserId ? 'add-candidate' : undefined}
-          onAddCandidate={handleAddAnswerCandidate}
+          onOpenSubmission={connectedUserId ? submission.open : undefined}
+          isSubmissionOpening={submission.opening}
           onClose={() => setSelectedFrame(null)}
           exploration={selectedFrame.explorationSnapshot ? {
             events: selectedFrame.explorationSnapshot.events,
@@ -189,20 +160,19 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
           } : undefined}
         />
       )}
-      {candidateDraft && (
-        <AnswerCandidateDialog
-          kind={candidateDraft.kind}
-          initialValue={candidateDraft.initialValue}
-          onSave={handleSaveAnswerCandidate}
-          onCancel={() => {
-            if (isSavingCandidate) return;
-            setCandidateDraft(null);
-            setCandidateDialogError('');
-          }}
-          errorMessage={candidateDialogError}
-          isSaving={isSavingCandidate}
+      {submission.dialog && (
+        <SubmissionDialog
+          task={submission.dialog.task}
+          initialValue={submission.dialog.value}
+          outcome={submission.dialog.outcome}
+          errorMessage={submission.dialog.error}
+          isSubmitting={submission.dialog.submitting}
+          onChange={submission.updateValue}
+          onSubmit={submission.submit}
+          onClose={submission.close}
         />
       )}
+      {submission.openError && <div className="submission-open-error" role="alert">{submission.openError}</div>}
       <TopKPromptModal
         isOpen={vim.isTopKOpen && activePage === 'query'}
         currentTopK={topK}
@@ -216,12 +186,12 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
 };
 
 const AppContent = () => {
-  const { connectedUserId, draftUserId } = useVbsSession();
-  return (
-    <AnswerWorkspaceProvider connectedUserId={connectedUserId}>
-      <AppShell connectedUserId={connectedUserId} draftUserId={draftUserId} />
-    </AnswerWorkspaceProvider>
-  );
+  const { connectedUserId, draftUserId, invalidateSession } = useVbsSession();
+  return <AppShell
+    connectedUserId={connectedUserId}
+    draftUserId={draftUserId}
+    invalidateSession={invalidateSession}
+  />;
 };
 
 const App = () => <VbsSessionProvider><AppContent /></VbsSessionProvider>;
