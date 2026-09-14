@@ -59,6 +59,41 @@ class SearchServiceCompositionTest(unittest.TestCase):
 
         self.assertEqual(visual.source_retriever_calls, 0)
 
+    def test_materialize_resolves_visual_score(self) -> None:
+        from unittest.mock import Mock
+        from types import SimpleNamespace
+        from hcmai.retrieval.models import RetrievalCandidate, RetrievalSource
+
+        corpus = Mock()
+        corpus.frame.return_value = SimpleNamespace(
+            video_id="V001",
+            frame_id="F001",
+            frame_idx=10,
+            timestamp_ms=1000,
+            fps=25.0,
+        )
+        corpus.title.return_value = "Video Title"
+        corpus.caption.return_value = "A test caption"
+        corpus.ocr.return_value = "Some OCR"
+        corpus.objects.return_value = []
+        corpus.transcript.return_value = "transcript text"
+        service = ImageSearchService(
+            corpus,
+            _VisualRetrieverThatTracksDiscovery(),  # type: ignore[arg-type]
+            object(),  # type: ignore[arg-type]
+            max_upload_bytes=1000,
+            max_pixels=1000,
+        )
+        candidate = RetrievalCandidate(
+            frame_id="F001",
+            source_scores={RetrievalSource.VISUAL: 0.95},
+        )
+        result = service._materialize(candidate)
+        self.assertEqual(result.video_id, "V001")
+        self.assertEqual(result.frame_idx, 10)
+        self.assertEqual(result.score, 0.95)
+
+
 
 if __name__ == "__main__":
     unittest.main()

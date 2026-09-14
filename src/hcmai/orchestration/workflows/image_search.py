@@ -17,7 +17,7 @@ from hcmai.api.contracts import ImageSearchResponse, SearchLatency, SearchResult
 from hcmai.corpus import Corpus
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
-from hcmai.retrieval.models import RetrievalCandidate
+from hcmai.retrieval.models import RetrievalCandidate, RetrievalSource
 from hcmai.retrieval.retriever.models.contracts import VectorRetriever
 from hcmai.retrieval.retriever.query_batch import encode_image_query_batch
 from hcmai.temporal import AlignedPath
