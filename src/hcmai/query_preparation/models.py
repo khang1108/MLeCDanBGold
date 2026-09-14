@@ -1,12 +1,35 @@
-"""Immutable query-preparation models and the inference adapter boundary.
+"""Immutable query-preparation models and structured LLM response schemas.
 
-This module owns ordered event bundles. It does not perform model inference,
+This module owns ordered event bundles and Pydantic models for structured
+LLM translation and candidate generation. It does not perform model inference,
 cache results, or expose HTTP contracts.
 """
 
-from collections.abc import Sequence
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, StringConstraints
+
+NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class LiteralTranslation(BaseModel):
+    """Structured literal English translation response from an LLM."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[NonBlank]
+
+
+class CandidateBundle(BaseModel):
+    """Structured literal translation and aligned candidate bundles from an LLM."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    literal_en: list[NonBlank]
+    candidates: list[list[NonBlank]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,19 +47,3 @@ class QueryCandidateSet:
     original_events: tuple[str, ...]
     literal_en: tuple[str, ...]
     candidates: tuple[QueryCandidate, ...]
-
-
-class QueryPreparationAdapter(Protocol):
-    """Structured inference boundary implemented by Thundercompute clients."""
-
-    @staticmethod
-    def translate(events_vi: Sequence[str]) -> tuple[str, ...]:
-        """Translate ordered Vietnamese events into literal English."""
-        ...
-
-    @staticmethod
-    def generate_candidates(
-        events_vi: Sequence[str], candidate_count: int
-    ) -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]:
-        """Generate a literal translation and aligned candidate bundles."""
-        ...

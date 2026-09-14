@@ -494,11 +494,11 @@ git commit -m "feat: resolve KIS clues into semantic intent graphs"
 - Delete `QueryPreparationAdapter` protocol and `QwenQueryPreparationAdapter`.
 - Remove query-preparation methods from `LLMService`/`InferenceClient` in Task 4 after reference audit.
 
-- [ ] **Step 1: Write tests that prove query preparation cannot change resolved event cardinality/order**
+- [x] **Step 1: Write tests that prove query preparation cannot change resolved event cardinality/order**
 
 Use a mock `LLMClient` returning structured translation/candidate payloads. Add an English no-op test so `language="en"` does not pay a translation call.
 
-- [ ] **Step 2: Introduce internal Pydantic response models owned by Query Preparation**
+- [x] **Step 2: Introduce internal Pydantic response models owned by Query Preparation**
 
 ```python
 class LiteralTranslation(BaseModel):
@@ -511,15 +511,15 @@ class CandidateBundle(BaseModel):
 
 `QueryPreparationService` calls `llm.generate_structured(...)` directly with its own version-controlled prompts.
 
-- [ ] **Step 3: Preserve existing invariant validation**
+- [x] **Step 3: Preserve existing invariant validation**
 
 Keep `_validate_bundle` and exact-token preservation. Change only inference ownership; do not relax event-alignment rules.
 
-- [ ] **Step 4: Replace setup wiring**
+- [x] **Step 4: Replace setup wiring**
 
 `_load_query_preparation` receives `LLMClient`, not `LLMService/QwenQueryPreparationAdapter`.
 
-- [ ] **Step 5: Delete Qwen-specific adapter after zero-reference check**
+- [x] **Step 5: Delete Qwen-specific adapter after zero-reference check**
 
 ```bash
 rg "QwenQueryPreparationAdapter|QueryPreparationAdapter" src llm
@@ -531,7 +531,7 @@ Expected after migration: no production references.
 git rm src/hcmai/query_preparation/adapters/qwen.py
 ```
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 ```bash
 PYTHONPATH=src python -m unittest tests.query_preparation.test_service -v

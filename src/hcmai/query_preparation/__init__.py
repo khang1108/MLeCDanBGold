@@ -1,7 +1,10 @@
+"""Query preparation package for literal translation and paraphrase candidates."""
+
 from hcmai.query_preparation.models import (
+    CandidateBundle,
+    LiteralTranslation,
     QueryCandidate,
     QueryCandidateSet,
-    QueryPreparationAdapter,
 )
 from hcmai.query_preparation.service import (
     QueryPreparationError,
@@ -9,9 +12,10 @@ from hcmai.query_preparation.service import (
 )
 
 __all__ = [
+    "CandidateBundle",
+    "LiteralTranslation",
     "QueryCandidate",
     "QueryCandidateSet",
-    "QueryPreparationAdapter",
     "QueryPreparationError",
     "QueryPreparationService",
 ]
