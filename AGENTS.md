@@ -14,6 +14,7 @@ All AI coding assistants (Antigravity, Codex, Claude Code, GitHub Copilot, Curso
 `.agents/skills/`
 
 Before executing tasks, **YOU MUST inspect and follow the instructions in the corresponding skill**:
+
 - **Planning / Brainstorming**: `.agents/skills/brainstorming/SKILL.md` and `.agents/skills/writing-plans/SKILL.md`
 - **TDD (Red / Green)**: `.agents/skills/tdd-red/SKILL.md` and `.agents/skills/tdd-green/SKILL.md`
 - **Code Review**: `.agents/skills/review/SKILL.md` and `.agents/skills/requesting-code-review/SKILL.md`
@@ -131,11 +132,13 @@ KNOWLEDGE.md          # persistent research knowledge
 ### Package ownership
 
 **`common/`**
+
 - authoritative shared contracts and configuration;
 - only truly cross-cutting utilities;
 - search for existing types before creating new ones.
 
 **`data/`**
+
 - canonical frame ingestion;
 - Caption/OCR/Object/ASR artifacts;
 - artifact lineage/versioning;
@@ -144,6 +147,7 @@ KNOWLEDGE.md          # persistent research knowledge
 Do not put KIS/TRAKE reasoning here.
 
 **`retrieval/`**
+
 - embeddings and indexes;
 - modality-specific retrieval;
 - filtering/fusion/reranking;
@@ -152,20 +156,24 @@ Do not put KIS/TRAKE reasoning here.
 Preserve modality provenance and canonical identity.
 
 **`orchestration/workflows/`**
+
 - task request validation and response composition after shared retrieval/data/
   temporal capabilities;
 - keep workflows thin and do not place reusable temporal algorithms here.
 
 **`temporal/`**
+
 - temporal query plans, evidence state, scene localization, and ordered-path
   alignment;
 - preserve canonical identity while materializing temporal candidates.
 
 **`orchestration/`**
+
 - compose services and task workflows;
 - do not duplicate low-level model adapters.
 
 **`api/`**
+
 - keep routers thin;
 - parse/validate requests, call services, shape responses;
 - no FAISS search, ranking, temporal alignment, or model inference in routes when a service already owns it.
@@ -720,18 +728,21 @@ A default value is not a scientific truth.
 Test changes at the layer they affect.
 
 **Schema/contract changes**
+
 - validation;
 - serialization;
 - important invariants;
 - required backward compatibility.
 
 **Data/enrichment**
+
 - canonical identity preservation;
 - deterministic behavior where expected;
 - partial failure/resume;
 - lineage/versioning.
 
 **Retrieval**
+
 - ranking behavior;
 - filters;
 - modality fallback;
@@ -739,9 +750,11 @@ Test changes at the layer they affect.
 - small hand-checkable fixtures.
 
 **Temporal logic**
+
 - use synthetic examples whose correct result can be reasoned about manually.
 
 **TRAKE**
+
 - do not casually break a working alignment path while modifying shared code.
 
 ---
@@ -798,6 +811,7 @@ Never silently revert unrelated teammate work merely to match an old document.
 ### Do
 
 - understand the task semantics before optimizing;
+- Use virtual environment named `aic`
 - preserve `video_id`, `frame_id`, `frame_idx`, and timestamp mappings;
 - keep code simple and easy to debug;
 - write meaningful module/class/function docstrings;
