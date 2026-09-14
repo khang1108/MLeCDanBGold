@@ -5,9 +5,12 @@ from .models import (
     KISEntityBinding,
     KISEvent,
     KISIntent,
+    KISResolution,
+    KISResolutionEntity,
+    KISResolutionEvent,
     KISTemporalEdge,
 )
-from .resolver import KISIntentResolver
+from .resolver import KISIntentResolver, KISResolutionError
 
 __all__ = [
     "KISEntity",
@@ -15,5 +18,9 @@ __all__ = [
     "KISEvent",
     "KISIntent",
     "KISIntentResolver",
+    "KISResolution",
+    "KISResolutionEntity",
+    "KISResolutionEvent",
+    "KISResolutionError",
     "KISTemporalEdge",
 ]

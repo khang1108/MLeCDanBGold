@@ -1,8 +1,9 @@
 """Semantic graph models for KIS intents.
 
 This module defines the domain models for structured KIS intent representation:
-entities, events, entity bindings, and temporal edges. It enforces graph validity,
-continuity, and canonical timeline order without depending on HTTP transport schemas.
+entities, events, entity bindings, temporal edges, and semantic resolution contracts.
+It enforces graph validity, continuity, and canonical timeline order without depending
+on HTTP transport schemas.
 """
 
 from __future__ import annotations
@@ -22,6 +23,32 @@ from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 EntityId = Annotated[str, StringConstraints(pattern=r"^X[1-9]\d*$")]
 EventId = Annotated[str, StringConstraints(pattern=r"^E[1-9]\d*$")]
+
+
+class KISResolutionEntity(BaseModel):
+    """Semantic entity returned by LLM without server-assigned ID."""
+
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["person", "object", "place", "text", "other"]
+    description: NonBlank
+
+
+class KISResolutionEvent(BaseModel):
+    """Semantic event returned by LLM with zero-based entity index references."""
+
+    model_config = ConfigDict(extra="forbid")
+    text: NonBlank
+    entity_indices: list[int] = Field(default_factory=list)
+
+
+class KISResolution(BaseModel):
+    """Semantic-only response requested from LLM without server-owned fields."""
+
+    model_config = ConfigDict(extra="forbid")
+    language: Literal["vi", "en"]
+    query_text: NonBlank
+    entities: list[KISResolutionEntity] = Field(default_factory=list)
+    events: list[KISResolutionEvent] = Field(min_length=1)
 
 
 class KISEntity(BaseModel):
@@ -109,24 +136,26 @@ class KISIntent(BaseModel):
                         f"Event {event.id} references unknown entity: {binding.entity_id}"
                     )
 
-        # 5. Temporal edge validation
-        for edge in self.temporal_edges:
-            if edge.source not in event_indices:
-                raise ValueError(
-                    f"Temporal edge references unknown source event: {edge.source}"
-                )
-            if edge.target not in event_indices:
-                raise ValueError(
-                    f"Temporal edge references unknown target event: {edge.target}"
-                )
-            if edge.source == edge.target:
-                raise ValueError(
-                    f"Self temporal edge is invalid: {edge.source} -> {edge.target}"
-                )
-            if event_indices[edge.source] >= event_indices[edge.target]:
-                raise ValueError(
-                    f"Temporal edge {edge.source} before {edge.target} contradicts "
-                    f"canonical event order"
-                )
+        # 5. Temporal edge validation: require complete sequential adjacent chain
+        expected_edges = [
+            (f"E{i}", f"E{i+1}") for i in range(1, len(self.events))
+        ]
+        actual_edges = [(edge.source, edge.target) for edge in self.temporal_edges]
+        if actual_edges != expected_edges:
+            raise ValueError(
+                f"Temporal edges must form complete sequential adjacent chain {expected_edges}, got: {actual_edges}"
+            )
 
         return self
+
+
+__all__ = [
+    "KISEntity",
+    "KISEntityBinding",
+    "KISEvent",
+    "KISIntent",
+    "KISResolution",
+    "KISResolutionEntity",
+    "KISResolutionEvent",
+    "KISTemporalEdge",
+]
