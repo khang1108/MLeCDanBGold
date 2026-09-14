@@ -158,7 +158,7 @@ data = yaml.safe_load(path.read_text(encoding="utf-8"))
 if not isinstance(data, dict):
     raise SystemExit(f"ERROR: Config must contain a YAML mapping: {path}")
 
-for section in ("visual_embedding", "caption_embedding"):
+for section in ("visual_embedding",):
     value = data.get(section)
     if not isinstance(value, dict):
         raise SystemExit(f"ERROR: Missing config section: {section}")
@@ -249,10 +249,8 @@ start_api() {
         export HCMAI_ENABLE_ASR="false"
         export HCMAI_ENABLE_DIARIZATION="false"
         export HCMAI_ENABLE_VISUAL_EMBEDDING="true"
-        export HCMAI_ENABLE_CAPTION_EMBEDDING="true"
         export HCMAI_ENABLE_RERANKER="false"
         export HCMAI_ENABLE_VQA="false"
-        export HCMAI_ENABLE_QUERY_PREPARATION="false"
         export PYTHONPATH="${REPO_DIR}:${REPO_DIR}/src"
 
         exec "${PYTHON_BIN}" -m uvicorn llm.server.api:app \

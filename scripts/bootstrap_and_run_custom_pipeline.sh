@@ -113,7 +113,6 @@ if [[ "$SKIP_INFERENCE_SERVER" != "1" ]]; then
     HCMAI_ENABLE_OCR=true \
     HCMAI_ENABLE_ASR=false \
     HCMAI_ENABLE_VISUAL_EMBEDDING=false \
-    HCMAI_ENABLE_CAPTION_EMBEDDING=false \
     HCMAI_ENABLE_RERANKER=false \
     PYTHONPATH=.:src nohup aic/bin/python -m uvicorn llm.server.api:app \
       --host "$INFERENCE_HOST" --port "$INFERENCE_PORT" --workers 1 \

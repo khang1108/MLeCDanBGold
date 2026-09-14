@@ -35,17 +35,13 @@ class LocalAdapter:
         self,
         config: LLMServiceConfig,
         visual_encoder: Any | None = None,
-        caption_encoder: Any | None = None,
         captioner: Any | None = None,
         reranker: Any | None = None,
-        query_preparer: Any | None = None,
         ocr_adapter: Any | None = None,
         *,
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
-        enable_caption_embedding: bool = True,
         enable_reranker: bool = True,
-        enable_query_preparation: bool = False,
         enable_ocr: bool = False,
         enable_asr: bool = False,
         enable_diarization: bool = False,
@@ -55,9 +51,7 @@ class LocalAdapter:
         self.transcript_config = transcript_config
         self.enable_caption = enable_caption
         self.enable_visual_embedding = enable_visual_embedding
-        self.enable_caption_embedding = enable_caption_embedding
         self.enable_reranker = enable_reranker
-        self.enable_query_preparation = enable_query_preparation
         self.enable_ocr = enable_ocr
         self.enable_asr = enable_asr
         self.enable_diarization = enable_diarization
@@ -68,11 +62,6 @@ class LocalAdapter:
         self.visual_encoder = visual_encoder or (
             cast(Any, EmbeddingService.create_text_adapter(config.visual_embedding))
             if enable_visual_embedding
-            else None
-        )
-        self.caption_encoder = caption_encoder or (
-            cast(Any, EmbeddingService.create_text_adapter(config.caption_embedding))
-            if enable_caption_embedding
             else None
         )
         self.captioner = captioner or (
@@ -87,14 +76,6 @@ class LocalAdapter:
             if enable_reranker
             else None
         )
-        if query_preparer is not None:
-            self.query_preparer = query_preparer
-        elif enable_query_preparation:
-            from llm.query_preparation import QwenQueryPreparer
-
-            self.query_preparer = QwenQueryPreparer(config.query_preparation)
-        else:
-            self.query_preparer = None
         self.ocr_adapter: Any = ocr_adapter or (
             FlorenceAdapter(
                 OCRConfig(
@@ -119,9 +100,7 @@ class LocalAdapter:
             config,
             enable_caption=_env_bool("HCMAI_ENABLE_CAPTION"),
             enable_visual_embedding=_env_bool("HCMAI_ENABLE_VISUAL_EMBEDDING"),
-            enable_caption_embedding=_env_bool("HCMAI_ENABLE_CAPTION_EMBEDDING"),
             enable_reranker=_env_bool("HCMAI_ENABLE_RERANKER"),
-            enable_query_preparation=_env_bool("HCMAI_ENABLE_QUERY_PREPARATION", default=False),
             enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
             enable_asr=_env_bool("HCMAI_ENABLE_ASR", default=False),
             enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", default=False),
@@ -137,12 +116,8 @@ class LocalAdapter:
             self.captioner.resolve_revision()
         if self.visual_encoder is not None:
             self.visual_encoder._load_model()
-        if self.caption_encoder is not None and self.caption_encoder is not self.visual_encoder:
-            self.caption_encoder._load_model()
         if self.reranker is not None:
             self.reranker._ensure_loaded()
-        if self.query_preparer is not None:
-            self.query_preparer._ensure_loaded()
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
 
@@ -157,12 +132,6 @@ class LocalAdapter:
 
             self.diarization = DiarizationAdapter(self.transcript_config.diarization)
             self.diarization._load_pipeline()
-
-    def embed_text(self, texts: list[str], source: str = "visual") -> np.ndarray:
-        encoder = self.caption_encoder if source == "text" else self.visual_encoder
-        if encoder is None:
-            raise RuntimeError("embedding model is disabled")
-        return encoder.encode_text(texts)
 
     def embed_images(
         self,
@@ -198,22 +167,6 @@ class LocalAdapter:
         if self.reranker is None:
             raise RuntimeError("reranker model is disabled")
         return list(self.reranker.score_batch(query, images))
-
-    def translate_query_events(self, events: list[str]) -> list[str]:
-        """Translate query events with the process-owned Qwen model."""
-
-        if self.query_preparer is None:
-            raise RuntimeError("query-preparation model is disabled")
-        return self.query_preparer.translate(events)
-
-    def generate_query_candidates(
-        self, events: list[str], candidate_count: int = 5
-    ) -> dict[str, Any]:
-        """Generate aligned candidates with the process-owned Qwen model."""
-
-        if self.query_preparer is None:
-            raise RuntimeError("query-preparation model is disabled")
-        return self.query_preparer.generate_candidates(events, candidate_count)
 
     def readiness(self) -> Any:
         """Report enabled capability readiness and checkpoint provenance."""

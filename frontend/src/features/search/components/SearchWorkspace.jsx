@@ -4,7 +4,7 @@
  * Retrieval contracts remain owned by the existing API modules. This module
  * adds only history persistence, canonical activity tracking, and Replay.
  */
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { searchFramesByImage } from '../../../api/search';
 import { searchKis } from '../../../api/kis';
 import KisPanel from '../../kis/components/KisPanel';
@@ -104,16 +104,13 @@ const SearchWorkspace = ({
   const [filterObject, setFilterObject] = useState('');
   const [filterPageId, setFilterPageId] = useState(1);
   const [filterTotalPages, setFilterTotalPages] = useState(0);
-  const [filterTotalResults, setFilterTotalResults] = useState(0);
   const [appliedFilterParams, setAppliedFilterParams] = useState(null);
-  const queryTextareaRef = useRef(null);
   const imageInputRef = useRef(null);
   const requestRef = useRef(null);
   const viewedPatchRef = useRef(new Set());
   const lastReplayTokenRef = useRef(null);
   const liveKisSnapshotRef = useRef(null);
   const setQueryTextareaRef = useCallback((node) => {
-    queryTextareaRef.current = node;
     if (queryInputRef) queryInputRef.current = node;
   }, [queryInputRef]);
 
@@ -197,22 +194,6 @@ const SearchWorkspace = ({
     return () => window.removeEventListener('paste', handlePaste);
   }, [handleImageFileSelect, isActive]);
 
-  useLayoutEffect(() => {
-    const textarea = queryTextareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = '0px';
-    textarea.style.paddingTop = '8px';
-    textarea.style.paddingBottom = '8px';
-    textarea.style.lineHeight = '1.3';
-    const contentHeight = textarea.scrollHeight;
-    if (!/\r?\n/.test(textarea.value) && contentHeight <= 42) {
-      textarea.style.height = '42px';
-      textarea.style.paddingTop = '0px';
-      textarea.style.paddingBottom = '0px';
-      textarea.style.lineHeight = '42px';
-    } else textarea.style.height = `${Math.max(contentHeight, 42)}px`;
-  }, [eventDescription]);
-
   useEffect(() => {
     onQueryChange?.(eventDescription);
   }, [eventDescription, onQueryChange]);
@@ -289,7 +270,7 @@ const SearchWorkspace = ({
       setResultType(null);
       setError(replayError.message);
     }
-  }, [replayRequest, historyIdentity]);
+  }, [replayRequest, historyIdentity, onExplorationInvalidated]);
 
   const submitImageSearch = useCallback(async (event) => {
     event?.preventDefault?.();
@@ -539,7 +520,6 @@ const SearchWorkspace = ({
       setWarnings(response.warnings || []);
       setFilterPageId(response.page_id || pageId);
       setFilterTotalPages(response.total_pages || 0);
-      setFilterTotalResults(response.total_results || 0);
       setAppliedFilterParams(paramsToUse);
     } catch (requestError) {
       if (requestError.name === 'AbortError') return;
@@ -571,7 +551,6 @@ const SearchWorkspace = ({
     setFilterObject('');
     setFilterPageId(1);
     setFilterTotalPages(0);
-    setFilterTotalResults(0);
     setAppliedFilterParams(null);
   }, []);
 
@@ -721,36 +700,14 @@ const SearchWorkspace = ({
             </div>
           </div>
         ) : (
-          <div className="search-query-row">
+          <div className="search-query-row search-image-drop-row">
             <div
-              className="query-input-wrapper"
+              className={`query-input-wrapper search-image-drop-target${isImageDragOver ? ' drag-over' : ''}`}
               onDragOver={handleImageDragOver}
               onDragLeave={handleImageDragLeave}
               onDrop={handleImageDrop}
             >
-              <textarea
-                ref={setQueryTextareaRef}
-                id="event-query"
-                className="input-text query-input-field"
-                rows={1}
-                value={eventDescription}
-                onChange={(e) => {
-                  setKisSession((prev) => setDraft(prev, e.target.value));
-                  onQueryChange?.(e.target.value);
-                }}
-                placeholder="Search or add another clue…"
-                onFocus={onFocusQueryInput}
-                onBlur={onBlurQueryInput}
-                disabled={isSearching}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!isSearching && eventDescription.trim()) {
-                      submit(e);
-                    }
-                  }
-                }}
-              />
+              <span>Drop an image here to search by image.</span>
             </div>
             <div className="search-query-actions">
               <input
@@ -762,27 +719,12 @@ const SearchWorkspace = ({
                 onChange={(e) => handleImageFileSelect(e.target.files?.[0])}
               />
               <button
-                type="submit"
-                className="btn-primary query-submit-btn"
-                disabled={isSearching || (!eventDescription.trim() && !selectedImageFile)}
-              >
-                {isSearching ? 'Searching…' : 'Search'}
-              </button>
-              <button
                 type="button"
                 className="btn-secondary search-action-btn"
                 onClick={() => imageInputRef.current?.click()}
                 title="Upload image"
               >
                 Upload
-              </button>
-              <button
-                type="button"
-                className="btn-secondary search-action-btn"
-                onClick={handleNewSearch}
-                title="Shortcut: N"
-              >
-                New Search
               </button>
             </div>
           </div>
@@ -917,24 +859,25 @@ const SearchWorkspace = ({
           <GifLoaderOverlay isVisible={isSearching} />
           {!isSearching && renderResults()}
         </div>
-        <aside className="kis-chat-sidebar" aria-label="KIS Chat Assistant">
-          <KisPanel
-            sessionState={{
-              ...kisSession,
-              isSearching: isSearching || kisSession.isSearching,
-              error: error || kisSession.error,
-            }}
-            onDraftChange={(val) => {
-              setKisSession((prev) => setDraft(prev, val));
-              onQueryChange?.(val);
-            }}
-            onSubmit={submit}
-            onReset={handleNewSearch}
-            disabled={isSearching}
-            submitLabel="Send"
-            resetLabel="Reset"
-          />
-        </aside>
+        {!selectedImageFile && (
+          <aside className="kis-chat-sidebar" aria-label="KIS search">
+            <KisPanel
+              sessionState={{
+                ...kisSession,
+                isSearching: isSearching || kisSession.isSearching,
+                error: error || kisSession.error,
+              }}
+              inputRef={setQueryTextareaRef}
+              onDraftChange={(val) => {
+                setKisSession((prev) => setDraft(prev, val));
+                onQueryChange?.(val);
+              }}
+              onSubmit={submit}
+              onReset={handleNewSearch}
+              disabled={isSearching}
+            />
+          </aside>
+        )}
       </div>
     </div>
   );

@@ -17,6 +17,13 @@ describe('KisPanel presentation component', () => {
     expect(screen.getByPlaceholderText('Search or add another clue…')).toBeTruthy();
   });
 
+  test('uses a neutral KIS presentation instead of chat-agent prose', () => {
+    render(<KisPanel sessionState={defaultState} />);
+
+    expect(screen.queryByText('KIS Assistant')).toBeNull();
+    expect(screen.queryByText('Multi-Clue Semantic Search')).toBeNull();
+  });
+
   test('renders committed clue history when revision > 0', () => {
     const sessionState = {
       ...defaultState,

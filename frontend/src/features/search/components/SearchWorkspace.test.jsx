@@ -137,6 +137,13 @@ test('defaults plain descriptions to KIS', () => {
   });
 });
 
+test('renders one KIS clue input owned by the unified panel', () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  expect(screen.getAllByPlaceholderText('Search or add another clue…')).toHaveLength(1);
+  expect(screen.queryByLabelText('KIS Chat Assistant')).toBeNull();
+});
+
 test('active KIS results preserve backend fps when the user opens a frame', async () => {
   const onFrameClick = jest.fn();
   searchKis.mockResolvedValueOnce(mockKisResponse({
@@ -701,4 +708,3 @@ test('pressing Enter in any filter input field triggers filter submission', asyn
     }),
   ));
 });
-

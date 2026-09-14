@@ -227,6 +227,24 @@
   width: 100%;
 }
 
+.search-image-drop-target {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px dashed var(--color-hairline);
+  border-radius: var(--rounded-md);
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.search-image-drop-target.drag-over {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+}
+
 .search-query-actions {
   display: flex;
   align-items: stretch;

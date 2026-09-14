@@ -32,10 +32,6 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
     visual_loaded = (
         adapter.visual_encoder is not None and adapter.visual_encoder.model is not None
     )
-    caption_loaded = (
-        adapter.caption_encoder is not None
-        and adapter.caption_encoder.model is not None
-    )
     reranker_loaded = (
         adapter.reranker is not None and adapter.reranker._base_model is not None
     )
@@ -44,20 +40,14 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
     )
     asr_loaded = adapter.asr is not None
     diarization_loaded = adapter.diarization is not None
-    query_preparation_loaded = (
-        adapter.query_preparer is not None and adapter.query_preparer.model is not None
-    )
-
     transcript_config = adapter.transcript_config
     return InferenceReadiness(
         ready=(not adapter.enable_caption or generator_loaded)
         and (not adapter.enable_visual_embedding or visual_loaded)
-        and (not adapter.enable_caption_embedding or caption_loaded)
         and (not adapter.enable_reranker or reranker_loaded)
         and (not adapter.enable_ocr or ocr_loaded)
         and (not adapter.enable_asr or asr_loaded)
-        and (not adapter.enable_diarization or diarization_loaded)
-        and (not adapter.enable_query_preparation or query_preparation_loaded),
+        and (not adapter.enable_diarization or diarization_loaded),
         models={
             "caption_generation": _model_status(
                 enabled=adapter.enable_caption,
@@ -74,12 +64,6 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
                 loaded=visual_loaded,
                 checkpoint=adapter.config.visual_embedding.model_name,
                 revision=adapter.config.visual_embedding.revision,
-            ),
-            "caption_embedding": _model_status(
-                enabled=adapter.enable_caption_embedding,
-                loaded=caption_loaded,
-                checkpoint=adapter.config.caption_embedding.model_name,
-                revision=adapter.config.caption_embedding.revision,
             ),
             "reranker": _model_status(
                 enabled=adapter.enable_reranker,
@@ -129,15 +113,9 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
                     else None
                 ),
             ),
-            "query_preparation": _model_status(
-                enabled=adapter.enable_query_preparation,
-                loaded=query_preparation_loaded,
-                checkpoint=adapter.config.query_preparation.model_checkpoint,
-                revision=adapter.config.query_preparation.revision,
-            ),
         },
         capabilities=_capabilities(
-            embedding=visual_loaded or caption_loaded,
+            embedding=visual_loaded,
             reranking=reranker_loaded,
             structured_parsing=False,
             image_embedding=visual_loaded,
@@ -145,6 +123,5 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
             ocr=ocr_loaded,
             asr=asr_loaded,
             diarization=diarization_loaded,
-            query_preparation=query_preparation_loaded,
         ),
     )

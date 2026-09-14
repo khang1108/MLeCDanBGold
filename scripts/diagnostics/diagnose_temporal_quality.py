@@ -1,7 +1,7 @@
 """Diagnostic script for Temporal Alignment Quality vs Dense Search.
 
-Executes API calls against http://127.0.0.1:8000 (Search & TRAKE)
-and http://127.0.0.1:8100 (Embeddings), slices mmap vectors (<2MB RAM),
+Executes API calls against http://127.0.0.1:8000 (Search & TRAKE), uses the
+configured provider-agnostic embedding client, slices mmap vectors (<2MB RAM),
 and computes R0, R1, R2 diagnostics across 5 benchmark queries.
 """
 
@@ -16,6 +16,7 @@ import urllib.request
 import numpy as np
 
 from hcmai.temporal.dp import align_video
+from hcmai.inference import EmbeddingClient, load_embedding_endpoint
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 BENCHMARK_QUERIES = [
@@ -109,15 +110,8 @@ def call_api(endpoint, payload):
         return None
 
 def embed_texts_siglip(texts):
-    data = json.dumps({"source": "visual", "texts": texts}).encode("utf-8")
-    req = urllib.request.Request(
-        "http://127.0.0.1:8100/v1/embeddings/text",
-        data=data,
-        headers={"Content-Type": "application/json"}
-    )
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        res = json.loads(resp.read().decode("utf-8"))
-        return np.array(res["embeddings"], dtype=np.float32)
+    batch = EmbeddingClient(load_embedding_endpoint()).embed_text(texts)
+    return np.asarray(batch.vectors, dtype=np.float32)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

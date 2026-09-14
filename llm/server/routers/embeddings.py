@@ -7,51 +7,11 @@ from time import perf_counter
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 import numpy as np
 
-from hcmai.retrieval.embedding.inference_contracts import (
-    EmbeddingResponse,
-    TextEmbeddingResponse,
-)
-from llm.contracts import TextEmbeddingRequest
+from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse
 from llm.server.dependencies import loaded_model_status, runtime_from, unavailable
 from llm.server.parsing import decode_images
 
 router = APIRouter(prefix="/v1/embeddings", tags=["embeddings"])
-
-
-@router.post("/text", response_model=TextEmbeddingResponse)
-async def embed_text(
-    payload: TextEmbeddingRequest,
-    request: Request,
-) -> TextEmbeddingResponse:
-    """Embed one bounded text batch in its requested encoder space."""
-
-    started = perf_counter()
-    runtime = runtime_from(request)
-    config = (
-        runtime.config.caption_embedding
-        if payload.source == "text"
-        else runtime.config.visual_embedding
-    )
-    if len(payload.texts) > config.batch_size:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"text batch must contain 1..{config.batch_size} items "
-                f"for source {payload.source!r}"
-            ),
-        )
-    try:
-        vectors = runtime.embed_text(list(payload.texts), payload.source)
-    except Exception as error:
-        raise unavailable("Embedding inference failed", error) from error
-    return TextEmbeddingResponse(
-        model=config.model_name,
-        revision=config.revision,
-        dimension=int(vectors.shape[1]),
-        normalized=True,
-        embeddings=vectors.tolist(),
-        latency_ms=(perf_counter() - started) * 1_000,
-    )
 
 
 @router.post("/images", response_model=EmbeddingResponse)

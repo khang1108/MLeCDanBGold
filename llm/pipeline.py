@@ -49,12 +49,6 @@ class LLMService:
     def reranker(self) -> Any:
         return self.adapter.reranker
 
-    @property
-    def query_preparer(self) -> Any:
-        """Return the hosted query-preparation adapter when available."""
-
-        return self.adapter.query_preparer
-
     def load(self) -> None:
         method = getattr(self.adapter, "load", None)
         if method is not None:
@@ -81,7 +75,6 @@ class LLMService:
                 "embedding": False,
                 "reranking": False,
                 "structured_parsing": False,
-                "query_preparation": False,
             }
         return readiness.capabilities.model_dump()
 

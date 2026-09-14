@@ -42,7 +42,6 @@ disposable VM.
 | `server/parsing.py` | Bounded multipart image/tensor validation |
 | `local/` | Single-process model lifecycle, audio input, and readiness |
 | `remote/` | HTTP client, endpoint pool, retries, circuit breaker, and bulkhead |
-| `query_preparation/` | Hosted structured-generation adapter |
 | `config.py` | Typed model and service configuration loaded from YAML |
 | `config.yaml` | Pinned enabled-model configuration |
 
@@ -59,16 +58,19 @@ enabled model groups are loaded and returns checkpoint provenance.
 
 ## Configuration and compatibility
 
-The checked-in configuration pins the visual encoder, multilingual text
-encoder, caption model and image-query reranker. Environment variables control
-which shared capabilities load:
+The checked-in configuration pins the visual encoder, caption model and
+image-query reranker. Environment variables control which shared capabilities
+load:
+
+Text query embeddings are requested by the application through the
+`HCMAI_EMBEDDING_*` endpoint settings; this private service intentionally
+exposes image embedding only.
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `HCMAI_LLM_CONFIG` | GPU service | YAML path; defaults to `llm/config.yaml` |
 | `HCMAI_ENABLE_CAPTION` | GPU service | Load caption generation |
 | `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load visual/query encoder |
-| `HCMAI_ENABLE_CAPTION_EMBEDDING` | GPU service | Load text encoder |
 | `HCMAI_ENABLE_RERANKER` | GPU service | Load image-query reranker |
 | `HCMAI_ENABLE_OCR` | GPU service | Load OCR capability |
 | `HCMAI_ENABLE_ASR` | GPU service | Load ASR capability |
@@ -87,7 +89,6 @@ must not query an index built in another vector space.
 | `GET /ready` | None | Enabled-model readiness and provenance |
 | `POST /v1/captions` | Multipart IDs and images | Caption for each input ID |
 | `POST /v1/enrichment/ocr` | Multipart IDs and images | OCR evidence for each input ID |
-| `POST /v1/embeddings/text` | JSON text batch | Normalized text vectors |
 | `POST /v1/embeddings/images` | Multipart IDs and images | Visual vectors |
 | `POST /v1/embeddings/dino` | Multipart IDs and images | DINO visual vectors |
 | `POST /v1/preprocessing/shot-scores` | Ordered images | Shot-boundary scores |
@@ -102,10 +103,6 @@ For example:
 ```bash
 curl -sS http://127.0.0.1:8100/health
 curl -sS http://127.0.0.1:8100/ready
-
-curl -sS http://127.0.0.1:8100/v1/embeddings/text \
-  -H 'Content-Type: application/json' \
-  -d '{"texts":["a 60-second timer","a red bus on a city street"]}'
 ```
 
 Reranking accepts the bounded candidate set supplied by local retrieval. It may
