@@ -1,14 +1,18 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { searchFrames } from '../../../api/search';
+import { searchFrames, searchFramesByImage } from '../../../api/search';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
 import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
+import { filterFrames } from '../../../api/filter';
 import {
   createQueryHistory,
   markFrameViewed,
 } from '../../../api/history';
 
 jest.mock('../../../api/search');
+jest.mock('../../../api/filter', () => ({
+  filterFrames: jest.fn(),
+}));
 jest.mock('../../../api/history', () => ({
   createQueryHistory: jest.fn(),
   markFrameViewed: jest.fn(),
@@ -21,6 +25,8 @@ const renderSearch = (props) => render(
 
 beforeEach(() => {
   searchFrames.mockReset();
+  searchFramesByImage.mockReset();
+  filterFrames.mockReset();
   createQueryHistory.mockResolvedValue({});
   markFrameViewed.mockResolvedValue({});
 });
@@ -405,3 +411,258 @@ test('keeps the viewed color while allowing a failed activity patch to retry', a
   fireEvent.click(frameImage);
   await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(2));
 });
+
+test('renders Upload button next to Search and opens file picker', () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  const uploadBtn = screen.getByRole('button', { name: 'Upload' });
+  expect(uploadBtn).toBeTruthy();
+
+  const fileInput = screen.getByTestId('image-search-file-input');
+  expect(fileInput).toBeTruthy();
+  const clickSpy = jest.spyOn(fileInput, 'click');
+  fireEvent.click(uploadBtn);
+  expect(clickSpy).toHaveBeenCalled();
+});
+
+test('detects uploaded image and executes image search API on submit', async () => {
+  searchFramesByImage.mockResolvedValueOnce({
+    results: [{
+      frame_id: 'img-result-1',
+      video_id: 'V02',
+      frame_idx: 10,
+      timestamp_ms: 2000,
+      frame_ids: ['img-result-1'],
+      timestamps_ms: [2000],
+      scores: { visual: 0.95 },
+    }],
+    warnings: [],
+    latency: SEARCH_LATENCY,
+  });
+
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+
+  // Initially search is disabled with no query
+  const searchBtn = screen.getByRole('button', { name: 'Search' });
+  expect(searchBtn.disabled).toBe(true);
+
+  // Upload an image file
+  const testFile = new File(['dummy content'], 'query_photo.jpg', { type: 'image/jpeg' });
+  const fileInput = screen.getByTestId('image-search-file-input');
+  fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+  // Preview badge should now be visible with filename
+  expect(await screen.findByText('query_photo.jpg')).toBeTruthy();
+  // Search button should now be enabled
+  expect(searchBtn.disabled).toBe(false);
+
+  // Submit search
+  fireEvent.click(searchBtn);
+
+  // It should automatically detect image search and call searchFramesByImage
+  await waitFor(() => expect(searchFramesByImage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      imageFile: testFile,
+      topK: 20,
+      userId: 'team-a',
+    }),
+  ));
+  expect(searchFrames).not.toHaveBeenCalled();
+
+  // Results should render in FramesBox
+  expect(await screen.findByAltText('Frame img-result-1')).toBeTruthy();
+});
+
+test('clearing the uploaded image restores text query input', async () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  const testFile = new File(['dummy'], 'sample.png', { type: 'image/png' });
+  const fileInput = screen.getByTestId('image-search-file-input');
+  fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+  expect(await screen.findByText('sample.png')).toBeTruthy();
+
+  // Click remove button ✕
+  const clearBtn = screen.getByRole('button', { name: 'Remove image' });
+  fireEvent.click(clearBtn);
+
+  // Textarea should be restored
+  expect(screen.queryByText('sample.png')).toBeNull();
+  expect(document.getElementById('event-query')).toBeTruthy();
+});
+
+test('New Search resets the uploaded image query', async () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  const testFile = new File(['dummy'], 'test.png', { type: 'image/png' });
+  const fileInput = screen.getByTestId('image-search-file-input');
+  fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+  expect(await screen.findByText('test.png')).toBeTruthy();
+
+  // Click New Search
+  fireEvent.click(screen.getByRole('button', { name: 'New Search' }));
+
+  // Image query cleared and textarea restored
+  expect(screen.queryByText('test.png')).toBeNull();
+  expect(document.getElementById('event-query')).toBeTruthy();
+});
+
+test('submitting filter inputs calls filterFrames and displays results in FramesBox', async () => {
+  filterFrames.mockResolvedValueOnce({
+    results: [
+      {
+        frame_id: 'filter-res-1',
+        video_id: 'Video_01',
+        frame_idx: 100,
+        timestamp_ms: 5000,
+        preview_url: '/frames/filter-res-1.jpg',
+      },
+    ],
+    total_results: 1,
+    total_pages: 1,
+    page_id: 1,
+    page_size: 100,
+    latency: 15,
+  });
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  fireEvent.change(screen.getByPlaceholderText('Folder ID'), { target: { value: 'Folder_01' } });
+  fireEvent.change(screen.getByPlaceholderText('Video ID'), { target: { value: 'Video_01' } });
+  fireEvent.change(screen.getByPlaceholderText('Title'), { target: { value: 'Traffic' } });
+  fireEvent.change(screen.getByPlaceholderText('ASR'), { target: { value: 'vehicle' } });
+  fireEvent.change(screen.getByPlaceholderText('OCR'), { target: { value: 'STOP' } });
+  fireEvent.change(screen.getByPlaceholderText('Object (name: count)'), { target: { value: 'car: 2, person' } });
+
+  const filterBtn = screen.getByRole('button', { name: 'Filter' });
+  expect(filterBtn.disabled).toBe(false);
+
+  fireEvent.click(filterBtn);
+
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledWith(
+    expect.objectContaining({
+      folderId: 'Folder_01',
+      videoId: 'Video_01',
+      filters: {
+        title: 'Traffic',
+        asr: 'vehicle',
+        ocr: 'STOP',
+        caption: '',
+        objects: [
+          { value: 'car: 2' },
+          { value: 'person: 1' },
+        ],
+      },
+      pageId: 1,
+    }),
+  ));
+
+  expect(await screen.findByAltText('Frame filter-res-1')).toBeTruthy();
+  expect(screen.getByText(/Found/i)).toBeTruthy();
+});
+
+test('filter pagination switches pages while reusing active filter parameters', async () => {
+  filterFrames.mockResolvedValueOnce({
+    results: [
+      {
+        frame_id: 'filter-page-1',
+        video_id: 'Video_01',
+        frame_idx: 10,
+        timestamp_ms: 1000,
+        preview_url: '/frames/filter-page-1.jpg',
+      },
+    ],
+    total_results: 250,
+    total_pages: 3,
+    page_id: 1,
+    pageSize: 100,
+    latency: 10,
+  });
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  fireEvent.change(screen.getByPlaceholderText('Folder ID'), { target: { value: 'Folder_01' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+
+  expect(await screen.findByRole('navigation', { name: 'Filter result pages' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Page 2' })).toBeTruthy();
+
+  filterFrames.mockResolvedValueOnce({
+    results: [
+      {
+        frame_id: 'filter-page-2',
+        video_id: 'Video_01',
+        frame_idx: 110,
+        timestamp_ms: 11000,
+        preview_url: '/frames/filter-page-2.jpg',
+      },
+    ],
+    total_results: 250,
+    total_pages: 3,
+    page_id: 2,
+    pageSize: 100,
+    latency: 10,
+  });
+
+  const nextBtn = screen.getByRole('button', { name: 'Next page' });
+  fireEvent.click(nextBtn);
+
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledWith(
+    expect.objectContaining({
+      folderId: 'Folder_01',
+      pageId: 2,
+    }),
+  ));
+
+  expect(await screen.findByAltText('Frame filter-page-2')).toBeTruthy();
+});
+
+test('Clear button resets all filter fields and disables the Filter button', () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  const folderInput = screen.getByPlaceholderText('Folder ID');
+  const videoInput = screen.getByPlaceholderText('Video ID');
+  const filterBtn = screen.getByRole('button', { name: 'Filter' });
+  const clearBtn = screen.getByRole('button', { name: 'Clear' });
+
+  expect(filterBtn.disabled).toBe(true);
+  expect(clearBtn.disabled).toBe(true);
+
+  fireEvent.change(folderInput, { target: { value: 'Folder_01' } });
+  fireEvent.change(videoInput, { target: { value: 'Video_01' } });
+
+  expect(filterBtn.disabled).toBe(false);
+  expect(clearBtn.disabled).toBe(false);
+
+  fireEvent.click(clearBtn);
+
+  expect(folderInput.value).toBe('');
+  expect(videoInput.value).toBe('');
+  expect(filterBtn.disabled).toBe(true);
+  expect(clearBtn.disabled).toBe(true);
+});
+
+test('pressing Enter in any filter input field triggers filter submission', async () => {
+  filterFrames.mockResolvedValueOnce({
+    results: [],
+    total_results: 0,
+    total_pages: 1,
+    page_id: 1,
+    pageSize: 100,
+    latency: 5,
+  });
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  const titleInput = screen.getByPlaceholderText('Title');
+  fireEvent.change(titleInput, { target: { value: 'Night City' } });
+  fireEvent.keyDown(titleInput, { key: 'Enter', code: 'Enter' });
+
+  await waitFor(() => expect(filterFrames).toHaveBeenCalledWith(
+    expect.objectContaining({
+      filters: expect.objectContaining({ title: 'Night City' }),
+      pageId: 1,
+    }),
+  ));
+});
+

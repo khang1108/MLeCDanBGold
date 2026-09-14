@@ -93,4 +93,31 @@ describe('ToolBox component', () => {
 
     expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
   });
+
+  test('renders dataset selector with AIC selected by default', () => {
+    renderToolBox({ topK: 20, setTopK: jest.fn() });
+
+    const select = screen.getByLabelText(/select dataset/i);
+    expect(select).toBeTruthy();
+    expect(select.value).toBe('aic');
+    expect(screen.getByText(/AI Challenge/)).toBeTruthy();
+  });
+
+  test('shows unavailable datasets as disabled options', () => {
+    renderToolBox({ topK: 20, setTopK: jest.fn() });
+
+    const select = screen.getByLabelText(/select dataset/i);
+    const options = Array.from(select.querySelectorAll('option'));
+
+    const aicOption = options.find((opt) => opt.value === 'aic');
+    expect(aicOption.disabled).toBe(false);
+
+    const disabledIds = ['v3c', 'trecvid', 'marine', 'lapgynlhe'];
+    disabledIds.forEach((id) => {
+      const opt = options.find((o) => o.value === id);
+      expect(opt).toBeTruthy();
+      expect(opt.disabled).toBe(true);
+      expect(opt.textContent).toContain('Coming soon');
+    });
+  });
 });

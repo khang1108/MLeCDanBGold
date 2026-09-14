@@ -41,15 +41,7 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
     );
   }
 ));
-jest.mock("./features/search/components/ImageSearchWorkspace", () => (
-  function FakeImageSearchWorkspace({ isActive, userId }) {
-    return (
-      <div data-testid="image-search-workspace">
-        Image search workspace (active: {String(isActive)}) for {userId || ''}
-      </div>
-    );
-  }
-));
+
 jest.mock("./features/workspace/components/WorkspacePage", () => (
   function FakeWorkspacePage({ onReplay, onOpenManualVideo, userId, historyRefreshToken }) {
     return (
@@ -211,7 +203,7 @@ test('persists and locks the User ID only after the backend handshake', async ()
   expect(localStorage.getItem('hcmai_user_id')).toBe('team-a');
   expect(screen.getByTestId('query-user-id').textContent).toBe('team-a');
 
-  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Database' }));
   fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
 
   expect(userId.value).toBe('team-a');
@@ -258,14 +250,9 @@ test('navigates to Database workspace when Database tab is clicked', () => {
   expect(screen.getByTestId('database-page').textContent).toContain('active: true');
 });
 
-test('navigates to Image Search workspace when Image Search tab is clicked', () => {
+test('does not display the retired standalone Image Search tab', () => {
   render(<App />);
-  const imageSearchTab = screen.getByRole('button', { name: 'Image Search' });
-  expect(imageSearchTab.getAttribute('aria-pressed')).toBe('false');
-
-  fireEvent.click(imageSearchTab);
-  expect(imageSearchTab.getAttribute('aria-pressed')).toBe('true');
-  expect(screen.getByTestId('image-search-workspace').textContent).toContain('active: true');
+  expect(screen.queryByRole('button', { name: 'Image Search' })).toBeNull();
 });
 
 test('revalidates a stored User ID before marking the session connected', async () => {

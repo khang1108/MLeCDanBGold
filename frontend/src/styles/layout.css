@@ -188,6 +188,16 @@
   overflow: hidden;
 }
 
+.adhoc-results .frames-results-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
 .adhoc-results .frames-container {
   gap: 6px;
   height: 100%;
@@ -197,7 +207,9 @@
 }
 
 .search-query-form {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
   padding: 12px 16px;
   background: var(--color-surface);
   border: 1px solid var(--color-hairline);
@@ -205,23 +217,127 @@
   box-shadow: var(--shadow-level-1);
 }
 
-.search-query-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
+.search-query-row,
+.search-filter-row {
+  display: contents;
 }
 
 .search-query-row .query-input-wrapper {
   min-width: 0;
-  flex: 1 1 auto;
+  width: 100%;
 }
 
 .search-query-actions {
   display: flex;
   align-items: stretch;
   gap: 8px;
-  flex: 0 0 auto;
+  width: 100%;
+}
+
+.search-filter-inputs-wrapper {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.search-filter-input {
+  height: 38px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.3;
+  border-radius: var(--rounded-md);
+  border: 1px solid var(--color-hairline);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-filter-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+  outline: none;
+}
+
+.search-filter-input::placeholder {
+  color: var(--color-ink-muted);
+  opacity: 0.75;
+  font-size: 11.5px;
+}
+
+.search-filter-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.search-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--rounded-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary, #ffffff);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 1 1 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+.search-filter-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 85%, black);
+  border-color: color-mix(in srgb, var(--color-primary) 85%, black);
+}
+
+.search-filter-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.search-filter-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.search-filter-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 1 1 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+.search-filter-clear-btn:hover:not(:disabled) {
+  border-color: var(--color-ink-muted);
+  color: var(--color-ink);
+  background: var(--color-surface-hover, rgba(0, 0, 0, 0.04));
+}
+
+.search-filter-clear-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.search-filter-clear-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .search-query-form textarea {
@@ -270,19 +386,44 @@
 }
 
 .adhoc-results .frames-empty-state {
-  margin-top: 0;
+  margin: auto;
+  max-width: 520px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 @media (max-width: 850px) {
-  .search-query-row {
+  .search-query-form {
+    display: flex;
     flex-direction: column;
+    gap: 12px;
   }
 
-  .search-query-actions {
+  .search-query-row,
+  .search-filter-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     width: 100%;
   }
 
-  .search-query-actions > button {
+  .search-filter-inputs-wrapper {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .search-query-actions,
+  .search-filter-actions {
+    width: 100%;
+  }
+
+  .search-query-actions > button,
+  .search-filter-actions > button {
     flex: 1 1 0;
+  }
+}
+
+@media (max-width: 550px) {
+  .search-filter-inputs-wrapper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

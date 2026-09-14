@@ -33,8 +33,6 @@ export const AppHeader = ({
       <nav className="workspace-nav" aria-label="Workspace selection">
         {[
           ['query', 'Query'],
-          ['image-search', 'Image Search'],
-          ['filter', 'Filter'],
           ['workspace', 'Workspace'],
           ['database', 'Database'],
         ].map(([page, label]) => (

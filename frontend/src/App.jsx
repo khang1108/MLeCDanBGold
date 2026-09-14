@@ -2,8 +2,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { AppHeader } from './features/header';
 import { ImageModal } from './features/frames';
-import { SearchWorkspace, ImageSearchWorkspace } from './features/search';
-import { FilterWorkspace } from './features/filter';
+import { SearchWorkspace } from './features/search';
 import { WorkspacePage } from './features/workspace';
 import { DatabasePage } from './features/database';
 import { useHealthCheck } from './features/health';
@@ -45,7 +44,7 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
   const vim = useVimMode({
     onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
-    enableTopK: activePage === 'query' || activePage === 'image-search',
+    enableTopK: activePage === 'query',
   });
 
   const closeExploration = useCallback(async () => {
@@ -62,11 +61,7 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
     setModalQuery(activeQuery);
   };
 
-  const handleFilterFrameClick = (frame) => {
-    closeExploration();
-    setSelectedFrame({ frame });
-    setModalQuery('');
-  };
+
 
   const handleAddAnswerCandidate = (initialValue) => {
     if (!connectedUserId) return;
@@ -148,24 +143,6 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
             onExplorationInvalidated={closeExploration}
           />
         </div>
-        <div className="workspace-panel" hidden={activePage !== 'image-search'}>
-          <ImageSearchWorkspace
-            isActive={activePage === 'image-search'}
-            topK={topK}
-            setTopK={setTopK}
-            onFrameClick={handleQueryFrameClick}
-            onAddCandidate={connectedUserId ? handleAddAnswerCandidate : undefined}
-            userId={connectedUserId}
-          />
-        </div>
-        <div className="workspace-panel" hidden={activePage !== 'filter'}>
-          <FilterWorkspace
-            isActive={activePage === 'filter'}
-            onFrameClick={handleFilterFrameClick}
-            onAddCandidate={connectedUserId ? handleAddAnswerCandidate : undefined}
-            userId={connectedUserId}
-          />
-        </div>
         <div className="workspace-panel" hidden={activePage !== 'workspace'}>
           <WorkspacePage
             isActive={activePage === 'workspace'}
@@ -227,7 +204,7 @@ const AppShell = ({ connectedUserId, draftUserId }) => {
         />
       )}
       <TopKPromptModal
-        isOpen={vim.isTopKOpen && (activePage === 'query' || activePage === 'image-search')}
+        isOpen={vim.isTopKOpen && activePage === 'query'}
         currentTopK={topK}
         onSave={setTopK}
         onClose={() => vim.setIsTopKOpen(false)}

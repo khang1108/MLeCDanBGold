@@ -5,6 +5,19 @@ const TOP_K_MIN = 1;
 const NOOP = () => {};
 
 /**
+ * Available competition datasets for VBS 2027.
+ * `enabled` controls whether the option is selectable in the current build.
+ * Disabled entries are shown with a "Coming soon" hint.
+ */
+const DATASETS = [
+  { id: 'aic', label: 'AIC', description: 'AI Challenge – current dataset', enabled: true },
+  { id: 'v3c', label: 'V3C', description: 'Vimeo Creative Commons Collection', enabled: false },
+  { id: 'trecvid', label: 'TRECVID', description: 'NIST Ad-Hoc Video Search', enabled: false },
+  { id: 'marine', label: 'MARINE', description: 'Marine / underwater video', enabled: false },
+  { id: 'lapgynlhe', label: 'LapGynLHE', description: 'Laparoscopic gynecology', enabled: false },
+];
+
+/**
  * User-tunable search controls with direct numeric input and quick presets.
  */
 const ToolBox = ({
@@ -18,7 +31,9 @@ const ToolBox = ({
   isActive = true,
 }) => {
   const topKInputId = useId();
+  const datasetSelectId = useId();
   const [topKText, setTopKText] = useState(String(topK));
+  const [activeDataset, setActiveDataset] = useState('aic');
 
   useEffect(() => {
     setTopKText(String(topK));
@@ -75,6 +90,28 @@ const ToolBox = ({
             aria-label="Top-K value"
           />
         </div>
+      </div>
+
+      <div className="toolbox-section toolbox-dataset-section">
+        <label htmlFor={datasetSelectId} className="toolbox-label">
+          Dataset
+        </label>
+        <select
+          id={datasetSelectId}
+          className="toolbox-dataset-select"
+          value={activeDataset}
+          onChange={(e) => setActiveDataset(e.target.value)}
+          aria-label="Select dataset"
+        >
+          {DATASETS.map((ds) => (
+            <option key={ds.id} value={ds.id} disabled={!ds.enabled}>
+              {ds.label}{!ds.enabled ? ' — Coming soon' : ''}
+            </option>
+          ))}
+        </select>
+        <p className="toolbox-help">
+          {DATASETS.find((ds) => ds.id === activeDataset)?.description}
+        </p>
       </div>
 
       {showRetrievalSources && (

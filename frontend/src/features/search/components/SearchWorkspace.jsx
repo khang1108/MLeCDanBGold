@@ -4,8 +4,10 @@
  * Retrieval contracts remain owned by the existing API modules. This module
  * adds only history persistence, canonical activity tracking, and Replay.
  */
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { searchFrames } from '../../../api/search';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { searchFrames, searchFramesByImage } from '../../../api/search';
+import { filterFrames } from '../../../api/filter';
+import FilterPagination from '../../filter/components/FilterPagination';
 import {
   createQueryHistory,
   markFrameViewed,
@@ -30,6 +32,23 @@ export const parseRetrievalDescription = (description) => {
 const createClientQueryId = () => {
   if (typeof window !== 'undefined' && typeof window.crypto?.randomUUID === 'function') return window.crypto.randomUUID();
   return `query-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const parseObjectInput = (raw) => {
+  if (!raw || !raw.trim()) return [];
+  return raw.split(',').map((part) => {
+    const trimmed = part.trim();
+    if (!trimmed) return null;
+    if (trimmed.includes(':')) return { value: trimmed };
+    return { value: `${trimmed}: 1` };
+  }).filter(Boolean);
 };
 
 const SearchWorkspace = ({
@@ -63,7 +82,21 @@ const SearchWorkspace = ({
   const [isSearching, setIsSearching] = useState(false);
   const [activeQuerySession, setActiveQuerySession] = useState(null);
   const [replaySnapshot, setReplaySnapshot] = useState(null);
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
+  const [isImageDragOver, setIsImageDragOver] = useState(false);
+  const [filterFolderId, setFilterFolderId] = useState('');
+  const [filterVideoId, setFilterVideoId] = useState('');
+  const [filterTitle, setFilterTitle] = useState('');
+  const [filterAsr, setFilterAsr] = useState('');
+  const [filterOcr, setFilterOcr] = useState('');
+  const [filterObject, setFilterObject] = useState('');
+  const [filterPageId, setFilterPageId] = useState(1);
+  const [filterTotalPages, setFilterTotalPages] = useState(0);
+  const [filterTotalResults, setFilterTotalResults] = useState(0);
+  const [appliedFilterParams, setAppliedFilterParams] = useState(null);
   const queryTextareaRef = useRef(null);
+  const imageInputRef = useRef(null);
   const requestRef = useRef(null);
   const viewedPatchRef = useRef(new Set());
   const lastReplayTokenRef = useRef(null);
@@ -72,6 +105,86 @@ const SearchWorkspace = ({
     queryTextareaRef.current = node;
     if (queryInputRef) queryInputRef.current = node;
   }, [queryInputRef]);
+
+  useEffect(() => {
+    if (!selectedImageFile) {
+      setImagePreviewUrl(null);
+      return undefined;
+    }
+    if (typeof URL.createObjectURL === 'function') {
+      const objectUrl = URL.createObjectURL(selectedImageFile);
+      setImagePreviewUrl(objectUrl);
+      return () => {
+        if (typeof URL.revokeObjectURL === 'function') {
+          URL.revokeObjectURL(objectUrl);
+        }
+      };
+    }
+    return undefined;
+  }, [selectedImageFile]);
+
+  const handleImageFileSelect = useCallback((file) => {
+    if (!file) return;
+    setSelectedImageFile(file);
+    setError(null);
+  }, []);
+
+  const handleClearImageFile = useCallback((e) => {
+    e?.stopPropagation?.();
+    setSelectedImageFile(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  }, []);
+
+  const handleImageDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsImageDragOver(true);
+  };
+
+  const handleImageDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsImageDragOver(false);
+  };
+
+  const handleImageDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsImageDragOver(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      handleImageFileSelect(files[0]);
+    }
+  };
+
+  useEffect(() => {
+    if (!isActive) return undefined;
+
+    const handlePaste = (event) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            const ext = file.type.split('/')[1] || 'png';
+            const fallbackName = `pasted-image-${Date.now()}.${ext}`;
+            const namedFile = file.name && file.name !== 'image.png'
+              ? file
+              : new File([file], fallbackName, { type: file.type });
+            handleImageFileSelect(namedFile);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [handleImageFileSelect, isActive]);
 
   useLayoutEffect(() => {
     const textarea = queryTextareaRef.current;
@@ -122,9 +235,11 @@ const SearchWorkspace = ({
         ? { explorationSnapshot: liveKisSnapshotRef.current }
         : {}),
     });
+    onFrameClick?.({ frame });
   }, [onFrameClick, recordViewed]);
 
   const openKisFrame = useCallback((frame) => openCanonicalFrame(frame), [openCanonicalFrame]);
+
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -163,12 +278,63 @@ const SearchWorkspace = ({
       setResultType(null);
       setError(replayError.message);
     }
-  }, [historyIdentity, onExplorationInvalidated, replayRequest]);
+  }, [replayRequest, historyIdentity]);
+
+  const submitImageSearch = useCallback(async (event) => {
+    event?.preventDefault?.();
+    if (!selectedImageFile || isSearching) return;
+
+    requestRef.current?.abort();
+    liveKisSnapshotRef.current = null;
+    onExplorationInvalidated?.();
+    const controller = new AbortController();
+    requestRef.current = controller;
+
+    setIsSearching(true);
+    setError(null);
+    setWarnings([]);
+    setFrames([]);
+    setKisEvents([]);
+    setSearchLatencyMs(null);
+    setResultType('image-retrieval');
+    setReplaySnapshot(null);
+    setActiveQuerySession(null);
+    lastReplayTokenRef.current = null;
+
+    try {
+      const response = await searchFramesByImage({
+        imageFile: selectedImageFile,
+        topK,
+        signal: controller.signal,
+        userId: typeof userId === 'string' ? userId.trim() : '',
+      });
+
+      if (controller.signal.aborted) return;
+
+      setFrames(response.results || []);
+      setSearchLatencyMs(response.latency);
+      setWarnings(response.warnings || []);
+    } catch (requestError) {
+      if (requestError.name === 'AbortError') return;
+      setError(requestError.message || 'Failed to contact image search API');
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setIsSearching(false);
+      }
+    }
+  }, [isSearching, onExplorationInvalidated, selectedImageFile, topK, userId]);
 
   const submit = useCallback(async (event) => {
-    event.preventDefault();
+    event?.preventDefault?.();
+    if (isSearching) return;
+
+    if (selectedImageFile) {
+      return submitImageSearch(event);
+    }
+
     const rawEventText = eventDescription.trim();
-    if (!rawEventText || isSearching) return;
+    if (!rawEventText) return;
 
     const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
     const retrieval = parseRetrievalDescription(rawEventText);
@@ -228,6 +394,7 @@ const SearchWorkspace = ({
           && explorationSnapshot.bm25_caption_events.length === explorationSnapshot.events.length
         ));
       liveKisSnapshotRef.current = sourcesComplete ? explorationSnapshot : null;
+      const snapshot = buildKisSnapshot(response.results || [], snapshotOptions);
       setResultType('retrieval');
       setFrames(response.results || []);
       setKisEvents(response.events || []);
@@ -270,15 +437,114 @@ const SearchWorkspace = ({
     }
   }, [
     eventDescription,
+    historyIdentity,
     isSearching,
-    onHistoryRefresh,
     onExplorationInvalidated,
+    onHistoryRefresh,
+    selectedImageFile,
+    submitImageSearch,
     topK,
     useBm25,
     useDense,
-    historyIdentity,
     userId,
   ]);
+
+  const hasAnyFilterValue = Boolean(
+    filterFolderId.trim()
+    || filterVideoId.trim()
+    || filterTitle.trim()
+    || filterAsr.trim()
+    || filterOcr.trim()
+    || filterObject.trim(),
+  );
+
+  const submitFilter = useCallback(async ({ pageId = 1, overrideParams = null } = {}) => {
+    const paramsToUse = overrideParams || {
+      folderId: filterFolderId.trim(),
+      videoId: filterVideoId.trim(),
+      filters: {
+        title: filterTitle.trim(),
+        asr: filterAsr.trim(),
+        ocr: filterOcr.trim(),
+        caption: '',
+        objects: parseObjectInput(filterObject),
+      },
+    };
+
+    const hasCriteria = paramsToUse.folderId || paramsToUse.videoId
+      || Object.values(paramsToUse.filters).some((v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)));
+    if (!hasCriteria && !overrideParams) return;
+
+    requestRef.current?.abort();
+    liveKisSnapshotRef.current = null;
+    onExplorationInvalidated?.();
+    const controller = new AbortController();
+    requestRef.current = controller;
+
+    setIsSearching(true);
+    setError(null);
+    setWarnings([]);
+    setResultType('filter');
+    setReplaySnapshot(null);
+    setActiveQuerySession(null);
+    lastReplayTokenRef.current = null;
+
+    try {
+      const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
+      const startTime = performance.now();
+      const response = await filterFrames({
+        folderId: paramsToUse.folderId,
+        videoId: paramsToUse.videoId,
+        filters: paramsToUse.filters,
+        pageId,
+        userId: capturedUserId,
+        signal: controller.signal,
+      });
+
+      if (controller.signal.aborted) return;
+      const elapsed = Math.round(performance.now() - startTime);
+
+      setFrames(response.results || []);
+      setKisEvents([]);
+      setSearchLatencyMs(elapsed);
+      setWarnings(response.warnings || []);
+      setFilterPageId(response.page_id || pageId);
+      setFilterTotalPages(response.total_pages || 0);
+      setFilterTotalResults(response.total_results || 0);
+      setAppliedFilterParams(paramsToUse);
+    } catch (requestError) {
+      if (requestError.name === 'AbortError') return;
+      setFrames([]);
+      setError(requestError.message || 'Failed to contact filter API');
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setIsSearching(false);
+      }
+    }
+  }, [
+    filterAsr,
+    filterFolderId,
+    filterObject,
+    filterOcr,
+    filterTitle,
+    filterVideoId,
+    onExplorationInvalidated,
+    userId,
+  ]);
+
+  const handleClearFilter = useCallback(() => {
+    setFilterFolderId('');
+    setFilterVideoId('');
+    setFilterTitle('');
+    setFilterAsr('');
+    setFilterOcr('');
+    setFilterObject('');
+    setFilterPageId(1);
+    setFilterTotalPages(0);
+    setFilterTotalResults(0);
+    setAppliedFilterParams(null);
+  }, []);
 
   const handleNewSearch = useCallback(() => {
     requestRef.current?.abort();
@@ -287,6 +553,9 @@ const SearchWorkspace = ({
     onExplorationInvalidated?.();
     setIsSearching(false);
     setEventDescription('');
+    setSelectedImageFile(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    handleClearFilter();
     setFrames([]);
     setKisEvents([]);
     setWarnings([]);
@@ -296,7 +565,7 @@ const SearchWorkspace = ({
     setReplaySnapshot(null);
     setActiveQuerySession(null);
     lastReplayTokenRef.current = null;
-  }, [onExplorationInvalidated]);
+  }, [handleClearFilter, onExplorationInvalidated]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -330,17 +599,27 @@ const SearchWorkspace = ({
       );
     }
     return (
-      <FramesBox
-        results={frames}
-        isLoading={false}
-        error={error}
-        latencyMs={searchLatencyMs}
-        warnings={warnings}
-        events={kisEvents}
-        onFrameClick={openKisFrame}
-        onAddCandidate={onAddCandidate}
-        getFrameClassName={getFrameClassName}
-      />
+      <div className="frames-results-shell">
+        <FramesBox
+          results={frames}
+          isLoading={false}
+          error={error}
+          latencyMs={searchLatencyMs}
+          warnings={warnings}
+          events={kisEvents}
+          onFrameClick={openKisFrame}
+          onAddCandidate={onAddCandidate}
+          getFrameClassName={getFrameClassName}
+        />
+        {resultType === 'filter' && filterTotalPages > 1 && (
+          <FilterPagination
+            currentPage={filterPageId}
+            totalPages={filterTotalPages}
+            isLoading={isSearching}
+            onPageChange={(nextPage) => submitFilter({ pageId: nextPage, overrideParams: appliedFilterParams })}
+          />
+        )}
+      </div>
     );
   };
 
@@ -348,29 +627,200 @@ const SearchWorkspace = ({
     <div className="adhoc-workspace search-workspace">
       <form className="search-query-form" onSubmit={submit}>
         <div className="search-query-row">
-          <div className="query-input-wrapper">
-            <textarea
-              ref={setQueryTextareaRef}
-              id="event-query"
-              className="input-text query-input-field"
-              rows={1}
-              value={eventDescription}
-              onChange={(event) => setEventDescription(event.target.value)}
-              placeholder="Describe a video moment to find (KIS or AVS)"
-              onFocus={onFocusQueryInput}
-              onBlur={onBlurQueryInput}
+          <div
+            className="query-input-wrapper"
+            onDragOver={handleImageDragOver}
+            onDragLeave={handleImageDragLeave}
+            onDrop={handleImageDrop}
+          >
+            {selectedImageFile ? (
+              <div className="query-image-preview-bar">
+                {imagePreviewUrl && (
+                  <img
+                    src={imagePreviewUrl}
+                    alt="Upload preview"
+                    className="query-image-thumb"
+                  />
+                )}
+                <div className="query-image-info">
+                  <span className="query-image-name" title={selectedImageFile.name}>{selectedImageFile.name}</span>
+                  <span className="query-image-size">{formatFileSize(selectedImageFile.size)}</span>
+                </div>
+                <button
+                  type="button"
+                  className="image-clear-btn"
+                  onClick={handleClearImageFile}
+                  title="Remove image"
+                  aria-label="Remove image"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <textarea
+                ref={setQueryTextareaRef}
+                id="event-query"
+                className={`input-text query-input-field ${isImageDragOver ? 'drag-over' : ''}`}
+                rows={1}
+                value={eventDescription}
+                onChange={(event) => setEventDescription(event.target.value)}
+                placeholder="Describe a video moment to find"
+                onFocus={onFocusQueryInput}
+                onBlur={onBlurQueryInput}
+                disabled={isSearching}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    submit(event);
+                  }
+                }}
+              />
+            )}
+          </div>
+          <div className="search-query-actions">
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="image-file-hidden-input"
+              data-testid="image-search-file-input"
+              onChange={(e) => handleImageFileSelect(e.target.files?.[0])}
+            />
+            <button
+              type="submit"
+              className="btn-primary query-submit-btn"
+              disabled={isSearching || (!eventDescription.trim() && !selectedImageFile)}
+            >
+              {isSearching ? 'Searching…' : 'Search'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary search-action-btn"
+              onClick={() => imageInputRef.current?.click()}
+              title="Upload image"
+            >
+              Upload
+            </button>
+            <button
+              type="button"
+              className="btn-secondary search-action-btn"
+              onClick={handleNewSearch}
+              title="Shortcut: N"
+            >
+              New Search
+            </button>
+          </div>
+        </div>
+        <div className="search-filter-row">
+          <div className="search-filter-inputs-wrapper">
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="Folder ID"
+              aria-label="Filter Folder ID"
+              value={filterFolderId}
+              onChange={(e) => setFilterFolderId(e.target.value)}
               disabled={isSearching}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  submit(event);
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="Video ID"
+              aria-label="Filter Video ID"
+              value={filterVideoId}
+              onChange={(e) => setFilterVideoId(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="Title"
+              aria-label="Filter Title"
+              value={filterTitle}
+              onChange={(e) => setFilterTitle(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="ASR"
+              aria-label="Filter ASR"
+              value={filterAsr}
+              onChange={(e) => setFilterAsr(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="OCR"
+              aria-label="Filter OCR"
+              value={filterOcr}
+              onChange={(e) => setFilterOcr(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="Object (name: count)"
+              aria-label="Filter Object"
+              value={filterObject}
+              onChange={(e) => setFilterObject(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
                 }
               }}
             />
           </div>
-          <div className="search-query-actions">
-            <button type="submit" className="btn-primary query-submit-btn" disabled={isSearching || !eventDescription.trim()}>{isSearching ? 'Searching…' : 'Search'}</button>
-            <button type="button" className="btn-secondary search-action-btn" onClick={handleNewSearch} title="Shortcut: N">New Search</button>
+          <div className="search-filter-actions">
+            <button
+              type="button"
+              className="btn-primary search-filter-btn"
+              disabled={isSearching || !hasAnyFilterValue}
+              onClick={() => submitFilter({ pageId: 1 })}
+            >
+              {isSearching && resultType === 'filter' ? 'Filtering…' : 'Filter'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary search-action-btn search-filter-clear-btn"
+              onClick={handleClearFilter}
+              disabled={isSearching || !hasAnyFilterValue}
+            >
+              Clear
+            </button>
           </div>
         </div>
       </form>

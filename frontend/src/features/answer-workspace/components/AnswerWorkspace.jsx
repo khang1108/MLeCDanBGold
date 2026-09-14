@@ -58,6 +58,25 @@ const AnswerWorkspace = ({ isActive = true }) => {
   const [statusMessage, setStatusMessage] = useState('');
   const [viewer, setViewer] = useState(null);
   const [isResolvingViewer, setIsResolvingViewer] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('hcmai_answer_workspace_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapsed = useCallback(() => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('hcmai_answer_workspace_collapsed', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
   const viewerRequestRef = useRef(null);
   const rowRefs = useRef(new Map());
 
@@ -81,6 +100,12 @@ const AnswerWorkspace = ({ isActive = true }) => {
   useEffect(() => {
     if (!isActive) return undefined;
     const focusCandidate = (event) => {
+      setIsCollapsed(false);
+      try {
+        localStorage.setItem('hcmai_answer_workspace_collapsed', 'false');
+      } catch {
+        // ignore
+      }
       const candidateId = event.detail?.candidateId;
       const row = rowRefs.current.get(candidateId);
       if (!row) return;
@@ -314,29 +339,55 @@ const AnswerWorkspace = ({ isActive = true }) => {
 
   return (
     <>
-      <section className="answer-workspace-panel" aria-label="Answer workspace">
+      <section className={`answer-workspace-panel ${isCollapsed ? 'collapsed' : ''}`} aria-label="Answer workspace">
         <header className="answer-workspace-header">
           <div className="answer-workspace-title-row">
-            <div>
-              <span className="answer-dialog-eyebrow">Shared with your team</span>
-              <h3>Answer Workspace</h3>
-            </div>
-            <span className={`answer-connection-indicator ${isConnected ? 'is-connected' : 'is-disconnected'}`} aria-label="Workspace connection">
-              <span className="answer-connection-dot" />{isConnected ? 'Live' : 'Offline'}
-            </span>
-          </div>
-          <div className="answer-workspace-toolbar">
-            <span className="answer-count">{candidatesInOrder.length} {candidatesInOrder.length === 1 ? 'answer' : 'answers'}</span>
             <button
               type="button"
-              className="answer-clear-button"
-              disabled={locked || candidatesInOrder.length === 0}
-              onClick={() => setShowClearConfirmation(true)}
+              className="answer-workspace-header-toggle"
+              onClick={toggleCollapsed}
+              aria-expanded={!isCollapsed}
+              aria-label={isCollapsed ? 'Expand answer workspace' : 'Collapse answer workspace'}
+              title={isCollapsed ? 'Click to expand' : 'Click to collapse'}
             >
-              Clear workspace
+              <div className="answer-workspace-title-text">
+                <span className="answer-dialog-eyebrow">Shared with your team</span>
+                <div className="answer-workspace-title-heading">
+                  <h3>Answer Workspace</h3>
+                  <span className={`answer-collapse-icon ${isCollapsed ? 'collapsed' : ''}`} aria-hidden="true">
+                    ▾
+                  </span>
+                </div>
+              </div>
             </button>
+            <div className="answer-workspace-status-group">
+              {isCollapsed && candidatesInOrder.length > 0 && (
+                <span className="answer-count-badge" title={`${candidatesInOrder.length} answers`}>
+                  {candidatesInOrder.length}
+                </span>
+              )}
+              <span className={`answer-connection-indicator ${isConnected ? 'is-connected' : 'is-disconnected'}`} aria-label="Workspace connection">
+                <span className="answer-connection-dot" />{isConnected ? 'Live' : 'Offline'}
+              </span>
+            </div>
           </div>
+          {!isCollapsed && (
+            <div className="answer-workspace-toolbar">
+              <span className="answer-count">{candidatesInOrder.length} {candidatesInOrder.length === 1 ? 'answer' : 'answers'}</span>
+              <button
+                type="button"
+                className="answer-clear-button"
+                disabled={locked || candidatesInOrder.length === 0}
+                onClick={() => setShowClearConfirmation(true)}
+              >
+                Clear workspace
+              </button>
+            </div>
+          )}
         </header>
+
+        {!isCollapsed && (
+          <div className="answer-workspace-collapsible-body">
 
         <div className="answer-mode-row">
           <div>
@@ -439,15 +490,12 @@ const AnswerWorkspace = ({ isActive = true }) => {
         )}
 
         {connectionError && <p className="answer-connection-error" role="status">{connectionError}</p>}
-        {!connectedUserId && <p className="answer-empty-note">Connect a participant ID to edit and share answers.</p>}
         {!isConnected && connectedUserId && <p className="answer-empty-note">Reconnecting to the shared workspace…</p>}
         {error && <p className="answer-inline-error" role="alert">{error}</p>}
         {statusMessage && <p className="answer-success-message" role="status">{statusMessage}</p>}
 
         <div className="answer-candidate-list" aria-label="Shared answers">
-          {visibleCandidates.length === 0 ? (
-            <p className="answer-empty-note">No answers yet. Add a frame or type a VQA answer.</p>
-          ) : visibleCandidates.map((candidate) => {
+          {visibleCandidates.map((candidate) => {
             const answer = candidate.kind === 'FRAME' ? frameAnswer(candidate) : candidate.text;
             const submitted = Boolean(candidate.submitted_at_ms || candidate.submitted_by_user_id || candidate.dres_status);
             return (
@@ -520,6 +568,8 @@ const AnswerWorkspace = ({ isActive = true }) => {
           >
             Submit all {eligibleAvsCandidates.length} AVS answers
           </button>
+        )}
+          </div>
         )}
       </section>
 

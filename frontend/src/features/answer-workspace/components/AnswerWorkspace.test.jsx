@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AnswerWorkspace from './AnswerWorkspace';
 import { useAnswerWorkspace } from '../contexts/AnswerWorkspaceContext';
 import {
@@ -396,3 +396,43 @@ test('opens the existing viewer at the exact candidate timestamp', async () => {
   }));
   expect((await screen.findByTestId('answer-frame-viewer')).getAttribute('data-initial-timestamp')).toBe('12000');
 });
+
+test('collapses and expands the answer workspace body on toggle', () => {
+  localStorage.removeItem('hcmai_answer_workspace_collapsed');
+  render(<AnswerWorkspace />);
+
+  const toggleBtn = screen.getByRole('button', { name: /collapse answer workspace/i });
+  expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByText('AVS mode')).toBeTruthy();
+
+  // Click to collapse
+  fireEvent.click(toggleBtn);
+  expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+  expect(screen.queryByText('AVS mode')).toBeNull();
+
+  // Click to expand
+  fireEvent.click(toggleBtn);
+  expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByText('AVS mode')).toBeTruthy();
+});
+
+test('auto-expands when a candidate is focused', async () => {
+  localStorage.setItem('hcmai_answer_workspace_collapsed', 'true');
+  render(<AnswerWorkspace />);
+
+  const toggleBtn = screen.getByRole('button', { name: /expand answer workspace/i });
+  expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+  expect(screen.queryByText('AVS mode')).toBeNull();
+
+  // Dispatch focus event
+  act(() => {
+    window.dispatchEvent(new CustomEvent('answer-workspace-focus-candidate', {
+      detail: { candidateId: 'frame-1' },
+    }));
+  });
+
+  await waitFor(() => expect(screen.getByRole('button', { name: /collapse answer workspace/i }).getAttribute('aria-expanded')).toBe('true'));
+  expect(screen.getByText('AVS mode')).toBeTruthy();
+});
+
+
