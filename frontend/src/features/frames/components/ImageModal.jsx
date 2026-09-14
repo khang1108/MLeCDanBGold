@@ -232,7 +232,10 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose, 
                 session={exploration.session}
                 pending={exploration.pending}
                 error={exploration.error}
-                readCurrentTimeMs={() => videoRef.current?.currentTime}
+                readCurrentTimeMs={() => {
+                  const seconds = Number(videoRef.current?.currentTime);
+                  return Number.isFinite(seconds) && seconds >= 0 ? Math.round(seconds * 1000) : null;
+                }}
                 onApprove={(payload) => exploration.act?.({ action: "confirm", ...payload })}
                 onDecline={(payload) => exploration.act?.({ action: "reject", ...payload })}
                 onSearchRange={(payload) => exploration.act?.({ action: "window", ...payload })}

@@ -16,10 +16,10 @@ test("selects E2, captures a valid interval, approves, and supports undo", () =>
   const onApprove = jest.fn();
   const onUndo = jest.fn();
   const readCurrentTimeMs = jest.fn()
-    .mockReturnValueOnce(1.234)
-    .mockReturnValueOnce(5.678);
+    .mockReturnValueOnce(1234)
+    .mockReturnValueOnce(5678);
 
-  render(
+  const { rerender } = render(
     <ExplorationPanel
       events={session.view.events}
       session={session}
@@ -34,6 +34,18 @@ test("selects E2, captures a valid interval, approves, and supports undo", () =>
   fireEvent.click(screen.getByRole("button", { name: "Use current time as start" }));
   fireEvent.click(screen.getByRole("button", { name: "Use current time as end" }));
   expect(onApprove).not.toHaveBeenCalled();
+  rerender(
+    <ExplorationPanel
+      events={session.view.events}
+      session={{ ...session, view: { ...session.view, revision: 2, status: "no_valid_path", paths: [] } }}
+      pending={false}
+      onApprove={onApprove}
+      onUndo={onUndo}
+      readCurrentTimeMs={readCurrentTimeMs}
+    />,
+  );
+  expect(screen.getByText("Event: second event")).toBeTruthy();
+  expect(screen.getByRole("status").textContent).toContain("no valid aligned path");
   fireEvent.click(screen.getByRole("button", { name: "Approve" }));
 
   expect(onApprove).toHaveBeenCalledWith({

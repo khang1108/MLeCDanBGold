@@ -16,16 +16,20 @@ const ExplorationPanel = ({
   const [draft, setDraft] = React.useState({ start: null, end: null });
   const [searchDraft, setSearchDraft] = React.useState({ start: null, end: null });
   const [captureError, setCaptureError] = React.useState(null);
+  const eventSetKey = events.join("\u0000");
 
   React.useEffect(() => {
     setSelectedEvent(0);
     setDraft({ start: null, end: null });
+  }, [eventSetKey, session?.handle]);
+
+  React.useEffect(() => {
     const window = session?.view?.conditions?.window;
     setSearchDraft({
       start: validTime(window?.[0]) ? Math.round(window[0]) : null,
       end: validTime(window?.[1]) ? Math.round(window[1]) : null,
     });
-  }, [events.length, session?.handle, session?.view?.revision, session?.view?.conditions?.window]);
+  }, [session?.handle, session?.view?.revision, session?.view?.conditions?.window]);
 
   if (!session || !view) return null;
   const eventList = Array.isArray(view.events) ? view.events : events;
@@ -37,13 +41,13 @@ const ExplorationPanel = ({
   const searchValid = validTime(searchDraft.start)
     && validTime(searchDraft.end) && searchDraft.start <= searchDraft.end;
   const capture = (end) => {
-    const seconds = Number(readCurrentTimeMs?.());
-    if (!validTime(seconds)) {
+    const milliseconds = Number(readCurrentTimeMs?.());
+    if (!validTime(milliseconds)) {
       setCaptureError("Current player time is unavailable.");
       return;
     }
     setCaptureError(null);
-    setDraft((previous) => ({ ...previous, [end]: Math.round(seconds * 1000) }));
+    setDraft((previous) => ({ ...previous, [end]: Math.round(milliseconds) }));
   };
   const selectEvent = (index) => {
     setSelectedEvent(index);
@@ -99,7 +103,13 @@ const ExplorationPanel = ({
       {declinedRanges.length > 0 && <div>Declined ranges: {JSON.stringify(declinedRanges)}</div>}
       {currentPath?.frame_ids?.[selectedEvent] && validTime(currentPath?.timestamps_ms?.[selectedEvent])
         ? <div className="exploration-path">{renderPath(currentPath, selectedEvent)}</div>
-        : <p role="status">No aligned path or frame is available.</p>}
+        : <p role="status">{view.status === "contradictory_conditions"
+          ? "No path: contradictory conditions."
+          : view.status === "no_indexed_frames"
+            ? "No path: no indexed frames."
+            : view.status === "no_valid_path"
+              ? "No path: no valid aligned path."
+              : "No aligned path or frame is available."}</p>}
     </section>
   );
 };
