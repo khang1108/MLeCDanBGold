@@ -139,4 +139,4 @@ artifact*/
 SETUP.md
 llm/scripts/run_local_cpu_cloudflared.sh
 
-dres-mock-server
+dres-mock-server/
