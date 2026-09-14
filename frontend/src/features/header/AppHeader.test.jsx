@@ -19,4 +19,8 @@ test('uses the VBS 2027 competition title', () => {
   );
 
   expect(screen.getByRole('heading', { name: 'VBS 2027 Video Retrieval' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Query' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Workspace' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Database' })).toBeNull();
 });
+

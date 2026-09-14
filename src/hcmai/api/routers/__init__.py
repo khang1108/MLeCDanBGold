@@ -1,6 +1,5 @@
 """FastAPI routers backed by HCMAI services and stores."""
 
-from hcmai.api.routers.database import create_database_router
 from hcmai.api.routers.frames import create_frames_router
 from hcmai.api.routers.history import create_history_router
 from hcmai.api.routers.kis import create_kis_router

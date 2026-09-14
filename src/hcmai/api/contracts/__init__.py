@@ -1,13 +1,6 @@
 """Public Pydantic contracts for the HCMAI HTTP and WebSocket APIs."""
 
-from .database import (
-    DatabaseColumn,
-    DatabaseQueryRequest,
-    DatabaseQueryResponse,
-    DatabaseRowsPage,
-    DatabaseTable,
-    DatabaseTableList,
-)
+
 from .frames import CatalogTranscriptSegment, FrameCatalogEntry, FrameInspectionResponse
 from .filter import FilterMetadataFilters, FilterRequest, FilterResponse, FilterResult
 from .history import (
@@ -50,12 +43,6 @@ from .vbs import (
 
 __all__ = [
     "CatalogTranscriptSegment",
-    "DatabaseColumn",
-    "DatabaseQueryRequest",
-    "DatabaseQueryResponse",
-    "DatabaseRowsPage",
-    "DatabaseTable",
-    "DatabaseTableList",
     "FrameCatalogEntry",
     "FrameInspectionResponse",
     "FilterMetadataFilters",
