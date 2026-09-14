@@ -1,64 +1,30 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { searchFrames, searchTrake } from '../../../api/search';
-import SearchWorkspace, {
-  parseRetrievalDescription,
-  parseTrakeEvents,
-} from './SearchWorkspace';
-import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
-import { SubmissionDialogProvider } from '../../submission/contexts/SubmissionDialogContext';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { searchFrames } from '../../../api/search';
+import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
+import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
 import {
   createQueryHistory,
-  getSubmissionFiles,
   markFrameViewed,
-} from '../../../api/workspace';
+} from '../../../api/history';
 
 jest.mock('../../../api/search');
-jest.mock('../../../api/workspace', () => ({
-  getSubmissionFiles: jest.fn(),
-  workspaceWebSocketUrl: jest.fn(() => 'ws://example.test/api/v1/workspace/ws'),
+jest.mock('../../../api/history', () => ({
   createQueryHistory: jest.fn(),
   markFrameViewed: jest.fn(),
-  markFramesSubmitted: jest.fn(),
 }));
-
-class MockWebSocket {
-  static instances = [];
-  static OPEN = 1;
-  constructor() { this.readyState = 0; this.sent = []; MockWebSocket.instances.push(this); }
-  send(value) { this.sent.push(value); }
-  open() { this.readyState = 1; this.onopen?.(); }
-  message(payload) { this.onmessage?.({ data: JSON.stringify(payload) }); }
-  close() { this.readyState = 3; this.onclose?.(); }
-}
-
-const renderSearch = (props) => {
-  const result = render(
-    <SubmissionProvider>
-      <SubmissionDialogProvider><SearchWorkspace {...props} /></SubmissionDialogProvider>
-    </SubmissionProvider>,
-  );
-  act(() => MockWebSocket.instances[MockWebSocket.instances.length - 1].open());
-  return result;
-};
+const renderSearch = (props) => render(
+  <AnswerWorkspaceProvider connectedUserId="">
+    <SearchWorkspace {...props} />
+  </AnswerWorkspaceProvider>,
+);
 
 beforeEach(() => {
   searchFrames.mockReset();
-  searchTrake.mockReset();
-  // Search behavior does not need the shared file list. Leaving hydration
-  // pending keeps this suite focused and avoids unrelated async state updates.
-  getSubmissionFiles.mockReturnValue(new Promise(() => {}));
   createQueryHistory.mockResolvedValue({});
   markFrameViewed.mockResolvedValue({});
-  MockWebSocket.instances = [];
-  window.WebSocket = MockWebSocket;
 });
 
-afterEach(() => {
-  delete window.WebSocket;
-});
-
-const EVENT_PLACEHOLDER = 'Describe the event, or add E1, E2, ... for TRAKE';
 const SEARCH_LATENCY = {
   query_ms: 1,
   retrieval_ms: 2,
@@ -67,26 +33,15 @@ const SEARCH_LATENCY = {
   total_ms: 7,
 };
 const submit = (eventDescription) => {
-  fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
+  fireEvent.change(document.getElementById('event-query'), {
     target: { value: eventDescription },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 };
 
-test('parses sequentially labeled TRAKE events and rejects invalid numbering', () => {
-  expect(parseTrakeEvents(
-    'A video description. E1: first event E2: second event E3: third event',
-  )).toEqual(['first event', 'second event', 'third event']);
-  expect(parseTrakeEvents(
-    'A video description.\nE1 first event\nE2 second event',
-  )).toEqual(['first event', 'second event']);
-  expect(parseTrakeEvents('A video description. E1: only one event')).toEqual(['only one event']);
-  expect(parseTrakeEvents('A video description. E1: first event E3: third event')).toEqual([]);
-  expect(parseTrakeEvents('A normal KIS description')).toBeNull();
-});
-
 test.each([
   ['a red vehicle passes', 'a red vehicle passes'],
+  ['E1: a person enters the room', 'E1: a person enters the room'],
 ])('routes %s through frame search', async (
   description,
   query,
@@ -100,8 +55,24 @@ test.each([
   await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
     expect.objectContaining({ query, topK: 20 }),
   ));
-  expect(searchTrake).not.toHaveBeenCalled();
   expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
+});
+
+test('Enter submits E1-prefixed text while Shift+Enter stays in the textarea', async () => {
+  searchFrames.mockResolvedValueOnce({
+    results: [], warnings: [], latency: SEARCH_LATENCY,
+  });
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  const textarea = document.getElementById('event-query');
+  fireEvent.change(textarea, { target: { value: 'E1: a person enters the room' } });
+
+  expect(fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', shiftKey: true })).toBe(true);
+  expect(searchFrames).not.toHaveBeenCalled();
+  expect(fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', shiftKey: false })).toBe(false);
+
+  await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
+    expect.objectContaining({ query: 'E1: a person enters the room', topK: 20 }),
+  ));
 });
 
 test('sends the selected Dense and BM25 modes with KIS search', async () => {
@@ -121,73 +92,6 @@ test('sends the selected Dense and BM25 modes with KIS search', async () => {
       useBm25: true,
     }),
   ));
-});
-
-test('TRAKE renders same-video backend paths independently and submits only the selected path', async () => {
-  searchTrake.mockResolvedValueOnce({
-    events: ['first event', 'second event'],
-    paths: [
-      {
-        video_id: 'V01',
-        score: 3.0,
-        frame_ids: ['a1', 'a2'],
-        frame_idxs: [10, 20],
-        timestamps_ms: [1000, 2000],
-      },
-      {
-        video_id: 'V01',
-        score: 2.8,
-        frame_ids: ['b1', 'b2'],
-        frame_idxs: [30, 40],
-        timestamps_ms: [3000, 4000],
-      },
-    ],
-    total_results: 3,
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
-  renderSearch({ topK: 20, setTopK: jest.fn() });
-  submit('Person enters and leaves.\nE1: first event\nE2: second event');
-
-  await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
-    expect.objectContaining({ events: ['first event', 'second event'], topK: 20 }),
-  ));
-  expect(searchFrames).not.toHaveBeenCalled();
-  expect(document.querySelectorAll('.trake-video-group')).toHaveLength(2);
-  expect(screen.getByAltText('Frame a1')).toBeTruthy();
-  expect(screen.getByAltText('Frame b1')).toBeTruthy();
-
-  fireEvent.click(screen.getAllByRole('button', { name: /submit trake path for V01/i })[1]);
-  expect(await screen.findByText('V01,30,40')).toBeTruthy();
-  expect(screen.queryByText('V01,10,20,30,40')).toBeNull();
-});
-
-test('TRAKE accepts one labeled event and opens its frame as read-only', async () => {
-  const onFrameClick = jest.fn();
-  searchTrake.mockResolvedValueOnce({
-    events: ['only one event'],
-    paths: [{
-      video_id: 'V01',
-      score: 1.0,
-      frame_ids: ['f1'],
-      frame_idxs: [10],
-      timestamps_ms: [1000],
-    }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
-  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick });
-  submit('A short video. E1: only one event');
-
-  await waitFor(() => expect(searchTrake).toHaveBeenCalledWith(
-    expect.objectContaining({ events: ['only one event'], topK: 20 }),
-  ));
-  fireEvent.click(await screen.findByAltText('Frame f1'));
-
-  expect(onFrameClick).toHaveBeenCalledWith({
-    frame: expect.objectContaining({ frame_id: 'f1', frame_idx: 10 }),
-    submissionMode: 'none',
-  });
 });
 
 test('defaults plain descriptions to KIS', () => {
@@ -225,7 +129,6 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
       frame_idx: 300,
       fps: 29.97,
     }),
-    submissionMode: 'kis',
   });
 });
 
@@ -253,14 +156,13 @@ test('passes the immutable live KIS scoring snapshot when opening a result', asy
   renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick });
   submit('red boat');
 
-  fireEvent.change(screen.getByPlaceholderText(EVENT_PLACEHOLDER), {
+  fireEvent.change(document.getElementById('event-query'), {
     target: { value: 'a different draft query' },
   });
   fireEvent.click(await screen.findByAltText('Frame frame-explore'));
 
   expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
     frame: expect.objectContaining({ frame_id: 'frame-explore', video_id: 'V01' }),
-    submissionMode: 'kis',
     explorationSnapshot: expect.objectContaining({
       query: 'red boat',
       events: ['red boat'],
@@ -272,20 +174,119 @@ test('passes the immutable live KIS scoring snapshot when opening a result', asy
   }));
 });
 
+test('keeps a saved legacy paths snapshot on the unsupported-history message', async () => {
+  renderSearch({
+    topK: 20,
+    setTopK: jest.fn(),
+    userId: 'team-a',
+    replayRequest: {
+      token: 3,
+      item: {
+        query_id: 'legacy-query',
+        query_text: 'saved query',
+        result_snapshot: { paths: [] },
+        frame_activity: {},
+      },
+    },
+  });
+
+  expect(await screen.findByText('This history snapshot cannot be replayed.')).toBeTruthy();
+});
+
 test('does not render the retired query-helper control', () => {
   renderSearch({ topK: 20, setTopK: jest.fn() });
   expect(screen.queryByRole('button', { name: /suggest query/i })).toBeNull();
 });
 
-test('requires the shared User ID before starting live retrieval', async () => {
+test('renders the shared answer workspace in the KIS sidebar', () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
+});
+
+test('adds a result frame using its exact timestamp when frame_idx differs', async () => {
+  const onAddCandidate = jest.fn();
+  searchFrames.mockResolvedValueOnce({
+    results: [{
+      frame_id: 'search-time-frame',
+      video_id: 'V01',
+      frame_idx: 3,
+      timestamp_ms: 12_345,
+      frame_ids: ['search-time-frame'],
+      timestamps_ms: [12_345],
+      scores: { final: 0.9 },
+    }],
+    warnings: [],
+    latency: SEARCH_LATENCY,
+  });
+  renderSearch({ topK: 20, setTopK: jest.fn(), onAddCandidate });
+  submit('boat');
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add frame to answer workspace' }));
+  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'V01', timestampMs: 12_345 });
+});
+
+test('keeps local retrieval available while no VBS participant is connected', async () => {
   const onFocusUserId = jest.fn();
+  searchFrames.mockResolvedValueOnce({
+    results: [], warnings: [], latency: SEARCH_LATENCY,
+  });
   renderSearch({ topK: 20, setTopK: jest.fn(), userId: '  ', onFocusUserId });
   submit('a red vehicle passes');
 
-  expect((await screen.findByRole('alert')).textContent).toMatch(/user id/i);
-  expect(onFocusUserId).toHaveBeenCalledTimes(1);
-  expect(searchFrames).not.toHaveBeenCalled();
+  await waitFor(() => expect(searchFrames).toHaveBeenCalledWith(
+    expect.objectContaining({ query: 'a red vehicle passes', userId: '' }),
+  ));
+  expect(onFocusUserId).not.toHaveBeenCalled();
+  expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
   expect(createQueryHistory).not.toHaveBeenCalled();
+});
+
+test('keeps disconnected retrieval in the draft user history without sending the DRES header', async () => {
+  const { searchFrames: realSearchFrames } = jest.requireActual('../../../api/search');
+  const frame = {
+    frame_id: 'disconnected-frame',
+    video_id: 'V01',
+    frame_idx: 4,
+    timestamp_ms: 160,
+    frame_ids: ['disconnected-frame'],
+    timestamps_ms: [160],
+    scores: { final: 0.8 },
+    caption: 'A boat crosses the scene',
+  };
+  searchFrames.mockImplementation(realSearchFrames);
+  const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: jest.fn().mockResolvedValue({
+      events: [],
+      results: [frame],
+      latency: SEARCH_LATENCY,
+    }),
+  });
+  renderSearch({
+    topK: 20,
+    setTopK: jest.fn(),
+    userId: '',
+    historyUserId: 'team-a',
+  });
+  submit('a boat crosses the scene');
+
+  const resultImage = await screen.findByAltText('Frame disconnected-frame');
+  await waitFor(() => expect(createQueryHistory).toHaveBeenCalledWith(expect.objectContaining({
+    userId: 'team-a',
+    queryText: 'a boat crosses the scene',
+  })));
+  expect(searchFrames).toHaveBeenCalledWith(expect.objectContaining({ userId: '' }));
+  const searchCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/api/v1/search'));
+  expect(searchCall[1].headers['X-VBS-User-ID']).toBeUndefined();
+
+  fireEvent.click(resultImage);
+  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledWith({
+    queryId: createQueryHistory.mock.calls[0][0].queryId,
+    frameId: 'disconnected-frame',
+  }));
+  fetchSpy.mockRestore();
 });
 
 test('persists a successful KIS search as a full replay snapshot', async () => {
@@ -355,37 +356,6 @@ test('persists a successful KIS search as a full replay snapshot', async () => {
   });
 });
 
-test('persists a successful TRAKE search while preserving path order', async () => {
-  searchTrake.mockResolvedValueOnce({
-    events: ['first event', 'second event'],
-    paths: [{
-      video_id: 'V01',
-      score: 3.0,
-      frame_ids: ['f2', 'f1'],
-      frame_idxs: [20, 10],
-      timestamps_ms: [2000, 1000],
-    }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('A video. E1: first event E2: second event');
-
-  await waitFor(() => expect(createQueryHistory).toHaveBeenCalled());
-  expect(createQueryHistory.mock.calls[0][0].resultSnapshot).toEqual({
-    events: ['first event', 'second event'],
-    latency: SEARCH_LATENCY,
-    warnings: [],
-    paths: [{
-      video_id: 'V01',
-      score: 3,
-      frame_ids: ['f2', 'f1'],
-      frame_idxs: [20, 10],
-      timestamps_ms: [2000, 1000],
-    }],
-  });
-});
-
 test('keeps live results visible but creates no active history session when history persistence fails', async () => {
   createQueryHistory.mockRejectedValueOnce(new Error('history unavailable'));
   searchFrames.mockResolvedValueOnce({
@@ -434,48 +404,4 @@ test('keeps the viewed color while allowing a failed activity patch to retry', a
   expect(await screen.findByText(/history view state was not recorded/i)).toBeTruthy();
   fireEvent.click(frameImage);
   await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(2));
-});
-
-test('highlights a frame only after its active query records the submission', async () => {
-  searchFrames.mockResolvedValueOnce({
-    results: [{
-      frame_id: 'frame-kis',
-      video_id: 'V01',
-      frame_idx: 125,
-      timestamp_ms: 1000,
-      frame_ids: ['frame-kis'],
-      timestamps_ms: [1000],
-      scores: { final: 0.8 },
-      caption: 'A test frame',
-    }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('red boat');
-
-  const submitBtn = await screen.findByRole('button', { name: /submit this frame/i });
-  await waitFor(() => expect(createQueryHistory).toHaveBeenCalledTimes(1));
-  const queryId = createQueryHistory.mock.calls[0][0].queryId;
-  const card = screen.getByAltText('Frame frame-kis').closest('.frame-card');
-
-  fireEvent.click(screen.getByAltText('Frame frame-kis'));
-  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledWith({ queryId, frameId: 'frame-kis' }));
-  expect(card.classList.contains('viewed')).toBe(true);
-
-  fireEvent.click(submitBtn);
-  expect(card.classList.contains('submitted')).toBe(false);
-
-  await act(async () => window.dispatchEvent(new CustomEvent('hcmai:history-changed', {
-    detail: { queryId: 'another-query', frameIds: ['frame-kis'] },
-  })));
-  expect(card.classList.contains('submitted')).toBe(false);
-
-  await act(async () => window.dispatchEvent(new CustomEvent('hcmai:history-changed', {
-    detail: { queryId, frameIds: ['frame-kis'] },
-  })));
-
-  const submittedBtn = await screen.findByRole('button', { name: /frame submitted/i });
-  expect(submittedBtn.textContent).toBe('✓ Submitted');
-  expect(card.classList.contains('submitted')).toBe(true);
 });

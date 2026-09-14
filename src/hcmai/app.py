@@ -21,12 +21,14 @@ from hcmai.api.history import WorkspaceStore
 from hcmai.api.routers import (
     create_database_router,
     create_frames_router,
+    create_history_router,
     create_query_candidates_router,
     create_search_router,
     create_system_router,
     create_trake_router,
     create_video_router,
-    create_workspace_router,
+    create_answer_workspace_router,
+    create_vbs_router,
 )
 from hcmai.api.routers.exploration import (
     ExplorationRegistry,
@@ -37,6 +39,8 @@ from hcmai.common.utils.logging import configure_logging, get_logger
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.socketapp.catalog import VideoCatalog
 from hcmai.socketapp.config import video_settings_from_environment
+from hcmai.vbs.config import DresSettings
+from hcmai.vbs.service import DresService
 
 logger = get_logger(__name__)
 
@@ -60,6 +64,7 @@ def create_app(
     search_service: SearchService | None = None,
     workspace_store: WorkspaceStore | None = None,
     video_catalog: VideoCatalog | None = None,
+    vbs_service: DresService | None = None,
 ) -> FastAPI:
     """Create the API with optional injected search, workspace, and video stores."""
 
@@ -71,6 +76,7 @@ def create_app(
         "service": search_service,
         "workspace_store": workspace_store,
         "video_catalog": video_catalog,
+        "vbs_service": vbs_service,
         "video_cache_control": "public, max-age=3600",
         "startup_messages": [],
         # Exploration branches are deliberately process-local for this MVP.
@@ -97,15 +103,25 @@ def create_app(
                     len(service_container["video_catalog"]),
                 )
         if service_container["workspace_store"] is None:
-            workspace_path = os.getenv("HCMAI_WORKSPACE_DB")
-            if workspace_path:
-                try:
-                    service_container["workspace_store"] = WorkspaceStore(
-                        workspace_path
-                    )
-                except Exception:
-                    logger.exception("Workspace database initialization failed")
-                    raise
+            workspace_path = os.getenv("HCMAI_WORKSPACE_DB", "runtime/workspace.sqlite3")
+            try:
+                service_container["workspace_store"] = WorkspaceStore(workspace_path)
+            except Exception:
+                logger.exception("Workspace database initialization failed")
+                raise
+        if service_container["vbs_service"] is None and any(
+            key in os.environ
+            for key in (
+                "HCMAI_DRES_BASE_URL",
+                "HCMAI_DRES_TIMEOUT_SECONDS",
+                "HCMAI_DRES_EVALUATION_ID",
+                "HCMAI_DRES_USERS_JSON",
+                "HCMAI_DRES_MEDIA_ID_PREFIX_TO_STRIP",
+            )
+        ):
+            # A completely absent DRES configuration keeps retrieval available;
+            # any supplied configuration must validate before the service starts.
+            service_container["vbs_service"] = DresService(DresSettings.from_env())
         if service_container["service"] is None:
             service_container["service"] = SearchService.load(service_container["startup_messages"])
         service = service_container["service"]
@@ -127,9 +143,13 @@ def create_app(
             close = getattr(service, "close", None)
             if close is not None:
                 close()
+            vbs_service = service_container["vbs_service"]
+            aclose = getattr(vbs_service, "aclose", None)
+            if aclose is not None:
+                await aclose()
             logger.info("Backend shutdown completed")
 
-    app = FastAPI(title="HCMAI 2026 Frame Retrieval API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="HCMAI VBS 2027 Answer Workspace API", version="0.2.0", lifespan=lifespan)
 
     @app.middleware("http")
     async def handle_unexpected_errors(
@@ -176,6 +196,7 @@ def create_app(
             "Content-Type",
             "ETag",
             "Last-Modified",
+            "X-DRES-Log-Status",
         ],
     )
     logger.info("Initializing FastAPI application for the backend service.")
@@ -187,7 +208,9 @@ def create_app(
     app.include_router(create_exploration_router(service_container))
     app.include_router(create_frames_router(service_container))
     app.include_router(create_database_router(service_container))
-    app.include_router(create_workspace_router(service_container))
+    app.include_router(create_history_router(service_container))
+    app.include_router(create_answer_workspace_router(service_container))
+    app.include_router(create_vbs_router(service_container))
     app.include_router(create_video_router(service_container))
 
     return app

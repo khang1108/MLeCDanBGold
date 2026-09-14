@@ -1,10 +1,11 @@
 import { buildFilterRequest, filterFrames, serializeObjectFilters } from './filter';
 
 
-const response = (payload, status = 200) => ({
+const response = (payload, status = 200, headers = {}) => ({
   ok: status >= 200 && status < 300,
   status,
   json: jest.fn().mockResolvedValue(payload),
+  headers: { get: jest.fn((name) => headers[name] ?? null) },
 });
 
 
@@ -107,4 +108,24 @@ test('rejects a backend response that violates the fixed page size', async () =>
   jest.spyOn(global, 'fetch').mockResolvedValue(response({ frames_per_pages: 12 }));
 
   await expect(filterFrames()).rejects.toThrow('page size other than 20');
+});
+
+test('publishes the DRES log failure status from Filter without changing its response', async () => {
+  const payload = {
+    page_id: 1,
+    frames_per_page: 20,
+    frames_per_pages: 20,
+    total_pages: 1,
+    total_results: 0,
+    results: [],
+  };
+  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload, 200, {
+    'X-DRES-Log-Status': 'failed',
+  }));
+  const listener = jest.fn();
+  window.addEventListener('hcmai:dres-log-status', listener);
+
+  await expect(filterFrames({ userId: 'team-a' })).resolves.toEqual(payload);
+  expect(listener.mock.calls[0][0].detail).toEqual({ userId: 'team-a', status: 'failed' });
+  window.removeEventListener('hcmai:dres-log-status', listener);
 });

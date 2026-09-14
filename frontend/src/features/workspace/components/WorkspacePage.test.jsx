@@ -1,15 +1,11 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { getQueryHistory, getSubmissionFiles } from '../../../api/workspace';
+import { getQueryHistory } from '../../../api/history';
 import { resolveFrameAtTimestamp } from '../../../api/frames';
 import WorkspacePage from './WorkspacePage';
-import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
-import { SubmissionDialogProvider } from '../../submission/contexts/SubmissionDialogContext';
 
-jest.mock('../../../api/workspace', () => ({
+jest.mock('../../../api/history', () => ({
   getQueryHistory: jest.fn(),
-  getSubmissionFiles: jest.fn().mockResolvedValue({ files: [] }),
-  workspaceWebSocketUrl: jest.fn(() => 'ws://example.test/api/v1/workspace/ws'),
 }));
 jest.mock('../../../api/frames', () => ({
   resolveFrameAtTimestamp: jest.fn(),
@@ -18,19 +14,12 @@ jest.mock('../../../api/frames', () => ({
 const historyItem = {
   query_id: 'q1',
   query_text: 'a red vehicle passes',
-  submission_files: ['query.csv'],
   result_snapshot: { results: [{ frame_id: 'f1', score: 0.9, frame_ids: ['f1'] }] },
-  frame_activity: { viewed_frame_ids: [], submitted_frame_ids: [] },
+  frame_activity: { viewed_frame_ids: [] },
 };
 
 const renderPage = async (props = {}) => {
-  const result = render(
-    <SubmissionProvider>
-      <SubmissionDialogProvider>
-        <WorkspacePage {...props} />
-      </SubmissionDialogProvider>
-    </SubmissionProvider>,
-  );
+  const result = render(<WorkspacePage {...props} />);
   await act(async () => Promise.resolve());
   return result;
 };
@@ -38,7 +27,6 @@ const renderPage = async (props = {}) => {
 beforeEach(() => {
   jest.clearAllMocks();
   getQueryHistory.mockResolvedValue({ items: [historyItem] });
-  getSubmissionFiles.mockResolvedValue({ files: [] });
   resolveFrameAtTimestamp.mockResolvedValue({
     requested_timestamp_ms: 12000,
     frame_id: 'L21_V001_00000300',
@@ -59,7 +47,7 @@ test('does not load history without a user id', async () => {
 test('loads bounded history rows and exposes only replay-safe summary fields', async () => {
   await renderPage({ isActive: true, userId: 'team A' });
   expect(await screen.findByText('a red vehicle passes')).toBeTruthy();
-  expect(screen.getByText('query.csv')).toBeTruthy();
+  expect(screen.queryByText('query.csv')).toBeNull();
   expect(screen.getByRole('button', { name: 'Replay in Query' })).toBeTruthy();
   expect(screen.queryByText('Query archive')).toBeNull();
   expect(screen.queryByText('Direct inspection')).toBeNull();
@@ -111,7 +99,7 @@ test('keeps the viewer closed and exposes a resolver error', async () => {
   expect(onOpenManualVideo).not.toHaveBeenCalled();
 });
 
-test('mounts the shared file worktree in the right column', async () => {
+test('does not mount the legacy submission-file worktree in the right column', async () => {
   await renderPage({ isActive: true });
-  expect(screen.getByRole('region', { name: 'Shared submission files' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Shared submission files' })).toBeNull();
 });

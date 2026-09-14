@@ -30,6 +30,7 @@ export const searchFrames = async ({
   useDense = true,
   useBm25 = true,
   signal,
+  userId,
 }) => {
   if (!useDense && !useBm25) {
     throw new Error('Enable at least one retrieval source');
@@ -44,6 +45,7 @@ export const searchFrames = async ({
       use_bm25: useBm25,
     },
     signal,
+    headers: userId?.trim() ? { 'X-VBS-User-ID': userId.trim() } : {},
   });
 
   if (
@@ -60,50 +62,11 @@ export const searchFrames = async ({
   };
 };
 
-export const searchTrake = async ({
-  events,
-  topK,
-  useDense = true,
-  useBm25 = true,
-  signal,
-}) => {
-  const orderedEvents = events.map((event) => event.trim()).filter(Boolean);
-  if (orderedEvents.length < 1) {
-    throw new Error('TRAKE requires at least one non-empty ordered event');
-  }
-  if (!useDense && !useBm25) {
-    throw new Error('Enable at least one retrieval source');
-  }
-
-  const payload = await requestJson('/api/v1/trake', {
-    method: 'POST',
-    body: {
-      events: orderedEvents,
-      top_k: topK,
-      use_dense: useDense,
-      use_bm25: useBm25,
-    },
-    signal,
-  });
-
-  if (
-    !Array.isArray(payload?.events)
-    || !Array.isArray(payload?.paths)
-    || !hasSearchLatency(payload?.latency)
-  ) {
-    throw new Error('TRAKE server returned an invalid response contract');
-  }
-
-  return {
-    ...payload,
-    latency: normalizeSearchLatency(payload.latency),
-  };
-};
-
 export const searchFramesByImage = async ({
   imageFile,
   topK = 20,
   signal,
+  userId,
 }) => {
   if (!imageFile) {
     throw new Error('An image file is required for image search');
@@ -113,7 +76,10 @@ export const searchFramesByImage = async ({
   formData.append('image', imageFile);
   formData.append('top_k', String(topK));
 
-  const payload = await requestFormData('/api/v1/search/image', formData, { signal });
+  const payload = await requestFormData('/api/v1/search/image', formData, {
+    signal,
+    headers: userId?.trim() ? { 'X-VBS-User-ID': userId.trim() } : {},
+  });
 
   if (
     !Array.isArray(payload?.results)

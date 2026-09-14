@@ -10,8 +10,6 @@ import { searchFramesByImage } from '../../../api/search';
 import FramesBox from '../../frames/components/FramesBox';
 import ToolBox from '../../search-controls/components/ToolBox';
 import GifLoaderOverlay from './GifLoaderOverlay';
-import { displayVideoId } from '../../frames/videoSource';
-import { useSubmissionDialog } from '../../submission/contexts/SubmissionDialogContext';
 
 const formatFileSize = (bytes) => {
   if (!bytes || bytes <= 0) return '0 B';
@@ -25,6 +23,8 @@ const ImageSearchWorkspace = ({
   topK = 20,
   setTopK,
   onFrameClick,
+  onAddCandidate,
+  userId,
 }) => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -37,8 +37,6 @@ const ImageSearchWorkspace = ({
 
   const fileInputRef = useRef(null);
   const requestRef = useRef(null);
-  const { requestSubmission } = useSubmissionDialog();
-
   // Manage thumbnail object URL
   useEffect(() => {
     if (!selectedFile) {
@@ -60,20 +58,9 @@ const ImageSearchWorkspace = ({
   // Clean up abort controller on unmount
   useEffect(() => () => requestRef.current?.abort(), []);
 
-  const openCanonicalFrame = useCallback((frame, submissionMode = 'kis') => {
-    onFrameClick?.({
-      frame,
-      submissionMode,
-    });
+  const openCanonicalFrame = useCallback((frame) => {
+    onFrameClick?.({ frame });
   }, [onFrameClick]);
-
-  const handleFrameSubmit = useCallback((frame) => {
-    const vid = displayVideoId(frame.video_id);
-    requestSubmission({
-      line: `${vid},${frame.frame_idx}`,
-      source: 'Image search frame',
-    });
-  }, [requestSubmission]);
 
   const handleFileSelect = useCallback((file) => {
     if (!file) return;
@@ -158,6 +145,7 @@ const ImageSearchWorkspace = ({
         imageFile: selectedFile,
         topK,
         signal: controller.signal,
+        userId,
       });
 
       if (controller.signal.aborted) return;
@@ -174,7 +162,7 @@ const ImageSearchWorkspace = ({
         setIsSearching(false);
       }
     }
-  }, [isSearching, selectedFile, topK]);
+  }, [isSearching, selectedFile, topK, userId]);
 
   const handleNewSearch = useCallback(() => {
     requestRef.current?.abort();
@@ -267,7 +255,7 @@ const ImageSearchWorkspace = ({
             topK={topK}
             setTopK={setTopK}
             showRetrievalSources={false}
-            includeSubmissionWorktree={isActive}
+            isActive={isActive}
           />
         </aside>
 
@@ -282,7 +270,7 @@ const ImageSearchWorkspace = ({
               warnings={warnings}
               events={[]}
               onFrameClick={openCanonicalFrame}
-              onSubmit={handleFrameSubmit}
+              onAddCandidate={onAddCandidate}
             />
           )}
         </div>

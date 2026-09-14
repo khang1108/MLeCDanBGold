@@ -1,9 +1,10 @@
-import { searchFrames, searchFramesByImage, searchTrake } from './search';
+import { searchFrames, searchFramesByImage } from './search';
 
-const response = (payload, status = 200) => ({
+const response = (payload, status = 200, headers = {}) => ({
   ok: status >= 200 && status < 300,
   status,
   json: jest.fn().mockResolvedValue(payload),
+  headers: { get: jest.fn((name) => headers[name] ?? null) },
 });
 
 afterEach(() => jest.restoreAllMocks());
@@ -99,91 +100,15 @@ test('rejects a malformed successful search response', async () => {
   })).rejects.toThrow('invalid response contract');
 });
 
-test('posts explicit ordered events to the dedicated TRAKE route', async () => {
-  const payload = {
-    events: ['person enters', 'person leaves'],
-    paths: [{
-      video_id: 'L21_V001',
-      score: 2.3,
-      frame_ids: ['f0', 'f1'],
-      frame_idxs: [100, 140],
-      timestamps_ms: [4000, 5600],
-    }],
-    latency: {
-      query_ms: 1,
-      retrieval_ms: 2,
-      alignment_ms: 3,
-      materialization_ms: 4,
-      total_ms: 10,
-    },
-  };
-  jest.spyOn(global, 'fetch').mockResolvedValue(response({
-    ...payload,
-  }));
-
-  await expect(searchTrake({
-    events: [' person enters ', ' person leaves '],
-    topK: 20,
-  })).resolves.toEqual(payload);
-
-  expect(global.fetch).toHaveBeenCalledWith(
-    expect.stringContaining('/api/v1/trake'),
-    expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({
-        events: ['person enters', 'person leaves'],
-        top_k: 20,
-        use_dense: true,
-        use_bm25: true,
-      }),
-    }),
-  );
-  expect(payload.paths).toHaveLength(1);
-  expect(payload.events).toEqual(['person enters', 'person leaves']);
-  expect(payload.latency.total_ms).toBe(10);
-});
-
-test('posts a single TRAKE event accepted by the backend contract', async () => {
-  const payload = {
-    events: ['only one'],
-    paths: [],
-    latency: {
-      query_ms: 1,
-      retrieval_ms: 2,
-      alignment_ms: 3,
-      materialization_ms: 4,
-      total_ms: 10,
-    },
-  };
-  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload));
-
-  await expect(searchTrake({ events: [' only one '], topK: 20 }))
-    .resolves.toEqual(payload);
-  expect(global.fetch).toHaveBeenCalledWith(
-    expect.stringContaining('/api/v1/trake'),
-    expect.objectContaining({
-      body: JSON.stringify({
-        events: ['only one'],
-        top_k: 20,
-        use_dense: true,
-        use_bm25: true,
-      }),
-    }),
-  );
-});
-
-test('forwards a BM25-only selection to both search contracts', async () => {
-  const kisPayload = { events: [], results: [], latency: {
+test('forwards a BM25-only selection to KIS search', async () => {
+  const payload = { events: [], results: [], latency: {
     query_ms: 0,
     retrieval_ms: 0,
     alignment_ms: 0,
     materialization_ms: 0,
     total_ms: 0,
   } };
-  const trakePayload = { events: ['event'], paths: [], latency: kisPayload.latency };
-  jest.spyOn(global, 'fetch')
-    .mockResolvedValueOnce(response(kisPayload))
-    .mockResolvedValueOnce(response(trakePayload));
+  jest.spyOn(global, 'fetch').mockResolvedValueOnce(response(payload));
 
   await searchFrames({
     query: 'boat',
@@ -191,21 +116,9 @@ test('forwards a BM25-only selection to both search contracts', async () => {
     useDense: false,
     useBm25: true,
   });
-  await searchTrake({
-    events: ['event'],
-    topK: 10,
-    useDense: false,
-    useBm25: true,
-  });
-
+  expect(global.fetch).toHaveBeenCalledTimes(1);
   expect(global.fetch.mock.calls[0][1].body).toBe(JSON.stringify({
     query: 'boat',
-    top_k: 10,
-    use_dense: false,
-    use_bm25: true,
-  }));
-  expect(global.fetch.mock.calls[1][1].body).toBe(JSON.stringify({
-    events: ['event'],
     top_k: 10,
     use_dense: false,
     use_bm25: true,
@@ -225,14 +138,6 @@ test('rejects disabling both retrieval sources before contacting the backend', a
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-test('rejects TRAKE input with no non-empty events before contacting the backend', async () => {
-  const fetchSpy = jest.spyOn(global, 'fetch');
-
-  await expect(searchTrake({ events: ['  '], topK: 20 }))
-    .rejects.toThrow('at least one');
-  expect(fetchSpy).not.toHaveBeenCalled();
-});
-
 test('backend network failures stay visible and never produce fake results', async () => {
   jest.spyOn(global, 'fetch').mockRejectedValue(new TypeError('offline'));
 
@@ -241,23 +146,21 @@ test('backend network failures stay visible and never produce fake results', asy
   expect(global.fetch).toHaveBeenCalledTimes(1);
 });
 
-test('malformed TRAKE requests are not retried', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(
-    response({ detail: [{ msg: 'events must contain at least 2 items' }] }, 422),
-  );
+test('publishes the DRES log status header with only the connected participant ID', async () => {
+  const payload = {
+    events: [], results: [], latency: { total_ms: 1 },
+  };
+  jest.spyOn(global, 'fetch').mockResolvedValue(response(payload, 200, {
+    'X-DRES-Log-Status': 'sent',
+  }));
+  const listener = jest.fn();
+  window.addEventListener('hcmai:dres-log-status', listener);
 
-  await expect(searchTrake({ events: ['one', 'two'], topK: 20 }))
-    .rejects.toThrow('events must contain at least 2 items');
-  expect(global.fetch).toHaveBeenCalledTimes(1);
-});
+  await searchFrames({ query: 'boat', topK: 10, userId: 'team-a' });
 
-test('rejects a malformed successful TRAKE response', async () => {
-  jest.spyOn(global, 'fetch').mockResolvedValue(
-    response({ events: ['e1', 'e2'], submissions: [] }),
-  );
-
-  await expect(searchTrake({ events: ['e1', 'e2'], topK: 20 }))
-    .rejects.toThrow('invalid response contract');
+  expect(listener).toHaveBeenCalledTimes(1);
+  expect(listener.mock.calls[0][0].detail).toEqual({ userId: 'team-a', status: 'sent' });
+  window.removeEventListener('hcmai:dres-log-status', listener);
 });
 
 test('posts multipart image search request and returns normalized results and latency', async () => {

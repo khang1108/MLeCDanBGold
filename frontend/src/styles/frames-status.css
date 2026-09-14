@@ -110,29 +110,6 @@
   pointer-events: auto;
 }
 
-.trake-video-group {
-  margin: 0 0 var(--spacing-xl);
-  padding: var(--spacing-md) 0 var(--spacing-lg);
-  border-bottom: 1px solid var(--color-hairline);
-}
-
-.trake-video-group h3 {
-  margin: 0 0 var(--spacing-md);
-  color: var(--color-ink);
-  font-size: 15px;
-}
-
-.trake-video-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.trake-path-submit-btn {
-  padding: 2px 6px;
-  font-size: 12px;
-}
-
 .score-tooltip-title {
   font-size: 10px;
   font-weight: 700;

@@ -1,10 +1,8 @@
 import {
   activityStateForFrame,
   buildKisSnapshot,
-  buildTrakeSnapshot,
   getSnapshotKind,
   normalizeFrameActivity,
-  withSubmittedFrames,
   withViewedFrame,
 } from './queryHistory';
 
@@ -87,49 +85,22 @@ test('uses the current or legacy final score field for KIS', () => {
   });
 });
 
-test('preserves TRAKE display data and event-frame order', () => {
-  expect(buildTrakeSnapshot([{
-    video_id: 'V01',
-    score: 2.4,
-    frame_ids: ['third', 'first', 'second'],
-    frame_idxs: [30, 10, 20],
-    timestamps_ms: [3, 1, 2],
-  }], {
-    events: ['first', 'second', 'third'],
-    latency: { total_ms: 8 },
-  })).toEqual({
-    events: ['first', 'second', 'third'],
-    latency: { total_ms: 8 },
-    warnings: [],
-    paths: [{
-      video_id: 'V01',
-      score: 2.4,
-      frame_ids: ['third', 'first', 'second'],
-      frame_idxs: [30, 10, 20],
-      timestamps_ms: [3, 1, 2],
-    }],
-  });
-});
-
-test('distinguishes only unambiguous snapshot discriminators', () => {
+test('classifies KIS snapshots and keeps legacy path snapshots unsupported', () => {
   expect(getSnapshotKind({ results: [] })).toBe('kis');
-  expect(getSnapshotKind({ paths: [] })).toBe('trake');
+  expect(getSnapshotKind({ paths: [] })).toBe('unsupported');
   expect(() => getSnapshotKind({ results: [], paths: [] })).toThrow(/exactly one/);
   expect(() => getSnapshotKind({})).toThrow(/exactly one/);
 });
 
-test('activity uses canonical ids and gives submitted state priority', () => {
+test('query history tracks viewed state only and ignores legacy submitted ids', () => {
   const activity = normalizeFrameActivity({
     viewed_frame_ids: ['frame-1', 'frame-2'],
-    submitted_frame_ids: ['frame-2'],
   });
-  expect(activityStateForFrame('frame-2', activity)).toBe('submitted');
+  expect(activity).toEqual({ viewedFrameIds: new Set(['frame-1', 'frame-2']) });
+  expect(activityStateForFrame('frame-2', activity)).toBe('viewed');
   expect(activityStateForFrame('frame-1', activity)).toBe('viewed');
   expect(activityStateForFrame('frame-3', activity)).toBe('neutral');
   expect(withViewedFrame(activity, 'frame-3').viewedFrameIds).toEqual(
     new Set(['frame-1', 'frame-2', 'frame-3']),
-  );
-  expect(withSubmittedFrames(activity, ['frame-2', 'frame-4']).submittedFrameIds).toEqual(
-    new Set(['frame-2', 'frame-4']),
   );
 });

@@ -1,11 +1,18 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import ToolBox from './ToolBox';
+import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
+
+const renderToolBox = (props) => render(
+  <AnswerWorkspaceProvider connectedUserId="">
+    <ToolBox {...props} />
+  </AnswerWorkspaceProvider>,
+);
 
 describe('ToolBox component', () => {
   test('renders an inline Top-K number input without stepper controls, presets, or a slider', () => {
     const setTopK = jest.fn();
-    render(<ToolBox topK={20} setTopK={setTopK} />);
+    renderToolBox({ topK: 20, setTopK });
 
     expect(screen.getByText('Top-K results')).toBeTruthy();
     expect(screen.queryByRole('slider')).toBeNull();
@@ -25,7 +32,7 @@ describe('ToolBox component', () => {
 
   test('allows typing a custom value in direct input mode', () => {
     const setTopK = jest.fn();
-    render(<ToolBox topK={20} setTopK={setTopK} />);
+    renderToolBox({ topK: 20, setTopK });
 
     const numberInput = screen.getByLabelText(/top-k value/i);
     fireEvent.change(numberInput, { target: { value: '10000' } });
@@ -39,16 +46,14 @@ describe('ToolBox component', () => {
   test('renders accessible Dense and BM25 switches', () => {
     const setUseDense = jest.fn();
     const setUseBm25 = jest.fn();
-    render(
-      <ToolBox
-        topK={20}
-        setTopK={jest.fn()}
-        useDense
-        setUseDense={setUseDense}
-        useBm25
-        setUseBm25={setUseBm25}
-      />,
-    );
+    renderToolBox({
+      topK: 20,
+      setTopK: jest.fn(),
+      useDense: true,
+      setUseDense,
+      useBm25: true,
+      setUseBm25,
+    });
 
     const dense = screen.getByRole('switch', { name: /use dense retrieval/i });
     const bm25 = screen.getByRole('switch', { name: /use bm25 retrieval/i });
@@ -62,26 +67,30 @@ describe('ToolBox component', () => {
   });
 
   test('does not allow the only enabled retrieval source to be disabled', () => {
-    render(
-      <ToolBox
-        topK={20}
-        setTopK={jest.fn()}
-        useDense
-        setUseDense={jest.fn()}
-        useBm25={false}
-        setUseBm25={jest.fn()}
-      />,
-    );
+    renderToolBox({
+      topK: 20,
+      setTopK: jest.fn(),
+      useDense: true,
+      setUseDense: jest.fn(),
+      useBm25: false,
+      setUseBm25: jest.fn(),
+    });
 
     expect(screen.getByRole('switch', { name: /use dense retrieval/i }).disabled).toBe(true);
     expect(screen.getByRole('switch', { name: /use bm25 retrieval/i }).disabled).toBe(false);
     expect(screen.queryByText(/at least one source/i)).toBeNull();
   });
 
-  test('keeps the submission files panel in the Query sidebar', () => {
-    render(<ToolBox topK={20} setTopK={jest.fn()} />);
+  test('does not render the retired submission files panel in the Query sidebar', () => {
+    renderToolBox({ topK: 20, setTopK: jest.fn() });
 
-    expect(screen.getByRole('region', { name: 'Shared submission files' })).toBeTruthy();
-    expect(screen.getByText('No Query Files')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Shared submission files' })).toBeNull();
+    expect(screen.queryByText('No Query Files')).toBeNull();
+  });
+
+  test('renders the shared answer workspace panel', () => {
+    renderToolBox({ topK: 20, setTopK: jest.fn() });
+
+    expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
   });
 });

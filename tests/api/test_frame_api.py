@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import pytest
 from fastapi import HTTPException
@@ -39,10 +39,9 @@ def test_frame_asset_is_served_only_from_dataset_root(
     ))
     route = next(
         route
-        for mounted in app.routes
-        if hasattr(mounted, "original_router")
-        for route in cast(Any, mounted).original_router.routes
-        if getattr(route, "path", "").endswith("/keyframes/{frame_id}")
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        and route.path.endswith("/keyframes/{frame_id}")
     )
     assert isinstance(route, APIRoute)
     response = asyncio.run(route.endpoint("safe"))

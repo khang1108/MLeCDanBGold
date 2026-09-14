@@ -1,7 +1,7 @@
-/** Build replayable Query-history snapshots and canonical activity state.
+/** Build replayable KIS Query-history snapshots and canonical activity state.
 
-History snapshots retain the fields needed by the live KIS/TRAKE result
-components. They intentionally do not contain images or model embeddings.
+History snapshots retain the fields needed by the live KIS result components.
+They intentionally do not contain images or model embeddings.
 */
 
 const requireText = (value, field) => {
@@ -138,46 +138,17 @@ export const buildKisSnapshot = (results, options) => {
   };
 };
 
-export const buildTrakeSnapshot = (paths, options) => {
-  if (!Array.isArray(paths)) throw new Error('TRAKE paths must be an array');
-  const { events, latency, warnings } = normalizeSnapshotOptions(options, 'TRAKE snapshot');
-  return {
-    events,
-    latency,
-    warnings,
-    paths: paths.map((path, index) => ({
-      video_id: requireText(path?.video_id, `paths[${index}].video_id`),
-      score: resolveScore(path, `paths[${index}].score`),
-      frame_ids: (() => {
-        const frameIds = normalizeFrameIds(path.frame_ids, `paths[${index}].frame_ids`);
-        normalizeNonNegativeIntegers(
-          path.frame_idxs,
-          `paths[${index}].frame_idxs`,
-          frameIds.length,
-        );
-        normalizeNonNegativeIntegers(
-          path.timestamps_ms,
-          `paths[${index}].timestamps_ms`,
-          frameIds.length,
-        );
-        return frameIds;
-      })(),
-      frame_idxs: path.frame_idxs.slice(),
-      timestamps_ms: path.timestamps_ms.slice(),
-    })),
-  };
-};
-
 export const getSnapshotKind = (resultSnapshot) => {
   if (!resultSnapshot || typeof resultSnapshot !== 'object') {
     throw new Error('resultSnapshot must be an object');
   }
   const hasResults = Array.isArray(resultSnapshot.results);
   const hasPaths = Array.isArray(resultSnapshot.paths);
+  if (hasPaths && !hasResults) return 'unsupported';
   if (hasResults === hasPaths) {
     throw new Error('resultSnapshot must contain exactly one of results or paths');
   }
-  return hasResults ? 'kis' : 'trake';
+  return 'kis';
 };
 
 const toSet = (values, field) => {
@@ -192,16 +163,11 @@ export const normalizeFrameActivity = (frameActivity = {}) => ({
     frameActivity.viewedFrameIds || frameActivity.viewed_frame_ids || [],
     'viewed_frame_ids',
   ),
-  submittedFrameIds: toSet(
-    frameActivity.submittedFrameIds || frameActivity.submitted_frame_ids || [],
-    'submitted_frame_ids',
-  ),
 });
 
 export const activityStateForFrame = (frameId, frameActivity) => {
   requireText(frameId, 'frameId');
   const normalized = normalizeFrameActivity(frameActivity);
-  if (normalized.submittedFrameIds.has(frameId)) return 'submitted';
   if (normalized.viewedFrameIds.has(frameId)) return 'viewed';
   return 'neutral';
 };
@@ -210,13 +176,5 @@ export const withViewedFrame = (frameActivity, frameId) => {
   requireText(frameId, 'frameId');
   const normalized = normalizeFrameActivity(frameActivity);
   normalized.viewedFrameIds.add(frameId);
-  return normalized;
-};
-
-export const withSubmittedFrames = (frameActivity, frameIds) => {
-  const normalized = normalizeFrameActivity(frameActivity);
-  normalizeFrameIds(frameIds, 'frameIds').forEach((frameId) => {
-    normalized.submittedFrameIds.add(frameId);
-  });
   return normalized;
 };

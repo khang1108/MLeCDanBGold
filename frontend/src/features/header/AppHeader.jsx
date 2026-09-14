@@ -1,6 +1,7 @@
 import React from 'react';
 import HealthBadge from '../health/components/HealthBadge';
 import VimModeBadge from '../vim/components/VimModeBadge';
+import VbsUserControl from '../vbs/components/VbsUserControl';
 
 export const AppHeader = ({
   isHealthy,
@@ -8,16 +9,13 @@ export const AppHeader = ({
   vimMode,
   onToggleVimMode,
   onOpenDocs,
-  userId,
-  onChangeUserId,
-  userIdError,
   userIdInputRef,
   activePage,
   onSelectPage,
 }) => (
   <header className="app-header">
     <div className="app-title-group">
-      <h1 className="app-title">HCMAI 2026 Frame Retrieval</h1>
+      <h1 className="app-title">VBS 2027 Video Retrieval</h1>
       <HealthBadge isHealthy={isHealthy} healthData={healthData} />
       <VimModeBadge mode={vimMode} onToggleMode={onToggleVimMode} />
       <button
@@ -31,24 +29,7 @@ export const AppHeader = ({
       </button>
     </div>
     <div className="app-header-tools">
-      <label className="user-id-field" htmlFor="app-user-id">
-        <span>User ID</span>
-        <input
-          ref={userIdInputRef}
-          id="app-user-id"
-          className="input-text"
-          value={userId}
-          onChange={onChangeUserId}
-          placeholder="team-a"
-          autoComplete="off"
-          aria-describedby={userIdError ? 'app-user-id-error' : undefined}
-        />
-      </label>
-      {userIdError && (
-        <span id="app-user-id-error" className="user-id-error" role="alert">
-          {userIdError}
-        </span>
-      )}
+      <VbsUserControl inputRef={userIdInputRef} />
       <nav className="workspace-nav" aria-label="Workspace selection">
         {[
           ['query', 'Query'],

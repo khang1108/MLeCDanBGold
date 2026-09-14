@@ -1,6 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import AlignmentAccordion, { formatTimestampMs } from "./AlignmentAccordion";
+import { keyframeUrl } from "../../../api/keyframes";
 
 test("reveals aligned events with their canonical timestamps and keyframes", () => {
   render(
@@ -16,7 +17,7 @@ test("reveals aligned events with their canonical timestamps and keyframes", () 
   expect(screen.getByText("hold")).toBeTruthy();
   expect(screen.getByText("00:01.200")).toBeTruthy();
   expect(screen.getByAltText(/f1/i).getAttribute("src"))
-    .toBe("http://127.0.0.1:8000/api/v1/keyframes/f1");
+    .toBe(keyframeUrl("f1"));
 });
 
 test("formats sub-hour and hour-long timestamps consistently", () => {

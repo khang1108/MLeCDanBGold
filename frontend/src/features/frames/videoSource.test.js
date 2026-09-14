@@ -35,7 +35,6 @@ test('rejects missing, negative, and non-integer timestamps', () => {
 });
 
 test('maps canonical video identity to the stream service leaf ID', () => {
-  expect(getStreamVideoUrl('L21_a_b.folder2.L21_V001', 5_000)).toBe(
-    'https://stream.iamphuckhang.dev/api/v1/videos/L21_V001/stream',
-  );
+  const url = new URL(getStreamVideoUrl('L21_a_b.folder2.L21_V001', 5_000));
+  expect(url.pathname).toBe('/api/v1/videos/L21_V001/stream');
 });

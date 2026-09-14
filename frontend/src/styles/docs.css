@@ -167,6 +167,30 @@
   flex: 1;
 }
 
+.api-docs-log-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #c4ddeb;
+  border-left: 3px solid #1877a5;
+  border-radius: var(--rounded-md);
+  background: #f3faff;
+  color: var(--color-ink-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.api-docs-log-status strong {
+  flex: 0 0 auto;
+  color: var(--color-ink);
+}
+
+.api-docs-log-status code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
 .api-docs-category-group {
   display: flex;
   flex-direction: column;

@@ -17,7 +17,7 @@ describe('DatabasePage Component', () => {
         ],
       },
       {
-        name: 'submission_files',
+        name: 'example_records',
         row_count: 1,
         columns: [
           { name: 'name', type: 'TEXT', nullable: false, primary_key: true },
@@ -52,7 +52,7 @@ describe('DatabasePage Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('query_history (2 rows)')).toBeTruthy();
-      expect(screen.getByText('submission_files (1 rows)')).toBeTruthy();
+      expect(screen.getByText('example_records (1 rows)')).toBeTruthy();
     });
 
     await waitFor(() => {
@@ -69,7 +69,7 @@ describe('DatabasePage Component', () => {
     dbApi.fetchDatabaseRows
       .mockResolvedValueOnce(mockRows)
       .mockResolvedValueOnce({
-        table: 'submission_files',
+        table: 'example_records',
         page: 1,
         page_size: 25,
         total_rows: 1,
@@ -80,16 +80,16 @@ describe('DatabasePage Component', () => {
     render(<DatabasePage isActive={true} />);
 
     await waitFor(() => {
-      expect(screen.getByText('submission_files (1 rows)')).toBeTruthy();
+      expect(screen.getByText('example_records (1 rows)')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByText('submission_files (1 rows)'));
+    fireEvent.click(screen.getByText('example_records (1 rows)'));
 
     await waitFor(() => {
       expect(screen.getByText('results.csv')).toBeTruthy();
     });
 
-    expect(dbApi.fetchDatabaseRows).toHaveBeenLastCalledWith('submission_files', { page: 1, pageSize: 25 });
+    expect(dbApi.fetchDatabaseRows).toHaveBeenLastCalledWith('example_records', { page: 1, pageSize: 25 });
   });
 
   test('handles database error gracefully', async () => {
@@ -141,7 +141,7 @@ describe('DatabasePage Component', () => {
     dbApi.fetchDatabaseTables.mockResolvedValue(mockTables);
     dbApi.fetchDatabaseRows.mockResolvedValue(mockRows);
     dbApi.executeDatabaseQuery.mockResolvedValueOnce({
-      query: 'DELETE FROM submission_files',
+      query: 'DELETE FROM example_records',
       columns: [],
       rows: [],
       rows_affected: 1,
@@ -156,7 +156,7 @@ describe('DatabasePage Component', () => {
     });
 
     const textarea = screen.getByPlaceholderText(/SELECT \* FROM/i);
-    fireEvent.change(textarea, { target: { value: 'DELETE FROM submission_files' } });
+    fireEvent.change(textarea, { target: { value: 'DELETE FROM example_records' } });
     fireEvent.click(screen.getByText('Execute SQL'));
 
     await waitFor(() => {

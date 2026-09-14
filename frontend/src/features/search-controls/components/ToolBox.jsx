@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useState } from "react";
-import SubmissionWorktree from "../../../features/submission/components/SubmissionWorktree";
+import AnswerWorkspace from '../../answer-workspace/components/AnswerWorkspace';
 
 const TOP_K_MIN = 1;
 const NOOP = () => {};
@@ -14,8 +14,8 @@ const ToolBox = ({
   setUseDense = NOOP,
   useBm25 = true,
   setUseBm25 = NOOP,
-  includeSubmissionWorktree = true,
   showRetrievalSources = true,
+  isActive = true,
 }) => {
   const topKInputId = useId();
   const [topKText, setTopKText] = useState(String(topK));
@@ -55,7 +55,8 @@ const ToolBox = ({
   };
 
   return (
-    <aside className="toolbox-sidebar">
+    <div className="toolbox-stack">
+      <aside className="toolbox-sidebar">
       <div className="toolbox-section">
         <div className="toolbox-label-row toolbox-top-k-row">
           <label htmlFor={topKInputId} className="toolbox-label">
@@ -114,9 +115,9 @@ const ToolBox = ({
           </div>
         </fieldset>
       )}
-
-      {includeSubmissionWorktree && <SubmissionWorktree />}
-    </aside>
+      </aside>
+      <AnswerWorkspace isActive={isActive} />
+    </div>
   );
 };
 

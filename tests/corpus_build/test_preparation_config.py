@@ -72,6 +72,8 @@ def test_staging_root_is_expanded_before_runtime_use(
     """Persist the expanded staging path instead of leaving a ``~`` literal."""
 
     monkeypatch.setenv("HOME", str(tmp_path))
+    # Windows resolves ``~`` from USERPROFILE while POSIX resolves it from HOME.
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     values = _values(tmp_path)
     preprocessing = values["preprocessing"]
     assert isinstance(preprocessing, dict)

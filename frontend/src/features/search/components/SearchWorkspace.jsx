@@ -1,52 +1,30 @@
 /**
- * Query page orchestration for KIS/TRAKE retrieval and history sessions.
+ * Query page orchestration for KIS retrieval and history sessions.
  *
  * Retrieval contracts remain owned by the existing API modules. This module
  * adds only history persistence, canonical activity tracking, and Replay.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { searchFrames, searchTrake } from '../../../api/search';
+import { searchFrames } from '../../../api/search';
 import {
   createQueryHistory,
   markFrameViewed,
-} from '../../../api/workspace';
+} from '../../../api/history';
 import FramesBox from '../../frames/components/FramesBox';
 import ToolBox from '../../search-controls/components/ToolBox';
 import GifLoaderOverlay from '../../search/components/GifLoaderOverlay';
-import { displayVideoId } from '../../frames/videoSource';
-import { useSubmissionDialog } from '../../submission/contexts/SubmissionDialogContext';
 import ReplayResults from '../../workspace/components/ReplayResults';
 import {
   buildKisSnapshot,
-  buildTrakeSnapshot,
   getSnapshotKind,
   normalizeFrameActivity,
   withViewedFrame,
-  withSubmittedFrames,
   activityStateForFrame,
 } from '../../workspace/queryHistory';
-import TrakeResults from './TrakeResults';
-
-export { TrakeResults };
-
-const TRAKE_EVENT_MARKER = /\bE(\d+)\b\s*:?\s*/gi;
 
 export const parseRetrievalDescription = (description) => {
   const query = description.trim();
   return query ? { query } : null;
-};
-
-export const parseTrakeEvents = (description) => {
-  const text = description.trim();
-  const markers = Array.from(text.matchAll(TRAKE_EVENT_MARKER));
-  if (!markers.length || Number(markers[0][1]) !== 1) return null;
-  const events = markers.map((marker, index) => {
-    if (Number(marker[1]) !== index + 1) return null;
-    const start = marker.index + marker[0].length;
-    const end = markers[index + 1]?.index ?? text.length;
-    return text.slice(start, end).trim() || null;
-  });
-  return events.some((event) => !event) ? [] : events;
 };
 
 const createClientQueryId = () => {
@@ -59,24 +37,26 @@ const SearchWorkspace = ({
   topK,
   setTopK,
   onFrameClick,
+  onAddCandidate,
   onQueryChange,
   queryInputRef,
   onFocusQueryInput,
   onBlurQueryInput,
   userId,
-  onFocusUserId,
+  historyUserId,
   onHistoryRefresh,
   replayRequest,
   onExplorationInvalidated,
 }) => {
+  const historyIdentity = typeof historyUserId === 'string'
+    ? historyUserId.trim()
+    : typeof userId === 'string' ? userId.trim() : '';
   const [eventDescription, setEventDescription] = useState('');
   const [useDense, setUseDense] = useState(true);
   const [useBm25, setUseBm25] = useState(true);
   const [resultType, setResultType] = useState(null);
   const [frames, setFrames] = useState([]);
   const [kisEvents, setKisEvents] = useState([]);
-  const [paths, setPaths] = useState([]);
-  const [trakeEvents, setTrakeEvents] = useState([]);
   const [warnings, setWarnings] = useState([]);
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
   const [error, setError] = useState(null);
@@ -88,8 +68,6 @@ const SearchWorkspace = ({
   const viewedPatchRef = useRef(new Set());
   const lastReplayTokenRef = useRef(null);
   const liveKisSnapshotRef = useRef(null);
-  const { requestSubmission } = useSubmissionDialog();
-
   const setQueryTextareaRef = useCallback((node) => {
     queryTextareaRef.current = node;
     if (queryInputRef) queryInputRef.current = node;
@@ -115,11 +93,6 @@ const SearchWorkspace = ({
     onQueryChange?.(eventDescription);
   }, [eventDescription, onQueryChange]);
 
-  const historyForSession = useCallback((session, frameIds) => {
-    if (!session?.queryId) return undefined;
-    return { queryId: session.queryId, frameIds };
-  }, []);
-
   const recordViewed = useCallback((frame) => {
     const frameId = frame?.frame_id;
     const session = activeQuerySession;
@@ -141,60 +114,19 @@ const SearchWorkspace = ({
     });
   }, [activeQuerySession]);
 
-  const openCanonicalFrame = useCallback((frame, submissionMode = 'none') => {
+  const openCanonicalFrame = useCallback((frame) => {
     recordViewed(frame);
     onFrameClick?.({
       frame,
-      submissionMode,
-      history: historyForSession(activeQuerySession, [frame.frame_id]),
-      ...(submissionMode === 'kis' && liveKisSnapshotRef.current
+      ...(liveKisSnapshotRef.current
         ? { explorationSnapshot: liveKisSnapshotRef.current }
         : {}),
     });
-  }, [activeQuerySession, historyForSession, onFrameClick, recordViewed]);
+  }, [onFrameClick, recordViewed]);
 
-  const openKisFrame = useCallback((frame) => openCanonicalFrame(frame, 'kis'), [openCanonicalFrame]);
-  const openTrakeFrame = useCallback((frame) => openCanonicalFrame(frame, 'none'), [openCanonicalFrame]);
-
-  const handleTrakeSubmit = useCallback((path) => {
-    const vid = displayVideoId(path.video_id);
-    requestSubmission({
-      line: `${vid},${path.frame_idxs.join(',')}`,
-      source: 'TRAKE path',
-      history: historyForSession(activeQuerySession, path.frame_ids),
-    });
-  }, [activeQuerySession, historyForSession, requestSubmission]);
-
-  const handleFrameSubmit = useCallback((frame) => {
-    const vid = displayVideoId(frame.video_id);
-    requestSubmission({
-      line: `${vid},${frame.frame_idx}`,
-      source: 'KIS/TRAKE frame',
-      history: historyForSession(activeQuerySession, [frame.frame_id]),
-    });
-  }, [activeQuerySession, historyForSession, requestSubmission]);
-
-  const handleReplayFrameClick = useCallback((frame, submissionMode = 'kis') => openCanonicalFrame(frame, submissionMode), [openCanonicalFrame]);
-  const handleReplayFrameSubmit = useCallback((frame) => handleFrameSubmit(frame), [handleFrameSubmit]);
-  const handleReplayPathSubmit = useCallback((path) => handleTrakeSubmit(path), [handleTrakeSubmit]);
+  const openKisFrame = useCallback((frame) => openCanonicalFrame(frame), [openCanonicalFrame]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
-
-  useEffect(() => {
-    const handleHistoryChanged = (event) => {
-      const { queryId, frameIds } = event?.detail || {};
-      if (!queryId || !Array.isArray(frameIds) || frameIds.length === 0) return;
-      setActiveQuerySession((current) => {
-        if (!current || current.queryId !== queryId) return current;
-        return {
-          ...current,
-          frameActivity: withSubmittedFrames(current.frameActivity, frameIds),
-        };
-      });
-    };
-    window.addEventListener('hcmai:history-changed', handleHistoryChanged);
-    return () => window.removeEventListener('hcmai:history-changed', handleHistoryChanged);
-  }, []);
 
   useEffect(() => {
     const item = replayRequest?.item || replayRequest;
@@ -210,19 +142,17 @@ const SearchWorkspace = ({
     setWarnings([]);
     setFrames([]);
     setKisEvents([]);
-    setPaths([]);
-    setTrakeEvents([]);
     setSearchLatencyMs(null);
     setEventDescription(item.query_text || '');
     try {
       const kind = getSnapshotKind(item.result_snapshot);
       const normalizedActivity = normalizeFrameActivity(item.frame_activity);
       setReplaySnapshot(item.result_snapshot);
-      setResultType(kind === 'kis' ? 'replay-kis' : 'replay-trake');
+      setResultType(`replay-${kind}`);
       viewedPatchRef.current = new Set();
       setActiveQuerySession({
         queryId: item.query_id,
-        ownerUserId: userId?.trim() || '',
+        ownerUserId: historyIdentity,
         queryText: item.query_text,
         resultSnapshot: item.result_snapshot,
         frameActivity: normalizedActivity,
@@ -233,116 +163,92 @@ const SearchWorkspace = ({
       setResultType(null);
       setError(replayError.message);
     }
-  }, [onExplorationInvalidated, replayRequest, userId]);
+  }, [historyIdentity, onExplorationInvalidated, replayRequest]);
 
   const submit = useCallback(async (event) => {
     event.preventDefault();
     const rawEventText = eventDescription.trim();
     if (!rawEventText || isSearching) return;
-    if (typeof userId === 'string' && !userId.trim()) {
-      setError('Enter a User ID before searching.');
-      onFocusUserId?.();
-      return;
-    }
 
-    const capturedUserId = typeof userId === 'string' ? userId.trim() : null;
-    const events = parseTrakeEvents(rawEventText);
-    const isTrakeMode = events !== null;
-    const retrieval = isTrakeMode ? null : parseRetrievalDescription(rawEventText);
+    const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
+    const retrieval = parseRetrievalDescription(rawEventText);
     requestRef.current?.abort();
     liveKisSnapshotRef.current = null;
     onExplorationInvalidated?.();
     const controller = new AbortController();
     requestRef.current = controller;
-    const queryId = capturedUserId ? createClientQueryId() : null;
+    const queryId = historyIdentity ? createClientQueryId() : null;
     setIsSearching(true);
     setError(null);
     setWarnings([]);
     setFrames([]);
     setKisEvents([]);
-    setPaths([]);
-    setTrakeEvents([]);
     setSearchLatencyMs(null);
     setResultType(null);
     setReplaySnapshot(null);
     setActiveQuerySession(null);
     lastReplayTokenRef.current = null;
     try {
-      const response = isTrakeMode
-        ? await searchTrake({
-          events,
-          topK,
-          useDense,
-          useBm25,
-          signal: controller.signal,
-        })
-        : await searchFrames({
-          query: retrieval.query,
-          topK,
-          useDense,
-          useBm25,
-          signal: controller.signal,
-        });
+      const response = await searchFrames({
+        query: retrieval.query,
+        topK,
+        useDense,
+        useBm25,
+        signal: controller.signal,
+        userId: capturedUserId,
+      });
       if (controller.signal.aborted) return;
       const snapshotOptions = {
-        events: response.events || events || [],
+        events: response.events || [],
         latency: response.latency,
         warnings: response.warnings || [],
       };
-      const snapshot = isTrakeMode
-        ? buildTrakeSnapshot(response.paths || [], snapshotOptions)
-        : buildKisSnapshot(response.results || [], snapshotOptions);
-      if (isTrakeMode) {
-        setResultType('trake');
-        setPaths(response.paths || []);
-        setTrakeEvents(response.events || events);
-      } else {
-        // This preserves the result's scoring source fields even if the user
-        // edits the query before opening the inspector.
-        const snapshot = {
-          ...response,
-          query: response.query || rawEventText,
-          events: response.events || [],
-          dense_events: response.dense_events,
-          bm25_caption_events: response.bm25_caption_events,
-          use_dense: typeof response.use_dense === 'boolean' ? response.use_dense : useDense,
-          use_bm25: typeof response.use_bm25 === 'boolean' ? response.use_bm25 : useBm25,
-        };
-        // Older/replayed response shapes cannot safely reconstruct source
-        // events, so they intentionally do not expose Explore.
-        const sourcesComplete = Array.isArray(snapshot.events)
-          && snapshot.events.length > 0
-          && (!snapshot.use_dense || (
-            Array.isArray(snapshot.dense_events)
-            && snapshot.dense_events.length === snapshot.events.length
-          ))
-          && (!snapshot.use_bm25 || (
-            Array.isArray(snapshot.bm25_caption_events)
-            && snapshot.bm25_caption_events.length === snapshot.events.length
-          ));
-        liveKisSnapshotRef.current = sourcesComplete ? snapshot : null;
-        setResultType('retrieval');
-        setFrames(response.results || []);
-        setKisEvents(response.events || []);
-        setSearchLatencyMs(response.latency);
-      }
+      const historySnapshot = buildKisSnapshot(response.results || [], snapshotOptions);
+      // Preserve the scoring-source fields from this response even if the
+      // query draft changes before the user opens the frame inspector.
+      const explorationSnapshot = {
+        ...response,
+        query: response.query || rawEventText,
+        events: response.events || [],
+        dense_events: response.dense_events,
+        bm25_caption_events: response.bm25_caption_events,
+        use_dense: typeof response.use_dense === 'boolean' ? response.use_dense : useDense,
+        use_bm25: typeof response.use_bm25 === 'boolean' ? response.use_bm25 : useBm25,
+      };
+      // Older response shapes cannot reconstruct source events safely, so
+      // they intentionally do not expose temporal exploration.
+      const sourcesComplete = Array.isArray(explorationSnapshot.events)
+        && explorationSnapshot.events.length > 0
+        && (!explorationSnapshot.use_dense || (
+          Array.isArray(explorationSnapshot.dense_events)
+          && explorationSnapshot.dense_events.length === explorationSnapshot.events.length
+        ))
+        && (!explorationSnapshot.use_bm25 || (
+          Array.isArray(explorationSnapshot.bm25_caption_events)
+          && explorationSnapshot.bm25_caption_events.length === explorationSnapshot.events.length
+        ));
+      liveKisSnapshotRef.current = sourcesComplete ? explorationSnapshot : null;
+      setResultType('retrieval');
+      setFrames(response.results || []);
+      setKisEvents(response.events || []);
+      setSearchLatencyMs(response.latency);
       setWarnings(response.warnings || []);
       if (queryId) {
         try {
           await createQueryHistory({
             queryId,
-            userId: capturedUserId,
+            userId: historyIdentity,
             queryText: rawEventText,
-            resultSnapshot: snapshot,
+            resultSnapshot: historySnapshot,
             signal: controller.signal,
           });
           if (controller.signal.aborted) return;
           viewedPatchRef.current = new Set();
           setActiveQuerySession({
             queryId,
-            ownerUserId: capturedUserId,
+            ownerUserId: historyIdentity,
             queryText: rawEventText,
-            resultSnapshot: snapshot,
+            resultSnapshot: historySnapshot,
             frameActivity: normalizeFrameActivity(),
             source: 'live-search',
           });
@@ -354,7 +260,7 @@ const SearchWorkspace = ({
       }
     } catch (requestError) {
       if (requestError.name === 'AbortError') return;
-      setResultType(isTrakeMode ? 'trake' : 'retrieval');
+      setResultType('retrieval');
       setError(requestError.message || 'Failed to contact search API');
     } finally {
       if (requestRef.current === controller) {
@@ -365,12 +271,12 @@ const SearchWorkspace = ({
   }, [
     eventDescription,
     isSearching,
-    onFocusUserId,
     onHistoryRefresh,
     onExplorationInvalidated,
     topK,
     useBm25,
     useDense,
+    historyIdentity,
     userId,
   ]);
 
@@ -383,8 +289,6 @@ const SearchWorkspace = ({
     setEventDescription('');
     setFrames([]);
     setKisEvents([]);
-    setPaths([]);
-    setTrakeEvents([]);
     setWarnings([]);
     setResultType(null);
     setError(null);
@@ -416,28 +320,12 @@ const SearchWorkspace = ({
   );
 
   const renderResults = () => {
-    if (resultType === 'replay-kis' || resultType === 'replay-trake') {
+    if (resultType?.startsWith('replay-')) {
       return (
         <ReplayResults
           resultSnapshot={replaySnapshot}
           frameActivity={activeQuerySession?.frameActivity}
-          onFrameClick={handleReplayFrameClick}
-          onFrameSubmit={handleReplayFrameSubmit}
-          onPathSubmit={handleReplayPathSubmit}
-        />
-      );
-    }
-    if (resultType === 'trake') {
-      return (
-        <TrakeResults
-          events={trakeEvents}
-          paths={paths}
-          warnings={warnings}
-          error={error}
-          hasSearched
-          onFrameClick={openTrakeFrame}
-          onTrakeSubmit={handleTrakeSubmit}
-          getFrameClassName={getFrameClassName}
+          onFrameClick={openKisFrame}
         />
       );
     }
@@ -450,7 +338,7 @@ const SearchWorkspace = ({
         warnings={warnings}
         events={kisEvents}
         onFrameClick={openKisFrame}
-        onSubmit={handleFrameSubmit}
+        onAddCandidate={onAddCandidate}
         getFrameClassName={getFrameClassName}
       />
     );
@@ -468,12 +356,12 @@ const SearchWorkspace = ({
               rows={1}
               value={eventDescription}
               onChange={(event) => setEventDescription(event.target.value)}
-              placeholder="Describe the event, or add E1, E2, ... for TRAKE"
+              placeholder="Describe a video moment to find (KIS or AVS)"
               onFocus={onFocusQueryInput}
               onBlur={onBlurQueryInput}
               disabled={isSearching}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey && parseTrakeEvents(eventDescription) === null) {
+                if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
                   submit(event);
                 }
@@ -496,7 +384,7 @@ const SearchWorkspace = ({
             setUseDense={setUseDense}
             useBm25={useBm25}
             setUseBm25={setUseBm25}
-            includeSubmissionWorktree={isActive}
+            isActive={isActive}
           />
         </aside>
         <div className="adhoc-results">
