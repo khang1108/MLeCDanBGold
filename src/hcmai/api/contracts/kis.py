@@ -56,13 +56,10 @@ class KISRevisionSearchResponse(BaseModel):
     """Response payload for a successful revisioned KIS search."""
 
     model_config = ConfigDict(extra="forbid")
-    revision: int = Field(ge=1)
-    inputs: list[KISInput] = Field(min_length=1)
+
     intent: KISIntent
-    query: str
-    events: list[str]
-    dense_events: list[str] | None = None
-    bm25_caption_events: list[str] | None = None
+    dense_events: list[NonBlank] | None = None
+    bm25_events: list[NonBlank] | None = None
     use_dense: bool
     use_bm25: bool
     results: list[SearchResult] = Field(default_factory=list)

@@ -22,6 +22,7 @@ from hcmai.api.routers import (
     create_database_router,
     create_frames_router,
     create_history_router,
+    create_kis_router,
     create_query_candidates_router,
     create_search_router,
     create_system_router,
@@ -202,6 +203,7 @@ def create_app(
     logger.info("Initializing FastAPI application for the backend service.")
 
     app.include_router(create_system_router(service_container))
+    app.include_router(create_kis_router(service_container))
     app.include_router(create_search_router(service_container))
     app.include_router(create_query_candidates_router(service_container))
     app.include_router(create_trake_router(service_container))

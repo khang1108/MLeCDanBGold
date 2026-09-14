@@ -30,8 +30,6 @@ from .query_candidates import (
 )
 from .search import (
     ImageSearchResponse,
-    SearchRequest,
-    SearchResponse,
     SearchResult,
     SearchResultMetadata,
 )
@@ -105,8 +103,6 @@ __all__ = [
     "QueryHistoryRecord",
     "QueryHistoryViewedFrameUpdate",
     "SearchLatency",
-    "SearchRequest",
-    "SearchResponse",
     "SearchResult",
     "SearchResultMetadata",
     "SubmissionAttemptSummary",

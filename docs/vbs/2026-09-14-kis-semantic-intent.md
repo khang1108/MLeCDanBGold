@@ -706,7 +706,7 @@ git commit -am "refactor: drive KIS temporal search from resolved intent"
 - Remove only the text `/api/v1/search` handler; preserve image/filter endpoints.
 - Response no longer duplicates `query`, `events`, `revision`, or `inputs` outside `intent`.
 
-- [ ] **Step 1: Simplify revisioned response contract**
+- [x] **Step 1: Simplify revisioned response contract**
 
 Target:
 
@@ -721,7 +721,7 @@ class KISRevisionSearchResponse(BaseModel):
     latency: SearchLatency
 ```
 
-- [ ] **Step 2: Implement orchestration sequence**
+- [x] **Step 2: Implement orchestration sequence**
 
 `search_kis_revision` must:
 
@@ -734,22 +734,22 @@ class KISRevisionSearchResponse(BaseModel):
 
 No planner or deterministic builder is allowed in this method.
 
-- [ ] **Step 3: Wire resolver and clients during setup**
+- [x] **Step 3: Wire resolver and clients during setup**
 
 `SearchService` constructor receives `intent_resolver: KISIntentResolver` and `query_preparation: QueryPreparationService` explicitly. Do not hide model-client construction inside KIS pipeline classes.
 
-- [ ] **Step 4: Add FastAPI error mapping**
+- [x] **Step 4: Add FastAPI error mapping**
 
 - revision conflict -> 409;
 - invalid request/graph -> 422;
 - LLM provider/network/invalid structured response -> 502 or existing inference-unavailable boundary;
 - retrieval unavailable -> 503.
 
-- [ ] **Step 5: Preserve DRES logging with canonical intent text**
+- [x] **Step 5: Preserve DRES logging with canonical intent text**
 
 Use `response.intent.query_text` as the logged query value. Result ranks still use the returned canonical frame results.
 
-- [ ] **Step 6: Remove old text search after route tests pass**
+- [x] **Step 6: Remove old text search after route tests pass**
 
 ```bash
 rg "SearchRequest|search_kis\(|/api/v1/search" src frontend
@@ -757,7 +757,7 @@ rg "SearchRequest|search_kis\(|/api/v1/search" src frontend
 
 Migrate remaining text-KIS callers first. Then remove the text handler and obsolete request type. Do not remove image search/filter functionality that happens to share `search.py`.
 
-- [ ] **Step 7: Run backend API tests and commit**
+- [x] **Step 7: Run backend API tests and commit**
 
 ```bash
 PYTHONPATH=src python -m unittest \

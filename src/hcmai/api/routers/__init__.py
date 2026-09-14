@@ -3,6 +3,7 @@
 from hcmai.api.routers.database import create_database_router
 from hcmai.api.routers.frames import create_frames_router
 from hcmai.api.routers.history import create_history_router
+from hcmai.api.routers.kis import create_kis_router
 from hcmai.api.routers.query_candidates import create_query_candidates_router
 from hcmai.api.routers.search import create_search_router
 from hcmai.api.routers.system import create_system_router
@@ -15,6 +16,7 @@ from hcmai.api.routers.workspace import create_answer_workspace_router
 __all__ = [
     "create_frames_router",
     "create_database_router",
+    "create_kis_router",
     "create_query_candidates_router",
     "create_search_router",
     "create_system_router",

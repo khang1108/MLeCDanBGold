@@ -14,14 +14,16 @@ from fastapi import FastAPI
 from PIL import Image
 
 from hcmai.api.contracts.filter import FilterResult, FilterResponse
+from hcmai.api.contracts.kis import KISRevisionSearchResponse
 from hcmai.api.contracts.latency import SearchLatency
 from hcmai.api.contracts.search import (
     ImageSearchResponse,
-    SearchResponse,
     SearchResult,
     SearchResultMetadata,
 )
+from hcmai.api.routers.kis import create_kis_router
 from hcmai.api.routers.search import create_search_router
+from hcmai.kis.models import KISEvent, KISIntent
 from hcmai.vbs.config import DresSettings
 
 
@@ -37,13 +39,19 @@ class _SearchService:
             max_upload_bytes=1024 * 1024,
         )
 
-    def search_kis(self, request) -> SearchResponse:
+    def search_kis_revision(self, request) -> KISRevisionSearchResponse:
         del request
-        return SearchResponse(
-            query="person running",
-            events=["person running"],
+        intent = KISIntent(
+            revision=1,
+            inputs=["person running"],
+            language="en",
+            query_text="person running",
+            events=[KISEvent(id="E1", text="person running")],
+        )
+        return KISRevisionSearchResponse(
+            intent=intent,
             dense_events=["person running"],
-            bm25_caption_events=["person running"],
+            bm25_events=["person running"],
             use_dense=True,
             use_bm25=True,
             results=[_search_result("video-a", 100), _search_result("video-b", 200)],
@@ -146,7 +154,9 @@ def _client(service: _SearchService, vbs: _VbsLogger | None):
     """Create an isolated ASGI client with frozen event wall-clock time."""
 
     app = FastAPI()
-    app.include_router(create_search_router({"service": service, "vbs_service": vbs}))
+    container = {"service": service, "vbs_service": vbs}
+    app.include_router(create_kis_router(container))
+    app.include_router(create_search_router(container))
     transport = httpx.ASGITransport(app=app)
     return app, transport
 
@@ -154,16 +164,21 @@ def _client(service: _SearchService, vbs: _VbsLogger | None):
 def test_text_search_logs_full_ranked_results_and_trimmed_event(monkeypatch: pytest.MonkeyPatch) -> None:
     """Use the performing participant's session and 1-based result order."""
 
-    monkeypatch.setattr("hcmai.api.routers.search._now_ms", lambda: EPOCH_MS)
+    monkeypatch.setattr("hcmai.api.routers.kis._now_ms", lambda: EPOCH_MS)
     logger = _VbsLogger()
     _, transport = _client(_SearchService(), logger)
 
     async def send() -> httpx.Response:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             return await client.post(
-                "/api/v1/search",
+                "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-who-searched"},
-                json={"query": "  person running  "},
+                json={
+                    "inputs": [{"text": "  person running  "}],
+                    "expected_revision": 0,
+                    "use_dense": True,
+                    "use_bm25": True,
+                },
             )
 
     response = asyncio.run(send())
@@ -276,7 +291,7 @@ def test_connected_user_logs_successful_search_even_when_legacy_toggle_is_false(
 ) -> None:
     """A connected participant's successful search always emits its result log."""
 
-    monkeypatch.setattr("hcmai.api.routers.search._now_ms", lambda: EPOCH_MS)
+    monkeypatch.setattr("hcmai.api.routers.kis._now_ms", lambda: EPOCH_MS)
     logger = _VbsLogger()
     logger.settings = SimpleNamespace(logging_enabled=False)
     _, transport = _client(_SearchService(), logger)
@@ -284,9 +299,14 @@ def test_connected_user_logs_successful_search_even_when_legacy_toggle_is_false(
     async def send() -> httpx.Response:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             return await client.post(
-                "/api/v1/search",
+                "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
-                json={"query": "person running"},
+                json={
+                    "inputs": [{"text": "person running"}],
+                    "expected_revision": 0,
+                    "use_dense": True,
+                    "use_bm25": True,
+                },
             )
 
     response = asyncio.run(send())
@@ -302,15 +322,20 @@ def test_logging_failure_does_not_change_retrieval_success_or_leak_error(
 ) -> None:
     """Keep successful retrieval visible when result logging raises."""
 
-    monkeypatch.setattr("hcmai.api.routers.search._now_ms", lambda: EPOCH_MS)
+    monkeypatch.setattr("hcmai.api.routers.kis._now_ms", lambda: EPOCH_MS)
     _, transport = _client(_SearchService(), _VbsLogger(fail=True))
 
     async def send() -> httpx.Response:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             return await client.post(
-                "/api/v1/search",
+                "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
-                json={"query": "person running"},
+                json={
+                    "inputs": [{"text": "person running"}],
+                    "expected_revision": 0,
+                    "use_dense": True,
+                    "use_bm25": True,
+                },
             )
 
     response = asyncio.run(send())
@@ -334,7 +359,16 @@ def test_unconfigured_or_unconnected_logging_is_skipped_without_blocking_search(
     async def send() -> httpx.Response:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             headers = {} if user_id is None else {"X-VBS-User-ID": user_id}
-            return await client.post("/api/v1/search", headers=headers, json={"query": "person"})
+            return await client.post(
+                "/api/v1/kis/search",
+                headers=headers,
+                json={
+                    "inputs": [{"text": "person"}],
+                    "expected_revision": 0,
+                    "use_dense": True,
+                    "use_bm25": True,
+                },
+            )
 
     response = asyncio.run(send())
 
@@ -351,9 +385,14 @@ def test_absent_dres_service_skips_logging_and_returns_search_results() -> None:
     async def send() -> httpx.Response:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             return await client.post(
-                "/api/v1/search",
+                "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
-                json={"query": "person"},
+                json={
+                    "inputs": [{"text": "person"}],
+                    "expected_revision": 0,
+                    "use_dense": True,
+                    "use_bm25": True,
+                },
             )
 
     response = asyncio.run(send())

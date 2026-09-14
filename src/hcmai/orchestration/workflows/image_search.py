@@ -17,8 +17,8 @@ from hcmai.api.contracts import ImageSearchResponse, SearchLatency, SearchResult
 from hcmai.corpus import Corpus
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
-from hcmai.retrieval.models import RetrievalCandidate, RetrievalSource
-from hcmai.retrieval.retriever.pipeline import RetrievalService
+from hcmai.retrieval.models import RetrievalCandidate
+from hcmai.retrieval.retriever.models.contracts import VectorRetriever
 from hcmai.retrieval.retriever.query_batch import encode_image_query_batch
 from hcmai.temporal import AlignedPath
 
@@ -39,7 +39,7 @@ class ImageSearchService:
     def __init__(
         self,
         corpus: Corpus,
-        retrieval: RetrievalService,
+        visual_retriever: VectorRetriever,
         encoder: ImageEmbeddingAdapter,
         *,
         max_upload_bytes: int,
@@ -47,14 +47,11 @@ class ImageSearchService:
     ) -> None:
         """Bind canonical data, visual retrieval, and bounded upload settings."""
 
-        visual = retrieval.source_retriever(RetrievalSource.VISUAL)
-        if visual is None:
-            raise ValueError("visual retriever is required for image search")
         if max_upload_bytes <= 0 or max_pixels <= 0:
             raise ValueError("image upload limits must be positive")
 
         self.corpus = corpus
-        self.visual = visual
+        self.visual = visual_retriever
         self.encoder = encoder
         self.max_upload_bytes = max_upload_bytes
         self.max_pixels = max_pixels

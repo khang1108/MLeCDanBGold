@@ -15,11 +15,8 @@ from hcmai.api.contracts import (
     FilterRequest,
     FilterResponse,
     ImageSearchResponse,
-    SearchRequest,
-    SearchResponse,
 )
 from hcmai.common.utils.logging import get_logger
-from hcmai.orchestration.errors import InvalidQueryInputError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.orchestration.workflows.image_search import (
     ImageQueryTooLargeError,
@@ -34,51 +31,6 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
     """Create the standalone frame-search HTTP router."""
 
     router = APIRouter()
-
-    @router.post("/api/v1/search", response_model=SearchResponse)
-    async def search_frames(
-        request: SearchRequest,
-        response: Response,
-        user_id: Annotated[str | None, Header(alias="X-VBS-User-ID")] = None,
-    ) -> SearchResponse:
-        """Validate and delegate one standalone KIS-family search request."""
-
-        service = service_container.get("service")
-        if service is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Search service not initialized",
-            )
-        try:
-            result = await run_in_threadpool(service.search_kis, request)
-            await _record_dres_result_log(
-                service_container,
-                response,
-                user_id=user_id,
-                category="TEXT",
-                event_value=request.query.strip(),
-                results=result.results,
-            )
-            return result
-        except InvalidQueryInputError as error:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=str(error),
-            ) from error
-        except KeyError as error:
-            logger.warning("API search request failed error=%s", error)
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(error),
-            ) from error
-        except SearchServiceUnavailableError as error:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=str(error),
-            ) from error
-        except Exception:
-            logger.exception("API search request failed unexpectedly")
-            raise
 
     @router.post(
         "/api/v1/search/image",

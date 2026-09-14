@@ -15,24 +15,25 @@ from hcmai.api.contracts import (
     QueryCandidatesRequest,
     QueryCandidatesResponse,
     ImageSearchResponse,
-    SearchRequest,
-    SearchResponse,
     TRAKERequest,
     TRAKEResponse,
 )
 
+from hcmai.api.contracts.kis import KISRevisionSearchRequest, KISRevisionSearchResponse
 from hcmai.common.config import ApiConfig, SearchConfig
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
+from hcmai.orchestration.errors import RevisionConflictError
 from hcmai.orchestration.health import build_health_report
 from hcmai.orchestration.workflows.image_search import ImageSearchService
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
-from hcmai.kis.models import KISEvent, KISIntent
+from hcmai.kis.models import KISIntent
 
 if TYPE_CHECKING:
+    from hcmai.kis.resolver import KISIntentResolver
     from hcmai.query_preparation.service import QueryPreparationService
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
     from hcmai.retrieval.evidence.literal import LiteralTextIndex
@@ -60,6 +61,7 @@ class SearchService:
         api_config: ApiConfig | None = None,
         literal_text: LiteralTextIndex | None = None,
         visual_retriever: VectorRetriever | None = None,
+        intent_resolver: KISIntentResolver | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
@@ -71,6 +73,7 @@ class SearchService:
         self.literal_text = literal_text
         self.temporal_evidence = temporal_evidence
         self.api_config = api_config or ApiConfig()
+        self.intent_resolver = intent_resolver
 
         self.image_search = (
             ImageSearchService(
@@ -160,32 +163,58 @@ class SearchService:
         if self.llm is not None:
             self.llm.close()
 
-    def search_kis(self, request: SearchRequest) -> SearchResponse:
-        """Execute a validated KIS request through the explicit KIS workflow."""
+    def search_kis_revision(
+        self, request: KISRevisionSearchRequest
+    ) -> KISRevisionSearchResponse:
+        """Execute a revisioned KIS search using semantic intent resolution."""
+        if request.has_revision_conflict:
+            raise RevisionConflictError(
+                f"Expected revision {request.expected_revision} does not match base {request.previous_revision}"
+            )
 
         self._ensure_search_ready()
-        intent = KISIntent(
-            revision=1,
-            inputs=[request.query],
-            language="en",
-            query_text=request.query,
-            entities=[],
-            events=[KISEvent(id="E1", text=request.query, bindings=[])],
-            temporal_edges=[],
-        )
-        retrieval = tuple(request.retrieval_events) if request.retrieval_events is not None else (request.query,)
+
+        if self.intent_resolver is None:
+            raise SearchServiceUnavailableError("KIS intent resolver is unavailable")
+
+        clue_texts = [item.text for item in request.inputs]
+        intent_started = perf_counter()
+        intent = self.intent_resolver.resolve(clue_texts)
+        query_ms = (perf_counter() - intent_started) * 1_000
+
+        canonical_events = tuple(event.text for event in intent.events)
+
+        dense_events: list[str] | None = None
+        if request.use_dense:
+            if intent.language == "en":
+                dense_events = list(canonical_events)
+            else:
+                if self.query_preparation is None:
+                    raise SearchServiceUnavailableError("Query preparation capability is unavailable")
+                dense_events = list(
+                    self.query_preparation.translate_literal(
+                        canonical_events,
+                        language=intent.language,
+                    )
+                )
+
+        bm25_events = list(canonical_events) if request.use_bm25 else None
+
+        retrieval_bundle = tuple(dense_events) if dense_events is not None else canonical_events
+
         execution = self.kis.execute(
             intent=intent,
-            retrieval_events=retrieval,
+            retrieval_events=retrieval_bundle,
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
             top_k=request.top_k,
+            query_ms=query_ms,
         )
-        return SearchResponse(
-            query=request.query,
-            events=[request.query],
-            dense_events=list(retrieval) if request.use_dense else None,
-            bm25_caption_events=[request.query] if request.use_bm25 else None,
+
+        return KISRevisionSearchResponse(
+            intent=intent,
+            dense_events=dense_events,
+            bm25_events=bm25_events,
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
             results=execution.results,
