@@ -4,6 +4,10 @@ from unittest.mock import Mock
 
 import pytest
 
+from hcmai.common.config import EventTranslationConfig
+from hcmai.inference.config import ModelEndpointConfig
+from hcmai.inference.errors import InferenceAuthError, InferenceUnavailableError
+from hcmai.inference.llm import LLMClient
 from hcmai.retrieval.translation import EventTranslationError, EventTranslator
 
 
@@ -52,6 +56,28 @@ def test_translation_preserves_required_uppercase_tokens() -> None:
     assert result == ("A woman holds OBJ_42",)
 
 
+def test_translation_rejects_missing_required_uppercase_token() -> None:
+    """A source identifier cannot be silently omitted from its translation."""
+    llm = Mock(model="test-model")
+    llm.generate_structured.return_value = Mock(events=["A woman holds a cup"])
+
+    with pytest.raises(EventTranslationError, match="omitted required token 'OBJ_42'"):
+        _translator(llm).translate(("Người phụ nữ cầm OBJ_42",), language="vi")
+
+
+def test_translation_rejects_token_moved_to_a_different_event() -> None:
+    """An identifier in another output event cannot satisfy positional fidelity."""
+    llm = Mock(model="test-model")
+    llm.generate_structured.return_value = Mock(
+        events=["A woman holds OBJ_43", "She puts down OBJ_42"]
+    )
+
+    with pytest.raises(EventTranslationError, match="omitted required token 'OBJ_42'"):
+        _translator(llm).translate(
+            ("Người phụ nữ cầm OBJ_42", "Cô ấy đặt nó xuống"), language="vi"
+        )
+
+
 def test_cache_identity_changes_when_llm_model_changes() -> None:
     """Translations from differently named LLMs cannot share a cache entry."""
     first_llm = Mock(model="model-one")
@@ -90,3 +116,37 @@ def test_invalid_translation_raises_event_translation_error() -> None:
 
     with pytest.raises(EventTranslationError, match="changed event count"):
         _translator(llm).translate(("Một phụ nữ", "Cô ấy đi vào"), language="vi")
+
+
+def test_malformed_real_client_schema_raises_event_translation_error() -> None:
+    """Malformed structured LLM output crosses the translation error boundary."""
+    transport = Mock()
+    transport.post_json.return_value = {
+        "choices": [{"message": {"content": '{"unexpected": "schema"}'}}]
+    }
+    llm = LLMClient(
+        ModelEndpointConfig(base_url="https://api.example/v1", model="test-model"),
+        transport=transport,
+    )
+    translator = EventTranslator(llm, EventTranslationConfig(cache_enabled=False))
+
+    with pytest.raises(EventTranslationError, match="structured translation response"):
+        translator.translate(("Một phụ nữ đi vào",), language="vi")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [InferenceAuthError("denied"), InferenceUnavailableError("offline")],
+)
+def test_provider_auth_and_unavailability_errors_are_not_wrapped(error: Exception) -> None:
+    """Provider authentication and reachability retain their inference error class."""
+    transport = Mock()
+    transport.post_json.side_effect = error
+    llm = LLMClient(
+        ModelEndpointConfig(base_url="https://api.example/v1", model="test-model"),
+        transport=transport,
+    )
+    translator = EventTranslator(llm, EventTranslationConfig(cache_enabled=False))
+
+    with pytest.raises(type(error)):
+        translator.translate(("Một phụ nữ đi vào",), language="vi")

@@ -10,6 +10,7 @@ import re
 from collections.abc import Sequence
 
 from hcmai.common.config import EventTranslationConfig
+from hcmai.inference.errors import InferenceResponseError
 from hcmai.inference.llm import LLMClient
 from hcmai.retrieval.translation.cache import EventTranslationCache, cache_key
 from hcmai.retrieval.translation.models import LiteralTranslation
@@ -61,11 +62,16 @@ class EventTranslator:
         if cached is not None:
             return cached
 
-        response = self._llm.generate_structured(
-            translation_messages(normalized),
-            LiteralTranslation,
-            temperature=0.0,
-        )
+        try:
+            response = self._llm.generate_structured(
+                translation_messages(normalized),
+                LiteralTranslation,
+                temperature=0.0,
+            )
+        except InferenceResponseError as error:
+            raise EventTranslationError(
+                "structured translation response is invalid"
+            ) from error
         result = _validate_translation(normalized, response.events)
 
         if self._config.cache_enabled:
