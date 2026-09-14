@@ -88,7 +88,3 @@ class LLMClient:
             raise ValueError(f"Failed to parse LLM response as JSON: {content}") from exc
 
         return response_model.model_validate(parsed)
- 
- 
-# Backward-compatible alias
-OpenAICompatibleLLMClient = LLMClient

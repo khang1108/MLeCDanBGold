@@ -11,13 +11,9 @@ from hcmai.inference.config import (
     load_embedding_endpoint,
     load_llm_endpoint,
 )
-from hcmai.inference.embeddings import (
-    EmbeddingClient,
-    OpenAICompatibleEmbeddingClient,
-    TextEmbeddingBatch,
-)
+from hcmai.inference.embeddings import EmbeddingClient, TextEmbeddingBatch
 from hcmai.inference.http import HttpTransport
-from hcmai.inference.llm import LLMClient, OpenAICompatibleLLMClient
+from hcmai.inference.llm import LLMClient
 
 
 class Sample(BaseModel):
@@ -84,9 +80,6 @@ class InferenceConfigTest(unittest.TestCase):
 
 
 class LLMClientTest(unittest.TestCase):
-    def test_alias_is_identical(self) -> None:
-        self.assertIs(OpenAICompatibleLLMClient, LLMClient)
-
     def test_structured_generation_validates_response_model(self) -> None:
         transport = Mock()
         transport.post_json.return_value = {
@@ -162,9 +155,6 @@ class LLMClientTest(unittest.TestCase):
 
 
 class EmbeddingClientTest(unittest.TestCase):
-    def test_alias_is_identical(self) -> None:
-        self.assertIs(OpenAICompatibleEmbeddingClient, EmbeddingClient)
-
     def test_embedding_client_preserves_input_order(self) -> None:
         transport = Mock()
         transport.post_json.return_value = {

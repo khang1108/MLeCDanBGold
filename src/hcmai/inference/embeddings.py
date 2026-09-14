@@ -81,7 +81,3 @@ class EmbeddingClient:
             model=model_name,
             vectors=vectors,
         )
-
-
-# Backward-compatible alias
-OpenAICompatibleEmbeddingClient = EmbeddingClient

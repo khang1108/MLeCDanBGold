@@ -43,7 +43,7 @@ HCMAI_EMBEDDING_MODEL=google/siglip2-base-patch16-224
 HCMAI_EMBEDDING_TIMEOUT_SECONDS=30
 ```
 
-`OpenAICompatibleLLMClient` is the default implementation. Provider-specific adapters may be added only when the provider cannot satisfy the capability contract.
+`LLMClient` is the default implementation. Provider-specific adapters may be added only when the provider cannot satisfy the capability contract.
 
 The system prompt is *not* stored in these client configs. `KISIntentResolver` owns its prompt/profile; Query Preparation owns a different prompt/profile.
 

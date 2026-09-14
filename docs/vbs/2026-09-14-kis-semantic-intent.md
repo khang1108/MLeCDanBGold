@@ -96,7 +96,7 @@ Remove obsolete methods from, but do not necessarily delete wholesale:
 - Test: `tests/inference/test_clients.py`
 
 **Interfaces:**
-- Produces: `ModelEndpointConfig`, `LLMClient.generate_structured(...)`, `EmbeddingClient.embed_text(...)`, `OpenAICompatibleLLMClient`, `OpenAICompatibleEmbeddingClient`.
+- Produces: `ModelEndpointConfig`, `LLMClient.generate_structured(...)`, `EmbeddingClient.embed_text(...)`.
 - Later tasks depend only on these capability interfaces.
 
 **Legacy impact:**
@@ -191,8 +191,8 @@ from pydantic import BaseModel
 from unittest.mock import Mock
 
 from hcmai.inference.config import ModelEndpointConfig
-from hcmai.inference.llm import OpenAICompatibleLLMClient
-from hcmai.inference.embeddings import OpenAICompatibleEmbeddingClient
+from hcmai.inference.llm import LLMClient
+from hcmai.inference.embeddings import EmbeddingClient
 
 class Sample(BaseModel):
     value: str
@@ -203,7 +203,7 @@ def test_structured_generation_validates_response_model():
     transport.post_json.return_value = {
         "choices": [{"message": {"content": '{"value":"ok"}'}}]
     }
-    client = OpenAICompatibleLLMClient(
+    client = LLMClient(
         ModelEndpointConfig("https://x/v1", "k", "model", 10),
         transport=transport,
     )
@@ -221,7 +221,7 @@ def test_embedding_client_preserves_input_order():
         ],
         "model": "embed",
     }
-    client = OpenAICompatibleEmbeddingClient(
+    client = EmbeddingClient(
         ModelEndpointConfig("https://x/v1", "k", "embed", 10),
         transport=transport,
     )
@@ -230,7 +230,7 @@ def test_embedding_client_preserves_input_order():
 
 - [x] **Step 5: Implement shared transport and capability clients**
 
-`LLMClient` must be a protocol; `OpenAICompatibleLLMClient` owns OpenAI-wire-format parsing only. `EmbeddingClient` returns a typed internal batch instead of leaking provider JSON.
+`LLMClient` provides structured generation. `EmbeddingClient` returns a typed internal batch instead of leaking provider JSON.
 
 ```python
 # src/hcmai/inference/llm.py
@@ -569,7 +569,7 @@ Do not move model/index validation into the provider client. Provider client val
 
 - [ ] **Step 3: Wire `_query_encoder` from `load_embedding_endpoint()`**
 
-Local encoders remain available when configured. Remote text encoding uses `OpenAICompatibleEmbeddingClient` built from `.env` instead of reusing the all-purpose `LLMService` object.
+Local encoders remain available when configured. Remote text encoding uses `EmbeddingClient` built from `.env` instead of reusing the all-purpose `LLMService` object.
 
 - [ ] **Step 4: Remove overlapping monolithic methods after reference audit**
 
