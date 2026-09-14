@@ -141,7 +141,7 @@
 - Do not delete deployed `/query-preparation/*` routes until this generic route passes the contract test and the deployed checkout is searched for their actual source.
 - Rename deployment capability flag from `HCMAI_ENABLE_QUERY_PREPARATION` to `HCMAI_ENABLE_TEXT_GENERATION` in this repository.
 
-- [ ] **Step 1: Write the failing generation-router tests**
+- [x] **Step 1: Write the failing generation-router tests**
 
 Create `tests/llm/test_generation_router.py` with an injectable fake runtime so the route can be tested without loading Qwen:
 
@@ -228,7 +228,7 @@ def test_chat_completions_rejects_unready_text_model():
     assert response.status_code == 503
 ```
 
-- [ ] **Step 2: Run the router tests and verify they fail**
+- [x] **Step 2: Run the router tests and verify they fail**
 
 Run:
 
@@ -238,7 +238,7 @@ PYTHONPATH=src:. python -m pytest tests/llm/test_generation_router.py -v
 
 Expected: FAIL because `/v1/chat/completions` and its contracts do not exist.
 
-- [ ] **Step 3: Add typed hosted text-generation configuration**
+- [x] **Step 3: Add typed hosted text-generation configuration**
 
 In `llm/config.py`, add:
 
@@ -261,7 +261,7 @@ class LLMServiceConfig(BaseModel):
 
 Add the matching `text_generation:` section to `llm/config.yaml`.
 
-- [ ] **Step 4: Implement the process-local text generator**
+- [x] **Step 4: Implement the process-local text generator**
 
 Create `llm/local/text_generation.py` with one lazy-loaded owner. It must not know KIS or translation prompts:
 
@@ -339,7 +339,7 @@ class TextGenerationAdapter:
 
 Do not parse domain schemas in this adapter; the HCMAI backend remains the domain validator.
 
-- [ ] **Step 5: Wire `LocalAdapter` and readiness to the text generator**
+- [x] **Step 5: Wire `LocalAdapter` and readiness to the text generator**
 
 In `llm/local/adapter.py`:
 
@@ -370,7 +370,7 @@ In `from_environment()`, read `HCMAI_ENABLE_TEXT_GENERATION`.
 
 In `llm/local/readiness.py`, add model status `text_generation`, include it in `ready`, and set `structured_parsing=text_generation_loaded`.
 
-- [ ] **Step 6: Add generic chat-completion contracts and router**
+- [x] **Step 6: Add generic chat-completion contracts and router**
 
 In `llm/contracts.py`, add strict models for the supported OpenAI subset:
 
@@ -402,7 +402,7 @@ Create `llm/server/routers/generation.py` and return an OpenAI-compatible respon
 
 Register the router in `llm/server/routers/__init__.py`.
 
-- [ ] **Step 7: Delegate generation through `LLMService`**
+- [x] **Step 7: Delegate generation through `LLMService`**
 
 In `llm/pipeline.py`:
 
@@ -419,7 +419,7 @@ def generate_chat(self, messages, *, response_schema, temperature, max_tokens):
     )
 ```
 
-- [ ] **Step 8: Update deployment flags/docs and reconcile deployed query-preparation routes**
+- [x] **Step 8: Update deployment flags/docs and reconcile deployed query-preparation routes**
 
 Replace `HCMAI_ENABLE_QUERY_PREPARATION` / `--query-preparation` in the repository scripts with `HCMAI_ENABLE_TEXT_GENERATION` / `--text-generation`. Update `llm/README.md` to document `/v1/chat/completions`.
 
@@ -433,7 +433,7 @@ If the deployed checkout is not accessible during this task, record this as a de
 
 Do not delete the deployed task-specific router yet; record its exact source path in the implementation notes for Task 4. If the deployed checkout contains source not present in this repository, port the generic generation changes into that checkout before route removal.
 
-- [ ] **Step 9: Run generation tests**
+- [x] **Step 9: Run generation tests**
 
 Run:
 
@@ -443,7 +443,7 @@ PYTHONPATH=src:. python -m pytest tests/llm/test_generation_router.py -v
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add llm tests/llm/test_generation_router.py
@@ -470,7 +470,7 @@ git commit -m "feat: expose generic text generation API"
 - Replaces raw `httpx`/`ValueError` leakage from capability clients.
 - Cache identity in later tasks must use `client.model`, never the old query-preparation model config.
 
-- [ ] **Step 1: Write failing client contract tests**
+- [x] **Step 1: Write failing client contract tests**
 
 Create `tests/hcmai/inference/test_clients.py` using a fake `HttpTransport` that records URL/payload and raises typed transport errors. Cover:
 
@@ -489,7 +489,7 @@ assert transport.calls[0].url == "https://api.example/v1/chat/completions"
 assert client.model == "Qwen/Qwen3-4B"
 ```
 
-- [ ] **Step 2: Run and verify failure**
+- [x] **Step 2: Run and verify failure**
 
 ```bash
 PYTHONPATH=src:. python -m pytest tests/hcmai/inference/test_clients.py -v
@@ -497,7 +497,7 @@ PYTHONPATH=src:. python -m pytest tests/hcmai/inference/test_clients.py -v
 
 Expected: FAIL because typed errors/model properties are absent.
 
-- [ ] **Step 3: Add the small inference error taxonomy**
+- [x] **Step 3: Add the small inference error taxonomy**
 
 Create `src/hcmai/inference/errors.py`:
 
@@ -518,7 +518,7 @@ class InferenceResponseError(InferenceError):
     pass
 ```
 
-- [ ] **Step 4: Make `HttpTransport` translate HTTP/network errors once**
+- [x] **Step 4: Make `HttpTransport` translate HTTP/network errors once**
 
 In `src/hcmai/inference/http.py`, catch:
 
@@ -528,7 +528,7 @@ In `src/hcmai/inference/http.py`, catch:
 
 Keep the transport unaware of KIS/translation semantics.
 
-- [ ] **Step 5: Add model identity and wrap malformed provider output**
+- [x] **Step 5: Add model identity and wrap malformed provider output**
 
 In both clients add:
 
@@ -542,7 +542,7 @@ def model(self) -> str:
 
 `EmbeddingClient.embed_text()` must convert malformed count/index/vector responses into `InferenceResponseError`.
 
-- [ ] **Step 6: Export errors and run tests**
+- [x] **Step 6: Export errors and run tests**
 
 Update `src/hcmai/inference/__init__.py`, then run:
 
@@ -552,7 +552,7 @@ PYTHONPATH=src:. python -m pytest tests/hcmai/inference/test_clients.py -v
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/hcmai/inference tests/hcmai/inference/test_clients.py
@@ -578,7 +578,7 @@ git commit -m "refactor: normalize inference client errors"
 - Replaces direct `LLMClient.generate_structured(..., KISIntent)` in `resolver.py`.
 - Removes model ownership of revision, raw clues, canonical IDs, and temporal edges.
 
-- [ ] **Step 1: Write resolver tests for semantic-only model output**
+- [x] **Step 1: Write resolver tests for semantic-only model output**
 
 Create `tests/hcmai/kis/test_resolver.py` with a fake LLM that returns `KISResolution`. Include tests for:
 
@@ -609,7 +609,7 @@ Also test:
 - blank client clue -> `ValueError` before calling the model;
 - provider unavailable propagates as inference-unavailable, not 422 semantics.
 
-- [ ] **Step 2: Run and verify failure**
+- [x] **Step 2: Run and verify failure**
 
 ```bash
 PYTHONPATH=src:. python -m pytest tests/hcmai/kis/test_resolver.py -v
@@ -617,7 +617,7 @@ PYTHONPATH=src:. python -m pytest tests/hcmai/kis/test_resolver.py -v
 
 Expected: FAIL because `KISResolution` and server canonicalization do not exist.
 
-- [ ] **Step 3: Add semantic-only resolution models**
+- [x] **Step 3: Add semantic-only resolution models**
 
 In `src/hcmai/kis/models.py`, add:
 
@@ -644,7 +644,7 @@ class KISResolution(BaseModel):
 
 Strengthen `KISIntent.validate_graph()` so a multi-event intent requires exactly the adjacent chain derived by the server, not an arbitrary partial edge set.
 
-- [ ] **Step 4: Change the prompt to request only semantic content**
+- [x] **Step 4: Change the prompt to request only semantic content**
 
 In `src/hcmai/kis/prompts.py`, remove instructions asking for `revision`, `inputs`, `E*`/`X*` IDs, or temporal edges. Explicitly require:
 
@@ -658,7 +658,7 @@ In `src/hcmai/kis/prompts.py`, remove instructions asking for `revision`, `input
 - Do not emit timestamps, candidate IDs, retrieval translations, event IDs, entity IDs, or edges.
 ```
 
-- [ ] **Step 5: Canonicalize inside `KISIntentResolver`**
+- [x] **Step 5: Canonicalize inside `KISIntentResolver`**
 
 Add `KISResolutionError(RuntimeError)` and implement:
 
@@ -695,7 +695,7 @@ Construct `KISIntent` with server-owned `revision=len(normalized)` and exact nor
 
 Wrap valid provider output that violates the semantic contract in `KISResolutionError`; do not convert provider-unavailable/auth failures to that domain error.
 
-- [ ] **Step 6: Run resolver tests**
+- [x] **Step 6: Run resolver tests**
 
 ```bash
 PYTHONPATH=src:. python -m pytest tests/hcmai/kis/test_resolver.py -v
@@ -703,7 +703,7 @@ PYTHONPATH=src:. python -m pytest tests/hcmai/kis/test_resolver.py -v
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/hcmai/kis tests/hcmai/kis/test_resolver.py
