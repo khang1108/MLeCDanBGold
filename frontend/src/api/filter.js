@@ -70,6 +70,7 @@ export const filterFrames = async ({
   videoId = null,
   pageId = 1,
   signal,
+  userId,
 } = {}) => {
   if (!Number.isInteger(pageId) || pageId < 1) {
     throw new Error('Filter request page_id must be a positive integer');
@@ -79,6 +80,7 @@ export const filterFrames = async ({
     method: 'POST',
     body: buildFilterRequest(filters, { folderId, videoId, pageId }),
     signal,
+    headers: userId?.trim() ? { 'X-VBS-User-ID': userId.trim() } : {},
   });
 
   if (payload?.frames_per_pages !== FRAMES_PER_PAGE) {

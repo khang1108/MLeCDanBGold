@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 FRAME_ENRICHMENT_PARQUET = "frame_enrichment.parquet"
 
 import hashlib

@@ -10,7 +10,7 @@ const latency = {
   total_ms: 7,
 };
 
-test('renders KIS with the legacy FramesBox and FrameCard UI', () => {
+test('replays KIS viewed state without deriving submission state from history', () => {
   render(
     <ReplayResults
       resultSnapshot={{
@@ -35,7 +35,7 @@ test('renders KIS with the legacy FramesBox and FrameCard UI', () => {
           },
         }],
       }}
-      frameActivity={{ viewed_frame_ids: ['f1'], submitted_frame_ids: ['f1'] }}
+      frameActivity={{ viewed_frame_ids: ['f1'] }}
     />
   );
 
@@ -45,7 +45,8 @@ test('renders KIS with the legacy FramesBox and FrameCard UI', () => {
   expect(screen.getAllByText('A person enters')).toHaveLength(2);
   expect(screen.getByText('Alignment score: 0.900')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Alignment' })).toBeTruthy();
-  expect(screen.getByAltText('Frame f1').closest('.frame-card').className).toContain('submitted');
+  expect(screen.getByAltText('Frame f1').closest('.frame-card').className).toContain('viewed');
+  expect(screen.getByAltText('Frame f1').closest('.frame-card').className).not.toContain('submitted');
   expect(screen.queryByText('Replay')).toBeNull();
 });
 
@@ -86,13 +87,10 @@ test('opens ImageModal from stored search metadata without a frame-detail reques
       video_id: 'V01',
       metadata: expect.objectContaining({ ocr: 'visible text' }),
     }),
-    'kis',
   );
 });
 
-test('renders TRAKE with the legacy ordered event rows and submits the selected path', () => {
-  const onPathSubmit = jest.fn();
-  const onFrameClick = jest.fn();
+test('shows the unsupported-history message for a saved legacy paths snapshot', () => {
   render(
     <ReplayResults
       resultSnapshot={{
@@ -107,29 +105,9 @@ test('renders TRAKE with the legacy ordered event rows and submits the selected 
           timestamps_ms: [1000, 2000],
         }],
       }}
-      frameActivity={{ viewed_frame_ids: ['f2'], submitted_frame_ids: ['f1'] }}
-      onPathSubmit={onPathSubmit}
-      onFrameClick={onFrameClick}
     />
   );
 
-  expect(screen.getByRole('button', { name: 'View event E1: person enters' })).toBeTruthy();
-  expect(screen.getByText('person exits')).toBeTruthy();
-  expect(screen.getByText('1000 ms')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Submit this path' })).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'View event E1: person enters' }).className).toContain('submitted');
-  expect(screen.getByRole('button', { name: 'View event E2: person exits' }).className).toContain('viewed');
-
-  fireEvent.click(screen.getByRole('button', { name: 'Submit this path' }));
-  expect(onPathSubmit).toHaveBeenCalledWith(expect.objectContaining({
-    video_id: 'V01',
-    frame_ids: ['f1', 'f2'],
-    frame_idxs: [10, 20],
-  }));
-
-  fireEvent.click(screen.getByRole('button', { name: 'View event E1: person enters' }));
-  expect(onFrameClick).toHaveBeenCalledWith(
-    expect.objectContaining({ frame_id: 'f1', frame_idx: 10 }),
-    'none',
-  );
+  expect(screen.getByText('This history snapshot cannot be replayed.')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /event/i })).toBeNull();
 });

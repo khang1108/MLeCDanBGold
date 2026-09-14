@@ -1,262 +1,92 @@
-"""HTTP history routes and WebSocket submission-file synchronization."""
+"""Query replay history and viewed-frame routes.
+
+This router owns lossless KIS/legacy replay snapshots and viewing activity.
+It intentionally has no submission-file or answer-workspace endpoints.
+"""
 
 from __future__ import annotations
 
-import json
-import os
-import re
-import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
-from fastapi.concurrency import run_in_threadpool
-from pydantic import ValidationError
+from fastapi import APIRouter, HTTPException, Query, status
+from starlette.concurrency import run_in_threadpool
 
-from hcmai.api.contracts import (
+from hcmai.api.contracts.history import (
     QueryHistoryCreate,
     QueryHistoryList,
     QueryHistoryRecord,
-    QueryHistorySubmissionUpdate,
     QueryHistoryViewedFrameUpdate,
-    SubmissionFileClear,
-    SubmissionFileCreate,
-    SubmissionFileDelete,
-    SubmissionFileList,
-    SubmissionFileUpdate,
-    SubmissionFileValidate,
 )
-from hcmai.api.history import RevisionConflict, WorkspaceStore
+from hcmai.api.history import WorkspaceStore
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 
 
-COMMANDS = {
-    "submission_file.create": SubmissionFileCreate,
-    "submission_file.update": SubmissionFileUpdate,
-    "submission_file.validate": SubmissionFileValidate,
-    "submission_file.delete": SubmissionFileDelete,
-    "submission_file.clear": SubmissionFileClear,
-}
-
-
-class WorkspaceConnections:
-    """Broadcast committed file changes to connected browser clients."""
-
-    def __init__(self) -> None:
-        self.clients: set[WebSocket] = set()
-
-
-    async def connect(self, websocket: WebSocket) -> None:
-        """Accept and retain one WebSocket connection."""
-
-        await websocket.accept()
-        self.clients.add(websocket)
-
-
-    def disconnect(self, websocket: WebSocket) -> None:
-        """Forget one disconnected client."""
-
-        self.clients.discard(websocket)
-
-
-    async def broadcast(self, event: dict[str, object]) -> None:
-        """Send one committed mutation to every connected client."""
-
-        failed = []
-        for client in list(self.clients):
-            try:
-                await client.send_json(event)
-            except RuntimeError:
-                failed.append(client)
-        for client in failed:
-            self.disconnect(client)
-
-
-def _workspace_store(container: dict[str, Any]) -> WorkspaceStore:
-    """Return the configured Workspace store or an HTTP 503."""
-
-    store = container.get("workspace_store")
-    if store is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Workspace storage is not configured",
-        )
-    return store
-
-
-def _frame(container: dict[str, Any], frame_id: str) -> Any:
-    """Resolve a canonical frame without invoking retrieval."""
-
-    service = container.get("service")
-    if service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Search service not initialized",
-        )
-    try:
-        return service.get_frame(frame_id)
-    except SearchServiceUnavailableError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    except KeyError as error:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Frame {frame_id!r} not found",
-        ) from error
-
-
-def _validate_snapshot(container: dict[str, Any], data: QueryHistoryCreate) -> None:
-    """Verify every replay identity against the canonical frame catalog."""
-
-    snapshot = data.result_snapshot
-    keys = [key for key in ("results", "paths") if key in snapshot]
-    items = snapshot.get(keys[0]) if len(keys) == 1 else None
-    if not isinstance(items, list):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Result snapshot must contain a results or paths array",
-        )
-    key = keys[0]
-
-    for item in items:
-        if not isinstance(item, dict):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Snapshot items must be objects",
-            )
-        raw_frame_ids = item.get("frame_ids")
-        if not isinstance(raw_frame_ids, list) or not all(
-            isinstance(frame_id, str) and frame_id.strip()
-            for frame_id in raw_frame_ids
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Snapshot frame_ids must be an array of strings",
-            )
-        frame_ids: list[str] = [str(fid) for fid in raw_frame_ids]
-
-        if key == "results":
-            representative = item.get("frame_id")
-            if not isinstance(representative, str) or not representative.strip():
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="KIS result must contain frame_id",
-                )
-            frame_ids = [representative, *frame_ids]
-
-        for frame_id in dict.fromkeys(frame_ids):
-            frame = _frame(container, frame_id)
-            if key == "paths" and frame.video_id != item.get("video_id"):
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="TRAKE path contains a frame from another video",
-                )
-
-
-def _allowed_origins() -> set[str]:
-    """Read the same browser-origin allowlist used by the HTTP application."""
-
-    return {
-        value.strip()
-        for value in os.getenv(
-            "HCMAI_CORS_ORIGINS",
-            "http://localhost:3000,http://127.0.0.1:3000,https://hcmai.iamphuckhang.dev,https://hcmai.iamphuckhnag.dev",
-        ).split(",")
-        if value.strip()
-    }
-
-
-def _is_origin_allowed(origin: str | None) -> bool:
-    """Check if the incoming browser origin is permitted for WebSocket connections."""
-    if not origin:
-        return True
-    origins = _allowed_origins()
-    if "*" in origins or origin in origins:
-        return True
-    regex_pattern = os.getenv(
-        "HCMAI_CORS_ORIGIN_REGEX",
-        r"^https?://(localhost|127\.0\.0\.1|(.+\.)?iamphuckhang\.dev|(.+\.)?iamphuckhnag\.dev)(:\d+)?$",
-    )
-    if regex_pattern and re.match(regex_pattern, origin):
-        return True
-    return False
-
-
-async def _run_file_command(
-    store: WorkspaceStore,
-    payload: dict[str, Any],
-) -> dict[str, object]:
-    """Validate and commit one submission-file WebSocket command."""
-
-    command_type = payload.get("type")
-    model = COMMANDS.get(str(command_type)) if command_type is not None else None
-    if model is None:
-        raise ValueError("Unknown submission file command")
-    command = model.model_validate(payload)
-
-    if isinstance(command, SubmissionFileCreate):
-        file = await run_in_threadpool(
-            store.create_submission_file, command.name, command.content
-        )
-        return {"type": "submission_file.created", "file": file.model_dump()}
-    if isinstance(command, SubmissionFileUpdate):
-        file = await run_in_threadpool(
-            store.update_submission_file,
-            command.name,
-            command.content,
-            command.expected_revision,
-        )
-        return {"type": "submission_file.updated", "file": file.model_dump()}
-    if isinstance(command, SubmissionFileValidate):
-        file = await run_in_threadpool(
-            store.validate_submission_file,
-            command.name,
-            command.is_validated,
-            command.expected_revision,
-        )
-        return {"type": "submission_file.updated", "file": file.model_dump()}
-
-    if isinstance(command, SubmissionFileClear):
-        deleted_names = await run_in_threadpool(store.clear_submission_files)
-        return {"type": "submission_file.cleared", "deleted_names": deleted_names}
-
-    await run_in_threadpool(
-        store.delete_submission_file, command.name, command.expected_revision
-    )
-    return {"type": "submission_file.deleted", "name": command.name}
-
-
-def create_workspace_router(service_container: dict[str, Any]) -> APIRouter:
-    """Create Workspace history, hydration, and synchronization endpoints."""
+def create_history_router(service_container: dict[str, Any]) -> APIRouter:
+    """Expose existing query-history persistence without submission coupling."""
 
     router = APIRouter()
-    connections = WorkspaceConnections()
+
+    def _store() -> WorkspaceStore:
+        store = service_container.get("workspace_store")
+        if store is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Query history store is not configured",
+            )
+        return store
 
     @router.post(
         "/api/v1/query-history",
         response_model=QueryHistoryRecord,
         status_code=status.HTTP_201_CREATED,
     )
-    async def create_history(data: QueryHistoryCreate) -> QueryHistoryRecord:
-        """Persist one successful KIS or TRAKE result snapshot."""
+    async def create_query_history(data: QueryHistoryCreate) -> QueryHistoryRecord:
+        """Persist a successful search snapshot without rewriting its evidence."""
 
-        _validate_snapshot(service_container, data)
-        try:
-            return await run_in_threadpool(
-                _workspace_store(service_container).create_history, data
-            )
-        except sqlite3.IntegrityError as error:
+        service = service_container.get("service")
+        if service is None:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Query history ID already exists",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Search service not initialized",
+            )
+        try:
+            _validate_snapshot_shape(data.result_snapshot)
+            _validate_snapshot_frames(service, data.result_snapshot)
+            return await run_in_threadpool(_store().create_history, data)
+        except HTTPException:
+            raise
+        except SearchServiceUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(error),
             ) from error
+        except KeyError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(error),
+            ) from error
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
+        except Exception as error:
+            if "UNIQUE constraint failed" in str(error):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Query history already exists",
+                ) from error
+            raise
 
     @router.get("/api/v1/query-history", response_model=QueryHistoryList)
-    async def get_recent_history(user_id: str) -> QueryHistoryList:
-        """Return one user's newest twenty replay snapshots."""
+    async def get_query_history(
+        user_id: str = Query(min_length=1),
+    ) -> QueryHistoryList:
+        """Return the newest stored searches for one participant."""
 
-        items = await run_in_threadpool(
-            _workspace_store(service_container).get_recent_history, user_id
+        return QueryHistoryList(
+            items=await run_in_threadpool(_store().get_recent_history, user_id)
         )
-        return QueryHistoryList(items=items)
 
     @router.patch(
         "/api/v1/query-history/{query_id}/viewed-frame",
@@ -266,111 +96,66 @@ def create_workspace_router(service_container: dict[str, Any]) -> APIRouter:
         query_id: str,
         data: QueryHistoryViewedFrameUpdate,
     ) -> QueryHistoryRecord:
-        """Record one canonical frame opened from this result."""
+        """Record a canonical frame opened from one replay snapshot."""
 
-        _frame(service_container, data.frame_id)
         try:
+            service = service_container.get("service")
+            if service is None:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Search service not initialized",
+                )
+            service.get_frame(data.frame_id)
             return await run_in_threadpool(
-                _workspace_store(service_container).update_viewed_frame,
+                _store().update_viewed_frame,
                 query_id,
                 data.frame_id,
             )
         except KeyError as error:
             raise HTTPException(
-                status_code=404,
-                detail="Query history not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(error),
             ) from error
-
-    @router.patch(
-        "/api/v1/query-history/{query_id}/submission",
-        response_model=QueryHistoryRecord,
-    )
-    async def update_submission(
-        query_id: str,
-        data: QueryHistorySubmissionUpdate,
-    ) -> QueryHistoryRecord:
-        """Link a query to submission data already committed to a file."""
-
-        for frame_id in dict.fromkeys(data.frame_ids):
-            _frame(service_container, frame_id)
-        try:
-            return await run_in_threadpool(
-                _workspace_store(service_container).update_submission,
-                query_id,
-                data.submission_file_name,
-                data.submission_line,
-                data.frame_ids,
-            )
-        except KeyError as error:
-            raise HTTPException(status_code=404, detail=str(error)) from error
-        except ValueError as error:
-            raise HTTPException(status_code=409, detail=str(error)) from error
-
-    @router.get("/api/v1/submission-files", response_model=SubmissionFileList)
-    async def list_submission_files() -> SubmissionFileList:
-        """Hydrate every shared submission file from SQLite."""
-
-        files = await run_in_threadpool(
-            _workspace_store(service_container).list_submission_files
-        )
-        return SubmissionFileList(files=files)
-
-    @router.delete("/api/v1/submission-files")
-    async def clear_submission_files() -> dict[str, object]:
-        """Delete all shared submission files and broadcast to connected clients."""
-
-        deleted_names = await run_in_threadpool(
-            _workspace_store(service_container).clear_submission_files
-        )
-        event: dict[str, object] = {
-            "type": "submission_file.cleared",
-            "deleted_names": deleted_names,
-        }
-        await connections.broadcast(event)
-        return event
-
-    @router.websocket("/api/v1/workspace/ws")
-    async def workspace_socket(websocket: WebSocket) -> None:
-        """Commit file commands and broadcast only committed changes."""
-
-        store = service_container.get("workspace_store")
-        origin = websocket.headers.get("origin")
-        if store is None:
-            await websocket.close(code=1013)
-            return
-        if origin and not _is_origin_allowed(origin):
-            await websocket.close(code=1008)
-            return
-
-        await connections.connect(websocket)
-        try:
-            while True:
-                try:
-                    payload = await websocket.receive_json()
-                    if not isinstance(payload, dict):
-                        raise ValueError("WebSocket command must be a JSON object")
-                    event = await _run_file_command(store, payload)
-                    await connections.broadcast(event)
-                except RevisionConflict as error:
-                    await websocket.send_json({
-                        "type": "submission_file.conflict",
-                        "file": error.file.model_dump(),
-                    })
-                except (
-                    KeyError,
-                    ValueError,
-                    ValidationError,
-                    json.JSONDecodeError,
-                    sqlite3.IntegrityError,
-                ) as error:
-                    await websocket.send_json({
-                        "type": "submission_file.error",
-                        "message": str(error),
-                    })
-        except WebSocketDisconnect:
-            connections.disconnect(websocket)
 
     return router
 
 
-__all__ = ["create_workspace_router"]
+def _validate_snapshot_frames(service: Any, snapshot: dict[str, Any]) -> None:
+    """Check canonical frame references when a replay snapshot contains them."""
+
+    results = snapshot.get("results")
+    if isinstance(results, list):
+        for result in results:
+            if not isinstance(result, dict) or not isinstance(result.get("frame_id"), str):
+                raise ValueError("KIS history results require canonical frame_id values")
+            frame = service.get_frame(result["frame_id"])
+            for field in ("video_id", "frame_idx", "timestamp_ms"):
+                if field in result and result[field] != getattr(frame, field):
+                    raise ValueError(
+                        f"KIS history result {field} does not match canonical frame metadata"
+                    )
+
+    paths = snapshot.get("paths")
+    if isinstance(paths, list):
+        for path in paths:
+            if not isinstance(path, dict) or not isinstance(path.get("frame_ids"), list):
+                raise ValueError("TRAKE history paths require canonical frame_ids arrays")
+            video_id = path.get("video_id")
+            for frame_id in path["frame_ids"]:
+                if not isinstance(frame_id, str):
+                    raise ValueError("TRAKE history frame IDs must be strings")
+                frame = service.get_frame(frame_id)
+                if video_id is not None and frame.video_id != video_id:
+                    raise ValueError(
+                        "TRAKE history path frames must belong to its declared video_id"
+                    )
+
+
+def _validate_snapshot_shape(snapshot: dict[str, Any]) -> None:
+    """Require one supported replay result collection without narrowing its data."""
+
+    if not isinstance(snapshot.get("results"), list) and not isinstance(snapshot.get("paths"), list):
+        raise ValueError("History snapshot must contain KIS results or legacy TRAKE paths")
+
+
+__all__ = ["create_history_router"]

@@ -24,7 +24,26 @@ describe('ApiDocsModal component', () => {
     expect(screen.getByText('/health')).toBeTruthy();
     expect(screen.getByText('Multimodal Frame Retrieval')).toBeTruthy();
     expect(screen.getByText('/api/v1/search')).toBeTruthy();
-    expect(screen.getByText('/api/v1/trake')).toBeTruthy();
+  });
+
+  test('documents VBS sessions, KIS/VQA/AVS, the answer workspace, and log status without retired workflows', () => {
+    render(<ApiDocsModal isOpen onClose={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /endpoints quick reference/i }));
+
+    expect(screen.getByText('/api/v1/vbs/session/connect')).toBeTruthy();
+    expect(screen.getByText('/api/v1/vbs/submit/kis')).toBeTruthy();
+    expect(screen.getByText('/api/v1/vbs/submit/vqa')).toBeTruthy();
+    expect(screen.getByText('/api/v1/vbs/submit/avs')).toBeTruthy();
+    expect(screen.getByText('/api/v1/answer-workspace')).toBeTruthy();
+    expect(document.body.textContent).toContain('task_scope_key');
+    expect(document.body.textContent).not.toContain(`"${['task', 'id'].join('_')}"`);
+    expect(screen.getByText(/X-DRES-Log-Status/i)).toBeTruthy();
+    const retiredTaskName = ['TRA', 'KE'].join('');
+    const retiredSubmissionPath = ['/api/v1', 'submission'].join('/');
+    expect(document.body.textContent).not.toMatch(
+      new RegExp(`${retiredTaskName}|CSV|${retiredSubmissionPath}`, 'i'),
+    );
+    expect(document.body.textContent).not.toMatch(/session token|evaluation token/i);
   });
 
   test('copies cURL command when clicking Copy cURL button', () => {

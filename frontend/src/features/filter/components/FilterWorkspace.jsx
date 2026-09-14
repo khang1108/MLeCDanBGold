@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { filterFrames } from '../../../api/filter';
 import FrameCard from '../../frames/components/FrameCard';
-import SubmissionWorktree from '../../submission/components/SubmissionWorktree';
-import { useSubmissionDialog } from '../../submission/contexts/SubmissionDialogContext';
-import { displayVideoId } from '../../frames/videoSource';
 import FilterForm from './FilterForm';
 import FilterPagination from './FilterPagination';
 import { FRAMES_PER_PAGE } from '../filterPagination';
+import AnswerWorkspace from '../../answer-workspace/components/AnswerWorkspace';
 
 
 const createInitialFilterValues = () => ({
@@ -18,13 +16,14 @@ const createInitialFilterValues = () => ({
 });
 
 
-const MatchedFrame = ({ frame, onFrameClick, onSubmit }) => (
+const MatchedFrame = ({ frame, onFrameClick, onAddCandidate }) => (
   <div className="filter-result-card">
     <FrameCard
       frame={frame}
       imageLoading="eager"
       onClick={() => onFrameClick?.(frame)}
-      onSubmit={onSubmit}
+      workspaceAction="add-candidate"
+      onAddCandidate={onAddCandidate}
     />
     {Object.keys(frame.matches || {}).length > 0 && (
       <div className="filter-match-list">
@@ -45,7 +44,7 @@ const FilterResults = ({
   hasFiltered,
   error,
   onFrameClick,
-  onSubmit,
+  onAddCandidate,
   currentPage,
   totalPages,
   isLoading,
@@ -108,7 +107,7 @@ const FilterResults = ({
               key={frame.frame_id}
               frame={frame}
               onFrameClick={onFrameClick}
-              onSubmit={onSubmit}
+              onAddCandidate={onAddCandidate}
             />
           ))}
         </div>
@@ -125,7 +124,7 @@ const FilterResults = ({
 
 
 /** Own the source-specific Filter form and backend-owned result pages. */
-const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
+const FilterWorkspace = ({ isActive = true, onFrameClick, onAddCandidate, userId }) => {
   const [filters, setFilters] = useState(createInitialFilterValues);
   const [appliedFilters, setAppliedFilters] = useState(null);
   const [folderId, setFolderId] = useState('');
@@ -139,7 +138,6 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
   const [isFiltering, setIsFiltering] = useState(false);
   const [error, setError] = useState(null);
   const requestRef = useRef(null);
-  const { requestSubmission } = useSubmissionDialog();
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -152,7 +150,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
     setError(null);
 
     try {
-      const response = await filterFrames({ ...parameters, signal: controller.signal });
+      const response = await filterFrames({ ...parameters, userId, signal: controller.signal });
       setResults(response.results || []);
       setTotalResults(response.total_results || 0);
       setPageId(response.page_id);
@@ -168,7 +166,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
         setIsFiltering(false);
       }
     }
-  }, []);
+  }, [userId]);
 
   const handleFilter = useCallback((event) => {
     event.preventDefault();
@@ -189,13 +187,6 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
       pageId: nextPage,
     });
   }, [appliedFilters, appliedScope, isFiltering, requestPage, totalPages]);
-
-  const handleFrameSubmit = useCallback((frame) => {
-    requestSubmission({
-      line: `${displayVideoId(frame.video_id)},${frame.frame_idx}`,
-      source: 'KIS frame',
-    });
-  }, [requestSubmission]);
 
   return (
     <div className="adhoc-workspace filter-workspace">
@@ -226,7 +217,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
               />
             </label>
           </div>
-          {isActive && <SubmissionWorktree />}
+          <AnswerWorkspace isActive={isActive} />
         </aside>
 
         <div className="filter-main-column">
@@ -245,7 +236,7 @@ const FilterWorkspace = ({ isActive = true, onFrameClick }) => {
               hasFiltered={hasFiltered}
               error={error}
               onFrameClick={onFrameClick}
-              onSubmit={handleFrameSubmit}
+              onAddCandidate={onAddCandidate}
               currentPage={pageId}
               totalPages={totalPages}
               isLoading={isFiltering}

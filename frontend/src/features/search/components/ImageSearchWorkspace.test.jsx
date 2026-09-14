@@ -1,59 +1,34 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { searchFramesByImage } from '../../../api/search';
 import ImageSearchWorkspace from './ImageSearchWorkspace';
-import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
-import { SubmissionDialogProvider } from '../../submission/contexts/SubmissionDialogContext';
+import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
 import {
   createQueryHistory,
-  getSubmissionFiles,
   markFrameViewed,
-} from '../../../api/workspace';
+} from '../../../api/history';
 
 jest.mock('../../../api/search');
-jest.mock('../../../api/workspace', () => ({
-  getSubmissionFiles: jest.fn(),
-  workspaceWebSocketUrl: jest.fn(() => 'ws://example.test/api/v1/workspace/ws'),
+jest.mock('../../../api/history', () => ({
   createQueryHistory: jest.fn(),
   markFrameViewed: jest.fn(),
-  markFramesSubmitted: jest.fn(),
 }));
 
-class MockWebSocket {
-  static instances = [];
-  static OPEN = 1;
-  constructor() { this.readyState = 0; this.sent = []; MockWebSocket.instances.push(this); }
-  send(value) { this.sent.push(value); }
-  open() { this.readyState = 1; this.onopen?.(); }
-  message(payload) { this.onmessage?.({ data: JSON.stringify(payload) }); }
-  close() { this.readyState = 3; this.onclose?.(); }
-}
-
-const renderImageSearch = (props) => {
-  const result = render(
-    <SubmissionProvider>
-      <SubmissionDialogProvider>
-        <ImageSearchWorkspace {...props} />
-      </SubmissionDialogProvider>
-    </SubmissionProvider>,
-  );
-  act(() => MockWebSocket.instances[MockWebSocket.instances.length - 1]?.open?.());
-  return result;
-};
+const renderImageSearch = (props) => render(
+  <AnswerWorkspaceProvider connectedUserId="">
+    <ImageSearchWorkspace {...props} />
+  </AnswerWorkspaceProvider>,
+);
 
 beforeEach(() => {
   searchFramesByImage.mockReset();
-  getSubmissionFiles.mockReturnValue(new Promise(() => {}));
   createQueryHistory.mockResolvedValue({});
   markFrameViewed.mockResolvedValue({});
-  MockWebSocket.instances = [];
-  window.WebSocket = MockWebSocket;
   global.URL.createObjectURL = jest.fn(() => 'blob:mock-image-preview');
   global.URL.revokeObjectURL = jest.fn();
 });
 
 afterEach(() => {
-  delete window.WebSocket;
   delete global.URL.createObjectURL;
   delete global.URL.revokeObjectURL;
 });
@@ -64,6 +39,12 @@ test('renders empty image dropzone with disabled Search button', () => {
   expect(screen.getByText(/Choose, drop, or paste an image/i)).toBeTruthy();
   const searchBtn = screen.getByRole('button', { name: 'Search' });
   expect(searchBtn.disabled).toBe(true);
+});
+
+test('renders the shared answer workspace in Image Search', () => {
+  renderImageSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+
+  expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
 });
 
 test('pasting an image via clipboard (Ctrl+V) selects image and enables Search', () => {
@@ -153,6 +134,7 @@ test('submitting search calls searchFramesByImage and renders results with laten
       imageFile: file,
       topK: 15,
       signal: expect.any(AbortSignal),
+      userId: 'team-a',
     });
   });
 
@@ -168,8 +150,31 @@ test('submitting search calls searchFramesByImage and renders results with laten
   fireEvent.click(frameCard);
   expect(onFrameClick).toHaveBeenCalledWith({
     frame: mockResults[0],
-    submissionMode: 'kis',
   });
+});
+
+test('adds an image-search frame at its exact timestamp, not its frame index', async () => {
+  const onAddCandidate = jest.fn();
+  searchFramesByImage.mockResolvedValueOnce({
+    results: [{
+      frame_id: 'image-time-frame',
+      video_id: 'V02',
+      frame_idx: 5,
+      timestamp_ms: 9_876,
+      frame_ids: ['image-time-frame'],
+      timestamps_ms: [9_876],
+      metadata: {},
+    }],
+    latency: { total_ms: 2 },
+  });
+  renderImageSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a', onAddCandidate });
+  fireEvent.change(document.querySelector('input[type="file"]'), {
+    target: { files: [new File(['image'], 'query.png', { type: 'image/png' })] },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add frame to answer workspace' }));
+  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'V02', timestampMs: 9_876 });
 });
 
 test('searches without a User ID and does not create history', async () => {
@@ -195,6 +200,7 @@ test('searches without a User ID and does not create history', async () => {
       imageFile: file,
       topK: 20,
       signal: expect.any(AbortSignal),
+      userId: '',
     });
   });
 

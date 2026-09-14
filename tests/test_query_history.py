@@ -1,4 +1,4 @@
-"""Integration tests for SQLite Workspace history and submission files."""
+"""Integration tests for SQLite query replay and viewed-frame activity."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from hcmai.api.contracts import QueryHistoryCreate
-from hcmai.api.history import RevisionConflict, WorkspaceStore
+from hcmai.api.history import WorkspaceStore
 from hcmai.app import create_app
 from hcmai.corpus.models import Frame
 
@@ -24,12 +24,14 @@ FRAME_B = "L21_V001_00000120"
 
 
 class FrameService:
-    """Expose canonical frame lookup without retrieval for Workspace tests."""
+    """Expose canonical frame lookup without loading search artifacts."""
 
     llm = None
     reranking = None
 
     def __init__(self) -> None:
+        """Build two hand-checkable canonical frame rows."""
+
         self.lookups: list[str] = []
         self.frames = {
             frame_id: Frame(
@@ -42,28 +44,37 @@ class FrameService:
             for index, frame_id in enumerate((FRAME_A, FRAME_B), start=90)
         }
 
-
     def get_frame(self, frame_id: str) -> Frame:
-        """Return one known canonical frame."""
+        """Return one known canonical frame or report its missing identity."""
 
         self.lookups.append(frame_id)
         if frame_id not in self.frames:
             raise KeyError(frame_id)
         return self.frames[frame_id]
 
-
     def health(self, messages: list[str]) -> dict[str, Any]:
-        """Return the fields read by application startup logging."""
+        """Return fields consumed by app startup logging."""
 
         del messages
-        return {
-            "capabilities": {"search": False},
-            "remote_inference": {},
-        }
-
+        return {"capabilities": {"search": False}, "remote_inference": {}}
 
     def close(self) -> None:
-        """Provide the lifecycle hook used by the application."""
+        """Provide the application lifecycle hook."""
+
+
+class VbsSessionService:
+    """Supply one connected participant scope to workspace WebSocket tests."""
+
+    def session_status(self, user_id: str) -> dict[str, bool | str]:
+        """Return a browser-safe connected state."""
+
+        return {"user_id": user_id, "connected": True}
+
+    async def resolve_scope(self, user_id: str) -> tuple[str, str, object]:
+        """Return a stable live DRES scope for the workspace test."""
+
+        del user_id
+        return "eval-1", "task-1", object()
 
 
 @pytest.fixture(autouse=True)
@@ -80,23 +91,24 @@ def inline_workspace_threadpool(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def workspace_store(tmp_path: Path) -> WorkspaceStore:
-    """Create an isolated Workspace database."""
+    """Create an isolated SQLite store."""
 
     return WorkspaceStore(tmp_path / "workspace.sqlite3")
 
 
 @pytest.fixture
 def workspace_app(workspace_store: WorkspaceStore) -> FastAPI:
-    """Create an app with canonical frame lookup and Workspace storage."""
+    """Create an app with canonical frame lookup and workspace storage."""
 
     return create_app(
         search_service=FrameService(),
         workspace_store=workspace_store,
+        vbs_service=VbsSessionService(),
     )
 
 
 def request(app: FastAPI, method: str, path: str, **kwargs: Any) -> httpx.Response:
-    """Send one request through the ASGI application."""
+    """Send one request through ASGI without starting online services."""
 
     async def send() -> httpx.Response:
         transport = httpx.ASGITransport(app=app)
@@ -145,11 +157,10 @@ def history_payload(index: int, *, user_id: str = "user-a") -> dict[str, Any]:
     }
 
 
-def test_history_create_view_submit_and_replay(
+def test_history_create_view_and_replay(
     workspace_app: FastAPI,
-    workspace_store: WorkspaceStore,
 ) -> None:
-    """Persist a lossless snapshot and its deduplicated frame activity."""
+    """Persist a lossless snapshot and deduplicated viewed-frame activity."""
 
     payload = history_payload(1)
     created = request(
@@ -159,10 +170,7 @@ def test_history_create_view_submit_and_replay(
         json=payload,
     )
     assert created.status_code == 201
-    assert created.json()["frame_activity"] == {
-        "viewed_frame_ids": [],
-        "submitted_frame_ids": [],
-    }
+    assert created.json()["frame_activity"] == {"viewed_frame_ids": []}
     assert created.json()["result_snapshot"] == payload["result_snapshot"]
 
     for _ in range(2):
@@ -175,37 +183,19 @@ def test_history_create_view_submit_and_replay(
         assert viewed.status_code == 200
     assert viewed.json()["frame_activity"]["viewed_frame_ids"] == [FRAME_A]
 
-    workspace_store.create_submission_file("query-01.csv", "L21_V001,90")
-    submitted = request(
-        workspace_app,
-        "PATCH",
-        "/api/v1/query-history/query-001/submission",
-        json={
-            "submission_file_name": "query-01.csv",
-            "submission_line": "L21_V001,90",
-            "frame_ids": [FRAME_A, FRAME_B, FRAME_A],
-        },
-    )
-    assert submitted.status_code == 200
-    assert submitted.json()["submission_files"] == ["query-01.csv"]
-    assert submitted.json()["frame_activity"]["submitted_frame_ids"] == [
-        FRAME_A,
-        FRAME_B,
-    ]
-
     loaded = request(
         workspace_app,
         "GET",
         "/api/v1/query-history",
         params={"user_id": "user-a"},
     )
-    assert loaded.json()["items"] == [submitted.json()]
+    assert loaded.json()["items"] == [viewed.json()]
 
 
 def test_full_trake_snapshot_round_trips_without_frame_lookup_on_get(
     workspace_store: WorkspaceStore,
 ) -> None:
-    """Preserve ordered TRAKE arrays and keep replay reads store-only."""
+    """Preserve ordered legacy TRAKE arrays for stored history replay."""
 
     service = FrameService()
     app = create_app(search_service=service, workspace_store=workspace_store)
@@ -241,16 +231,12 @@ def test_full_trake_snapshot_round_trips_without_frame_lookup_on_get(
     assert service.lookups == []
 
 
-def test_history_validates_contract_and_canonical_frames(
-    workspace_app: FastAPI,
-) -> None:
-    """Reject stale fields, missing frames, and mixed-video TRAKE paths."""
+def test_history_validates_contract_and_canonical_frames(workspace_app: FastAPI) -> None:
+    """Reject stale fields, missing canonical rows, and mismatched TRAKE paths."""
 
     stale = history_payload(1)
     stale["query_type"] = "kis"
-    assert request(
-        workspace_app, "POST", "/api/v1/query-history", json=stale
-    ).status_code == 422
+    assert request(workspace_app, "POST", "/api/v1/query-history", json=stale).status_code == 422
 
     invalid_snapshot = history_payload(3)
     invalid_snapshot["result_snapshot"] = {"events": []}
@@ -263,37 +249,25 @@ def test_history_validates_contract_and_canonical_frames(
 
     missing = history_payload(2)
     missing["result_snapshot"]["results"][0]["frame_id"] = "missing"
-    assert request(
-        workspace_app, "POST", "/api/v1/query-history", json=missing
-    ).status_code == 404
+    assert request(workspace_app, "POST", "/api/v1/query-history", json=missing).status_code == 404
 
     trake = {
         "query_id": "trake-001",
         "user_id": "user-a",
         "query_text": "ordered events",
         "result_snapshot": {
-            "paths": [{
-                "video_id": "L99_V999",
-                "score": 0.8,
-                "frame_ids": [FRAME_A],
-            }],
+            "paths": [{"video_id": "L99_V999", "score": 0.8, "frame_ids": [FRAME_A]}],
         },
     }
-    assert request(
-        workspace_app, "POST", "/api/v1/query-history", json=trake
-    ).status_code == 422
+    assert request(workspace_app, "POST", "/api/v1/query-history", json=trake).status_code == 422
 
 
 def test_history_errors_and_latest_twenty(workspace_app: FastAPI) -> None:
-    """Map conflicts and isolate each user's newest twenty histories."""
+    """Reject duplicate query IDs and isolate each participant's recent searches."""
 
     payload = history_payload(0)
-    assert request(
-        workspace_app, "POST", "/api/v1/query-history", json=payload
-    ).status_code == 201
-    assert request(
-        workspace_app, "POST", "/api/v1/query-history", json=payload
-    ).status_code == 409
+    assert request(workspace_app, "POST", "/api/v1/query-history", json=payload).status_code == 201
+    assert request(workspace_app, "POST", "/api/v1/query-history", json=payload).status_code == 409
 
     for index in range(1, 22):
         assert request(
@@ -317,7 +291,6 @@ def test_history_errors_and_latest_twenty(workspace_app: FastAPI) -> None:
     )
     assert len(response.json()["items"]) == 20
     assert response.json()["items"][0]["query_id"] == "query-021"
-
     other = request(
         workspace_app,
         "GET",
@@ -327,143 +300,57 @@ def test_history_errors_and_latest_twenty(workspace_app: FastAPI) -> None:
     assert [item["query_id"] for item in other.json()["items"]] == ["query-099"]
 
 
-def test_submission_requires_committed_file_line(
+def test_missing_query_history_and_viewed_frame_return_not_found(
     workspace_app: FastAPI,
-    workspace_store: WorkspaceStore,
 ) -> None:
-    """Do not record a submission that is absent from shared file content."""
-
-    request(
-        workspace_app,
-        "POST",
-        "/api/v1/query-history",
-        json=history_payload(1),
-    )
-    workspace_store.create_submission_file("query.csv", "L21_V001,120")
+    """Return a stable not-found response for missing history or frame IDs."""
 
     response = request(
-        workspace_app,
-        "PATCH",
-        "/api/v1/query-history/query-001/submission",
-        json={
-            "submission_file_name": "query.csv",
-            "submission_line": "L21_V001,90",
-            "frame_ids": [FRAME_A],
-        },
-    )
-    assert response.status_code == 409
-
-    missing_history = request(
         workspace_app,
         "PATCH",
         "/api/v1/query-history/missing/viewed-frame",
         json={"frame_id": FRAME_A},
     )
-    missing_file = request(
+    assert response.status_code == 404
+    missing_frame = request(
         workspace_app,
         "PATCH",
-        "/api/v1/query-history/query-001/submission",
-        json={
-            "submission_file_name": "missing.csv",
-            "submission_line": "L21_V001,90",
-            "frame_ids": [FRAME_A],
-        },
+        "/api/v1/query-history/missing/viewed-frame",
+        json={"frame_id": "missing-frame"},
     )
-    assert missing_history.status_code == 404
-    assert missing_file.status_code == 404
+    assert missing_frame.status_code == 404
 
 
-def test_submission_file_state_revision_and_persistence(tmp_path: Path) -> None:
-    """Persist shared files and protect edits with optimistic revisions."""
-
-    database = tmp_path / "workspace.sqlite3"
-    store = WorkspaceStore(database)
-    empty = store.create_submission_file("query.csv", "")
-    assert empty.revision == 1
-    with pytest.raises(ValueError):
-        store.validate_submission_file("query.csv", True, 1)
-
-    filled = store.update_submission_file("query.csv", "L21_V001,90", 1)
-    validated = store.validate_submission_file("query.csv", True, 2)
-    assert filled.revision == 2
-    assert validated.is_validated is True
-    with pytest.raises(RevisionConflict) as conflict:
-        store.update_submission_file("query.csv", "stale", 2)
-    assert conflict.value.file.revision == 3
-
-    reopened = WorkspaceStore(database)
-    assert reopened.list_submission_files() == [validated]
-    edited = reopened.update_submission_file("query.csv", "changed", 3)
-    assert edited.is_validated is False
-
-
-def test_submission_files_hydrate_and_websocket_broadcast(
-    workspace_app: FastAPI,
-) -> None:
-    """Broadcast committed changes and return the latest conflict state."""
-
-    with TestClient(workspace_app) as client:
-        with client.websocket_connect("/api/v1/workspace/ws") as first:
-            with client.websocket_connect("/api/v1/workspace/ws") as second:
-                first.send_json({
-                    "type": "submission_file.create",
-                    "name": "shared.csv",
-                    "content": "",
-                })
-                assert first.receive_json()["type"] == "submission_file.created"
-                assert second.receive_json()["file"]["revision"] == 1
-
-                second.send_json({
-                    "type": "submission_file.update",
-                    "name": "shared.csv",
-                    "content": "L21_V001,90",
-                    "expected_revision": 1,
-                })
-                assert first.receive_json()["file"]["revision"] == 2
-                assert second.receive_json()["type"] == "submission_file.updated"
-
-                first.send_json({
-                    "type": "submission_file.update",
-                    "name": "shared.csv",
-                    "content": "stale",
-                    "expected_revision": 1,
-                })
-                conflict = first.receive_json()
-                assert conflict["type"] == "submission_file.conflict"
-                assert conflict["file"]["content"] == "L21_V001,90"
-
-        hydrated = client.get("/api/v1/submission-files")
-        assert hydrated.json()["files"][0]["name"] == "shared.csv"
-
-
-def test_workspace_websocket_rejects_unknown_origin(
-    workspace_app: FastAPI,
-) -> None:
-    """Apply the configured browser-origin allowlist to WebSocket clients."""
+def test_workspace_websocket_rejects_unknown_origin(workspace_app: FastAPI) -> None:
+    """Apply the configured browser-origin allowlist to answer workspace sockets."""
 
     with TestClient(workspace_app) as client:
         with pytest.raises(WebSocketDisconnect) as rejected:
             with client.websocket_connect(
-                "/api/v1/workspace/ws",
-                headers={"origin": "https://untrusted.example"},
+                "/api/v1/answer-workspace/ws",
+                headers={
+                    "origin": "https://untrusted.example",
+                    "X-VBS-User-ID": "member-1",
+                },
             ):
                 pass
     assert rejected.value.code == 1008
 
 
-def test_workspace_is_unavailable_without_store() -> None:
-    """Keep unrelated APIs mountable when Workspace storage is not configured."""
+def test_answer_workspace_requires_storage_but_other_apis_remain_mounted() -> None:
+    """Keep retrieval APIs mounted while an unconfigured workspace returns 503."""
 
     response = request(
-        create_app(search_service=FrameService()),
+        create_app(search_service=FrameService(), vbs_service=VbsSessionService()),
         "GET",
-        "/api/v1/submission-files",
+        "/api/v1/answer-workspace",
+        headers={"X-VBS-User-ID": "member-1"},
     )
     assert response.status_code == 503
 
 
 def test_history_store_reopens(tmp_path: Path) -> None:
-    """Keep history after reopening the SQLite database."""
+    """Keep query replay data after reopening the SQLite database."""
 
     database = tmp_path / "workspace.sqlite3"
     WorkspaceStore(database).create_history(
@@ -471,40 +358,3 @@ def test_history_store_reopens(tmp_path: Path) -> None:
     )
     reopened = WorkspaceStore(database)
     assert reopened.get_recent_history("user-a")[0].query_id == "query-001"
-
-
-def test_clear_submission_files_broadcasts_over_websocket(
-    workspace_app: FastAPI,
-    workspace_store: WorkspaceStore,
-) -> None:
-    """Clear all submission files and broadcast the event to all WebSocket clients."""
-
-    workspace_store.create_submission_file("file1.csv", "V01,1")
-    workspace_store.create_submission_file("file2.csv", "V02,2")
-    assert len(workspace_store.list_submission_files()) == 2
-
-    with TestClient(workspace_app) as client:
-        with client.websocket_connect(
-            "/api/v1/workspace/ws",
-            headers={"origin": "http://localhost:3000"},
-        ) as websocket:
-            websocket.send_json({"type": "submission_file.clear"})
-            event = websocket.receive_json()
-            assert event["type"] == "submission_file.cleared"
-            assert set(event["deleted_names"]) == {"file1.csv", "file2.csv"}
-
-    assert len(workspace_store.list_submission_files()) == 0
-
-
-def test_delete_submission_files_http_endpoint(
-    workspace_app: FastAPI,
-    workspace_store: WorkspaceStore,
-) -> None:
-    """DELETE /api/v1/submission-files clears files and returns event."""
-
-    workspace_store.create_submission_file("file1.csv", "V01,1")
-    response = request(workspace_app, "DELETE", "/api/v1/submission-files")
-    assert response.status_code == 200
-    assert response.json()["type"] == "submission_file.cleared"
-    assert response.json()["deleted_names"] == ["file1.csv"]
-    assert len(workspace_store.list_submission_files()) == 0

@@ -1,6 +1,6 @@
-# HCMAI 2026 — Multimodal Video Retrieval
+# VBS 2027 — Multimodal Video Retrieval
 
-HCMAI là hệ thống tìm kiếm video đa phương thức cho HCMAI 2026. Người dùng
+HCMAI hỗ trợ truy xuất video và nộp đáp án cho VBS 2027. Người dùng
 nhập truy vấn tiếng Việt hoặc tiếng Anh; hệ thống tìm các keyframe phù hợp,
 giữ lại bằng chứng Caption/OCR/Object/ASR, định vị theo thời gian và trả về
 `video_id` cùng `frame_idx` hợp lệ cho bài thi.
@@ -137,8 +137,67 @@ POST /api/v1/trake
 | `POST /api/v1/search/image` | SigLIP2 image-to-keyframe search |
 | `POST /api/v1/trake` | TRAKE ordered-event alignment |
 | `GET /api/v1/keyframes/{frame_id}` | Lấy canonical keyframe theo internal `frame_id` |
-| `GET /api/v1/frames/{frame_id}/neighbors` | Lấy frame lân cận theo thời gian |
-| `POST /api/v1/submit` | Tạo identity submission cho một frame |
+| `POST /api/v1/vbs/session/connect` | Kết nối participant bằng VBS User ID; credential được tra ở backend |
+| `GET /api/v1/vbs/session/{user_id}` | Kiểm tra trạng thái kết nối an toàn |
+| `DELETE /api/v1/vbs/session/{user_id}` | Ngắt và xóa DRES session của participant |
+| `GET /api/v1/answer-workspace` | Hydrate answer workspace theo task với `X-VBS-User-ID` |
+| `WS /api/v1/answer-workspace/ws?user_id=...` | Đồng bộ answer workspace theo thời gian thực |
+| `POST /api/v1/vbs/submit/kis` | Nộp một FRAME answer của KIS |
+| `POST /api/v1/vbs/submit/vqa` | Nộp một TEXT answer của VQA |
+| `POST /api/v1/vbs/submit/avs` | Nộp tập FRAME AVS đã chọn trong một DRES request |
+| `X-DRES-Log-Status` response header | Trạng thái gửi result log: `sent`, `failed` hoặc `skipped` |
+
+## VBS 2027 competition runbook
+
+### Migration archive notice
+
+Before migration, stop the backend and create a backup of `runtime/workspace.sqlite3` in a timestamped archive in the operator’s protected backup location. The legacy
+submission-file workflow and its stored data are retired by this migration;
+keep the archive in case an older deployment needs to be restored. Do not copy
+the database into the frontend or publish it with a public build.
+
+### Prepare and rehearse
+
+1. On the backend only, set `HCMAI_DRES_BASE_URL` to the organizer’s test DRES
+   endpoint and configure `HCMAI_DRES_USERS_JSON` as the mapping from each VBS
+   `user_id` to its DRES username/password. Keep this JSON in a protected
+   backend environment file or secret store. A browser submits only its VBS
+   user ID; never put credentials or a DRES session in frontend configuration.
+2. Verify every HCMAI `video_id` against the organizer’s exact DRES
+   `mediaItemName`. Confirm `HCMAI_DRES_MEDIA_ID_PREFIX_TO_STRIP` against known
+   media before setting it; do not infer the mapping from display labels or
+   `frame_idx`. Save and review the verified mapping before rehearsal.
+3. Start the backend against test DRES. In each browser, enter the assigned VBS
+   user ID and wait for the connected state before opening the shared answer
+   workspace. Confirm separate browsers converge on the same candidates. The
+   official current-task response has no task ID: HCMAI derives a deterministic
+   `task_scope_key` from its evaluation and task-template fields for internal
+   workspace isolation only. DRES submissions send the freshly resolved
+   `taskName`; the internal key is never sent upstream. Existing workspace DB
+   v1 rows migrate as `legacy-unverified` and require an explicit clear-and-
+   switch before use with a current official task.
+4. Against test DRES, submit one KIS FRAME captured from live playback and one
+   added from a FrameCard. Confirm the reviewed `timestamp_ms` is exact and
+   DRES receives a point answer with `start == end`. Submit one VQA TEXT answer
+   and confirm the answer contains text only. Add several AVS frames and confirm
+   one ordered batch reaches DRES in a single request. DRES HTTP 200/202 success
+   must include a verdict (`CORRECT`, `WRONG`, `INDETERMINATE`, or
+   `UNDECIDABLE`); `accepted` means DRES processed the submission, not that the
+   answer was correct.
+5. With each assigned user connected to test DRES, run text search, image search,
+   and Filter. Confirm the header and indicator report `Log sent`; make one
+   controlled logging-failure check and confirm retrieval still displays results
+   with `Last log failed`.
+6. After the rehearsal passes, freeze the verified media mapping, evaluation
+   settings, indexes, backend/frontend revisions, and non-secret environment
+   configuration. Keep credentials in the backend secret store; each successful
+   search is logged with the connected participant's DRES session.
+
+The DRES client current-task endpoint cannot distinguish consecutive task
+instances whose `name`, `taskGroup`, `taskType`, and `duration` are identical.
+The internal key therefore isolates observable task templates, not hidden task
+instance identity; confirm that staging exposes a task-name change or another
+supported client-visible boundary before relying on automatic scope detection.
 
 ## 3. Cấu trúc thư mục và artifact
 

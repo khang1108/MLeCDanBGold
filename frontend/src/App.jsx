@@ -9,46 +9,28 @@ import { DatabasePage } from './features/database';
 import { useHealthCheck } from './features/health';
 import { useVimMode, TopKPromptModal, VimHelpModal } from './features/vim';
 import { ApiDocsModal } from './features/docs';
-import { SubmissionProvider, SubmissionDialogProvider, useSubmissionDialog } from './features/submission';
+import { VbsSessionProvider, useVbsSession } from './features/vbs/contexts/VbsSessionContext';
+import AnswerWorkspaceProvider from './features/answer-workspace/contexts/AnswerWorkspaceContext';
+import { useAnswerWorkspace } from './features/answer-workspace/contexts/AnswerWorkspaceContext';
+import AnswerCandidateDialog from './features/answer-workspace/components/AnswerCandidateDialog';
 
-const USER_ID_STORAGE_KEY = 'hcmai_user_id';
-
-const getStoredUserId = () => {
-  try {
-    return window.localStorage.getItem(USER_ID_STORAGE_KEY) || '';
-  } catch {
-    return '';
-  }
-};
-
-const persistUserId = (val) => {
-  try {
-    if (val) {
-      window.localStorage.setItem(USER_ID_STORAGE_KEY, val);
-    } else {
-      window.localStorage.removeItem(USER_ID_STORAGE_KEY);
-    }
-  } catch {
-    // Ignore storage errors in restricted contexts
-  }
-};
-
-const AppContent = () => {
+const AppShell = ({ connectedUserId, draftUserId }) => {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
   const [activePage, setActivePage] = useState('query');
   const [modalQuery, setModalQuery] = useState('');
-  const [userId, setUserId] = useState(getStoredUserId);
-  const [userIdError, setUserIdError] = useState(null);
   const [topK, setTopK] = useState(20);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [replayRequest, setReplayRequest] = useState(null);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const [candidateDraft, setCandidateDraft] = useState(null);
+  const [candidateDialogError, setCandidateDialogError] = useState('');
+  const [isSavingCandidate, setIsSavingCandidate] = useState(false);
   const replayTokenRef = useRef(0);
   const userIdInputRef = useRef(null);
   const queryInputRef = useRef(null);
   const { isHealthy, healthData } = useHealthCheck();
-  const { requestSubmission } = useSubmissionDialog();
+  const answerWorkspace = useAnswerWorkspace();
   const vim = useVimMode({
     onCloseAllModals: () => setSelectedFrame(null),
     queryInputRef,
@@ -61,15 +43,46 @@ const AppContent = () => {
   };
 
   const handleFilterFrameClick = (frame) => {
-    setSelectedFrame({ frame, submissionMode: 'kis' });
+    setSelectedFrame({ frame });
     setModalQuery('');
+  };
+
+  const handleAddAnswerCandidate = (initialValue) => {
+    if (!connectedUserId) return;
+    setCandidateDialogError('');
+    setCandidateDraft({ kind: 'FRAME', initialValue });
+  };
+
+  const handleSaveAnswerCandidate = async (value) => {
+    if (!connectedUserId || isSavingCandidate) return;
+    setIsSavingCandidate(true);
+    setCandidateDialogError('');
+    try {
+      const nextWorkspace = value.kind === 'FRAME'
+        ? await answerWorkspace.addFrame({ videoId: value.videoId, timestampMs: value.timestampMs })
+        : await answerWorkspace.addText({ text: value.text });
+      const candidate = nextWorkspace?.candidates?.find((item) => item.kind === value.kind && (
+        value.kind === 'FRAME'
+          ? item.video_id === value.videoId && item.timestamp_ms === value.timestampMs
+          : item.text === value.text
+      ));
+      if (candidate?.candidate_id) {
+        window.dispatchEvent(new CustomEvent('answer-workspace-focus-candidate', {
+          detail: { candidateId: candidate.candidate_id },
+        }));
+      }
+      setCandidateDraft(null);
+    } catch (error) {
+      setCandidateDialogError(error.message || 'Could not add the answer to the shared workspace.');
+    } finally {
+      setIsSavingCandidate(false);
+    }
   };
 
   const handleManualVideo = ({ frame, requestedTimestampMs }) => {
     setSelectedFrame({
       frame,
       initialTimestampMs: requestedTimestampMs,
-      submissionMode: 'none',
     });
     setModalQuery('');
   };
@@ -80,18 +93,6 @@ const AppContent = () => {
     setActivePage('query');
   };
 
-  const handleFocusUserId = () => {
-    setUserIdError('A User ID is required before searching.');
-    userIdInputRef.current?.focus();
-  };
-
-  const handleInspectorSubmit = (intent) => {
-    requestSubmission({
-      ...intent,
-      history: selectedFrame?.history || (selectedFrame?.frame?.frame_id ? { frameIds: [selectedFrame.frame.frame_id] } : undefined),
-    });
-  };
-
   return (
     <div className="app-wrapper">
       <AppHeader
@@ -100,14 +101,6 @@ const AppContent = () => {
         vimMode={vim.mode}
         onToggleVimMode={() => (vim.mode === 'NORMAL' ? vim.enterInsertMode() : vim.enterNormalMode())}
         onOpenDocs={() => setIsDocsOpen(true)}
-        userId={userId}
-        onChangeUserId={(event) => {
-          const nextUserId = event.target.value;
-          setUserId(nextUserId);
-          persistUserId(nextUserId);
-          if (nextUserId.trim()) setUserIdError(null);
-        }}
-        userIdError={userIdError}
         userIdInputRef={userIdInputRef}
         activePage={activePage}
         onSelectPage={setActivePage}
@@ -117,7 +110,9 @@ const AppContent = () => {
         <div className="workspace-panel" hidden={activePage !== 'query'}>
           <SearchWorkspace
             isActive={activePage === 'query'}
-            userId={userId}
+            onAddCandidate={connectedUserId ? handleAddAnswerCandidate : undefined}
+            userId={connectedUserId}
+            historyUserId={draftUserId}
             topK={topK}
             setTopK={setTopK}
             onFrameClick={handleQueryFrameClick}
@@ -125,7 +120,6 @@ const AppContent = () => {
             queryInputRef={queryInputRef}
             onFocusQueryInput={() => vim.setMode('INSERT')}
             onBlurQueryInput={() => vim.setMode('NORMAL')}
-            onFocusUserId={handleFocusUserId}
             onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
             replayRequest={replayRequest}
           />
@@ -136,15 +130,22 @@ const AppContent = () => {
             topK={topK}
             setTopK={setTopK}
             onFrameClick={handleQueryFrameClick}
+            onAddCandidate={connectedUserId ? handleAddAnswerCandidate : undefined}
+            userId={connectedUserId}
           />
         </div>
         <div className="workspace-panel" hidden={activePage !== 'filter'}>
-          <FilterWorkspace isActive={activePage === 'filter'} onFrameClick={handleFilterFrameClick} />
+          <FilterWorkspace
+            isActive={activePage === 'filter'}
+            onFrameClick={handleFilterFrameClick}
+            onAddCandidate={connectedUserId ? handleAddAnswerCandidate : undefined}
+            userId={connectedUserId}
+          />
         </div>
         <div className="workspace-panel" hidden={activePage !== 'workspace'}>
           <WorkspacePage
             isActive={activePage === 'workspace'}
-            userId={userId}
+            userId={draftUserId}
             historyRefreshToken={historyRefreshToken}
             onReplay={handleReplay}
             onOpenManualVideo={handleManualVideo}
@@ -160,8 +161,23 @@ const AppContent = () => {
           frame={selectedFrame.frame}
           query={modalQuery}
           initialTimestampMs={selectedFrame.initialTimestampMs}
-          onSubmit={selectedFrame.submissionMode === 'kis' ? handleInspectorSubmit : undefined}
+          workspaceAction={connectedUserId ? 'add-candidate' : undefined}
+          onAddCandidate={handleAddAnswerCandidate}
           onClose={() => setSelectedFrame(null)}
+        />
+      )}
+      {candidateDraft && (
+        <AnswerCandidateDialog
+          kind={candidateDraft.kind}
+          initialValue={candidateDraft.initialValue}
+          onSave={handleSaveAnswerCandidate}
+          onCancel={() => {
+            if (isSavingCandidate) return;
+            setCandidateDraft(null);
+            setCandidateDialogError('');
+          }}
+          errorMessage={candidateDialogError}
+          isSaving={isSavingCandidate}
         />
       )}
       <TopKPromptModal
@@ -176,12 +192,15 @@ const AppContent = () => {
   );
 };
 
-const App = () => (
-  <SubmissionProvider>
-    <SubmissionDialogProvider>
-      <AppContent />
-    </SubmissionDialogProvider>
-  </SubmissionProvider>
-);
+const AppContent = () => {
+  const { connectedUserId, draftUserId } = useVbsSession();
+  return (
+    <AnswerWorkspaceProvider connectedUserId={connectedUserId}>
+      <AppShell connectedUserId={connectedUserId} draftUserId={draftUserId} />
+    </AnswerWorkspaceProvider>
+  );
+};
+
+const App = () => <VbsSessionProvider><AppContent /></VbsSessionProvider>;
 
 export default App;

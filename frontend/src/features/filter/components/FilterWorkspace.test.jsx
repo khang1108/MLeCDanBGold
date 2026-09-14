@@ -1,24 +1,18 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FilterWorkspace from './FilterWorkspace';
-import { SubmissionProvider } from '../../submission/contexts/SubmissionContext';
-import { SubmissionDialogProvider } from '../../submission/contexts/SubmissionDialogContext';
 import { filterFrames } from '../../../api/filter';
-import { getSubmissionFiles } from '../../../api/workspace';
+import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
 
 
 jest.mock('../../../api/filter');
-jest.mock('../../../api/workspace', () => ({
-  getSubmissionFiles: jest.fn().mockResolvedValue({ files: [] }),
-  workspaceWebSocketUrl: jest.fn(() => 'ws://example.test/api/v1/workspace/ws'),
-}));
 
 
 const renderWorkspace = async (props = {}) => {
   const result = render(
-    <SubmissionProvider>
-      <SubmissionDialogProvider><FilterWorkspace {...props} /></SubmissionDialogProvider>
-    </SubmissionProvider>,
+    <AnswerWorkspaceProvider connectedUserId="">
+      <FilterWorkspace {...props} />
+    </AnswerWorkspaceProvider>,
   );
   await act(async () => Promise.resolve());
   return result;
@@ -27,7 +21,6 @@ const renderWorkspace = async (props = {}) => {
 
 beforeEach(() => {
   filterFrames.mockReset();
-  getSubmissionFiles.mockResolvedValue({ files: [] });
 });
 
 
@@ -156,8 +149,37 @@ test('reuses applied evidence predicates during pagination', async () => {
 });
 
 
-test('keeps the shared submission files panel in the Filter sidebar', async () => {
-  await renderWorkspace({ isActive: true });
+test('does not render the legacy submission-file panel in the Filter sidebar', async () => {
+  await renderWorkspace();
 
-  expect(screen.getByRole('region', { name: 'Shared submission files' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Shared submission files' })).toBeNull();
+});
+
+test('renders the shared answer workspace in the Filter sidebar', async () => {
+  await renderWorkspace();
+
+  expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
+});
+
+test('adds a filtered frame using the exact backend timestamp', async () => {
+  const onAddCandidate = jest.fn();
+  const frame = {
+    frame_id: 'filter-time-frame',
+    video_id: 'V03',
+    frame_idx: 11,
+    timestamp_ms: 56_789,
+    matches: {},
+  };
+  filterFrames.mockResolvedValue({
+    page_id: 1,
+    frames_per_pages: 20,
+    total_pages: 1,
+    total_results: 1,
+    results: [frame],
+  });
+  await renderWorkspace({ onAddCandidate });
+  fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Add frame to answer workspace' }));
+  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'V03', timestampMs: 56_789 });
 });

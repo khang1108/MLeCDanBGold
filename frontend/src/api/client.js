@@ -15,6 +15,16 @@ const resolveDefaultBaseUrl = () => {
 };
 
 export const API_BASE_URL = resolveDefaultBaseUrl().replace(/\/+$/, '');
+export const DRES_LOG_STATUS_EVENT = 'hcmai:dres-log-status';
+
+const publishDresLogStatus = (response, requestHeaders) => {
+  const status = response.headers?.get?.('X-DRES-Log-Status');
+  const userId = requestHeaders?.['X-VBS-User-ID']?.trim();
+  if (!userId || (status !== 'sent' && status !== 'failed') || typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(DRES_LOG_STATUS_EVENT, {
+    detail: { userId, status },
+  }));
+};
 
 /** Resolve an API-relative asset path without rewriting absolute URLs. */
 export const resolveApiUrl = (value) => {
@@ -51,6 +61,7 @@ export const requestJson = async (path, {
     error.cause = cause;
     throw error;
   }
+  publishDresLogStatus(response, headers);
 
   if (response.status === 204 || response.status === 205) {
     if (!response.ok) {
@@ -99,6 +110,7 @@ export const requestFormData = async (path, formData, {
     error.cause = cause;
     throw error;
   }
+  publishDresLogStatus(response, headers);
 
   if (response.status === 204 || response.status === 205) {
     if (!response.ok) {

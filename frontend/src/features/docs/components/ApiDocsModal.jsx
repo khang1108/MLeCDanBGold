@@ -20,20 +20,32 @@ const ENDPOINTS = [
       {
         method: 'POST',
         path: '/api/v1/search',
-        title: 'KIS Temporal Search',
-        desc: 'Splits a natural-language query into ordered events, aligns them against canonical visual keyframes, and returns representative frames with full alignment evidence.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/search" \\
+        title: 'KIS Text Search',
+        desc: 'Runs text retrieval over canonical video frames. A connected VBS User ID is optional; successful retrieval remains successful if result logging fails.',
+        curl: `curl -i -X POST "${API_BASE_URL}/api/v1/search" \\
   -H "Content-Type: application/json" \\
+  -H "X-VBS-User-ID: team-a" \\
   -d '{"query": "a red car approaches. It turns left.", "top_k": 20}'`,
       },
       {
         method: 'POST',
-        path: '/api/v1/trake',
-        title: 'TRAKE Sequential Event Alignment',
-        desc: 'Aligns an ordered sequence of semantic events across long video timelines.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/trake" \\
+        path: '/api/v1/search/image',
+        title: 'Image-to-Frame Search',
+        desc: 'Searches keyframes from an image upload. The response carries the same DRES log-status header as text search.',
+        curl: `curl -i -X POST "${API_BASE_URL}/api/v1/search/image" \\
+  -H "X-VBS-User-ID: team-a" \\
+  -F "image=@query.jpg;type=image/jpeg" \\
+  -F "top_k=20"`,
+      },
+      {
+        method: 'POST',
+        path: '/api/v1/filter',
+        title: 'Evidence Filter',
+        desc: 'Returns a backend-paginated page of matching frames and logs a FILTER result event for the connected participant.',
+        curl: `curl -i -X POST "${API_BASE_URL}/api/v1/filter" \\
   -H "Content-Type: application/json" \\
-  -d '{"events": ["person enters room", "person sits at desk", "person leaves room"], "top_k": 20}'`,
+  -H "X-VBS-User-ID: team-a" \\
+  -d '{"metadata_filters": {"caption": "red car"}, "folder_id": null, "video_id": null, "frames_per_pages": 20, "page_id": 1}'`,
       },
     ],
   },
@@ -57,16 +69,83 @@ const ENDPOINTS = [
     ],
   },
   {
-    category: 'Submissions',
+    category: 'VBS Sessions',
     items: [
       {
         method: 'POST',
-        path: '/api/v1/submission',
-        title: 'Submit CSV Files',
-        desc: 'Submits finalized CSV result files to the evaluation backend.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/submission" \\
+        path: '/api/v1/vbs/session/connect',
+        title: 'Connect a mapped participant',
+        desc: 'Connects using only the VBS user ID. DRES credentials and session values are resolved and retained by the backend.',
+        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/session/connect" \\
   -H "Content-Type: application/json" \\
-  -d '{"files": [{"name": "query-1-kis.csv", "content": "L01_V001,100"}]}'`,
+  -d '{"user_id": "team-a"}'`,
+      },
+      {
+        method: 'GET',
+        path: '/api/v1/vbs/session/{user_id}',
+        title: 'Check or clear participant connection',
+        desc: 'GET reports a safe connected flag; DELETE evicts that backend session. Neither response returns credentials or a DRES session.',
+        curl: `curl -i "${API_BASE_URL}/api/v1/vbs/session/team-a"`,
+      },
+      {
+        method: 'DELETE',
+        path: '/api/v1/vbs/session/{user_id}',
+        title: 'Disconnect a participant',
+        desc: 'Unlocks the browser after the backend removes this participant’s private DRES session.',
+        curl: `curl -X DELETE "${API_BASE_URL}/api/v1/vbs/session/team-a"`,
+      },
+    ],
+  },
+  {
+    category: 'Shared Answer Workspace',
+    items: [
+      {
+        method: 'GET',
+        path: '/api/v1/answer-workspace',
+        title: 'Load the task-scoped answer workspace',
+        desc: 'Requires X-VBS-User-ID. Live collaborators receive revisioned snapshots over /api/v1/answer-workspace/ws?user_id=team-a. The snapshot includes a human-readable task_name and an opaque task_scope_key used to guard mutations.',
+        curl: `curl -H "X-VBS-User-ID: team-a" "${API_BASE_URL}/api/v1/answer-workspace"`,
+      },
+    ],
+  },
+  {
+    category: 'KIS, VQA, and AVS Submissions',
+    items: [
+      {
+        method: 'POST',
+        path: '/api/v1/vbs/submit/kis',
+        title: 'Submit one KIS frame answer',
+        desc: 'Forwards one frozen FRAME candidate and expected revisions. Use the task_scope_key returned by the workspace as an optimistic scope guard; it is not a DRES task ID. The backend resolves the canonical media ID and exact timestamp before sending to DRES.',
+        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submit/kis" \\
+  -H "Content-Type: application/json" \\
+  -d '{"user_id": "team-a", "task_scope_key": "dres-task-v1:<copy-from-workspace>", "expected_workspace_revision": 4, "candidate_id": "candidate-1", "expected_revision": 2}'`,
+      },
+      {
+        method: 'POST',
+        path: '/api/v1/vbs/submit/vqa',
+        title: 'Submit one VQA text answer',
+        desc: 'Forwards one frozen TEXT candidate with revision checks and the workspace task_scope_key; the backend sends answer text only.',
+        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submit/vqa" \\
+  -H "Content-Type: application/json" \\
+  -d '{"user_id": "team-a", "task_scope_key": "dres-task-v1:<copy-from-workspace>", "expected_workspace_revision": 4, "candidate_id": "candidate-2", "expected_revision": 1}'`,
+      },
+      {
+        method: 'POST',
+        path: '/api/v1/vbs/submit/avs',
+        title: 'Submit the eligible AVS frame set',
+        desc: 'Sends the ordered eligible FRAME candidate revisions with the workspace task_scope_key in one DRES request. The server rejects a stale workspace snapshot before forwarding.',
+        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submit/avs" \\
+  -H "Content-Type: application/json" \\
+  -d '{"user_id": "team-a", "task_scope_key": "dres-task-v1:<copy-from-workspace>", "expected_workspace_revision": 8, "candidates": [{"candidate_id": "candidate-1", "expected_revision": 2}, {"candidate_id": "candidate-3", "expected_revision": 1}]}'`,
+      },
+      {
+        method: 'POST',
+        path: '/api/v1/vbs/submission-attempts/{attempt_id}/resolve',
+        title: 'Resolve an unknown submission outcome',
+        desc: 'Applies an operator-confirmed accepted or not_accepted decision to the current UNKNOWN attempt without retrying DRES.',
+        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submission-attempts/attempt-1/resolve" \\
+  -H "Content-Type: application/json" \\
+  -d '{"user_id": "team-a", "outcome": "not_accepted"}'`,
       },
     ],
   },
@@ -175,6 +254,16 @@ const ApiDocsModal = ({ isOpen, onClose }) => {
             </div>
           ) : (
             <div className="api-docs-reference-container">
+              <aside className="api-docs-log-status" aria-label="DRES result logging status">
+                <strong>DRES result logging</strong>
+                <span>
+                  Successful text, image, and Filter retrievals send one DRES
+                  <code> QueryResultLog</code> with the active session of the user who searched.
+                  Read <code>X-DRES-Log-Status</code> as <code>sent</code>, <code>failed</code>, or
+                  {' '}<code>skipped</code> (no active session). A logging failure does not replace
+                  the retrieval response. Credentials and DRES sessions stay on the backend.
+                </span>
+              </aside>
               {ENDPOINTS.map((category) => (
                 <div key={category.category} className="api-docs-category-group">
                   <h3 className="api-docs-category-title">{category.category}</h3>
@@ -183,7 +272,7 @@ const ApiDocsModal = ({ isOpen, onClose }) => {
                       const uniqueKey = `${category.category}-${itemIdx}`;
                       const isCopied = copiedIndex === uniqueKey;
                       return (
-                        <div key={endpoint.path} className="api-docs-endpoint-card">
+                        <div key={`${endpoint.method}-${endpoint.path}`} className="api-docs-endpoint-card">
                           <div className="api-docs-endpoint-header">
                             <div className="api-docs-path-group">
                               <span className={`api-method-badge ${endpoint.method.toLowerCase()}`}>

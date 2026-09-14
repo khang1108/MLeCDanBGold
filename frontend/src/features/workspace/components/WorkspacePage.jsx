@@ -1,11 +1,9 @@
 /**
- * Workspace page for persisted Query history, manual video inspection, and
- * the shared submission filename worktree.
+ * Workspace page for persisted Query history and manual video inspection.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { getQueryHistory } from '../../../api/workspace';
+import { getQueryHistory } from '../../../api/history';
 import { resolveFrameAtTimestamp } from '../../../api/frames';
-import SubmissionWorktree from '../../submission/components/SubmissionWorktree';
 
 const WorkspacePage = ({
   isActive = false,
@@ -21,7 +19,6 @@ const WorkspacePage = ({
   const [timestampText, setTimestampText] = useState('');
   const [videoError, setVideoError] = useState(null);
   const [isOpeningVideo, setIsOpeningVideo] = useState(false);
-  const [eventRefreshToken, setEventRefreshToken] = useState(0);
   const viewerRequestRef = useRef(null);
 
   const loadHistory = useCallback((signal) => {
@@ -44,13 +41,7 @@ const WorkspacePage = ({
     const controller = new AbortController();
     loadHistory(controller.signal);
     return () => controller.abort();
-  }, [eventRefreshToken, historyRefreshToken, isActive, loadHistory, userId]);
-
-  useEffect(() => {
-    const refresh = () => setEventRefreshToken((token) => token + 1);
-    window.addEventListener('hcmai:history-changed', refresh);
-    return () => window.removeEventListener('hcmai:history-changed', refresh);
-  }, []);
+  }, [historyRefreshToken, isActive, loadHistory, userId]);
 
   useEffect(() => {
     if (!userId.trim()) {
@@ -129,13 +120,6 @@ const WorkspacePage = ({
                 <article className="workspace-history-row" key={item.query_id}>
                   <div className="workspace-history-copy">
                     <p className="workspace-history-query">{item.query_text}</p>
-                    {item.submission_files?.length > 0 && (
-                      <div className="workspace-history-files" aria-label="Submitted files">
-                        {item.submission_files.map((fileName) => (
-                          <span className="workspace-history-file" key={fileName}>{fileName}</span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                   <button
                     type="button"
@@ -186,7 +170,6 @@ const WorkspacePage = ({
               </button>
             </form>
           </section>
-          {isActive && <SubmissionWorktree />}
         </aside>
       </div>
     </div>

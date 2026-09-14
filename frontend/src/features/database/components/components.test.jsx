@@ -10,18 +10,18 @@ describe('Database Sub-Components (No Icons, Plain Text UI)', () => {
   test('TableSelector renders table list and invokes onSelectTable on click', () => {
     const tables = [
       { name: 'query_history', row_count: 5 },
-      { name: 'submission_files', row_count: 2 },
+      { name: 'example_records', row_count: 2 },
     ];
     const onSelect = jest.fn();
 
     render(<TableSelector tables={tables} selectedTableName="query_history" onSelectTable={onSelect} />);
 
     expect(screen.getByText('query_history (5 rows)')).toBeTruthy();
-    const subBtn = screen.getByText('submission_files (2 rows)');
+    const subBtn = screen.getByText('example_records (2 rows)');
     expect(subBtn).toBeTruthy();
 
     fireEvent.click(subBtn);
-    expect(onSelect).toHaveBeenCalledWith('submission_files');
+    expect(onSelect).toHaveBeenCalledWith('example_records');
   });
 
   test('TableMetadata displays formatted schema columns and primary keys', () => {

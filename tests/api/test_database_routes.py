@@ -50,7 +50,15 @@ def workspace_store(tmp_path):
             result_snapshot={"results": []},
         )
     )
-    store.create_submission_file("answer.csv", "L21_V001,90")
+    workspace = store.get_answer_workspace("eval-1", "task-1", "KIS task")
+    store.add_text_candidate(
+        text="answer",
+        user_id="user-1",
+        evaluation_id="eval-1",
+        task_scope_key="task-1",
+        task_name="KIS task",
+        expected_workspace_revision=workspace.revision,
+    )
     return store
 
 
@@ -74,19 +82,19 @@ def test_workspace_store_executes_select_query(workspace_store) -> None:
     assert result.execution_time_ms >= 0.0
 
 
-def test_workspace_store_executes_mutation_query(workspace_store) -> None:
-    """Execute INSERT and verify rows_affected and persistence."""
+def test_workspace_store_executes_unrelated_mutation_query(workspace_store) -> None:
+    """Keep non-answer database-console mutations compatible with existing use."""
 
     result = workspace_store.execute_query(
-        "INSERT INTO submission_files (name, content, is_validated, revision) VALUES ('test.csv', 'data', 0, 1)"
+        "UPDATE query_history SET query_text = 'updated' WHERE query_id = 'query-1'"
     )
     assert result.is_mutation is True
     assert result.rows_affected == 1
 
     select_result = workspace_store.execute_query(
-        "SELECT name FROM submission_files WHERE name = 'test.csv'"
+        "SELECT query_text FROM query_history WHERE query_id = 'query-1'"
     )
-    assert len(select_result.rows) == 1
+    assert select_result.rows == [{"query_text": "updated"}]
 
 
 def test_workspace_store_raises_on_invalid_syntax(workspace_store) -> None:
@@ -94,6 +102,60 @@ def test_workspace_store_raises_on_invalid_syntax(workspace_store) -> None:
 
     with pytest.raises(ValueError, match="syntax error"):
         workspace_store.execute_query("SELCT * FROM query_history")
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "UPDATE answer_workspace_state SET revision = revision + 1 WHERE singleton_id = 1",
+        "UPDATE answer_candidates SET text = 'changed' WHERE kind = 'TEXT'",
+        "DELETE FROM submission_attempts",
+        "ALTER TABLE answer_candidates ADD COLUMN bypassed_revision INTEGER",
+        "DROP TABLE answer_candidates",
+        "CREATE INDEX bypassed_candidate_index ON answer_candidates(text)",
+        "DROP INDEX answer_frame_unique",
+    ],
+)
+def test_workspace_store_rejects_raw_answer_table_writes(workspace_store, query: str) -> None:
+    """Protect typed workspace revisions and durable attempt snapshots from SQL bypasses."""
+
+    with pytest.raises(ValueError, match="Answer workspace tables are managed"):
+        workspace_store.execute_query(query)
+
+
+def test_workspace_store_authorizer_rejects_triggered_answer_table_writes(workspace_store) -> None:
+    """Deny protected writes even when a SQL trigger attempts them indirectly."""
+
+    before = workspace_store.execute_query(
+        "SELECT revision FROM answer_workspace_state WHERE singleton_id = 1"
+    ).rows[0]["revision"]
+    workspace_store.execute_query(
+        "CREATE TRIGGER bypass_workspace_revision AFTER UPDATE ON query_history "
+        "BEGIN UPDATE answer_workspace_state SET revision = revision + 1; END"
+    )
+
+    with pytest.raises(ValueError, match="Answer workspace tables are managed"):
+        workspace_store.execute_query(
+            "UPDATE query_history SET query_text = 'trigger attempt' WHERE query_id = 'query-1'"
+        )
+
+    after = workspace_store.execute_query(
+        "SELECT revision FROM answer_workspace_state WHERE singleton_id = 1"
+    ).rows[0]["revision"]
+    assert after == before
+
+
+def test_database_execute_endpoint_rejects_raw_answer_table_writes(database_app) -> None:
+    """Keep SQL console browsing available without bypassing workspace services."""
+
+    response = _post_json(
+        database_app,
+        "/api/v1/database/execute",
+        {"query": "UPDATE answer_workspace_state SET revision = revision + 1"},
+    )
+
+    assert response.status_code == 400
+    assert "Answer workspace tables are managed" in response.json()["detail"]
 
 
 
@@ -104,14 +166,13 @@ def test_database_tables_exposes_only_application_tables(database_app) -> None:
 
     assert response.status_code == 200
     tables = {table["name"]: table for table in response.json()["tables"]}
-    assert set(tables) == {"query_history", "submission_files"}
+    assert set(tables) == {"query_history", "answer_workspace_state", "answer_candidates"}
     assert tables["query_history"]["row_count"] == 1
-    assert {column["name"] for column in tables["submission_files"]["columns"]} == {
-        "name",
-        "content",
-        "is_validated",
-        "revision",
-    }
+    assert tables["answer_candidates"]["row_count"] == 1
+    assert "timestamp_ms" in {column["name"] for column in tables["answer_candidates"]["columns"]}
+    state_columns = {column["name"] for column in tables["answer_workspace_state"]["columns"]}
+    assert {"task_scope_key", "task_name"} <= state_columns
+    assert "task_id" not in state_columns
 
 
 def test_database_rows_returns_stable_bounded_raw_sqlite_page(database_app) -> None:
@@ -166,13 +227,13 @@ def test_database_execute_endpoint_select(database_app) -> None:
     assert payload["is_mutation"] is False
 
 
-def test_database_execute_endpoint_mutation(database_app) -> None:
-    """Endpoint handles mutation queries and reports rows_affected."""
+def test_database_execute_endpoint_unrelated_mutation(database_app) -> None:
+    """Keep database-console writes outside answer state available over HTTP."""
 
     response = _post_json(
         database_app,
         "/api/v1/database/execute",
-        {"query": "INSERT INTO submission_files (name, content, is_validated, revision) VALUES ('ep.csv', 'x', 0, 1)"},
+        {"query": "UPDATE query_history SET query_text = 'changed' WHERE query_id = 'query-1'"},
     )
     assert response.status_code == 200
     payload = response.json()

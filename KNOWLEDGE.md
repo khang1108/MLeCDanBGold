@@ -1,5 +1,154 @@
 # HCMAI Research Knowledge
 
+## VBS 2027 DRES v2 submission and interaction logging boundary
+
+**Date:** 2026-09-14
+**Problem:** The AIC-oriented frontend uses frame-index CSV submission files and
+TRAKE UI semantics, while VBS 2027 requires direct KIS, AVS, and VQA result
+submission and successful-search interaction logs through DRES.
+
+### Sources
+
+- [VBS 2027 Call for Systems](https://mmm2027.net/call_for_VBS.html)
+- [VBS task overview](https://videobrowsershowdown.org/about-vbs/)
+- [Official DRES Client OpenAPI](https://raw.githubusercontent.com/dres-dev/DRES/master/doc/oas-client.json)
+- [Official DRES TypeScript client example](https://github.com/dres-dev/Client-Examples/blob/main/angular-ts/src/app/app.component.ts)
+- [Official VBS communication with DRES guide](https://videobrowsershowdown.org/about-vbs/communication-with-dres/)
+- [VBS 2026 public task description](https://cfp.sciltp.com/video-browser-showdown-2026/)
+- [V3C collection structure](https://doi.org/10.1007/978-3-030-05710-7_29)
+
+### Findings
+
+- **SOURCE:** VBS 2027 lists KIS, AVS, and VQA, and requires participating
+  systems to send results and logs to DRES. TRAKE is not listed as a VBS 2027
+  task.
+- **SOURCE:** DRES Client API v2 submits with
+  `POST /api/v2/submit/{evaluationId}` and an
+  `ApiClientSubmission.answerSets[].answers[]` body. An answer can contain
+  plaintext, a media item, or a temporal media location.
+- **SOURCE:** Temporal answer `start` and `end` values are integer
+  milliseconds. The official client example demonstrates a point submission
+  with `start` populated and `end` null; DRES also accepts an integer `end`.
+- **SOURCE:** Result logging uses
+  `POST /api/v2/log/result/{evaluationId}` and `QueryResultLog`, whose ranked
+  answers reuse the temporal answer contract. Query/result event timestamps
+  are epoch milliseconds and are distinct from media timeline milliseconds.
+- **DECISION:** Successful text, image, and filter searches always send one
+  `QueryResultLog` using the performing user's DRES session. HCMAI does not send
+  a separate `/api/v2/log/query` event, and logging failures do not replace a
+  successful retrieval response.
+- **SOURCE:** Login requires a username and password and returns a session ID;
+  client evaluation and submission/logging endpoints accept that session ID.
+- **SOURCE:** In DRES Client OpenAPI 2.0.5-SNAPSHOT, the current-task endpoint
+  references `ApiClientTaskTemplateInfo`, whose schema contains `name`,
+  `taskGroup`, `taskType`, and `duration` but no task ID. A successful submit
+  response contains `status`, a verdict in `submission`, and `description`; an
+  HTTP 200/202 without a recognized verdict is ambiguous and must remain
+  `UNKNOWN` locally.
+- **SOURCE:** AVS rewards multiple distinct correct instances and strongly
+  penalizes false submissions; temporally close shots contribute less than
+  diverse instances.
+- **SOURCE:** Public VBS 2026 material describes KIS as one segment, AVS as many
+  segments, Q/A as plaintext, and KIS/AVS segment submission as video ID plus
+  timestamp. The official VBS integration guide references DRES v2.0.1, while
+  current master advertises v2.0.5-SNAPSHOT.
+- **SOURCE:** V3C uses sequential numerical video IDs across its three
+  partitions and source filenames such as `00001.mp4`.
+- **PROPOSED:** These 2026/V3C facts are sufficient for provisional contracts
+  and fixtures, but they do not prove the campaign-specific DRES
+  `mediaItemName`.
+
+### Relevance to HCMAI
+
+- **PROPOSED:** Keep DRES credentials and session tokens only in the backend,
+  keyed by the VBS user ID already entered in the frontend. The browser should
+  receive connection status, never the token.
+- **PROPOSED:** Preconfigure each participant credential in BE secrets for the
+  competition. FE accepts only `user_id`; it has no DRES credential form or
+  login popup. Auth data must never enter the shared answer workspace, SQLite,
+  WebSocket state, localStorage, or logs.
+- **PROPOSED:** Replace free-form CSV submission files with a structured,
+  WebSocket-synchronized answer workspace. KIS and VQA submit one selected
+  frame/text answer; AVS submits all selected temporal answers.
+- **SOURCE / DECISION:** DRES v2 permits multiple `answers` inside one
+  `answerSet`. AVS therefore sends every eligible frame in one submission
+  request; no sequential submission mode is planned.
+- **DECISION:** HCMAI sends point answers with `start == end == timestamp_ms`.
+  Inspector candidates capture rounded realtime `video.currentTime` in
+  milliseconds; frame-card candidates preserve the card's exact
+  `timestamp_ms`. Neither submission coordinate is derived from `frame_id` or
+  `frame_idx`.
+- **DECISION:** The synchronized workspace displays only the actual FRAME or
+  TEXT answer. Rows open an editor on click; compact actions handle submission,
+  deletion, and—for FRAME answers—opening the existing viewer at the exact
+  candidate timestamp. AVS exposes only one Submit All action.
+- **DECISION:** Final submission uses optimistic revision snapshots. KIS/VQA
+  submit one candidate ID/revision plus workspace revision; AVS submits a
+  deterministic ordered list of candidate ID/revision pairs plus workspace
+  revision. BE rejects any changed snapshot or incompatible AVS mode before
+  calling DRES.
+- **DECISION:** After validation, BE reserves the whole workspace until the DRES
+  call has a definitive outcome. Mutations cannot make a newer answer inherit
+  an older payload's submitted status. Ambiguous network outcomes remain locked
+  for explicit operator reconciliation and are never automatically retried.
+- **DECISION:** Every reservation persists its exact payload, candidate
+  revisions, and task scope as an immutable submission attempt. On BE restart,
+  leftover `FORWARDING` attempts become `UNKNOWN`; resolution uses the stored
+  snapshot rather than reconstructing it from mutable workspace state.
+- **DECISION:** Workspace candidates bind to the active DRES evaluation/task.
+  A non-empty workspace cannot cross a task transition until a participant
+  explicitly confirms clearing it and switching scope.
+- **DECISION (2026-09-14):** Derive an internal `task_scope_key` as
+  `dres-task-v1:` plus SHA-256 of compact, sorted-key UTF-8 JSON containing the
+  exact evaluation ID, task name, task group, task type, and duration. Preserve
+  non-blank task strings exactly; do not trim or otherwise normalize them. The
+  key exists only for HCMAI workspace isolation and is never serialized as
+  DRES `taskId`.
+- **SOURCE / DECISION (2026-09-14):** Send the freshly resolved official
+  `taskName` in each DRES answer set. A valid verdict means DRES processed the
+  request, independently of correctness; even `WRONG` is delivered and its
+  frozen candidates become submitted rather than retryable.
+- **DECISION (2026-09-14):** SQLite schema v2 migrates every v1 task ID into
+  `task_scope_key` and labels its task name `legacy-unverified`. Preserve
+  candidate rows, revisions, submitted state, pending attempt linkage, and raw
+  immutable `snapshot_json` bytes. The first official task scope mismatches and
+  requires explicit clear-and-switch.
+- **SOURCE LIMITATION (2026-09-14):** DRES `currentTask` exposes only task
+  template fields. Consecutive task instances with identical name, group, type,
+  and duration are indistinguishable through this endpoint; do not call an
+  undocumented endpoint to invent stronger identity. Verify the staging
+  boundary or request a supported client-visible instance identifier.
+- **PROPOSED:** Map `video_id` through one verified organizer-ID adapter and
+  submit the exact selected `timestamp_ms`. Do not reuse AIC `frame_idx` or the
+  display-only helper that strips dotted video-ID prefixes.
+- **SOURCE / DECISION (2026-09-13):** Every successful text, image, or filter
+  retrieval sends one QueryResultLog with the executing participant's connected
+  DRES session. No optional logging switch suppresses it; a missing session is
+  reported as `skipped`, and logging errors never replace retrieval results.
+- **SOURCE / DECISION (2026-09-13):** Filter logs contain the exact returned
+  page, with global ranks offset by `(page_id - 1) * frames_per_pages`. All
+  result timestamps retain canonical `timestamp_ms`; event timestamps are epoch
+  milliseconds.
+
+### Status
+
+**SOURCE-CONFIRMED CONTRACT / LOCAL FIXTURES VERIFIED / STAGING PENDING.** The
+official current-task and verdict-bearing submission models are verified
+against the published DRES client OpenAPI and local MockTransport fixtures.
+Exact VBS 2027 media item names, task-instance boundaries, and campaign
+acceptance still require verification against the organizer's test DRES
+instance; no staging result has been observed yet.
+
+### Decision or Experiment
+
+Rehearse the boundary described in
+`docs/superpowers/plans/2026-09-12-vbs-2027-dres-answer-workspace.md` and its
+contract corrections in
+`docs/superpowers/plans/2026-09-14-vbs-dres-contract-corrections.md`. Capture
+sanitized KIS, VQA, AVS, text-search, image-search, and filter-log fixtures from
+test DRES before enabling the live competition configuration. The identical-
+template task-instance limitation remains an explicit staging question.
+
 ## Temporal Alignment Quality vs Dense Retrieval: Pathology Diagnosis & Two-Stage Reranking (P1-Diag)
 
 **Date:** 2026-09-04  

@@ -95,7 +95,7 @@ def request(app, method, path, **kwargs):
     finally:
         loop.close()
 
-def test_app_exposes_only_standalone_search_contract() -> None:
+def test_app_exposes_standalone_search_and_vbs_contracts() -> None:
     store, retriever = Store(), Retriever()
     service = SearchService(cast(Corpus, store), cast(RetrievalService, retriever))
     app = create_app(service)
@@ -126,13 +126,17 @@ def test_app_exposes_only_standalone_search_contract() -> None:
     assert "frame_url" not in result
     assert "thumbnail_url" not in result
     assert "thumbnail_urls" not in result
-    paths = {
-        getattr(route, "path", None)
-        for mounted in app.routes
-        if hasattr(mounted, "original_router")
-        for route in mounted.original_router.routes
-    }
+    paths = set(app.openapi()["paths"])
     assert "/api/v1/keyframes/{frame_id}" in paths
     assert "/api/v1/frames/{frame_id}/image" not in paths
     assert "/api/v1/frames/{frame_id}/thumbnail" not in paths
     assert "/api/v1/vqa" not in paths
+    assert "/api/v1/vbs/session/connect" in paths
+    assert "/api/v1/answer-workspace" in paths
+    assert "/api/v1/vbs/submit/kis" in paths
+    assert "/api/v1/vbs/submit/vqa" in paths
+    assert "/api/v1/vbs/submit/avs" in paths
+    legacy_submit_path = "/api/v1/" + "submit"
+    legacy_csv_path = "/api/v1/" + "submission"
+    assert legacy_submit_path not in paths
+    assert legacy_csv_path not in paths

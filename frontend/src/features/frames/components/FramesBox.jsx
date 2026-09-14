@@ -15,7 +15,7 @@ const FramesBox = ({
   warnings = [],
   events = [],
   onFrameClick,
-  onSubmit,
+  onAddCandidate,
   getFrameClassName,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
@@ -82,10 +82,11 @@ const FramesBox = ({
                   <FrameCard
                   key={`${frame.video_id}:${(frame.frame_ids || [frame.frame_id]).join("|")}:${index}`}
                   frame={frame}
-                    events={events}
-                    className={getFrameClassName?.(frame)}
-                    onClick={() => onFrameClick(frame)}
-                  onSubmit={onSubmit}
+                  events={events}
+                  className={getFrameClassName?.(frame)}
+                  workspaceAction="add-candidate"
+                  onAddCandidate={onAddCandidate}
+                  onClick={() => onFrameClick(frame)}
                 />
               ))}
             </div>

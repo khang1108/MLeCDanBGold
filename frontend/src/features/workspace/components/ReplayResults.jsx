@@ -1,28 +1,20 @@
-/** Adapt a history snapshot to the same result UI used by live Query.
+/** Adapt a KIS history snapshot to the same result UI used by live Query.
 
-Replay never invokes KIS or TRAKE retrieval. The snapshot supplies the same
-result and metadata fields returned by live search, so ImageModal opens from
-the snapshot without a second frame-detail request.
+Replay never invokes retrieval. The snapshot supplies the same result and
+metadata fields returned by live search, so the inspector opens without a
+second frame-detail request. Legacy path snapshots remain unsupported.
 */
 import React, { useCallback } from 'react';
 import FramesBox from '../../frames/components/FramesBox';
-import TrakeResults from '../../search/components/TrakeResults';
 import { activityStateForFrame } from '../queryHistory';
 
 const ReplayResults = ({
   resultSnapshot,
   frameActivity,
   onFrameClick,
-  onFrameSubmit,
-  onSubmit,
-  onPathSubmit,
-  onTrakeSubmit,
 }) => {
-  const frameSubmit = onFrameSubmit || onSubmit;
-  const pathSubmit = onPathSubmit || onTrakeSubmit;
-
-  const openFrame = useCallback((frame, submissionMode) => {
-    onFrameClick?.(frame, submissionMode);
+  const openFrame = useCallback((frame) => {
+    onFrameClick?.(frame);
   }, [onFrameClick]);
 
   const getFrameClassName = useCallback(
@@ -43,23 +35,7 @@ const ReplayResults = ({
         warnings={resultSnapshot.warnings || []}
         events={resultSnapshot.events || []}
         getFrameClassName={getFrameClassName}
-        onFrameClick={(frame) => openFrame(frame, 'kis')}
-        onSubmit={frameSubmit}
-      />
-    );
-  }
-
-  if (Array.isArray(resultSnapshot?.paths)) {
-    return (
-      <TrakeResults
-        events={resultSnapshot.events || []}
-        paths={resultSnapshot.paths}
-        warnings={resultSnapshot.warnings || []}
-        error={null}
-        hasSearched
-        getFrameClassName={getFrameClassName}
-        onFrameClick={(frame) => openFrame(frame, 'none')}
-        onTrakeSubmit={pathSubmit}
+        onFrameClick={openFrame}
       />
     );
   }

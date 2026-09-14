@@ -1,4 +1,4 @@
-"""Canonical frame metadata, keyframe asset, and submission routes."""
+"""Canonical frame metadata, keyframe asset, and inspection routes."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
-from hcmai.api.contracts import FrameInspectionResponse, SubmissionResult
+from hcmai.api.contracts import FrameInspectionResponse
 from hcmai.corpus.models import Frame
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.common.utils.logging import get_logger
@@ -27,7 +27,7 @@ def _search_service(container: dict[str, Any]) -> Any:
 
 
 def create_frames_router(service_container: dict[str, Any]) -> APIRouter:
-    """Create metadata, keyframe asset, and submission routes."""
+    """Create metadata, keyframe asset, and inspection routes."""
 
     router = APIRouter()
 
@@ -109,20 +109,5 @@ def create_frames_router(service_container: dict[str, Any]) -> APIRouter:
         """Serve the canonical keyframe image for one internal frame ID."""
 
         return keyframe_asset(frame_id)
-
-    @router.post("/api/v1/submit", response_model=SubmissionResult)
-    async def submit_frame(frame_id: str) -> SubmissionResult:
-        try:
-            return _search_service(service_container).submission(frame_id)
-        except SearchServiceUnavailableError as error:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=str(error),
-            ) from error
-        except KeyError as error:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(error),
-            ) from error
 
     return router

@@ -49,7 +49,6 @@
     overflow: auto;
   }
 
-  .submission-tree-list,
   .workspace-history-list {
     max-height: 360px;
     overflow-y: auto;

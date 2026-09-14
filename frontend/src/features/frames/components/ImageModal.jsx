@@ -4,15 +4,15 @@ import VideoTimeline from "./VideoTimeline";
 import {
   displayVideoId,
   getStreamVideoUrl,
-  normalizeSubmissionFps,
 } from "../videoSource";
 
 // The player page endpoint returns HTML, so the inspector uses the raw MP4
 // stream and seeks native media time to the selected canonical timestamp.
-const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }) => {
+const ImageModal = ({ frame = {}, initialTimestampMs, query, onClose, workspaceAction, onAddCandidate }) => {
   const modalCardRef = React.useRef(null);
   const videoRef = React.useRef(null);
   const [videoError, setVideoError] = useState(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
   const [videoDuration, setVideoDuration] = useState(0);
   const targetTime = useMemo(
     () => {
@@ -31,19 +31,13 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }
     [frame.timestamp_ms, frame.video_id],
   );
   const [playbackTime, setPlaybackTime] = useState(targetTime);
-  const [submitted, setSubmitted] = useState(false);
-  const liveFrameIdx = useMemo(() => {
-    const submissionFps = normalizeSubmissionFps(frame.fps);
-    return Number.isFinite(playbackTime) && submissionFps !== null
-      ? Math.round(playbackTime * submissionFps)
-      : frame.frame_idx;
-  }, [frame.frame_idx, frame.fps, playbackTime]);
   const videoLabel = displayVideoId(frame.video_id);
 
   useEffect(() => {
     setPlaybackTime(targetTime);
     setVideoError(null);
     setVideoDuration(0);
+    setIsVideoReady(false);
   }, [streamUrl, targetTime]);
 
   useEffect(() => {
@@ -67,6 +61,7 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }
 
   const handleVideoLoadedMetadata = useCallback((event) => {
     const video = event.currentTarget;
+    setIsVideoReady(true);
     const duration = Number(video.duration);
     setVideoDuration(Number.isFinite(duration) && duration > 0 ? duration : 0);
     if (targetTime === null) return;
@@ -77,6 +72,15 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }
     video.currentTime = seekTime;
     updatePlaybackTime(seekTime);
   }, [targetTime, updatePlaybackTime]);
+
+  const addCurrentVideoMoment = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || typeof onAddCandidate !== 'function') return;
+    const currentTime = video.currentTime;
+    if (!Number.isFinite(currentTime) || currentTime < 0) return;
+    const timestampMs = Math.round(video.currentTime * 1000);
+    onAddCandidate({ kind: 'FRAME', videoId: frame.video_id, timestampMs });
+  }, [frame.video_id, onAddCandidate]);
 
   const handleVideoTimeUpdate = useCallback((event) => {
     updatePlaybackTime(event.currentTarget.currentTime);
@@ -109,16 +113,6 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }
     video.currentTime = nextTime;
     updatePlaybackTime(nextTime);
   }, [updatePlaybackTime]);
-
-  const handleSubmit = useCallback(() => {
-    if (!onSubmit) return;
-    onSubmit({
-      line: `${videoLabel},${liveFrameIdx}`,
-      source: "Frame inspector",
-    });
-    setSubmitted(true);
-    window.setTimeout(() => setSubmitted(false), 1200);
-  }, [liveFrameIdx, onSubmit, videoLabel]);
 
   const handleModalKeyDown = useCallback((event) => {
     if (event.key === 'Escape') {
@@ -200,14 +194,16 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose }
       {videoLabel} · {Number.isFinite(frame.frame_idx) ? frame.frame_idx : `${frame.timestamp_ms} ms`}
             </span>
             <div className="inspector-header-actions">
-              {onSubmit && (
+              {workspaceAction === 'add-candidate' && (
                 <button
                   type="button"
-                  className={`inspector-submit-btn ${submitted ? "submitted" : ""}`}
-                  onClick={handleSubmit}
-                  aria-label="Submit current frame"
+                  className="inspector-add-answer-button"
+                  onClick={addCurrentVideoMoment}
+                  disabled={!isVideoReady || Boolean(videoError)}
+                  aria-label="Add current video moment to answer workspace"
+                  title="Add the current video time to the answer workspace"
                 >
-                  {submitted ? "✓" : "Submit"}
+                  ＋ Answer
                 </button>
               )}
               <button

@@ -17,9 +17,7 @@ test('streams the canonical video at the selected timestamp', async () => {
 
   const video = await screen.findByLabelText('Video for L21_V001');
   expect(video.tagName).toBe('VIDEO');
-  expect(video.getAttribute('src')).toBe(
-    'https://stream.iamphuckhang.dev/api/v1/videos/L21_V001/stream',
-  );
+  expect(video.getAttribute('src')).toMatch(/\/videos\/L21_V001\/stream$/);
   expect(video.hasAttribute('controls')).toBe(false);
   expect(screen.getByRole('slider', { name: 'Video timeline' })).toBeTruthy();
   expect(screen.getByText('125')).toBeTruthy();
@@ -50,9 +48,7 @@ test('updates the stream URL when the selected timestamp changes', async () => {
   rerender(<ImageModal frame={{ ...frame, timestamp_ms: 5_200 }} onClose={jest.fn()} />);
 
   const video = await screen.findByLabelText('Video for L21_V001');
-  expect(video.getAttribute('src')).toBe(
-    'https://stream.iamphuckhang.dev/api/v1/videos/L21_V001/stream',
-  );
+  expect(video.getAttribute('src')).toMatch(/\/videos\/L21_V001\/stream$/);
 });
 
 test('seeks the raw stream to the selected source timestamp after metadata loads', async () => {
@@ -180,7 +176,7 @@ test('uses source time for metadata while keeping the selected frame in the head
   expect(screen.getByText('L21_V001 · 125')).toBeTruthy();
 });
 
-test('submits the live video position from the inspector header', async () => {
+test('does not expose a direct submission action in the inspector', async () => {
   const onSubmit = jest.fn();
   render(
     <ImageModal
@@ -193,15 +189,30 @@ test('submits the live video position from the inspector header', async () => {
   const video = await screen.findByLabelText('Video for L21_V001');
   Object.defineProperty(video, 'currentTime', { configurable: true, value: 5.2 });
   fireEvent.timeUpdate(video);
-  fireEvent.click(screen.getByRole('button', { name: /submit current frame/i }));
-
-  expect(onSubmit).toHaveBeenCalledWith({
-    line: 'L21_V001,156',
-    source: 'Frame inspector',
-  });
+  expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
+  expect(onSubmit).not.toHaveBeenCalled();
 });
 
-test('uses normalized fps when calculating the live BTC frame index', async () => {
+test('freezes the live video currentTime synchronously when adding an inspector candidate', async () => {
+  const onAddCandidate = jest.fn();
+  render(
+    <ImageModal
+      frame={{ ...frame, frame_idx: 900, timestamp_ms: 5_000 }}
+      workspaceAction="add-candidate"
+      onAddCandidate={onAddCandidate}
+      onClose={jest.fn()}
+    />,
+  );
+
+  const video = await screen.findByLabelText('Video for L21_V001');
+  fireEvent.loadedMetadata(video);
+  Object.defineProperty(video, 'currentTime', { configurable: true, value: 12.3456 });
+  fireEvent.click(screen.getByRole('button', { name: 'Add current video moment to answer workspace' }));
+
+  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'L21_V001', timestampMs: 12_346 });
+});
+
+test('keeps playback metadata without exposing an FPS-derived submission action', async () => {
   const onSubmit = jest.fn();
   render(
     <ImageModal
@@ -216,12 +227,8 @@ test('uses normalized fps when calculating the live BTC frame index', async () =
   fireEvent.timeUpdate(video);
 
   expect(screen.getByText('158')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: /submit current frame/i }));
-
-  expect(onSubmit).toHaveBeenCalledWith({
-    line: 'L21_V001,158',
-    source: 'Frame inspector',
-  });
+  expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
+  expect(onSubmit).not.toHaveBeenCalled();
 });
 
 test('shows an unavailable message when the stream cannot be built', async () => {
