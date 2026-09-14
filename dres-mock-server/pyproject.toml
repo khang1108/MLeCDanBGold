@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dres-mock-server"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.139,<1",
+  "pydantic>=2,<3",
+  "pydantic-settings>=2,<3",
+  "uvicorn>=0.51,<1",
+]
+
+[project.optional-dependencies]
+dev = ["httpx>=0.28,<1", "pytest>=9,<10"]
+
+[project.scripts]
+dres-mock-server = "dres_mock_server.app:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dres_mock_server = ["static/*.html", "static/*.css", "static/*.js"]
