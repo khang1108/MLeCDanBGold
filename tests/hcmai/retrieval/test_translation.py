@@ -1,0 +1,92 @@
+"""Behavioral tests for one-to-one event translation."""
+
+from unittest.mock import Mock
+
+import pytest
+
+from hcmai.retrieval.translation import EventTranslationError, EventTranslator
+
+
+def _translator(llm: Mock, cache: object | None = None) -> EventTranslator:
+    """Construct the translator with the minimum configuration it consumes."""
+    config = Mock(
+        prompt_version="event-translation-v1",
+        cache_enabled=True,
+        cache_ttl_seconds=3600,
+        cache_max_entries=2048,
+    )
+    return EventTranslator(llm, config, cache=cache)
+
+
+def test_english_events_bypass_llm() -> None:
+    """English input remains normalized and does not invoke structured inference."""
+    llm = Mock(model="test-model")
+
+    result = _translator(llm).translate(("A woman enters",), language="en")
+
+    assert result == ("A woman enters",)
+    llm.generate_structured.assert_not_called()
+
+
+def test_vietnamese_translation_preserves_event_count_and_order() -> None:
+    """Non-English events map positionally to exactly one translated event each."""
+    llm = Mock(model="test-model")
+    llm.generate_structured.return_value = Mock(
+        events=["A woman enters", "She closes the door"]
+    )
+
+    result = _translator(llm).translate(
+        ("Một phụ nữ đi vào", "Cô ấy đóng cửa"), language="vi"
+    )
+
+    assert result == ("A woman enters", "She closes the door")
+
+
+def test_translation_preserves_required_uppercase_tokens() -> None:
+    """Identifiers in the source event are not lost in translation."""
+    llm = Mock(model="test-model")
+    llm.generate_structured.return_value = Mock(events=["A woman holds OBJ_42"])
+
+    result = _translator(llm).translate(("Người phụ nữ cầm OBJ_42",), language="vi")
+
+    assert result == ("A woman holds OBJ_42",)
+
+
+def test_cache_identity_changes_when_llm_model_changes() -> None:
+    """Translations from differently named LLMs cannot share a cache entry."""
+    first_llm = Mock(model="model-one")
+    first_llm.generate_structured.return_value = Mock(events=["A woman enters"])
+    second_llm = Mock(model="model-two")
+    second_llm.generate_structured.return_value = Mock(events=["A woman enters"])
+
+    class SharedCache:
+        """Small in-memory cache exposing the translator cache protocol."""
+
+        def __init__(self) -> None:
+            """Initialize a hand-checkable cache fixture."""
+            self.entries: dict[object, object] = {}
+
+        def get(self, key: object) -> object | None:
+            """Return the value previously stored under the exact key."""
+            return self.entries.get(key)
+
+        def put(self, key: object, value: object) -> None:
+            """Store one value under the exact cache key."""
+            self.entries[key] = value
+
+    cache = SharedCache()
+
+    _translator(first_llm, cache).translate(("Một phụ nữ đi vào",), language="vi")
+    _translator(second_llm, cache).translate(("Một phụ nữ đi vào",), language="vi")
+
+    assert first_llm.generate_structured.call_count == 1
+    assert second_llm.generate_structured.call_count == 1
+
+
+def test_invalid_translation_raises_event_translation_error() -> None:
+    """A response that changes cardinality fails at the translation boundary."""
+    llm = Mock(model="test-model")
+    llm.generate_structured.return_value = Mock(events=["Only one event"])
+
+    with pytest.raises(EventTranslationError, match="changed event count"):
+        _translator(llm).translate(("Một phụ nữ", "Cô ấy đi vào"), language="vi")

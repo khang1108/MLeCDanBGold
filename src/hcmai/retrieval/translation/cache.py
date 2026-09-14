@@ -1,7 +1,7 @@
-"""Bounded process-local cache for validated query-preparation results.
+"""Bounded process-local storage for validated event translations.
 
-Cache identity preserves event case and model lineage. This module does not
-perform inference or validate generated event bundles.
+Cache identity includes the actual LLM model name and preserves event case, so
+translations from differently configured models cannot be mixed.
 """
 
 from collections import OrderedDict
@@ -20,23 +20,15 @@ def cache_key(
     operation: str,
     events: Sequence[str],
     model_name: str,
-    model_revision: str,
     prompt_version: str,
 ) -> CacheKey:
-    """Build a deterministic key while preserving case-sensitive tokens."""
-
+    """Build a key from operation, live model identity, prompt, and events."""
     normalized_events = normalize_event_texts(events)
-    return (
-        operation,
-        model_name,
-        model_revision,
-        prompt_version,
-        *normalized_events,
-    )
+    return (operation, model_name, prompt_version, *normalized_events)
 
 
-class QueryPreparationCache:
-    """Store recent validated results with TTL and LRU-style eviction."""
+class EventTranslationCache:
+    """Store recent validated translations with TTL and LRU-style eviction."""
 
     def __init__(
         self,
@@ -46,7 +38,6 @@ class QueryPreparationCache:
         clock: Callable[[], float] = monotonic,
     ) -> None:
         """Initialize cache bounds and an injectable monotonic clock."""
-
         if max_entries < 1:
             raise ValueError("max_entries must be at least 1")
         if ttl_seconds <= 0:
@@ -60,7 +51,6 @@ class QueryPreparationCache:
 
     def get(self, key: Hashable) -> Any | None:
         """Return an unexpired value and mark it as recently used."""
-
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
@@ -76,7 +66,6 @@ class QueryPreparationCache:
 
     def put(self, key: Hashable, value: Any) -> None:
         """Store a value and evict least-recently-used entries as needed."""
-
         with self._lock:
             self._entries[key] = (self._clock() + self._ttl_seconds, value)
             self._entries.move_to_end(key)

@@ -11,9 +11,6 @@ from hcmai.api.contracts import (
     FilterResponse,
     FilterResult,
     FrameInspectionResponse,
-    QueryCandidateResponse,
-    QueryCandidatesRequest,
-    QueryCandidatesResponse,
     ImageSearchResponse,
     TRAKERequest,
     TRAKEResponse,
@@ -34,13 +31,14 @@ from hcmai.kis.models import KISIntent
 
 if TYPE_CHECKING:
     from hcmai.kis.resolver import KISIntentResolver
-    from hcmai.query_preparation.service import QueryPreparationService
+    from hcmai.retrieval.translation.service import EventTranslator
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
     from hcmai.retrieval.evidence.literal import LiteralTextIndex
     from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
     from hcmai.retrieval.retriever.models.contracts import VectorRetriever
     from hcmai.retrieval.retriever.pipeline import RetrievalService
     from llm.pipeline import LLMService
+
 
 class SearchServiceUnavailableError(RuntimeError):
     """A required configured search dependency is unavailable."""
@@ -55,7 +53,7 @@ class SearchService:
         retrieval: RetrievalService | None,
         config: SearchConfig | None = None,
         llm: LLMService | None = None,
-        query_preparation: QueryPreparationService | None = None,
+        event_translator: EventTranslator | None = None,
         temporal_evidence: TemporalEvidenceScorer | None = None,
         image_encoder: ImageEmbeddingAdapter | None = None,
         api_config: ApiConfig | None = None,
@@ -69,7 +67,7 @@ class SearchService:
         self.retrieval = retrieval
         self.config = config or SearchConfig()
         self.llm = llm
-        self.query_preparation = query_preparation
+        self.event_translator = event_translator
         self.literal_text = literal_text
         self.temporal_evidence = temporal_evidence
         self.api_config = api_config or ApiConfig()
@@ -189,10 +187,10 @@ class SearchService:
             if intent.language == "en":
                 dense_events = list(canonical_events)
             else:
-                if self.query_preparation is None:
-                    raise SearchServiceUnavailableError("Query preparation capability is unavailable")
+                if self.event_translator is None:
+                    raise SearchServiceUnavailableError("Event translation capability is unavailable")
                 dense_events = list(
-                    self.query_preparation.translate_literal(
+                    self.event_translator.translate(
                         canonical_events,
                         language=intent.language,
                     )
@@ -282,26 +280,6 @@ class SearchService:
             total_results=total,
             available_sources=list(self.literal_text.available_sources),
             results=results,
-        )
-
-    def generate_query_candidates(self, request: QueryCandidatesRequest) -> QueryCandidatesResponse:
-        """Generate five candidates without retaining request or search state."""
-
-        if self.query_preparation is None:
-            raise SearchServiceUnavailableError("Query preparation capability is unavailable")
-        started = perf_counter()
-        result = self.query_preparation.generate_candidates(request.events)
-        return QueryCandidatesResponse(
-            original_events=list(result.original_events),
-            literal_en=list(result.literal_en),
-            candidates=[
-                QueryCandidateResponse(
-                    index=candidate.index,
-                    events=list(candidate.events),
-                )
-                for candidate in result.candidates
-            ],
-            query_preparation_ms=(perf_counter() - started) * 1_000,
         )
 
     def search_trake(self, request: TRAKERequest) -> TRAKEResponse:

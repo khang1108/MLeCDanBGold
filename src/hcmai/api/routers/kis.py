@@ -16,7 +16,7 @@ from hcmai.api.contracts.kis import (
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
-from hcmai.query_preparation.service import QueryPreparationError
+from hcmai.retrieval.translation.service import EventTranslationError
 from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer
 
 logger = get_logger(__name__)
@@ -60,7 +60,7 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(error),
             ) from error
-        except (SearchServiceUnavailableError, QueryPreparationError) as error:
+        except (SearchServiceUnavailableError, EventTranslationError) as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(error),

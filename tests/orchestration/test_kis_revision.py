@@ -42,19 +42,19 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
             ],
         )
 
-    def test_search_kis_revision_success_english_no_query_prep(self) -> None:
+    def test_search_kis_revision_success_english_without_translation(self) -> None:
         corpus = Mock()
         retrieval = Mock()
         intent_resolver = Mock()
         intent_resolver.resolve.return_value = self.mock_intent_en
-        query_prep = Mock()
+        event_translator = Mock()
 
         service = SearchService(
             corpus=corpus,
             retrieval=retrieval,
             temporal_evidence=Mock(),
             intent_resolver=intent_resolver,
-            query_preparation=query_prep,
+            event_translator=event_translator,
         )
 
         mock_execution = KISSearchExecution(
@@ -92,7 +92,7 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
             "A man enters a room.",
             "He talks to a woman.",
         ])
-        query_prep.translate_literal.assert_not_called()
+        event_translator.translate.assert_not_called()
         self.assertEqual(service.kis.execute.call_count, 1)
         call_kwargs = service.kis.execute.call_args.kwargs
         self.assertEqual(call_kwargs["intent"], self.mock_intent_en)
@@ -116,7 +116,7 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
         )
         self.assertEqual(len(response.results), 1)
 
-    def test_search_kis_revision_calls_query_prep_for_vietnamese(self) -> None:
+    def test_search_kis_revision_translates_vietnamese_for_dense_retrieval(self) -> None:
         intent_vi = KISIntent(
             revision=1,
             inputs=["Một người phụ nữ trong bếp."],
@@ -137,15 +137,15 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
         retrieval = Mock()
         intent_resolver = Mock()
         intent_resolver.resolve.return_value = intent_vi
-        query_prep = Mock()
-        query_prep.translate_literal.return_value = ("A woman in a kitchen",)
+        event_translator = Mock()
+        event_translator.translate.return_value = ("A woman in a kitchen",)
 
         service = SearchService(
             corpus=corpus,
             retrieval=retrieval,
             temporal_evidence=Mock(),
             intent_resolver=intent_resolver,
-            query_preparation=query_prep,
+            event_translator=event_translator,
         )
 
         mock_execution = KISSearchExecution(
@@ -165,7 +165,7 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
 
         response = service.search_kis_revision(request)
 
-        query_prep.translate_literal.assert_called_once_with(
+        event_translator.translate.assert_called_once_with(
             ("Một người phụ nữ trong bếp",),
             language="vi",
         )

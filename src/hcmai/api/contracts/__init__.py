@@ -16,11 +16,6 @@ from .kis import (
     KISRevisionSearchResponse,
 )
 from .latency import SearchLatency
-from .query_candidates import (
-    QueryCandidateResponse,
-    QueryCandidatesRequest,
-    QueryCandidatesResponse,
-)
 from .search import (
     ImageSearchResponse,
     SearchResult,
@@ -54,9 +49,6 @@ __all__ = [
     "KISIntent",
     "KISRevisionSearchRequest",
     "KISRevisionSearchResponse",
-    "QueryCandidateResponse",
-    "QueryCandidatesRequest",
-    "QueryCandidatesResponse",
     "QueryHistoryCreate",
     "QueryHistoryList",
     "QueryHistoryRecord",

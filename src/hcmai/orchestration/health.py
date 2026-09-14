@@ -111,7 +111,7 @@ def build_health_report(
             "dense_temporal": dense_temporal_ready,
             "bm25": bm25_ready,
             "hybrid_temporal": dense_temporal_ready and bm25_ready,
-            "query_preparation": service.query_preparation is not None,
+            "event_translation": service.event_translator is not None,
             "filter": bool(
                 service.literal_text is not None
                 and service.literal_text.available_sources

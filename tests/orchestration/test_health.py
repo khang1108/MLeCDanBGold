@@ -50,7 +50,7 @@ class HealthReportTest(unittest.TestCase):
             llm=None,
             temporal_evidence=evidence,
             image_search=object(),
-            query_preparation=object(),
+            event_translator=object(),
             literal_text=SimpleNamespace(available_sources=(RetrievalSource.CAPTION,)),
         )
 
@@ -66,6 +66,7 @@ class HealthReportTest(unittest.TestCase):
         self.assertTrue(report["capabilities"]["search"])
         self.assertTrue(report["capabilities"]["image_search"])
         self.assertTrue(report["capabilities"]["hybrid_temporal"])
+        self.assertTrue(report["capabilities"]["event_translation"])
         self.assertTrue(report["capabilities"]["frame_assets"])
         self.assertEqual(report["startup_messages"], ["optional ASR unavailable"])
 

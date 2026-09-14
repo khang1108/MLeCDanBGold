@@ -27,8 +27,8 @@ from hcmai.orchestration.retrieval_setup import (
     load_temporal_evidence,
     select_visual_retriever,
 )
-from hcmai.query_preparation.service import QueryPreparationService
 from hcmai.retrieval.evidence.literal import LiteralTextIndex
+from hcmai.retrieval.translation.service import EventTranslator
 # pyrefly: ignore [missing-import]
 from llm.config import LLMServiceConfig
 # pyrefly: ignore [missing-import]
@@ -66,7 +66,7 @@ def load_search_service(messages: list[str]) -> SearchService:
     corpus = load_corpus(settings, metadata_path, dataset_root, messages)
     llm = _load_remote_llm(settings, messages)
     llm_client = _load_llm_client(messages)
-    query_preparation = _load_query_preparation(settings, messages, llm=llm_client)
+    event_translator = _load_event_translator(settings, messages, llm=llm_client)
     intent_resolver = _load_intent_resolver(messages, llm=llm_client)
     retrieval = load_retrieval(settings, models, llm, messages, corpus=corpus)
     visual_retriever = select_visual_retriever(retrieval)
@@ -90,7 +90,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         retrieval=retrieval,
         config=settings.search,
         llm=llm,
-        query_preparation=query_preparation,
+        event_translator=event_translator,
         temporal_evidence=temporal_evidence,
         image_encoder=image_encoder,
         api_config=settings.api,
@@ -137,7 +137,7 @@ def _load_remote_llm(
 
 
 def _load_llm_client(messages: list[str]) -> LLMClient | None:
-    """Construct shared LLM client for intent resolution and query preparation."""
+    """Construct the shared LLM client for intent resolution and translation."""
     try:
         return LLMClient(load_llm_endpoint())
     except Exception as error:
@@ -156,15 +156,15 @@ def _load_intent_resolver(
     return KISIntentResolver(llm)
 
 
-def _load_query_preparation(
+def _load_event_translator(
     settings: AppConfig,
     messages: list[str],
     llm: LLMClient | None = None,
-) -> QueryPreparationService | None:
-    """Construct query preparation using the provider-agnostic LLM client."""
+) -> EventTranslator | None:
+    """Construct event translation using the provider-agnostic LLM client."""
     if llm is None:
         messages.append(
-            "Query preparation unavailable; Dense search remains available"
+            "Event translation unavailable; Dense search remains available"
         )
         return None
-    return QueryPreparationService(llm, settings.query_preparation)
+    return EventTranslator(llm, settings.event_translation)
