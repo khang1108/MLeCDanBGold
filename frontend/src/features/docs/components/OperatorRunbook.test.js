@@ -3,9 +3,10 @@ import path from 'path';
 
 const readme = fs.readFileSync(path.resolve(__dirname, '../../../../../README.md'), 'utf8');
 
-test('archives the retired shared-workspace data before migration', () => {
+test('warns before retiring stored answers while keeping query history on migration', () => {
   expect(readme).toMatch(/backup[^\n]*runtime\/workspace\.sqlite3/i);
   expect(readme).toMatch(/submission-file[^\n]*(retired|retirement)/i);
+  expect(readme).toMatch(/schema v3[^\n]*preserving `query_history`/i);
 });
 
 test('documents the VBS 2027 operator rehearsal and freeze checklist', () => {

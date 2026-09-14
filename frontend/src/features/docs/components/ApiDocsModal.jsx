@@ -97,55 +97,21 @@ const ENDPOINTS = [
     ],
   },
   {
-    category: 'Shared Answer Workspace',
+    category: 'Private DRES Submissions',
     items: [
       {
         method: 'GET',
-        path: '/api/v1/answer-workspace',
-        title: 'Load the task-scoped answer workspace',
-        desc: 'Requires X-VBS-User-ID. Live collaborators receive revisioned snapshots over /api/v1/answer-workspace/ws?user_id=team-a. The snapshot includes a human-readable task_name and an opaque task_scope_key used to guard mutations.',
-        curl: `curl -H "X-VBS-User-ID: team-a" "${API_BASE_URL}/api/v1/answer-workspace"`,
-      },
-    ],
-  },
-  {
-    category: 'KIS, VQA, and AVS Submissions',
-    items: [
-      {
-        method: 'POST',
-        path: '/api/v1/vbs/submit/kis',
-        title: 'Submit one KIS frame answer',
-        desc: 'Forwards one frozen FRAME candidate and expected revisions. Use the task_scope_key returned by the workspace as an optimistic scope guard; it is not a DRES task ID. The backend resolves the canonical media ID and exact timestamp before sending to DRES.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submit/kis" \\
-  -H "Content-Type: application/json" \\
-  -d '{"user_id": "team-a", "task_scope_key": "dres-task-v1:<copy-from-workspace>", "expected_workspace_revision": 4, "candidate_id": "candidate-1", "expected_revision": 2}'`,
+        path: '/api/v1/vbs/task/{user_id}',
+        title: 'Read the participant’s active task scope',
+        desc: 'Requires an already-connected participant ID. Returns safe task metadata and an opaque task_scope_key; the DRES session and credentials remain private to the backend.',
+        curl: `curl "${API_BASE_URL}/api/v1/vbs/task/team-a"`,
       },
       {
         method: 'POST',
-        path: '/api/v1/vbs/submit/vqa',
-        title: 'Submit one VQA text answer',
-        desc: 'Forwards one frozen TEXT candidate with revision checks and the workspace task_scope_key; the backend sends answer text only.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submit/vqa" \\
-  -H "Content-Type: application/json" \\
-  -d '{"user_id": "team-a", "task_scope_key": "dres-task-v1:<copy-from-workspace>", "expected_workspace_revision": 4, "candidate_id": "candidate-2", "expected_revision": 1}'`,
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/vbs/submit/avs',
-        title: 'Submit the eligible AVS frame set',
-        desc: 'Sends the ordered eligible FRAME candidate revisions with the workspace task_scope_key in one DRES request. The server rejects a stale workspace snapshot before forwarding.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submit/avs" \\
-  -H "Content-Type: application/json" \\
-  -d '{"user_id": "team-a", "task_scope_key": "dres-task-v1:<copy-from-workspace>", "expected_workspace_revision": 8, "candidates": [{"candidate_id": "candidate-1", "expected_revision": 2}, {"candidate_id": "candidate-3", "expected_revision": 1}]}'`,
-      },
-      {
-        method: 'POST',
-        path: '/api/v1/vbs/submission-attempts/{attempt_id}/resolve',
-        title: 'Resolve an unknown submission outcome',
-        desc: 'Applies an operator-confirmed accepted or not_accepted decision to the current UNKNOWN attempt without retrying DRES.',
-        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submission-attempts/attempt-1/resolve" \\
-  -H "Content-Type: application/json" \\
-  -d '{"user_id": "team-a", "outcome": "not_accepted"}'`,
+        path: '/api/v1/vbs/submit',
+        title: 'Submit one KIS, AVS, or VQA answer',
+        desc: 'KIS and AVS accept one temporal answer; VQA accepts one text answer. Include the task_scope_key returned by task lookup. The backend validates scope and answer kind, then sends once through this participant’s private DRES session.',
+        curl: `curl -X POST "${API_BASE_URL}/api/v1/vbs/submit" -H "Content-Type: application/json" -d '{"user_id": "team-a", "expected_task_scope_key": "dres-task-v1:<copy-from-task-lookup>", "answer": {"kind": "TEMPORAL", "video_id": "L21_V001", "start_ms": 12345, "end_ms": 12345}}'`,
       },
     ],
   },

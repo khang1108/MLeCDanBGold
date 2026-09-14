@@ -139,10 +139,26 @@ class DresService:
 
         if type(timestamp_ms) is not int or timestamp_ms < 0:
             raise ValueError("timestamp_ms must be a non-negative integer")
+        return self.temporal_range_answer(video_id, timestamp_ms, timestamp_ms)
+
+    def temporal_range_answer(
+        self,
+        video_id: str,
+        start_ms: int,
+        end_ms: int,
+    ) -> ApiClientAnswer:
+        """Build a temporal answer while preserving the exact selected interval."""
+
+        if type(start_ms) is not int or start_ms < 0:
+            raise ValueError("start_ms must be a non-negative integer")
+        if type(end_ms) is not int or end_ms < 0:
+            raise ValueError("end_ms must be a non-negative integer")
+        if end_ms < start_ms:
+            raise ValueError("end_ms must be greater than or equal to start_ms")
         return ApiClientAnswer(
             media_item_name=self.media_item_name(video_id),
-            start=timestamp_ms,
-            end=timestamp_ms,
+            start=start_ms,
+            end=end_ms,
         )
 
     async def submit(
@@ -151,11 +167,12 @@ class DresService:
         evaluation_id: str,
         payload: ApiClientSubmission,
     ):
-        """Forward one submission through the participant's session."""
+        """Send one answer once and evict only this user's session on a 401."""
 
         return await self._with_session(
             user_id,
             lambda session_id: self.client.submit(evaluation_id, session_id, payload),
+            retry_auth=False,
         )
 
     async def log_results(
@@ -197,7 +214,7 @@ class DresService:
         *,
         retry_auth: bool = True,
     ) -> _T:
-        """Run once with a cached token and retry at most once after a 401."""
+        """Run with one cached token; retry reads once, never submission POSTs."""
 
         session_id = self._sessions.get(user_id)
         if session_id is None:
@@ -205,13 +222,16 @@ class DresService:
         try:
             return await operation(session_id)
         except DresAuthenticationError:
-            if not retry_auth:
-                raise
             async with self._lock(user_id):
                 latest = self._sessions.get(user_id)
                 if latest == session_id:
-                    latest = await self._login(user_id)
-                    self._sessions[user_id] = latest
+                    if retry_auth:
+                        latest = await self._login(user_id)
+                        self._sessions[user_id] = latest
+                    else:
+                        self._sessions.pop(user_id, None)
+            if not retry_auth:
+                raise
             if latest is None:
                 raise DresAuthenticationError("Participant is not connected to DRES") from None
             return await operation(latest)

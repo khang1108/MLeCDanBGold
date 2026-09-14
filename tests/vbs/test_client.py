@@ -250,6 +250,38 @@ def test_client_translates_dres_error_statuses_without_session_leak(
     asyncio.run(exercise())
 
 
+def test_submit_401_is_one_http_post_without_transport_replay() -> None:
+    """Keep a single client submission call to one upstream POST attempt."""
+
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            401,
+            json={"status": False, "description": "expired session"},
+        )
+
+    async def exercise() -> None:
+        client = DresClient(_settings(), transport=httpx.MockTransport(handler))
+        payload = ApiClientSubmission(answer_sets=[ApiClientAnswerSet(
+            task_name="KIS task",
+            answers=[ApiClientAnswer(media_item_name="video-1", start=1, end=2)],
+        )])
+        try:
+            with pytest.raises(DresAuthenticationError):
+                await client.submit("eval-1", "private-session", payload)
+        finally:
+            await client.aclose()
+
+    asyncio.run(exercise())
+
+    assert len(requests) == 1
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/api/v2/submit/eval-1"
+    assert requests[0].url.params["session"] == "private-session"
+
+
 def test_client_redacts_passwords_from_authentication_errors() -> None:
     """Do not trust upstream descriptions to omit submitted credentials."""
 

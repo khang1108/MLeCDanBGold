@@ -56,7 +56,8 @@ const SearchWorkspace = ({
   topK,
   setTopK,
   onFrameClick,
-  onAddCandidate,
+  onOpenSubmission,
+  isSubmissionOpening = false,
   onQueryChange,
   queryInputRef,
   onFocusQueryInput,
@@ -608,7 +609,8 @@ const SearchWorkspace = ({
           warnings={warnings}
           events={kisEvents}
           onFrameClick={openKisFrame}
-          onAddCandidate={onAddCandidate}
+          onOpenSubmission={onOpenSubmission}
+          isSubmissionOpening={isSubmissionOpening}
           getFrameClassName={getFrameClassName}
         />
         {resultType === 'filter' && filterTotalPages > 1 && (
@@ -834,7 +836,6 @@ const SearchWorkspace = ({
             setUseDense={setUseDense}
             useBm25={useBm25}
             setUseBm25={setUseBm25}
-            isActive={isActive}
           />
         </aside>
         <div className="adhoc-results">

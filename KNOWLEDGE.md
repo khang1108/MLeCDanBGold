@@ -623,3 +623,48 @@ IMPLEMENTED / EVALUATION PENDING
 ### Decision or Experiment
 Preserve legacy default scoring. Do not advance to P1 until B0-B6 separates
 emission failures from DP failures on reproducible localization evidence.
+
+## VBS AVS submissions are scored as individual instances
+
+**Date:** 2026-09-14
+**Problem:** The first private-workspace design proposed bundling all locally
+collected AVS answers into one DRES request, but the VBS competition evaluates
+AVS as an iterative search for many independently submitted instances.
+
+### Sources
+
+- [Official VBS task description](https://videobrowsershowdown.org/about-vbs/)
+- [Results of the 2025 Video Browser Showdown](https://arxiv.org/abs/2509.12000)
+- [Official DRES repository and submission documentation](https://github.com/dres-dev/DRES)
+
+### Findings
+
+- **SOURCE:** VBS describes AVS as finding as many correct instances as
+  possible. Its score considers submission time, false submissions, and the
+  number and temporal/video diversity of submitted instances.
+- **PAPER:** The VBS 2025 report analyzes submissions per participant and notes
+  that AVS produces a comparatively high number of submissions, consistent
+  with iterative instance-by-instance judging.
+- **SOURCE:** DRES exposes a flexible array-shaped submission wire contract,
+  but the transport shape alone does not define VBS scoring semantics or imply
+  that multiple AVS instances should be bundled into one submission event.
+
+### Relevance to HCMAI
+
+Each selected AVS instance must retain its own DRES request, response, timing,
+and failure boundary. HCMAI does not need an AVS answer workspace or a bulk
+action for the active VBS flow; an editable ephemeral popup can submit the
+selected instance immediately through the participant's private session.
+
+### Status
+
+**SOURCE / PAPER-SUPPORTED architecture decision.** The exact organizer
+configuration remains authoritative if a future VBS edition publishes a
+different submission rule.
+
+### Decision or Experiment
+
+Send exactly one AVS temporal answer per DRES request. Do not persist AVS answer
+drafts or results and do not expose `Submit all`. Use the same ephemeral
+single-answer popup for KIS and AVS, then forward directly through the backend
+and the DRES session mapped to that participant.

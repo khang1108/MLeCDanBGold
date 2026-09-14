@@ -2,21 +2,6 @@ import React from "react";
 import { keyframeUrl } from "../../../api/keyframes";
 import AlignmentAccordion from "../../alignment/components/AlignmentAccordion";
 import { displayVideoId } from "../videoSource";
-import { useOptionalAnswerWorkspace } from "../../answer-workspace/contexts/AnswerWorkspaceContext";
-
-/** Derive result-card state only from durable answer-workspace candidates. */
-export const getAnswerFrameClassName = (frame, candidates = []) => {
-  if (!frame || !Array.isArray(candidates)) return '';
-  const matches = candidates.filter((candidate) => candidate?.kind === 'FRAME'
-    && (candidate.source_frame_id
-      ? candidate.source_frame_id === frame.frame_id
-      : candidate.video_id === frame.video_id && candidate.timestamp_ms === frame.timestamp_ms));
-  if (matches.some((candidate) => candidate.submitted_at_ms != null
-      || candidate.submitted_by_user_id != null || candidate.dres_status)) {
-    return 'submitted';
-  }
-  return matches.length ? 'candidate' : '';
-};
 
 // Compact result card; clicking opens the inspector while controls stop propagation.
 const FrameCard = ({
@@ -26,22 +11,19 @@ const FrameCard = ({
   detailStatus = 'idle',
   imageLoading = 'lazy',
   className = '',
-  workspaceAction,
-  onAddCandidate,
+  onOpenSubmission,
+  isSubmissionOpening = false,
   onClick,
   onSeek,
 }) => {
-  const answerWorkspace = useOptionalAnswerWorkspace();
   const displayFrame = detail ? { ...frame, ...detail } : frame;
   const frameId = displayFrame.frame_id;
-  const answerFrameClassName = getAnswerFrameClassName(frame, answerWorkspace?.candidates);
-  const cardClassName = [className, answerFrameClassName].filter(Boolean).join(' ');
+  const cardClassName = [className].filter(Boolean).join(' ');
   const previewUrl = frameId ? keyframeUrl(frameId) : null;
   const caption = displayFrame.metadata?.caption ?? displayFrame.caption;
   const hasScore = Number.isFinite(displayFrame.score);
   const hasTimestamp = Number.isFinite(displayFrame.timestamp_ms);
-  const canAddFrame = workspaceAction === 'add-candidate'
-    && typeof onAddCandidate === 'function'
+  const canSubmitFrame = typeof onOpenSubmission === 'function'
     && typeof frame.video_id === 'string'
     && frame.video_id.trim().length > 0
     && Number.isSafeInteger(frame.timestamp_ms)
@@ -92,21 +74,22 @@ const FrameCard = ({
           )}
         </div>
       )}
-      {canAddFrame && (
+      {canSubmitFrame && (
         <button
           type="button"
-          className="frame-add-answer-button"
+          className="frame-submit-button"
+          disabled={isSubmissionOpening}
           onClick={(event) => {
             event.stopPropagation();
-            onAddCandidate?.({
-              kind: 'FRAME',
+            onOpenSubmission?.({
               videoId: frame.video_id,
-              timestampMs: frame.timestamp_ms,
+              startMs: frame.timestamp_ms,
+              endMs: frame.timestamp_ms,
             });
           }}
-          aria-label="Add frame to answer workspace"
+          aria-label="Submit this frame to DRES"
         >
-          ＋ Add answer
+          ↗ Submit
         </button>
       )}
       <AlignmentAccordion

@@ -1,13 +1,8 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import ToolBox from './ToolBox';
-import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
 
-const renderToolBox = (props) => render(
-  <AnswerWorkspaceProvider connectedUserId="">
-    <ToolBox {...props} />
-  </AnswerWorkspaceProvider>,
-);
+const renderToolBox = (props) => render(<ToolBox {...props} />);
 
 describe('ToolBox component', () => {
   test('renders an inline Top-K number input without stepper controls, presets, or a slider', () => {
@@ -88,10 +83,10 @@ describe('ToolBox component', () => {
     expect(screen.queryByText('No Query Files')).toBeNull();
   });
 
-  test('renders the shared answer workspace panel', () => {
+  test('does not render a shared answer workspace panel', () => {
     renderToolBox({ topK: 20, setTopK: jest.fn() });
 
-    expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: /answer workspace/i })).toBeNull();
   });
 
   test('renders dataset selector with AIC selected by default', () => {

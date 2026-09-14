@@ -2,7 +2,6 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { searchFramesByImage } from '../../../api/search';
 import ImageSearchWorkspace from './ImageSearchWorkspace';
-import AnswerWorkspaceProvider from '../../answer-workspace/contexts/AnswerWorkspaceContext';
 import {
   createQueryHistory,
   markFrameViewed,
@@ -14,11 +13,7 @@ jest.mock('../../../api/history', () => ({
   markFrameViewed: jest.fn(),
 }));
 
-const renderImageSearch = (props) => render(
-  <AnswerWorkspaceProvider connectedUserId="">
-    <ImageSearchWorkspace {...props} />
-  </AnswerWorkspaceProvider>,
-);
+const renderImageSearch = (props) => render(<ImageSearchWorkspace {...props} />);
 
 beforeEach(() => {
   searchFramesByImage.mockReset();
@@ -41,10 +36,10 @@ test('renders empty image dropzone with disabled Search button', () => {
   expect(searchBtn.disabled).toBe(true);
 });
 
-test('renders the shared answer workspace in Image Search', () => {
+test('does not render a shared answer workspace in Image Search', () => {
   renderImageSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
 
-  expect(screen.getByRole('region', { name: 'Answer workspace' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: /answer workspace/i })).toBeNull();
 });
 
 test('pasting an image via clipboard (Ctrl+V) selects image and enables Search', () => {
@@ -153,8 +148,8 @@ test('submitting search calls searchFramesByImage and renders results with laten
   });
 });
 
-test('adds an image-search frame at its exact timestamp, not its frame index', async () => {
-  const onAddCandidate = jest.fn();
+test('opens direct submission for an image-search frame at its exact timestamp', async () => {
+  const onOpenSubmission = jest.fn();
   searchFramesByImage.mockResolvedValueOnce({
     results: [{
       frame_id: 'image-time-frame',
@@ -167,14 +162,14 @@ test('adds an image-search frame at its exact timestamp, not its frame index', a
     }],
     latency: { total_ms: 2 },
   });
-  renderImageSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a', onAddCandidate });
+  renderImageSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a', onOpenSubmission });
   fireEvent.change(document.querySelector('input[type="file"]'), {
     target: { files: [new File(['image'], 'query.png', { type: 'image/png' })] },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Add frame to answer workspace' }));
-  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'V02', timestampMs: 9_876 });
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit this frame to DRES' }));
+  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'V02', startMs: 9_876, endMs: 9_876 });
 });
 
 test('searches without a User ID and does not create history', async () => {

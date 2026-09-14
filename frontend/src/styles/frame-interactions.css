@@ -9,7 +9,7 @@
   margin-left: auto;
 }
 
-.card-submit-btn {
+.frame-submit-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -27,21 +27,17 @@
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-.card-submit-btn:hover {
+.frame-submit-button:hover {
   border-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
 }
 
-.card-submit-btn.submitted {
-  border-color: #10b981;
-  background: #ecfdf5;
-  color: #047857;
+.frame-submit-button:disabled,
+.inspector-submit-answer-button:disabled {
+  opacity: .55;
+  cursor: wait;
 }
 
-.card-submit-btn.submitted:hover {
-  border-color: #059669;
-  background: #d1fae5;
-}
 
 .alignment-accordion-toggle {
   width: 100%;

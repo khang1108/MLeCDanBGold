@@ -23,7 +23,8 @@ const ImageSearchWorkspace = ({
   topK = 20,
   setTopK,
   onFrameClick,
-  onAddCandidate,
+  onOpenSubmission,
+  isSubmissionOpening = false,
   userId,
 }) => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -255,7 +256,6 @@ const ImageSearchWorkspace = ({
             topK={topK}
             setTopK={setTopK}
             showRetrievalSources={false}
-            isActive={isActive}
           />
         </aside>
 
@@ -270,7 +270,8 @@ const ImageSearchWorkspace = ({
               warnings={warnings}
               events={[]}
               onFrameClick={openCanonicalFrame}
-              onAddCandidate={onAddCandidate}
+              onOpenSubmission={onOpenSubmission}
+              isSubmissionOpening={isSubmissionOpening}
             />
           )}
         </div>

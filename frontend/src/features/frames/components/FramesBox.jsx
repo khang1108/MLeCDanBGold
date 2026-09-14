@@ -15,7 +15,8 @@ const FramesBox = ({
   warnings = [],
   events = [],
   onFrameClick,
-  onAddCandidate,
+  onOpenSubmission,
+  isSubmissionOpening = false,
   getFrameClassName,
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
@@ -84,8 +85,8 @@ const FramesBox = ({
                   frame={frame}
                   events={events}
                   className={getFrameClassName?.(frame)}
-                  workspaceAction="add-candidate"
-                  onAddCandidate={onAddCandidate}
+                  onOpenSubmission={onOpenSubmission}
+                  isSubmissionOpening={isSubmissionOpening}
                   onClick={() => onFrameClick(frame)}
                 />
               ))}

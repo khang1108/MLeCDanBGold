@@ -176,12 +176,10 @@ test('uses source time for metadata while keeping the selected frame in the head
   expect(screen.getByText('L21_V001 · 125')).toBeTruthy();
 });
 
-test('does not expose a direct submission action in the inspector', async () => {
-  const onSubmit = jest.fn();
+test('does not expose a DRES action while the participant is disconnected', async () => {
   render(
     <ImageModal
       frame={{ ...frame, fps: 30 }}
-      onSubmit={onSubmit}
       onClose={jest.fn()}
     />,
   );
@@ -189,17 +187,15 @@ test('does not expose a direct submission action in the inspector', async () => 
   const video = await screen.findByLabelText('Video for L21_V001');
   Object.defineProperty(video, 'currentTime', { configurable: true, value: 5.2 });
   fireEvent.timeUpdate(video);
-  expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
-  expect(onSubmit).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: /submit current video moment/i })).toBeNull();
 });
 
-test('freezes the live video currentTime synchronously when adding an inspector candidate', async () => {
-  const onAddCandidate = jest.fn();
+test('freezes rounded live player time when opening direct submission', async () => {
+  const onOpenSubmission = jest.fn();
   render(
     <ImageModal
       frame={{ ...frame, frame_idx: 900, timestamp_ms: 5_000 }}
-      workspaceAction="add-candidate"
-      onAddCandidate={onAddCandidate}
+      onOpenSubmission={onOpenSubmission}
       onClose={jest.fn()}
     />,
   );
@@ -207,28 +203,51 @@ test('freezes the live video currentTime synchronously when adding an inspector 
   const video = await screen.findByLabelText('Video for L21_V001');
   fireEvent.loadedMetadata(video);
   Object.defineProperty(video, 'currentTime', { configurable: true, value: 12.3456 });
-  fireEvent.click(screen.getByRole('button', { name: 'Add current video moment to answer workspace' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Submit current video moment to DRES' }));
 
-  expect(onAddCandidate).toHaveBeenCalledWith({ kind: 'FRAME', videoId: 'L21_V001', timestampMs: 12_346 });
+  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'L21_V001', startMs: 12_346, endMs: 12_346 });
 });
 
-test('keeps playback metadata without exposing an FPS-derived submission action', async () => {
-  const onSubmit = jest.fn();
+test('disables the inspector action while the active DRES task is loading', async () => {
   render(
     <ImageModal
-      frame={{ ...frame, fps: 29.97 }}
-      onSubmit={onSubmit}
+      frame={frame}
+      isSubmissionOpening
+      onOpenSubmission={jest.fn()}
       onClose={jest.fn()}
     />,
   );
 
   const video = await screen.findByLabelText('Video for L21_V001');
-  Object.defineProperty(video, 'currentTime', { configurable: true, value: 5.25 });
+  fireEvent.loadedMetadata(video);
+  expect(screen.getByRole('button', { name: 'Submit current video moment to DRES' }).disabled).toBe(true);
+});
+
+test('uses exact current time rather than FPS-derived frame index for submission', async () => {
+  const onOpenSubmission = jest.fn();
+  render(
+    <ImageModal
+      frame={{ ...frame, fps: 29.97 }}
+      onOpenSubmission={onOpenSubmission}
+      onClose={jest.fn()}
+    />,
+  );
+
+  const video = await screen.findByLabelText('Video for L21_V001');
+  let currentTime = 0;
+  Object.defineProperty(video, 'duration', { configurable: true, value: 30 });
+  Object.defineProperty(video, 'currentTime', {
+    configurable: true,
+    get: () => currentTime,
+    set: (value) => { currentTime = value; },
+  });
+  fireEvent.loadedMetadata(video);
+  currentTime = 5.25;
   fireEvent.timeUpdate(video);
+  fireEvent.click(screen.getByRole('button', { name: 'Submit current video moment to DRES' }));
 
   expect(screen.getByText('158')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
-  expect(onSubmit).not.toHaveBeenCalled();
+  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'L21_V001', startMs: 5_250, endMs: 5_250 });
 });
 
 test('shows an unavailable message when the stream cannot be built', async () => {

@@ -27,7 +27,6 @@ from hcmai.api.routers import (
     create_system_router,
     create_trake_router,
     create_video_router,
-    create_answer_workspace_router,
     create_vbs_router,
 )
 from hcmai.api.routers.exploration import (
@@ -149,7 +148,7 @@ def create_app(
                 await aclose()
             logger.info("Backend shutdown completed")
 
-    app = FastAPI(title="HCMAI VBS 2027 Answer Workspace API", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="HCMAI Video Retrieval API", version="0.3.0", lifespan=lifespan)
 
     @app.middleware("http")
     async def handle_unexpected_errors(
@@ -209,7 +208,6 @@ def create_app(
     app.include_router(create_frames_router(service_container))
     app.include_router(create_database_router(service_container))
     app.include_router(create_history_router(service_container))
-    app.include_router(create_answer_workspace_router(service_container))
     app.include_router(create_vbs_router(service_container))
     app.include_router(create_video_router(service_container))
 
