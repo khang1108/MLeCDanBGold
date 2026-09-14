@@ -94,9 +94,6 @@ class LLMService:
             }
         return method()
 
-    def embed_text(self, texts: list[str], source: str = "visual") -> Any:
-        return self.adapter.embed_text(texts, source)
-
     def embed_images(
         self,
         images: Any,
@@ -123,18 +120,6 @@ class LLMService:
 
     def rerank(self, query: str, images: Any) -> list[float]:
         return self.adapter.rerank(query, images)
-
-    def translate_query_events(self, events: list[str]) -> list[str]:
-        """Translate ordered retrieval events through the configured provider."""
-
-        return self.adapter.translate_query_events(events)
-
-    def generate_query_candidates(
-        self, events: list[str], candidate_count: int = 5
-    ) -> dict[str, Any]:
-        """Generate literal and controlled retrieval-event bundles."""
-
-        return self.adapter.generate_query_candidates(events, candidate_count)
 
     def boundary_scores(self, frames: Any, *, source: str) -> Any:
         return self.adapter.boundary_scores(frames, source=source)

@@ -9,17 +9,9 @@ import numpy as np
 from PIL import Image
 
 from hcmai.common.config import EncoderConfig
-from hcmai.retrieval.embedding.inference_contracts import (
-    EmbeddingResponse,
-    TextEmbeddingResponse,
-)
+from hcmai.inference.embeddings import EmbeddingClient, TextEmbeddingBatch
+from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse
 from hcmai.retrieval.embedding.models.stats import EncodingStats
-
-
-class EmbeddingClient(Protocol):
-    def embed_text(
-        self, texts: list[str], source: str = "visual"
-    ) -> TextEmbeddingResponse: ...
 
 
 class ImageEmbeddingClient(Protocol):
@@ -57,7 +49,7 @@ class RemoteEmbeddingAdapter:
         size = self.config.batch_size
         for start in range(0, len(texts), size):
             batch = texts[start : start + size]
-            response = self.client.embed_text(batch, self.source)
+            response = self.client.embed_text(batch)
             batches.append(self._validate(response, len(batch)))
         vectors = np.vstack(batches)
         if stats is not None:
@@ -69,17 +61,13 @@ class RemoteEmbeddingAdapter:
         return vectors
 
     def _validate(
-        self, response: TextEmbeddingResponse, count: int
+        self, response: TextEmbeddingBatch, count: int
     ) -> np.ndarray:
         if response.model != self.config.model_name:
             raise ValueError("remote embedding checkpoint mismatch")
-        if self.config.revision is not None and response.revision != self.config.revision:
-            raise ValueError("remote embedding revision mismatch")
-        if self.embedding_dim == 0:
-            self.embedding_dim = response.dimension
-        if response.dimension != self.embedding_dim or not response.normalized:
-            raise ValueError("remote embedding metadata mismatch")
-        vectors = np.asarray(response.embeddings, dtype=self.config.dtype)
+        vectors = np.asarray(response.vectors, dtype=self.config.dtype)
+        if self.embedding_dim == 0 and vectors.shape[0] > 0:
+            self.embedding_dim = vectors.shape[1]
         if vectors.shape != (count, self.embedding_dim):
             raise ValueError("remote embedding shape mismatch")
         if not np.all(np.isfinite(vectors)):

@@ -118,9 +118,6 @@ class InferenceClientPool:
     def ocr(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("ocr", *args, **kwargs)
 
-    def embed_text(self, *args: Any, **kwargs: Any) -> Any:
-        return self._call("embed_text", *args, **kwargs)
-
     def embed_images(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("embed_images", *args, **kwargs)
 

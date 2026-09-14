@@ -17,7 +17,12 @@ from hcmai.common.environment import load_repository_environment
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
 from hcmai.corpus.corpus import _CorpusFrameLoadError
-from hcmai.inference import LLMClient, load_llm_endpoint
+from hcmai.inference import (
+    EmbeddingClient,
+    LLMClient,
+    load_embedding_endpoint,
+    load_llm_endpoint,
+)
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.query_preparation.service import QueryPreparationService
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
@@ -624,7 +629,25 @@ def _load_fast_track_index(
         return None
 
 
-def _query_encoder(config: Any, index: Any, llm: LLMService | None, source: str) -> Any:
-    if llm is None:
+def _query_encoder(
+    config: Any,
+    index: Any,
+    embedding_client: Any = None,
+    source: str = "text",
+) -> Any:
+    """Build a query encoder, using a remote EmbeddingClient if configured or falling back to local."""
+    if not isinstance(embedding_client, EmbeddingClient):
+        try:
+            endpoint = load_embedding_endpoint()
+            embedding_client = EmbeddingClient(endpoint)
+        except Exception:
+            embedding_client = None
+
+    if embedding_client is None:
         return EmbeddingService.create_text_adapter(config)
-    return EmbeddingService.create_remote_adapter(llm, config, index.metadata.embedding_dim, source)
+    return EmbeddingService.create_remote_adapter(
+        embedding_client,
+        config,
+        index.metadata.embedding_dim,
+        source,
+    )

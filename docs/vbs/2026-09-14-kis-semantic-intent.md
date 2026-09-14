@@ -559,19 +559,19 @@ git commit -am "refactor: make query preparation provider agnostic"
 - Remove `InferenceClient.embed_text` and `LLMService.embed_text` only after all text-embedding callers use the shared client.
 - Keep private image embedding methods until a separate `VisionEmbeddingClient` exists; they are a distinct capability, not duplicate legacy.
 
-- [ ] **Step 1: Adapt remote text-embedding tests to `TextEmbeddingBatch`**
+- [x] **Step 1: Adapt remote text-embedding tests to `TextEmbeddingBatch`**
 
 The test must check count, dimension, finite values, normalization, and configured model identity exactly as the existing adapter does.
 
-- [ ] **Step 2: Change `RemoteEmbeddingAdapter` to import `EmbeddingClient`**
+- [x] **Step 2: Change `RemoteEmbeddingAdapter` to import `EmbeddingClient`**
 
 Do not move model/index validation into the provider client. Provider client validates wire format; adapter validates HCMAI checkpoint/dimension/normalization semantics.
 
-- [ ] **Step 3: Wire `_query_encoder` from `load_embedding_endpoint()`**
+- [x] **Step 3: Wire `_query_encoder` from `load_embedding_endpoint()`**
 
 Local encoders remain available when configured. Remote text encoding uses `EmbeddingClient` built from `.env` instead of reusing the all-purpose `LLMService` object.
 
-- [ ] **Step 4: Remove overlapping monolithic methods after reference audit**
+- [x] **Step 4: Remove overlapping monolithic methods after reference audit**
 
 ```bash
 rg "\.embed_text\(|def embed_text" src llm | sort
@@ -579,7 +579,7 @@ rg "\.embed_text\(|def embed_text" src llm | sort
 
 Remove only the methods made unreachable by the new text client. Do not delete OCR/caption/ASR/image-specific transport.
 
-- [ ] **Step 5: Run embedding regression tests and commit**
+- [x] **Step 5: Run embedding regression tests and commit**
 
 ```bash
 PYTHONPATH=src python -m unittest tests.retrieval.embedding.test_remote_adapter -v

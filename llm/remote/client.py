@@ -12,11 +12,9 @@ import numpy as np
 from PIL import Image
 from hcmai.common.config import InferenceConfig
 from hcmai.common.utils.logging import get_logger
-from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse, TextEmbeddingResponse
+from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse
 from llm.contracts import (
     BoundaryScoreResponse,
-    QueryCandidatesResponse,
-    QueryTranslationResponse,
     RerankResponse,
 )
 
@@ -56,36 +54,6 @@ class InferenceClient:
             client,
         )
         self.client = self.gateway.client
-
-    def embed_text(self, texts: list[str], source: str = "visual") -> TextEmbeddingResponse:
-        payload = self._post(
-            "/v1/embeddings/text",
-            json={"source": source, "texts": texts},
-        )
-        return _validated(TextEmbeddingResponse, payload)
-
-    def translate_query_events(self, events: list[str]) -> list[str]:
-        """Request aligned literal translations from llm."""
-
-        payload = self._post(
-            "/query-preparation/translate",
-            json={"events": events},
-        )
-        response = _validated(QueryTranslationResponse, payload)
-        return list(response.events)
-
-    def generate_query_candidates(
-        self, events: list[str], candidate_count: int = 5
-    ) -> dict[str, Any]:
-        """Request exactly five aligned retrieval candidate bundles."""
-
-        payload = self._post(
-            "/query-preparation/candidates",
-            json={"events": events, "candidate_count": candidate_count},
-        )
-        response = _validated(QueryCandidatesResponse, payload)
-        return response.model_dump()
-
     def readiness(self, deadline_at: float | None = None) -> InferenceReadiness:
         payload = self._request("GET", "/ready", deadline_at=deadline_at)
         return _validated(InferenceReadiness, payload)
