@@ -82,8 +82,25 @@ const normalizeSnapshotOptions = (options, field) => {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {
     throw new Error(`${field} options must be an object`);
   }
+
+  let intent = null;
+  if (options.intent !== undefined && options.intent !== null) {
+    if (typeof options.intent !== 'object' || Array.isArray(options.intent)) {
+      throw new Error(`${field}.intent must be an object`);
+    }
+    intent = JSON.parse(JSON.stringify(options.intent));
+  }
+
+  let events = null;
+  if (Array.isArray(options.events) && !intent) {
+    events = normalizeEvents(options.events, `${field}.events`);
+  } else if (!intent && !Array.isArray(options.events)) {
+    throw new Error(`${field} must contain either intent or events array`);
+  }
+
   return {
-    events: normalizeEvents(options.events, `${field}.events`),
+    intent,
+    events,
     latency: normalizeLatency(options.latency, `${field}.latency`),
     warnings: options.warnings === undefined
       ? []
@@ -93,9 +110,10 @@ const normalizeSnapshotOptions = (options, field) => {
 
 export const buildKisSnapshot = (results, options) => {
   if (!Array.isArray(results)) throw new Error('KIS results must be an array');
-  const { events, latency, warnings } = normalizeSnapshotOptions(options, 'KIS snapshot');
+  const { intent, events, latency, warnings } = normalizeSnapshotOptions(options, 'KIS snapshot');
   return {
-    events,
+    ...(intent ? { intent } : {}),
+    ...(events ? { events } : {}),
     latency,
     warnings,
     results: results.map((result, index) => {

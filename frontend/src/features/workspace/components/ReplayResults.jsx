@@ -26,6 +26,10 @@ const ReplayResults = ({
   );
 
   if (Array.isArray(resultSnapshot?.results)) {
+    const replayEvents = Array.isArray(resultSnapshot?.intent?.events)
+      ? resultSnapshot.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
+      : (resultSnapshot?.events || []);
+
     return (
       <FramesBox
         results={resultSnapshot.results}
@@ -33,7 +37,7 @@ const ReplayResults = ({
         error={null}
         latencyMs={resultSnapshot.latency ?? null}
         warnings={resultSnapshot.warnings || []}
-        events={resultSnapshot.events || []}
+        events={replayEvents}
         getFrameClassName={getFrameClassName}
         onFrameClick={openFrame}
       />

@@ -56,6 +56,49 @@ test('builds a replayable KIS snapshot with the complete live-search result', ()
   });
 });
 
+test('preserves full KIS semantic intent graph with entities, events, and temporal edges', () => {
+  const mockIntent = {
+    revision: 2,
+    inputs: ['A woman enters the kitchen', 'She takes a white plate'],
+    language: 'en',
+    query_text: 'A woman enters the kitchen and takes a white plate',
+    entities: [
+      { id: 'X1', kind: 'person', description: 'woman' },
+      { id: 'X2', kind: 'object', description: 'white plate' },
+    ],
+    events: [
+      { id: 'E1', text: 'woman enters kitchen' },
+      { id: 'E2', text: 'woman takes white plate' },
+    ],
+    temporal_edges: [
+      { source: 'E1', relation: 'before', target: 'E2' },
+    ],
+  };
+
+  const snapshot = buildKisSnapshot([{
+    frame_id: 'frame-1',
+    video_id: 'V01',
+    frame_idx: 10,
+    timestamp_ms: 1000,
+    score: 0.95,
+    frame_ids: ['frame-1', 'frame-2'],
+    timestamps_ms: [1000, 2000],
+    metadata: { caption: 'Kitchen scene' },
+  }], {
+    intent: mockIntent,
+    latency: { total_ms: 15 },
+  });
+
+  expect(snapshot.intent).toEqual(mockIntent);
+  expect(snapshot.intent.inputs).toEqual(['A woman enters the kitchen', 'She takes a white plate']);
+  expect(snapshot.intent.entities).toEqual(mockIntent.entities);
+  expect(snapshot.intent.events).toEqual(mockIntent.events);
+  expect(snapshot.intent.temporal_edges).toEqual(mockIntent.temporal_edges);
+  expect(snapshot.events).toBeUndefined();
+  expect(snapshot.results[0].frame_id).toBe('frame-1');
+  expect(snapshot.results[0].timestamps_ms).toEqual([1000, 2000]);
+});
+
 test('uses the current or legacy final score field for KIS', () => {
   expect(buildKisSnapshot([{
     frame_id: 'frame-1',

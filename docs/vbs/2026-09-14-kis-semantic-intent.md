@@ -789,7 +789,7 @@ git commit -am "feat: add semantic revisioned KIS search API"
 - `api/search.js` retains only non-KIS search operations still used (for example image search).
 - Do not fold clue/session state into `activeQuerySession`; that object remains history/replay state until explicitly refactored later.
 
-- [ ] **Step 1: Write pure session tests**
+- [x] **Step 1: Write pure session tests**
 
 Test these transitions:
 
@@ -800,15 +800,15 @@ request failure -> keep revision 1 and keep Q2 as draft
 reset -> inputs=[], revision=0, intent=null
 ```
 
-- [ ] **Step 2: Implement `createKisSessionState` and reducer/helpers**
+- [x] **Step 2: Implement `createKisSessionState` and reducer/helpers**
 
 Use explicit immutable state rather than adding more independent `useState` values to `SearchWorkspace`.
 
-- [ ] **Step 3: Implement API helper**
+- [x] **Step 3: Implement API helper**
 
 `searchKis({ inputs, expectedRevision, useDense, useBm25, topK, userId, signal })` posts to `/api/v1/kis/search` and preserves the DRES user header behavior.
 
-- [ ] **Step 4: Implement `KisPanel`**
+- [x] **Step 4: Implement `KisPanel`**
 
 Required presentation:
 
@@ -821,11 +821,11 @@ Required presentation:
 
 No chat-agent prose and no EventTrail action controls in this task.
 
-- [ ] **Step 5: Integrate `SearchWorkspace`**
+- [x] **Step 5: Integrate `SearchWorkspace`**
 
 Replace the current text submission branch with the session helper/API. Preserve image search/filter/replay/result rendering. Successful result rendering still uses `FramesBox`.
 
-- [ ] **Step 6: Delete old text KIS API call after zero references**
+- [x] **Step 6: Delete old text KIS API call after zero references**
 
 ```bash
 rg "searchFrames\(" frontend/src
@@ -833,7 +833,7 @@ rg "searchFrames\(" frontend/src
 
 If only KIS used it, delete that export and its old tests. Keep `searchFramesByImage` or move it to an image-specific API module if that is the remaining responsibility.
 
-- [ ] **Step 7: Run frontend tests and commit**
+- [x] **Step 7: Run frontend tests and commit**
 
 ```bash
 cd frontend
@@ -864,7 +864,7 @@ git add src
 - Replace snapshot `events: string[]` as the semantic source of truth with `intent`.
 - Remove duplicate event-only snapshot metadata after replay callers use `snapshot.intent.events`.
 
-- [ ] **Step 1: Add snapshot test with entity/event graph**
+- [x] **Step 1: Add snapshot test with entity/event graph**
 
 Assert round-trip preservation of:
 
@@ -877,11 +877,11 @@ intent.temporal_edges
 
 and existing result frame/timestamp metadata.
 
-- [ ] **Step 2: Modify snapshot normalization**
+- [x] **Step 2: Modify snapshot normalization**
 
 Validate intent as an object and retain it unchanged apart from defensive cloning. Stop separately requiring a top-level `events` field.
 
-- [ ] **Step 3: Update Replay consumers and remove duplicate `events` snapshot usage**
+- [x] **Step 3: Update Replay consumers and remove duplicate `events` snapshot usage**
 
 Search with:
 
@@ -891,7 +891,7 @@ rg "result_snapshot.*events|snapshot\.events|\.events" frontend/src/features/wor
 
 Migrate only KIS-history semantics; do not touch unrelated event arrays in temporal exploration.
 
-- [ ] **Step 4: Run history/replay tests and commit**
+- [x] **Step 4: Run history/replay tests and commit**
 
 ```bash
 cd frontend
