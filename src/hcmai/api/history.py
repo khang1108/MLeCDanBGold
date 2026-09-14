@@ -1,4 +1,4 @@
-"""Persist query replay history and expose safe SQLite inspection helpers.
+"""Persist query replay history.
 
 This module owns query-history schema migration and read/write transactions. It
 does not persist answer candidates or DRES submission outcomes.
@@ -14,12 +14,7 @@ from pathlib import Path
 import sqlite3
 import time
 
-from hcmai.api.contracts.database import (
-    DatabaseColumn,
-    DatabaseQueryResponse,
-    DatabaseRowsPage,
-    DatabaseTable,
-)
+
 from hcmai.api.contracts.history import (
     FrameActivity,
     QueryHistoryCreate,
@@ -30,7 +25,7 @@ from hcmai.common.utils.logging import get_logger
 
 logger = get_logger(__name__)
 _DATABASE_VERSION = 3
-_DATABASE_TABLE_ORDER = {"query_history": "created_at DESC, rowid DESC"}
+
 _RETIRED_ANSWER_TABLES = frozenset(
     {
         "answer_workspace_state",
@@ -39,41 +34,7 @@ _RETIRED_ANSWER_TABLES = frozenset(
         "submission_files",
     }
 )
-_RETIRED_ANSWER_OBJECTS = frozenset({"answer_frame_unique"})
-_SQLITE_DML_ACTIONS = frozenset(
-    {
-        sqlite3.SQLITE_INSERT,
-        sqlite3.SQLITE_UPDATE,
-        sqlite3.SQLITE_DELETE,
-    }
-)
-_SQLITE_TABLE_TARGET_SECOND_ARGUMENT_ACTIONS = frozenset(
-    {
-        sqlite3.SQLITE_ALTER_TABLE,
-        sqlite3.SQLITE_CREATE_INDEX,
-        sqlite3.SQLITE_CREATE_TEMP_INDEX,
-        sqlite3.SQLITE_CREATE_TRIGGER,
-        sqlite3.SQLITE_CREATE_TEMP_TRIGGER,
-    }
-)
-_SQLITE_RETIRED_TABLE_ACTIONS = _SQLITE_DML_ACTIONS | frozenset(
-    {
-        sqlite3.SQLITE_ALTER_TABLE,
-        sqlite3.SQLITE_CREATE_TABLE,
-        sqlite3.SQLITE_CREATE_TEMP_TABLE,
-        sqlite3.SQLITE_DROP_TABLE,
-        sqlite3.SQLITE_CREATE_VIEW,
-        sqlite3.SQLITE_CREATE_TEMP_VIEW,
-        sqlite3.SQLITE_DROP_VIEW,
-        sqlite3.SQLITE_DROP_TEMP_VIEW,
-        sqlite3.SQLITE_CREATE_VTABLE,
-        sqlite3.SQLITE_DROP_VTABLE,
-        sqlite3.SQLITE_CREATE_INDEX,
-        sqlite3.SQLITE_CREATE_TEMP_INDEX,
-        sqlite3.SQLITE_CREATE_TRIGGER,
-        sqlite3.SQLITE_CREATE_TEMP_TRIGGER,
-    }
-)
+
 
 
 class WorkspaceStore:
@@ -150,135 +111,6 @@ class WorkspaceStore:
         logger.info("Query history loaded user_id=%s count=%d", user_id, len(records))
         return records
 
-    def list_database_tables(self) -> list[DatabaseTable]:
-        """Describe the sole application table exposed to database browsing."""
-
-        with self._readonly_connection() as connection:
-            return [
-                DatabaseTable(
-                    name=table_name,
-                    row_count=connection.execute(
-                        f"SELECT COUNT(*) FROM {table_name}"
-                    ).fetchone()[0],
-                    columns=_table_columns(connection, table_name),
-                )
-                for table_name in _DATABASE_TABLE_ORDER
-            ]
-
-    def list_database_rows(
-        self,
-        table_name: str,
-        *,
-        page: int,
-        page_size: int,
-    ) -> DatabaseRowsPage:
-        """Read one stable page from the allowlisted query-history table."""
-
-        try:
-            order_by = _DATABASE_TABLE_ORDER[table_name]
-        except KeyError:
-            raise KeyError(f"Database table {table_name!r} is not available") from None
-        if page < 1 or not 1 <= page_size <= 100:
-            raise ValueError("Database pagination is outside the supported bounds")
-        with self._readonly_connection() as connection:
-            total_rows = int(
-                connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-            )
-            offset = (page - 1) * page_size
-            rows = connection.execute(
-                f"SELECT * FROM {table_name} ORDER BY {order_by} LIMIT ? OFFSET ?",
-                (page_size, offset),
-            ).fetchall()
-        return DatabaseRowsPage(
-            table=table_name,
-            page=page,
-            page_size=page_size,
-            total_rows=total_rows,
-            total_pages=(total_rows + page_size - 1) // page_size,
-            rows=[dict(row) for row in rows],
-        )
-
-    def execute_query(
-        self,
-        query: str,
-        *,
-        max_rows: int = 100,
-    ) -> DatabaseQueryResponse:
-        """Run one database-console statement while blocking retired answer tables."""
-
-        cleaned_query = query.strip()
-        if not cleaned_query:
-            raise ValueError("SQL query cannot be empty")
-        if max_rows < 1:
-            raise ValueError("max_rows must be at least 1")
-
-        start_time = time.perf_counter()
-        denied_objects: list[str] = []
-
-        def authorize_retired_answer_storage(
-            action: int,
-            table_name: str | None,
-            second_argument: str | None,
-            _database_name: str | None,
-            _trigger_name: str | None,
-        ) -> int:
-            """Prevent SQL-console writes from reviving the removed answer store."""
-
-            target_table = (
-                second_argument
-                if action in _SQLITE_TABLE_TARGET_SECOND_ARGUMENT_ACTIONS
-                else table_name
-            )
-            if (
-                action in _SQLITE_RETIRED_TABLE_ACTIONS
-                and target_table is not None
-                and target_table.casefold() in _RETIRED_ANSWER_TABLES
-            ):
-                denied_objects.append(target_table)
-                return sqlite3.SQLITE_DENY
-            if (
-                action
-                in {
-                    sqlite3.SQLITE_DROP_INDEX,
-                    sqlite3.SQLITE_DROP_TEMP_INDEX,
-                    sqlite3.SQLITE_DROP_TRIGGER,
-                    sqlite3.SQLITE_DROP_TEMP_TRIGGER,
-                }
-                and table_name is not None
-                and table_name.casefold() in _RETIRED_ANSWER_OBJECTS
-            ):
-                denied_objects.append(table_name)
-                return sqlite3.SQLITE_DENY
-            return sqlite3.SQLITE_OK
-
-        try:
-            with self._connection() as connection:
-                connection.set_authorizer(authorize_retired_answer_storage)
-                cursor = connection.execute(cleaned_query)
-                if cursor.description is not None:
-                    columns = [column[0] for column in cursor.description]
-                    rows = [dict(row) for row in cursor.fetchmany(max_rows)]
-                    is_mutation = False
-                    rows_affected = 0
-                else:
-                    columns = []
-                    rows = []
-                    is_mutation = True
-                    rows_affected = cursor.rowcount if cursor.rowcount >= 0 else 0
-        except sqlite3.Error as error:
-            if denied_objects:
-                raise ValueError(
-                    "Retired answer storage tables cannot be accessed or recreated"
-                ) from error
-            raise ValueError(f"SQLite execution failed: {error}") from error
-        return DatabaseQueryResponse(
-            query=cleaned_query,
-            columns=columns,
-            rows=rows,
-            rows_affected=rows_affected,
-            execution_time_ms=round((time.perf_counter() - start_time) * 1000, 3),
-            is_mutation=is_mutation,
-        )
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -293,19 +125,6 @@ class WorkspaceStore:
         except Exception:
             connection.rollback()
             raise
-        finally:
-            connection.close()
-
-    @contextmanager
-    def _readonly_connection(self) -> Iterator[sqlite3.Connection]:
-        """Open SQLite in URI read-only mode for database-browser requests."""
-
-        database_uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
-        connection = sqlite3.connect(database_uri, uri=True, timeout=5.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA query_only=ON")
-        try:
-            yield connection
         finally:
             connection.close()
 
@@ -446,23 +265,6 @@ def _append_unique(target: list[str], values: list[str]) -> bool:
             target.append(value)
             changed = True
     return changed
-
-
-def _table_columns(
-    connection: sqlite3.Connection,
-    table_name: str,
-) -> list[DatabaseColumn]:
-    """Project schema facts for an allowlisted table name."""
-
-    return [
-        DatabaseColumn(
-            name=row["name"],
-            type=row["type"],
-            nullable=not bool(row["notnull"]) and not bool(row["pk"]),
-            primary_key=bool(row["pk"]),
-        )
-        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
-    ]
 
 
 __all__ = ["WorkspaceStore"]

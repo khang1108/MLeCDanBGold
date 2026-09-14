@@ -4,6 +4,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { getQueryHistory } from '../../../api/history';
 import { resolveFrameAtTimestamp } from '../../../api/frames';
+import WorkspaceInlinePlayer from './WorkspaceInlinePlayer';
+
 
 const WorkspacePage = ({
   isActive = false,
@@ -19,6 +21,7 @@ const WorkspacePage = ({
   const [timestampText, setTimestampText] = useState('');
   const [videoError, setVideoError] = useState(null);
   const [isOpeningVideo, setIsOpeningVideo] = useState(false);
+  const [activeVideo, setActiveVideo] = useState(null);
   const viewerRequestRef = useRef(null);
 
   const loadHistory = useCallback((signal) => {
@@ -82,9 +85,14 @@ const WorkspacePage = ({
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
+      const requestedTimestampMs = frame.requested_timestamp_ms ?? timestamp;
+      setActiveVideo({
+        frame,
+        requestedTimestampMs,
+      });
       onOpenManualVideo?.({
         frame,
-        requestedTimestampMs: frame.requested_timestamp_ms,
+        requestedTimestampMs,
       });
     } catch (error) {
       if (error.name !== 'AbortError') {
@@ -170,6 +178,13 @@ const WorkspacePage = ({
               </button>
             </form>
           </section>
+          {activeVideo && (
+            <WorkspaceInlinePlayer
+              frame={activeVideo.frame}
+              initialTimestampMs={activeVideo.requestedTimestampMs}
+              onClose={() => setActiveVideo(null)}
+            />
+          )}
         </aside>
       </div>
     </div>

@@ -99,6 +99,23 @@ test('keeps the viewer closed and exposes a resolver error', async () => {
   expect(onOpenManualVideo).not.toHaveBeenCalled();
 });
 
+test('renders inline video player without captions and allows closing it', async () => {
+  await renderPage({ isActive: true, userId: '' });
+  expect(screen.queryByRole('region', { name: /inline player/i })).toBeNull();
+
+  fireEvent.change(screen.getByLabelText('video_id'), { target: { value: 'L21_V001' } });
+  fireEvent.change(screen.getByLabelText('timestamp_ms'), { target: { value: '12000' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Open in viewer' }));
+
+  const inlinePlayer = await screen.findByRole('region', { name: /inline player for L21_V001/i });
+  expect(inlinePlayer).toBeTruthy();
+  expect(screen.queryByText('A traffic scene')).toBeNull();
+  expect(screen.getByRole('button', { name: /close video player/i })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: /close video player/i }));
+  expect(screen.queryByRole('region', { name: /inline player/i })).toBeNull();
+});
+
 test('does not mount the legacy submission-file worktree in the right column', async () => {
   await renderPage({ isActive: true });
   expect(screen.queryByRole('region', { name: 'Shared submission files' })).toBeNull();

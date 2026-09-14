@@ -28,10 +28,18 @@ def test_app_keeps_query_history_and_only_the_private_direct_dres_routes() -> No
     assert "/api/v1/vbs/task/{user_id}" in paths
     assert "/api/v1/vbs/submit" in paths
     assert "/api/v1/query-history" in paths
+    assert "/api/v1/database/tables" not in paths
+    assert "/api/v1/database/execute" not in paths
     assert getattr(SearchService, "submis" + "sion", None) is None
     assert getattr(WorkspaceStore, "add_frame_candidate", None) is None
     assert getattr(WorkspaceStore, "get_answer_workspace", None) is None
     assert getattr(WorkspaceStore, "reserve_submission", None) is None
+    assert getattr(WorkspaceStore, "list_database_tables", None) is None
+    assert getattr(WorkspaceStore, "list_database_rows", None) is None
+    assert getattr(WorkspaceStore, "execute_query", None) is None
     assert importlib.util.find_spec("hcmai.api.contracts." + "sub" + "mission") is None
     assert importlib.util.find_spec("hcmai.api.contracts.workspace") is None
     assert importlib.util.find_spec("hcmai.api.routers.workspace") is None
+    assert importlib.util.find_spec("hcmai.api.contracts.database") is None
+    assert importlib.util.find_spec("hcmai.api.routers.database") is None
+

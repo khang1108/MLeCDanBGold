@@ -43,7 +43,7 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
 ));
 
 jest.mock("./features/workspace/components/WorkspacePage", () => (
-  function FakeWorkspacePage({ onReplay, onOpenManualVideo, userId, historyRefreshToken }) {
+  function FakeWorkspacePage({ onReplay, userId, historyRefreshToken }) {
     return (
       <div data-testid="workspace-page">
         Workspace page for {userId}
@@ -59,31 +59,10 @@ jest.mock("./features/workspace/components/WorkspacePage", () => (
         >
           Replay saved query
         </button>
-        <button
-          type="button"
-          onClick={() => onOpenManualVideo?.({
-            frame: {
-              frame_id: 'V01_00000025',
-              video_id: 'V01',
-              frame_idx: 25,
-              timestamp_ms: 1040,
-              fps: 25,
-              metadata: { caption: 'Resolved evidence' },
-            },
-            requestedTimestampMs: 1000,
-          })}
-        >
-          Open manual video
-        </button>
       </div>
     );
   }
 ));
-jest.mock("./features/database", () => ({
-  DatabasePage: function FakeDatabasePage({ isActive }) {
-    return <div data-testid="database-page">Database Page (active: {String(isActive)})</div>;
-  },
-}));
 jest.mock("./api/submissions", () => ({
   getCurrentDresTask: jest.fn(),
   submitDresAnswer: jest.fn(),
@@ -213,7 +192,8 @@ test('persists and locks the User ID only after the backend handshake', async ()
   expect(localStorage.getItem('hcmai_user_id')).toBe('team-a');
   expect(screen.getByTestId('query-user-id').textContent).toBe('team-a');
 
-  fireEvent.click(screen.getByRole('button', { name: 'Database' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Query' }));
   fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
 
   expect(userId.value).toBe('team-a');
@@ -240,29 +220,16 @@ test('replays a saved history item in Query without generating a new request', (
   expect(screen.getByRole('button', { name: 'Query' }).getAttribute('aria-pressed')).toBe('true');
 });
 
-test('opens manual video inspection without exposing a fake frame submission', () => {
+test('navigates to Workspace page when Workspace tab is clicked', () => {
   render(<App />);
   fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Open manual video' }));
-
-  expect(screen.getByText('V01 · 25')).toBeTruthy();
-  expect(screen.getByText('Resolved evidence')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
+  expect(screen.getByTestId('workspace-page')).toBeTruthy();
 });
 
-test('navigates to Database workspace when Database tab is clicked', () => {
-  render(<App />);
-  const databaseTab = screen.getByRole('button', { name: 'Database' });
-  expect(databaseTab.getAttribute('aria-pressed')).toBe('false');
-
-  fireEvent.click(databaseTab);
-  expect(databaseTab.getAttribute('aria-pressed')).toBe('true');
-  expect(screen.getByTestId('database-page').textContent).toContain('active: true');
-});
-
-test('does not display the retired standalone Image Search tab', () => {
+test('does not display retired tabs (Image Search, Database)', () => {
   render(<App />);
   expect(screen.queryByRole('button', { name: 'Image Search' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Database' })).toBeNull();
 });
 
 test('revalidates a stored User ID before marking the session connected', async () => {
