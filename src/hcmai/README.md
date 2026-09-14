@@ -75,6 +75,6 @@ PYTHONPATH=.:src aic/bin/python -m uvicorn hcmai.app:app \
 ```
 
 `GET /health` reports frame-store, retrieval, evidence, and frame-asset
-readiness. The principal task routes are `POST /api/v1/search` and
+readiness. The principal task routes are `POST /api/v1/kis/search` and
 `POST /api/v1/trake`; frame and submission routes materialize identity through
 the same `Corpus` instance.

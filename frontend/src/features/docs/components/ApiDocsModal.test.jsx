@@ -23,7 +23,7 @@ describe('ApiDocsModal component', () => {
     expect(screen.getByText('System & Diagnostics')).toBeTruthy();
     expect(screen.getByText('/health')).toBeTruthy();
     expect(screen.getByText('Multimodal Frame Retrieval')).toBeTruthy();
-    expect(screen.getByText('/api/v1/search')).toBeTruthy();
+    expect(screen.getByText('/api/v1/kis/search')).toBeTruthy();
   });
 
   test('documents VBS sessions, KIS/VQA/AVS, the answer workspace, and log status without retired workflows', () => {

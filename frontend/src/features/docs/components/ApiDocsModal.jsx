@@ -19,13 +19,13 @@ const ENDPOINTS = [
     items: [
       {
         method: 'POST',
-        path: '/api/v1/search',
-        title: 'KIS Text Search',
-        desc: 'Runs text retrieval over canonical video frames. A connected VBS User ID is optional; successful retrieval remains successful if result logging fails.',
-        curl: `curl -i -X POST "${API_BASE_URL}/api/v1/search" \\
+        path: '/api/v1/kis/search',
+        title: 'KIS Semantic Search & Revision',
+        desc: 'Runs semantic KIS retrieval over canonical video frames with clue history. Returns canonical resolved intent, events, entities, temporal metadata, and ranked frames.',
+        curl: `curl -i -X POST "${API_BASE_URL}/api/v1/kis/search" \\
   -H "Content-Type: application/json" \\
   -H "X-VBS-User-ID: team-a" \\
-  -d '{"query": "a red car approaches. It turns left.", "top_k": 20}'`,
+  -d '{"inputs": [{"text": "a red car approaches. It turns left."}], "use_dense": true, "use_bm25": true, "top_k": 20}'`,
       },
       {
         method: 'POST',

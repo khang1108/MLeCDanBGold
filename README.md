@@ -77,9 +77,22 @@ pip install -e ".[embedding,reranking,dev]"
 
 # Configure environment
 cp .env.example .env
+# Configure inference endpoints (LLM & Embeddings) in .env:
+#   Self-hosted example:
+#     HCMAI_LLM_BASE_URL=https://api.iamphuckhang.dev/v1
+#     HCMAI_LLM_MODEL=Qwen/Qwen3-4B
+#     HCMAI_EMBEDDING_BASE_URL=https://api.iamphuckhang.dev/v1
+#     HCMAI_EMBEDDING_MODEL=google/siglip2-base-patch16-224
+#   Third-party example:
+#     HCMAI_LLM_BASE_URL=https://api.openai.com/v1
+#     HCMAI_LLM_API_KEY=sk-...
+#     HCMAI_LLM_MODEL=gpt-4o-mini
+#     HCMAI_EMBEDDING_BASE_URL=https://api.openai.com/v1
+#     HCMAI_EMBEDDING_API_KEY=sk-...
+#     HCMAI_EMBEDDING_MODEL=text-embedding-3-small
 
 # Start the FastAPI server
-uvicorn MLeCDanBGold.app:app --host 127.0.0.1 --port 8000 --reload
+uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Verify backend health:
@@ -157,6 +170,25 @@ MLeCDanBGold_2026/
 2. **Deterministic FrameContext**: Specialist evidence (OCR, Captions, Objects) is stored with full provenance. Rather than destructively flattening them into a generic blob, they are indexed separately and joined into a deterministic `FrameContext` view for hybrid retrieval.
 3. **Traceable Submissions & Security**: Official DRES credentials remain securely on the backend (`HCMAI_DRES_USERS_JSON`). Operators connect using their team user ID, and the backend signs submissions and streams required audit logs (`X-DRES-Log-Status`).
 4. **Collaborative Synchronization**: Operators share an active answer board backed by SQLite and WebSockets with optimistic locking to eliminate redundant duplicate submissions during high-speed competition rounds.
+
+---
+
+## 6. VBS 2027 Competition Runbook
+
+### Migration archive notice
+
+Before migration, stop the backend and create a backup of `runtime/workspace.sqlite3` in a timestamped archive in the operator’s protected backup location. The legacy submission-file workflow and its stored data are retired by this migration; keep the archive in case an older deployment needs to be restored. Do not copy the database into the frontend or publish it with a public build.
+
+### Prepare and rehearse
+
+1. On the backend only, set `HCMAI_DRES_BASE_URL` to the organizer’s test DRES endpoint and configure `HCMAI_DRES_USERS_JSON` as the mapping from each VBS `user_id` to its DRES username/password. Keep this JSON in a protected backend environment file or secret store. A browser submits only its VBS user ID; never put credentials or a DRES session in frontend configuration.
+2. Verify every HCMAI `video_id` against the organizer’s exact DRES `mediaItemName`. Confirm `HCMAI_DRES_MEDIA_ID_PREFIX_TO_STRIP` against known media before setting it; do not infer the mapping from display labels or `frame_idx`. Save and review the verified mapping before rehearsal.
+3. Start the backend against test DRES. In each browser, enter the assigned VBS user ID and wait for the connected state before opening the shared answer workspace. Confirm separate browsers converge on the same candidates. The official current-task response has no task ID: HCMAI derives a deterministic `task_scope_key` from its evaluation and task-template fields for internal workspace isolation only. DRES submissions send the freshly resolved `taskName`; the internal key is never sent upstream. Existing workspace DB v1 rows migrate as `legacy-unverified` and require an explicit clear-and-switch before use with a current official task.
+4. Against test DRES, submit one KIS FRAME captured from live playback and one added from a FrameCard. Confirm the reviewed `timestamp_ms` is exact and DRES receives a point answer with `start == end`. Submit one VQA TEXT answer and confirm the answer contains text only. Add several AVS frames and confirm one ordered batch reaches DRES in a single request. DRES HTTP 200/202 success must include a verdict (`CORRECT`, `WRONG`, `INDETERMINATE`, or `UNDECIDABLE`); `accepted` means DRES processed the submission, not that the answer was correct.
+5. With each assigned user connected to test DRES, run text search, image search, and Filter. Confirm the header and indicator report `Log sent`; make one controlled logging-failure check and confirm retrieval still displays results with `Last log failed`.
+6. After the rehearsal passes, freeze the verified media mapping, evaluation settings, indexes, backend/frontend revisions, and non-secret environment configuration. Keep credentials in the backend secret store; each successful search is logged with the connected participant's DRES session.
+
+The DRES client current-task endpoint cannot distinguish consecutive task instances whose `name`, `taskGroup`, `taskType`, and `duration` are identical. The internal key therefore isolates observable task templates, not hidden task instance identity; confirm that staging exposes a task-name change or another supported client-visible boundary before relying on automatic scope detection.
 
 ---
 

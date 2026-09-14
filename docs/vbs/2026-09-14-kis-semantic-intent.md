@@ -916,7 +916,7 @@ git commit -am "feat: persist KIS semantic intent in query history"
 
 **Legacy impact:** this task proves the replacement map is complete.
 
-- [ ] **Step 1: Run mandatory zero-reference audits**
+- [x] **Step 1: Run mandatory zero-reference audits**
 
 Each command must return no production matches (tests documenting deletion may be excluded explicitly):
 
@@ -930,7 +930,7 @@ rg '"/api/v1/search"|`/api/v1/search`|/api/v1/search' frontend/src src/hcmai
 
 Any remaining match must be classified as a current independent responsibility or removed; do not leave compatibility shims without a named external consumer.
 
-- [ ] **Step 2: Audit duplicate inference HTTP ownership**
+- [x] **Step 2: Audit duplicate inference HTTP ownership**
 
 ```bash
 rg "translate_query_events|generate_query_candidates|def embed_text" src llm
@@ -942,7 +942,7 @@ Expected final state:
 - text query embeddings call `EmbeddingClient`;
 - remaining methods in the private inference service are only capabilities not replaced by those clients.
 
-- [ ] **Step 3: Document environment switching**
+- [x] **Step 3: Document environment switching**
 
 Document one self-host example and one third-party example using the same variables:
 
@@ -958,7 +958,7 @@ HCMAI_EMBEDDING_MODEL=google/siglip2-base-patch16-224
 
 Changing providers must not require editing KIS/query-preparation source.
 
-- [ ] **Step 4: Run backend regression suite**
+- [x] **Step 4: Run backend regression suite**
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
@@ -966,14 +966,14 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 
 At minimum verify KIS semantic resolver, query preparation, temporal DP, TRAKE, image search, and history-facing contracts.
 
-- [ ] **Step 5: Run frontend regression suite**
+- [x] **Step 5: Run frontend regression suite**
 
 ```bash
 cd frontend
 npm test -- --runInBand
 ```
 
-- [ ] **Step 6: Manual acceptance smoke test**
+- [x] **Step 6: Manual acceptance smoke test**
 
 Use these three cases:
 
@@ -983,7 +983,7 @@ Use these three cases:
 
 For each case verify returned `frame_ids` length equals `len(intent.events)`.
 
-- [ ] **Step 7: Commit completion gate**
+- [x] **Step 7: Commit completion gate**
 
 ```bash
 git add .
