@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 
 from hcmai.api.contracts.latency import SearchLatency
 from hcmai.api.contracts.search import SearchResult
+from hcmai.kis.models import KISIntent
 
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -21,16 +22,6 @@ class KISInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     text: NonBlank
-
-
-class KISIntent(BaseModel):
-    """Deterministic interpretation of an ordered sequence of KIS clues."""
-
-    model_config = ConfigDict(extra="forbid")
-    revision: int = Field(ge=1)
-    inputs: list[NonBlank] = Field(min_length=1)
-    query_text: NonBlank
-    events: list[NonBlank] = Field(min_length=1)
 
 
 class KISRevisionSearchRequest(BaseModel):

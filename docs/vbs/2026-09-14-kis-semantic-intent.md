@@ -306,7 +306,7 @@ git commit -m "feat: add provider-agnostic inference clients"
 - Removes the old string-list `KISIntent.events` contract.
 - No fallback path survives.
 
-- [ ] **Step 1: Write semantic graph validation tests**
+- [x] **Step 1: Write semantic graph validation tests**
 
 ```python
 # tests/kis/test_models.py
@@ -360,7 +360,7 @@ class KISIntentModelTest(unittest.TestCase):
             KISIntent.model_validate(invalid)
 ```
 
-- [ ] **Step 2: Run and verify failure**
+- [x] **Step 2: Run and verify failure**
 
 ```bash
 PYTHONPATH=src python -m unittest tests.kis.test_models -v
@@ -368,7 +368,7 @@ PYTHONPATH=src python -m unittest tests.kis.test_models -v
 
 Expected: missing `hcmai.kis.models`.
 
-- [ ] **Step 3: Implement graph models and cross-reference validation**
+- [x] **Step 3: Implement graph models and cross-reference validation**
 
 Use `Annotated[str, StringConstraints(...)]` IDs and one `model_validator` on `KISIntent` to check unique IDs, sequential event IDs, binding references, edge references, cycles, and edge/list-order consistency. Limit `events` with `DEFAULT_MAX_TEMPORAL_EVENT_COUNT`.
 
@@ -382,7 +382,7 @@ KISTemporalEdge
 KISIntent
 ```
 
-- [ ] **Step 4: Write resolver tests with a fake LLM client**
+- [x] **Step 4: Write resolver tests with a fake LLM client**
 
 ```python
 # tests/kis/test_resolver.py
@@ -433,7 +433,7 @@ class ResolverTest(unittest.TestCase):
             KISIntentResolver(llm).resolve(["A woman is in a kitchen."])
 ```
 
-- [ ] **Step 5: Implement resolver prompt/profile and `KISIntentResolver`**
+- [x] **Step 5: Implement resolver prompt/profile and `KISIntentResolver`**
 
 `resolver.py` must normalize whitespace, reject empty inputs, and call the LLM once with the entire clue history. Do not call `plan_query_events`.
 
@@ -453,7 +453,7 @@ class KISIntentResolver:
         return intent
 ```
 
-- [ ] **Step 6: Move `KISIntent` ownership out of the API contract and delete the deterministic builder**
+- [x] **Step 6: Move `KISIntent` ownership out of the API contract and delete the deterministic builder**
 
 `src/hcmai/api/contracts/kis.py` imports `KISIntent` from `hcmai.kis.models`. Delete `src/hcmai/orchestration/workflows/kis_intent.py` after:
 
@@ -463,7 +463,7 @@ rg "KISIntentBuilder|workflows\.kis_intent" src llm frontend
 
 returns no production caller.
 
-- [ ] **Step 7: Run Task 2 tests and commit**
+- [x] **Step 7: Run Task 2 tests and commit**
 
 ```bash
 PYTHONPATH=src python -m unittest tests.kis.test_models tests.kis.test_resolver -v
