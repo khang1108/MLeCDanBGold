@@ -37,7 +37,6 @@
 - `src/hcmai/orchestration/workflows/kis_intent.py` — deterministic ordered-input → structured KIS intent builder.
 - `src/hcmai/api/routers/kis.py` — `POST /api/v1/kis/search` HTTP boundary only.
 - `src/hcmai/api/dres_logging.py` — shared DRES result-log side effect used by stateless and revisioned KIS routers.
-- `tests/__init__.py`, `tests/api/__init__.py`, `tests/orchestration/__init__.py`, `tests/orchestration/workflows/__init__.py` — stdlib-unittest package markers.
 - `tests/api/test_kis_contracts.py` — request/revision/source validation.
 - `tests/orchestration/workflows/test_kis_intent.py` — deterministic intent construction.
 - `tests/orchestration/workflows/test_kis_pipeline.py` — precomputed-event KIS reuse.
@@ -46,11 +45,11 @@
 ### Backend: modify
 
 - `src/hcmai/api/contracts/__init__.py:1-80` — export KIS session contracts.
-- `src/hcmai/orchestration/workflows/kis.py:21-121` — split query planning from shared event execution.
+- `src/hcmai/orchestration/workflows/kis.py:21-121` — split query planning from shared event execution while preserving empty query short-circuit.
 - `src/hcmai/orchestration/pipeline.py:74-150,310-315` — instantiate the intent builder and expose `search_kis_revision`.
-- `src/hcmai/api/routers/search.py:1-180` — consume shared DRES logging helper without changing `/api/v1/search` behavior.
+- `src/hcmai/api/routers/search.py:50-65,125-140,200-270` — consume shared DRES logging helper without changing `/api/v1/search` behavior.
 - `src/hcmai/api/routers/__init__.py:1-30` — export `create_kis_router`.
-- `src/hcmai/app.py:20-38,170-190` — register the new router.
+- `src/hcmai/app.py:20-38,204-215` — register the new router.
 
 ### Frontend: create
 
@@ -64,6 +63,7 @@
 
 ### Frontend: modify
 
+- `frontend/src/styles/workspace.css` — style `.kis-panel`, `.kis-clue-history`, `.kis-current-intent`, and `.kis-intent-event`.
 - `frontend/src/features/search/components/SearchWorkspace.jsx:54-107,203-228,248-438,548-710` — consume live KIS session state and the revisioned API for text KIS.
 - `frontend/src/features/search/components/SearchWorkspace.test.jsx:1-end` — switch text-search mocks/assertions to the KIS API and add multi-revision behavior.
 - `frontend/src/features/workspace/queryHistory.js:81-139` — retain KIS revision/input metadata in replay snapshots.
@@ -77,10 +77,6 @@
 - Create: `src/hcmai/api/contracts/kis.py`
 - Modify: `src/hcmai/api/contracts/__init__.py:1-80`
 - Create: `src/hcmai/orchestration/workflows/kis_intent.py`
-- Create: `tests/__init__.py`
-- Create: `tests/api/__init__.py`
-- Create: `tests/orchestration/__init__.py`
-- Create: `tests/orchestration/workflows/__init__.py`
 - Create: `tests/api/test_kis_contracts.py`
 - Create: `tests/orchestration/workflows/test_kis_intent.py`
 
@@ -93,11 +89,13 @@
   - `KISRevisionSearchResponse(revision, inputs, intent, query, events, dense_events, bm25_caption_events, use_dense, use_bm25, results, latency)`
   - `KISIntentBuilder.build(inputs: Sequence[str]) -> KISIntent`
 
-- [ ] **Step 1: Write contract tests for first revision, append revision, stale revision, and source validation**
+- [x] **Step 1: Write contract tests for first revision, append revision, stale revision, and source validation**
 
 ```python
 # tests/api/test_kis_contracts.py
 import unittest
+
+from pydantic import ValidationError
 
 from hcmai.api.contracts.kis import KISRevisionSearchRequest
 
@@ -146,18 +144,17 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run the contract test and verify it fails because the KIS contract module does not exist**
+- [x] **Step 2: Run the contract test and verify it fails because the KIS contract module does not exist**
 
 Run:
 
 ```bash
-cd /mnt/data/src_v3_extracted
-PYTHONPATH=src python -m unittest tests.api.test_kis_contracts -v
+./aic/bin/pytest tests/api/test_kis_contracts.py -v
 ```
 
-Expected: `ModuleNotFoundError: No module named 'hcmai.api.contracts.kis'`.
+Expected: `ModuleNotFoundError: No module named 'hcmai.api.contracts.kis'` or test collection failure.
 
-- [ ] **Step 3: Implement the KIS request/response contracts with explicit revision-conflict metadata**
+- [x] **Step 3: Implement the KIS request/response contracts with explicit revision-conflict metadata**
 
 ```python
 # src/hcmai/api/contracts/kis.py
@@ -226,17 +223,17 @@ class KISRevisionSearchResponse(BaseModel):
 
 Also export the four classes from `src/hcmai/api/contracts/__init__.py`; do not move or rename the existing stateless `SearchRequest`/`SearchResponse` classes.
 
-- [ ] **Step 4: Run contract tests and verify they pass**
+- [x] **Step 4: Run contract tests and verify they pass**
 
 Run:
 
 ```bash
-PYTHONPATH=src python -m unittest tests.api.test_kis_contracts -v
+./aic/bin/pytest tests/api/test_kis_contracts.py -v
 ```
 
 Expected: 4 tests pass.
 
-- [ ] **Step 5: Write intent-builder tests that lock deterministic phase-1 semantics**
+- [x] **Step 5: Write intent-builder tests that lock deterministic phase-1 semantics**
 
 ```python
 # tests/orchestration/workflows/test_kis_intent.py
@@ -265,6 +262,16 @@ class KISIntentBuilderTest(unittest.TestCase):
             ["A woman is standing in a kitchen", "She is talking to a man"],
         )
 
+    def test_clues_without_terminal_punctuation_still_split_into_distinct_events(self) -> None:
+        intent = KISIntentBuilder(max_temporal_event_count=8).build([
+            "A woman is standing in a kitchen",
+            "She is talking to a man",
+        ])
+        self.assertEqual(intent.revision, 2)
+        self.assertEqual(len(intent.events), 2)
+        self.assertEqual(intent.events[0], "A woman is standing in a kitchen")
+        self.assertEqual(intent.events[1], "She is talking to a man")
+
     def test_preserves_input_order(self) -> None:
         intent = KISIntentBuilder(max_temporal_event_count=8).build([
             "First event happens.",
@@ -286,17 +293,17 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 6: Run the intent-builder test and verify it fails because the builder is missing**
+- [x] **Step 6: Run the intent-builder test and verify it fails because the builder is missing**
 
 Run:
 
 ```bash
-PYTHONPATH=src python -m unittest tests.orchestration.workflows.test_kis_intent -v
+./aic/bin/pytest tests/orchestration/workflows/test_kis_intent.py -v
 ```
 
 Expected: import failure for `KISIntentBuilder`.
 
-- [ ] **Step 7: Implement `KISIntentBuilder` as the isolated deterministic baseline**
+- [x] **Step 7: Implement `KISIntentBuilder` as the isolated deterministic baseline**
 
 ```python
 # src/hcmai/orchestration/workflows/kis_intent.py
@@ -321,13 +328,16 @@ class KISIntentBuilder:
         if not normalized or any(not text for text in normalized):
             raise ValueError("KIS intent inputs must contain non-empty text")
 
-        query_text = " ".join(normalized)
-        events = list(plan_query_events(query_text))
+        # Join with newlines so plan_query_events recognizes distinct clues
+        # even when users do not provide trailing punctuation.
+        planned_text = "\n".join(normalized)
+        events = list(plan_query_events(planned_text))
         if len(events) > self.max_temporal_event_count:
             raise ValueError(
                 f"requests may contain at most {self.max_temporal_event_count} temporal events"
             )
 
+        query_text = " ".join(normalized)
         return KISIntent(
             revision=len(normalized),
             inputs=normalized,
@@ -338,26 +348,25 @@ class KISIntentBuilder:
 
 The joined text is deliberately a deterministic baseline. Do not add pronoun resolution, contradiction resolution, or LLM calls in this task.
 
-- [ ] **Step 8: Run both Task 1 suites**
+- [x] **Step 8: Run both Task 1 suites**
 
 Run:
 
 ```bash
-PYTHONPATH=src python -m unittest \
-  tests.api.test_kis_contracts \
-  tests.orchestration.workflows.test_kis_intent -v
+./aic/bin/pytest tests/api/test_kis_contracts.py tests/orchestration/workflows/test_kis_intent.py -v
 ```
 
 Expected: all tests pass.
 
-- [ ] **Step 9: Commit Task 1**
+- [x] **Step 9: Commit Task 1**
 
 ```bash
 git add \
   src/hcmai/api/contracts/kis.py \
   src/hcmai/api/contracts/__init__.py \
   src/hcmai/orchestration/workflows/kis_intent.py \
-  tests
+  tests/api/test_kis_contracts.py \
+  tests/orchestration/workflows/test_kis_intent.py
 git commit -m "feat: add revisioned KIS intent contracts"
 ```
 
@@ -424,6 +433,11 @@ class KISPipelineReuseTest(unittest.TestCase):
         self.assertEqual(response.query, "A woman enters.")
         self.assertEqual(response.events, ["A woman enters."])
 
+    def test_stateless_execute_with_empty_query_returns_empty_response(self) -> None:
+        response = self.pipeline.execute(SearchRequest(query="   "))
+        self.assertEqual(response.events, [])
+        self.assertEqual(response.results, [])
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -434,7 +448,7 @@ if __name__ == "__main__":
 Run:
 
 ```bash
-PYTHONPATH=src python -m unittest tests.orchestration.workflows.test_kis_pipeline -v
+./aic/bin/pytest tests/orchestration/workflows/test_kis_pipeline.py -v
 ```
 
 Expected: `AttributeError: 'KISPipeline' object has no attribute 'execute_events'`.
@@ -449,6 +463,25 @@ from collections.abc import Sequence
 
 def execute(self, request: SearchRequest) -> SearchResponse:
     query_started = perf_counter()
+    if not request.query.strip():
+        query_ms = (perf_counter() - query_started) * 1_000
+        return SearchResponse(
+            query=request.query,
+            events=[],
+            dense_events=[] if request.use_dense else None,
+            bm25_caption_events=None,
+            use_dense=request.use_dense,
+            use_bm25=request.use_bm25,
+            results=[],
+            latency=SearchLatency(
+                query_ms=query_ms,
+                retrieval_ms=0,
+                alignment_ms=0,
+                materialization_ms=0,
+                total_ms=query_ms,
+            ),
+        )
+
     events = plan_query_events(request.query)
     query_ms = (perf_counter() - query_started) * 1_000
     return self.execute_events(
@@ -521,14 +554,14 @@ def execute_events(
     )
 ```
 
-`execute` must contain only query planning plus the call to `execute_events`; retrieval and materialization live exactly once in `execute_events`.
+`execute` preserves the short-circuit for empty queries and contains query planning plus delegation to `execute_events`; retrieval and materialization live exactly once in `execute_events`.
 
 - [ ] **Step 4: Run the pipeline test and verify it passes**
 
 Run:
 
 ```bash
-PYTHONPATH=src python -m unittest tests.orchestration.workflows.test_kis_pipeline -v
+./aic/bin/pytest tests/orchestration/workflows/test_kis_pipeline.py -v
 ```
 
 Expected: both tests pass and the old `execute(SearchRequest)` path still works.
@@ -642,10 +675,10 @@ This test proves `search_kis_revision` does not invoke a second planner or a dup
 Run:
 
 ```bash
-PYTHONPATH=src python -m unittest \
-  tests.api.test_kis_contracts \
-  tests.orchestration.workflows.test_kis_intent \
-  tests.orchestration.workflows.test_kis_pipeline -v
+./aic/bin/pytest \
+  tests/api/test_kis_contracts.py \
+  tests/orchestration/workflows/test_kis_intent.py \
+  tests/orchestration/workflows/test_kis_pipeline.py -v
 ```
 
 Expected: all pass.
@@ -667,9 +700,9 @@ git commit -m "refactor: reuse KIS retrieval from resolved intent events"
 **Files:**
 - Create: `src/hcmai/api/dres_logging.py`
 - Create: `src/hcmai/api/routers/kis.py`
-- Modify: `src/hcmai/api/routers/search.py:1-180`
+- Modify: `src/hcmai/api/routers/search.py:50-65,125-140,200-270`
 - Modify: `src/hcmai/api/routers/__init__.py:1-30`
-- Modify: `src/hcmai/app.py:20-38,170-190`
+- Modify: `src/hcmai/app.py:20-38,204-215`
 - Create: `tests/api/test_kis_router.py`
 
 **Interfaces:**
@@ -755,6 +788,18 @@ class KISRouterTest(unittest.TestCase):
             "expected_revision": 0,
         })
         self.assertEqual(response.status_code, 409)
+
+    def test_invalid_input_or_excessive_events_returns_422(self) -> None:
+        self.service.search_kis_revision.side_effect = ValueError("requests may contain at most 8 temporal events")
+        response = self.client.post("/api/v1/kis/search", json={
+            "inputs": [
+                {"text": "A woman is in a kitchen."},
+                {"text": "She talks to a man."},
+            ],
+            "expected_revision": 1,
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("temporal events", response.json()["detail"])
 ```
 
 - [ ] **Step 2: Run the router test and verify it fails because the route is unregistered**
@@ -762,7 +807,7 @@ class KISRouterTest(unittest.TestCase):
 Run:
 
 ```bash
-PYTHONPATH=src python -m unittest tests.api.test_kis_router -v
+./aic/bin/pytest tests/api/test_kis_router.py -v
 ```
 
 Expected: import/module failure for `hcmai.api.routers.kis` before the router is created.
@@ -856,7 +901,7 @@ await record_dres_result_log(...)
 
 Do not change the existing category/value behavior for text, image, or filter routes.
 
-- [ ] **Step 4: Implement the dedicated KIS router with explicit HTTP 409 mapping**
+- [ ] **Step 4: Implement the dedicated KIS router with explicit HTTP 409 and 422 mapping**
 
 ```python
 # src/hcmai/api/routers/kis.py
@@ -868,6 +913,7 @@ from fastapi import APIRouter, Header, HTTPException, Response, status
 from fastapi.concurrency import run_in_threadpool
 from hcmai.api.contracts.kis import KISRevisionSearchRequest, KISRevisionSearchResponse
 from hcmai.api.dres_logging import record_dres_result_log
+from hcmai.orchestration.errors import InvalidQueryInputError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 
 
@@ -905,6 +951,11 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
                 results=result.results,
             )
             return result
+        except (ValueError, InvalidQueryInputError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
         except SearchServiceUnavailableError as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -914,7 +965,7 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
     return router
 ```
 
-The explicit `request.has_revision_conflict` branch is the only 409 path. Malformed bodies, empty inputs, and invalid retrieval-source combinations remain ordinary FastAPI/Pydantic 422 responses.
+The explicit `request.has_revision_conflict` branch is the only 409 path. Malformed bodies, empty inputs, excessive events, and invalid retrieval-source combinations return proper HTTP 422 responses.
 
 - [ ] **Step 5: Export and register `create_kis_router`**
 
@@ -967,7 +1018,7 @@ This test locks the current-resolved-query logging behavior without requiring a 
 Run:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
+./aic/bin/pytest tests/api/test_kis_*.py tests/orchestration/workflows/test_kis_*.py -v
 ```
 
 Expected: all Task 1–3 tests pass; existing app imports still succeed.
@@ -977,7 +1028,7 @@ Expected: all Task 1–3 tests pass; existing app imports still succeed.
 Run:
 
 ```bash
-PYTHONPATH=src python - <<'PY'
+./aic/bin/python - <<'PY'
 from hcmai.app import create_app
 paths = {route.path for route in create_app(search_service=object()).routes}
 assert "/api/v1/search" in paths
@@ -1089,8 +1140,7 @@ test('posts the complete ordered input list and previous revision', async () => 
 Run:
 
 ```bash
-cd /mnt/data/src_v3_extracted/frontend
-CI=true npm test -- --runInBand src/api/kis.test.js
+cd frontend && CI=true npm test -- --runInBand src/api/kis.test.js
 ```
 
 Expected: module-not-found failure.
@@ -1145,7 +1195,7 @@ export const searchKisSession = async ({
 Run:
 
 ```bash
-CI=true npm test -- --runInBand src/api/kis.test.js
+cd frontend && CI=true npm test -- --runInBand src/api/kis.test.js
 ```
 
 Expected: pass.
@@ -1199,6 +1249,34 @@ test('building a request never mutates current committed inputs', () => {
   expect(session.revision).toBe(1);
 });
 
+test('builds re-search request when draft is empty but committed inputs exist', () => {
+  const session = {
+    ...createKisSession(),
+    revision: 2,
+    inputs: [{ text: 'clue 1' }, { text: 'clue 2' }],
+    draft: '',
+  };
+  expect(buildKisRevisionRequest(session)).toEqual({
+    inputs: [{ text: 'clue 1' }, { text: 'clue 2' }],
+    expectedRevision: 1,
+  });
+});
+
+test('commit supports idempotent re-search response with same revision', () => {
+  const session = {
+    ...createKisSession(),
+    revision: 1,
+    inputs: [{ text: 'clue 1' }],
+    draft: '',
+  };
+  const committed = commitKisRevision(session, {
+    revision: 1,
+    inputs: [{ text: 'clue 1' }],
+    intent: { revision: 1, inputs: ['clue 1'], query_text: 'clue 1', events: ['clue 1'] },
+  });
+  expect(committed.revision).toBe(1);
+});
+
 test('reset clears all live KIS state', () => {
   expect(resetKisSession()).toEqual({
     draft: '',
@@ -1214,7 +1292,7 @@ test('reset clears all live KIS state', () => {
 Run:
 
 ```bash
-CI=true npm test -- --runInBand src/features/kis/kisSession.test.js
+cd frontend && CI=true npm test -- --runInBand src/features/kis/kisSession.test.js
 ```
 
 Expected: module-not-found failure.
@@ -1223,29 +1301,37 @@ Expected: module-not-found failure.
 
 ```javascript
 // frontend/src/features/kis/kisSession.js
-export const createKisSession = ({ draft = '' } = {}) => ({
+export const createKisSession = ({ draft = '', inputs = [], revision = 0, intent = null } = {}) => ({
   draft,
-  inputs: [],
-  revision: 0,
-  intent: null,
+  inputs,
+  revision,
+  intent,
 });
 
-export const resetKisSession = ({ draft = '' } = {}) => createKisSession({ draft });
+export const resetKisSession = (options = {}) => createKisSession(options);
 
 export const withKisDraft = (session, draft) => ({ ...session, draft });
 
 export const buildKisRevisionRequest = (session) => {
   const text = session.draft.trim();
-  if (!text) return null;
-  return {
-    inputs: [...session.inputs, { text }],
-    expectedRevision: session.revision,
-  };
+  if (text) {
+    return {
+      inputs: [...session.inputs, { text }],
+      expectedRevision: session.revision,
+    };
+  }
+  if (session.inputs.length > 0) {
+    return {
+      inputs: session.inputs,
+      expectedRevision: session.revision - 1,
+    };
+  }
+  return null;
 };
 
 export const commitKisRevision = (session, response) => {
-  if (response.revision !== session.revision + 1) {
-    throw new Error('KIS response revision does not advance the current session');
+  if (response.revision !== session.revision + 1 && response.revision !== session.revision) {
+    throw new Error('KIS response revision is invalid for the current session');
   }
   return {
     draft: '',
@@ -1263,7 +1349,7 @@ Export these helpers from `frontend/src/features/kis/index.js`.
 Run:
 
 ```bash
-CI=true npm test -- --runInBand \
+cd frontend && CI=true npm test -- --runInBand \
   src/api/kis.test.js \
   src/features/kis/kisSession.test.js
 ```
@@ -1348,7 +1434,7 @@ test('Enter submits and Shift+Enter remains available for multiline text', () =>
 Run:
 
 ```bash
-CI=true npm test -- --runInBand src/features/kis/components/KisPanel.test.jsx
+cd frontend && CI=true npm test -- --runInBand src/features/kis/components/KisPanel.test.jsx
 ```
 
 Expected: module-not-found failure.
@@ -1421,12 +1507,77 @@ export default KisPanel;
 
 Keep the component stateless; it must not import API/history modules.
 
+- [ ] **Step 3b: Add styling for `KisPanel` and clue badges in `workspace.css`**
+
+Append to `frontend/src/styles/workspace.css`:
+
+```css
+/* KIS Revisioned Session & Panel */
+.kis-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.kis-clue-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kis-clue-history li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #94a3b8);
+  background: var(--surface-secondary, rgba(255, 255, 255, 0.03));
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 2px solid var(--accent-primary, #3b82f6);
+}
+
+.kis-clue-history li span:first-child {
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--accent-primary, #3b82f6);
+}
+
+.kis-current-intent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.kis-intent-event {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-elevated, rgba(59, 130, 246, 0.1));
+  border: 1px solid var(--border-subtle, rgba(59, 130, 246, 0.25));
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.kis-intent-event strong {
+  font-size: 0.7rem;
+  color: var(--accent-primary, #38bdf8);
+}
+```
+
 - [ ] **Step 4: Run the panel tests and verify they pass**
 
 Run:
 
 ```bash
-CI=true npm test -- --runInBand src/features/kis/components/KisPanel.test.jsx
+cd frontend && CI=true npm test -- --runInBand src/features/kis/components/KisPanel.test.jsx
 ```
 
 Expected: pass.
@@ -1519,7 +1670,7 @@ Also add a failed-second-revision test asserting the first committed clue remain
 Run:
 
 ```bash
-CI=true npm test -- --runInBand src/features/search/components/SearchWorkspace.test.jsx
+cd frontend && CI=true npm test -- --runInBand src/features/search/components/SearchWorkspace.test.jsx
 ```
 
 Expected: failures around `searchKisSession`/clue history while image/filter tests remain structurally valid.
@@ -1562,7 +1713,7 @@ useEffect(() => {
 }, [kisSession.draft, onQueryChange]);
 ```
 
-Do not merge `activeQuerySession` into this object; it remains Query History/view-state only.
+Update `submit`'s `useCallback` dependency array to include `kisSession` in place of `eventDescription`. Do not merge `activeQuerySession` into this object; it remains Query History/view-state only.
 
 - [ ] **Step 8: Change the text submit path to append-on-success semantics**
 
@@ -1618,15 +1769,15 @@ Inside the existing query input wrapper, keep the image preview branch unchanged
 />
 ```
 
-Update the submit button condition to:
+Update the submit button condition to allow re-searching committed clues or submitting a new draft:
 
 ```javascript
-disabled={isSearching || (!kisSession.draft.trim() && !selectedImageFile)}
+disabled={isSearching || (!kisSession.draft.trim() && kisSession.inputs.length === 0 && !selectedImageFile)}
 ```
 
 Keep the visible button label `Search`; the input placeholder/history communicates that subsequent submissions are clue refinements.
 
-- [ ] **Step 10: Make `New Search` abort and reset the KIS session**
+- [ ] **Step 10: Make `New Search` abort and reset the KIS session, and restore clue visibility on replay**
 
 In `handleNewSearch`, replace `setEventDescription('')` with:
 
@@ -1634,20 +1785,26 @@ In `handleNewSearch`, replace `setEventDescription('')` with:
 setKisSession(resetKisSession());
 ```
 
-For history replay, use:
+For history replay, hydrate the session with saved clues and revision metadata for inspection:
 
 ```javascript
-setKisSession(resetKisSession({ draft: item.query_text || '' }));
+const replaySnapshot = item.result_snapshot;
+setKisSession(createKisSession({
+  draft: item.query_text || '',
+  inputs: replaySnapshot?.kis_inputs || (item.query_text ? [{ text: item.query_text }] : []),
+  revision: replaySnapshot?.kis_revision || (item.query_text ? 1 : 0),
+  intent: replaySnapshot?.events ? { events: replaySnapshot.events } : null,
+}));
 ```
 
-This shows the replayed query text but intentionally does not pretend the replay is the live revisioned session. If the user submits from replay, it starts a new revision-1 KIS session.
+This shows the replayed query text and restores previous clue badges in `KisPanel`. If the user submits from replay with a new or edited draft, it advances the session smoothly.
 
 - [ ] **Step 11: Run the focused KIS frontend suites**
 
 Run:
 
 ```bash
-CI=true npm test -- --runInBand \
+cd frontend && CI=true npm test -- --runInBand \
   src/features/kis/components/KisPanel.test.jsx \
   src/features/kis/kisSession.test.js \
   src/features/search/components/SearchWorkspace.test.jsx
@@ -1659,6 +1816,7 @@ Expected: all pass, including existing image/filter/exploration tests.
 
 ```bash
 git add \
+  frontend/src/styles/workspace.css \
   frontend/src/features/kis \
   frontend/src/features/search/components/SearchWorkspace.jsx \
   frontend/src/features/search/components/SearchWorkspace.test.jsx
@@ -1717,7 +1875,7 @@ test('retains KIS revision and ordered committed inputs in the replay snapshot',
 Run:
 
 ```bash
-CI=true npm test -- --runInBand src/features/workspace/queryHistory.test.js
+cd frontend && CI=true npm test -- --runInBand src/features/workspace/queryHistory.test.js
 ```
 
 Expected: `kis_revision`/`kis_inputs` assertions fail.
@@ -1874,7 +2032,7 @@ Also retain the existing assertion that history persistence failure does not rem
 Run:
 
 ```bash
-CI=true npm test -- --runInBand
+cd frontend && CI=true npm test -- --runInBand
 ```
 
 Expected: all frontend tests pass.
@@ -1884,7 +2042,7 @@ Expected: all frontend tests pass.
 Run:
 
 ```bash
-npm run build
+cd frontend && npm run build
 ```
 
 Expected: build succeeds with no missing imports or compile errors.
@@ -1894,15 +2052,14 @@ Expected: build succeeds with no missing imports or compile errors.
 Run from repository root:
 
 ```bash
-cd /mnt/data/src_v3_extracted
-PYTHONPATH=src python -m unittest discover -s tests -v
+./aic/bin/pytest tests/ -v
 ```
 
 Expected: all backend tests pass.
 
 - [ ] **Step 9: Perform one API-level acceptance smoke test for revision 1 → revision 2**
 
-With the backend running locally, execute:
+With the backend running locally (`./aic/bin/python -m uvicorn hcmai.app:app`), execute:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/api/v1/kis/search \
@@ -1994,8 +2151,7 @@ Before declaring this phase complete, verify every acceptance criterion from the
 Run the final commands:
 
 ```bash
-cd /mnt/data/src_v3_extracted
-PYTHONPATH=src python -m unittest discover -s tests -v
+./aic/bin/pytest tests/ -v
 cd frontend
 CI=true npm test -- --runInBand
 npm run build

@@ -16,6 +16,12 @@ from .history import (
     QueryHistoryRecord,
     QueryHistoryViewedFrameUpdate,
 )
+from .kis import (
+    KISInput,
+    KISIntent,
+    KISRevisionSearchRequest,
+    KISRevisionSearchResponse,
+)
 from .latency import SearchLatency
 from .query_candidates import (
     QueryCandidateResponse,
@@ -87,6 +93,10 @@ __all__ = [
     "FilterResponse",
     "FilterResult",
     "ImageSearchResponse",
+    "KISInput",
+    "KISIntent",
+    "KISRevisionSearchRequest",
+    "KISRevisionSearchResponse",
     "QueryCandidateResponse",
     "QueryCandidatesRequest",
     "QueryCandidatesResponse",
