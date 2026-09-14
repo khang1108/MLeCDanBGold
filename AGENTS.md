@@ -8,6 +8,24 @@ When this file conflicts with the user's latest explicit instruction or an offic
 
 ---
 
+## Universal Agent Directives: Skills & Workflows
+
+All AI coding assistants (Antigravity, Codex, Claude Code, GitHub Copilot, Cursor, Windsurf) working in this repository must observe the runbooks and procedural skills maintained under:
+`.agents/skills/`
+
+Before executing tasks, **YOU MUST inspect and follow the instructions in the corresponding skill**:
+- **Planning / Brainstorming**: `.agents/skills/brainstorming/SKILL.md` and `.agents/skills/writing-plans/SKILL.md`
+- **TDD (Red / Green)**: `.agents/skills/tdd-red/SKILL.md` and `.agents/skills/tdd-green/SKILL.md`
+- **Code Review**: `.agents/skills/review/SKILL.md` and `.agents/skills/requesting-code-review/SKILL.md`
+- **Systematic Debugging**: `.agents/skills/systematic-debugging/SKILL.md`
+- **Project Documentation / README**: `.agents/skills/documenter/SKILL.md`
+- **Caveman / Low-Token Mode**: `.agents/skills/caveman/SKILL.md` and `.agents/rules/caveman.md`
+- **Task Execution & Verification**: `.agents/skills/executing-plans/SKILL.md` and `.agents/skills/verification-before-completion/SKILL.md`
+
+Always inspect the relevant `.agents/skills/<skill-name>/SKILL.md` file before generating code or taking action.
+
+---
+
 ## 1. Project Overview
 
 HCMAI is a hackathon and applied-research system for multimodal video retrieval and reasoning.
