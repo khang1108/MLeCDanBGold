@@ -11,9 +11,13 @@ from hcmai.inference.config import (
     load_embedding_endpoint,
     load_llm_endpoint,
 )
-from hcmai.inference.embeddings import OpenAICompatibleEmbeddingClient, TextEmbeddingBatch
+from hcmai.inference.embeddings import (
+    EmbeddingClient,
+    OpenAICompatibleEmbeddingClient,
+    TextEmbeddingBatch,
+)
 from hcmai.inference.http import HttpTransport
-from hcmai.inference.llm import OpenAICompatibleLLMClient
+from hcmai.inference.llm import LLMClient, OpenAICompatibleLLMClient
 
 
 class Sample(BaseModel):
@@ -80,12 +84,15 @@ class InferenceConfigTest(unittest.TestCase):
 
 
 class LLMClientTest(unittest.TestCase):
+    def test_alias_is_identical(self) -> None:
+        self.assertIs(OpenAICompatibleLLMClient, LLMClient)
+
     def test_structured_generation_validates_response_model(self) -> None:
         transport = Mock()
         transport.post_json.return_value = {
             "choices": [{"message": {"content": '{"value":"ok"}'}}]
         }
-        client = OpenAICompatibleLLMClient(
+        client = LLMClient(
             ModelEndpointConfig("https://x/v1", "test-key", "test-model", 10),
             transport=transport,
         )
@@ -109,7 +116,7 @@ class LLMClientTest(unittest.TestCase):
         transport.post_json.return_value = {
             "choices": [{"message": {"content": '{"value":"hello"}'}}]
         }
-        client = OpenAICompatibleLLMClient(
+        client = LLMClient(
             ModelEndpointConfig("https://x/v1", None, "test-model", 10),
             transport=transport,
         )
@@ -124,7 +131,7 @@ class LLMClientTest(unittest.TestCase):
         transport.post_json.return_value = {
             "choices": [{"message": {"content": "not-a-json"}}]
         }
-        client = OpenAICompatibleLLMClient(
+        client = LLMClient(
             ModelEndpointConfig("https://x/v1", None, "test-model", 10),
             transport=transport,
         )
@@ -136,7 +143,7 @@ class LLMClientTest(unittest.TestCase):
         transport.post_json.return_value = {
             "choices": [{"message": {"content": '{"wrong_key": 123}'}}]
         }
-        client = OpenAICompatibleLLMClient(
+        client = LLMClient(
             ModelEndpointConfig("https://x/v1", None, "test-model", 10),
             transport=transport,
         )
@@ -146,7 +153,7 @@ class LLMClientTest(unittest.TestCase):
     def test_structured_generation_raises_on_empty_choices(self) -> None:
         transport = Mock()
         transport.post_json.return_value = {"choices": []}
-        client = OpenAICompatibleLLMClient(
+        client = LLMClient(
             ModelEndpointConfig("https://x/v1", None, "test-model", 10),
             transport=transport,
         )
@@ -155,6 +162,9 @@ class LLMClientTest(unittest.TestCase):
 
 
 class EmbeddingClientTest(unittest.TestCase):
+    def test_alias_is_identical(self) -> None:
+        self.assertIs(OpenAICompatibleEmbeddingClient, EmbeddingClient)
+
     def test_embedding_client_preserves_input_order(self) -> None:
         transport = Mock()
         transport.post_json.return_value = {
@@ -164,7 +174,7 @@ class EmbeddingClientTest(unittest.TestCase):
             ],
             "model": "embed",
         }
-        client = OpenAICompatibleEmbeddingClient(
+        client = EmbeddingClient(
             ModelEndpointConfig("https://x/v1", "embed-key", "embed", 10),
             transport=transport,
         )
@@ -188,7 +198,7 @@ class EmbeddingClientTest(unittest.TestCase):
             ],
             "model": "embed",
         }
-        client = OpenAICompatibleEmbeddingClient(
+        client = EmbeddingClient(
             ModelEndpointConfig("https://x/v1", None, "embed", 10),
             transport=transport,
         )

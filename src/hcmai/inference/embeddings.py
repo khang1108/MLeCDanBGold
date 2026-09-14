@@ -21,16 +21,8 @@ class TextEmbeddingBatch:
     vectors: tuple[tuple[float, ...], ...]
 
 
-class EmbeddingClient(Protocol):
-    """Capability protocol for dense text embedding."""
-
-    def embed_text(self, texts: list[str]) -> TextEmbeddingBatch:
-        """Embed a list of text strings into vectors preserving input order."""
-        ...
-
-
-class OpenAICompatibleEmbeddingClient:
-    """OpenAI embedding API client."""
+class EmbeddingClient:
+    """HTTP client for dense text embeddings using remote endpoints."""
 
     def __init__(
         self,
@@ -89,3 +81,7 @@ class OpenAICompatibleEmbeddingClient:
             model=model_name,
             vectors=vectors,
         )
+
+
+# Backward-compatible alias
+OpenAICompatibleEmbeddingClient = EmbeddingClient

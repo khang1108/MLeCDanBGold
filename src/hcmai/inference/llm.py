@@ -19,23 +19,8 @@ from hcmai.inference.http import HttpTransport
 T = TypeVar("T", bound=BaseModel)
 
 
-class LLMClient(Protocol):
-    """Capability protocol for structured text generation."""
-
-    def generate_structured(
-        self,
-        messages: Sequence[dict[str, str]],
-        response_model: type[T],
-        *,
-        temperature: float = 0.0,
-        max_tokens: int = 2048,
-    ) -> T:
-        """Generate structured data adhering to a Pydantic schema."""
-        ...
-
-
-class OpenAICompatibleLLMClient:
-    """OpenAI chat completion API client for structured text generation."""
+class LLMClient:
+    """HTTP client for structured text generation using remote LLM endpoints."""
 
     def __init__(
         self,
@@ -103,3 +88,7 @@ class OpenAICompatibleLLMClient:
             raise ValueError(f"Failed to parse LLM response as JSON: {content}") from exc
 
         return response_model.model_validate(parsed)
+ 
+ 
+# Backward-compatible alias
+OpenAICompatibleLLMClient = LLMClient
