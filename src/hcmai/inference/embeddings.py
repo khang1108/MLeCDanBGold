@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from hcmai.inference.config import ModelEndpointConfig
+from hcmai.inference.errors import InferenceResponseError
 from hcmai.inference.http import HttpTransport
 
 
@@ -33,6 +34,11 @@ class EmbeddingClient:
         self._endpoint = endpoint
         self._transport = transport or HttpTransport()
 
+    @property
+    def model(self) -> str:
+        """Return the configured model checkpoint or identifier."""
+        return self._endpoint.model
+
     def embed_text(self, texts: list[str]) -> TextEmbeddingBatch:
         """Generate dense embeddings for a list of input texts.
 
@@ -44,7 +50,8 @@ class EmbeddingClient:
             order as input texts.
 
         Raises:
-            ValueError: If returned count or indices do not match the input texts.
+            InferenceResponseError: If returned count, indices, or vector formats
+                do not match the expected structure.
         """
         if not texts:
             return TextEmbeddingBatch(model=self._endpoint.model, vectors=())
@@ -68,17 +75,21 @@ class EmbeddingClient:
 
         raw_items = data.get("data", [])
         if len(raw_items) != len(texts):
-            raise ValueError(
+            raise InferenceResponseError(
                 f"Embedding count mismatch: expected {len(texts)} embeddings, got {len(raw_items)}"
             )
 
         indices = [item.get("index") for item in raw_items]
         # Reject ambiguous mappings rather than assigning a vector to the wrong text.
         if any(type(index) is not int for index in indices) or sorted(indices) != list(range(len(texts))):
-            raise ValueError("Embedding indices must contain each input index exactly once")
+            raise InferenceResponseError("Embedding indices must contain each input index exactly once")
 
-        sorted_items = sorted(raw_items, key=lambda item: item["index"])
-        vectors = tuple(tuple(float(x) for x in item["embedding"]) for item in sorted_items)
+        try:
+            sorted_items = sorted(raw_items, key=lambda item: item["index"])
+            vectors = tuple(tuple(float(x) for x in item["embedding"]) for item in sorted_items)
+        except Exception as exc:
+            raise InferenceResponseError(f"Failed to decode embedding vectors: {exc}") from exc
+
         model_name = data.get("model", self._endpoint.model)
 
         return TextEmbeddingBatch(

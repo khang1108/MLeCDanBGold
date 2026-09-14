@@ -14,6 +14,7 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from hcmai.inference.config import ModelEndpointConfig
+from hcmai.inference.errors import InferenceResponseError
 from hcmai.inference.http import HttpTransport
 
 T = TypeVar("T", bound=BaseModel)
@@ -30,6 +31,11 @@ class LLMClient:
         """Initialize the client with endpoint configuration and transport."""
         self._endpoint = endpoint
         self._transport = transport or HttpTransport()
+
+    @property
+    def model(self) -> str:
+        """Return the configured model checkpoint or identifier."""
+        return self._endpoint.model
 
     def generate_structured(
         self,
@@ -55,8 +61,8 @@ class LLMClient:
             An instance of response_model parsed from the LLM JSON output.
 
         Raises:
-            ValueError: If completion choices are empty or content cannot be parsed as JSON.
-            pydantic.ValidationError: If parsed JSON does not match response_model.
+            InferenceResponseError: If completion choices are empty, content cannot be
+                parsed as JSON, or schema validation fails.
         """
         url = f"{self._endpoint.base_url}/chat/completions"
         headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -86,15 +92,18 @@ class LLMClient:
 
         choices = data.get("choices")
         if not choices:
-            raise ValueError(f"OpenAI completion returned empty choices: {data}")
+            raise InferenceResponseError(f"OpenAI completion returned empty choices: {data}")
 
         content = choices[0].get("message", {}).get("content")
         if not content:
-            raise ValueError(f"OpenAI completion message content was empty: {data}")
+            raise InferenceResponseError(f"OpenAI completion message content was empty: {data}")
 
         try:
             parsed = json.loads(content)
         except Exception as exc:
-            raise ValueError(f"Failed to parse LLM response as JSON: {content}") from exc
+            raise InferenceResponseError(f"Failed to parse LLM response as JSON: {content}") from exc
 
-        return response_model.model_validate(parsed)
+        try:
+            return response_model.model_validate(parsed)
+        except Exception as exc:
+            raise InferenceResponseError(f"LLM response failed schema validation: {exc}") from exc

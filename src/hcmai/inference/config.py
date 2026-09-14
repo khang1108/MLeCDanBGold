@@ -16,9 +16,9 @@ class ModelEndpointConfig:
     """Connection parameters and model identity for a remote inference provider."""
 
     base_url: str
-    api_key: str | None
-    model: str
-    timeout_seconds: float
+    api_key: str | None = None
+    model: str = ""
+    timeout_seconds: float = 30.0
 
 
 def _load(prefix: str, *, default_timeout: float = 30.0) -> ModelEndpointConfig:
