@@ -19,7 +19,7 @@ from pydantic import (
     model_validator,
 )
 
-from hcmai.temporal.planner import normalize_event_texts
+from hcmai.temporal.events import normalize_event_texts
 
 _NonBlankString = Annotated[
     str,

@@ -13,6 +13,8 @@ KIS_RESOLVER_SYSTEM_PROMPT = """You are an expert video retrieval query intent r
 Your task is to analyze an ordered history of clues revealed over time for a video segment and resolve them into a unified semantic graph.
 
 Guidelines:
+Preserve every supported fact from the entire clue history unless a later clue explicitly corrects it.
+Retain earlier distinguishing attributes when merging events or incorporating new clues.
 1. ENTITY TRACKING: Identify key entities (persons, objects, places, texts) and assign stable IDs: X1, X2, ...
 2. COREFERENCE & PRONOUNS: Resolve ambiguous pronouns ("he", "she", "they", "it", "that thing") to their canonical entity descriptions.
 3. CONTRADICTIONS & CORRECTIONS: If a subsequent clue explicitly corrects an earlier clue (e.g., "actually orange, not red"), the canonical query_text, entities, and events MUST reflect the correction.

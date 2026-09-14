@@ -10,24 +10,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, TYPE_CHECKING, cast
-
 import numpy as np
 
 from hcmai.common.config import AlignmentConfig, DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
 from hcmai.orchestration.materializer import SearchMaterializer
+from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
-from hcmai.temporal.planner import normalize_event_texts
+from hcmai.temporal.events import normalize_event_texts
 from hcmai.temporal.dp import AlignedPath, DPPath, align_video, rank_paths
-
-if TYPE_CHECKING:
-    from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
-
-
-# =====================================================================
-# 1. DATA CONTRACTS & SEARCH RESULT CONTAINER
-# =====================================================================
 
 @dataclass(frozen=True, slots=True)
 class TemporalSearchResult:
@@ -47,10 +38,6 @@ class DecoderConfigSnapshot:
     cluster_delta: float
     path_min_separation_ms: int
 
-
-# =====================================================================
-# 2. TEMPORAL SEARCH SERVICE: CORE ORCHESTRATION FACADE
-# =====================================================================
 
 class TemporalSearchService:
     """Score ordered events, decode monotonic paths, and preserve identity."""
@@ -153,21 +140,13 @@ class TemporalSearchService:
             raise ValueError("at least one retrieval source must be enabled")
 
         retrieval_started = perf_counter()
-        score_events = getattr(self.evidence, "score_events", None)
-        if score_events is None:
-            legacy_evidence = cast(Any, self.evidence)
-            scores = legacy_evidence.score_event_videos(
-                retrieval,
-                chunk_size=self.config.chunk_size,
-            )
-        else:
-            scores = score_events(
-                original,
-                retrieval,
-                caption_events=captions,
-                use_dense=use_dense,
-                use_bm25=use_bm25,
-            )
+        scores = self.evidence.score_events(
+            original,
+            retrieval,
+            caption_events=captions,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+        )
         retrieval_ms = (perf_counter() - retrieval_started) * 1_000
 
         validated = tuple(scores)

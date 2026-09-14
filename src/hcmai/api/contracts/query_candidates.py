@@ -6,7 +6,7 @@ queries, call inference, or persist candidate state.
 
 from __future__ import annotations
 
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -17,20 +17,12 @@ _NonBlankString = Annotated[
 
 
 class QueryCandidatesRequest(BaseModel):
-    """Accept either one raw KIS query or explicit TRAKE event boundaries."""
+    """Accept explicit ordered event boundaries for candidate generation."""
 
     model_config = ConfigDict(extra="forbid")
 
-    query: _NonBlankString | None = None
-    events: list[_NonBlankString] | None = Field(default=None, min_length=1)
-
-    @model_validator(mode="after")
-    def validate_exactly_one_input(self) -> Self:
-        """Require exactly one caller-owned input representation."""
-
-        if (self.query is None) == (self.events is None):
-            raise ValueError("exactly one of query or events is required")
-        return self
+    events: list[_NonBlankString] = Field(min_length=1)
+    language: Literal["vi", "en"] = "vi"
 
 
 class QueryCandidateResponse(BaseModel):

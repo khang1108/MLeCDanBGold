@@ -13,7 +13,7 @@ import numpy as np
 from hcmai.common.config import DenseTemporalWeights
 from hcmai.retrieval.evidence.components import TemporalScoreBundle, TemporalScoreComponent
 from hcmai.retrieval.evidence.normalization import minmax_rows
-from hcmai.temporal.planner import normalize_event_texts
+from hcmai.temporal.events import normalize_event_texts
 
 
 class DenseTemporalScorer:

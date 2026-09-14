@@ -47,6 +47,12 @@ class ResolverTest(unittest.TestCase):
         ])
         self.assertEqual([event.id for event in intent.events], ["E1", "E2"])
         llm.generate_structured.assert_called_once()
+        messages, response_model = llm.generate_structured.call_args.args
+        self.assertIs(response_model, KISIntent)
+        self.assertIn("Preserve every supported fact", messages[0]["content"])
+        self.assertIn("unless a later clue explicitly corrects it", messages[0]["content"])
+        self.assertIn("Clue 1: A man enters a room.", messages[1]["content"])
+        self.assertIn("Clue 2: Before that, he talks to a woman.", messages[1]["content"])
 
     def test_provider_failure_is_not_hidden_by_deterministic_fallback(self) -> None:
         llm = Mock()

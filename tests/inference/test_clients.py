@@ -100,7 +100,13 @@ class LLMClientTest(unittest.TestCase):
         self.assertEqual(payload["model"], "test-model")
         self.assertEqual(payload["messages"], [{"role": "user", "content": "test"}])
         self.assertEqual(payload["temperature"], 0.0)
-        self.assertEqual(payload["response_format"]["type"], "json_object")
+        self.assertEqual(payload["response_format"], {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "Sample",
+                "schema": Sample.model_json_schema(),
+            },
+        })
         self.assertEqual(headers["Authorization"], "Bearer test-key")
         self.assertEqual(timeout, 10)
 
@@ -155,6 +161,24 @@ class LLMClientTest(unittest.TestCase):
 
 
 class EmbeddingClientTest(unittest.TestCase):
+    def test_rejects_invalid_embedding_indices(self) -> None:
+        for indices in ([0, 0], [0, None], [0, 2], [-1, 0], [0, "1"], [0, True], [0, 1.0]):
+            with self.subTest(indices=indices):
+                transport = Mock()
+                transport.post_json.return_value = {
+                    "data": [
+                        {**({"index": index} if index is not None else {}),
+                         "embedding": [1.0, 0.0]}
+                        for index in indices
+                    ],
+                }
+                client = EmbeddingClient(
+                    ModelEndpointConfig("https://x/v1", None, "embed", 10),
+                    transport=transport,
+                )
+                with self.assertRaisesRegex(ValueError, "indices"):
+                    client.embed_text(["first", "second"])
+
     def test_embedding_client_preserves_input_order(self) -> None:
         transport = Mock()
         transport.post_json.return_value = {

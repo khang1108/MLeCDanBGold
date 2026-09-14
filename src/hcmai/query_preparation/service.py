@@ -18,7 +18,7 @@ from hcmai.query_preparation.models import (
     QueryCandidate,
     QueryCandidateSet,
 )
-from hcmai.temporal.planner import normalize_event_texts
+from hcmai.temporal.events import normalize_event_texts
 
 _REQUIRED_TOKEN = re.compile(r"(?<!\w)[A-Z][A-Z0-9_-]*(?!\w)")
 

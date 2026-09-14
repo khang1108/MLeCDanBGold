@@ -24,7 +24,7 @@ from hcmai.temporal.constraints import (
     validate_interval,
 )
 from hcmai.temporal.dp import AlignedPath
-from hcmai.temporal.planner import normalize_event_texts
+from hcmai.temporal.events import normalize_event_texts
 
 ExplorationStatus = Literal[
     "ok",
@@ -190,7 +190,7 @@ class TemporalExploration:
                 return previous
 
             # Evaluate before mutation so infrastructure failures keep history intact.
-            status, paths = self._evaluate_available(new)
+            status, paths = self._evaluate_active(new)
             revision = self._revision + 1
             view = self._make_view(
                 binding=binding,
@@ -229,7 +229,7 @@ class TemporalExploration:
                 return previous
 
             restored = self._history[-1]
-            status, paths = self._evaluate_available(restored)
+            status, paths = self._evaluate_active(restored)
             revision = self._revision + 1
             view = self._make_view(
                 binding=binding,
@@ -354,20 +354,6 @@ class TemporalExploration:
         )
         return replace(old, rejected=tuple(rejected))
 
-    def _evaluate(
-        self,
-        conditions: Conditions,
-    ) -> tuple[ExplorationStatus, tuple[AlignedPath, ...]]:
-        """Evaluate active cached scores without changing branch state."""
-
-        if self._video is None:
-            raise ExplorationUnavailable("temporal exploration is not open")
-        return self._evaluate_video(
-            self._video,
-            conditions,
-            self._decoder_config,
-        )
-
     def _evaluate_video(
         self,
         video: VideoEventScores,
@@ -389,14 +375,15 @@ class TemporalExploration:
             )
         return ("ok", paths) if paths else ("no_valid_path", ())
 
-    def _evaluate_available(
+    def _evaluate_active(
         self,
         conditions: Conditions,
     ) -> tuple[ExplorationStatus, tuple[AlignedPath, ...]]:
-        """Map only known I/O/timeout failures at the evaluation boundary."""
+        """Evaluate active cached scores without changing branch state."""
 
+        _, video, _, _ = self._require_active()
         try:
-            return self._evaluate(conditions)
+            return self._evaluate_video(video, conditions, self._decoder_config)
         except OSError as error:
             raise ExplorationUnavailable(
                 "temporal exploration evaluation is unavailable"

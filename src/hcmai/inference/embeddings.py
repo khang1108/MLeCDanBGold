@@ -1,13 +1,13 @@
 """Provider-agnostic text embedding capability and OpenAI-compatible implementation.
 
-This module owns text embedding through the EmbeddingClient protocol.
+This module owns text embedding through the EmbeddingClient.
 It guarantees that returned embedding vectors strictly preserve input order.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any
 
 from hcmai.inference.config import ModelEndpointConfig
 from hcmai.inference.http import HttpTransport
@@ -44,7 +44,7 @@ class EmbeddingClient:
             order as input texts.
 
         Raises:
-            ValueError: If returned embedding count does not match input texts length.
+            ValueError: If returned count or indices do not match the input texts.
         """
         if not texts:
             return TextEmbeddingBatch(model=self._endpoint.model, vectors=())
@@ -72,8 +72,12 @@ class EmbeddingClient:
                 f"Embedding count mismatch: expected {len(texts)} embeddings, got {len(raw_items)}"
             )
 
-        # Sort by 'index' to guarantee that output vectors match the input text order
-        sorted_items = sorted(raw_items, key=lambda item: item.get("index", 0))
+        indices = [item.get("index") for item in raw_items]
+        # Reject ambiguous mappings rather than assigning a vector to the wrong text.
+        if any(type(index) is not int for index in indices) or sorted(indices) != list(range(len(texts))):
+            raise ValueError("Embedding indices must contain each input index exactly once")
+
+        sorted_items = sorted(raw_items, key=lambda item: item["index"])
         vectors = tuple(tuple(float(x) for x in item["embedding"]) for item in sorted_items)
         model_name = data.get("model", self._endpoint.model)
 

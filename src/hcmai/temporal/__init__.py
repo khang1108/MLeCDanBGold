@@ -5,14 +5,13 @@ Timed search orchestration lives in ``hcmai.orchestration.temporal_search``.
 """
 
 from .dp import DPPath, AlignedPath, align_video, cluster_starts, rank_paths
-from .planner import plan_query_events, split_query_events
+from .events import normalize_event_texts
 
 __all__ = [
     "AlignedPath",
     "DPPath",
     "align_video",
     "cluster_starts",
-    "plan_query_events",
+    "normalize_event_texts",
     "rank_paths",
-    "split_query_events",
 ]

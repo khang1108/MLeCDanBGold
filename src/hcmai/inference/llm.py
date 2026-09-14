@@ -1,6 +1,6 @@
 """Provider-agnostic LLM client capability and OpenAI-compatible implementation.
 
-This module owns structured text generation through the LLMClient protocol.
+This module owns structured text generation through the LLMClient.
 It does not hardcode provider names or prompts; callers pass their own message
 sequences and response schemas.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 import json
-from typing import Any, Protocol, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
@@ -39,7 +39,11 @@ class LLMClient:
         temperature: float = 0.0,
         max_tokens: int = 2048,
     ) -> T:
-        """Send chat messages and validate the JSON completion against response_model.
+        """Send the response schema and validate the returned JSON locally.
+
+        The endpoint must support the OpenAI-compatible json_schema response
+        format. Local validation also enforces domain model validators that
+        cannot be represented in JSON Schema.
 
         Args:
             messages: OpenAI-style list of message dictionaries with role and content.
@@ -64,7 +68,13 @@ class LLMClient:
             "messages": list(messages),
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": response_model.model_json_schema(),
+                },
+            },
         }
 
         data = self._transport.post_json(

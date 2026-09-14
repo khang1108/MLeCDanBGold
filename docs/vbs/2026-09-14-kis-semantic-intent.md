@@ -610,11 +610,11 @@ git commit -am "refactor: use shared text embedding client"
 - Moves only reusable `normalize_event_texts` to `temporal/events.py`.
 - Raw query candidate generation is removed; candidate generation receives explicit resolved events.
 
-- [ ] **Step 1: Move explicit-event normalization with unchanged behavior**
+- [x] **Step 1: Move explicit-event normalization with unchanged behavior**
 
 Copy the existing `normalize_event_texts` behavior into `temporal/events.py` and update `TemporalSearchService` imports. Write regression tests first.
 
-- [ ] **Step 2: Write KIS pipeline test that fails if raw planning is attempted**
+- [x] **Step 2: Write KIS pipeline test that fails if raw planning is attempted**
 
 Patch/omit any planner entirely; construct a `KISIntent` with two events, call the new pipeline API, and assert `TemporalSearchService.search` receives exactly:
 
@@ -624,7 +624,7 @@ Patch/omit any planner entirely; construct a `KISIntent` with two events, call t
 
 with the retrieval translation bundle aligned by position.
 
-- [ ] **Step 3: Replace `KISPipeline.execute(SearchRequest)` with one explicit intent method**
+- [x] **Step 3: Replace `KISPipeline.execute(SearchRequest)` with one explicit intent method**
 
 Target signature:
 
@@ -647,7 +647,7 @@ def execute(
 
 There must be no import of `plan_query_events` in `workflows/kis.py`.
 
-- [ ] **Step 4: Remove raw-query mode from Query Candidates**
+- [x] **Step 4: Remove raw-query mode from Query Candidates**
 
 `QueryCandidatesRequest` becomes:
 
@@ -659,7 +659,7 @@ class QueryCandidatesRequest(BaseModel):
 
 `SearchService.generate_query_candidates` must no longer call a planner.
 
-- [ ] **Step 5: Delete planner after a zero-reference search**
+- [x] **Step 5: Delete planner after a zero-reference search**
 
 ```bash
 rg "plan_query_events|split_query_events|temporal\.planner" src llm frontend
@@ -671,7 +671,7 @@ Expected: no production reference except the file being deleted.
 git rm src/hcmai/temporal/planner.py
 ```
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 ```bash
 PYTHONPATH=src python -m unittest \

@@ -10,7 +10,7 @@ from threading import RLock
 from time import monotonic
 from typing import Any
 
-from hcmai.temporal.planner import normalize_event_texts
+from hcmai.temporal.events import normalize_event_texts
 
 CacheKey = tuple[str, ...]
 
