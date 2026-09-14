@@ -24,6 +24,7 @@ from offline.enrichment.ocr.models.entities import OCRResult
 from offline.enrichment.pipeline import EnrichmentService
 from llm.local.audio import download_audio
 from llm.local.readiness import build_readiness
+from llm.local.text_generation import TextGenerationAdapter
 
 
 class LocalAdapter:
@@ -38,6 +39,7 @@ class LocalAdapter:
         captioner: Any | None = None,
         reranker: Any | None = None,
         ocr_adapter: Any | None = None,
+        text_generator: Any | None = None,
         *,
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
@@ -45,6 +47,7 @@ class LocalAdapter:
         enable_ocr: bool = False,
         enable_asr: bool = False,
         enable_diarization: bool = False,
+        enable_text_generation: bool = False,
         transcript_config: TranscriptJobConfig | None = None,
     ) -> None:
         self.config = config
@@ -55,6 +58,7 @@ class LocalAdapter:
         self.enable_ocr = enable_ocr
         self.enable_asr = enable_asr
         self.enable_diarization = enable_diarization
+        self.enable_text_generation = enable_text_generation
 
         self.asr = None
         self.diarization = None
@@ -85,6 +89,11 @@ class LocalAdapter:
             if enable_ocr
             else None
         )
+        self.text_generator: Any = text_generator or (
+            TextGenerationAdapter(config.text_generation)
+            if enable_text_generation
+            else None
+        )
 
     @classmethod
     def from_environment(cls) -> LocalAdapter:
@@ -104,6 +113,7 @@ class LocalAdapter:
             enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
             enable_asr=_env_bool("HCMAI_ENABLE_ASR", default=False),
             enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", default=False),
+            enable_text_generation=_env_bool("HCMAI_ENABLE_TEXT_GENERATION", default=False),
             transcript_config=transcript_config,
         )
 
@@ -120,6 +130,8 @@ class LocalAdapter:
             self.reranker._ensure_loaded()
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
+        if self.text_generator is not None:
+            self.text_generator.load()
 
         if self.enable_asr and self.transcript_config:
             from offline.enrichment.transcripts.adapters.asr import ASRAdapter
@@ -132,6 +144,24 @@ class LocalAdapter:
 
             self.diarization = DiarizationAdapter(self.transcript_config.diarization)
             self.diarization._load_pipeline()
+
+    def generate_chat(
+        self,
+        messages: Sequence[dict[str, str]],
+        *,
+        response_schema: dict[str, Any],
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """Generate text conforming to response_schema using the process-local text generator."""
+        if self.text_generator is None:
+            raise RuntimeError("text generation model is disabled")
+        return self.text_generator.generate(
+            messages,
+            response_schema=response_schema,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
 
     def embed_images(
         self,

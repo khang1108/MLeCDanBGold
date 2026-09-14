@@ -128,3 +128,22 @@ class LLMService:
         if method is not None:
             return method(images, source="dino")
         raise RuntimeError("dino embedding is not supported by this provider")
+
+    def generate_chat(
+        self,
+        messages: Any,
+        *,
+        response_schema: dict[str, Any],
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """Generate text conforming to response_schema using the configured provider."""
+        method = getattr(self.adapter, "generate_chat", None)
+        if method is None:
+            raise RuntimeError("text generation is not supported by this provider")
+        return method(
+            messages,
+            response_schema=response_schema,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )

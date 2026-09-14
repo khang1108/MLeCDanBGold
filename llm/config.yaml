@@ -39,3 +39,12 @@ caption_embedding:
   max_length: 1024
 
   dtype: "float32"
+
+
+text_generation:
+  checkpoint: "Qwen/Qwen3-4B"
+  revision: "1cfa9a7208912126459214e8b04321603b3df60c"
+  device: "cuda"
+  dtype: "bfloat16"
+  max_input_tokens: 4096
+  max_new_tokens: 2048

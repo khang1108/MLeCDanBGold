@@ -40,6 +40,15 @@ class HostedRerankerConfig(BaseModel):
     max_pixels: int = Field(default=262144, ge=4096)
 
 
+class HostedTextGenerationConfig(BaseModel):
+    checkpoint: str = "Qwen/Qwen3-4B"
+    revision: str | None = "1cfa9a7208912126459214e8b04321603b3df60c"
+    device: str = "cuda"
+    dtype: str = "bfloat16"
+    max_input_tokens: int = Field(default=4096, ge=256)
+    max_new_tokens: int = Field(default=2048, ge=64)
+
+
 class LLMServiceConfig(BaseModel):
     """Hosted inference settings plus pinned dense encoder configurations."""
 
@@ -51,6 +60,9 @@ class LLMServiceConfig(BaseModel):
     caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     evidence_embedding: EncoderConfig | None = None
     reranker: HostedRerankerConfig = Field(default_factory=HostedRerankerConfig)
+    text_generation: HostedTextGenerationConfig = Field(
+        default_factory=HostedTextGenerationConfig
+    )
 
     @property
     def resolved_evidence_embedding(self) -> EncoderConfig:

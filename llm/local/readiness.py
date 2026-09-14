@@ -41,13 +41,19 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
     asr_loaded = adapter.asr is not None
     diarization_loaded = adapter.diarization is not None
     transcript_config = adapter.transcript_config
+    text_generator = getattr(adapter, "text_generator", None)
+    text_generation_loaded = (
+        text_generator is not None and getattr(text_generator, "model", None) is not None
+    )
+    enable_text_gen = getattr(adapter, "enable_text_generation", False)
     return InferenceReadiness(
         ready=(not adapter.enable_caption or generator_loaded)
         and (not adapter.enable_visual_embedding or visual_loaded)
         and (not adapter.enable_reranker or reranker_loaded)
         and (not adapter.enable_ocr or ocr_loaded)
         and (not adapter.enable_asr or asr_loaded)
-        and (not adapter.enable_diarization or diarization_loaded),
+        and (not adapter.enable_diarization or diarization_loaded)
+        and (not enable_text_gen or text_generation_loaded),
         models={
             "caption_generation": _model_status(
                 enabled=adapter.enable_caption,
@@ -113,11 +119,25 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
                     else None
                 ),
             ),
+            "text_generation": _model_status(
+                enabled=enable_text_gen,
+                loaded=text_generation_loaded,
+                checkpoint=(
+                    adapter.config.text_generation.checkpoint
+                    if hasattr(adapter.config, "text_generation")
+                    else None
+                ),
+                revision=(
+                    adapter.config.text_generation.revision
+                    if hasattr(adapter.config, "text_generation")
+                    else None
+                ),
+            ),
         },
         capabilities=_capabilities(
             embedding=visual_loaded,
             reranking=reranker_loaded,
-            structured_parsing=False,
+            structured_parsing=text_generation_loaded,
             image_embedding=visual_loaded,
             caption=generator_loaded,
             ocr=ocr_loaded,

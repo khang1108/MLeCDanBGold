@@ -75,6 +75,7 @@ exposes image embedding only.
 | `HCMAI_ENABLE_OCR` | GPU service | Load OCR capability |
 | `HCMAI_ENABLE_ASR` | GPU service | Load ASR capability |
 | `HCMAI_ENABLE_DIARIZATION` | GPU service | Load diarization capability |
+| `HCMAI_ENABLE_TEXT_GENERATION` | GPU service | Load generic causal LM text generation |
 | `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted inference API base URL |
 
 Every remote encoder checkpoint, vector dimension, normalization and dtype must
@@ -87,6 +88,7 @@ must not query an index built in another vector space.
 | --- | --- | --- |
 | `GET /health` | None | Process liveness |
 | `GET /ready` | None | Enabled-model readiness and provenance |
+| `POST /v1/chat/completions` | OpenAI chat messages + JSON Schema | Assistant message with structured JSON |
 | `POST /v1/captions` | Multipart IDs and images | Caption for each input ID |
 | `POST /v1/enrichment/ocr` | Multipart IDs and images | OCR evidence for each input ID |
 | `POST /v1/embeddings/images` | Multipart IDs and images | Visual vectors |
