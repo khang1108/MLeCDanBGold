@@ -77,10 +77,7 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose, 
       : targetTime;
     video.currentTime = seekTime;
     updatePlaybackTime(seekTime);
-    if (exploration?.open && Number.isFinite(duration) && duration > 0 && !exploration.session) {
-      exploration.open(duration);
-    }
-  }, [exploration, targetTime, updatePlaybackTime]);
+  }, [targetTime, updatePlaybackTime]);
 
   const handleVideoTimeUpdate = useCallback((event) => {
     updatePlaybackTime(event.currentTarget.currentTime);
@@ -227,11 +224,22 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose, 
           <div className="inspector-content">
             <FrameMetadata frame={frame} playbackTime={playbackTime} />
             {exploration && (
+              <>
+                {!exploration.session && (
+                  <div className="exploration-launch">
+                    <button type="button" disabled={!videoDuration || exploration.pending} onClick={() => exploration.open(videoDuration)}>
+                      {exploration.pending ? "Opening…" : "Explore"}
+                    </button>
+                    {exploration.error && <p role="alert">{exploration.error}</p>}
+                  </div>
+                )}
               <ExplorationPanel
                 events={exploration.events || exploration.session?.events || exploration.session?.view?.events || []}
                 session={exploration.session}
                 pending={exploration.pending}
                 error={exploration.error}
+                unsynced={exploration.unsynced}
+                onRefresh={exploration.refresh}
                 readCurrentTimeMs={() => {
                   const seconds = Number(videoRef.current?.currentTime);
                   return Number.isFinite(seconds) && seconds >= 0 ? Math.round(seconds * 1000) : null;
@@ -246,6 +254,7 @@ const ImageModal = ({ frame = {}, initialTimestampMs, query, onSubmit, onClose, 
                   if (Number.isFinite(milliseconds) && milliseconds >= 0) handleVideoSeek(milliseconds / 1000);
                 }}
               />
+              </>
             )}
           </div>
         </div>

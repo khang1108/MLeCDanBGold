@@ -9,7 +9,7 @@ const ExplorationPanel = ({
   events = [], session,
   pending = false, error,
   onApprove, onDecline, onUndo, onSearchRange, onBack, onSeek,
-  readCurrentTimeMs,
+  readCurrentTimeMs, unsynced = false, onRefresh,
 }) => {
   const view = session?.view;
   const [selectedEvent, setSelectedEvent] = React.useState(0);
@@ -35,14 +35,16 @@ const ExplorationPanel = ({
   const eventList = Array.isArray(view.events) ? view.events : events;
   const paths = Array.isArray(view.paths) ? view.paths : [];
   const currentPath = paths[0];
+  const changedEvents = Array.isArray(view.changed_event_indices) ? view.changed_event_indices : [];
   const approvedRanges = view.conditions?.approved_ranges || view.conditions?.confirmed || [];
   const declinedRanges = view.conditions?.declined_ranges || view.conditions?.rejected || [];
   const intervalValid = validTime(draft.start) && validTime(draft.end) && draft.start <= draft.end;
   const searchValid = validTime(searchDraft.start)
     && validTime(searchDraft.end) && searchDraft.start <= searchDraft.end;
   const capture = (end) => {
-    const milliseconds = Number(readCurrentTimeMs?.());
-    if (!validTime(milliseconds)) {
+    const rawTime = readCurrentTimeMs?.();
+    const milliseconds = Number(rawTime);
+    if (rawTime === null || rawTime === undefined || !validTime(milliseconds)) {
       setCaptureError("Current player time is unavailable.");
       return;
     }
@@ -64,7 +66,7 @@ const ExplorationPanel = ({
     return (
       <button type="button" className="exploration-moment" key={`${frameId || "frame"}-${index}`} onClick={() => onSeek?.(timestamp)}>
         {frameId && <img src={keyframeUrl(frameId)} alt={`Moment ${frameId}`} />}
-        <span>Updated moment · {formatTime(timestamp)}</span>
+        <span>{view.comparison_available === false ? "Comparison unavailable" : changedEvents.includes(index) ? "Updated moment" : "Current moment"} · {formatTime(timestamp)}</span>
       </button>
     );
   };
@@ -78,8 +80,8 @@ const ExplorationPanel = ({
       </div>
       <p className="exploration-selected-event">Event: {eventList[selectedEvent] || "—"}</p>
       <div className="exploration-range-fields">
-        <span>Start: {formatTime(draft.start)}</span>
-        <span>End: {formatTime(draft.end)}</span>
+        <label>Start (seconds): <input aria-label="Start seconds" type="number" step="0.001" min="0" value={draft.start === null ? "" : (draft.start / 1000).toFixed(3)} onChange={(event) => setDraft((previous) => ({ ...previous, start: validTime(Number(event.target.value)) ? Math.round(Number(event.target.value) * 1000) : null }))} /></label>
+        <label>End (seconds): <input aria-label="End seconds" type="number" step="0.001" min="0" value={draft.end === null ? "" : (draft.end / 1000).toFixed(3)} onChange={(event) => setDraft((previous) => ({ ...previous, end: validTime(Number(event.target.value)) ? Math.round(Number(event.target.value) * 1000) : null }))} /></label>
       </div>
       <div className="exploration-draft-actions">
         <button type="button" onClick={() => capture("start")}>Use current time as start</button>
@@ -87,15 +89,16 @@ const ExplorationPanel = ({
       </div>
       {captureError && <p role="status">{captureError}</p>}
       <div className="exploration-feedback-actions">
-        <button type="button" disabled={!intervalValid || pending} onClick={() => onApprove?.({ event_index: selectedEvent, interval: [draft.start, draft.end] })}>Approve</button>
-        <button type="button" disabled={!intervalValid || pending} onClick={() => onDecline?.({ event_index: selectedEvent, interval: [draft.start, draft.end] })}>Decline</button>
+        <button type="button" disabled={!intervalValid || pending || unsynced} onClick={() => onApprove?.({ event_index: selectedEvent, interval: [draft.start, draft.end] })}>Approve</button>
+        <button type="button" disabled={!intervalValid || pending || unsynced} onClick={() => onDecline?.({ event_index: selectedEvent, interval: [draft.start, draft.end] })}>Decline</button>
       </div>
       <div className="exploration-search-range">
         <h3>Search range</h3>
-        <input aria-label="Search range start" type="number" min="0" value={searchDraft.start ?? ""} onChange={(event) => updateSearch("start", event.target.value)} />
-        <input aria-label="Search range end" type="number" min="0" value={searchDraft.end ?? ""} onChange={(event) => updateSearch("end", event.target.value)} />
-        <button type="button" disabled={!searchValid || pending} onClick={() => onSearchRange?.({ interval: [searchDraft.start, searchDraft.end] })}>Search this range</button>
+        <label>Start (seconds): <input aria-label="Search range start" type="number" step="0.001" min="0" value={searchDraft.start === null ? "" : (searchDraft.start / 1000).toFixed(3)} onChange={(event) => updateSearch("start", Number(event.target.value) * 1000)} /></label>
+        <label>End (seconds): <input aria-label="Search range end" type="number" step="0.001" min="0" value={searchDraft.end === null ? "" : (searchDraft.end / 1000).toFixed(3)} onChange={(event) => updateSearch("end", Number(event.target.value) * 1000)} /></label>
+        <button type="button" disabled={!searchValid || pending || unsynced} onClick={() => onSearchRange?.({ interval: [searchDraft.start, searchDraft.end] })}>Search this range</button>
       </div>
+      {unsynced && <button type="button" disabled={pending} onClick={onRefresh}>Refresh</button>}
       {view.can_undo && <button type="button" disabled={pending} onClick={onUndo}>Undo</button>}
       {error && <p role="alert">{error}</p>}
       {view.conditions && <div className="exploration-conditions">Conditions: {JSON.stringify(view.conditions)}</div>}

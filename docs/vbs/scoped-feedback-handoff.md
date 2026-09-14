@@ -9,7 +9,9 @@ implemented in this checkout.
 
 `POST /api/v1/search` remains backward-compatible. Its `SearchResponse` carries
 the original `events`, optional `dense_events` and `bm25_caption_events`, and
-`use_dense`/`use_bm25` flags. No exploration endpoint exists yet. Feedback must
+`use_dense`/`use_bm25` flags. The additive local exploration transport is now
+available at `/api/v1/exploration`; it owns branch feedback and does not claim
+candidate or DRES integration. Feedback must
 not be put in `retrieval_events` or routed through `/trake`; the integration PR
 must add an explicitly reviewed additive transport contract.
 
@@ -120,7 +122,7 @@ integration and end-to-end rehearsal are not complete here.
 
 ## Next-owner checklist
 
-- [ ] Define and review additive exploration transport; keep `/api/v1/search`
+- [x] Define and review additive local exploration transport; keep `/api/v1/search`
       backward-compatible.
 - [ ] Map the transport to the real frontend result/inspector and candidate
       dialog components; preserve the global snapshot.

@@ -88,6 +88,7 @@ export const useTemporalExploration = () => {
   const [session, setSession] = useState(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(null);
+  const [unsynced, setUnsynced] = useState(false);
   const generationRef = useRef(0);
   const sessionRef = useRef(null);
   const pendingRef = useRef(false);
@@ -107,6 +108,7 @@ export const useTemporalExploration = () => {
     controllerRef.current = null;
     pendingRef.current = false;
     unsyncedRef.current = false;
+    setUnsynced(false);
     setPending(false);
     setError(null);
   }, []);
@@ -139,6 +141,7 @@ export const useTemporalExploration = () => {
       ) return null;
       setCurrentSession(refreshed, keyRef.current);
       unsyncedRef.current = false;
+      setUnsynced(false);
       setError(null);
       return refreshed;
     } catch (refreshError) {
@@ -151,9 +154,11 @@ export const useTemporalExploration = () => {
         if (isNotFound(refreshError)) {
           setCurrentSession(null);
           unsyncedRef.current = false;
+          setUnsynced(false);
           setError(null);
         } else {
           unsyncedRef.current = true;
+          setUnsynced(true);
           setError(`Exploration is not synchronized: ${refreshError.message || 'refresh failed'}`);
         }
       }
@@ -298,6 +303,7 @@ export const useTemporalExploration = () => {
     session,
     pending,
     error,
+    unsynced,
     open,
     act,
     undo,

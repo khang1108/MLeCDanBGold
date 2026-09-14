@@ -190,6 +190,7 @@ const AppContent = () => {
             session: exploration.session,
             pending: exploration.pending,
             error: exploration.error,
+            unsynced: exploration.unsynced,
             open: (durationSeconds) => {
               explorationKeyRef.current = explorationSelectionKey(selectedFrame);
               return exploration.open({
@@ -202,8 +203,8 @@ const AppContent = () => {
             undo: exploration.undo,
             refresh: exploration.refresh,
             onBack: async () => {
-              await closeExploration();
               setSelectedFrame(null);
+              await closeExploration();
             },
           } : undefined}
         />
