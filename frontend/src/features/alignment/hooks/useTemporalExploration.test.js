@@ -19,10 +19,8 @@ jest.mock('../../../api/exploration', () => ({
 }));
 
 const snapshot = {
-  query: 'red boat',
-  events: ['red boat'],
-  dense_events: ['dense red boat'],
-  bm25_caption_events: ['caption red boat'],
+  semantic_revision: 1,
+  events: [{ event_id: 'E1', canonical_text: 'red boat', dense_text: 'dense red boat', bm25_text: 'caption red boat' }],
   use_dense: true,
   use_bm25: true,
 };
@@ -54,12 +52,7 @@ test('maps only the live snapshot and finite whole-video window for open', () =>
     videoId: 'V01',
     durationSeconds: 30.999,
   })).toEqual({
-    query: 'red boat',
-    events: ['red boat'],
-    retrieval_events: ['dense red boat'],
-    caption_events: ['caption red boat'],
-    use_dense: true,
-    use_bm25: true,
+    seed: snapshot,
     video_id: 'V01',
     window: [0, 30_999],
   });
@@ -203,4 +196,21 @@ test('closes a late successful open after its generation has been invalidated', 
   });
   expect(closeExploration).toHaveBeenCalledWith('branch-1', 1);
   expect(result.current.session).toBeNull();
+});
+
+
+test('passes the dedicated seed unchanged without legacy response strings', () => {
+  const body = buildExplorationOpenBody({ snapshot, videoId: 'V01', durationSeconds: 30 });
+  expect(body.seed).toBe(snapshot);
+  expect(Object.keys(body)).toEqual(['seed', 'video_id', 'window']);
+});
+
+test('opens a new branch when the same video has a different scoring seed', async () => {
+  openExploration.mockResolvedValue(envelope(1));
+  const { result } = renderHook(() => useTemporalExploration());
+  await act(async () => {
+    await result.current.open({ snapshot, videoId: 'V01', durationSeconds: 30 });
+    await result.current.open({ snapshot: { ...snapshot, semantic_revision: 2 }, videoId: 'V01', durationSeconds: 30 });
+  });
+  expect(openExploration).toHaveBeenCalledTimes(2);
 });

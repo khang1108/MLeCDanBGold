@@ -13,13 +13,11 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    StrictBool,
     StringConstraints,
-    field_validator,
     model_validator,
 )
 
-from hcmai.temporal.events import normalize_event_texts
+from hcmai.api.contracts.kis import KISExplorationSeed
 
 _NonBlankString = Annotated[
     str,
@@ -34,38 +32,14 @@ class ExplorationOpenRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    query: _NonBlankString
-    events: list[_NonBlankString] = Field(min_length=1)
-    retrieval_events: list[_NonBlankString] = Field(min_length=1)
-    caption_events: list[_NonBlankString] | None
-    use_dense: StrictBool
-    use_bm25: StrictBool
+    seed: KISExplorationSeed
     video_id: _NonBlankString
     window: _Interval
 
-    @field_validator("events", "retrieval_events", "caption_events")
-    @classmethod
-    def normalize_events(
-        cls,
-        events: list[str] | None,
-    ) -> list[str] | None:
-        """Normalize whitespace before binding event positions to the core."""
-
-        return list(normalize_event_texts(events)) if events is not None else None
-
     @model_validator(mode="after")
     def validate_snapshot(self) -> "ExplorationOpenRequest":
-        """Keep event rows aligned and require an active retrieval source."""
+        """Require a forward selected-video window for the validated seed."""
 
-        if not self.use_dense and not self.use_bm25:
-            raise ValueError("at least one of use_dense or use_bm25 must be true")
-        if len(self.retrieval_events) != len(self.events):
-            raise ValueError("retrieval_events must match the event count")
-        if (
-            self.caption_events is not None
-            and len(self.caption_events) != len(self.events)
-        ):
-            raise ValueError("caption_events must match the event count")
         if self.window[0] > self.window[1]:
             raise ValueError("window start_ms must not exceed end_ms")
         return self

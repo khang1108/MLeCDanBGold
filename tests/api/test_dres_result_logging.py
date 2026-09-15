@@ -50,8 +50,17 @@ class _SearchService:
         )
         return KISRevisionSearchResponse(
             intent=intent,
-            dense_events=["person running"],
-            bm25_events=["person running"],
+            exploration_seed={
+                "semantic_revision": 1,
+                "events": [{
+                    "event_id": "E1",
+                    "canonical_text": "person running",
+                    "dense_text": "person running",
+                    "bm25_text": "person running",
+                }],
+                "use_dense": True,
+                "use_bm25": True,
+            },
             use_dense=True,
             use_bm25=True,
             results=[_search_result("video-a", 100), _search_result("video-b", 200)],

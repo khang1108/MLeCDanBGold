@@ -47,3 +47,15 @@ class KISRevisionSearchRequestTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_task2_step7_seed_response_removes_prepared_string_aliases():
+    from hcmai.api.contracts.kis import KISExplorationSeed, KISRevisionSearchResponse
+    from hcmai.api.contracts.latency import SearchLatency
+
+    seed = KISExplorationSeed(semantic_revision=1, events=[dict(event_id="E1", canonical_text="boat", dense_text="boat")], use_dense=True, use_bm25=False)
+    assert seed.model_dump()["events"][0]["dense_text"] == "boat"
+    assert "dense_events" not in KISRevisionSearchResponse.model_fields
+    assert "bm25_events" not in KISRevisionSearchResponse.model_fields
+    assert "exploration_seed" in KISRevisionSearchResponse.model_fields
+    assert SearchLatency(intent_ms=1, translation_ms=2).translation_ms == 2

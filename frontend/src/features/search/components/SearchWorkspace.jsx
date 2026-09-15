@@ -381,30 +381,8 @@ const SearchWorkspace = ({
         warnings: response.warnings || [],
       };
       const historySnapshot = buildKisSnapshot(response.results || [], snapshotOptions);
-      // Preserve the scoring-source fields from this response even if the
-      // query draft changes before the user opens the frame inspector.
-      const explorationSnapshot = {
-        ...response,
-        query: queryText,
-        events: eventTexts,
-        dense_events: response.dense_events,
-        bm25_caption_events: response.bm25_events,
-        use_dense: typeof response.use_dense === 'boolean' ? response.use_dense : useDense,
-        use_bm25: typeof response.use_bm25 === 'boolean' ? response.use_bm25 : useBm25,
-      };
-      // Older response shapes cannot reconstruct source events safely, so
-      // they intentionally do not expose temporal exploration.
-      const sourcesComplete = Array.isArray(explorationSnapshot.events)
-        && explorationSnapshot.events.length > 0
-        && (!explorationSnapshot.use_dense || (
-          Array.isArray(explorationSnapshot.dense_events)
-          && explorationSnapshot.dense_events.length === explorationSnapshot.events.length
-        ))
-        && (!explorationSnapshot.use_bm25 || (
-          Array.isArray(explorationSnapshot.bm25_caption_events)
-          && explorationSnapshot.bm25_caption_events.length === explorationSnapshot.events.length
-        ));
-      liveKisSnapshotRef.current = sourcesComplete ? explorationSnapshot : null;
+      // Keep the backend's committed scoring seed intact while the draft changes.
+      liveKisSnapshotRef.current = response.exploration_seed || null;
       setResultType('retrieval');
       setFrames(response.results || []);
       setKisEvents(eventTexts);

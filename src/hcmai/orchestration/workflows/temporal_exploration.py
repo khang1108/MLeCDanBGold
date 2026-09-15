@@ -15,6 +15,7 @@ from hcmai.orchestration.workflows.temporal_search import (
     DecoderConfigSnapshot,
     TemporalSearchService,
 )
+from hcmai.retrieval.plan import KISRetrievalPlan
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.constraints import (
     Conditions,
@@ -24,7 +25,6 @@ from hcmai.temporal.constraints import (
     validate_interval,
 )
 from hcmai.temporal.dp import AlignedPath
-from hcmai.temporal.events import normalize_event_texts
 
 ExplorationStatus = Literal[
     "ok",
@@ -38,11 +38,9 @@ ExplorationStatus = Literal[
 class QueryBinding:
     """Bind an exploration branch to one immutable scoring generation."""
 
-    query: str
+    retrieval_plan: KISRetrievalPlan
+    semantic_revision: int
     event_version: str
-    events: tuple[str, ...]
-    retrieval_events: tuple[str, ...]
-    caption_events: tuple[str, ...] | None
     use_dense: bool
     use_bm25: bool
     scoring_revision: str
@@ -105,15 +103,20 @@ class TemporalExploration:
             validate_interval(window)
             conditions = Conditions(
                 window=(int(window[0]), int(window[1])),
-                confirmed=(None,) * len(binding.events),
-                rejected=((),) * len(binding.events),
+                confirmed=(None,) * len(binding.retrieval_plan.events),
+                rejected=((),) * len(binding.retrieval_plan.events),
             )
 
             try:
                 scores, _ = self._temporal.score_videos(
-                    binding.events,
-                    retrieval_events=binding.retrieval_events,
-                    caption_events=binding.caption_events,
+                    binding.retrieval_plan.canonical_texts,
+                    retrieval_events=(
+                        binding.retrieval_plan.dense_texts
+                        if binding.use_dense else binding.retrieval_plan.canonical_texts
+                    ),
+                    caption_events=(
+                        binding.retrieval_plan.bm25_texts if binding.use_bm25 else None
+                    ),
                     use_dense=binding.use_dense,
                     use_bm25=binding.use_bm25,
                 )
@@ -464,35 +467,19 @@ def _validate_binding(binding: QueryBinding) -> None:
 
     if not isinstance(binding, QueryBinding):
         raise ValueError("binding must be a QueryBinding")
-    _validate_nonblank(binding.query, "query")
     _validate_nonblank(binding.event_version, "event_version")
     _validate_nonblank(binding.scoring_revision, "scoring_revision")
-
-    _validate_normalized_events(binding.events, "events")
-    _validate_normalized_events(binding.retrieval_events, "retrieval_events")
-    event_count = len(binding.events)
-    if len(binding.retrieval_events) != event_count:
-        raise ValueError("retrieval_events must match the event count")
-    if binding.caption_events is not None:
-        _validate_normalized_events(binding.caption_events, "caption_events")
-        if len(binding.caption_events) != event_count:
-            raise ValueError("caption_events must match the event count")
-    if not isinstance(binding.use_dense, bool) or not isinstance(
-        binding.use_bm25, bool
+    if (
+        not isinstance(binding.semantic_revision, int)
+        or isinstance(binding.semantic_revision, bool)
+        or binding.semantic_revision < 1
     ):
-        raise ValueError("retrieval source flags must be booleans")
-    if not binding.use_dense and not binding.use_bm25:
-        raise ValueError("at least one retrieval source must be enabled")
-
-
-def _validate_normalized_events(events: tuple[str, ...], name: str) -> None:
-    """Require a tuple whose text already matches shared normalization."""
-
-    if not isinstance(events, tuple):
-        raise ValueError(f"{name} must be a tuple")
-    normalized = normalize_event_texts(events)
-    if normalized != events:
-        raise ValueError(f"{name} must contain normalized event text")
+        raise ValueError("semantic_revision must be a positive integer")
+    if not isinstance(binding.retrieval_plan, KISRetrievalPlan):
+        raise ValueError("binding requires a KISRetrievalPlan")
+    binding.retrieval_plan.validate_text_sources(
+        use_dense=binding.use_dense, use_bm25=binding.use_bm25,
+    )
 
 
 def _validate_nonblank(value: str, name: str) -> None:

@@ -8,6 +8,7 @@ from hcmai.orchestration.workflows.temporal_exploration import (
     QueryBinding,
     TemporalExploration,
 )
+from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
@@ -49,11 +50,9 @@ class TemporalExplorationTest(unittest.TestCase):
         temporal = _TemporalSearch()
         exploration = TemporalExploration(temporal)  # type: ignore[arg-type]
         binding = QueryBinding(
-            query="A person walks",
+            semantic_revision=1,
+            retrieval_plan=KISRetrievalPlan(events=(KISRetrievalEvent("E1", "A person walks", "A person walks", None),)),
             event_version="events-v1",
-            events=("A person walks",),
-            retrieval_events=("A person walks",),
-            caption_events=None,
             use_dense=True,
             use_bm25=False,
             scoring_revision="scores-v1",

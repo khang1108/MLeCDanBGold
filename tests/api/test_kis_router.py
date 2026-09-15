@@ -36,8 +36,17 @@ def _make_intent() -> KISIntent:
 def _make_response() -> KISRevisionSearchResponse:
     return KISRevisionSearchResponse(
         intent=_make_intent(),
-        dense_events=["A woman cooks in kitchen"],
-        bm25_events=["A woman cooks in kitchen"],
+        exploration_seed={
+            "semantic_revision": 1,
+            "events": [{
+                "event_id": "E1",
+                "canonical_text": "A woman cooks in kitchen",
+                "dense_text": "A woman cooks in kitchen",
+                "bm25_text": "A woman cooks in kitchen",
+            }],
+            "use_dense": True,
+            "use_bm25": True,
+        },
         use_dense=True,
         use_bm25=True,
         results=[
@@ -81,7 +90,9 @@ async def test_search_kis_revision_success() -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["intent"]["query_text"] == "A woman cooks in kitchen."
-    assert data["dense_events"] == ["A woman cooks in kitchen"]
+    assert data["exploration_seed"]["events"][0]["dense_text"] == "A woman cooks in kitchen"
+    assert "dense_events" not in data
+    assert "bm25_events" not in data
     assert len(data["results"]) == 1
 
 

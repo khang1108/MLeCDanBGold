@@ -97,24 +97,28 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
         call_kwargs = service.kis.execute.call_args.kwargs
         self.assertEqual(call_kwargs["intent"], self.mock_intent_en)
         self.assertEqual(
-            call_kwargs["retrieval_events"],
+            call_kwargs["retrieval_plan"].dense_texts,
             ("A man enters a room", "The man talks to a woman"),
         )
         self.assertTrue(call_kwargs["use_dense"])
         self.assertTrue(call_kwargs["use_bm25"])
         self.assertEqual(call_kwargs["top_k"], 10)
-        self.assertGreaterEqual(call_kwargs["query_ms"], 0.0)
+        self.assertGreaterEqual(call_kwargs["intent_ms"], 0.0)
         self.assertIsInstance(response, KISRevisionSearchResponse)
         self.assertEqual(response.intent, self.mock_intent_en)
         self.assertEqual(
-            response.dense_events,
+            [event.dense_text for event in response.exploration_seed.events],
             ["A man enters a room", "The man talks to a woman"],
         )
         self.assertEqual(
-            response.bm25_events,
+            [event.bm25_text for event in response.exploration_seed.events],
             ["A man enters a room", "The man talks to a woman"],
         )
         self.assertEqual(len(response.results), 1)
+        self.assertEqual(response.exploration_seed.semantic_revision, 2)
+        self.assertNotIn("dense_events", response.model_dump())
+        self.assertNotIn("bm25_events", response.model_dump())
+        self.assertGreaterEqual(call_kwargs["translation_ms"], 0)
 
     def test_search_kis_revision_translates_vietnamese_for_dense_retrieval(self) -> None:
         intent_vi = KISIntent(
@@ -169,8 +173,8 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
             ("Một người phụ nữ trong bếp",),
             language="vi",
         )
-        self.assertEqual(response.dense_events, ["A woman in a kitchen"])
-        self.assertEqual(response.bm25_events, ["Một người phụ nữ trong bếp"])
+        self.assertEqual([event.dense_text for event in response.exploration_seed.events], ["A woman in a kitchen"])
+        self.assertEqual([event.bm25_text for event in response.exploration_seed.events], ["Một người phụ nữ trong bếp"])
 
     def test_search_kis_revision_rejects_revision_conflict_before_inference(self) -> None:
         intent_resolver = Mock()

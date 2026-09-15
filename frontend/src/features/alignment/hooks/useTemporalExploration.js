@@ -45,26 +45,26 @@ const requestWithTimeout = (request, controller, onLateSuccess) => new Promise((
   });
 });
 
+const hasText = (value) => typeof value === 'string' && value.trim().length > 0;
+
 const validSnapshot = (snapshot) => (
   snapshot
-  && typeof snapshot.query === 'string'
-  && snapshot.query.trim()
+  && Number.isInteger(snapshot.semantic_revision)
+  && snapshot.semantic_revision >= 1
   && Array.isArray(snapshot.events)
   && snapshot.events.length > 0
   && typeof snapshot.use_dense === 'boolean'
   && typeof snapshot.use_bm25 === 'boolean'
   && (snapshot.use_dense || snapshot.use_bm25)
-  && (!snapshot.use_dense || (
-    Array.isArray(snapshot.dense_events)
-    && snapshot.dense_events.length === snapshot.events.length
-  ))
-  && (!snapshot.use_bm25 || (
-    Array.isArray(snapshot.bm25_caption_events)
-    && snapshot.bm25_caption_events.length === snapshot.events.length
+  && snapshot.events.every((event, index) => (
+    event?.event_id === `E${index + 1}`
+    && hasText(event.canonical_text)
+    && (!snapshot.use_dense || hasText(event.dense_text))
+    && (!snapshot.use_bm25 || hasText(event.bm25_text))
   ))
 );
 
-const sessionKey = (snapshot, videoId) => `${snapshot.query}\u0000${videoId}`;
+const sessionKey = (snapshot, videoId) => JSON.stringify([snapshot, videoId]);
 
 /** Build the backend contract without inferring events or timestamp coordinates. */
 export const buildExplorationOpenBody = ({ snapshot, videoId, durationSeconds }) => {
@@ -72,12 +72,7 @@ export const buildExplorationOpenBody = ({ snapshot, videoId, durationSeconds })
   if (!validSnapshot(snapshot) || !videoId || !Number.isFinite(duration) || duration <= 0) return null;
 
   return {
-    query: snapshot.query,
-    events: snapshot.events,
-    retrieval_events: snapshot.use_dense ? snapshot.dense_events : snapshot.events,
-    caption_events: snapshot.use_bm25 ? snapshot.bm25_caption_events : null,
-    use_dense: snapshot.use_dense,
-    use_bm25: snapshot.use_bm25,
+    seed: snapshot,
     video_id: videoId,
     window: [0, Math.floor(duration * 1000)],
   };

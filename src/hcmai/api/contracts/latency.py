@@ -15,6 +15,8 @@ class SearchLatency(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    intent_ms: float = Field(default=0.0, ge=0)
+    translation_ms: float = Field(default=0.0, ge=0)
     query_ms: float = Field(default=0, ge=0)
     retrieval_ms: float = Field(default=0, ge=0)
     alignment_ms: float = Field(default=0, ge=0)

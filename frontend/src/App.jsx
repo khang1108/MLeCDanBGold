@@ -12,9 +12,9 @@ import { VbsSessionProvider, useVbsSession } from './features/vbs/contexts/VbsSe
 import { SubmissionDialog, useDirectSubmission } from './features/submission';
 
 const explorationSelectionKey = (selection) => {
-  const query = selection?.explorationSnapshot?.query;
+  const seed = selection?.explorationSnapshot;
   const videoId = selection?.frame?.video_id;
-  return query && videoId ? `${query}\u0000${videoId}` : null;
+  return seed && videoId ? JSON.stringify([seed, videoId]) : null;
 };
 
 const AppShell = ({ connectedUserId, draftUserId, invalidateSession }) => {
@@ -125,7 +125,9 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession }) => {
           isSubmissionOpening={submission.opening}
           onClose={() => setSelectedFrame(null)}
           exploration={selectedFrame.explorationSnapshot ? {
-            events: selectedFrame.explorationSnapshot.events,
+            events: selectedFrame.explorationSnapshot.events.map(
+              (event) => event.canonical_text,
+            ),
             session: exploration.session,
             pending: exploration.pending,
             error: exploration.error,

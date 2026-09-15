@@ -8,7 +8,6 @@ retrieval indexes, or reranking.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -19,6 +18,7 @@ from hcmai.kis.models import KISIntent
 from hcmai.orchestration.errors import InvalidQueryInputError
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
+from hcmai.retrieval.plan import KISRetrievalPlan
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,11 +48,12 @@ class KISPipeline:
         self,
         *,
         intent: KISIntent,
-        retrieval_events: Sequence[str],
+        retrieval_plan: KISRetrievalPlan,
         use_dense: bool,
         use_bm25: bool,
         top_k: int,
-        query_ms: float = 0.0,
+        intent_ms: float = 0.0,
+        translation_ms: float = 0.0,
     ) -> KISSearchExecution:
         """Search temporal paths using resolved intent events and materialize each midpoint.
 
@@ -66,19 +67,22 @@ class KISPipeline:
         if self.temporal is None:
             raise RuntimeError("temporal search service is not loaded")
 
-        original_events = tuple(event.text for event in intent.events)
-        if len(original_events) > self.max_temporal_event_count:
+        if retrieval_plan.event_ids != tuple(event.id for event in intent.events):
+            raise InvalidQueryInputError(
+                "retrieval plan event IDs must match intent event order"
+            )
+        if len(retrieval_plan.events) > self.max_temporal_event_count:
             raise ValueError(
                 f"requests may contain at most {self.max_temporal_event_count} temporal events"
             )
+        try:
+            retrieval_plan.validate_text_sources(use_dense=use_dense, use_bm25=use_bm25)
+        except ValueError as error:
+            raise InvalidQueryInputError(str(error)) from error
 
-        retrieval_bundle = tuple(retrieval_events)
-        if len(retrieval_bundle) != len(original_events):
-            raise InvalidQueryInputError("retrieval_events must match the original event count")
-
-        # The published context corpus is Vietnamese. Candidate rewrites may
-        # improve Dense recall, but must not replace the literal BM25 query.
-        caption_events = original_events if use_bm25 else None
+        original_events = retrieval_plan.canonical_texts
+        retrieval_bundle = retrieval_plan.dense_texts if use_dense else original_events
+        caption_events = retrieval_plan.bm25_texts if use_bm25 else None
 
         search = self.temporal.search(
             original_events,
@@ -92,9 +96,12 @@ class KISPipeline:
         materialization_started = perf_counter()
         results = [self.materializer.build_kis_result(path) for path in search.paths]
         materialization_ms = (perf_counter() - materialization_started) * 1_000
+        query_ms = intent_ms + translation_ms
         total_ms = (perf_counter() - started) * 1_000 + query_ms
 
         latency = SearchLatency(
+            intent_ms=intent_ms,
+            translation_ms=translation_ms,
             query_ms=query_ms,
             retrieval_ms=search.retrieval_ms,
             alignment_ms=search.alignment_ms,

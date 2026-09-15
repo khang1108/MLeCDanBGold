@@ -16,7 +16,12 @@ from hcmai.api.contracts import (
     TRAKEResponse,
 )
 
-from hcmai.api.contracts.kis import KISRevisionSearchRequest, KISRevisionSearchResponse
+from hcmai.api.contracts.kis import (
+    KISExplorationEventSeed,
+    KISExplorationSeed,
+    KISRevisionSearchRequest,
+    KISRevisionSearchResponse,
+)
 from hcmai.common.config import ApiConfig, SearchConfig
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
@@ -28,6 +33,7 @@ from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.kis.models import KISIntent
+from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 
 if TYPE_CHECKING:
     from hcmai.kis.resolver import KISIntentResolver
@@ -178,41 +184,62 @@ class SearchService:
         clue_texts = [item.text for item in request.inputs]
         intent_started = perf_counter()
         intent = self.intent_resolver.resolve(clue_texts)
-        query_ms = (perf_counter() - intent_started) * 1_000
+        intent_ms = (perf_counter() - intent_started) * 1_000
 
         canonical_events = tuple(event.text for event in intent.events)
-
-        dense_events: list[str] | None = None
-        if request.use_dense:
-            if intent.language == "en":
-                dense_events = list(canonical_events)
-            else:
-                if self.event_translator is None:
-                    raise SearchServiceUnavailableError("Event translation capability is unavailable")
-                dense_events = list(
-                    self.event_translator.translate(
-                        canonical_events,
-                        language=intent.language,
-                    )
+        translation_started = perf_counter()
+        if request.use_dense and intent.language != "en":
+            if self.event_translator is None:
+                raise SearchServiceUnavailableError(
+                    "Event translation capability is unavailable"
                 )
+            dense = self.event_translator.translate(
+                canonical_events, language=intent.language,
+            )
+        else:
+            dense = canonical_events if request.use_dense else None
+        translation_ms = (perf_counter() - translation_started) * 1_000
 
-        bm25_events = list(canonical_events) if request.use_bm25 else None
-
-        retrieval_bundle = tuple(dense_events) if dense_events is not None else canonical_events
+        plan = KISRetrievalPlan(
+            events=tuple(
+                KISRetrievalEvent(
+                    event_id=event.id,
+                    canonical_text=event.text,
+                    dense_text=None if dense is None else dense[index],
+                    bm25_text=event.text if request.use_bm25 else None,
+                )
+                for index, event in enumerate(intent.events)
+            )
+        )
+        if plan.event_ids != tuple(event.id for event in intent.events):
+            raise ValueError("retrieval plan event IDs must match intent event order")
 
         execution = self.kis.execute(
             intent=intent,
-            retrieval_events=retrieval_bundle,
+            retrieval_plan=plan,
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
             top_k=request.top_k,
-            query_ms=query_ms,
+            intent_ms=intent_ms,
+            translation_ms=translation_ms,
         )
 
         return KISRevisionSearchResponse(
             intent=intent,
-            dense_events=dense_events,
-            bm25_events=bm25_events,
+            exploration_seed=KISExplorationSeed(
+                semantic_revision=intent.revision,
+                events=[
+                    KISExplorationEventSeed(
+                        event_id=event.event_id,
+                        canonical_text=event.canonical_text,
+                        dense_text=event.dense_text,
+                        bm25_text=event.bm25_text,
+                    )
+                    for event in plan.events
+                ],
+                use_dense=request.use_dense,
+                use_bm25=request.use_bm25,
+            ),
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
             results=execution.results,

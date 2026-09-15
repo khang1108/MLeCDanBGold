@@ -1,7 +1,10 @@
 """Tests for KISPipeline driven by resolved KISIntent."""
 
 import unittest
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
+
+import pytest
+from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 
 from hcmai.api.contracts.search import SearchResult, SearchResultMetadata
 from hcmai.kis.models import KISEntity, KISEntityBinding, KISEvent, KISIntent, KISTemporalEdge
@@ -74,11 +77,12 @@ class KISPipelineTest(unittest.TestCase):
         )
         execution = pipeline.execute(
             intent=self.intent,
-            retrieval_events=retrieval_events,
+            retrieval_plan=make_plan(retrieval_events),
             use_dense=True,
             use_bm25=True,
             top_k=10,
-            query_ms=5.0,
+            intent_ms=2.0,
+            translation_ms=3.0,
         )
 
         temporal.search.assert_called_once_with(
@@ -110,7 +114,7 @@ class KISPipelineTest(unittest.TestCase):
         retrieval_events = ("A woman talks to a man", "The woman takes a white plate")
         pipeline.execute(
             intent=self.intent,
-            retrieval_events=retrieval_events,
+            retrieval_plan=make_plan(retrieval_events),
             use_dense=True,
             use_bm25=False,
             top_k=5,
@@ -133,7 +137,7 @@ class KISPipelineTest(unittest.TestCase):
         with self.assertRaises(InvalidQueryInputError):
             pipeline.execute(
                 intent=self.intent,
-                retrieval_events=["Only one event"],
+                retrieval_plan=make_plan(["Only one event"]),
                 use_dense=True,
                 use_bm25=False,
                 top_k=5,
@@ -145,7 +149,7 @@ class KISPipelineTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "canonical frame data is not loaded"):
             pipeline.execute(
                 intent=self.intent,
-                retrieval_events=["a", "b"],
+                retrieval_plan=make_plan(["a", "b"]),
                 use_dense=True,
                 use_bm25=False,
                 top_k=5,
@@ -154,3 +158,56 @@ class KISPipelineTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def make_plan(texts):
+    return KISRetrievalPlan(events=tuple(
+        KISRetrievalEvent(f"E{i}", text, text, text)
+        for i, text in enumerate(texts, 1)
+    ))
+
+
+def test_task2_step1_plan_preserves_aligned_views_and_is_immutable():
+    from dataclasses import FrozenInstanceError
+    event = KISRetrievalEvent("E1", "một phụ nữ vào bếp", "a woman enters a kitchen", "một phụ nữ vào bếp")
+    plan = KISRetrievalPlan(events=(event,))
+    assert plan.event_ids == ("E1",)
+    assert plan.dense_texts == ("a woman enters a kitchen",)
+    assert plan.bm25_texts == ("một phụ nữ vào bếp",)
+    with pytest.raises(FrozenInstanceError):
+        event.event_id = "E2"
+
+
+@pytest.mark.parametrize("ids", [(), ("E2",), ("E1", "E3"), ("E1", "E1")])
+def test_task2_step1_plan_rejects_nonsequential_ids(ids):
+    with pytest.raises(ValueError):
+        KISRetrievalPlan(events=tuple(KISRetrievalEvent(i, "text", "text", None) for i in ids))
+
+
+def test_task2_step5_pipeline_uses_plan_text_and_accounts_for_translation():
+    intent = KISPipelineTest()
+    intent.setUp()
+    temporal = Mock()
+    temporal.search.return_value = Mock(paths=[], retrieval_ms=4, alignment_ms=5)
+    pipeline = KISPipeline(Mock(), temporal)
+    plan = KISRetrievalPlan(events=tuple(
+        KISRetrievalEvent(f"E{i}", f"canonical {i}", f"dense {i}", f"literal {i}")
+        for i in (1, 2)
+    ))
+    result = pipeline.execute(intent=intent.intent, retrieval_plan=plan, use_dense=True, use_bm25=True, top_k=3, intent_ms=20, translation_ms=30)
+    temporal.search.assert_called_once_with(("canonical 1", "canonical 2"), retrieval_events=("dense 1", "dense 2"), caption_events=("literal 1", "literal 2"), use_dense=True, use_bm25=True, top_k=3)
+    assert result.latency.intent_ms == 20
+    assert result.latency.translation_ms == 30
+    assert result.latency.query_ms == 50
+    assert result.latency.total_ms >= 50
+
+
+@pytest.mark.parametrize("dense,bm25", [(None, "literal"), ("dense", None)])
+def test_task2_step5_pipeline_rejects_missing_enabled_text_rows(dense, bm25):
+    intent = KISPipelineTest()
+    intent.setUp()
+    temporal = Mock()
+    plan = KISRetrievalPlan(events=tuple(KISRetrievalEvent(f"E{i}", "canonical", dense, bm25) for i in (1, 2)))
+    with pytest.raises(InvalidQueryInputError):
+        KISPipeline(Mock(), temporal).execute(intent=intent.intent, retrieval_plan=plan, use_dense=True, use_bm25=True, top_k=3)
+    temporal.search.assert_not_called()

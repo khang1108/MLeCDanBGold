@@ -188,8 +188,12 @@ test('passes the immutable live KIS scoring snapshot when opening a result', asy
         scores: { final: 0.91 },
       }],
     }),
-    dense_events: ['dense red boat'],
-    bm25_events: ['caption red boat'],
+    exploration_seed: {
+      semantic_revision: 1,
+      events: [{ event_id: 'E1', canonical_text: 'red boat', dense_text: 'dense red boat', bm25_text: 'caption red boat' }],
+      use_dense: true,
+      use_bm25: true,
+    },
     use_dense: true,
     use_bm25: true,
   };
@@ -204,14 +208,7 @@ test('passes the immutable live KIS scoring snapshot when opening a result', asy
 
   expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
     frame: expect.objectContaining({ frame_id: 'frame-explore', video_id: 'V01' }),
-    explorationSnapshot: expect.objectContaining({
-      query: 'red boat',
-      events: ['red boat'],
-      dense_events: ['dense red boat'],
-      bm25_caption_events: ['caption red boat'],
-      use_dense: true,
-      use_bm25: true,
-    }),
+    explorationSnapshot: response.exploration_seed,
   }));
 });
 

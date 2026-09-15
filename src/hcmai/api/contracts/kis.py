@@ -8,11 +8,19 @@ from __future__ import annotations
 
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StringConstraints,
+    model_validator,
+)
 
 from hcmai.api.contracts.latency import SearchLatency
 from hcmai.api.contracts.search import SearchResult
-from hcmai.kis.models import KISIntent
+from hcmai.kis.models import EventId, KISIntent
+from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -52,15 +60,51 @@ class KISRevisionSearchRequest(BaseModel):
         return self
 
 
+class KISExplorationEventSeed(BaseModel):
+    """Transport one committed event's canonical and scoring text views."""
+
+    model_config = ConfigDict(extra="forbid")
+    event_id: EventId
+    canonical_text: NonBlank | None = None
+    dense_text: NonBlank | None = None
+    bm25_text: NonBlank | None = None
+
+
+class KISExplorationSeed(BaseModel):
+    """Capture ordered scoring inputs for a committed semantic revision."""
+
+    model_config = ConfigDict(extra="forbid")
+    semantic_revision: int = Field(ge=1)
+    events: list[KISExplorationEventSeed] = Field(min_length=1)
+    use_dense: StrictBool
+    use_bm25: StrictBool
+
+    def to_plan(self) -> KISRetrievalPlan:
+        """Copy transport rows into an immutable, event-aligned plan."""
+        return KISRetrievalPlan(
+            events=tuple(
+                KISRetrievalEvent(**event.model_dump()) for event in self.events
+            )
+        )
+
+    @model_validator(mode="after")
+    def validate_text_snapshot(self) -> Self:
+        """Reject event order and missing scoring views before opening S0 branches."""
+        self.to_plan().validate_text_sources(
+            use_dense=self.use_dense, use_bm25=self.use_bm25,
+        )
+        return self
+
+
 class KISRevisionSearchResponse(BaseModel):
     """Response payload for a successful revisioned KIS search."""
 
     model_config = ConfigDict(extra="forbid")
 
     intent: KISIntent
-    dense_events: list[NonBlank] | None = None
-    bm25_events: list[NonBlank] | None = None
+    exploration_seed: KISExplorationSeed
     use_dense: bool
     use_bm25: bool
     results: list[SearchResult] = Field(default_factory=list)
     latency: SearchLatency
+    warnings: list[str] = Field(default_factory=list)

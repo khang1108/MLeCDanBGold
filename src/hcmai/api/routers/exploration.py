@@ -289,15 +289,11 @@ def _open_branch(
     """Open one real branch in the worker thread used for scoring and decoding."""
 
     binding = QueryBinding(
-        query=request.query,
+        retrieval_plan=request.seed.to_plan(),
+        semantic_revision=request.seed.semantic_revision,
         event_version=str(uuid4()),
-        events=tuple(request.events),
-        retrieval_events=tuple(request.retrieval_events),
-        caption_events=(
-            tuple(request.caption_events) if request.caption_events else None
-        ),
-        use_dense=request.use_dense,
-        use_bm25=request.use_bm25,
+        use_dense=request.seed.use_dense,
+        use_bm25=request.seed.use_bm25,
         scoring_revision=scoring_revision,
     )
     branch = TemporalExploration(temporal)  # type: ignore[arg-type]
