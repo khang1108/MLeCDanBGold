@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock
 
 from hcmai.common.config import SearchConfig
 from hcmai.orchestration.utils.health import build_health_report
@@ -84,6 +85,70 @@ def test_kis_readiness_does_not_require_event_translation() -> None:
 
     assert report["capabilities"]["event_translation"] is False
     assert report["capabilities"]["kis"] is True
+
+
+def test_health_report_does_not_call_configured_provider_health_methods() -> None:
+    """Health projection must remain observational when an LLM is configured."""
+    llm = Mock()
+    llm.gateway_health.side_effect = AssertionError("gateway health was called")
+    llm.capability_health.side_effect = AssertionError("capability health was called")
+    service = SimpleNamespace(
+        corpus=_Corpus(),
+        retrieval=SimpleNamespace(active_sources=(RetrievalSource.VISUAL,)),
+        config=SearchConfig(),
+        llm=llm,
+        temporal_evidence=object(),
+        image_search=None,
+        event_translator=None,
+        intent_resolver=object(),
+        literal_text=None,
+    )
+
+    report = build_health_report(service)
+
+    assert report["capabilities"]["kis"] is True
+    llm.gateway_health.assert_not_called()
+    llm.capability_health.assert_not_called()
+
+
+def test_retrieval_and_kis_not_ready_without_temporal_evidence() -> None:
+    """Retrieval readiness requires temporal evidence even with a corpus."""
+    service = SimpleNamespace(
+        corpus=_Corpus(),
+        retrieval=SimpleNamespace(active_sources=(RetrievalSource.VISUAL,)),
+        config=SearchConfig(),
+        llm=None,
+        temporal_evidence=None,
+        image_search=None,
+        event_translator=object(),
+        intent_resolver=object(),
+        literal_text=None,
+    )
+
+    report = build_health_report(service)
+
+    assert report["capabilities"]["retrieval"] is False
+    assert report["capabilities"]["kis"] is False
+
+
+def test_retrieval_and_kis_not_ready_without_corpus() -> None:
+    """Retrieval readiness requires canonical corpus data."""
+    service = SimpleNamespace(
+        corpus=None,
+        retrieval=SimpleNamespace(active_sources=(RetrievalSource.VISUAL,)),
+        config=SearchConfig(),
+        llm=None,
+        temporal_evidence=object(),
+        image_search=None,
+        event_translator=object(),
+        intent_resolver=object(),
+        literal_text=None,
+    )
+
+    report = build_health_report(service)
+
+    assert report["capabilities"]["retrieval"] is False
+    assert report["capabilities"]["kis"] is False
 
 
 class HealthReportTest(unittest.TestCase):
