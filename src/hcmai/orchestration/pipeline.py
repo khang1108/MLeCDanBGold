@@ -183,7 +183,9 @@ class SearchService:
 
         clue_texts = [item.text for item in request.inputs]
         intent_started = perf_counter()
-        intent = self.intent_resolver.resolve(clue_texts)
+        intent = self.intent_resolver.resolve(
+            clue_texts, revision=request.expected_revision + 1
+        )
         intent_ms = (perf_counter() - intent_started) * 1_000
 
         canonical_events = tuple(event.text for event in intent.events)

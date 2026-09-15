@@ -15,7 +15,6 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.mock_intent_en = KISIntent(
             revision=2,
-            inputs=["A man enters a room.", "He talks to a woman."],
             language="en",
             query_text="A man enters a room and talks to a woman.",
             entities=[
@@ -88,10 +87,9 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
 
         response = service.search_kis_revision(request)
 
-        intent_resolver.resolve.assert_called_once_with([
-            "A man enters a room.",
-            "He talks to a woman.",
-        ])
+        intent_resolver.resolve.assert_called_once_with(
+            ["A man enters a room.", "He talks to a woman."], revision=2
+        )
         event_translator.translate.assert_not_called()
         self.assertEqual(service.kis.execute.call_count, 1)
         call_kwargs = service.kis.execute.call_args.kwargs
@@ -123,7 +121,6 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
     def test_search_kis_revision_translates_vietnamese_for_dense_retrieval(self) -> None:
         intent_vi = KISIntent(
             revision=1,
-            inputs=["Một người phụ nữ trong bếp."],
             language="vi",
             query_text="Một người phụ nữ trong bếp.",
             entities=[KISEntity(id="X1", kind="person", description="phụ nữ")],

@@ -42,13 +42,13 @@ class KISIntentResolver:
         """
         return self._resolve((query,), revision=revision)
 
-    def resolve(self, inputs: Sequence[str]) -> KISIntent:
+    def resolve(self, inputs: Sequence[str], *, revision: int) -> KISIntent:
         """Resolve legacy ordered inputs while callers migrate to ``resolve_initial``.
 
         This compatibility entry point preserves existing runtime behavior without
         restoring raw inputs to the canonical semantic intent.
         """
-        return self._resolve(inputs, revision=len(inputs))
+        return self._resolve(inputs, revision=revision)
 
     def _resolve(self, inputs: Sequence[str], *, revision: int) -> KISIntent:
         """Canonicalize validated natural-language input using the configured LLM.

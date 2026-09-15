@@ -98,6 +98,18 @@ class KISIntentModelTest(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "image-only"):
             KISIntent.model_validate(invalid)
 
+    def test_rejects_language_without_query_text(self) -> None:
+        invalid = {**VALID, "query_text": None}
+
+        with self.assertRaisesRegex(ValidationError, "both be present or absent"):
+            KISIntent.model_validate(invalid)
+
+    def test_rejects_query_text_without_language(self) -> None:
+        invalid = {**VALID, "language": None}
+
+        with self.assertRaisesRegex(ValidationError, "both be present or absent"):
+            KISIntent.model_validate(invalid)
+
     def test_rejects_unknown_entity_binding(self) -> None:
         invalid = {
             **VALID,
@@ -121,6 +133,19 @@ class KISIntentModelTest(unittest.TestCase):
             "temporal_edges": [{"source": "E2", "relation": "before", "target": "E1"}],
         }
         with self.assertRaises(ValidationError):
+            KISIntent.model_validate(invalid)
+
+    def test_rejects_missing_adjacent_edge_in_multi_event_intent(self) -> None:
+        invalid = {
+            **VALID,
+            "events": [
+                {"id": "E1", "text": "first", "bindings": []},
+                {"id": "E2", "text": "second", "bindings": []},
+            ],
+            "temporal_edges": [],
+        }
+
+        with self.assertRaisesRegex(ValidationError, "complete sequential adjacent"):
             KISIntent.model_validate(invalid)
 
     def test_rejects_self_temporal_edge(self) -> None:

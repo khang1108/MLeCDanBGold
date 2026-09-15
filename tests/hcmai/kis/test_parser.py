@@ -52,6 +52,21 @@ def test_parser_rejects_malformed_event_prefix() -> None:
         parse_kis_command("E: missing number", base_event_count=0)
 
 
+@pytest.mark.parametrize(
+    "command,base_event_count",
+    [
+        ("E 1: woman enters", 0),
+        ("E1: woman enters\nE 2: she sits", 1),
+    ],
+)
+def test_parser_rejects_whitespace_separated_event_prefixes(
+    command: str, base_event_count: int
+) -> None:
+    """Whitespace inside an event ID cannot become natural text or continuation."""
+    with pytest.raises(KISCommandError, match="Malformed"):
+        parse_kis_command(command, base_event_count=base_event_count)
+
+
 def test_parser_rejects_unscoped_progressive_text() -> None:
     """A follow-up must explicitly name its event once an intent exists."""
     with pytest.raises(KISCommandError, match="explicit E#"):
@@ -64,6 +79,18 @@ def test_parser_routes_initial_explicit_batch() -> None:
 
     assert command.kind == "initial_explicit"
     assert [patch.event_id for patch in command.patches] == ["E1", "E2"]
+
+
+def test_parser_rejects_initial_explicit_event_gap() -> None:
+    """Initial explicit batches must begin at E1 and remain contiguous."""
+    with pytest.raises(KISCommandError, match="missing E2"):
+        parse_kis_command("E1: woman enters\nE3: woman sits", base_event_count=0)
+
+
+def test_parser_rejects_gap_with_multiple_appended_events() -> None:
+    """Multiple new events cannot skip an event in the appended suffix."""
+    with pytest.raises(KISCommandError, match="missing E5"):
+        parse_kis_command("E4: woman enters\nE6: woman sits", base_event_count=3)
 
 
 def test_parser_routes_initial_natural_text() -> None:
@@ -83,3 +110,10 @@ def test_parser_routes_global_rewrite() -> None:
 
     assert command.kind == "global_rewrite"
     assert command.instruction == "Resolve all pronouns explicitly."
+
+
+@pytest.mark.parametrize("command", ["/llm-rewrite", "/llm-rewrite\n   "])
+def test_parser_rejects_blank_global_rewrite_instruction(command: str) -> None:
+    """Global rewriting requires an explicit non-blank instruction."""
+    with pytest.raises(KISCommandError, match="non-empty"):
+        parse_kis_command(command, base_event_count=3)

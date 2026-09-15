@@ -13,7 +13,7 @@ from typing import Literal, TypeAlias
 
 
 _EVENT_HEADER = re.compile(r"(?m)^E([1-9]\d*):[ \t]*(.*)$")
-_MALFORMED_EVENT_PREFIX = re.compile(r"(?m)^E[^\s:]*[ \t]*:")
+_MALFORMED_EVENT_PREFIX = re.compile(r"(?m)^E[ \t]*\d*[ \t]*:")
 
 
 class KISCommandError(ValueError):

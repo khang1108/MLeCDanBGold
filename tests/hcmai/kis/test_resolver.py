@@ -61,6 +61,24 @@ def test_resolver_canonicalizes_initial_natural_resolution() -> None:
     assert "revision" not in messages[0]["content"]
 
 
+def test_legacy_resolver_adapter_uses_explicit_revision_not_input_count() -> None:
+    """The temporary clue-sequence adapter keeps revision server-owned."""
+    llm = Mock()
+    llm.generate_structured.return_value = KISResolution(
+        language="en",
+        query_text="A woman enters.",
+        entities=[],
+        events=[KISResolutionEvent(text="A woman enters")],
+    )
+
+    intent = KISIntentResolver(llm).resolve(
+        ["First clue.", "Second clue."], revision=9
+    )
+
+    assert intent.revision == 9
+    assert not hasattr(intent, "inputs")
+
+
 def test_resolver_rejects_out_of_range_entity_index() -> None:
     """Out-of-range entity index raises KISResolutionError."""
     llm = Mock()
