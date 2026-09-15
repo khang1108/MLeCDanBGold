@@ -25,8 +25,8 @@ from hcmai.api.contracts.kis import (
 from hcmai.common.config import ApiConfig, SearchConfig
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
-from hcmai.orchestration.errors import RevisionConflictError
-from hcmai.orchestration.health import build_health_report
+from hcmai.orchestration.utils.errors import RevisionConflictError
+from hcmai.orchestration.utils.health import build_health_report
 from hcmai.orchestration.workflows.image_search import ImageSearchService
 from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService

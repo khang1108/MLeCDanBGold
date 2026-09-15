@@ -7,14 +7,15 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Response, status
 from fastapi.concurrency import run_in_threadpool
-from pydantic import ValidationError
 
 from hcmai.api.contracts.kis import (
     KISRevisionSearchRequest,
     KISRevisionSearchResponse,
 )
 from hcmai.common.utils.logging import get_logger
-from hcmai.orchestration.errors import InvalidQueryInputError, RevisionConflictError
+from hcmai.inference.errors import InferenceResponseError, InferenceUnavailableError
+from hcmai.kis.resolver import KISResolutionError
+from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.retrieval.translation.service import EventTranslationError
 from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer
@@ -55,12 +56,17 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=str(error),
             ) from error
-        except (InvalidQueryInputError, ValueError, ValidationError) as error:
+        except InvalidQueryInputError as error:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(error),
             ) from error
-        except (SearchServiceUnavailableError, EventTranslationError) as error:
+        except (KISResolutionError, EventTranslationError, InferenceResponseError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(error),
+            ) from error
+        except (InferenceUnavailableError, SearchServiceUnavailableError) as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(error),

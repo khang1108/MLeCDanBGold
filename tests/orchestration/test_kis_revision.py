@@ -6,7 +6,7 @@ from unittest.mock import Mock
 from hcmai.api.contracts.kis import KISInput, KISRevisionSearchRequest, KISRevisionSearchResponse
 from hcmai.api.contracts.search import SearchLatency, SearchResult, SearchResultMetadata
 from hcmai.kis.models import KISEntity, KISEntityBinding, KISEvent, KISIntent, KISTemporalEdge
-from hcmai.orchestration.errors import RevisionConflictError
+from hcmai.orchestration.utils.errors import RevisionConflictError
 from hcmai.orchestration.pipeline import SearchService, SearchServiceUnavailableError
 from hcmai.orchestration.workflows.kis import KISSearchExecution
 

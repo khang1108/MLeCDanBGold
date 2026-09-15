@@ -8,7 +8,7 @@ from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 
 from hcmai.api.contracts.search import SearchResult, SearchResultMetadata
 from hcmai.kis.models import KISEntity, KISEntityBinding, KISEvent, KISIntent, KISTemporalEdge
-from hcmai.orchestration.errors import InvalidQueryInputError
+from hcmai.orchestration.utils.errors import InvalidQueryInputError
 from hcmai.orchestration.workflows.kis import KISPipeline, KISSearchExecution
 
 

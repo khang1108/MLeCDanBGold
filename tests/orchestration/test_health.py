@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import unittest
 
 from hcmai.common.config import SearchConfig
-from hcmai.orchestration.health import build_health_report
+from hcmai.orchestration.utils.health import build_health_report
 from hcmai.retrieval.models import RetrievalSource
 
 
@@ -30,6 +30,60 @@ class _Corpus:
     def frame_asset_status(self) -> _FrameAssetStatus:
         """Provide deterministic frame-asset diagnostics."""
         return _FrameAssetStatus()
+
+
+def _service(*, intent_resolver, event_translator, temporal_evidence):
+    """Build the smallest service-shaped fixture for KIS readiness tests."""
+    return SimpleNamespace(
+        intent_resolver=intent_resolver,
+        event_translator=event_translator,
+        temporal_evidence=temporal_evidence,
+    )
+
+
+def test_kis_not_ready_when_intent_resolver_is_missing() -> None:
+    """KIS readiness must require the initial semantic resolver capability."""
+    service = _service(
+        intent_resolver=None,
+        event_translator=object(),
+        temporal_evidence=object(),
+    )
+
+    report = build_health_report(service)
+
+    assert report["capabilities"]["intent_resolution"] is False
+    assert report["capabilities"]["retrieval"] is True
+    assert report["capabilities"]["event_translation"] is True
+    assert report["capabilities"]["kis"] is False
+
+
+def test_kis_ready_with_resolver_and_temporal_retrieval() -> None:
+    """KIS becomes ready when retrieval and intent resolution are present."""
+    service = _service(
+        intent_resolver=object(),
+        event_translator=object(),
+        temporal_evidence=object(),
+    )
+
+    report = build_health_report(service)
+
+    assert report["capabilities"]["intent_resolution"] is True
+    assert report["capabilities"]["retrieval"] is True
+    assert report["capabilities"]["kis"] is True
+
+
+def test_kis_readiness_does_not_require_event_translation() -> None:
+    """English and image-only paths remain KIS-ready without translation."""
+    service = _service(
+        intent_resolver=object(),
+        event_translator=None,
+        temporal_evidence=object(),
+    )
+
+    report = build_health_report(service)
+
+    assert report["capabilities"]["event_translation"] is False
+    assert report["capabilities"]["kis"] is True
 
 
 class HealthReportTest(unittest.TestCase):
