@@ -719,7 +719,7 @@ git commit -m "fix: make KIS revisions transactional in the frontend"
 - Produces: explicit `kis`, `intent_resolution`, `event_translation`, `retrieval` readiness fields.
 - Produces: stable 409/422/502/503 routing semantics.
 
-- [ ] **Step 1: Write readiness tests for missing mandatory semantic capabilities**
+- [X] **Step 1: Write readiness tests for missing mandatory semantic capabilities**
 
 ```python
 from types import SimpleNamespace
@@ -746,7 +746,7 @@ def test_kis_ready_with_resolver_and_temporal_retrieval() -> None:
     assert report["capabilities"]["kis"] is True
 ```
 
-- [ ] **Step 2: Write router mapping tests before changing exception handling**
+- [X] **Step 2: Write router mapping tests before changing exception handling**
 
 Assert:
 
@@ -758,7 +758,7 @@ InferenceResponseError -> 502
 InferenceUnavailableError / SearchServiceUnavailableError -> 503
 ```
 
-- [ ] **Step 3: Implement capability-based readiness without making live LLM calls**
+- [X] **Step 3: Implement capability-based readiness without making live LLM calls**
 
 Set:
 
@@ -771,11 +771,11 @@ kis_ready = retrieval_ready and intent_resolution_ready
 
 Translation is reported independently because English text and image-only queries can remain valid without translation; KIS as a whole must not be marked ready when all initial text semantic resolution would fail.
 
-- [ ] **Step 4: Normalize router exception mapping**
+- [X] **Step 4: Normalize router exception mapping**
 
 Keep Pydantic/FastAPI request-shape validation as 422. Catch domain/model failures explicitly rather than mapping generic `ValidationError` to user-input failure.
 
-- [ ] **Step 5: Run health/router tests**
+- [X] **Step 5: Run health/router tests**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/orchestration/test_health.py tests/api/test_kis_router.py -q
@@ -783,7 +783,7 @@ PYTHONPATH=src python -m pytest tests/orchestration/test_health.py tests/api/tes
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit the S0 readiness/error completion gate**
+- [X] **Step 6: Commit the S0 readiness/error completion gate**
 
 ```bash
 git add src/hcmai/orchestration/health.py src/hcmai/orchestration/errors.py src/hcmai/api/routers/kis.py tests/orchestration/test_health.py tests/api/test_kis_router.py
@@ -809,7 +809,7 @@ git commit -m "fix: align KIS readiness and inference error semantics"
 - Produces: `KISImageRef`, multimodal `KISEvent`, `EventPatchInstruction`, parsed composer command types.
 - Produces: `parse_kis_command(text: str, *, base_event_count: int) -> ParsedKISCommand`.
 
-- [ ] **Step 1: Write failing model tests for text-only, image-only, and mixed events**
+- [X] **Step 1: Write failing model tests for text-only, image-only, and mixed events**
 
 ```python
 def test_kis_event_accepts_image_only() -> None:
@@ -830,7 +830,7 @@ def test_kis_event_rejects_empty_text_and_no_images() -> None:
 
 Update `KISIntent` tests to construct intents without `inputs` and with revision independent of event count.
 
-- [ ] **Step 2: Write failing parser tests for legal/illegal explicit batches and global rewrite**
+- [X] **Step 2: Write failing parser tests for legal/illegal explicit batches and global rewrite**
 
 ```python
 def test_parser_extracts_scoped_batch() -> None:
@@ -858,7 +858,7 @@ def test_parser_routes_global_rewrite() -> None:
 
 Also test an initial explicit `E1:/E2:` batch returns `initial_explicit`, plus duplicate IDs, malformed `E:` prefixes, and unscoped progressive text with `base_event_count > 0`.
 
-- [ ] **Step 3: Run model/parser tests and verify failures**
+- [X] **Step 3: Run model/parser tests and verify failures**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/kis/test_models.py tests/hcmai/kis/test_parser.py -q
@@ -866,7 +866,7 @@ PYTHONPATH=src python -m pytest tests/kis/test_models.py tests/hcmai/kis/test_pa
 
 Expected: FAIL because multimodal models/parser are absent.
 
-- [ ] **Step 4: Change canonical models**
+- [X] **Step 4: Change canonical models**
 
 Add:
 
@@ -893,7 +893,7 @@ class KISEvent(BaseModel):
 
 Remove `inputs` from `KISIntent`; change canonical `language` to `Literal["vi", "en"] | None` and `query_text` to `NonBlank | None` so an image-only intent does not need invented metadata. Keep revision `ge=1`, sequential event IDs, binding integrity, max count, and complete adjacent edge chain. Initial natural-text `KISResolution.language/query_text` remain required.
 
-- [ ] **Step 5: Implement a strict parser with no LLM involvement**
+- [X] **Step 5: Implement a strict parser with no LLM involvement**
 
 Use anchored event headers:
 
@@ -936,7 +936,7 @@ class ParsedGlobalRewrite:
 
 When `base_event_count == 0`, an explicit contiguous `E1..Ek` batch returns `ParsedInitialExplicit`; when an intent already exists, explicit headers return `ParsedPatchEvents`. Collect continuation lines until the next `E#:` header, reject duplicate IDs, reject event gaps, and sort nothing: user header order must already be increasing.
 
-- [ ] **Step 6: Update initial resolver tests for server-owned revision without raw inputs**
+- [X] **Step 6: Update initial resolver tests for server-owned revision without raw inputs**
 
 Change the resolver contract to receive one natural query and explicit revision:
 
@@ -948,7 +948,7 @@ assert not hasattr(intent, "inputs")
 
 The initial resolver still may return multiple events for one natural query.
 
-- [ ] **Step 7: Run KIS domain tests**
+- [X] **Step 7: Run KIS domain tests**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/kis/test_models.py tests/hcmai/kis/test_parser.py tests/hcmai/kis/test_resolver.py -q
@@ -956,7 +956,7 @@ PYTHONPATH=src python -m pytest tests/kis/test_models.py tests/hcmai/kis/test_pa
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit the canonical multimodal domain model/parser**
+- [X] **Step 8: Commit the canonical multimodal domain model/parser**
 
 ```bash
 git add src/hcmai/kis tests/kis tests/hcmai/kis
