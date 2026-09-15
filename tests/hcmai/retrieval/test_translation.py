@@ -109,6 +109,19 @@ def test_cache_identity_changes_when_llm_model_changes() -> None:
     assert second_llm.generate_structured.call_count == 1
 
 
+def test_cache_reuses_translation_for_the_same_llm_model() -> None:
+    """Repeated input uses the entry keyed by the configured LLM model."""
+    llm = Mock(model="provider/model-a")
+    llm.generate_structured.return_value = Mock(events=["A woman enters"])
+    translator = _translator(llm)
+
+    first = translator.translate(("Một phụ nữ đi vào",), language="vi")
+    second = translator.translate(("Một phụ nữ đi vào",), language="vi")
+
+    assert first == second == ("A woman enters",)
+    assert llm.generate_structured.call_count == 1
+
+
 def test_invalid_translation_raises_event_translation_error() -> None:
     """A response that changes cardinality fails at the translation boundary."""
     llm = Mock(model="test-model")

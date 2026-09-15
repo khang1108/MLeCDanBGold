@@ -163,8 +163,6 @@ def _load_event_translator(
 ) -> EventTranslator | None:
     """Construct event translation using the provider-agnostic LLM client."""
     if llm is None:
-        messages.append(
-            "Event translation unavailable; Dense search remains available"
-        )
+        messages.append("Event translation unavailable: LLM client not configured")
         return None
     return EventTranslator(llm, settings.event_translation)

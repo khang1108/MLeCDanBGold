@@ -3,10 +3,14 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import Mock
 
+from hcmai.common.config import AppConfig, EventTranslationConfig
+from hcmai.orchestration.setup import _load_event_translator
 from hcmai.orchestration.corpus_setup import load_corpus
 from hcmai.orchestration.retrieval_setup import select_visual_retriever
 from hcmai.retrieval.models import RetrievalSource
+from hcmai.retrieval.translation.service import EventTranslator
 
 
 class _Retrieval:
@@ -43,6 +47,47 @@ class SetupModuleTest(unittest.TestCase):
 
         self.assertIs(selected, visual)
         self.assertEqual(retrieval.requests, [RetrievalSource.VISUAL])
+
+    def test_baseline_config_exposes_only_event_translation_settings(self) -> None:
+        """The runtime baseline loads the reduced translation configuration."""
+        settings = AppConfig.from_yaml("configs/baseline.yaml")
+
+        self.assertEqual(
+            settings.event_translation,
+            EventTranslationConfig(
+                prompt_version="event-translation-v1",
+                cache_enabled=True,
+                cache_ttl_seconds=3600,
+                cache_max_entries=2048,
+            ),
+        )
+
+    def test_event_translator_loader_uses_configured_translation_settings(self) -> None:
+        """Startup composes translation from the shared LLM client and config."""
+        settings = AppConfig(
+            event_translation=EventTranslationConfig(prompt_version="test-prompt-v1")
+        )
+        llm = Mock(model="provider/model-a")
+        messages: list[str] = []
+
+        translator = _load_event_translator(settings, messages, llm=llm)
+
+        self.assertIsInstance(translator, EventTranslator)
+        self.assertIs(translator._llm, llm)
+        self.assertEqual(translator._config, settings.event_translation)
+        self.assertEqual(messages, [])
+
+    def test_event_translator_loader_reports_missing_llm_client(self) -> None:
+        """Startup reports when translation cannot use the shared LLM client."""
+        messages: list[str] = []
+
+        translator = _load_event_translator(AppConfig(), messages, llm=None)
+
+        self.assertIsNone(translator)
+        self.assertEqual(
+            messages,
+            ["Event translation unavailable: LLM client not configured"],
+        )
 
 
 if __name__ == "__main__":
