@@ -9,14 +9,14 @@ from hcmai.kis.models import (
     KISEntity,
     KISEntityBinding,
     KISEvent,
+    KISImageRef,
     KISIntent,
     KISTemporalEdge,
 )
 
 
 VALID = {
-    "revision": 2,
-    "inputs": ["A woman is in a kitchen.", "She talks to a man."],
+    "revision": 7,
     "language": "en",
     "query_text": "A woman talks to a man in a kitchen.",
     "entities": [
@@ -43,6 +43,60 @@ class KISIntentModelTest(unittest.TestCase):
         self.assertEqual(intent.events[0].id, "E1")
         self.assertEqual(len(intent.entities), 2)
         self.assertEqual(intent.language, "en")
+        self.assertEqual(intent.revision, 7)
+
+    def test_accepts_image_only_event(self) -> None:
+        event = KISEvent(
+            id="E1",
+            text=None,
+            images=[KISImageRef(asset_id="sha256:abc", content_type="image/png")],
+            bindings=[],
+        )
+
+        self.assertIsNone(event.text)
+        self.assertEqual(event.images[0].asset_id, "sha256:abc")
+
+    def test_rejects_event_without_text_or_images(self) -> None:
+        with self.assertRaisesRegex(ValueError, "text or image"):
+            KISEvent(id="E1", text=None, images=[], bindings=[])
+
+    def test_accepts_mixed_event_evidence(self) -> None:
+        event = KISEvent(
+            id="E1",
+            text="A woman holds a plate",
+            images=[KISImageRef(asset_id="sha256:mixed", content_type="image/webp")],
+        )
+
+        self.assertEqual(event.text, "A woman holds a plate")
+        self.assertEqual(event.images[0].content_type, "image/webp")
+
+    def test_accepts_image_only_intent_without_language_or_query_text(self) -> None:
+        intent = KISIntent(
+            revision=11,
+            language=None,
+            query_text=None,
+            entities=[],
+            events=[
+                KISEvent(
+                    id="E1",
+                    text=None,
+                    images=[
+                        KISImageRef(
+                            asset_id="sha256:image", content_type="image/jpeg"
+                        )
+                    ],
+                )
+            ],
+            temporal_edges=[],
+        )
+
+        self.assertEqual(intent.revision, 11)
+
+    def test_rejects_missing_language_or_query_for_textual_intent(self) -> None:
+        invalid = {**VALID, "language": None, "query_text": None}
+
+        with self.assertRaisesRegex(ValidationError, "image-only"):
+            KISIntent.model_validate(invalid)
 
     def test_rejects_unknown_entity_binding(self) -> None:
         invalid = {

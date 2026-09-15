@@ -21,7 +21,7 @@ Q2 = "She is talking to a man."
 Q3 = "Before taking a white plate, they move to the left."
 
 
-def test_resolver_canonicalizes_semantic_resolution() -> None:
+def test_resolver_canonicalizes_initial_natural_resolution() -> None:
     """Verify resolver constructs canonical revision, IDs, bindings, and temporal edges."""
     llm = Mock()
     llm.generate_structured.return_value = KISResolution(
@@ -40,10 +40,10 @@ def test_resolver_canonicalizes_semantic_resolution() -> None:
     )
 
     resolver = KISIntentResolver(llm)
-    intent = resolver.resolve([Q1, Q2, Q3])
+    intent = resolver.resolve_initial(Q1, revision=1)
 
-    assert intent.revision == 3
-    assert intent.inputs == [Q1, Q2, Q3]
+    assert intent.revision == 1
+    assert not hasattr(intent, "inputs")
     assert [event.id for event in intent.events] == ["E1", "E2", "E3"]
     assert [(e.source, e.target) for e in intent.temporal_edges] == [
         ("E1", "E2"),
@@ -72,7 +72,7 @@ def test_resolver_rejects_out_of_range_entity_index() -> None:
     )
     resolver = KISIntentResolver(llm)
     with pytest.raises(KISResolutionError, match="out-of-range"):
-        resolver.resolve(["A woman talks."])
+        resolver.resolve_initial("A woman talks.", revision=1)
 
 
 def test_resolver_rejects_duplicate_entity_index_in_event() -> None:
@@ -86,7 +86,7 @@ def test_resolver_rejects_duplicate_entity_index_in_event() -> None:
     )
     resolver = KISIntentResolver(llm)
     with pytest.raises(KISResolutionError, match="duplicate"):
-        resolver.resolve(["A woman talks."])
+        resolver.resolve_initial("A woman talks.", revision=1)
 
 
 def test_resolver_rejects_too_many_events() -> None:
@@ -104,17 +104,17 @@ def test_resolver_rejects_too_many_events() -> None:
     )
     resolver = KISIntentResolver(llm)
     with pytest.raises(KISResolutionError):
-        resolver.resolve(["Too many events."])
+        resolver.resolve_initial("Too many events.", revision=1)
 
 
-def test_resolver_rejects_blank_client_clues() -> None:
-    """Blank or empty client clues raise ValueError before calling LLM."""
+def test_resolver_rejects_blank_initial_query_or_invalid_revision() -> None:
+    """Blank initial natural text and non-positive revisions fail before LLM use."""
     llm = Mock()
     resolver = KISIntentResolver(llm)
     with pytest.raises(ValueError, match="non-empty"):
-        resolver.resolve([])
-    with pytest.raises(ValueError, match="non-empty"):
-        resolver.resolve(["   "])
+        resolver.resolve_initial("   ", revision=1)
+    with pytest.raises(ValueError, match="at least 1"):
+        resolver.resolve_initial("A woman talks.", revision=0)
     llm.generate_structured.assert_not_called()
 
 
@@ -124,4 +124,4 @@ def test_resolver_propagates_provider_unavailable() -> None:
     llm.generate_structured.side_effect = InferenceUnavailableError("GPU node down")
     resolver = KISIntentResolver(llm)
     with pytest.raises(InferenceUnavailableError):
-        resolver.resolve(["A woman in a kitchen."])
+        resolver.resolve_initial("A woman in a kitchen.", revision=1)

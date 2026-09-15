@@ -70,14 +70,31 @@ class KISEntityBinding(BaseModel):
     role: NonBlank
 
 
+class KISImageRef(BaseModel):
+    """A validated reference to a user-provided image stored outside the intent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: NonBlank
+    content_type: Literal["image/jpeg", "image/png", "image/webp"]
+
+
 class KISEvent(BaseModel):
-    """A distinct timeline moment or action node."""
+    """A distinct timeline moment with text and/or attached image evidence."""
 
     model_config = ConfigDict(extra="forbid")
 
     id: EventId
-    text: NonBlank
+    text: NonBlank | None = None
+    images: list[KISImageRef] = Field(default_factory=list)
     bindings: list[KISEntityBinding] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> Self:
+        """Require every event to retain at least one source of semantic evidence."""
+        if self.text is None and not self.images:
+            raise ValueError("KIS event requires text or image evidence")
+        return self
 
 
 class KISTemporalEdge(BaseModel):
@@ -96,9 +113,8 @@ class KISIntent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     revision: int = Field(ge=1)
-    inputs: list[NonBlank] = Field(min_length=1)
-    language: Literal["vi", "en"]
-    query_text: NonBlank
+    language: Literal["vi", "en"] | None
+    query_text: NonBlank | None
     entities: list[KISEntity] = Field(default_factory=list)
     events: list[KISEvent] = Field(min_length=1)
     temporal_edges: list[KISTemporalEdge] = Field(default_factory=list)
@@ -106,6 +122,14 @@ class KISIntent(BaseModel):
     @model_validator(mode="after")
     def validate_graph(self) -> Self:
         """Validate identity uniqueness, referential integrity, and edge ordering."""
+        if self.language is None or self.query_text is None:
+            if self.language is not None or self.query_text is not None:
+                raise ValueError("language and query_text must both be present or absent")
+            if any(event.text is not None for event in self.events):
+                raise ValueError(
+                    "language and query_text may be absent only for image-only intents"
+                )
+
         # 1. Unique entity IDs
         entity_ids = [entity.id for entity in self.entities]
         if len(entity_ids) != len(set(entity_ids)):
@@ -153,6 +177,7 @@ __all__ = [
     "KISEntity",
     "KISEntityBinding",
     "KISEvent",
+    "KISImageRef",
     "KISIntent",
     "KISResolution",
     "KISResolutionEntity",

@@ -1,6 +1,6 @@
 """Domain resolver for semantic KIS intent graphs using an LLM.
 
-This module owns transforming client-provided raw clue sequences into a validated
+This module owns transforming initial natural-language queries into a validated
 KISIntent graph. It delegates language reasoning to an LLMClient producing a
 semantic KISResolution, then canonicalizes IDs, revision, bindings, and temporal
 chains server-side.
@@ -28,14 +28,30 @@ class KISResolutionError(RuntimeError):
 
 
 class KISIntentResolver:
-    """Resolves an evolving sequence of KIS clues into a validated semantic graph."""
+    """Resolves initial natural-language KIS input into a semantic graph."""
 
     def __init__(self, llm: LLMClient) -> None:
         """Initialize with a capability-level LLMClient."""
         self._llm = llm
 
+    def resolve_initial(self, query: str, *, revision: int) -> KISIntent:
+        """Resolve one initial natural-language query at a server-owned revision.
+
+        The returned intent is a semantic snapshot and deliberately does not
+        retain raw client input history.
+        """
+        return self._resolve((query,), revision=revision)
+
     def resolve(self, inputs: Sequence[str]) -> KISIntent:
-        """Resolve ordered clue strings into a canonical KISIntent.
+        """Resolve legacy ordered inputs while callers migrate to ``resolve_initial``.
+
+        This compatibility entry point preserves existing runtime behavior without
+        restoring raw inputs to the canonical semantic intent.
+        """
+        return self._resolve(inputs, revision=len(inputs))
+
+    def _resolve(self, inputs: Sequence[str], *, revision: int) -> KISIntent:
+        """Canonicalize validated natural-language input using the configured LLM.
 
         Args:
             inputs: Ordered list of participant clues from revision 1 to current.
@@ -51,6 +67,8 @@ class KISIntentResolver:
         normalized = tuple(" ".join(value.split()) for value in inputs)
         if not normalized or any(not value for value in normalized):
             raise ValueError("KIS inputs must contain non-empty text")
+        if revision < 1:
+            raise ValueError("KIS revision must be at least 1")
 
         messages = build_kis_intent_messages(normalized)
         resolution = self._llm.generate_structured(messages, KISResolution)
@@ -91,8 +109,7 @@ class KISIntentResolver:
 
         try:
             return KISIntent(
-                revision=len(normalized),
-                inputs=list(normalized),
+                revision=revision,
                 language=resolution.language,
                 query_text=resolution.query_text,
                 entities=entities,
