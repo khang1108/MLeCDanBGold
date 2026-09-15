@@ -65,7 +65,7 @@ const FramesBox = ({
           )}
         </div>
       )}
-      {!error && warnings.length > 0 && (
+      {warnings.length > 0 && (
         <div className="search-warning" role="status">
           <span>Server note:</span>
           <ul>

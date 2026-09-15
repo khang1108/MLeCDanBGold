@@ -255,6 +255,32 @@ test('keeps previous committed results and retains draft when next revision fail
   expect(input.value).toBe('second clue');
 });
 
+test('preserves committed warnings while the next revision is pending and fails', async () => {
+  let rejectSecond;
+  searchKis
+    .mockResolvedValueOnce(mockKisResponse({
+      queryText: 'first',
+      revision: 1,
+      warnings: ['first response warning'],
+      results: [frameResult('frame-1')],
+    }))
+    .mockImplementationOnce(() => new Promise((resolve, reject) => {
+      rejectSecond = reject;
+    }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('first');
+  expect(await screen.findByText('first response warning')).toBeTruthy();
+
+  submit('second clue');
+  expect(screen.getByText('first response warning')).toBeTruthy();
+
+  rejectSecond(new Error('second request failed'));
+  expect(await screen.findByText('second request failed')).toBeTruthy();
+  expect(screen.getByText('first response warning')).toBeTruthy();
+  expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
+});
+
 test('opens a KIS result exactly once and records one viewed-frame write', async () => {
   const onFrameClick = jest.fn();
   const response = {
@@ -342,6 +368,35 @@ test('skips a queued viewed-frame write when query history creation fails', asyn
 
   expect(markFrameViewed).not.toHaveBeenCalled();
   expect(await screen.findByText(/history was not saved: history unavailable/i)).toBeTruthy();
+  expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
+});
+
+test('skips a queued viewed-frame write when history creation aborts', async () => {
+  let rejectHistory;
+  createQueryHistory.mockImplementationOnce(() => new Promise((resolve, reject) => {
+    rejectHistory = reject;
+  }));
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'first',
+    revision: 1,
+    results: [frameResult('frame-1')],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
+  submit('first');
+  const frame = await screen.findByAltText('Frame frame-1');
+  fireEvent.click(frame);
+
+  const abortError = new Error('history request aborted');
+  abortError.name = 'AbortError';
+  await act(async () => {
+    rejectHistory(abortError);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(markFrameViewed).not.toHaveBeenCalled();
+  expect(screen.queryByText(/history was not saved/i)).toBeNull();
   expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
 });
 

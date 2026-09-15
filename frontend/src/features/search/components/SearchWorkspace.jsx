@@ -402,7 +402,6 @@ const SearchWorkspace = ({
 
     setIsSearching(true);
     setError(null);
-    setWarnings([]);
     try {
       const response = await searchKis({
         inputs: requestPayload.inputs,
@@ -464,7 +463,7 @@ const SearchWorkspace = ({
               onHistoryRefresh?.();
             }
           } catch (historyError) {
-            if (historyError.name === 'AbortError') return;
+            if (historyError.name === 'AbortError') throw historyError;
             if (isCurrentHistorySession(historySession)) {
               invalidateHistorySession();
               setWarnings((current) => [...current, `History was not saved: ${historyError.message || 'request failed'}`]);
