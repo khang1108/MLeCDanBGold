@@ -21,11 +21,26 @@ const ENDPOINTS = [
         method: 'POST',
         path: '/api/v1/kis/search',
         title: 'KIS Semantic Search & Revision',
-        desc: 'Runs semantic KIS retrieval over canonical video frames with clue history. Returns canonical resolved intent, events, entities, temporal metadata, and ranked frames.',
+        desc: 'Runs progressive multimodal KIS retrieval via explicit semantic operations (initial_resolve, patch_events, global_rewrite, search_only) over canonical video frames. Returns resolved intent, events, entities, temporal metadata, and ranked frames.',
         curl: `curl -i -X POST "${API_BASE_URL}/api/v1/kis/search" \\
   -H "Content-Type: application/json" \\
   -H "X-VBS-User-ID: team-a" \\
-  -d '{"inputs": [{"text": "a red car approaches. It turns left."}], "use_dense": true, "use_bm25": true, "top_k": 20}'`,
+  -d '{"base_intent": null, "expected_revision": 0, "operation": {"kind": "initial_resolve", "text": "a red car approaches. It turns left."}, "use_dense": true, "use_bm25": true, "top_k": 20}'`,
+      },
+      {
+        method: 'POST',
+        path: '/api/v1/kis/assets',
+        title: 'KIS Query Image Upload',
+        desc: 'Uploads a content-addressed JPEG/PNG/WebP query image and returns its canonical asset reference.',
+        curl: `curl -i -X POST "${API_BASE_URL}/api/v1/kis/assets" \\
+  -F "file=@example.jpg;type=image/jpeg"`,
+      },
+      {
+        method: 'GET',
+        path: '/api/v1/kis/assets/{asset_id}',
+        title: 'KIS Query Image Asset',
+        desc: 'Retrieves a previously stored query image asset by its SHA-256 digest reference.',
+        curl: `curl -i -X GET "${API_BASE_URL}/api/v1/kis/assets/sha256:..."`,
       },
       {
         method: 'POST',

@@ -18,6 +18,22 @@ FastAPI router
   -> competition-compatible response
 ```
 
+### Progressive multimodal KIS retrieval flow
+
+```text
+Query Composer
+  -> InitialResolve | PatchEvents | GlobalRewrite | SearchOnly
+  -> KISIntent
+  -> KISRetrievalPlan
+  -> text/image temporal evidence
+  -> existing fusion
+  -> DP
+  -> ranked results
+```
+
+Note: EventTrail is the next design cycle, not part of S0/S1. KIS semantic interactions are stateless per-request operations against explicit base intents.
+
+
 `Corpus.open(...)` is the read-only boundary for existing canonical frames,
 Caption, OCR, object-count, transcript, and media-metadata artifacts. It does
 not create, migrate, or republish artifacts. `RetrievalService` similarly owns

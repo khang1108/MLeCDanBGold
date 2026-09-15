@@ -1,4 +1,4 @@
-import { requestFormData, requestJson } from './client';
+import { requestFormData } from './client';
 
 export const roundLatencyMs = (val) => {
   if (typeof val !== 'number' || !Number.isFinite(val)) return val;

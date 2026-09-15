@@ -2146,7 +2146,7 @@ git commit -m "feat: persist KIS operation metadata for replay and evaluation"
 - Consumes: all prior tasks.
 - Produces: verified single production path ready for the separate EventTrail design cycle.
 
-- [ ] **Step 1: Rewrite the acceptance smoke test around semantic operations**
+- [x] **Step 1: Rewrite the acceptance smoke test around semantic operations**
 
 The test must execute this sequence through the real orchestration boundary with deterministic inference/retrieval doubles:
 
@@ -2185,7 +2185,7 @@ The test must execute this sequence through the real orchestration boundary with
 
 Assert DP receives event rows in exact canonical order on each successful retrieval. Also assert the SearchService-built retrieval plan translates only text-bearing rows and preserves image refs, the loaded `configs/baseline.yaml` gives `visual_image` positive effective weight, and an image-only result can open temporal exploration from `exploration_seed`.
 
-- [ ] **Step 2: Run focused backend acceptance and full backend suite**
+- [x] **Step 2: Run focused backend acceptance and full backend suite**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/test_kis_acceptance_smoke.py -q
@@ -2194,7 +2194,7 @@ PYTHONPATH=src python -m pytest tests -q
 
 Expected: PASS.
 
-- [ ] **Step 3: Run the full frontend test suite and production build**
+- [x] **Step 3: Run the full frontend test suite and production build**
 
 ```bash
 cd frontend
@@ -2204,7 +2204,7 @@ npm run build
 
 Expected: all tests PASS and production build succeeds.
 
-- [ ] **Step 4: Run compile/import validation**
+- [x] **Step 4: Run compile/import validation**
 
 ```bash
 python -m compileall -q src llm/server
@@ -2219,7 +2219,7 @@ PY
 
 Expected output: `imports-ok`.
 
-- [ ] **Step 5: Run the legacy-reference hard gate**
+- [x] **Step 5: Run the legacy-reference hard gate**
 
 Run:
 
@@ -2240,7 +2240,7 @@ rg -n "query_preparation" src frontend tests configs llm -g '!**/__pycache__/**'
 
 Expected: no production query-preparation subsystem references.
 
-- [ ] **Step 6: Clean generated artifacts and establish ignore rules**
+- [x] **Step 6: Clean generated artifacts and establish ignore rules**
 
 `.gitignore` must include:
 
@@ -2255,7 +2255,7 @@ frontend/node_modules/
 
 Remove generated directories/files from the working tree snapshot before the final commit.
 
-- [ ] **Step 7: Update docs to the final architecture**
+- [x] **Step 7: Update docs to the final architecture**
 
 Docs must describe this single product flow:
 
@@ -2272,7 +2272,7 @@ Query Composer
 
 Explicitly state that EventTrail is the next design cycle, not part of S0/S1.
 
-- [ ] **Step 8: Perform one manual browser acceptance run**
+- [x] **Step 8: Perform one manual browser acceptance run**
 
 Use a running backend/inference service and verify:
 
@@ -2294,7 +2294,7 @@ read-only replay does not populate live composer draft
 
 Record failures as blocking defects; do not mark S0/S1 complete while any item above is broken.
 
-- [ ] **Step 9: Commit the completion gate**
+- [x] **Step 9: Commit the completion gate**
 
 ```bash
 git add .gitignore docs src frontend tests configs
@@ -2308,24 +2308,24 @@ git commit -m "chore: complete multimodal progressive KIS stabilization"
 
 Before handing the codebase to the EventTrail design cycle, verify all of these statements are true:
 
-- [ ] `/api/v1/query-candidates` and candidate-generation code are gone.
-- [ ] `EventTranslator` is the only KIS translation owner and cache identity uses `LLMClient.model`.
-- [ ] KIS product responses do not expose loose prepared Dense/BM25 strings; committed selected-video rescoring uses `exploration_seed`.
-- [ ] `KISIntent` has no raw clue history and revision is independent of clue/event count.
-- [ ] `KISEvent` supports text-only, image-only, and text+image evidence.
-- [ ] `E#:` commands are parsed deterministically and only named events can change.
-- [ ] Image-only patches make zero LLM calls.
-- [ ] `/llm-rewrite` preserves IDs/order/cardinality/images.
-- [ ] Image uploads are content-addressed, reused by opaque refs, and fetchable through the canonical asset GET route after replay/reload.
-- [ ] SearchService plan construction translates only text-bearing rows, restores original positions, and preserves image refs.
-- [ ] The loaded baseline configuration assigns positive effective weight to `visual_image`; image-only ranking is non-zero.
-- [ ] Image evidence enters full-corpus temporal scoring and the existing adaptive fusion; standalone top-K image search is not the KIS path.
-- [ ] Temporal exploration consumes `exploration_seed` and supports image-only events after multimodal scoring lands.
-- [ ] Semantic operations increment once and `SearchOnly` leaves revision unchanged.
-- [ ] Frontend pending operations never clear committed results/exploration before success.
-- [ ] Frame click propagates exactly once with the committed exploration snapshot and records exactly one viewed-frame write.
-- [ ] History persistence is best-effort but per-query ordered; activity waits for query creation and late older responses cannot replace the active session. Replay is read-only.
-- [ ] Scoped resolver outputs carry full binding roles and image-only intents may adopt their first textual language on a scoped update.
-- [ ] Operation-level metadata is persisted for later EventTrail evaluation.
-- [ ] Full backend/frontend suites and production frontend build pass.
-- [ ] Legacy/dead-code scans are clean.
+- [x] `/api/v1/query-candidates` and candidate-generation code are gone.
+- [x] `EventTranslator` is the only KIS translation owner and cache identity uses `LLMClient.model`.
+- [x] KIS product responses do not expose loose prepared Dense/BM25 strings; committed selected-video rescoring uses `exploration_seed`.
+- [x] `KISIntent` has no raw clue history and revision is independent of clue/event count.
+- [x] `KISEvent` supports text-only, image-only, and text+image evidence.
+- [x] `E#:` commands are parsed deterministically and only named events can change.
+- [x] Image-only patches make zero LLM calls.
+- [x] `/llm-rewrite` preserves IDs/order/cardinality/images.
+- [x] Image uploads are content-addressed, reused by opaque refs, and fetchable through the canonical asset GET route after replay/reload.
+- [x] SearchService plan construction translates only text-bearing rows, restores original positions, and preserves image refs.
+- [x] The loaded baseline configuration assigns positive effective weight to `visual_image`; image-only ranking is non-zero.
+- [x] Image evidence enters full-corpus temporal scoring and the existing adaptive fusion; standalone top-K image search is not the KIS path.
+- [x] Temporal exploration consumes `exploration_seed` and supports image-only events after multimodal scoring lands.
+- [x] Semantic operations increment once and `SearchOnly` leaves revision unchanged.
+- [x] Frontend pending operations never clear committed results/exploration before success.
+- [x] Frame click propagates exactly once with the committed exploration snapshot and records exactly one viewed-frame write.
+- [x] History persistence is best-effort but per-query ordered; activity waits for query creation and late older responses cannot replace the active session. Replay is read-only.
+- [x] Scoped resolver outputs carry full binding roles and image-only intents may adopt their first textual language on a scoped update.
+- [x] Operation-level metadata is persisted for later EventTrail evaluation.
+- [x] Full backend/frontend suites and production frontend build pass.
+- [x] Legacy/dead-code scans are clean.

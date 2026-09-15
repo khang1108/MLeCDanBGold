@@ -23,11 +23,25 @@ FastAPI
     → Corpus-backed canonical materialization
 ```
 
+### Progressive multimodal KIS retrieval flow
+
+```text
+Query Composer
+  -> InitialResolve | PatchEvents | GlobalRewrite | SearchOnly
+  -> KISIntent
+  -> KISRetrievalPlan
+  -> text/image temporal evidence
+  -> existing fusion
+  -> DP
+  -> ranked results
+```
+
+Note: EventTrail is the next design cycle, not part of S0/S1. KIS semantic interactions are stateless per-request operations against explicit base intents.
+
 Both workflows consume one stateless ordered event-to-frame alignment service.
-KIS deterministically splits raw query text and projects each ranked path to
-its upper-middle frame while retaining the full alignment. TRAKE accepts
-ordered events directly and returns every ranked path independently, including
-multiple paths from the same video.
+KIS handles progressive multimodal event graphs (`KISIntent`) with immutable
+revisions, while TRAKE accepts ordered events directly and returns every ranked
+path independently, including multiple paths from the same video.
 
 `setup.py` loads configuration and artifacts once, constructs the selected
 services, and injects them into `SearchService`. Request handling does not
