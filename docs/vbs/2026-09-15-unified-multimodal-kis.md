@@ -300,7 +300,7 @@ git commit -m "refactor: retire query expansion and isolate event translation"
 - Produces: immutable `KISRetrievalEvent` and `KISRetrievalPlan` aligned by `event_id`.
 - Produces: `KISExplorationSeed` as the dedicated selected-video scoring snapshot; top-level `dense_events` / `bm25_events` disappear only after this migration.
 
-- [x] **Step 1: Write failing retrieval-plan alignment tests**
+- [X] **Step 1: Write failing retrieval-plan alignment tests**
 
 ```python
 from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
@@ -324,7 +324,7 @@ def test_plan_requires_sequential_event_ids_and_aligned_views() -> None:
 
 Add failure cases for non-sequential IDs and for an event with no text and no image refs once the final S1 model is available; in this S0 task only text rows are constructed.
 
-- [x] **Step 2: Run the plan tests and verify import failure**
+- [X] **Step 2: Run the plan tests and verify import failure**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/orchestration/workflows/test_kis_pipeline.py -q
@@ -332,7 +332,7 @@ PYTHONPATH=src python -m pytest tests/orchestration/workflows/test_kis_pipeline.
 
 Expected: FAIL because `hcmai.retrieval.plan` does not exist and KIS pipeline still takes loose `retrieval_events`.
 
-- [x] **Step 3: Implement the initial text-capable retrieval plan**
+- [X] **Step 3: Implement the initial text-capable retrieval plan**
 
 Create:
 
@@ -367,7 +367,7 @@ class KISRetrievalPlan:
 
 Validate event IDs are exactly `E1..En`. Keep `image_refs` as an empty tuple in S0 so Task 9 can extend it after the canonical `KISImageRef` type exists.
 
-- [x] **Step 4: Build the plan in `SearchService` after semantic resolution**
+- [X] **Step 4: Build the plan in `SearchService` after semantic resolution**
 
 For each canonical event:
 
@@ -397,7 +397,7 @@ plan = KISRetrievalPlan(
 
 Validate `plan.event_ids == tuple(event.id for event in intent.events)` before execution.
 
-- [x] **Step 5: Change `KISPipeline.execute()` to consume the plan, not parallel lists**
+- [X] **Step 5: Change `KISPipeline.execute()` to consume the plan, not parallel lists**
 
 Use:
 
@@ -417,7 +417,7 @@ def execute(
 
 For the S0 textual path, derive the existing temporal arguments from the plan and reject missing required text rows. Do not re-derive retrieval strings from `KISIntent` elsewhere.
 
-- [x] **Step 6: Make latency stage ownership explicit**
+- [X] **Step 6: Make latency stage ownership explicit**
 
 `SearchLatency` must support:
 
@@ -432,7 +432,7 @@ total_ms: float = Field(default=0.0, ge=0)
 
 If `query_ms` is retained for another endpoint, derive KIS query timing from `intent_ms + translation_ms`; do not count translation outside user-visible latency.
 
-- [x] **Step 7: Add a dedicated exploration seed before removing prepared-string response fields**
+- [X] **Step 7: Add a dedicated exploration seed before removing prepared-string response fields**
 
 Add transport models in `src/hcmai/api/contracts/kis.py`:
 
@@ -472,7 +472,7 @@ class KISRevisionSearchResponse(BaseModel):
 
 Only after `exploration_seed` is wired may top-level `dense_events` and `bm25_events` be deleted.
 
-- [x] **Step 8: Migrate temporal exploration to consume the seed**
+- [X] **Step 8: Migrate temporal exploration to consume the seed**
 
 Replace `ExplorationOpenRequest.events/retrieval_events/caption_events/query` with the dedicated seed plus selected-video/window fields:
 
@@ -488,7 +488,7 @@ Update `QueryBinding` to retain the ordered seed/plan projection instead of thre
 
 Update `useTemporalExploration.validSnapshot()` and `buildExplorationOpenBody()` so the frontend stores `response.exploration_seed` unchanged and sends `{ seed, video_id, window }`. Do not inspect `dense_events`/`bm25_events` aliases. Add a regression test proving exploration still opens after those top-level fields are removed.
 
-- [x] **Step 9: Run textual plan, response, and exploration migration tests**
+- [X] **Step 9: Run textual plan, response, and exploration migration tests**
 
 ```bash
 PYTHONPATH=src python -m pytest \
@@ -503,7 +503,7 @@ CI=true npm test -- --watchAll=false src/features/alignment/hooks/useTemporalExp
 
 Expected: PASS.
 
-- [x] **Step 10: Commit textual retrieval-plan and exploration-snapshot migration**
+- [X] **Step 10: Commit textual retrieval-plan and exploration-snapshot migration**
 
 ```bash
 git add src/hcmai/retrieval/plan.py src/hcmai/orchestration src/hcmai/api/contracts src/hcmai/api/routers/exploration.py frontend/src/features/alignment tests/orchestration tests/api
@@ -532,7 +532,7 @@ git commit -m "refactor: align KIS retrieval and exploration through event plans
 - Produces: pending semantic request state that never destroys committed results before success.
 - Produces: one frame selection callback carrying the committed exploration snapshot.
 
-- [x] **Step 1: Add regression tests for pending success/failure and single frame callback**
+- [X] **Step 1: Add regression tests for pending success/failure and single frame callback**
 
 Add tests equivalent to:
 
@@ -585,7 +585,7 @@ test('opens a KIS result exactly once and records one viewed-frame write', async
 
 Also add a failed-second-request case asserting first intent/results remain and the draft remains editable.
 
-- [x] **Step 2: Run the frontend regression tests and verify failures on current clearing/double-callback behavior**
+- [X] **Step 2: Run the frontend regression tests and verify failures on current clearing/double-callback behavior**
 
 ```bash
 cd frontend
@@ -594,7 +594,7 @@ CI=true npm test -- --watchAll=false src/features/search/components/SearchWorksp
 
 Expected: pending-result and callback-count tests FAIL.
 
-- [x] **Step 3: Make session state distinguish committed state from pending request metadata**
+- [X] **Step 3: Make session state distinguish committed state from pending request metadata**
 
 For this S0 task, retain the current clue request format but stop committing draft changes early. `prepareSearchRequest()` returns a payload plus pending metadata; it must not alter committed inputs/revision/current intent.
 
@@ -614,7 +614,7 @@ export const prepareSearchRequest = (state) => {
 
 Only `commitSearchSuccess()` changes committed semantic state.
 
-- [x] **Step 4: Stop clearing committed KIS UI before the request succeeds**
+- [X] **Step 4: Stop clearing committed KIS UI before the request succeeds**
 
 In `SearchWorkspace.submit()` remove pre-request calls that clear:
 
@@ -628,7 +628,7 @@ active committed query context
 
 Set only pending/error UI fields before request. On success, atomically update committed response-derived state. On failure, leave committed state unchanged and call `commitSearchFailure()` so draft survives.
 
-- [x] **Step 5: Fix `openCanonicalFrame()` to call `onFrameClick` once**
+- [X] **Step 5: Fix `openCanonicalFrame()` to call `onFrameClick` once**
 
 Replace the current two calls with:
 
@@ -644,7 +644,7 @@ const openCanonicalFrame = useCallback((frame) => {
 }, [onFrameClick, recordViewed]);
 ```
 
-- [x] **Step 6: Make global active query follow committed intent, never draft**
+- [X] **Step 6: Make global active query follow committed intent, never draft**
 
 Remove draft-driven `onQueryChange` effects/callbacks. After successful commit call:
 
@@ -654,7 +654,7 @@ onQueryChange?.(response.intent?.query_text || '');
 
 Typing a new draft must not change `App.modalQuery`/inspector query until a semantic request succeeds.
 
-- [x] **Step 7: Move history persistence after live commit and serialize writes per query**
+- [X] **Step 7: Move history persistence after live commit and serialize writes per query**
 
 The live KIS commit and search lock release happen immediately after retrieval success. History is best-effort, but it is not unordered. Create a per-query write queue in `SearchWorkspace` (or a focused helper) keyed by `queryId`:
 
@@ -676,11 +676,11 @@ Late history promises must never replace the active session. Capture the `queryI
 
 Add tests for: (1) a frame clicked before `createQueryHistory` resolves does not call `markFrameViewed` until creation resolves; (2) a late history completion from search A cannot overwrite active search B; and (3) history failure never rolls back live results.
 
-- [x] **Step 8: Make replay read-only instead of copying historical query into draft**
+- [X] **Step 8: Make replay read-only instead of copying historical query into draft**
 
 On replay set a replay snapshot/mode and initialize live KIS session separately. `setDraft(createInitialKisSessionState(), item.query_text)` must disappear. Replay rendering uses stored snapshot only; `New Search` returns to a clean live session.
 
-- [x] **Step 9: Run frontend S0 tests**
+- [X] **Step 9: Run frontend S0 tests**
 
 ```bash
 cd frontend
@@ -693,7 +693,7 @@ CI=true npm test -- --watchAll=false \
 
 Expected: PASS.
 
-- [x] **Step 10: Commit the transactional frontend stabilization**
+- [X] **Step 10: Commit the transactional frontend stabilization**
 
 ```bash
 git add frontend/src/features/kis frontend/src/features/search/components/SearchWorkspace.jsx frontend/src/features/search/components/SearchWorkspace.test.jsx frontend/src/App.jsx frontend/src/App.test.jsx frontend/src/features/workspace
@@ -984,7 +984,7 @@ git commit -m "feat: add multimodal KIS events and explicit command grammar"
 - Produces: `KISScopedResolver.resolve(base: KISIntent | None, instructions: Sequence[EventPatchInstruction]) -> ScopedResolutionBatch`. `EventPatchInstruction` is defined in Task 5; do not introduce a second scoped-instruction type.
 - Produces: `KISGlobalRewriter.rewrite(base: KISIntent, instruction: str) -> KISIntent`.
 
-- [ ] **Step 1: Write scoped-resolver tests that prove model scope is enforced**
+- [X] **Step 1: Write scoped-resolver tests that prove model scope is enforced**
 
 ```python
 def _base_intent() -> KISIntent:
@@ -1040,7 +1040,7 @@ def test_scoped_resolver_returns_only_named_events() -> None:
 
 Add a failure test where model returns `E1` and `E2` while only `E2` was granted; expect `KISResolutionError`.
 
-- [ ] **Step 2: Write global-rewrite tests for topology/image preservation**
+- [X] **Step 2: Write global-rewrite tests for topology/image preservation**
 
 ```python
 def test_global_rewrite_preserves_ids_order_and_images() -> None:
@@ -1067,7 +1067,7 @@ def test_global_rewrite_preserves_ids_order_and_images() -> None:
 
 Add a test where model tries to return a different event count; expect `KISResolutionError`.
 
-- [ ] **Step 3: Run the new resolver tests and verify import failures**
+- [X] **Step 3: Run the new resolver tests and verify import failures**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/hcmai/kis/test_scoped_resolver.py tests/hcmai/kis/test_rewriter.py -q
@@ -1075,7 +1075,7 @@ PYTHONPATH=src python -m pytest tests/hcmai/kis/test_scoped_resolver.py tests/hc
 
 Expected: FAIL because both services are absent.
 
-- [ ] **Step 4: Define narrow structured output schemas**
+- [X] **Step 4: Define narrow structured output schemas**
 
 In domain modules define:
 
@@ -1113,7 +1113,7 @@ base.language is None     -> resolved.language becomes the new intent language f
 
 When `base is None` for an initial explicit `E1..Ek` batch, scoped bindings must be empty because there is no canonical entity table yet.
 
-- [ ] **Step 5: Apply scoped results server-side without touching unrelated events**
+- [X] **Step 5: Apply scoped results server-side without touching unrelated events**
 
 Provide a pure helper:
 
@@ -1130,11 +1130,11 @@ When `base` exists, replace only named event text/bindings and preserve unrelate
 
 Add a dedicated test: start from an image-only `E1` with `language=None`, apply `E1: the woman is holding a plate`, have the scoped model return `language="en"`, and assert the new intent is text+image with `language="en"`.
 
-- [ ] **Step 6: Implement global rewrite with fixed topology**
+- [X] **Step 6: Implement global rewrite with fixed topology**
 
 Use a structured response containing `language`, optional `query_text`, global entities, and exactly one text/binding resolution for every existing event ID. The model may rewrite only events that already contain text; image-only events remain `text=None` because the LLM is not given image pixels and must not invent image semantics. After validation, copy image arrays from the base intent by event ID and derive the same adjacent chain. Set revision only from the caller-provided next revision.
 
-- [ ] **Step 7: Run scoped/global resolver tests**
+- [X] **Step 7: Run scoped/global resolver tests**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/hcmai/kis/test_scoped_resolver.py tests/hcmai/kis/test_rewriter.py tests/hcmai/kis/test_resolver.py -q
@@ -1142,7 +1142,7 @@ PYTHONPATH=src python -m pytest tests/hcmai/kis/test_scoped_resolver.py tests/hc
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit semantic operation services**
+- [X] **Step 8: Commit semantic operation services**
 
 ```bash
 git add src/hcmai/kis tests/hcmai/kis
@@ -1170,7 +1170,7 @@ git commit -m "feat: add scoped and global KIS semantic resolution"
 - Produces: `KISImageAssetStore.put(payload, content_type) -> KISImageRef`, `open(asset_id) -> PIL.Image.Image`, and `read(asset_id) -> tuple[bytes, str]` for transport-safe thumbnail retrieval.
 - Produces: `POST /api/v1/kis/assets/images` returning `KISImageRef` and `GET /api/v1/kis/assets/images/{asset_id}` returning the validated original bytes.
 
-- [ ] **Step 1: Write asset-store tests for validation, dedupe, and stable IDs**
+- [X] **Step 1: Write asset-store tests for validation, dedupe, and stable IDs**
 
 ```python
 from io import BytesIO
@@ -1197,7 +1197,7 @@ def test_asset_store_deduplicates_identical_payloads(tmp_path) -> None:
 
 Also test unsupported MIME, empty payload, byte limit, pixel limit, animated image rejection, `open()` returning RGB, and `read()` returning the exact validated bytes plus normalized content type for a known asset. Unknown asset IDs must fail without path traversal.
 
-- [ ] **Step 2: Run asset tests and verify failure**
+- [X] **Step 2: Run asset tests and verify failure**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/hcmai/kis/test_assets.py -q
@@ -1205,7 +1205,7 @@ PYTHONPATH=src python -m pytest tests/hcmai/kis/test_assets.py -q
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement the store using canonical bytes hash and safe decoding**
+- [X] **Step 3: Implement the store using canonical bytes hash and safe decoding**
 
 Use:
 
@@ -1218,7 +1218,7 @@ Validate first, detect the actual static format (`JPEG`, `PNG`, or `WEBP`), then
 
 Add `ApiConfig.kis_query_asset_dir` with a repository-relative default such as `data/query-assets` and resolve it through the existing repository-path helper in setup. `read(asset_id)` resolves only canonical `sha256:<hex>` IDs, reads the stored original bytes, and returns `(payload, normalized_content_type)`; it must not expose filesystem paths.
 
-- [ ] **Step 4: Wire the asset store into `SearchService` and add the upload contract/endpoint**
+- [X] **Step 4: Wire the asset store into `SearchService` and add the upload contract/endpoint**
 
 Add `kis_image_assets: KISImageAssetStore | None` to the `SearchService` constructor and assign `self.kis_image_assets`. In setup, create it from `ApiConfig.kis_query_asset_dir`, `image_max_upload_bytes`, and `image_max_pixels`; record a startup message and leave it `None` only when storage initialization fails.
 
@@ -1250,7 +1250,7 @@ async def get_kis_image(asset_id: str) -> Response:
 
 Map invalid upload to 422, unknown asset to 404, and asset-store unavailable to 503. Add an upload-then-GET test that asserts byte equality, content type, and immutable cache header. This route is the canonical source for event-card thumbnails after replay/reload; browser object URLs are temporary preview-only state.
 
-- [ ] **Step 5: Run asset/router tests**
+- [X] **Step 5: Run asset/router tests**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/hcmai/kis/test_assets.py tests/api/test_kis_router.py -q
@@ -1258,7 +1258,7 @@ PYTHONPATH=src python -m pytest tests/hcmai/kis/test_assets.py tests/api/test_ki
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit query image asset support**
+- [X] **Step 6: Commit query image asset support**
 
 ```bash
 git add src/hcmai/kis/assets.py src/hcmai/api src/hcmai/orchestration src/hcmai/common/config.py tests/hcmai/kis/test_assets.py tests/api/test_kis_router.py
@@ -1286,7 +1286,7 @@ git commit -m "feat: add reusable KIS query image assets"
 - Produces: discriminated `KISSearchRequest` with `base_intent`, `expected_revision`, and one operation.
 - Produces: `KISOperationSummary(kind, affected_event_ids)` in `KISSearchResponse`.
 
-- [ ] **Step 1: Write failing contract tests for all operation types**
+- [X] **Step 1: Write failing contract tests for all operation types**
 
 Define request examples:
 
@@ -1327,7 +1327,7 @@ search_only = KISSearchRequest.model_validate({
 
 Add patch/global variants and reject base-intent/revision mismatches.
 
-- [ ] **Step 2: Run contract/orchestration tests and verify old clue-list assumptions fail**
+- [X] **Step 2: Run contract/orchestration tests and verify old clue-list assumptions fail**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/api/test_kis_contracts.py tests/orchestration/test_kis_revision.py -q
@@ -1335,7 +1335,7 @@ PYTHONPATH=src python -m pytest tests/api/test_kis_contracts.py tests/orchestrat
 
 Expected: FAIL because `inputs`/`previous_revision` still define the API.
 
-- [ ] **Step 3: Replace the old revision/clue contract names and implement discriminated operation models**
+- [X] **Step 3: Replace the old revision/clue contract names and implement discriminated operation models**
 
 Rename `KISRevisionSearchRequest` -> `KISSearchRequest`, `KISRevisionSearchResponse` -> `KISSearchResponse`, and `SearchService.search_kis_revision()` -> `SearchService.search_kis()`. Keep the published route path `/api/v1/kis/search`; the payload contract changes in place. Update the KIS router to call `service.search_kis(request)`.
 
@@ -1390,7 +1390,7 @@ KISOperation = Annotated[
 ]
 ```
 
-- [ ] **Step 4: Implement pure operation application in orchestration**
+- [X] **Step 4: Implement pure operation application in orchestration**
 
 Add a private method or focused helper with this exact semantic behavior:
 
@@ -1421,7 +1421,7 @@ search_only:
 
 An image-only patch must not call any LLM service.
 
-- [ ] **Step 5: Implement operation summary and response**
+- [X] **Step 5: Implement operation summary and response**
 
 ```python
 class KISOperationSummary(BaseModel):
@@ -1431,11 +1431,11 @@ class KISOperationSummary(BaseModel):
 
 Response returns intent, summary, results, retrieval settings, latency, warnings. No raw input history and no prepared retrieval strings. In DRES/search logging, use `intent.query_text` when present; for a purely image-only intent use the fixed transport label `[image-only KIS]` without writing that label back into canonical semantic state.
 
-- [ ] **Step 6: Normalize revision errors before model/retrieval work**
+- [X] **Step 6: Normalize revision errors before model/retrieval work**
 
 If `base_intent is None`, require `expected_revision == 0` and only allow `initial_resolve`. For an explicit initial batch, require contiguous patch IDs starting at `E1`. If base exists, require exact equality to `base_intent.revision`; reject `initial_resolve`. Raise `RevisionConflictError` before calling LLM.
 
-- [ ] **Step 7: Run API/orchestration operation tests**
+- [X] **Step 7: Run API/orchestration operation tests**
 
 ```bash
 PYTHONPATH=src python -m pytest \
@@ -1446,7 +1446,7 @@ PYTHONPATH=src python -m pytest \
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit the stateless operation API**
+- [X] **Step 8: Commit the stateless operation API**
 
 ```bash
 git add src/hcmai/api/contracts/kis.py src/hcmai/api/routers/kis.py src/hcmai/orchestration tests/api tests/orchestration/test_kis_revision.py

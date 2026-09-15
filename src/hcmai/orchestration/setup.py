@@ -20,6 +20,8 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.inference import LLMClient, load_llm_endpoint
 from hcmai.kis.assets import KISImageAssetStore
 from hcmai.kis.resolver import KISIntentResolver
+from hcmai.kis.rewriter import KISGlobalRewriter
+from hcmai.kis.scoped_resolver import KISScopedResolver
 from hcmai.orchestration.corpus_setup import load_corpus
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.retrieval_setup import (
@@ -69,6 +71,8 @@ def load_search_service(messages: list[str]) -> SearchService:
     llm_client = _load_llm_client(messages)
     event_translator = _load_event_translator(settings, messages, llm=llm_client)
     intent_resolver = _load_intent_resolver(messages, llm=llm_client)
+    scoped_resolver = _load_scoped_resolver(messages, llm=llm_client)
+    global_rewriter = _load_global_rewriter(messages, llm=llm_client)
     retrieval = load_retrieval(settings, models, llm, messages, corpus=corpus)
     visual_retriever = select_visual_retriever(retrieval)
     image_encoder = load_image_encoder(models, visual_retriever, llm, messages)
@@ -100,6 +104,8 @@ def load_search_service(messages: list[str]) -> SearchService:
         literal_text=literal_text,
         visual_retriever=visual_retriever,
         intent_resolver=intent_resolver,
+        scoped_resolver=scoped_resolver,
+        global_rewriter=global_rewriter,
         kis_image_assets=kis_image_assets,
     )
 
@@ -158,6 +164,28 @@ def _load_intent_resolver(
         messages.append("KIS intent resolver unavailable: LLM client not configured")
         return None
     return KISIntentResolver(llm)
+
+
+def _load_scoped_resolver(
+    messages: list[str],
+    llm: LLMClient | None = None,
+) -> KISScopedResolver | None:
+    """Construct KIS scoped resolver using the shared LLM client."""
+    if llm is None:
+        messages.append("KIS scoped resolver unavailable: LLM client not configured")
+        return None
+    return KISScopedResolver(llm)
+
+
+def _load_global_rewriter(
+    messages: list[str],
+    llm: LLMClient | None = None,
+) -> KISGlobalRewriter | None:
+    """Construct KIS global rewriter using the shared LLM client."""
+    if llm is None:
+        messages.append("KIS global rewriter unavailable: LLM client not configured")
+        return None
+    return KISGlobalRewriter(llm)
 
 
 def _load_event_translator(

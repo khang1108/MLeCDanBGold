@@ -9,8 +9,8 @@ from fastapi import APIRouter, File, Header, HTTPException, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 
 from hcmai.api.contracts.kis import (
-    KISRevisionSearchRequest,
-    KISRevisionSearchResponse,
+    KISSearchRequest,
+    KISSearchResponse,
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.inference.errors import InferenceResponseError, InferenceUnavailableError
@@ -29,13 +29,13 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
     """Create the revisioned KIS search router."""
     router = APIRouter()
 
-    @router.post("/api/v1/kis/search", response_model=KISRevisionSearchResponse)
-    async def search_kis_revision(
-        request: KISRevisionSearchRequest,
+    @router.post("/api/v1/kis/search", response_model=KISSearchResponse)
+    async def search_kis(
+        request: KISSearchRequest,
         response: Response,
         user_id: Annotated[str | None, Header(alias="X-VBS-User-ID")] = None,
-    ) -> KISRevisionSearchResponse:
-        """Execute a revisioned KIS search with semantic intent resolution."""
+    ) -> KISSearchResponse:
+        """Execute a stateless semantic KIS search."""
         service = service_container.get("service")
         if service is None:
             raise HTTPException(
@@ -44,12 +44,13 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
             )
 
         try:
-            result = await run_in_threadpool(service.search_kis_revision, request)
+            result = await run_in_threadpool(service.search_kis, request)
+            log_query_text = result.intent.query_text or "[image-only KIS]"
             await _record_kis_dres_log(
                 service_container,
                 response,
                 user_id=user_id,
-                query_text=result.intent.query_text,
+                query_text=log_query_text,
                 results=result.results,
             )
             return result

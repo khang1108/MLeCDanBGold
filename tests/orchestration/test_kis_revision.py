@@ -1,20 +1,37 @@
-"""Tests for SearchService.search_kis_revision orchestration."""
+"""Tests for SearchService.search_kis stateless semantic orchestration."""
 
 import unittest
 from unittest.mock import Mock
 
-from hcmai.api.contracts.kis import KISInput, KISRevisionSearchRequest, KISRevisionSearchResponse
+from hcmai.api.contracts.kis import (
+    EventPatch,
+    GlobalRewriteOperation,
+    InitialResolveOperation,
+    KISSearchRequest,
+    KISSearchResponse,
+    PatchEventsOperation,
+    SearchOnlyOperation,
+)
 from hcmai.api.contracts.search import SearchLatency, SearchResult, SearchResultMetadata
-from hcmai.kis.models import KISEntity, KISEntityBinding, KISEvent, KISIntent, KISTemporalEdge
-from hcmai.orchestration.utils.errors import RevisionConflictError
+from hcmai.kis.assets import KISImageAssetStore
+from hcmai.kis.models import (
+    KISEntity,
+    KISEntityBinding,
+    KISEvent,
+    KISImageRef,
+    KISIntent,
+    KISTemporalEdge,
+)
+from hcmai.kis.scoped_resolver import ScopedResolutionBatch, ScopedResolvedEvent
+from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchService, SearchServiceUnavailableError
 from hcmai.orchestration.workflows.kis import KISSearchExecution
 
 
-class KISRevisionOrchestrationTest(unittest.TestCase):
+class KISOrchestrationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.mock_intent_en = KISIntent(
-            revision=2,
+            revision=1,
             language="en",
             query_text="A man enters a room and talks to a woman.",
             entities=[
@@ -41,22 +58,7 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
             ],
         )
 
-    def test_search_kis_revision_success_english_without_translation(self) -> None:
-        corpus = Mock()
-        retrieval = Mock()
-        intent_resolver = Mock()
-        intent_resolver.resolve.return_value = self.mock_intent_en
-        event_translator = Mock()
-
-        service = SearchService(
-            corpus=corpus,
-            retrieval=retrieval,
-            temporal_evidence=Mock(),
-            intent_resolver=intent_resolver,
-            event_translator=event_translator,
-        )
-
-        mock_execution = KISSearchExecution(
+        self.mock_execution = KISSearchExecution(
             results=[
                 SearchResult(
                     frame_id="v1_f1",
@@ -71,54 +73,66 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
             ],
             latency=SearchLatency(query_ms=5.0, retrieval_ms=10.0),
         )
-        service.kis = Mock()
-        service.kis.execute.return_value = mock_execution
 
-        request = KISRevisionSearchRequest(
-            inputs=[
-                KISInput(text="A man enters a room."),
-                KISInput(text="He talks to a woman."),
-            ],
-            expected_revision=1,
+    def _make_service(
+        self,
+        *,
+        intent_resolver=None,
+        scoped_resolver=None,
+        global_rewriter=None,
+        event_translator=None,
+        kis_image_assets=None,
+    ) -> SearchService:
+        corpus = Mock()
+        retrieval = Mock()
+        service = SearchService(
+            corpus=corpus,
+            retrieval=retrieval,
+            temporal_evidence=Mock(),
+            intent_resolver=intent_resolver,
+            scoped_resolver=scoped_resolver,
+            global_rewriter=global_rewriter,
+            event_translator=event_translator,
+            kis_image_assets=kis_image_assets,
+        )
+        service.kis = Mock()
+        service.kis.execute.return_value = self.mock_execution
+        return service
+
+    def test_search_kis_initial_resolve_natural_text_english(self) -> None:
+        intent_resolver = Mock()
+        intent_resolver.resolve_initial.return_value = self.mock_intent_en
+        event_translator = Mock()
+
+        service = self._make_service(
+            intent_resolver=intent_resolver,
+            event_translator=event_translator,
+        )
+
+        request = KISSearchRequest(
+            base_intent=None,
+            expected_revision=0,
+            operation=InitialResolveOperation(
+                kind="initial_resolve",
+                text="A man enters a room and talks to a woman.",
+            ),
             use_dense=True,
             use_bm25=True,
             top_k=10,
         )
 
-        response = service.search_kis_revision(request)
+        response = service.search_kis(request)
 
-        intent_resolver.resolve.assert_called_once_with(
-            ["A man enters a room.", "He talks to a woman."], revision=2
+        intent_resolver.resolve_initial.assert_called_once_with(
+            "A man enters a room and talks to a woman.", revision=1
         )
         event_translator.translate.assert_not_called()
-        self.assertEqual(service.kis.execute.call_count, 1)
-        call_kwargs = service.kis.execute.call_args.kwargs
-        self.assertEqual(call_kwargs["intent"], self.mock_intent_en)
-        self.assertEqual(
-            call_kwargs["retrieval_plan"].dense_texts,
-            ("A man enters a room", "The man talks to a woman"),
-        )
-        self.assertTrue(call_kwargs["use_dense"])
-        self.assertTrue(call_kwargs["use_bm25"])
-        self.assertEqual(call_kwargs["top_k"], 10)
-        self.assertGreaterEqual(call_kwargs["intent_ms"], 0.0)
-        self.assertIsInstance(response, KISRevisionSearchResponse)
         self.assertEqual(response.intent, self.mock_intent_en)
-        self.assertEqual(
-            [event.dense_text for event in response.exploration_seed.events],
-            ["A man enters a room", "The man talks to a woman"],
-        )
-        self.assertEqual(
-            [event.bm25_text for event in response.exploration_seed.events],
-            ["A man enters a room", "The man talks to a woman"],
-        )
+        self.assertEqual(response.operation_summary.kind, "initial_resolve")
+        self.assertEqual(response.operation_summary.affected_event_ids, ["E1", "E2"])
         self.assertEqual(len(response.results), 1)
-        self.assertEqual(response.exploration_seed.semantic_revision, 2)
-        self.assertNotIn("dense_events", response.model_dump())
-        self.assertNotIn("bm25_events", response.model_dump())
-        self.assertGreaterEqual(call_kwargs["translation_ms"], 0)
 
-    def test_search_kis_revision_translates_vietnamese_for_dense_retrieval(self) -> None:
+    def test_search_kis_initial_resolve_vietnamese_translates_dense(self) -> None:
         intent_vi = KISIntent(
             revision=1,
             language="vi",
@@ -134,80 +148,277 @@ class KISRevisionOrchestrationTest(unittest.TestCase):
             temporal_edges=[],
         )
 
-        corpus = Mock()
-        retrieval = Mock()
         intent_resolver = Mock()
-        intent_resolver.resolve.return_value = intent_vi
+        intent_resolver.resolve_initial.return_value = intent_vi
         event_translator = Mock()
         event_translator.translate.return_value = ("A woman in a kitchen",)
 
-        service = SearchService(
-            corpus=corpus,
-            retrieval=retrieval,
-            temporal_evidence=Mock(),
+        service = self._make_service(
             intent_resolver=intent_resolver,
             event_translator=event_translator,
         )
 
-        mock_execution = KISSearchExecution(
-            results=[],
-            latency=SearchLatency(query_ms=2.0),
-        )
-        service.kis = Mock()
-        service.kis.execute.return_value = mock_execution
-
-        request = KISRevisionSearchRequest(
-            inputs=[KISInput(text="Một người phụ nữ trong bếp.")],
+        request = KISSearchRequest(
+            base_intent=None,
             expected_revision=0,
+            operation=InitialResolveOperation(
+                kind="initial_resolve",
+                text="Một người phụ nữ trong bếp.",
+            ),
             use_dense=True,
             use_bm25=True,
             top_k=5,
         )
 
-        response = service.search_kis_revision(request)
+        response = service.search_kis(request)
 
         event_translator.translate.assert_called_once_with(
             ("Một người phụ nữ trong bếp",),
             language="vi",
         )
-        self.assertEqual([event.dense_text for event in response.exploration_seed.events], ["A woman in a kitchen"])
-        self.assertEqual([event.bm25_text for event in response.exploration_seed.events], ["Một người phụ nữ trong bếp"])
+        self.assertEqual(
+            [event.dense_text for event in response.exploration_seed.events],
+            ["A woman in a kitchen"],
+        )
+        self.assertEqual(
+            [event.bm25_text for event in response.exploration_seed.events],
+            ["Một người phụ nữ trong bếp"],
+        )
 
-    def test_search_kis_revision_rejects_revision_conflict_before_inference(self) -> None:
+    def test_search_kis_initial_resolve_image_only_makes_no_llm_call(self) -> None:
         intent_resolver = Mock()
-        service = SearchService(
-            corpus=Mock(),
-            retrieval=Mock(),
+        scoped_resolver = Mock()
+        service = self._make_service(
             intent_resolver=intent_resolver,
+            scoped_resolver=scoped_resolver,
         )
 
-        # inputs has 2 items -> expected_revision should be 1, but client sends 0
-        request = KISRevisionSearchRequest(
-            inputs=[
-                KISInput(text="Clue 1"),
-                KISInput(text="Clue 2"),
+        request = KISSearchRequest(
+            base_intent=None,
+            expected_revision=0,
+            operation=InitialResolveOperation(
+                kind="initial_resolve",
+                image_refs=[KISImageRef(asset_id="sha256:abc", content_type="image/png")],
+            ),
+            use_dense=True,
+            use_bm25=False,
+        )
+
+        response = service.search_kis(request)
+
+        intent_resolver.resolve_initial.assert_not_called()
+        scoped_resolver.resolve.assert_not_called()
+        self.assertEqual(response.intent.revision, 1)
+        self.assertIsNone(response.intent.language)
+        self.assertIsNone(response.intent.query_text)
+        self.assertEqual(len(response.intent.events), 1)
+        self.assertEqual(response.intent.events[0].id, "E1")
+        self.assertIsNone(response.intent.events[0].text)
+        self.assertEqual(response.intent.events[0].images[0].asset_id, "sha256:abc")
+        self.assertEqual(response.operation_summary.kind, "initial_resolve")
+        self.assertEqual(response.operation_summary.affected_event_ids, ["E1"])
+
+    def test_search_kis_initial_resolve_text_plus_image(self) -> None:
+        scoped_resolver = Mock()
+        scoped_resolver.resolve.return_value = ScopedResolutionBatch(
+            language="en",
+            events=[ScopedResolvedEvent(event_id="E1", text="Woman in kitchen")],
+        )
+
+        service = self._make_service(scoped_resolver=scoped_resolver)
+
+        request = KISSearchRequest(
+            base_intent=None,
+            expected_revision=0,
+            operation=InitialResolveOperation(
+                kind="initial_resolve",
+                text="Woman in kitchen",
+                image_refs=[KISImageRef(asset_id="sha256:abc", content_type="image/png")],
+            ),
+            use_dense=True,
+            use_bm25=True,
+        )
+
+        response = service.search_kis(request)
+
+        self.assertEqual(scoped_resolver.resolve.call_count, 1)
+        self.assertEqual(response.intent.revision, 1)
+        self.assertEqual(response.intent.events[0].text, "Woman in kitchen")
+        self.assertEqual(response.intent.events[0].images[0].asset_id, "sha256:abc")
+
+    def test_search_kis_patch_events_text_instruction(self) -> None:
+        scoped_resolver = Mock()
+        scoped_resolver.resolve.return_value = ScopedResolutionBatch(
+            language="en",
+            events=[
+                ScopedResolvedEvent(
+                    event_id="E2",
+                    text="The man is a chef wearing black",
+                    bindings=[KISEntityBinding(entity_id="X1", role="actor")],
+                )
             ],
-            expected_revision=0,
         )
 
+        service = self._make_service(scoped_resolver=scoped_resolver)
+
+        request = KISSearchRequest(
+            base_intent=self.mock_intent_en,
+            expected_revision=1,
+            operation=PatchEventsOperation(
+                kind="patch_events",
+                patches=[
+                    EventPatch(
+                        event_id="E2",
+                        instruction="the man is a chef wearing black",
+                    )
+                ],
+            ),
+            use_dense=True,
+            use_bm25=True,
+        )
+
+        response = service.search_kis(request)
+
+        self.assertEqual(response.intent.revision, 2)
+        self.assertEqual(response.intent.events[0].text, "A man enters a room")
+        self.assertEqual(
+            response.intent.events[1].text, "The man is a chef wearing black"
+        )
+        self.assertEqual(response.operation_summary.kind, "patch_events")
+        self.assertEqual(response.operation_summary.affected_event_ids, ["E2"])
+
+    def test_search_kis_patch_events_image_only_makes_no_llm_call(self) -> None:
+        asset_store = Mock()
+        asset_store.ref.return_value = KISImageRef(
+            asset_id="sha256:photo", content_type="image/jpeg"
+        )
+        scoped_resolver = Mock()
+
+        service = self._make_service(
+            scoped_resolver=scoped_resolver,
+            kis_image_assets=asset_store,
+        )
+
+        request = KISSearchRequest(
+            base_intent=self.mock_intent_en,
+            expected_revision=1,
+            operation=PatchEventsOperation(
+                kind="patch_events",
+                patches=[
+                    EventPatch(
+                        event_id="E1",
+                        add_image_ids=["sha256:photo"],
+                    )
+                ],
+            ),
+            use_dense=True,
+            use_bm25=True,
+        )
+
+        response = service.search_kis(request)
+
+        scoped_resolver.resolve.assert_not_called()
+        self.assertEqual(response.intent.revision, 2)
+        self.assertEqual(len(response.intent.events[0].images), 1)
+        self.assertEqual(response.intent.events[0].images[0].asset_id, "sha256:photo")
+        self.assertEqual(response.operation_summary.kind, "patch_events")
+
+    def test_search_kis_global_rewrite(self) -> None:
+        global_rewriter = Mock()
+        rewritten_intent = self.mock_intent_en.model_copy(
+            update={
+                "revision": 2,
+                "query_text": "Rewritten global query text.",
+            }
+        )
+        global_rewriter.rewrite.return_value = rewritten_intent
+
+        service = self._make_service(global_rewriter=global_rewriter)
+
+        request = KISSearchRequest(
+            base_intent=self.mock_intent_en,
+            expected_revision=1,
+            operation=GlobalRewriteOperation(
+                kind="global_rewrite",
+                instruction="Resolve all pronouns explicitly.",
+            ),
+            use_dense=True,
+            use_bm25=True,
+        )
+
+        response = service.search_kis(request)
+
+        global_rewriter.rewrite.assert_called_once_with(
+            base=self.mock_intent_en,
+            instruction="Resolve all pronouns explicitly.",
+        )
+        self.assertEqual(response.intent.revision, 2)
+        self.assertEqual(response.operation_summary.kind, "global_rewrite")
+        self.assertEqual(response.operation_summary.affected_event_ids, ["E1", "E2"])
+
+    def test_search_kis_search_only_preserves_revision_and_intent(self) -> None:
+        service = self._make_service()
+
+        request = KISSearchRequest(
+            base_intent=self.mock_intent_en,
+            expected_revision=1,
+            operation=SearchOnlyOperation(kind="search_only"),
+            use_dense=True,
+            use_bm25=False,
+            top_k=50,
+        )
+
+        response = service.search_kis(request)
+
+        self.assertEqual(response.intent, self.mock_intent_en)
+        self.assertEqual(response.intent.revision, 1)
+        self.assertEqual(response.operation_summary.kind, "search_only")
+        self.assertEqual(response.operation_summary.affected_event_ids, [])
+
+    def test_search_kis_rejects_revision_conflict_before_inference(self) -> None:
+        service = self._make_service()
+
+        # Expected 0 when base_intent exists -> conflict
+        request = KISSearchRequest(
+            base_intent=self.mock_intent_en,
+            expected_revision=0,
+            operation=SearchOnlyOperation(kind="search_only"),
+        )
         with self.assertRaises(RevisionConflictError):
-            service.search_kis_revision(request)
+            service.search_kis(request)
 
-        intent_resolver.resolve.assert_not_called()
-
-    def test_search_kis_revision_requires_intent_resolver(self) -> None:
-        service = SearchService(
-            corpus=Mock(),
-            retrieval=Mock(),
-            intent_resolver=None,
+        # Expected != 0 when base_intent is None -> conflict
+        request_initial_bad_rev = KISSearchRequest(
+            base_intent=None,
+            expected_revision=2,
+            operation=InitialResolveOperation(
+                kind="initial_resolve", text="query"
+            ),
         )
-        request = KISRevisionSearchRequest(
-            inputs=[KISInput(text="Clue 1")],
+        with self.assertRaises(RevisionConflictError):
+            service.search_kis(request_initial_bad_rev)
+
+        # Non-initial_resolve when base_intent is None -> conflict
+        request_patch_without_base = KISSearchRequest(
+            base_intent=None,
             expected_revision=0,
+            operation=SearchOnlyOperation(kind="search_only"),
+        )
+        with self.assertRaises(RevisionConflictError):
+            service.search_kis(request_patch_without_base)
+
+    def test_search_kis_requires_intent_resolver_for_initial_resolve(self) -> None:
+        service = self._make_service(intent_resolver=None)
+        request = KISSearchRequest(
+            base_intent=None,
+            expected_revision=0,
+            operation=InitialResolveOperation(
+                kind="initial_resolve", text="query"
+            ),
         )
 
         with self.assertRaises(SearchServiceUnavailableError):
-            service.search_kis_revision(request)
+            service.search_kis(request)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from PIL import Image
 
 from hcmai.api.contracts.filter import FilterResult, FilterResponse
-from hcmai.api.contracts.kis import KISRevisionSearchResponse
+from hcmai.api.contracts.kis import KISOperationSummary, KISSearchResponse
 from hcmai.api.contracts.latency import SearchLatency
 from hcmai.api.contracts.search import (
     ImageSearchResponse,
@@ -39,7 +39,7 @@ class _SearchService:
             max_upload_bytes=1024 * 1024,
         )
 
-    def search_kis_revision(self, request) -> KISRevisionSearchResponse:
+    def search_kis(self, request) -> KISSearchResponse:
         del request
         intent = KISIntent(
             revision=1,
@@ -47,8 +47,11 @@ class _SearchService:
             query_text="person running",
             events=[KISEvent(id="E1", text="person running")],
         )
-        return KISRevisionSearchResponse(
+        return KISSearchResponse(
             intent=intent,
+            operation_summary=KISOperationSummary(
+                kind="initial_resolve", affected_event_ids=["E1"]
+            ),
             exploration_seed={
                 "semantic_revision": 1,
                 "events": [{
@@ -182,8 +185,12 @@ def test_text_search_logs_full_ranked_results_and_trimmed_event(monkeypatch: pyt
                 "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-who-searched"},
                 json={
-                    "inputs": [{"text": "  person running  "}],
+                    "base_intent": None,
                     "expected_revision": 0,
+                    "operation": {
+                        "kind": "initial_resolve",
+                        "text": "  person running  ",
+                    },
                     "use_dense": True,
                     "use_bm25": True,
                 },
@@ -310,8 +317,9 @@ def test_connected_user_logs_successful_search_even_when_legacy_toggle_is_false(
                 "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
                 json={
-                    "inputs": [{"text": "person running"}],
+                    "base_intent": None,
                     "expected_revision": 0,
+                    "operation": {"kind": "initial_resolve", "text": "person running"},
                     "use_dense": True,
                     "use_bm25": True,
                 },
@@ -339,8 +347,9 @@ def test_logging_failure_does_not_change_retrieval_success_or_leak_error(
                 "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
                 json={
-                    "inputs": [{"text": "person running"}],
+                    "base_intent": None,
                     "expected_revision": 0,
+                    "operation": {"kind": "initial_resolve", "text": "person running"},
                     "use_dense": True,
                     "use_bm25": True,
                 },
@@ -371,8 +380,9 @@ def test_unconfigured_or_unconnected_logging_is_skipped_without_blocking_search(
                 "/api/v1/kis/search",
                 headers=headers,
                 json={
-                    "inputs": [{"text": "person"}],
+                    "base_intent": None,
                     "expected_revision": 0,
+                    "operation": {"kind": "initial_resolve", "text": "person"},
                     "use_dense": True,
                     "use_bm25": True,
                 },
@@ -396,8 +406,9 @@ def test_absent_dres_service_skips_logging_and_returns_search_results() -> None:
                 "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
                 json={
-                    "inputs": [{"text": "person"}],
+                    "base_intent": None,
                     "expected_revision": 0,
+                    "operation": {"kind": "initial_resolve", "text": "person"},
                     "use_dense": True,
                     "use_bm25": True,
                 },

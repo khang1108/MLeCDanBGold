@@ -8,44 +8,75 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
-from hcmai.api.contracts.kis import KISInput, KISRevisionSearchRequest, KISRevisionSearchResponse
+from hcmai.api.contracts.kis import (
+    EventPatch,
+    KISOperationSummary,
+    KISSearchRequest,
+    KISSearchResponse,
+)
 from hcmai.api.contracts.search import SearchLatency, SearchResult, SearchResultMetadata
 from hcmai.api.routers.kis import create_kis_router
 from hcmai.inference.errors import InferenceResponseError, InferenceUnavailableError
-from hcmai.kis.models import KISEntity, KISEntityBinding, KISEvent, KISIntent
+from hcmai.kis.models import (
+    KISEntity,
+    KISEntityBinding,
+    KISEvent,
+    KISImageRef,
+    KISIntent,
+)
 from hcmai.kis.resolver import KISResolutionError
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.retrieval.translation.service import EventTranslationError
 
 
-def _make_intent() -> KISIntent:
+def _make_intent(query_text: str | None = "A woman cooks in kitchen.") -> KISIntent:
+    if query_text:
+        return KISIntent(
+            revision=1,
+            language="en",
+            query_text=query_text,
+            entities=[KISEntity(id="X1", kind="person", description="woman")],
+            events=[
+                KISEvent(
+                    id="E1",
+                    text=query_text,
+                    bindings=[KISEntityBinding(entity_id="X1", role="actor")],
+                )
+            ],
+            temporal_edges=[],
+        )
     return KISIntent(
         revision=1,
-        language="en",
-        query_text="A woman cooks in kitchen.",
-        entities=[KISEntity(id="X1", kind="person", description="woman")],
+        language=None,
+        query_text=None,
+        entities=[],
         events=[
             KISEvent(
                 id="E1",
-                text="A woman cooks in kitchen",
-                bindings=[KISEntityBinding(entity_id="X1", role="actor")],
+                text=None,
+                images=[KISImageRef(asset_id="sha256:abc", content_type="image/png")],
+                bindings=[],
             )
         ],
         temporal_edges=[],
     )
 
 
-def _make_response() -> KISRevisionSearchResponse:
-    return KISRevisionSearchResponse(
-        intent=_make_intent(),
+def _make_response(query_text: str | None = "A woman cooks in kitchen.") -> KISSearchResponse:
+    intent = _make_intent(query_text)
+    return KISSearchResponse(
+        intent=intent,
+        operation_summary=KISOperationSummary(
+            kind="initial_resolve", affected_event_ids=["E1"]
+        ),
         exploration_seed={
             "semantic_revision": 1,
             "events": [{
                 "event_id": "E1",
-                "canonical_text": "A woman cooks in kitchen",
-                "dense_text": "A woman cooks in kitchen",
-                "bm25_text": "A woman cooks in kitchen",
+                "canonical_text": query_text,
+                "dense_text": query_text,
+                "bm25_text": query_text,
             }],
             "use_dense": True,
             "use_bm25": True,
@@ -69,10 +100,10 @@ def _make_response() -> KISRevisionSearchResponse:
 
 
 @pytest.mark.anyio
-async def test_search_kis_revision_success() -> None:
+async def test_search_kis_success() -> None:
     service = Mock()
     expected = _make_response()
-    service.search_kis_revision.return_value = expected
+    service.search_kis.return_value = expected
 
     container = {"service": service}
     app = FastAPI()
@@ -82,8 +113,12 @@ async def test_search_kis_revision_success() -> None:
         resp = await client.post(
             "/api/v1/kis/search",
             json={
-                "inputs": [{"text": "A woman cooks in kitchen."}],
+                "base_intent": None,
                 "expected_revision": 0,
+                "operation": {
+                    "kind": "initial_resolve",
+                    "text": "A woman cooks in kitchen.",
+                },
                 "use_dense": True,
                 "use_bm25": True,
                 "top_k": 10,
@@ -93,17 +128,18 @@ async def test_search_kis_revision_success() -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["intent"]["query_text"] == "A woman cooks in kitchen."
-    assert data["exploration_seed"]["events"][0]["dense_text"] == "A woman cooks in kitchen"
+    assert data["operation_summary"]["kind"] == "initial_resolve"
+    assert data["exploration_seed"]["events"][0]["dense_text"] == "A woman cooks in kitchen."
     assert "dense_events" not in data
     assert "bm25_events" not in data
     assert len(data["results"]) == 1
 
 
 @pytest.mark.anyio
-async def test_search_kis_revision_dres_logging_preserves_canonical_query_text() -> None:
+async def test_search_kis_dres_logging_preserves_canonical_query_text() -> None:
     service = Mock()
     expected = _make_response()
-    service.search_kis_revision.return_value = expected
+    service.search_kis.return_value = expected
 
     vbs_mock = AsyncMock()
     vbs_mock.session_status = Mock(return_value={"connected": True})
@@ -119,8 +155,12 @@ async def test_search_kis_revision_dres_logging_preserves_canonical_query_text()
             "/api/v1/kis/search",
             headers={"X-VBS-User-ID": "user-test"},
             json={
-                "inputs": [{"text": "A woman cooks in kitchen."}],
+                "base_intent": None,
                 "expected_revision": 0,
+                "operation": {
+                    "kind": "initial_resolve",
+                    "text": "A woman cooks in kitchen.",
+                },
                 "use_dense": True,
                 "use_bm25": True,
                 "top_k": 10,
@@ -135,46 +175,77 @@ async def test_search_kis_revision_dres_logging_preserves_canonical_query_text()
 
 
 @pytest.mark.anyio
-async def test_search_kis_revision_error_mapping() -> None:
+async def test_search_kis_dres_logging_falls_back_to_image_only_label() -> None:
+    service = Mock()
+    expected = _make_response(query_text=None)
+    service.search_kis.return_value = expected
+
+    vbs_mock = AsyncMock()
+    vbs_mock.session_status = Mock(return_value={"connected": True})
+    vbs_mock.resolve_evaluation.return_value = "eval_42"
+    vbs_mock.media_item_name = Mock(return_value="video_item_1")
+
+    container = {"service": service, "vbs_service": vbs_mock}
+    app = FastAPI()
+    app.include_router(create_kis_router(container))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/kis/search",
+            headers={"X-VBS-User-ID": "user-test"},
+            json={
+                "base_intent": None,
+                "expected_revision": 0,
+                "operation": {
+                    "kind": "initial_resolve",
+                    "image_refs": [{"asset_id": "sha256:abc", "content_type": "image/png"}],
+                },
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.headers.get("X-DRES-Log-Status") == "sent"
+    vbs_mock.log_results.assert_called_once()
+    payload = vbs_mock.log_results.call_args[0][2]
+    assert payload.events[0].value == "[image-only KIS]"
+    assert expected.intent.query_text is None
+
+
+@pytest.mark.anyio
+async def test_search_kis_error_mapping() -> None:
     service = Mock()
     container = {"service": service}
     app = FastAPI()
     app.include_router(create_kis_router(container))
 
+    valid_payload = {
+        "base_intent": None,
+        "expected_revision": 0,
+        "operation": {"kind": "initial_resolve", "text": "Clue"},
+    }
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # 409 Conflict
-        service.search_kis_revision.side_effect = RevisionConflictError("revision conflict")
-        resp = await client.post(
-            "/api/v1/kis/search",
-            json={"inputs": [{"text": "Clue"}], "expected_revision": 0},
-        )
+        service.search_kis.side_effect = RevisionConflictError("revision conflict")
+        resp = await client.post("/api/v1/kis/search", json=valid_payload)
         assert resp.status_code == 409
 
         # 422 Unprocessable Entity for an explicitly classified user-input error
-        service.search_kis_revision.side_effect = InvalidQueryInputError("invalid query text")
-        resp = await client.post(
-            "/api/v1/kis/search",
-            json={"inputs": [{"text": "Clue"}], "expected_revision": 0},
-        )
+        service.search_kis.side_effect = InvalidQueryInputError("invalid query text")
+        resp = await client.post("/api/v1/kis/search", json=valid_payload)
         assert resp.status_code == 422
 
         # A generic service ValueError is an inference failure, not request validation.
-        service.search_kis_revision.side_effect = ValueError("unexpected service value error")
-        resp = await client.post(
-            "/api/v1/kis/search",
-            json={"inputs": [{"text": "Clue"}], "expected_revision": 0},
-        )
+        service.search_kis.side_effect = ValueError("unexpected service value error")
+        resp = await client.post("/api/v1/kis/search", json=valid_payload)
         assert resp.status_code == 502
 
         # A provider/schema ValidationError raised during service execution is
         # also an inference failure; request validation happens before the route.
         with pytest.raises(ValidationError) as validation_error:
-            KISInput.model_validate({})
-        service.search_kis_revision.side_effect = validation_error.value
-        resp = await client.post(
-            "/api/v1/kis/search",
-            json={"inputs": [{"text": "Clue"}], "expected_revision": 0},
-        )
+            EventPatch.model_validate({})
+        service.search_kis.side_effect = validation_error.value
+        resp = await client.post("/api/v1/kis/search", json=valid_payload)
         assert resp.status_code == 502
 
         # Semantic-response contract failures are bad gateway responses.
@@ -183,11 +254,8 @@ async def test_search_kis_revision_error_mapping() -> None:
             EventTranslationError("invalid event translation"),
             InferenceResponseError("malformed provider response"),
         ):
-            service.search_kis_revision.side_effect = error
-            resp = await client.post(
-                "/api/v1/kis/search",
-                json={"inputs": [{"text": "Clue"}], "expected_revision": 0},
-            )
+            service.search_kis.side_effect = error
+            resp = await client.post("/api/v1/kis/search", json=valid_payload)
             assert resp.status_code == 502
 
         # 503 Unavailable for provider and composed-service outages.
@@ -195,24 +263,18 @@ async def test_search_kis_revision_error_mapping() -> None:
             InferenceUnavailableError("provider offline"),
             SearchServiceUnavailableError("resolver down"),
         ):
-            service.search_kis_revision.side_effect = error
-            resp = await client.post(
-                "/api/v1/kis/search",
-                json={"inputs": [{"text": "Clue"}], "expected_revision": 0},
-            )
+            service.search_kis.side_effect = error
+            resp = await client.post("/api/v1/kis/search", json=valid_payload)
             assert resp.status_code == 503
 
         # 502 Bad Gateway (remote provider network error)
-        service.search_kis_revision.side_effect = RuntimeError("network connection failed")
-        resp = await client.post(
-            "/api/v1/kis/search",
-            json={"inputs": [{"text": "Clue"}], "expected_revision": 0},
-        )
+        service.search_kis.side_effect = RuntimeError("network connection failed")
+        resp = await client.post("/api/v1/kis/search", json=valid_payload)
         assert resp.status_code == 502
 
 
 @pytest.mark.anyio
-async def test_search_kis_revision_request_validation_is_422() -> None:
+async def test_search_kis_request_validation_is_422() -> None:
     """FastAPI request-shape validation remains a client error boundary."""
     service = Mock()
     app = FastAPI()
@@ -225,7 +287,7 @@ async def test_search_kis_revision_request_validation_is_422() -> None:
         )
 
     assert resp.status_code == 422
-    service.search_kis_revision.assert_not_called()
+    service.search_kis.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

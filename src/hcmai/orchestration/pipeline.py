@@ -17,27 +17,42 @@ from hcmai.api.contracts import (
 )
 
 from hcmai.api.contracts.kis import (
+    EventPatch,
     KISExplorationEventSeed,
     KISExplorationSeed,
-    KISRevisionSearchRequest,
-    KISRevisionSearchResponse,
+    KISOperationSummary,
+    KISSearchRequest,
+    KISSearchResponse,
 )
 from hcmai.common.config import ApiConfig, SearchConfig
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
-from hcmai.orchestration.utils.errors import RevisionConflictError
+from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.utils.health import build_health_report
 from hcmai.orchestration.utils.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.image_search import ImageSearchService
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
-from hcmai.kis.models import KISIntent
+from hcmai.kis.models import (
+    DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
+    KISEvent,
+    KISImageRef,
+    KISIntent,
+    KISTemporalEdge,
+)
+from hcmai.kis.parser import EventPatchInstruction
+from hcmai.kis.scoped_resolver import (
+    apply_scoped_resolutions,
+    canonical_query_text,
+)
 from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 
 if TYPE_CHECKING:
     from hcmai.kis.assets import KISImageAssetStore
     from hcmai.kis.resolver import KISIntentResolver
+    from hcmai.kis.rewriter import KISGlobalRewriter
+    from hcmai.kis.scoped_resolver import KISScopedResolver
     from hcmai.retrieval.translation.service import EventTranslator
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
     from hcmai.retrieval.evidence.literal import LiteralTextIndex
@@ -67,6 +82,8 @@ class SearchService:
         literal_text: LiteralTextIndex | None = None,
         visual_retriever: VectorRetriever | None = None,
         intent_resolver: KISIntentResolver | None = None,
+        scoped_resolver: KISScopedResolver | None = None,
+        global_rewriter: KISGlobalRewriter | None = None,
         kis_image_assets: KISImageAssetStore | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
@@ -80,6 +97,8 @@ class SearchService:
         self.temporal_evidence = temporal_evidence
         self.api_config = api_config or ApiConfig()
         self.intent_resolver = intent_resolver
+        self.scoped_resolver = scoped_resolver
+        self.global_rewriter = global_rewriter
         self.kis_image_assets = kis_image_assets
 
         self.image_search = (
@@ -170,40 +189,280 @@ class SearchService:
         if self.llm is not None:
             self.llm.close()
 
-    def search_kis_revision(
-        self, request: KISRevisionSearchRequest
-    ) -> KISRevisionSearchResponse:
-        """Execute a revisioned KIS search using semantic intent resolution."""
-        if request.has_revision_conflict:
-            raise RevisionConflictError(
-                f"Expected revision {request.expected_revision} does not match base {request.previous_revision}"
+    def _resolve_operation(
+        self, request: KISSearchRequest
+    ) -> tuple[KISIntent, KISOperationSummary, float]:
+        """Resolve the requested semantic operation into the canonical KISIntent."""
+        # 1. Base intent and revision boundary validation before inference
+        if request.base_intent is None:
+            if request.expected_revision != 0:
+                raise RevisionConflictError(
+                    f"Expected revision {request.expected_revision} must be 0 when base_intent is None"
+                )
+            if request.operation.kind != "initial_resolve":
+                raise RevisionConflictError(
+                    f"Operation '{request.operation.kind}' requires an existing base_intent"
+                )
+        else:
+            if request.expected_revision != request.base_intent.revision:
+                raise RevisionConflictError(
+                    f"Expected revision {request.expected_revision} does not match base {request.base_intent.revision}"
+                )
+            if request.operation.kind == "initial_resolve":
+                raise RevisionConflictError(
+                    "initial_resolve cannot be performed with an existing base_intent"
+                )
+
+        # 2. initial_resolve
+        if request.operation.kind == "initial_resolve":
+            op = request.operation
+            # Natural route
+            if not op.patches:
+                if op.text is not None and not op.image_refs:
+                    # Natural text only -> full initial resolver
+                    if self.intent_resolver is None:
+                        raise SearchServiceUnavailableError("KIS intent resolver is unavailable")
+                    t0 = perf_counter()
+                    intent = self.intent_resolver.resolve_initial(op.text, revision=1)
+                    intent_ms = (perf_counter() - t0) * 1_000.0
+                    summary = KISOperationSummary(
+                        kind="initial_resolve",
+                        affected_event_ids=[event.id for event in intent.events],
+                    )
+                    return intent, summary, intent_ms
+
+                if op.text is None and op.image_refs:
+                    # Image only -> deterministic E1, no LLM call
+                    event = KISEvent(
+                        id="E1",
+                        text=None,
+                        images=list(op.image_refs),
+                        bindings=[],
+                    )
+                    intent = KISIntent(
+                        revision=1,
+                        language=None,
+                        query_text=None,
+                        entities=[],
+                        events=[event],
+                        temporal_edges=[],
+                    )
+                    summary = KISOperationSummary(kind="initial_resolve", affected_event_ids=["E1"])
+                    return intent, summary, 0.0
+
+                if op.text is not None and op.image_refs:
+                    # Text + image -> scoped resolver for E1, attach image deterministically
+                    if self.scoped_resolver is None:
+                        raise SearchServiceUnavailableError("KIS scoped resolver is unavailable")
+                    t0 = perf_counter()
+                    batch = self.scoped_resolver.resolve(
+                        base=None,
+                        instructions=[EventPatchInstruction(event_id="E1", instruction=op.text)],
+                    )
+                    intent_ms = (perf_counter() - t0) * 1_000.0
+                    base_resolved = apply_scoped_resolutions(base=None, resolved=batch, revision=1)
+                    e1 = base_resolved.events[0].model_copy(update={"images": list(op.image_refs)})
+                    intent = base_resolved.model_copy(update={"events": [e1]})
+                    summary = KISOperationSummary(kind="initial_resolve", affected_event_ids=["E1"])
+                    return intent, summary, intent_ms
+
+            # Explicit patches route E1..Ek
+            expected_patch_ids = [f"E{i + 1}" for i in range(len(op.patches))]
+            actual_patch_ids = [p.event_id for p in op.patches]
+            if actual_patch_ids != expected_patch_ids:
+                raise InvalidQueryInputError(
+                    f"Explicit initial patches must be contiguous starting at E1, got {actual_patch_ids}"
+                )
+            for p in op.patches:
+                if p.remove_image_ids:
+                    raise InvalidQueryInputError("Cannot remove images during initial resolve")
+                if not p.instruction and not p.add_image_ids:
+                    raise InvalidQueryInputError(f"Patch {p.event_id} requires text instruction or image")
+
+            # Resolve image assets
+            patch_images: dict[str, list[KISImageRef]] = {}
+            for p in op.patches:
+                refs: list[KISImageRef] = []
+                for aid in p.add_image_ids:
+                    if self.kis_image_assets is None:
+                        raise SearchServiceUnavailableError("KIS image asset store is unavailable")
+                    try:
+                        refs.append(self.kis_image_assets.ref(aid))
+                    except (KeyError, ValueError) as exc:
+                        raise InvalidQueryInputError(f"Unknown image asset: {aid}") from exc
+                patch_images[p.event_id] = refs
+
+            text_patches = [p for p in op.patches if p.instruction]
+            if text_patches:
+                if self.scoped_resolver is None:
+                    raise SearchServiceUnavailableError("KIS scoped resolver is unavailable")
+                t0 = perf_counter()
+                batch = self.scoped_resolver.resolve(
+                    base=None,
+                    instructions=[EventPatchInstruction(event_id=p.event_id, instruction=p.instruction) for p in text_patches],
+                )
+                intent_ms = (perf_counter() - t0) * 1_000.0
+                resolved_by_id = {e.event_id: e for e in batch.events}
+                events = []
+                for p in op.patches:
+                    txt = resolved_by_id[p.event_id].text if p.event_id in resolved_by_id else None
+                    events.append(KISEvent(id=p.event_id, text=txt, images=patch_images[p.event_id], bindings=[]))
+                q_text = canonical_query_text(events)
+                lang = batch.language if q_text is not None else None
+                edges = [KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}") for i in range(1, len(events))]
+                intent = KISIntent(
+                    revision=1,
+                    language=lang,
+                    query_text=q_text,
+                    entities=[],
+                    events=events,
+                    temporal_edges=edges,
+                )
+            else:
+                intent_ms = 0.0
+                events = [
+                    KISEvent(id=p.event_id, text=None, images=patch_images[p.event_id], bindings=[])
+                    for p in op.patches
+                ]
+                edges = [KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}") for i in range(1, len(events))]
+                intent = KISIntent(
+                    revision=1,
+                    language=None,
+                    query_text=None,
+                    entities=[],
+                    events=events,
+                    temporal_edges=edges,
+                )
+            summary = KISOperationSummary(kind="initial_resolve", affected_event_ids=actual_patch_ids)
+            return intent, summary, intent_ms
+
+        # 3. patch_events
+        if request.operation.kind == "patch_events":
+            op = request.operation
+            base = request.base_intent
+            assert base is not None
+
+            patch_ids = [p.event_id for p in op.patches]
+            if len(patch_ids) != len(set(patch_ids)):
+                raise InvalidQueryInputError("Duplicate patch event IDs")
+
+            base_count = len(base.events)
+            patch_numbers = [int(pid[1:]) for pid in patch_ids]
+            if any(num < 1 for num in patch_numbers):
+                raise InvalidQueryInputError("Event IDs must be >= E1")
+            new_numbers = sorted(num for num in patch_numbers if num > base_count)
+            if new_numbers and new_numbers != list(range(base_count + 1, new_numbers[-1] + 1)):
+                raise InvalidQueryInputError("New event IDs must extend the timeline contiguously without gaps")
+
+            existing_images_by_id = {e.id: {img.asset_id for img in e.images} for e in base.events}
+            for p in op.patches:
+                for aid in p.remove_image_ids:
+                    if p.event_id not in existing_images_by_id or aid not in existing_images_by_id[p.event_id]:
+                        raise InvalidQueryInputError(f"Cannot remove asset {aid} from event {p.event_id}: not present")
+                for aid in p.add_image_ids:
+                    if self.kis_image_assets is None:
+                        raise SearchServiceUnavailableError("KIS image asset store is unavailable")
+                    try:
+                        self.kis_image_assets.ref(aid)
+                    except (KeyError, ValueError) as exc:
+                        raise InvalidQueryInputError(f"Unknown image asset: {aid}") from exc
+
+            text_patches = [p for p in op.patches if p.instruction]
+            if text_patches:
+                if self.scoped_resolver is None:
+                    raise SearchServiceUnavailableError("KIS scoped resolver is unavailable")
+                t0 = perf_counter()
+                batch = self.scoped_resolver.resolve(
+                    base=base,
+                    instructions=[EventPatchInstruction(event_id=p.event_id, instruction=p.instruction) for p in text_patches],
+                )
+                intent_ms = (perf_counter() - t0) * 1_000.0
+                intermediate_intent = apply_scoped_resolutions(base, batch, revision=base.revision + 1)
+            else:
+                intent_ms = 0.0
+                events = list(base.events)
+                for num in new_numbers:
+                    events.append(KISEvent(id=f"E{num}", text=None, images=[], bindings=[]))
+                edges = [KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}") for i in range(1, len(events))]
+                intermediate_intent = base.model_copy(
+                    update={"revision": base.revision + 1, "events": events, "temporal_edges": edges}
+                )
+
+            # Apply add/remove images deterministically
+            patch_by_id = {p.event_id: p for p in op.patches}
+            final_events = []
+            for event in intermediate_intent.events:
+                patch = patch_by_id.get(event.id)
+                if patch is None:
+                    final_events.append(event)
+                    continue
+                imgs = [img for img in event.images if img.asset_id not in patch.remove_image_ids]
+                for aid in patch.add_image_ids:
+                    img_ref = self.kis_image_assets.ref(aid)
+                    if not any(x.asset_id == aid for x in imgs):
+                        imgs.append(img_ref)
+                if event.text is None and not imgs:
+                    raise InvalidQueryInputError(f"Event {event.id} requires text or image evidence")
+                final_events.append(event.model_copy(update={"images": imgs}))
+
+            q_text = canonical_query_text(final_events)
+            lang = intermediate_intent.language if q_text is not None else None
+            intent = intermediate_intent.model_copy(
+                update={"events": final_events, "query_text": q_text, "language": lang}
             )
+            summary = KISOperationSummary(kind="patch_events", affected_event_ids=patch_ids)
+            return intent, summary, intent_ms
+
+        # 4. global_rewrite
+        if request.operation.kind == "global_rewrite":
+            op = request.operation
+            base = request.base_intent
+            assert base is not None
+            if self.global_rewriter is None:
+                raise SearchServiceUnavailableError("KIS global rewriter is unavailable")
+            t0 = perf_counter()
+            intent = self.global_rewriter.rewrite(base=base, instruction=op.instruction)
+            intent_ms = (perf_counter() - t0) * 1_000.0
+            summary = KISOperationSummary(
+                kind="global_rewrite",
+                affected_event_ids=[e.id for e in intent.events],
+            )
+            return intent, summary, intent_ms
+
+        # 5. search_only
+        if request.operation.kind == "search_only":
+            base = request.base_intent
+            assert base is not None
+            summary = KISOperationSummary(kind="search_only", affected_event_ids=[])
+            return base, summary, 0.0
+
+        raise InvalidQueryInputError(f"Unsupported operation kind: {request.operation.kind}")
+
+    def search_kis(self, request: KISSearchRequest) -> KISSearchResponse:
+        """Execute a stateless semantic KIS search."""
+        intent, summary, intent_ms = self._resolve_operation(request)
 
         self._ensure_search_ready()
 
-        if self.intent_resolver is None:
-            raise SearchServiceUnavailableError("KIS intent resolver is unavailable")
-
-        clue_texts = [item.text for item in request.inputs]
-        intent_started = perf_counter()
-        intent = self.intent_resolver.resolve(
-            clue_texts, revision=request.expected_revision + 1
-        )
-        intent_ms = (perf_counter() - intent_started) * 1_000
-
         canonical_events = tuple(event.text for event in intent.events)
         translation_started = perf_counter()
-        if request.use_dense and intent.language != "en":
+        if request.use_dense and intent.language is not None and intent.language != "en":
             if self.event_translator is None:
                 raise SearchServiceUnavailableError(
                     "Event translation capability is unavailable"
                 )
-            dense = self.event_translator.translate(
-                canonical_events, language=intent.language,
-            )
+            text_bearing = tuple(t for t in canonical_events if t is not None)
+            if text_bearing:
+                translated_texts = self.event_translator.translate(
+                    text_bearing, language=intent.language,
+                )
+                t_iter = iter(translated_texts)
+                dense = tuple(next(t_iter) if t is not None else None for t in canonical_events)
+            else:
+                dense = tuple(None for _ in canonical_events)
         else:
             dense = canonical_events if request.use_dense else None
-        translation_ms = (perf_counter() - translation_started) * 1_000
+        translation_ms = (perf_counter() - translation_started) * 1_000.0
 
         plan = KISRetrievalPlan(
             events=tuple(
@@ -229,8 +488,9 @@ class SearchService:
             translation_ms=translation_ms,
         )
 
-        return KISRevisionSearchResponse(
+        return KISSearchResponse(
             intent=intent,
+            operation_summary=summary,
             exploration_seed=KISExplorationSeed(
                 semantic_revision=intent.revision,
                 events=[

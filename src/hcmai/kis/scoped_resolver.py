@@ -186,8 +186,9 @@ class KISScopedResolver:
             raise KISResolutionError(
                 f"Scoped model output IDs {returned_ids} do not exactly match targets {target_ids}"
             )
-        # Applying here validates bindings and all canonical graph invariants.
-        apply_scoped_resolutions(base, resolved, revision=(base.revision + 1 if base else 1))
+        # Applying here validates bindings and all canonical graph invariants when base exists or instructions form a complete initial chain.
+        if base is not None or [item.event_id for item in instructions] == [f"E{i + 1}" for i in range(len(instructions))]:
+            apply_scoped_resolutions(base, resolved, revision=1 if base is None else base.revision + 1)
         return resolved
 
 
