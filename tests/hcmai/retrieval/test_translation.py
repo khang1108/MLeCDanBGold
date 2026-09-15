@@ -46,6 +46,21 @@ def test_vietnamese_translation_preserves_event_count_and_order() -> None:
     assert result == ("A woman enters", "She closes the door")
 
 
+def test_translator_accepts_language_as_a_positional_argument() -> None:
+    """The public translation contract accepts the brief's positional form."""
+    llm = Mock(model="test-model")
+    llm.generate_structured.return_value = Mock(events=["A woman enters"])
+
+    result = _translator(llm).translate(("Một phụ nữ đi vào",), "vi")
+
+    assert result == ("A woman enters",)
+
+
+def test_translator_has_no_candidate_generation_api() -> None:
+    """Literal translation cannot reintroduce retired query expansion."""
+    assert getattr(EventTranslator, "generate_query_candidates", None) is None
+
+
 def test_translation_preserves_required_uppercase_tokens() -> None:
     """Identifiers in the source event are not lost in translation."""
     llm = Mock(model="test-model")
@@ -120,6 +135,31 @@ def test_cache_reuses_translation_for_the_same_llm_model() -> None:
 
     assert first == second == ("A woman enters",)
     assert llm.generate_structured.call_count == 1
+
+
+def test_cache_identity_isolates_prompt_versions_and_event_case() -> None:
+    """Prompt revisions and case-distinct normalized events cannot share a cache entry."""
+    llm = Mock(model="provider/model-a")
+    llm.generate_structured.return_value = Mock(events=["A woman enters"])
+    from hcmai.retrieval.translation.cache import EventTranslationCache
+
+    cache = EventTranslationCache(max_entries=8, ttl_seconds=3600)
+    first = EventTranslator(
+        llm,
+        EventTranslationConfig(prompt_version="event-translation-v1"),
+        cache=cache,
+    )
+    second = EventTranslator(
+        llm,
+        EventTranslationConfig(prompt_version="event-translation-v2"),
+        cache=cache,
+    )
+
+    first.translate(("một phụ nữ đi vào",), "vi")
+    second.translate(("một phụ nữ đi vào",), "vi")
+    second.translate(("Một phụ nữ đi vào",), "vi")
+
+    assert llm.generate_structured.call_count == 3
 
 
 def test_invalid_translation_raises_event_translation_error() -> None:

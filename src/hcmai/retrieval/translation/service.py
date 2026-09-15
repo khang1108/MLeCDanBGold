@@ -41,7 +41,7 @@ class EventTranslator:
             ttl_seconds=config.cache_ttl_seconds,
         )
 
-    def translate(self, events: Sequence[str], *, language: str) -> tuple[str, ...]:
+    def translate(self, events: Sequence[str], language: str) -> tuple[str, ...]:
         """Translate events to literal English without changing their sequence.
 
         English events bypass inference. Provider failures deliberately retain
