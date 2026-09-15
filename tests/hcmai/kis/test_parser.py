@@ -46,29 +46,48 @@ def test_parser_rejects_out_of_order_headers() -> None:
         parse_kis_command("E2: second\nE1: first", base_event_count=2)
 
 
-def test_parser_rejects_malformed_event_prefix() -> None:
-    """Malformed event-like prefixes cannot silently become natural language."""
-    with pytest.raises(KISCommandError, match="Malformed"):
-        parse_kis_command("E: missing number", base_event_count=0)
-
-
 @pytest.mark.parametrize(
-    "command,base_event_count",
+    "prefix",
     [
-        ("E 1: woman enters", 0),
-        ("Efoo: woman enters", 0),
-        ("E-1: woman enters", 0),
-        ("E+1: woman enters", 0),
-        ("E1: woman enters\nE 2: she sits", 1),
-        ("E1: woman enters\nE+2: she sits", 1),
+        "E:",
+        "E0:",
+        "E01:",
+        "E 1:",
+        "E-1:",
+        "E+1:",
+        "E1junk:",
     ],
 )
-def test_parser_rejects_whitespace_separated_event_prefixes(
-    command: str, base_event_count: int
-) -> None:
-    """Malformed E-like headers cannot become natural text or continuation."""
+def test_parser_rejects_numeric_looking_malformed_event_prefixes(prefix: str) -> None:
+    """Numeric-looking malformed headers cannot become initial natural text."""
     with pytest.raises(KISCommandError, match="Malformed"):
-        parse_kis_command(command, base_event_count=base_event_count)
+        parse_kis_command(f"{prefix} woman enters", base_event_count=0)
+
+
+@pytest.mark.parametrize("prefix", ["E:", "E0:", "E 2:", "E-2:", "E+2:", "E2junk:"])
+def test_parser_rejects_numeric_looking_malformed_continuation(prefix: str) -> None:
+    """Numeric-looking malformed headers cannot become event continuation text."""
+    with pytest.raises(KISCommandError, match="Malformed"):
+        parse_kis_command(f"E1: woman enters\n{prefix} she sits", base_event_count=1)
+
+
+def test_parser_accepts_natural_text_starting_with_example() -> None:
+    """Alphabetic words beginning with E remain valid initial natural language."""
+    command = parse_kis_command("Example query: a woman enters", base_event_count=0)
+
+    assert command.kind == "initial_natural"
+    assert command.text == "Example query: a woman enters"
+
+
+def test_parser_retains_example_as_event_continuation() -> None:
+    """Alphabetic E-words after a header remain content for that event."""
+    command = parse_kis_command(
+        "E1: woman enters\nExample: through the rear door", base_event_count=1
+    )
+
+    assert command.patches[0].instruction == (
+        "woman enters\nExample: through the rear door"
+    )
 
 
 def test_parser_rejects_unscoped_progressive_text() -> None:
