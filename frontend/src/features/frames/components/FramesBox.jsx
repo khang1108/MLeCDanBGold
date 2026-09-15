@@ -76,7 +76,7 @@ const FramesBox = ({
         </div>
       )}
       <div className="frames-scroll-region">
-        {!error &&
+        {(results.length > 0 || !error) &&
           (results.length ? (
             <div className="frames-grid">
               {results.map((frame, index) => (

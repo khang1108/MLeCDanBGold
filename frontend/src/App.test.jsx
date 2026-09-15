@@ -127,6 +127,14 @@ test("the frame inspector has no direct legacy submission action", () => {
   expect(screen.queryByRole("button", { name: /submit current frame/i })).toBeNull();
 });
 
+test("inspector receives committed query context when frame inspector is opened", () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Set committed query" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open inspector" }));
+  expect(screen.getByText("committed search clue")).toBeTruthy();
+});
+
 test('opens the editable direct-submission popup after participant connection and sends once', async () => {
   render(<App />);
   const userId = screen.getByLabelText('User ID');
