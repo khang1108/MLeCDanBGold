@@ -1724,7 +1724,7 @@ git commit -m "feat: score KIS image events in temporal fusion"
 - Produces: `parseComposerDraft(draft, baseIntent) -> preview` for deterministic UI feedback.
 - Produces: session state based on `currentIntent`, staged image refs, draft, pending operation, and replay/live mode; no `committedInputs`.
 
-- [ ] **Step 1: Write parser tests mirroring backend grammar**
+- [X] **Step 1: Write parser tests mirroring backend grammar**
 
 ```javascript
 const BASE_INTENT = {
@@ -1759,7 +1759,7 @@ test('reports an illegal event gap before submit', () => {
 
 Also cover `/llm-rewrite`, initial natural text, initial explicit `E1..Ek` mapped to `initial_resolve` with patches, duplicate IDs, and unscoped progressive text.
 
-- [ ] **Step 2: Write session-state tests for operation/revision semantics**
+- [X] **Step 2: Write session-state tests for operation/revision semantics**
 
 State target:
 
@@ -1778,7 +1778,7 @@ State target:
 
 Test semantic success increments according to response intent, `search_only` keeps revision, failure preserves draft/staged images/current intent, and replay mode cannot create a live search payload.
 
-- [ ] **Step 3: Run parser/session tests and verify old clue-list model fails**
+- [X] **Step 3: Run parser/session tests and verify old clue-list model fails**
 
 ```bash
 cd frontend
@@ -1787,11 +1787,11 @@ CI=true npm test -- --watchAll=false src/features/kis/parser.test.js src/feature
 
 Expected: FAIL because parser is absent and session still stores `committedInputs`.
 
-- [ ] **Step 4: Implement frontend parser as a preview only**
+- [X] **Step 4: Implement frontend parser as a preview only**
 
 The parser mirrors structural rules for immediate feedback but never becomes authoritative. Return preview kinds `initial_resolve`, `patch_events`, `global_rewrite`, `invalid` and affected IDs. Backend errors still surface on submit.
 
-- [ ] **Step 5: Rewrite session payload creation around `base_intent + operation`**
+- [X] **Step 5: Rewrite session payload creation around `base_intent + operation`**
 
 Expose:
 
@@ -1804,7 +1804,7 @@ export const commitSearchFailure = (state, error) => nextState;
 
 No payload contains `inputs` or derives expected revision from clue count.
 
-- [ ] **Step 6: Update `searchKis()` API client**
+- [X] **Step 6: Update `searchKis()` API client**
 
 Signature:
 
@@ -1835,7 +1835,7 @@ export const searchKis = async ({
 
 Validate response requires `intent`, `operation_summary`, `results`, and latency.
 
-- [ ] **Step 7: Run frontend parser/session/API tests**
+- [X] **Step 7: Run frontend parser/session/API tests**
 
 ```bash
 cd frontend
@@ -1847,7 +1847,7 @@ CI=true npm test -- --watchAll=false \
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit frontend operation/session contracts**
+- [X] **Step 8: Commit frontend operation/session contracts**
 
 ```bash
 git add frontend/src/features/kis frontend/src/api/kis.js frontend/src/api/kis.test.js

@@ -8,8 +8,9 @@ const hasSearchLatency = (latency) => (
 );
 
 export const searchKis = async ({
-  inputs,
+  baseIntent = null,
   expectedRevision = 0,
+  operation,
   useDense = true,
   useBm25 = true,
   topK = 20,
@@ -19,23 +20,16 @@ export const searchKis = async ({
   if (!useDense && !useBm25) {
     throw new Error('Enable at least one retrieval source');
   }
-  if (!Array.isArray(inputs) || inputs.length === 0) {
-    throw new Error('Inputs must be a non-empty array');
+  if (!operation || typeof operation !== 'object') {
+    throw new Error('Operation is required');
   }
-
-  const normalizedInputs = inputs.map((item) => {
-    const text = typeof item === 'string' ? item.trim() : item?.text?.trim();
-    if (!text) {
-      throw new Error('Input text must not be blank');
-    }
-    return { text };
-  });
 
   const payload = await requestJson('/api/v1/kis/search', {
     method: 'POST',
     body: {
-      inputs: normalizedInputs,
+      base_intent: baseIntent ?? null,
       expected_revision: expectedRevision,
+      operation,
       use_dense: useDense,
       use_bm25: useBm25,
       top_k: topK,
@@ -46,6 +40,7 @@ export const searchKis = async ({
 
   if (
     !payload?.intent
+    || !payload?.operation_summary
     || !Array.isArray(payload?.results)
     || !hasSearchLatency(payload?.latency)
   ) {

@@ -9,16 +9,19 @@ const mockResponse = (payload, status = 200, headers = {}) => ({
 
 afterEach(() => jest.restoreAllMocks());
 
-test('posts revisioned KIS search request to /api/v1/kis/search', async () => {
+test('posts revisioned KIS search request with base_intent and operation to /api/v1/kis/search', async () => {
   const payload = {
     intent: {
       revision: 1,
-      inputs: ['chef cooks'],
       language: 'en',
       query_text: 'chef cooks',
       entities: [],
       events: [{ id: 'E1', text: 'chef cooks' }],
       temporal_edges: [],
+    },
+    operation_summary: {
+      kind: 'initial_resolve',
+      affected_event_ids: ['E1'],
     },
     results: [{
       frame_id: 'f1',
@@ -40,9 +43,17 @@ test('posts revisioned KIS search request to /api/v1/kis/search', async () => {
   };
   jest.spyOn(global, 'fetch').mockResolvedValue(mockResponse(payload));
 
+  const operation = {
+    kind: 'initial_resolve',
+    text: 'chef cooks',
+    image_refs: [],
+    patches: [],
+  };
+
   const result = await searchKis({
-    inputs: [{ text: '  chef cooks  ' }],
+    baseIntent: null,
     expectedRevision: 0,
+    operation,
     topK: 20,
     useDense: true,
     useBm25: true,
@@ -50,6 +61,7 @@ test('posts revisioned KIS search request to /api/v1/kis/search', async () => {
   });
 
   expect(result.intent.query_text).toBe('chef cooks');
+  expect(result.operation_summary.kind).toBe('initial_resolve');
   expect(result.results[0].frame_id).toBe('f1');
   expect(global.fetch).toHaveBeenCalledWith(
     expect.stringContaining('/api/v1/kis/search'),
@@ -60,8 +72,9 @@ test('posts revisioned KIS search request to /api/v1/kis/search', async () => {
         'X-VBS-User-ID': 'team-alpha',
       }),
       body: JSON.stringify({
-        inputs: [{ text: 'chef cooks' }],
+        base_intent: null,
         expected_revision: 0,
+        operation,
         use_dense: true,
         use_bm25: true,
         top_k: 20,
@@ -70,15 +83,27 @@ test('posts revisioned KIS search request to /api/v1/kis/search', async () => {
   );
 });
 
-test('validates inputs non-empty', async () => {
-  await expect(searchKis({ inputs: [] })).rejects.toThrow('Inputs must be a non-empty array');
-  await expect(searchKis({ inputs: ['   '] })).rejects.toThrow('Input text must not be blank');
+test('validates operation is required', async () => {
+  await expect(searchKis({ operation: null })).rejects.toThrow('Operation is required');
 });
 
 test('validates at least one retrieval source', async () => {
   await expect(searchKis({
-    inputs: ['query'],
+    operation: { kind: 'search_only' },
     useDense: false,
     useBm25: false,
   })).rejects.toThrow('Enable at least one retrieval source');
+});
+
+test('validates response contract', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(mockResponse({
+    intent: { revision: 1 },
+    // missing operation_summary
+    results: [],
+    latency: { total_ms: 5 },
+  }));
+
+  await expect(searchKis({
+    operation: { kind: 'search_only' },
+  })).rejects.toThrow('Search server returned an invalid response contract');
 });
