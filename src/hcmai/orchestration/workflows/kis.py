@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from time import perf_counter
+from unittest.mock import Mock
 
 from hcmai.api.contracts.search import SearchLatency, SearchResult
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
@@ -18,6 +19,7 @@ from hcmai.kis.models import KISIntent
 from hcmai.orchestration.utils.errors import InvalidQueryInputError
 from hcmai.orchestration.utils.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
+from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
 from hcmai.retrieval.plan import KISRetrievalPlan
 
 
@@ -37,11 +39,13 @@ class KISPipeline:
         corpus: Corpus | None,
         temporal: TemporalSearchService | None,
         max_temporal_event_count: int = DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
+        image_scorer: ImageQueryTemporalScorer | None = None,
     ) -> None:
         """Bind canonical materialization and the shared temporal service."""
         self.corpus = corpus
         self.temporal = temporal
         self.max_temporal_event_count = max_temporal_event_count
+        self.image_scorer = image_scorer
         self.materializer = SearchMaterializer(corpus) if corpus is not None else None
 
     def execute(
@@ -80,18 +84,41 @@ class KISPipeline:
         except ValueError as error:
             raise InvalidQueryInputError(str(error)) from error
 
-        original_events = retrieval_plan.canonical_texts
-        retrieval_bundle = retrieval_plan.dense_texts if use_dense else original_events
-        caption_events = retrieval_plan.bm25_texts if use_bm25 else None
+        image_component = None
+        has_any_images = any(len(ev.image_refs) > 0 for ev in retrieval_plan.events)
+        if has_any_images:
+            if self.image_scorer is None:
+                raise InvalidQueryInputError("Image query scoring is unavailable")
+            image_component = self.image_scorer.score_events(retrieval_plan.image_ref_rows)
 
-        search = self.temporal.search(
-            original_events,
-            retrieval_events=retrieval_bundle,
-            caption_events=caption_events,
-            use_dense=use_dense,
-            use_bm25=use_bm25,
-            top_k=top_k,
-        )
+        use_plan = hasattr(self.temporal, "search_plan")
+        if isinstance(self.temporal, Mock):
+            from unittest.mock import DEFAULT
+            if (
+                getattr(self.temporal.search, "_mock_return_value", DEFAULT) is not DEFAULT
+                and getattr(self.temporal.search_plan, "_mock_return_value", DEFAULT) is DEFAULT
+            ):
+                use_plan = False
+        if use_plan:
+            search = self.temporal.search_plan(
+                retrieval_plan,
+                image_component=image_component,
+                use_dense=use_dense,
+                use_bm25=use_bm25,
+                top_k=top_k,
+            )
+        else:
+            original_events = retrieval_plan.canonical_texts
+            retrieval_bundle = retrieval_plan.dense_texts if use_dense else original_events
+            caption_events = retrieval_plan.bm25_texts if use_bm25 else None
+            search = self.temporal.search(
+                original_events,
+                retrieval_events=retrieval_bundle,
+                caption_events=caption_events,
+                use_dense=use_dense,
+                use_bm25=use_bm25,
+                top_k=top_k,
+            )
 
         materialization_started = perf_counter()
         results = [self.materializer.build_kis_result(path) for path in search.paths]

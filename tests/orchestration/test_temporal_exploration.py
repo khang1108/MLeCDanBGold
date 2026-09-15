@@ -33,6 +33,10 @@ class _TemporalSearch:
             0.0,
         )
 
+    def score_plan(self, *args: object, **kwargs: object) -> tuple[tuple[VideoEventScores, ...], float]:
+        """Return score matrix from score_plan."""
+        return self.score_videos(*args, **kwargs)
+
     def snapshot_decoder_config(self) -> None:
         """Use the fake decoder's default configuration."""
         return None

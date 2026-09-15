@@ -377,6 +377,7 @@ class AdaptiveTemporalFusionConfig(BaseModel):
         default_factory=lambda: {
             "visual_dense": 0.35,
             "context_dense": 0.35,
+            "visual_image": 0.35,
             "asr_dense": 0.08,
             "bm25_title": 0.02,
             "bm25_caption": 0.10,

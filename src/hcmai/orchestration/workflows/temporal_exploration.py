@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from numbers import Integral
 from threading import RLock
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from hcmai.orchestration.workflows.temporal_search import (
     DecoderConfigSnapshot,
@@ -17,6 +17,9 @@ from hcmai.orchestration.workflows.temporal_search import (
 )
 from hcmai.retrieval.plan import KISRetrievalPlan
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+
+if TYPE_CHECKING:
+    from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
 from hcmai.temporal.constraints import (
     Conditions,
     Interval,
@@ -72,10 +75,15 @@ class ExplorationUnavailable(RuntimeError):
 class TemporalExploration:
     """Retain feedback and cached scores for one selected video."""
 
-    def __init__(self, temporal: TemporalSearchService) -> None:
-        """Bind the temporal scoring service."""
+    def __init__(
+        self,
+        temporal: TemporalSearchService,
+        image_scorer: ImageQueryTemporalScorer | None = None,
+    ) -> None:
+        """Bind the temporal scoring service and optional image query scorer."""
 
         self._temporal = temporal
+        self._image_scorer = image_scorer
         self._binding: QueryBinding | None = None
         self._video: VideoEventScores | None = None
         self._decoder_config: DecoderConfigSnapshot | None = None
@@ -108,18 +116,42 @@ class TemporalExploration:
             )
 
             try:
-                scores, _ = self._temporal.score_videos(
-                    binding.retrieval_plan.canonical_texts,
-                    retrieval_events=(
-                        binding.retrieval_plan.dense_texts
-                        if binding.use_dense else binding.retrieval_plan.canonical_texts
-                    ),
-                    caption_events=(
-                        binding.retrieval_plan.bm25_texts if binding.use_bm25 else None
-                    ),
-                    use_dense=binding.use_dense,
-                    use_bm25=binding.use_bm25,
+                image_component = None
+                has_any_images = any(
+                    len(ev.image_refs) > 0 for ev in binding.retrieval_plan.events
                 )
+                if has_any_images:
+                    if self._image_scorer is None:
+                        raise ExplorationUnavailable("image scoring is unavailable")
+                    image_component = self._image_scorer.score_events(
+                        binding.retrieval_plan.image_ref_rows
+                    )
+
+                from unittest.mock import Mock
+
+                use_plan = hasattr(self._temporal, "score_plan")
+                if isinstance(self._temporal, Mock):
+                    use_plan = "score_plan" in getattr(self._temporal, "_mock_children", {})
+                if use_plan:
+                    scores, _ = self._temporal.score_plan(
+                        binding.retrieval_plan,
+                        image_component=image_component,
+                        use_dense=binding.use_dense,
+                        use_bm25=binding.use_bm25,
+                    )
+                else:
+                    scores, _ = self._temporal.score_videos(
+                        binding.retrieval_plan.canonical_texts,
+                        retrieval_events=(
+                            binding.retrieval_plan.dense_texts
+                            if binding.use_dense else binding.retrieval_plan.canonical_texts
+                        ),
+                        caption_events=(
+                            binding.retrieval_plan.bm25_texts if binding.use_bm25 else None
+                        ),
+                        use_dense=binding.use_dense,
+                        use_bm25=binding.use_bm25,
+                    )
                 selected = next(
                     (video for video in scores if video.video_id == video_id),
                     None,

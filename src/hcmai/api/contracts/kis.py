@@ -116,13 +116,14 @@ class KISSearchRequest(BaseModel):
 
 
 class KISExplorationEventSeed(BaseModel):
-    """Transport one committed event's canonical and scoring text views."""
+    """Transport one committed event's canonical, scoring text views, and image refs."""
 
     model_config = ConfigDict(extra="forbid")
     event_id: EventId
     canonical_text: NonBlank | None = None
     dense_text: NonBlank | None = None
     bm25_text: NonBlank | None = None
+    image_refs: list[KISImageRef] = Field(default_factory=list)
 
 
 class KISExplorationSeed(BaseModel):
@@ -138,18 +139,24 @@ class KISExplorationSeed(BaseModel):
         """Copy transport rows into an immutable, event-aligned plan."""
         return KISRetrievalPlan(
             events=tuple(
-                KISRetrievalEvent(**event.model_dump()) for event in self.events
+                KISRetrievalEvent(
+                    event_id=event.event_id,
+                    canonical_text=event.canonical_text,
+                    dense_text=event.dense_text,
+                    bm25_text=event.bm25_text,
+                    image_refs=tuple(event.image_refs),
+                )
+                for event in self.events
             )
         )
 
     @model_validator(mode="after")
     def validate_text_snapshot(self) -> Self:
-        """Reject event order and missing scoring views before opening S0 branches."""
+        """Reject event order and missing scoring views."""
         plan = self.to_plan()
-        if plan.canonical_texts is not None:
-            plan.validate_text_sources(
-                use_dense=self.use_dense, use_bm25=self.use_bm25,
-            )
+        plan.validate_text_sources(
+            use_dense=self.use_dense, use_bm25=self.use_bm25,
+        )
         return self
 
 

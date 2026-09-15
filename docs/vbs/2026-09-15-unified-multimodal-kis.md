@@ -1486,7 +1486,7 @@ git commit -m "feat: make KIS revisions explicit semantic operations"
 - Produces: `TemporalScoreComponent(name="visual_image", raw_scores=[event_count, frame_count])`.
 - Produces: multimodal KIS execution through the same fusion and DP decoder.
 
-- [ ] **Step 1: Write image-evidence scorer tests including MAX pooling**
+- [X] **Step 1: Write image-evidence scorer tests including MAX pooling**
 
 ```python
 import numpy as np
@@ -1543,7 +1543,7 @@ def test_image_query_scorer_max_pools_multiple_exemplars_per_event() -> None:
 
 Assert row 0 equals `maximum(score(image_a), score(image_b))`, row 1 is zero, and the `EventEvidenceProfile.has_images` flag prevents an image-less row from receiving image weight. Visual image evidence covers the canonical visual frame index, so it does not misuse the component `coverage` field to represent per-event availability.
 
-- [ ] **Step 2: Run evidence tests and verify failure**
+- [X] **Step 2: Run evidence tests and verify failure**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/retrieval/evidence/test_image_query.py -q
@@ -1551,13 +1551,13 @@ PYTHONPATH=src python -m pytest tests/retrieval/evidence/test_image_query.py -q
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement `ImageQueryTemporalScorer`**
+- [X] **Step 3: Implement `ImageQueryTemporalScorer`**
 
 Use `asset_store.open()` for refs, batch `image_encoder.encode_images(images)`, score against all canonical visual positions with `visual_index.score_subset()`, then MAX pool vectors belonging to the same event. Return a component with a per-frame coverage mask and an event-availability vector exposed separately or encoded in the fusion input descriptor.
 
 Do not call standalone top-K `ImageSearchService.search()`.
 
-- [ ] **Step 4: Extend `KISRetrievalPlan` and the SearchService plan builder for sparse text + image rows**
+- [X] **Step 4: Extend `KISRetrievalPlan` and the SearchService plan builder for sparse text + image rows**
 
 Change `KISRetrievalEvent.image_refs` from tuple of strings to `tuple[KISImageRef, ...]`. Extend `KISExplorationEventSeed` with:
 
@@ -1589,7 +1589,7 @@ translated = translator.translate(text_values, intent.language)  # only when req
 
 Restore translated values to their original event indices, leave text fields `None` for image-only rows, and copy `tuple(event.images)` into every `KISRetrievalEvent.image_refs`. Do not compact or reorder `plan.events`. Add a `SearchService.search_kis()`/orchestration test for `E1 text-only, E2 image-only, E3 text+image` that asserts event IDs/order, translated text at positions 0/2 only, and exact image refs at positions 1/2. The test must exercise the real plan builder rather than manually constructing `KISRetrievalPlan`.
 
-- [ ] **Step 5: Add `visual_image` to adaptive fusion without creating a new fusion algorithm**
+- [X] **Step 5: Add `visual_image` to adaptive fusion without creating a new fusion algorithm**
 
 Add a default base component weight for `visual_image` and structural availability routing. Update `configs/baseline.yaml` in the same step: because YAML supplies the entire `base_component_weights` dictionary, it must include a positive `visual_image` entry or production baseline fusion will assign image evidence zero mass. Use this exact additive baseline entry:
 
@@ -1625,7 +1625,7 @@ def fuse_profiles(
 
 The existing `fuse(original_events=..., retrieval_events=..., bundle=...)` constructs profiles with `has_text=True, has_images=False` and delegates to `fuse_profiles()`. `visual_image` receives zero multiplier when `has_images` is false. Every text/BM25 component receives zero multiplier when `has_text` is false. Text cue boosts continue to apply only when text exists. Preserve existing calibration/confidence gating/local renormalization.
 
-- [ ] **Step 6: Let `TemporalEvidenceScorer` merge text/BM25/image components before one fusion call**
+- [X] **Step 6: Let `TemporalEvidenceScorer` merge text/BM25/image components before one fusion call**
 
 Add a plan-oriented method:
 
@@ -1653,7 +1653,7 @@ def expand_component_rows(
 
 For image-only events, structural `has_text=False` makes the zero text rows carry zero effective weight, while `visual_image` supplies the event row. Existing legacy `score_events()` remains for TRAKE/older non-KIS callers during this plan.
 
-- [ ] **Step 7: Add `TemporalSearchService.search_plan()` and keep DP unchanged**
+- [X] **Step 7: Add `TemporalSearchService.search_plan()` and keep DP unchanged**
 
 ```python
 def search_plan(
@@ -1669,7 +1669,7 @@ def search_plan(
 
 This method calls `evidence.score_plan()`, validates matrix shape by `plan.event_count`, then uses the same `rank_paths()` and materialization code as `search()`.
 
-- [ ] **Step 8: Wire KIS pipeline and temporal exploration through the same multimodal plan scoring**
+- [X] **Step 8: Wire KIS pipeline and temporal exploration through the same multimodal plan scoring**
 
 `KISPipeline.execute()` resolves image refs to the image component, calls `search_plan()`, and materializes results. Add a test with:
 
@@ -1683,7 +1683,7 @@ Assert the final score matrix has three rows and aligned path order stays `E1,E2
 
 Then migrate `TemporalExploration.open()` from the S0 textual fallback to `TemporalSearchService.score_plan()` using the `KISExplorationSeed` supplied by the frontend. Reconstruct a typed `KISRetrievalPlan` from the seed, resolve image refs through the same image scorer, and select the requested video's cached scores. `ExplorationOpenRequest` must accept image-only seed rows; it must no longer require non-empty text for every event. Add an API/workflow test that opens exploration for an image-only event and obtains a valid branch/view.
 
-- [ ] **Step 9: Run multimodal retrieval, baseline-config, SearchService-builder, and exploration tests**
+- [X] **Step 9: Run multimodal retrieval, baseline-config, SearchService-builder, and exploration tests**
 
 ```bash
 PYTHONPATH=src python -m pytest \
@@ -1697,7 +1697,7 @@ PYTHONPATH=src python -m pytest \
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit multimodal temporal evidence**
+- [X] **Step 10: Commit multimodal temporal evidence**
 
 ```bash
 git add src/hcmai/retrieval src/hcmai/orchestration src/hcmai/api/contracts/exploration.py src/hcmai/api/contracts/kis.py src/hcmai/common/config.py configs/baseline.yaml tests/retrieval tests/orchestration tests/api/test_exploration_router.py

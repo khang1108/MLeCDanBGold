@@ -15,7 +15,9 @@ import numpy as np
 from hcmai.common.config import AlignmentConfig, DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
 from hcmai.orchestration.utils.materializer import SearchMaterializer
+from hcmai.retrieval.evidence.components import TemporalScoreComponent
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
+from hcmai.retrieval.plan import KISRetrievalPlan
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.events import normalize_event_texts
 from hcmai.temporal.dp import AlignedPath, DPPath, align_video, rank_paths
@@ -101,6 +103,74 @@ class TemporalSearchService:
             retrieval_ms=retrieval_ms,
             alignment_ms=alignment_ms,
         )
+
+    def search_plan(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        image_component: TemporalScoreComponent | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+        top_k: int = 20,
+    ) -> TemporalSearchResult:
+        """Return canonical aligned paths for a multimodal retrieval plan."""
+        if top_k <= 0:
+            raise ValueError("top_k must be greater than zero")
+
+        scores, retrieval_ms = self.score_plan(
+            plan,
+            image_component=image_component,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+        )
+        score_by_video = {video.video_id: video for video in scores}
+
+        alignment_started = perf_counter()
+        rows = rank_paths(
+            scores,
+            lambda_gap=self.config.lambda_gap,
+            max_rows=top_k,
+            event_power=self.config.event_power,
+            cluster_delta=self.config.cluster_delta,
+            paths_per_video=self.config.paths_per_video,
+            path_min_separation_ms=self.config.path_min_separation_ms,
+        )
+
+        paths = tuple(
+            self._materialize_aligned_path(row, score_by_video[row.video_id]) for row in rows
+        )
+        alignment_ms = (perf_counter() - alignment_started) * 1_000
+        return TemporalSearchResult(
+            paths=paths,
+            retrieval_ms=retrieval_ms,
+            alignment_ms=alignment_ms,
+        )
+
+    def score_plan(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        image_component: TemporalScoreComponent | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+    ) -> tuple[tuple[VideoEventScores, ...], float]:
+        """Score and validate every video for a multimodal retrieval plan."""
+        if plan.event_count > self.max_temporal_event_count:
+            raise ValueError(
+                f"requests may contain at most {self.max_temporal_event_count} temporal events"
+            )
+
+        retrieval_started = perf_counter()
+        scores = self.evidence.score_plan(
+            plan,
+            image_component=image_component,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+        )
+        retrieval_ms = (perf_counter() - retrieval_started) * 1_000
+
+        validated = tuple(self._validate_video_scores(item, plan.event_count) for item in scores)
+        return validated, retrieval_ms
 
     def score_videos(
         self,

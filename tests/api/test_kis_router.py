@@ -77,6 +77,7 @@ def _make_response(query_text: str | None = "A woman cooks in kitchen.") -> KISS
                 "canonical_text": query_text,
                 "dense_text": query_text,
                 "bm25_text": query_text,
+                "image_refs": [{"asset_id": "sha256:abc", "content_type": "image/png"}] if query_text is None else [],
             }],
             "use_dense": True,
             "use_bm25": True,

@@ -1,26 +1,32 @@
-"""Immutable event-aligned retrieval views for textual KIS execution.
+"""Immutable event-aligned retrieval views for multimodal KIS execution.
 
-Canonical, dense, and literal text retain the same server-owned event IDs.
-This S0 plan does not load images or perform translation or model inference.
+Canonical, dense, literal text, and image exemplars retain the same server-owned
+event IDs.
 """
 
 from dataclasses import dataclass
 
+from hcmai.kis.models import KISImageRef
+
 
 @dataclass(frozen=True, slots=True)
 class KISRetrievalEvent:
-    """Retain canonical and retriever-facing text for one semantic event."""
+    """Retain canonical and retriever-facing text and images for one semantic event."""
 
     event_id: str
     canonical_text: str | None
     dense_text: str | None
     bm25_text: str | None
-    image_refs: tuple[str, ...] = ()
+    image_refs: tuple[KISImageRef, ...] = ()
 
     def __post_init__(self) -> None:
-        """Keep S0 text-only and reject blank supplied retrieval views."""
-        if self.image_refs != ():
-            raise ValueError("S0 retrieval events do not support image refs")
+        """Reject blank supplied retrieval views and require text or image evidence."""
+        if not isinstance(self.image_refs, tuple):
+            raise ValueError("image_refs must be a tuple")
+        if any(not isinstance(ref, KISImageRef) for ref in self.image_refs):
+            raise ValueError("image_refs must contain KISImageRef instances")
+        if self.canonical_text is None and not self.image_refs:
+            raise ValueError("KIS event requires text or image evidence")
         for text in (self.canonical_text, self.dense_text, self.bm25_text):
             if text is not None and (not isinstance(text, str) or not text.strip()):
                 raise ValueError("supplied event text must be nonblank")
@@ -42,9 +48,19 @@ class KISRetrievalPlan:
             raise ValueError("event IDs must be sequential E1..En")
 
     @property
+    def event_count(self) -> int:
+        """Return the number of planned events."""
+        return len(self.events)
+
+    @property
     def event_ids(self) -> tuple[str, ...]:
         """Return the shared order of every retrieval view."""
         return tuple(event.event_id for event in self.events)
+
+    @property
+    def image_ref_rows(self) -> tuple[tuple[KISImageRef, ...], ...]:
+        """Return the sequence of image references per event."""
+        return tuple(event.image_refs for event in self.events)
 
     @property
     def canonical_texts(self) -> tuple[str, ...] | None:
@@ -71,14 +87,22 @@ class KISRetrievalPlan:
         return tuple(str(value) for value in values)
 
     def validate_text_sources(self, *, use_dense: bool, use_bm25: bool) -> None:
-        """Require complete canonical and enabled scoring views for S0."""
+        """Require valid scoring views for text and image events."""
         if not isinstance(use_dense, bool) or not isinstance(use_bm25, bool):
             raise ValueError("retrieval source flags must be booleans")
-        if not use_dense and not use_bm25:
+        has_any_text = any(event.canonical_text is not None for event in self.events)
+        has_any_images = any(len(event.image_refs) > 0 for event in self.events)
+        if not has_any_text and not has_any_images:
+            raise ValueError("at least one event must have text or image evidence")
+        if has_any_text and not use_dense and not use_bm25 and not has_any_images:
             raise ValueError("at least one retrieval source must be enabled")
-        if self.canonical_texts is None:
-            raise ValueError("S0 requires canonical text for every event")
-        if use_dense and self.dense_texts is None:
-            raise ValueError("every event requires dense text when Dense is enabled")
-        if use_bm25 and self.bm25_texts is None:
-            raise ValueError("every event requires BM25 text when BM25 is enabled")
+        for event in self.events:
+            if event.canonical_text is not None:
+                if not use_dense and not use_bm25 and not event.image_refs:
+                    raise ValueError("text events require at least one enabled text source")
+                if use_dense and event.dense_text is None:
+                    raise ValueError("every event with text requires dense text when Dense is enabled")
+                if use_bm25 and event.bm25_text is None:
+                    raise ValueError("every event with text requires BM25 text when BM25 is enabled")
+            elif not event.image_refs:
+                raise ValueError("events without text require image evidence")

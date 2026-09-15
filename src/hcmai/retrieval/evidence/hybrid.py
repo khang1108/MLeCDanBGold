@@ -21,8 +21,9 @@ from hcmai.retrieval.evidence.diagnostics import (
     TemporalEvidenceDebugResult,
     build_evidence_diagnostics,
 )
-from hcmai.retrieval.evidence.fusion import TemporalFusionScorer
+from hcmai.retrieval.evidence.fusion import EventEvidenceProfile, TemporalFusionScorer
 from hcmai.retrieval.evidence.normalization import minmax_rows
+from hcmai.retrieval.plan import KISRetrievalPlan
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 
@@ -241,6 +242,97 @@ class TemporalEvidenceScorer:
             fused_scores=fused,
             top_positions=top_positions,
         )
+
+    def score_plan(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        image_component: TemporalScoreComponent | None,
+        use_dense: bool,
+        use_bm25: bool,
+    ) -> list[VideoEventScores]:
+        """Score multimodal KIS retrieval plan over every frame and split by canonical video."""
+        event_count = plan.event_count
+        if not event_count:
+            raise ValueError("plan must have at least one event")
+
+        text_indices = [
+            i for i, event in enumerate(plan.events) if event.canonical_text is not None
+        ]
+        has_any_text = len(text_indices) > 0
+
+        if has_any_text:
+            plan.validate_text_sources(use_dense=use_dense, use_bm25=use_bm25)
+
+        use_dense_eff, use_bm25_eff = self._available(use_dense=use_dense, use_bm25=use_bm25)
+        has_text_evidence = has_any_text and (use_dense_eff or use_bm25_eff)
+        has_image_evidence = image_component is not None and any(len(ev.image_refs) > 0 for ev in plan.events)
+
+        if not has_text_evidence and not has_image_evidence:
+            raise ValueError("at least one temporal evidence source must be enabled and available")
+
+        components: dict[str, TemporalScoreComponent] = {}
+
+        if has_text_evidence:
+            sub_canonical = [plan.events[i].canonical_text for i in text_indices]
+            sub_dense = [plan.events[i].dense_text for i in text_indices] if use_dense_eff else None
+            sub_bm25 = [plan.events[i].bm25_text for i in text_indices] if use_bm25_eff else None
+
+            sub_bundle = self._score_components(
+                sub_canonical,  # type: ignore[arg-type]
+                sub_dense if sub_dense is not None else sub_canonical,  # type: ignore[arg-type]
+                caption_events=sub_bm25 if sub_bm25 is not None else sub_canonical,  # type: ignore[arg-type]
+                use_dense=use_dense_eff,
+                use_bm25=use_bm25_eff,
+            )
+            for name, comp in sub_bundle.components.items():
+                components[name] = expand_component_rows(
+                    comp,
+                    event_indices=text_indices,
+                    event_count=event_count,
+                )
+
+        if image_component is not None:
+            if image_component.raw_scores.shape != (event_count, len(self.visual_index.frame_ids)):
+                raise ValueError("image component shape does not match plan and frame count")
+            components["visual_image"] = image_component
+
+        bundle = TemporalScoreBundle(components)
+        scorer = self._adaptive_scorer()
+
+        profiles = [
+            EventEvidenceProfile(
+                original_text=event.canonical_text,
+                retrieval_text=event.dense_text,
+                has_text=event.canonical_text is not None,
+                has_images=len(event.image_refs) > 0,
+            )
+            for event in plan.events
+        ]
+        scores = scorer.fuse_profiles(profiles=profiles, bundle=bundle)
+
+        expected_shape = (event_count, len(self.visual_index.frame_ids))
+        if scores.shape != expected_shape:
+            raise ValueError("temporal evidence matrix shape conflicts with canonical index")
+        return _split_videos(self.visual_index, np.asarray(scores, dtype=np.float32))
+
+
+def expand_component_rows(
+    component: TemporalScoreComponent,
+    *,
+    event_indices: Sequence[int],
+    event_count: int,
+) -> TemporalScoreComponent:
+    """Expand component rows from a compact subset of event indices to the full event count."""
+    frame_count = component.raw_scores.shape[1]
+    expanded_scores = np.zeros((event_count, frame_count), dtype=np.float32)
+    for sub_idx, event_idx in enumerate(event_indices):
+        expanded_scores[event_idx] = component.raw_scores[sub_idx]
+    return TemporalScoreComponent(
+        name=component.name,
+        raw_scores=expanded_scores,
+        coverage=component.coverage,
+    )
 
 
 def _split_videos(index: Any, scores: np.ndarray) -> list[VideoEventScores]:

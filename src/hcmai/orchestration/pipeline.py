@@ -34,6 +34,7 @@ from hcmai.orchestration.workflows.image_search import ImageSearchService
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
+from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
 from hcmai.kis.models import (
     DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
     KISEvent,
@@ -117,6 +118,21 @@ class SearchService:
             else None
         )
 
+        self.image_query_scorer = (
+            ImageQueryTemporalScorer(
+                visual_index=visual_retriever.index,
+                image_encoder=image_encoder,
+                asset_store=kis_image_assets,
+                chunk_size=self.config.alignment.chunk_size,
+            )
+            if (
+                visual_retriever is not None
+                and image_encoder is not None
+                and kis_image_assets is not None
+            )
+            else None
+        )
+
         temporal = (
             TemporalSearchService(
                 self.corpus,
@@ -131,6 +147,7 @@ class SearchService:
             self.corpus,
             temporal,
             self.config.max_temporal_event_count,
+            image_scorer=self.image_query_scorer,
         )
         self.trake = TRAKEPipeline(
             temporal,
@@ -444,24 +461,24 @@ class SearchService:
 
         self._ensure_search_ready()
 
-        canonical_events = tuple(event.text for event in intent.events)
+        text_positions = [i for i, event in enumerate(intent.events) if event.text is not None]
+        text_values = tuple(intent.events[i].text for i in text_positions)  # type: ignore[misc]
+        dense_map: dict[int, str] = {}
         translation_started = perf_counter()
-        if request.use_dense and intent.language is not None and intent.language != "en":
-            if self.event_translator is None:
-                raise SearchServiceUnavailableError(
-                    "Event translation capability is unavailable"
+        if request.use_dense and text_values:
+            if intent.language is not None and intent.language != "en":
+                if self.event_translator is None:
+                    raise SearchServiceUnavailableError(
+                        "Event translation capability is unavailable"
+                    )
+                translated = self.event_translator.translate(
+                    text_values, language=intent.language,
                 )
-            text_bearing = tuple(t for t in canonical_events if t is not None)
-            if text_bearing:
-                translated_texts = self.event_translator.translate(
-                    text_bearing, language=intent.language,
-                )
-                t_iter = iter(translated_texts)
-                dense = tuple(next(t_iter) if t is not None else None for t in canonical_events)
+                for pos, trans in zip(text_positions, translated, strict=True):
+                    dense_map[pos] = trans
             else:
-                dense = tuple(None for _ in canonical_events)
-        else:
-            dense = canonical_events if request.use_dense else None
+                for pos, val in zip(text_positions, text_values, strict=True):
+                    dense_map[pos] = val
         translation_ms = (perf_counter() - translation_started) * 1_000.0
 
         plan = KISRetrievalPlan(
@@ -469,8 +486,9 @@ class SearchService:
                 KISRetrievalEvent(
                     event_id=event.id,
                     canonical_text=event.text,
-                    dense_text=None if dense is None else dense[index],
+                    dense_text=dense_map.get(index) if request.use_dense else None,
                     bm25_text=event.text if request.use_bm25 else None,
+                    image_refs=tuple(event.images),
                 )
                 for index, event in enumerate(intent.events)
             )
@@ -499,6 +517,7 @@ class SearchService:
                         canonical_text=event.canonical_text,
                         dense_text=event.dense_text,
                         bm25_text=event.bm25_text,
+                        image_refs=list(event.image_refs),
                     )
                     for event in plan.events
                 ],

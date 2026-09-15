@@ -1,0 +1,109 @@
+"""Validate and materialize HTTP results from canonical aligned paths.
+
+This module validates canonical path identity and resolves representative-frame
+metadata from loaded data stores. It does not retrieve, rerank, alter temporal
+alignment paths, or construct client-facing keyframe URLs.
+"""
+
+from __future__ import annotations
+
+from hcmai.api.contracts import SearchResult, SearchResultMetadata, TRAKEPath
+from hcmai.corpus import Corpus
+from hcmai.corpus.models import Frame
+from hcmai.temporal import AlignedPath
+
+
+class SearchMaterializer:
+    """Validate canonical paths and project public KIS or TRAKE results."""
+
+    def __init__(self, corpus: Corpus) -> None:
+        """Retain the read-only Corpus facade used for materialization."""
+
+        self.corpus = corpus
+
+    def validate_aligned_path(self, path: AlignedPath) -> None:
+        """Reject a path whose canonical identity disagrees with the corpus."""
+
+        if not path.frame_ids:
+            raise ValueError("aligned path must contain at least one frame")
+        if not (
+            len(path.frame_ids)
+            == len(path.frame_idxs)
+            == len(path.timestamps_ms)
+        ):
+            raise ValueError("aligned path arrays must have equal lengths")
+
+        for frame_id, frame_idx, timestamp_ms in zip(
+            path.frame_ids,
+            path.frame_idxs,
+            path.timestamps_ms,
+            strict=True,
+        ):
+            frame = self.corpus.frame(frame_id)
+            if frame.frame_id != frame_id:
+                raise ValueError("aligned frame_id disagrees with canonical frame")
+            if frame.video_id != path.video_id:
+                raise ValueError("aligned video_id disagrees with canonical frame")
+            if frame.frame_idx != frame_idx:
+                raise ValueError("aligned frame_idx disagrees with canonical frame")
+            if frame.timestamp_ms != timestamp_ms:
+                raise ValueError("aligned timestamp disagrees with canonical frame")
+
+    def build_kis_result(self, path: AlignedPath) -> SearchResult:
+        """Project one aligned path to its upper-middle canonical frame.
+
+        Metadata comes only from the selected representative frame and its
+        transcript segments at the representative timestamp. The complete
+        aligned frame and timestamp arrays remain untouched in the result.
+        """
+
+        self.validate_aligned_path(path)
+
+        representative = len(path.frame_ids) // 2
+        frame_id = path.frame_ids[representative]
+        frame = self.corpus.frame(frame_id)
+
+        return SearchResult(
+            frame_id=frame.frame_id,
+            video_id=frame.video_id,
+            frame_idx=frame.frame_idx,
+            timestamp_ms=frame.timestamp_ms,
+            score=path.score,
+            frame_ids=list(path.frame_ids),
+            timestamps_ms=list(path.timestamps_ms),
+            fps=frame.fps,
+            metadata=self.build_frame_metadata(frame),
+        )
+
+    @staticmethod
+    def build_trake_path(path: AlignedPath) -> TRAKEPath:
+        """Project one already validated aligned path into the TRAKE response shape."""
+
+        return TRAKEPath(
+            video_id=path.video_id,
+            score=path.score,
+            frame_ids=list(path.frame_ids),
+            frame_idxs=list(path.frame_idxs),
+            timestamps_ms=list(path.timestamps_ms),
+        )
+
+    def build_frame_metadata(self, frame: Frame) -> SearchResultMetadata:
+        """Materialize one canonical frame's specialist evidence for inspection.
+
+        This is shared by ranked Search results and direct viewer resolution so
+        both surfaces expose the same source evidence for the same frame ID.
+        """
+
+        # A one-millisecond half-open range retains Phase A's point-containment
+        # semantics without treating nearby timeline speech as frame evidence.
+        return SearchResultMetadata(
+            title=self.corpus.title(frame.video_id),
+            caption=self.corpus.caption(frame.frame_id),
+            ocr=self.corpus.ocr(frame.frame_id),
+            objects=list(self.corpus.objects(frame.frame_id)),
+            asr=self.corpus.transcript(
+                frame.video_id,
+                frame.timestamp_ms,
+                frame.timestamp_ms + 1,
+            ),
+        )

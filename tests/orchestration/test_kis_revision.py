@@ -420,6 +420,65 @@ class KISOrchestrationTest(unittest.TestCase):
         with self.assertRaises(SearchServiceUnavailableError):
             service.search_kis(request)
 
+    def test_search_kis_builds_plan_for_sparse_text_and_image_events(self) -> None:
+        """SearchService translates text-only events and preserves image refs."""
+        img2 = KISImageRef(asset_id="sha256:img2", content_type="image/png")
+        img3 = KISImageRef(asset_id="sha256:img3", content_type="image/png")
+        intent_vi = KISIntent(
+            revision=1,
+            language="vi",
+            query_text="người phụ nữ và đĩa",
+            events=[
+                KISEvent(id="E1", text="người phụ nữ"),
+                KISEvent(id="E2", images=[img2]),
+                KISEvent(id="E3", text="chiếc đĩa trắng", images=[img3]),
+            ],
+            temporal_edges=[
+                KISTemporalEdge(source="E1", relation="before", target="E2"),
+                KISTemporalEdge(source="E2", relation="before", target="E3"),
+            ],
+        )
+        translator = Mock()
+        translator.translate.return_value = ("a woman", "a white plate")
+
+        service = self._make_service(event_translator=translator)
+        request = KISSearchRequest(
+            base_intent=intent_vi,
+            expected_revision=1,
+            operation=SearchOnlyOperation(kind="search_only"),
+            use_dense=True,
+            use_bm25=True,
+        )
+
+        response = service.search_kis(request)
+
+        translator.translate.assert_called_once_with(
+            ("người phụ nữ", "chiếc đĩa trắng"),
+            language="vi",
+        )
+
+        plan = service.kis.execute.call_args.kwargs["retrieval_plan"]
+        self.assertEqual(plan.event_ids, ("E1", "E2", "E3"))
+
+        self.assertEqual(plan.events[0].canonical_text, "người phụ nữ")
+        self.assertEqual(plan.events[0].dense_text, "a woman")
+        self.assertEqual(plan.events[0].bm25_text, "người phụ nữ")
+        self.assertEqual(plan.events[0].image_refs, ())
+
+        self.assertIsNone(plan.events[1].canonical_text)
+        self.assertIsNone(plan.events[1].dense_text)
+        self.assertIsNone(plan.events[1].bm25_text)
+        self.assertEqual(plan.events[1].image_refs, (img2,))
+
+        self.assertEqual(plan.events[2].canonical_text, "chiếc đĩa trắng")
+        self.assertEqual(plan.events[2].dense_text, "a white plate")
+        self.assertEqual(plan.events[2].bm25_text, "chiếc đĩa trắng")
+        self.assertEqual(plan.events[2].image_refs, (img3,))
+
+        self.assertEqual(response.exploration_seed.events[0].image_refs, [])
+        self.assertEqual(response.exploration_seed.events[1].image_refs, [img2])
+        self.assertEqual(response.exploration_seed.events[2].image_refs, [img3])
+
 
 if __name__ == "__main__":
     unittest.main()

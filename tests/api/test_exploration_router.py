@@ -77,3 +77,51 @@ async def test_task2_step8_http_open_accepts_seed_without_legacy_fields():
     assert response.status_code == 200
     assert response.json()["view"]["video_id"] == "video-1"
     assert response.json()["view"]["revision"] == 1
+
+
+@pytest.mark.anyio
+async def test_task9_http_open_accepts_image_only_seed():
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from hcmai.api.routers.exploration import create_exploration_router
+
+    app = FastAPI()
+    service = Mock()
+    service.kis.temporal = object()
+    service.kis.image_scorer = Mock()
+    app.include_router(create_exploration_router({"service": service}))
+    view = ExplorationView(
+        revision=1,
+        event_version="events-v1",
+        video_id="video-1",
+        conditions=Conditions(window=(0, 100), confirmed=(None,), rejected=((),)),
+        status="ok",
+        paths=(),
+        changed_event_indices=(),
+        comparison_available=False,
+        can_undo=False,
+    )
+    with patch(
+        "hcmai.api.routers.exploration.run_in_threadpool",
+        new=AsyncMock(return_value=(Mock(), view)),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/api/v1/exploration", json={
+                "seed": {
+                    "semantic_revision": 1,
+                    "events": [
+                        {
+                            "event_id": "E1",
+                            "image_refs": [{"asset_id": "sha256:img1", "content_type": "image/png"}],
+                        }
+                    ],
+                    "use_dense": True,
+                    "use_bm25": False,
+                },
+                "video_id": "video-1",
+                "window": [0, 100],
+            })
+    assert response.status_code == 200
+    assert response.json()["view"]["video_id"] == "video-1"
+

@@ -185,6 +185,7 @@ def create_exploration_router(service_container: dict[str, Any]) -> APIRouter:
         temporal = _temporal_service(service_container.get("service"))
         if temporal is None:
             raise _unavailable("Temporal exploration service not initialized")
+        image_scorer = _image_scorer(service_container.get("service"))
         handle = registry.reserve()
         if handle is None:
             raise _unavailable("Temporal exploration capacity is full")
@@ -194,6 +195,7 @@ def create_exploration_router(service_container: dict[str, Any]) -> APIRouter:
                 temporal,
                 request,
                 registry.scoring_revision,
+                image_scorer,
             )
             if not registry.publish(handle, branch):
                 # A cancelled caller removed the reservation while scoring ran.
@@ -281,10 +283,17 @@ def _temporal_service(service: object) -> object | None:
     return getattr(getattr(service, "kis", None), "temporal", None)
 
 
+def _image_scorer(service: object) -> object | None:
+    """Read the existing image query scorer from the KIS pipeline."""
+
+    return getattr(getattr(service, "kis", None), "image_scorer", None)
+
+
 def _open_branch(
     temporal: object,
     request: ExplorationOpenRequest,
     scoring_revision: str,
+    image_scorer: object | None = None,
 ) -> tuple[TemporalExploration, ExplorationView]:
     """Open one real branch in the worker thread used for scoring and decoding."""
 
@@ -296,7 +305,7 @@ def _open_branch(
         use_bm25=request.seed.use_bm25,
         scoring_revision=scoring_revision,
     )
-    branch = TemporalExploration(temporal)  # type: ignore[arg-type]
+    branch = TemporalExploration(temporal, image_scorer=image_scorer)  # type: ignore[arg-type]
     return branch, branch.open(binding, request.video_id, request.window)
 
 

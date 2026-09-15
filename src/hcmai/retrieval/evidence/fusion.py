@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 import re
+from dataclasses import dataclass
 from typing import Literal
 import unicodedata
 import numpy as np
@@ -48,32 +49,44 @@ def _cue_matches(text: str, tokens: set[str], cue: str) -> bool:
     return cue_clean in tokens
 
 
+@dataclass(frozen=True, slots=True)
+class EventEvidenceProfile:
+    """Modality availability and query strings for one temporal event."""
+
+    original_text: str | None
+    retrieval_text: str | None
+    has_text: bool
+    has_images: bool
+
+
 class EventModalityRouter:
     """Deterministic routing of component weight multipliers based on text cues."""
 
     def __init__(self, config: AdaptiveTemporalFusionConfig) -> None:
         self.config = config
 
-    def multipliers(
+    def multipliers_for_profile(
         self,
-        original_event: str,
-        retrieval_event: str,
+        profile: EventEvidenceProfile,
     ) -> dict[str, float]:
-        """Compute unnormalized positive component weights for one event query.
-
-        Args:
-            original_event: Original natural-language query string (e.g. Vietnamese).
-            retrieval_event: Translated / prepared retrieval string (e.g. English).
-
-        Returns:
-            Dictionary mapping component names to unnormalized positive weights.
-        """
-
+        """Compute unnormalized positive component weights for an event profile."""
         weights = dict(self.config.base_component_weights)
+        if not profile.has_images:
+            weights["visual_image"] = 0.0
+
+        if not profile.has_text:
+            for key in list(weights.keys()):
+                if key != "visual_image":
+                    weights[key] = 0.0
+            return weights
+
         if not self.config.event_routing:
             return weights
 
-        raw_combined = f"{original_event} {retrieval_event}"
+        raw_combined = f"{profile.original_text or ''} {profile.retrieval_text or ''}".strip()
+        if not raw_combined:
+            return weights
+
         normalized = unicodedata.normalize("NFKC", raw_combined).lower()
         cleaned_text = " ".join(re.sub(r"[^\w\s]", " ", normalized).split())
         tokens = set(cleaned_text.split())
@@ -95,6 +108,28 @@ class EventModalityRouter:
                 weights["context_dense"] *= self.config.visual_boost
 
         return weights
+
+    def multipliers(
+        self,
+        original_event: str,
+        retrieval_event: str,
+    ) -> dict[str, float]:
+        """Compute unnormalized positive component weights for one event query.
+
+        Args:
+            original_event: Original natural-language query string (e.g. Vietnamese).
+            retrieval_event: Translated / prepared retrieval string (e.g. English).
+
+        Returns:
+            Dictionary mapping component names to unnormalized positive weights.
+        """
+        profile = EventEvidenceProfile(
+            original_text=original_event,
+            retrieval_text=retrieval_event,
+            has_text=True,
+            has_images=False,
+        )
+        return self.multipliers_for_profile(profile)
 
 
 class TemporalFusionScorer:
@@ -166,39 +201,21 @@ class TemporalFusionScorer:
             for name, component in bundle.components.items()
         }
 
-    def fuse(
+    def fuse_profiles(
         self,
         *,
-        original_events: Sequence[str],
-        retrieval_events: Sequence[str],
+        profiles: Sequence[EventEvidenceProfile],
         bundle: TemporalScoreBundle,
     ) -> np.ndarray:
-        """Fuse multimodal temporal score components into a unified score matrix.
-
-        Args:
-            original_events: Original event queries.
-            retrieval_events: Retrieval event queries matching original_events.
-            bundle: Bundle of raw score components and coverage masks.
-
-        Returns:
-            Float32 score matrix shaped ``[len(original_events), frame_count]``.
-
-        Raises:
-            ValueError: If event counts do not match bundle dimensions.
-        """
-
-        if len(original_events) != len(retrieval_events):
-            raise ValueError("original and retrieval event counts must match")
-        if bundle.shape[0] != len(original_events):
-            raise ValueError("component event count must match query event count")
+        """Fuse multimodal temporal score components into a unified score matrix."""
+        if bundle.shape[0] != len(profiles):
+            raise ValueError("component event count must match profile event count")
 
         calibrated = self.calibrate_bundle(bundle)
         result = np.zeros(bundle.shape, dtype=np.float32)
 
-        for event_index, (original, retrieval) in enumerate(
-            zip(original_events, retrieval_events, strict=True)
-        ):
-            requested = self.router.multipliers(original, retrieval)
+        for event_index, profile in enumerate(profiles):
+            requested = self.router.multipliers_for_profile(profile)
             numerator = np.zeros(bundle.shape[1], dtype=np.float32)
             denominator = np.zeros(bundle.shape[1], dtype=np.float32)
 
@@ -230,15 +247,55 @@ class TemporalFusionScorer:
                 where=denominator > 0.0,
             )
             missing = denominator <= 0.0
-            if np.any(missing) and "visual_dense" in calibrated:
-                result[event_index, missing] = calibrated["visual_dense"].scores[
-                    event_index, missing
-                ]
+            if np.any(missing):
+                if "visual_dense" in calibrated and profile.has_text:
+                    result[event_index, missing] = calibrated["visual_dense"].scores[
+                        event_index, missing
+                    ]
+                elif "visual_image" in calibrated and profile.has_images:
+                    result[event_index, missing] = calibrated["visual_image"].scores[
+                        event_index, missing
+                    ]
 
         return result
 
+    def fuse(
+        self,
+        *,
+        original_events: Sequence[str],
+        retrieval_events: Sequence[str],
+        bundle: TemporalScoreBundle,
+    ) -> np.ndarray:
+        """Fuse multimodal temporal score components into a unified score matrix.
+
+        Args:
+            original_events: Original event queries.
+            retrieval_events: Retrieval event queries matching original_events.
+            bundle: Bundle of raw score components and coverage masks.
+
+        Returns:
+            Float32 score matrix shaped ``[len(original_events), frame_count]``.
+
+        Raises:
+            ValueError: If event counts do not match bundle dimensions.
+        """
+
+        if len(original_events) != len(retrieval_events):
+            raise ValueError("original and retrieval event counts must match")
+        profiles = [
+            EventEvidenceProfile(
+                original_text=orig,
+                retrieval_text=ret,
+                has_text=True,
+                has_images=False,
+            )
+            for orig, ret in zip(original_events, retrieval_events, strict=True)
+        ]
+        return self.fuse_profiles(profiles=profiles, bundle=bundle)
+
 
 __all__ = [
+    "EventEvidenceProfile",
     "EventModalityRouter",
     "OCR_CUES",
     "SPEECH_CUES",

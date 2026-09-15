@@ -210,3 +210,60 @@ def test_task2_step5_pipeline_rejects_missing_enabled_text_rows(dense, bm25):
     with pytest.raises(InvalidQueryInputError):
         KISPipeline(Mock(), temporal).execute(intent=intent.intent, retrieval_plan=plan, use_dense=True, use_bm25=True, top_k=3)
     temporal.search.assert_not_called()
+
+
+def test_kis_pipeline_multimodal_plan_execution():
+    import numpy as np
+    from hcmai.kis.models import KISEvent, KISImageRef, KISIntent, KISTemporalEdge
+    from hcmai.retrieval.evidence.components import TemporalScoreComponent
+    
+    intent = KISIntent(
+        revision=1,
+        language="en",
+        query_text="E1 and E3",
+        events=[
+            KISEvent(id="E1", text="text one"),
+            KISEvent(id="E2", images=[KISImageRef(asset_id="sha256:img2", content_type="image/png")]),
+            KISEvent(id="E3", text="text three", images=[KISImageRef(asset_id="sha256:img3", content_type="image/png")]),
+        ],
+        temporal_edges=[
+            KISTemporalEdge(source="E1", relation="before", target="E2"),
+            KISTemporalEdge(source="E2", relation="before", target="E3"),
+        ],
+    )
+    plan = KISRetrievalPlan(events=(
+        KISRetrievalEvent("E1", "text one", "text one", "text one"),
+        KISRetrievalEvent("E2", None, None, None, image_refs=(KISImageRef(asset_id="sha256:img2", content_type="image/png"),)),
+        KISRetrievalEvent("E3", "text three", "text three", "text three", image_refs=(KISImageRef(asset_id="sha256:img3", content_type="image/png"),)),
+    ))
+    
+    image_scorer = Mock()
+    image_component = TemporalScoreComponent(
+        name="visual_image",
+        raw_scores=np.zeros((3, 10), dtype=np.float32),
+    )
+    image_scorer.score_events.return_value = image_component
+    
+    temporal = Mock()
+    mock_search_result = Mock(paths=[], retrieval_ms=10.0, alignment_ms=5.0)
+    temporal.search_plan.return_value = mock_search_result
+    
+    corpus = Mock()
+    pipeline = KISPipeline(corpus=corpus, temporal=temporal, image_scorer=image_scorer)
+    
+    res = pipeline.execute(
+        intent=intent,
+        retrieval_plan=plan,
+        use_dense=True,
+        use_bm25=True,
+        top_k=5,
+    )
+    image_scorer.score_events.assert_called_once_with(plan.image_ref_rows)
+    temporal.search_plan.assert_called_once_with(
+        plan,
+        image_component=image_component,
+        use_dense=True,
+        use_bm25=True,
+        top_k=5,
+    )
+
