@@ -43,7 +43,6 @@ class _SearchService:
         del request
         intent = KISIntent(
             revision=1,
-            inputs=["person running"],
             language="en",
             query_text="person running",
             events=[KISEvent(id="E1", text="person running")],

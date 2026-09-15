@@ -16,7 +16,6 @@ class KISPipelineTest(unittest.TestCase):
     def setUp(self) -> None:
         self.intent = KISIntent(
             revision=2,
-            inputs=["A woman talks to a man.", "She takes a white plate."],
             language="en",
             query_text="A woman talks to a man before taking a white plate.",
             entities=[

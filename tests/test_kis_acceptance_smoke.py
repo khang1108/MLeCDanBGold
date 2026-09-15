@@ -5,8 +5,7 @@ Verifies the 3 required acceptance cases from Task 9 of the KIS specification:
 2. KIS-C revision 1: "A man enters a room."; revision 2: "Before that, he talks to a woman."
    Verify event order becomes talk -> enter.
 3. Correction: first clue says "red shirt"; later clue says "actually orange, not red".
-   Verify canonical intent/event text contains the corrected color and raw clue history
-   still contains both clues.
+   Verify canonical intent/event text contains the corrected color.
 
 For each case, verify returned frame_ids length equals len(intent.events).
 """
@@ -21,6 +20,9 @@ from hcmai.kis.models import (
     KISEntityBinding,
     KISEvent,
     KISIntent,
+    KISResolution,
+    KISResolutionEntity,
+    KISResolutionEvent,
     KISTemporalEdge,
 )
 from hcmai.kis.resolver import KISIntentResolver
@@ -40,7 +42,6 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
         raw_input = "A woman talks to a man in a kitchen, then takes a white plate."
         mock_intent = KISIntent(
             revision=1,
-            inputs=[raw_input],
             language="en",
             query_text="A woman talks to a man in a kitchen, then takes a white plate.",
             entities=[
@@ -74,9 +75,9 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
         )
 
         llm = Mock()
-        llm.generate_structured.return_value = mock_intent
+        llm.generate_structured.return_value = resolution_from_intent(mock_intent)
         resolver = KISIntentResolver(llm)
-        resolved_intent = resolver.resolve([raw_input])
+        resolved_intent = resolver.resolve([raw_input], revision=1)
 
         self.assertEqual(len(resolved_intent.events), 2)
         self.assertEqual(resolved_intent.events[0].id, "E1")
@@ -137,7 +138,6 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
 
         mock_intent_rev2 = KISIntent(
             revision=2,
-            inputs=[clue1, clue2],
             language="en",
             query_text="A man talks to a woman before entering a room.",
             entities=[
@@ -169,9 +169,9 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
         )
 
         llm = Mock()
-        llm.generate_structured.return_value = mock_intent_rev2
+        llm.generate_structured.return_value = resolution_from_intent(mock_intent_rev2)
         resolver = KISIntentResolver(llm)
-        resolved_intent = resolver.resolve([clue1, clue2])
+        resolved_intent = resolver.resolve([clue1, clue2], revision=2)
 
         # Verify event order: talk -> enter
         self.assertEqual(len(resolved_intent.events), 2)
@@ -227,7 +227,6 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
         Clue 2: Actually orange, not red.
         Verify:
         - Canonical intent / event text contains corrected color ("orange", not "red").
-        - Raw clue history still contains both clues intact.
         - returned frame_ids length == len(intent.events).
         """
         clue1 = "A man in a red shirt walks into an office."
@@ -235,7 +234,6 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
 
         mock_intent_corrected = KISIntent(
             revision=2,
-            inputs=[clue1, clue2],
             language="en",
             query_text="A man in an orange shirt walks into an office.",
             entities=[
@@ -256,12 +254,11 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
         )
 
         llm = Mock()
-        llm.generate_structured.return_value = mock_intent_corrected
+        llm.generate_structured.return_value = resolution_from_intent(mock_intent_corrected)
         resolver = KISIntentResolver(llm)
-        resolved_intent = resolver.resolve([clue1, clue2])
+        resolved_intent = resolver.resolve([clue1, clue2], revision=2)
 
-        # Verify raw clue history contains both clues
-        self.assertEqual(resolved_intent.inputs, [clue1, clue2])
+        self.assertFalse(hasattr(resolved_intent, "inputs"))
         # Verify canonical query and event text contains "orange" and not "red"
         self.assertIn("orange", resolved_intent.query_text)
         self.assertNotIn("red", resolved_intent.query_text)
@@ -300,7 +297,7 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(response.intent.inputs, [clue1, clue2])
+        self.assertFalse(hasattr(response.intent, "inputs"))
         self.assertIn("orange", response.intent.query_text)
         # Verify returned frame_ids length equals len(intent.events)
         self.assertEqual(
@@ -312,3 +309,23 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def resolution_from_intent(intent: KISIntent) -> KISResolution:
+    """Project a canonical fixture into the semantic shape returned by the LLM."""
+    entity_indices = {entity.id: index for index, entity in enumerate(intent.entities)}
+    return KISResolution(
+        language=intent.language,
+        query_text=intent.query_text,
+        entities=[
+            KISResolutionEntity(kind=entity.kind, description=entity.description)
+            for entity in intent.entities
+        ],
+        events=[
+            KISResolutionEvent(
+                text=event.text,
+                entity_indices=[entity_indices[binding.entity_id] for binding in event.bindings],
+            )
+            for event in intent.events
+        ],
+    )
