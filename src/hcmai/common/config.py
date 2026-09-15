@@ -442,6 +442,7 @@ class ApiConfig(BaseModel):
     maximum_top_k: int = 100
     image_max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
     image_max_pixels: int = Field(default=40_000_000, gt=0)
+    kis_query_asset_dir: str = "data/query-assets"
 
 
 class InferenceConfig(BaseModel):

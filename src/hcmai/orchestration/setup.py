@@ -18,6 +18,7 @@ from hcmai.common.config import (
 from hcmai.common.environment import load_repository_environment
 from hcmai.common.utils.logging import get_logger
 from hcmai.inference import LLMClient, load_llm_endpoint
+from hcmai.kis.assets import KISImageAssetStore
 from hcmai.kis.resolver import KISIntentResolver
 from hcmai.orchestration.corpus_setup import load_corpus
 from hcmai.orchestration.pipeline import SearchService
@@ -85,6 +86,8 @@ def load_search_service(messages: list[str]) -> SearchService:
             ",".join(literal_text.available_sources) or "none",
         )
 
+    kis_image_assets = _load_kis_image_assets(settings, messages)
+
     return SearchService(
         corpus=corpus,
         retrieval=retrieval,
@@ -97,6 +100,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         literal_text=literal_text,
         visual_retriever=visual_retriever,
         intent_resolver=intent_resolver,
+        kis_image_assets=kis_image_assets,
     )
 
 
@@ -166,3 +170,26 @@ def _load_event_translator(
         messages.append("Event translation unavailable: LLM client not configured")
         return None
     return EventTranslator(llm, settings.event_translation)
+
+
+def _load_kis_image_assets(
+    settings: AppConfig,
+    messages: list[str],
+) -> KISImageAssetStore | None:
+    """Create the persistent KIS query image asset store.
+
+    Returns None only when storage initialisation fails; the store directory
+    is created on first write so a missing directory at startup is not an error.
+    """
+    try:
+        storage_dir = resolve_repository_path(settings.api.kis_query_asset_dir)
+        store = KISImageAssetStore(
+            storage_dir,
+            max_upload_bytes=settings.api.image_max_upload_bytes,
+            max_pixels=settings.api.image_max_pixels,
+        )
+        logger.info("KIS image asset store ready at %s", storage_dir)
+        return store
+    except Exception as error:
+        messages.append(f"KIS image asset store unavailable ({error})")
+        return None

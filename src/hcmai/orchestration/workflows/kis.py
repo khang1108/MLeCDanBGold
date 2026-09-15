@@ -16,7 +16,7 @@ from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
 from hcmai.kis.models import KISIntent
 from hcmai.orchestration.utils.errors import InvalidQueryInputError
-from hcmai.orchestration.materializer import SearchMaterializer
+from hcmai.orchestration.utils.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.retrieval.plan import KISRetrievalPlan
 

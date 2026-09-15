@@ -13,7 +13,7 @@ from time import perf_counter
 from hcmai.api.contracts import SearchLatency, TRAKERequest, TRAKEResponse
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.common.utils.logging import get_logger
-from hcmai.orchestration.materializer import SearchMaterializer
+from hcmai.orchestration.utils.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 
 

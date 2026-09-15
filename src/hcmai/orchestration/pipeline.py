@@ -27,8 +27,8 @@ from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
 from hcmai.orchestration.utils.errors import RevisionConflictError
 from hcmai.orchestration.utils.health import build_health_report
+from hcmai.orchestration.utils.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.image_search import ImageSearchService
-from hcmai.orchestration.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
@@ -36,6 +36,7 @@ from hcmai.kis.models import KISIntent
 from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 
 if TYPE_CHECKING:
+    from hcmai.kis.assets import KISImageAssetStore
     from hcmai.kis.resolver import KISIntentResolver
     from hcmai.retrieval.translation.service import EventTranslator
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
@@ -66,6 +67,7 @@ class SearchService:
         literal_text: LiteralTextIndex | None = None,
         visual_retriever: VectorRetriever | None = None,
         intent_resolver: KISIntentResolver | None = None,
+        kis_image_assets: KISImageAssetStore | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
@@ -78,6 +80,7 @@ class SearchService:
         self.temporal_evidence = temporal_evidence
         self.api_config = api_config or ApiConfig()
         self.intent_resolver = intent_resolver
+        self.kis_image_assets = kis_image_assets
 
         self.image_search = (
             ImageSearchService(

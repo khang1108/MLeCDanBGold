@@ -14,7 +14,7 @@ import numpy as np
 
 from hcmai.common.config import AlignmentConfig, DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.corpus import Corpus
-from hcmai.orchestration.materializer import SearchMaterializer
+from hcmai.orchestration.utils.materializer import SearchMaterializer
 from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.events import normalize_event_texts

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Header, HTTPException, Response, status
+from fastapi import APIRouter, File, Header, HTTPException, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
 from hcmai.api.contracts.kis import (
@@ -14,6 +14,8 @@ from hcmai.api.contracts.kis import (
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.inference.errors import InferenceResponseError, InferenceUnavailableError
+from hcmai.kis.assets import InvalidImageError
+from hcmai.kis.models import KISImageRef
 from hcmai.kis.resolver import KISResolutionError
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
@@ -77,6 +79,60 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Inference error: {error}",
             ) from error
+
+    @router.post("/api/v1/kis/assets/images", response_model=KISImageRef)
+    async def upload_kis_image(file: UploadFile = File(...)) -> KISImageRef:
+        """Store a validated user-supplied query image and return its stable ref.
+
+        The returned ``asset_id`` can be attached to KIS events as an image
+        reference. The canonical copy is available via the paired GET route.
+        """
+        service = service_container.get("service")
+        if service is None or service.kis_image_assets is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="KIS image asset store not available",
+            )
+        payload = await file.read(service.api_config.image_max_upload_bytes + 1)
+        try:
+            return await run_in_threadpool(
+                service.kis_image_assets.put,
+                payload,
+                file.content_type,
+            )
+        except InvalidImageError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(error),
+            ) from error
+
+    @router.get("/api/v1/kis/assets/images/{asset_id}")
+    async def get_kis_image(asset_id: str) -> Response:
+        """Return the validated original bytes for a previously uploaded image.
+
+        Responses are cache-immutable because asset IDs are content-addressed:
+        the same ID always returns the same bytes.
+        """
+        service = service_container.get("service")
+        if service is None or service.kis_image_assets is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="KIS image asset store not available",
+            )
+        try:
+            payload, content_type = await run_in_threadpool(
+                service.kis_image_assets.read, asset_id
+            )
+        except (KeyError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Asset not found: {asset_id}",
+            ) from error
+        return Response(
+            content=payload,
+            media_type=content_type,
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
 
     return router
 
