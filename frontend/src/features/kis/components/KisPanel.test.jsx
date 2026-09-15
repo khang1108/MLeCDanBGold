@@ -1,113 +1,161 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import KisPanel from './KisPanel';
+import { kisImageAssetUrl } from '../../../api/kis';
 
-describe('KisPanel presentation component', () => {
-  const defaultState = {
-    draft: '',
-    committedInputs: [],
-    revision: 0,
-    currentIntent: null,
-    isSearching: false,
-    error: null,
-  };
+const STATE_WITH_E1_E2 = {
+  draft: '',
+  revision: 2,
+  currentIntent: {
+    revision: 2,
+    language: 'en',
+    query_text: 'woman enters, then chef appears',
+    entities: [
+      { id: 'X1', kind: 'person', description: 'woman' },
+      { id: 'X2', kind: 'person', description: 'chef' },
+    ],
+    events: [
+      {
+        id: 'E1',
+        text: 'woman enters',
+        images: [{ asset_id: 'ast_e1_img', file_name: 'ref1.jpg' }],
+        bindings: [],
+      },
+      { id: 'E2', text: 'chef appears', images: [], bindings: [] },
+    ],
+    temporal_edges: [{ source: 'E1', target: 'E2', relation: 'before' }],
+  },
+  stagedImages: {},
+  pendingOperation: null,
+  isSearching: false,
+  error: null,
+  mode: 'live',
+};
 
-  test('renders input with required placeholder "Search or add another clue…"', () => {
-    render(<KisPanel sessionState={defaultState} />);
-    expect(screen.getByPlaceholderText('Search or add another clue…')).toBeTruthy();
-  });
-
-  test('uses a neutral KIS presentation instead of chat-agent prose', () => {
-    render(<KisPanel sessionState={defaultState} />);
-
-    expect(screen.queryByText('KIS Assistant')).toBeNull();
-    expect(screen.queryByText('Multi-Clue Semantic Search')).toBeNull();
-  });
-
-  test('renders committed clue history when revision > 0', () => {
-    const sessionState = {
-      ...defaultState,
-      committedInputs: ['A woman enters the kitchen', 'She takes a plate'],
-      revision: 2,
-    };
-    render(<KisPanel sessionState={sessionState} />);
-    expect(screen.getByText('Q1')).toBeTruthy();
-    expect(screen.getByText('A woman enters the kitchen')).toBeTruthy();
-    expect(screen.getByText('Q2')).toBeTruthy();
-    expect(screen.getByText('She takes a plate')).toBeTruthy();
-  });
-
-  test('renders canonical query text, events, and entity chips from currentIntent', () => {
-    const currentIntent = {
-      revision: 2,
-      inputs: ['A woman enters the kitchen', 'She takes a plate'],
-      language: 'en',
-      query_text: 'A woman enters the kitchen and takes a plate',
-      entities: [
-        { id: 'X1', kind: 'person', description: 'woman' },
-        { id: 'X2', kind: 'object', description: 'plate' },
-      ],
-      events: [
-        { id: 'E1', text: 'woman enters kitchen' },
-        { id: 'E2', text: 'woman takes plate' },
-      ],
-      temporal_edges: [{ source: 'E1', relation: 'before', target: 'E2' }],
-    };
-
-    const sessionState = {
-      ...defaultState,
-      committedInputs: currentIntent.inputs,
-      revision: 2,
-      currentIntent,
-    };
-
-    render(<KisPanel sessionState={sessionState} />);
-
-    // Canonical query text
-    expect(screen.getByText('A woman enters the kitchen and takes a plate')).toBeTruthy();
-
-    // Event list E1..En
-    expect(screen.getByText(/E1:/)).toBeTruthy();
-    expect(screen.getByText(/woman enters kitchen/)).toBeTruthy();
-    expect(screen.getByText(/E2:/)).toBeTruthy();
-    expect(screen.getByText(/woman takes plate/)).toBeTruthy();
-
-    // Entity chips
-    const entitiesContainer = screen.getByTestId('kis-intent-entities');
-    expect(entitiesContainer).toBeTruthy();
-    expect(entitiesContainer.textContent).toContain('X1:');
-    expect(entitiesContainer.textContent).toContain('woman');
-    expect(entitiesContainer.textContent).toContain('X2:');
-    expect(entitiesContainer.textContent).toContain('plate');
-  });
-
-  test('calls onDraftChange when typing in the input', () => {
+describe('KisPanel unified multimodal component', () => {
+  test('renders committed multimodal events and prefills the next event', () => {
     const onDraftChange = jest.fn();
-    render(<KisPanel sessionState={defaultState} onDraftChange={onDraftChange} />);
-    const textarea = screen.getByPlaceholderText('Search or add another clue…');
-    fireEvent.change(textarea, { target: { value: 'New clue' } });
-    expect(onDraftChange).toHaveBeenCalledWith('New clue');
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} onDraftChange={onDraftChange} />);
+    expect(screen.getByText('E1')).toBeTruthy();
+    expect(screen.getByText('E2')).toBeTruthy();
+    expect(screen.getByText('woman enters')).toBeTruthy();
+    expect(screen.getByText('chef appears')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /add event/i }));
+    expect(onDraftChange).toHaveBeenCalledWith('E3: ');
   });
 
-  test('calls onSubmit on Enter (without Shift) and on button click', () => {
-    const onSubmit = jest.fn();
-    const sessionState = { ...defaultState, draft: 'New clue' };
-    render(<KisPanel sessionState={sessionState} onSubmit={onSubmit} />);
-    const textarea = screen.getByPlaceholderText('Search or add another clue…');
+  test('asks for an event target when an image is attached without E# scope', async () => {
+    const file = new File(['png-bytes'], 'chef.png', { type: 'image/png' });
+    const onAttachImage = jest.fn();
+    render(
+      <KisPanel
+        sessionState={STATE_WITH_E1_E2}
+        onDraftChange={jest.fn()}
+        onAttachImage={onAttachImage}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/attach image/i), { target: { files: [file] } });
+    expect(screen.getByText(/attach image to/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'E1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'E2' })).toBeTruthy();
+    expect(onAttachImage).not.toHaveBeenCalled();
 
-    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
-    expect(onSubmit).toHaveBeenCalledTimes(1);
-
-    const submitBtn = screen.getByRole('button', { name: 'Search' });
-    fireEvent.click(submitBtn);
-    expect(onSubmit).toHaveBeenCalledTimes(2);
+    // Clicking E2 triggers onAttachImage
+    fireEvent.click(screen.getByRole('button', { name: 'E2' }));
+    expect(onAttachImage).toHaveBeenCalledWith(file, 'E2');
   });
 
-  test('calls onReset when New Search button is clicked', () => {
+  test('initial image-only targets E1 directly', () => {
+    const file = new File(['png-bytes'], 'solo.png', { type: 'image/png' });
+    const onAttachImage = jest.fn();
+    const initialState = {
+      draft: '',
+      revision: 0,
+      currentIntent: null,
+      stagedImages: {},
+      isSearching: false,
+      error: null,
+      mode: 'live',
+    };
+    render(<KisPanel sessionState={initialState} onAttachImage={onAttachImage} />);
+    fireEvent.change(screen.getByLabelText(/attach image/i), { target: { files: [file] } });
+    expect(onAttachImage).toHaveBeenCalledWith(file, 'E1');
+  });
+
+  test('initial text+image targets one E1', () => {
+    const file = new File(['png-bytes'], 'kitchen.png', { type: 'image/png' });
+    const onAttachImage = jest.fn();
+    const initialState = {
+      draft: 'woman enters the kitchen',
+      revision: 0,
+      currentIntent: null,
+      stagedImages: {},
+      isSearching: false,
+      error: null,
+      mode: 'live',
+    };
+    render(<KisPanel sessionState={initialState} onAttachImage={onAttachImage} />);
+    fireEvent.change(screen.getByLabelText(/attach image/i), { target: { files: [file] } });
+    expect(onAttachImage).toHaveBeenCalledWith(file, 'E1');
+  });
+
+  test('E2: scoped draft + pasted image immediately targets E2', () => {
+    const file = new File(['png-bytes'], 'pasted.png', { type: 'image/png' });
+    const onAttachImage = jest.fn();
+    const stateWithE2Draft = {
+      ...STATE_WITH_E1_E2,
+      draft: 'E2: chef wears black hat',
+    };
+    render(<KisPanel sessionState={stateWithE2Draft} onAttachImage={onAttachImage} />);
+
+    const textarea = screen.getByPlaceholderText('Search or add another clue…');
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ type: 'image/png', getAsFile: () => file }],
+      },
+    });
+
+    expect(onAttachImage).toHaveBeenCalledWith(file, 'E2');
+  });
+
+  test('renders persisted thumbnail URL pointing to kisImageAssetUrl(asset_id)', () => {
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} />);
+    const img = screen.getByAltText('ref1.jpg');
+    expect(img).toBeTruthy();
+    expect(img.getAttribute('src')).toBe(kisImageAssetUrl('ast_e1_img'));
+  });
+
+  test('calls onRemoveImage when remove button on event image is clicked', () => {
+    const onRemoveImage = jest.fn();
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} onRemoveImage={onRemoveImage} />);
+    const removeBtn = screen.getByRole('button', { name: /remove image ref1.jpg/i });
+    fireEvent.click(removeBtn);
+    expect(onRemoveImage).toHaveBeenCalledWith('E1', 'ast_e1_img');
+  });
+
+  test('displays dynamic submit label Rewrite for /llm-rewrite', () => {
+    const rewriteState = {
+      ...STATE_WITH_E1_E2,
+      draft: '/llm-rewrite\nrewrite everything for restaurant setting',
+    };
+    render(<KisPanel sessionState={rewriteState} />);
+    expect(screen.getByRole('button', { name: 'Rewrite' })).toBeTruthy();
+  });
+
+  test('displays dynamic submit label Update for patch_events', () => {
+    const patchState = {
+      ...STATE_WITH_E1_E2,
+      draft: 'E2: chef stirs soup',
+    };
+    render(<KisPanel sessionState={patchState} />);
+    expect(screen.getByRole('button', { name: 'Update' })).toBeTruthy();
+  });
+
+  test('calls onReset when reset button is clicked', () => {
     const onReset = jest.fn();
-    render(<KisPanel sessionState={defaultState} onReset={onReset} />);
-    const resetBtn = screen.getByRole('button', { name: /new search/i });
-    fireEvent.click(resetBtn);
-    expect(onReset).toHaveBeenCalledTimes(1);
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} onReset={onReset} />);
+    fireEvent.click(screen.getByRole('button', { name: /new search/i }));
+    expect(onReset).toHaveBeenCalled();
   });
 });

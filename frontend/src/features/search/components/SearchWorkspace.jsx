@@ -5,17 +5,20 @@
  * adds only history persistence, canonical activity tracking, and Replay.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { searchFramesByImage } from '../../../api/search';
-import { searchKis } from '../../../api/kis';
+import { searchKis, uploadKisImage } from '../../../api/kis';
 import KisPanel from '../../kis/components/KisPanel';
 import {
   createInitialKisSessionState,
   setDraft,
-  prepareSearchRequest,
+  stageImage,
+  unstageImage,
+  prepareSemanticRequest,
+  prepareSearchOnlyRequest,
   commitSearchSuccess,
   commitSearchFailure,
   resetKisSession,
 } from '../../kis/session';
+import { parseComposerDraft } from '../../kis/parser';
 import { filterFrames } from '../../../api/filter';
 import FilterPagination from '../../filter/components/FilterPagination';
 import {
@@ -44,13 +47,6 @@ const createClientQueryId = () => {
   return `query-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-const formatFileSize = (bytes) => {
-  if (!bytes || bytes <= 0) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
 const parseObjectInput = (raw) => {
   if (!raw || !raw.trim()) return [];
   return raw.split(',').map((part) => {
@@ -62,20 +58,22 @@ const parseObjectInput = (raw) => {
 };
 
 const SearchWorkspace = ({
-  isActive = true,
-  topK,
+  topK = 20,
   setTopK,
-  onFrameClick,
-  onOpenSubmission,
-  isSubmissionOpening = false,
-  onQueryChange,
   queryInputRef,
   onFocusQueryInput,
   onBlurQueryInput,
+  renderExtraActions,
+  onFrameClick,
+  onOpenSubmission,
+  isSubmissionOpening = false,
   userId,
   historyUserId,
   onHistoryRefresh,
+  onQueryChange,
   replayRequest,
+  onReplayHandled,
+  isActive = true,
   onExplorationInvalidated,
 }) => {
   const historyIdentity = typeof historyUserId === 'string'
@@ -93,9 +91,6 @@ const SearchWorkspace = ({
   const [isSearching, setIsSearching] = useState(false);
   const [activeQuerySession, setActiveQuerySession] = useState(null);
   const [replaySnapshot, setReplaySnapshot] = useState(null);
-  const [selectedImageFile, setSelectedImageFile] = useState(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
-  const [isImageDragOver, setIsImageDragOver] = useState(false);
   const [filterFolderId, setFilterFolderId] = useState('');
   const [filterVideoId, setFilterVideoId] = useState('');
   const [filterTitle, setFilterTitle] = useState('');
@@ -105,7 +100,6 @@ const SearchWorkspace = ({
   const [filterPageId, setFilterPageId] = useState(1);
   const [filterTotalPages, setFilterTotalPages] = useState(0);
   const [appliedFilterParams, setAppliedFilterParams] = useState(null);
-  const imageInputRef = useRef(null);
   const requestRef = useRef(null);
   const viewedPatchRef = useRef(new Set());
   const historyQueuesRef = useRef(new Map());
@@ -113,6 +107,7 @@ const SearchWorkspace = ({
   const historyGenerationRef = useRef(0);
   const lastReplayTokenRef = useRef(null);
   const liveKisSnapshotRef = useRef(null);
+  const prevControlsRef = useRef({ topK, useDense, useBm25 });
 
   const enqueueHistoryWrite = useCallback((queryId, write) => {
     const prior = historyQueuesRef.current.get(queryId) || Promise.resolve();
@@ -149,367 +144,21 @@ const SearchWorkspace = ({
     if (queryInputRef) queryInputRef.current = node;
   }, [queryInputRef]);
 
-  useEffect(() => {
-    if (!selectedImageFile) {
-      setImagePreviewUrl(null);
-      return undefined;
-    }
-    if (typeof URL.createObjectURL === 'function') {
-      const objectUrl = URL.createObjectURL(selectedImageFile);
-      setImagePreviewUrl(objectUrl);
-      return () => {
-        if (typeof URL.revokeObjectURL === 'function') {
-          URL.revokeObjectURL(objectUrl);
-        }
-      };
-    }
-    return undefined;
-  }, [selectedImageFile]);
-
-  const handleImageFileSelect = useCallback((file) => {
+  const handleAttachImage = useCallback(async (file, targetEventId) => {
     if (!file) return;
-    setSelectedImageFile(file);
-    setError(null);
+    try {
+      const assetRef = await uploadKisImage({ imageFile: file });
+      const eventId = targetEventId || 'E1';
+      setKisSession((prev) => stageImage(prev, eventId, assetRef));
+      setError(null);
+    } catch (err) {
+      setError(err?.message || 'Failed to upload image asset');
+    }
   }, []);
 
-  const handleClearImageFile = useCallback((e) => {
-    e?.stopPropagation?.();
-    setSelectedImageFile(null);
-    if (imageInputRef.current) imageInputRef.current.value = '';
+  const handleRemoveImage = useCallback((eventId, assetId) => {
+    setKisSession((prev) => unstageImage(prev, eventId, assetId));
   }, []);
-
-  const handleImageDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsImageDragOver(true);
-  };
-
-  const handleImageDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsImageDragOver(false);
-  };
-
-  const handleImageDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsImageDragOver(false);
-    const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-      handleImageFileSelect(files[0]);
-    }
-  };
-
-  useEffect(() => {
-    if (!isActive) return undefined;
-
-    const handlePaste = (event) => {
-      const items = event.clipboardData?.items;
-      if (!items) return;
-
-      for (let i = 0; i < items.length; i += 1) {
-        const item = items[i];
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            event.preventDefault();
-            const ext = file.type.split('/')[1] || 'png';
-            const fallbackName = `pasted-image-${Date.now()}.${ext}`;
-            const namedFile = file.name && file.name !== 'image.png'
-              ? file
-              : new File([file], fallbackName, { type: file.type });
-            handleImageFileSelect(namedFile);
-            break;
-          }
-        }
-      }
-    };
-
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [handleImageFileSelect, isActive]);
-
-  const recordViewed = useCallback((frame) => {
-    const frameId = frame?.frame_id;
-    const session = activeQuerySession;
-    if (!frameId || !session?.queryId) return;
-    const patchKey = `${session.queryId}:${frameId}`;
-    if (viewedPatchRef.current.has(patchKey)) return;
-    viewedPatchRef.current.add(patchKey);
-    setActiveQuerySession((current) => {
-      if (!current || current.queryId !== session.queryId || current.generation !== session.generation) {
-        return current;
-      }
-      const next = { ...current, frameActivity: withViewedFrame(current.frameActivity, frameId) };
-      activeQuerySessionRef.current = next;
-      return next;
-    });
-
-    enqueueHistoryWrite(session.queryId, async () => {
-      try {
-        await markFrameViewed({ queryId: session.queryId, frameId });
-      } catch (patchError) {
-        viewedPatchRef.current.delete(patchKey);
-        if (isCurrentHistorySession(session)) {
-          setWarnings((current) => Array.from(new Set([
-            ...current,
-            `History view state was not recorded: ${patchError.message || 'request failed'}`,
-          ])));
-        }
-      }
-    });
-  }, [activeQuerySession, enqueueHistoryWrite, isCurrentHistorySession]);
-
-  const openCanonicalFrame = useCallback((frame) => {
-    recordViewed(frame);
-    onFrameClick?.({
-      frame,
-      ...(liveKisSnapshotRef.current
-        ? { explorationSnapshot: liveKisSnapshotRef.current }
-        : {}),
-    });
-  }, [onFrameClick, recordViewed]);
-
-  const openKisFrame = useCallback((frame) => openCanonicalFrame(frame), [openCanonicalFrame]);
-
-
-  useEffect(() => () => requestRef.current?.abort(), []);
-
-  useEffect(() => {
-    const item = replayRequest?.item || replayRequest;
-    if (!item || !item.query_id || !item.result_snapshot) return;
-    const token = replayRequest?.token || item.query_id;
-    if (lastReplayTokenRef.current === token) return;
-    lastReplayTokenRef.current = token;
-    requestRef.current?.abort();
-    liveKisSnapshotRef.current = null;
-    onExplorationInvalidated?.();
-    invalidateHistorySession();
-    setIsSearching(false);
-    setError(null);
-    setWarnings([]);
-    setFrames([]);
-    setKisEvents([]);
-    setSearchLatencyMs(null);
-    setKisSession(createInitialKisSessionState());
-    onQueryChange?.(item.query_text || '');
-    try {
-      const kind = getSnapshotKind(item.result_snapshot);
-      const normalizedActivity = normalizeFrameActivity(item.frame_activity);
-      setReplaySnapshot(item.result_snapshot);
-      setResultType(`replay-${kind}`);
-      viewedPatchRef.current = new Set();
-      activateHistorySession({
-        queryId: item.query_id,
-        ownerUserId: historyIdentity,
-        queryText: item.query_text,
-        resultSnapshot: item.result_snapshot,
-        frameActivity: normalizedActivity,
-        source: 'history-replay',
-      });
-    } catch (replayError) {
-      setReplaySnapshot(null);
-      setResultType(null);
-      setError(replayError.message);
-    }
-  }, [
-    activateHistorySession,
-    historyIdentity,
-    invalidateHistorySession,
-    onExplorationInvalidated,
-    onQueryChange,
-    replayRequest,
-  ]);
-
-  const submitImageSearch = useCallback(async (event) => {
-    event?.preventDefault?.();
-    if (!selectedImageFile || isSearching) return;
-
-    requestRef.current?.abort();
-    liveKisSnapshotRef.current = null;
-    onExplorationInvalidated?.();
-    invalidateHistorySession();
-    const controller = new AbortController();
-    requestRef.current = controller;
-
-    setIsSearching(true);
-    setError(null);
-    setWarnings([]);
-    setFrames([]);
-    setKisEvents([]);
-    setSearchLatencyMs(null);
-    setResultType('image-retrieval');
-    setReplaySnapshot(null);
-    lastReplayTokenRef.current = null;
-
-    try {
-      const response = await searchFramesByImage({
-        imageFile: selectedImageFile,
-        topK,
-        signal: controller.signal,
-        userId: typeof userId === 'string' ? userId.trim() : '',
-      });
-
-      if (controller.signal.aborted) return;
-
-      setFrames(response.results || []);
-      setSearchLatencyMs(response.latency);
-      setWarnings(response.warnings || []);
-    } catch (requestError) {
-      if (requestError.name === 'AbortError') return;
-      setError(requestError.message || 'Failed to contact image search API');
-    } finally {
-      if (requestRef.current === controller) {
-        requestRef.current = null;
-        setIsSearching(false);
-      }
-    }
-  }, [
-    invalidateHistorySession,
-    isSearching,
-    onExplorationInvalidated,
-    selectedImageFile,
-    topK,
-    userId,
-  ]);
-
-  const submit = useCallback(async (event) => {
-    event?.preventDefault?.();
-    if (isSearching) return;
-
-    if (selectedImageFile) {
-      return submitImageSearch(event);
-    }
-
-    const rawEventText = (kisSession.draft || '').trim();
-    if (!rawEventText) return;
-
-    let prepared;
-    try {
-      prepared = prepareSearchRequest(kisSession);
-    } catch {
-      return;
-    }
-
-    const { nextState, requestPayload } = prepared;
-    setKisSession(nextState);
-
-    const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
-    requestRef.current?.abort();
-    const controller = new AbortController();
-    requestRef.current = controller;
-    const queryId = historyIdentity ? createClientQueryId() : null;
-
-    setIsSearching(true);
-    setError(null);
-    try {
-      const response = await searchKis({
-        inputs: requestPayload.inputs,
-        expectedRevision: requestPayload.expectedRevision,
-        topK,
-        useDense,
-        useBm25,
-        signal: controller.signal,
-        userId: capturedUserId,
-      });
-      if (controller.signal.aborted) return;
-
-      setKisSession((prev) => commitSearchSuccess(prev, response));
-
-      const eventTexts = Array.isArray(response.intent?.events)
-        ? response.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
-        : [];
-      const queryText = response.intent?.query_text || rawEventText;
-
-      const snapshotOptions = {
-        intent: response.intent,
-        latency: response.latency,
-        warnings: response.warnings || [],
-      };
-      const historySnapshot = buildKisSnapshot(response.results || [], snapshotOptions);
-
-      // Keep the backend's committed scoring seed intact while the draft changes.
-      liveKisSnapshotRef.current = response.exploration_seed || null;
-      setResultType('retrieval');
-      setReplaySnapshot(null);
-      lastReplayTokenRef.current = null;
-      setFrames(response.results || []);
-      setKisEvents(eventTexts);
-      setSearchLatencyMs(response.latency);
-      setWarnings(response.warnings || []);
-      onQueryChange?.(queryText);
-
-      if (queryId) {
-        viewedPatchRef.current = new Set();
-        const historySession = activateHistorySession({
-          queryId,
-          ownerUserId: historyIdentity,
-          queryText,
-          resultSnapshot: historySnapshot,
-          frameActivity: normalizeFrameActivity(),
-          source: 'live-search',
-        });
-
-        enqueueHistoryWrite(queryId, async () => {
-          try {
-            await createQueryHistory({
-              queryId,
-              userId: historyIdentity,
-              queryText,
-              resultSnapshot: historySnapshot,
-              signal: controller.signal,
-            });
-            if (!controller.signal.aborted && isCurrentHistorySession(historySession)) {
-              onHistoryRefresh?.();
-            }
-          } catch (historyError) {
-            if (historyError.name === 'AbortError') throw historyError;
-            if (isCurrentHistorySession(historySession)) {
-              invalidateHistorySession();
-              setWarnings((current) => [...current, `History was not saved: ${historyError.message || 'request failed'}`]);
-            }
-            throw historyError;
-          }
-        });
-      } else {
-        invalidateHistorySession();
-      }
-    } catch (requestError) {
-      if (requestError.name === 'AbortError') return;
-      setKisSession((prev) => commitSearchFailure(prev, requestError));
-      setError(requestError.message || 'Search failed');
-    } finally {
-      if (requestRef.current === controller) {
-        requestRef.current = null;
-        setIsSearching(false);
-      }
-    }
-  }, [
-    enqueueHistoryWrite,
-    activateHistorySession,
-    historyIdentity,
-    invalidateHistorySession,
-    isSearching,
-    isCurrentHistorySession,
-    kisSession,
-    onHistoryRefresh,
-    onQueryChange,
-    selectedImageFile,
-    submitImageSearch,
-    topK,
-    useBm25,
-    useDense,
-    userId,
-  ]);
-
-  const hasAnyFilterValue = Boolean(
-    filterFolderId.trim()
-    || filterVideoId.trim()
-    || filterTitle.trim()
-    || filterAsr.trim()
-    || filterOcr.trim()
-    || filterObject.trim(),
-  );
 
   const submitFilter = useCallback(async ({ pageId = 1, overrideParams = null } = {}) => {
     const paramsToUse = overrideParams || {
@@ -598,6 +247,250 @@ const SearchWorkspace = ({
     setAppliedFilterParams(null);
   }, []);
 
+  const recordViewed = useCallback((frame) => {
+    const frameId = frame?.frame_id;
+    const session = activeQuerySession;
+    if (!frameId || !session?.queryId) return;
+    const patchKey = `${session.queryId}:${frameId}`;
+    if (viewedPatchRef.current.has(patchKey)) return;
+    viewedPatchRef.current.add(patchKey);
+    setActiveQuerySession((current) => {
+      if (!current || current.queryId !== session.queryId || current.generation !== session.generation) {
+        return current;
+      }
+      const next = { ...current, frameActivity: withViewedFrame(current.frameActivity, frameId) };
+      activeQuerySessionRef.current = next;
+      return next;
+    });
+
+    enqueueHistoryWrite(session.queryId, async () => {
+      try {
+        await markFrameViewed({ queryId: session.queryId, frameId });
+      } catch (patchError) {
+        viewedPatchRef.current.delete(patchKey);
+        if (isCurrentHistorySession(session)) {
+          setWarnings((current) => Array.from(new Set([
+            ...current,
+            `History view state was not recorded: ${patchError.message || 'request failed'}`,
+          ])));
+        }
+      }
+    });
+  }, [activeQuerySession, enqueueHistoryWrite, isCurrentHistorySession]);
+
+  const openCanonicalFrame = useCallback((frame) => {
+    recordViewed(frame);
+    onFrameClick?.({
+      frame,
+      ...(liveKisSnapshotRef.current
+        ? { explorationSnapshot: liveKisSnapshotRef.current }
+        : {}),
+    });
+  }, [onFrameClick, recordViewed]);
+
+  const openKisFrame = useCallback((frame) => openCanonicalFrame(frame), [openCanonicalFrame]);
+
+  useEffect(() => {
+    const item = replayRequest?.item || replayRequest;
+    if (!item || !item.query_id || !item.result_snapshot) return;
+    const token = replayRequest?.token || item.query_id;
+    if (lastReplayTokenRef.current === token) return;
+    lastReplayTokenRef.current = token;
+
+    requestRef.current?.abort();
+    liveKisSnapshotRef.current = null;
+    onExplorationInvalidated?.();
+    invalidateHistorySession();
+    setIsSearching(false);
+    setError(null);
+    setWarnings([]);
+    setFrames([]);
+    setKisEvents([]);
+    setSearchLatencyMs(null);
+    handleClearFilter();
+    setKisSession(createInitialKisSessionState());
+    onQueryChange?.(item.query_text || '');
+
+    try {
+      const kind = getSnapshotKind(item.result_snapshot);
+      const normalizedActivity = normalizeFrameActivity(item.frame_activity);
+      setReplaySnapshot(item.result_snapshot);
+      setResultType(`replay-${kind}`);
+      viewedPatchRef.current = new Set();
+      activateHistorySession({
+        queryId: item.query_id,
+        ownerUserId: historyIdentity,
+        queryText: item.query_text,
+        resultSnapshot: item.result_snapshot,
+        frameActivity: normalizedActivity,
+        source: 'history-replay',
+      });
+    } catch (replayError) {
+      setReplaySnapshot(null);
+      setResultType(null);
+      setError(replayError.message);
+    }
+  }, [
+    activateHistorySession,
+    handleClearFilter,
+    historyIdentity,
+    invalidateHistorySession,
+    onExplorationInvalidated,
+    onQueryChange,
+    replayRequest,
+  ]);
+
+  const submit = useCallback(async (event) => {
+    event?.preventDefault?.();
+    if (isSearching) return;
+
+    let prepared;
+    const draftText = (kisSession.draft || '').trim();
+    const hasStagedImages = Object.keys(kisSession.stagedImages || {}).length > 0;
+
+    try {
+      if (draftText) {
+        const preview = parseComposerDraft(draftText, kisSession.currentIntent);
+        if (preview.error) {
+          setError(preview.error);
+          return;
+        }
+        prepared = prepareSemanticRequest(kisSession, preview);
+      } else if (hasStagedImages) {
+        const preview = kisSession.currentIntent
+          ? { kind: 'patch_events', affectedEventIds: Object.keys(kisSession.stagedImages), error: null }
+          : { kind: 'initial_resolve', affectedEventIds: [], error: null };
+        prepared = prepareSemanticRequest(kisSession, preview);
+      } else if (kisSession.currentIntent) {
+        prepared = prepareSearchOnlyRequest(kisSession);
+      } else {
+        return;
+      }
+    } catch (prepareErr) {
+      setError(prepareErr?.message || 'Invalid request');
+      return;
+    }
+
+    const { nextState, requestPayload } = prepared;
+    setKisSession(nextState);
+
+    const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const queryId = historyIdentity ? createClientQueryId() : null;
+
+    setIsSearching(true);
+    setError(null);
+    try {
+      const response = await searchKis({
+        baseIntent: requestPayload.baseIntent,
+        expectedRevision: requestPayload.expectedRevision,
+        operation: requestPayload.operation,
+        topK,
+        useDense,
+        useBm25,
+        signal: controller.signal,
+        userId: capturedUserId,
+      });
+      if (controller.signal.aborted) return;
+
+      setKisSession((prev) => commitSearchSuccess(prev, response));
+
+      const eventTexts = Array.isArray(response.intent?.events)
+        ? response.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
+        : [];
+      const queryText = response.intent?.query_text || draftText || 'Multimodal search';
+
+      const snapshotOptions = {
+        intent: response.intent,
+        latency: response.latency,
+        warnings: response.warnings || [],
+      };
+      const historySnapshot = buildKisSnapshot(response.results || [], snapshotOptions);
+
+      liveKisSnapshotRef.current = response.exploration_seed || null;
+      setResultType('retrieval');
+      setReplaySnapshot(null);
+      lastReplayTokenRef.current = null;
+      setFrames(response.results || []);
+      setKisEvents(eventTexts);
+      setSearchLatencyMs(response.latency);
+      setWarnings(response.warnings || []);
+      onQueryChange?.(queryText);
+
+      if (queryId && requestPayload.operation?.kind !== 'search_only') {
+        viewedPatchRef.current = new Set();
+        const historySession = activateHistorySession({
+          queryId,
+          ownerUserId: historyIdentity,
+          queryText,
+          resultSnapshot: historySnapshot,
+          frameActivity: normalizeFrameActivity(),
+          source: 'live-search',
+        });
+
+        enqueueHistoryWrite(queryId, async () => {
+          try {
+            await createQueryHistory({
+              queryId,
+              userId: historyIdentity,
+              queryText,
+              resultSnapshot: historySnapshot,
+              signal: controller.signal,
+            });
+            if (!controller.signal.aborted && isCurrentHistorySession(historySession)) {
+              onHistoryRefresh?.();
+            }
+          } catch (historyError) {
+            if (historyError.name === 'AbortError') throw historyError;
+            if (isCurrentHistorySession(historySession)) {
+              invalidateHistorySession();
+              setWarnings((current) => [...current, `History was not saved: ${historyError.message || 'request failed'}`]);
+            }
+            throw historyError;
+          }
+        });
+      } else {
+        invalidateHistorySession();
+      }
+    } catch (requestError) {
+      if (requestError.name === 'AbortError') return;
+      setKisSession((prev) => commitSearchFailure(prev, requestError));
+      setError(requestError.message || 'Search failed');
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setIsSearching(false);
+      }
+    }
+  }, [
+    activateHistorySession,
+    enqueueHistoryWrite,
+    historyIdentity,
+    invalidateHistorySession,
+    isCurrentHistorySession,
+    isSearching,
+    kisSession,
+    onHistoryRefresh,
+    onQueryChange,
+    topK,
+    useBm25,
+    useDense,
+    userId,
+  ]);
+
+  // Step 7: Search-only rerun when only retrieval controls change
+  useEffect(() => {
+    const prev = prevControlsRef.current;
+    const controlsChanged = prev.topK !== topK || prev.useDense !== useDense || prev.useBm25 !== useBm25;
+    prevControlsRef.current = { topK, useDense, useBm25 };
+
+    if (controlsChanged && kisSession.currentIntent && !kisSession.draft?.trim() && !isSearching) {
+      submit();
+    }
+  }, [topK, useDense, useBm25, kisSession.currentIntent, kisSession.draft, isSearching, submit]);
+
   const handleNewSearch = useCallback(() => {
     requestRef.current?.abort();
     requestRef.current = null;
@@ -606,8 +499,6 @@ const SearchWorkspace = ({
     invalidateHistorySession();
     setIsSearching(false);
     setKisSession(resetKisSession());
-    setSelectedImageFile(null);
-    if (imageInputRef.current) imageInputRef.current.value = '';
     handleClearFilter();
     setFrames([]);
     setKisEvents([]);
@@ -679,209 +570,120 @@ const SearchWorkspace = ({
 
   const isReplay = resultType?.startsWith('replay-');
 
+  const hasAnyFilterValue = Boolean(
+    filterFolderId.trim()
+    || filterVideoId.trim()
+    || filterTitle.trim()
+    || filterAsr.trim()
+    || filterOcr.trim()
+    || filterObject.trim(),
+  );
+
   return (
     <div className="adhoc-workspace search-workspace">
-      <form className="search-query-form" onSubmit={submit}>
-        {selectedImageFile ? (
-          <div className="search-query-row">
-            <div
-              className="query-input-wrapper"
-              onDragOver={handleImageDragOver}
-              onDragLeave={handleImageDragLeave}
-              onDrop={handleImageDrop}
-            >
-              <div className="query-image-preview-bar">
-                {imagePreviewUrl && (
-                  <img
-                    src={imagePreviewUrl}
-                    alt="Upload preview"
-                    className="query-image-thumb"
-                  />
-                )}
-                <div className="query-image-info">
-                  <span className="query-image-name" title={selectedImageFile.name}>{selectedImageFile.name}</span>
-                  <span className="query-image-size">{formatFileSize(selectedImageFile.size)}</span>
-                </div>
-                <button
-                  type="button"
-                  className="image-clear-btn"
-                  onClick={handleClearImageFile}
-                  title="Remove image"
-                  aria-label="Remove image"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            <div className="search-query-actions">
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="image-file-hidden-input"
-                data-testid="image-search-file-input"
-                onChange={(e) => handleImageFileSelect(e.target.files?.[0])}
-              />
-              <button
-                type="submit"
-                className="btn-primary query-submit-btn"
-                disabled={isSearching}
-              >
-                {isSearching ? 'Searching…' : 'Search'}
-              </button>
-              <button
-                type="button"
-                className="btn-secondary search-action-btn"
-                onClick={() => imageInputRef.current?.click()}
-                title="Upload image"
-              >
-                Upload
-              </button>
-              <button
-                type="button"
-                className="btn-secondary search-action-btn"
-                onClick={handleNewSearch}
-                title="Shortcut: N"
-              >
-                New Search
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="search-query-row search-image-drop-row">
-            <div
-              className={`query-input-wrapper search-image-drop-target${isImageDragOver ? ' drag-over' : ''}`}
-              onDragOver={handleImageDragOver}
-              onDragLeave={handleImageDragLeave}
-              onDrop={handleImageDrop}
-            >
-              <span>Drop an image here to search by image.</span>
-            </div>
-            <div className="search-query-actions">
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="image-file-hidden-input"
-                data-testid="image-search-file-input"
-                onChange={(e) => handleImageFileSelect(e.target.files?.[0])}
-              />
-              <button
-                type="button"
-                className="btn-secondary search-action-btn"
-                onClick={() => imageInputRef.current?.click()}
-                title="Upload image"
-              >
-                Upload
-              </button>
-            </div>
-          </div>
-        )}
+      <form className="search-query-form" onSubmit={(e) => { e.preventDefault(); submitFilter(); }}>
         <div className="search-filter-row">
-          <div className="search-filter-inputs-wrapper">
-            <input
-              type="text"
-              className="input-text search-filter-input"
-              placeholder="Folder ID"
-              aria-label="Filter Folder ID"
-              value={filterFolderId}
-              onChange={(e) => setFilterFolderId(e.target.value)}
-              disabled={isSearching}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submitFilter({ pageId: 1 });
-                }
-              }}
-            />
-            <input
-              type="text"
-              className="input-text search-filter-input"
-              placeholder="Video ID"
-              aria-label="Filter Video ID"
-              value={filterVideoId}
-              onChange={(e) => setFilterVideoId(e.target.value)}
-              disabled={isSearching}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submitFilter({ pageId: 1 });
-                }
-              }}
-            />
-            <input
-              type="text"
-              className="input-text search-filter-input"
-              placeholder="Title"
-              aria-label="Filter Title"
-              value={filterTitle}
-              onChange={(e) => setFilterTitle(e.target.value)}
-              disabled={isSearching}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submitFilter({ pageId: 1 });
-                }
-              }}
-            />
-            <input
-              type="text"
-              className="input-text search-filter-input"
-              placeholder="ASR"
-              aria-label="Filter ASR"
-              value={filterAsr}
-              onChange={(e) => setFilterAsr(e.target.value)}
-              disabled={isSearching}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submitFilter({ pageId: 1 });
-                }
-              }}
-            />
-            <input
-              type="text"
-              className="input-text search-filter-input"
-              placeholder="OCR"
-              aria-label="Filter OCR"
-              value={filterOcr}
-              onChange={(e) => setFilterOcr(e.target.value)}
-              disabled={isSearching}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submitFilter({ pageId: 1 });
-                }
-              }}
-            />
-            <input
-              type="text"
-              className="input-text search-filter-input"
-              placeholder="Object (name: count)"
-              aria-label="Filter Object"
-              value={filterObject}
-              onChange={(e) => setFilterObject(e.target.value)}
-              disabled={isSearching}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submitFilter({ pageId: 1 });
-                }
-              }}
-            />
-          </div>
+          <input
+            type="text"
+            className="input-text search-filter-input"
+            placeholder="Folder ID"
+            aria-label="Filter Folder ID"
+            value={filterFolderId}
+            onChange={(e) => setFilterFolderId(e.target.value)}
+            disabled={isSearching}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitFilter({ pageId: 1 });
+              }
+            }}
+          />
+          <input
+            type="text"
+            className="input-text search-filter-input"
+            placeholder="Video ID"
+            aria-label="Filter Video ID"
+            value={filterVideoId}
+            onChange={(e) => setFilterVideoId(e.target.value)}
+            disabled={isSearching}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitFilter({ pageId: 1 });
+              }
+            }}
+          />
+          <input
+            type="text"
+            className="input-text search-filter-input"
+            placeholder="Title"
+            aria-label="Filter Title"
+            value={filterTitle}
+            onChange={(e) => setFilterTitle(e.target.value)}
+            disabled={isSearching}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitFilter({ pageId: 1 });
+              }
+            }}
+          />
+          <input
+            type="text"
+            className="input-text search-filter-input"
+            placeholder="ASR"
+            aria-label="Filter ASR"
+            value={filterAsr}
+            onChange={(e) => setFilterAsr(e.target.value)}
+            disabled={isSearching}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitFilter({ pageId: 1 });
+              }
+            }}
+          />
+          <input
+            type="text"
+            className="input-text search-filter-input"
+            placeholder="OCR"
+            aria-label="Filter OCR"
+            value={filterOcr}
+            onChange={(e) => setFilterOcr(e.target.value)}
+            disabled={isSearching}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitFilter({ pageId: 1 });
+              }
+            }}
+          />
+          <input
+            type="text"
+            className="input-text search-filter-input"
+            placeholder="Object (name: count)"
+            aria-label="Filter Object"
+            value={filterObject}
+            onChange={(e) => setFilterObject(e.target.value)}
+            disabled={isSearching}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitFilter({ pageId: 1 });
+              }
+            }}
+          />
           <div className="search-filter-actions">
             <button
-              type="button"
-              className="btn-primary search-filter-btn"
+              type="submit"
+              className="btn-primary filter-submit-btn"
               disabled={isSearching || !hasAnyFilterValue}
-              onClick={() => submitFilter({ pageId: 1 })}
             >
-              {isSearching && resultType === 'filter' ? 'Filtering…' : 'Filter'}
+              Filter
             </button>
             <button
               type="button"
-              className="btn-secondary search-action-btn search-filter-clear-btn"
+              className="btn-secondary filter-clear-btn"
               onClick={handleClearFilter}
               disabled={isSearching || !hasAnyFilterValue}
             >
@@ -906,24 +708,25 @@ const SearchWorkspace = ({
           <GifLoaderOverlay isVisible={isSearching && frames.length === 0} />
           {renderResults()}
         </div>
-        {!selectedImageFile && (
-          <aside className="kis-chat-sidebar" aria-label="KIS search">
-            <KisPanel
-              sessionState={{
-                ...kisSession,
-                isSearching: isSearching || kisSession.isSearching,
-                error: error || kisSession.error,
-              }}
-              inputRef={setQueryTextareaRef}
-              onDraftChange={(val) => {
-                setKisSession((prev) => setDraft(prev, val));
-              }}
-              onSubmit={submit}
-              onReset={handleNewSearch}
-              disabled={isReplay || isSearching}
-            />
-          </aside>
-        )}
+        <aside className="kis-chat-sidebar" aria-label="KIS search">
+          <KisPanel
+            sessionState={{
+              ...kisSession,
+              isSearching: isSearching || kisSession.isSearching,
+              error: error || kisSession.error,
+            }}
+            inputRef={setQueryTextareaRef}
+            onDraftChange={(val) => {
+              setKisSession((prev) => setDraft(prev, val));
+            }}
+            onSubmit={submit}
+            onReset={handleNewSearch}
+            onAttachImage={handleAttachImage}
+            onRemoveImage={handleRemoveImage}
+            disabled={isReplay || isSearching}
+            renderExtraActions={renderExtraActions}
+          />
+        </aside>
       </div>
     </div>
   );

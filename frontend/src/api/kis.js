@@ -1,5 +1,15 @@
-import { requestJson } from './client';
+import { requestJson, requestFormData } from './client';
 import { normalizeSearchLatency } from './search';
+
+export const kisImageAssetUrl = (assetId) => (
+  `/api/v1/kis/assets/images/${encodeURIComponent(assetId)}`
+);
+
+export const uploadKisImage = async ({ imageFile, signal }) => {
+  const body = new FormData();
+  body.append('file', imageFile);
+  return requestFormData('/api/v1/kis/assets/images', body, { method: 'POST', signal });
+};
 
 const hasSearchLatency = (latency) => (
   latency

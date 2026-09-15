@@ -1,7 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { searchFramesByImage } from '../../../api/search';
-import { searchKis } from '../../../api/kis';
+import { searchKis, uploadKisImage } from '../../../api/kis';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
 import { filterFrames } from '../../../api/filter';
 import {
@@ -9,12 +8,10 @@ import {
   markFrameViewed,
 } from '../../../api/history';
 
-jest.mock('../../../api/search', () => ({
-  ...jest.requireActual('../../../api/search'),
-  searchFramesByImage: jest.fn(),
-}));
 jest.mock('../../../api/kis', () => ({
+  ...jest.requireActual('../../../api/kis'),
   searchKis: jest.fn(),
+  uploadKisImage: jest.fn(),
 }));
 jest.mock('../../../api/filter', () => ({
   filterFrames: jest.fn(),
@@ -27,7 +24,7 @@ const renderSearch = (props) => render(<SearchWorkspace {...props} />);
 
 beforeEach(() => {
   searchKis.mockReset();
-  searchFramesByImage.mockReset();
+  uploadKisImage.mockReset();
   filterFrames.mockReset();
   createQueryHistory.mockResolvedValue({});
   markFrameViewed.mockResolvedValue({});
@@ -49,6 +46,7 @@ const mockKisResponse = ({
   revision = 1,
   warnings = [],
   latency = SEARCH_LATENCY,
+  operationSummary = { kind: 'initial_resolve', affected_event_ids: ['E1'] },
 } = {}) => ({
   intent: {
     revision,
@@ -59,6 +57,7 @@ const mockKisResponse = ({
     events,
     temporal_edges: [],
   },
+  operation_summary: operationSummary,
   results,
   warnings,
   latency,
@@ -68,22 +67,22 @@ const submit = (eventDescription) => {
   fireEvent.change(document.getElementById('event-query'), {
     target: { value: eventDescription },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite)$/i }));
 };
 
 test.each([
-  ['a red vehicle passes', 'a red vehicle passes'],
-  ['E1: a person enters the room', 'E1: a person enters the room'],
+  ['a red vehicle passes', { kind: 'initial_resolve', text: 'a red vehicle passes' }],
+  ['E1: a person enters the room', { kind: 'initial_resolve', patches: [expect.objectContaining({ event_id: 'E1', instruction: 'a person enters the room' })] }],
 ])('routes %s through frame search', async (
   description,
-  query,
+  expectedOp,
 ) => {
-  searchKis.mockResolvedValueOnce(mockKisResponse({ inputs: [query], queryText: query }));
+  searchKis.mockResolvedValueOnce(mockKisResponse({ inputs: [description], queryText: description }));
   renderSearch({ topK: 20, setTopK: jest.fn() });
   submit(description);
 
   await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
-    expect.objectContaining({ inputs: [{ text: query }], topK: 20 }),
+    expect.objectContaining({ operation: expect.objectContaining(expectedOp), topK: 20 }),
   ));
   expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
 });
@@ -102,7 +101,13 @@ test('Enter submits E1-prefixed text while Shift+Enter stays in the textarea', a
   expect(fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', shiftKey: false })).toBe(false);
 
   await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
-    expect.objectContaining({ inputs: [{ text: 'E1: a person enters the room' }], topK: 20 }),
+    expect.objectContaining({
+      operation: expect.objectContaining({
+        kind: 'initial_resolve',
+        patches: [expect.objectContaining({ event_id: 'E1', instruction: 'a person enters the room' })],
+      }),
+      topK: 20,
+    }),
   ));
 });
 
@@ -118,7 +123,7 @@ test('sends the selected Dense and BM25 modes with KIS search', async () => {
 
   await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
     expect.objectContaining({
-      inputs: [{ text: 'a lexical-only query' }],
+      operation: expect.objectContaining({ kind: 'initial_resolve', text: 'a lexical-only query' }),
       topK: 20,
       useDense: false,
       useBm25: true,
@@ -219,6 +224,7 @@ const frameResult = (id) => ({
   timestamp_ms: id === 'frame-1' ? 4_000 : 8_000,
   fps: 25,
   caption: id,
+  score: 0.9,
   scores: { final: 0.9 },
 });
 
@@ -232,7 +238,7 @@ test('keeps committed results visible while the next revision is pending', async
   submit('first');
   expect(await screen.findByAltText('Frame frame-1')).toBeTruthy();
 
-  submit('second');
+  submit('E2: second');
   expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
 
   resolveSecond(mockKisResponse({ queryText: 'second', revision: 2, results: [frameResult('frame-2')] }));
@@ -248,11 +254,11 @@ test('keeps previous committed results and retains draft when next revision fail
   submit('first');
   expect(await screen.findByAltText('Frame frame-1')).toBeTruthy();
 
-  submit('second clue');
+  submit('E2: second clue');
   expect(await screen.findByText('Network error (500)')).toBeTruthy();
   expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
   const input = document.getElementById('event-query');
-  expect(input.value).toBe('second clue');
+  expect(input.value).toBe('E2: second clue');
 });
 
 test('preserves committed warnings while the next revision is pending and fails', async () => {
@@ -272,7 +278,7 @@ test('preserves committed warnings while the next revision is pending and fails'
   submit('first');
   expect(await screen.findByText('first response warning')).toBeTruthy();
 
-  submit('second clue');
+  submit('E2: second clue');
   expect(screen.getByText('first response warning')).toBeTruthy();
 
   rejectSecond(new Error('second request failed'));
@@ -414,7 +420,7 @@ test('late history completion from search A cannot overwrite active search B', a
   submit('first');
   await screen.findByAltText('Frame frame-1');
 
-  submit('second');
+  submit('E2: second');
   await screen.findByAltText('Frame frame-2');
 
   const queryIdB = createQueryHistory.mock.calls[1][0].queryId;
@@ -441,7 +447,7 @@ test('late history failure from search A cannot warn about or clear active searc
   renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
   submit('first');
   await screen.findByAltText('Frame frame-1');
-  submit('second');
+  submit('E2: second');
   await screen.findByAltText('Frame frame-2');
 
   await act(async () => {
@@ -566,7 +572,10 @@ test('keeps local retrieval available while no VBS participant is connected', as
   submit('a red vehicle passes');
 
   await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
-    expect.objectContaining({ inputs: [{ text: 'a red vehicle passes' }], userId: '' }),
+    expect.objectContaining({
+      operation: expect.objectContaining({ kind: 'initial_resolve', text: 'a red vehicle passes' }),
+      userId: '',
+    }),
   ));
   expect(onFocusUserId).not.toHaveBeenCalled();
   expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
@@ -725,6 +734,7 @@ test('keeps the viewed color while allowing a failed activity patch to retry', a
       timestamp_ms: 1000,
       frame_ids: ['frame-kis'],
       timestamps_ms: [1000],
+      score: 0.5,
       scores: { final: 0.5 },
     }],
   }));
@@ -739,20 +749,12 @@ test('keeps the viewed color while allowing a failed activity patch to retry', a
   await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(2));
 });
 
-test('renders Upload button next to Search and opens file picker', () => {
-  renderSearch({ topK: 20, setTopK: jest.fn() });
-  const uploadBtn = screen.getByRole('button', { name: 'Upload' });
-  expect(uploadBtn).toBeTruthy();
-
-  const fileInput = screen.getByTestId('image-search-file-input');
-  expect(fileInput).toBeTruthy();
-  const clickSpy = jest.spyOn(fileInput, 'click');
-  fireEvent.click(uploadBtn);
-  expect(clickSpy).toHaveBeenCalled();
-});
-
-test('detects uploaded image and executes image search API on submit', async () => {
-  searchFramesByImage.mockResolvedValueOnce({
+test('attaches image via composer and executes multimodal KIS search on submit', async () => {
+  uploadKisImage.mockResolvedValueOnce({
+    asset_id: 'ast_test_1',
+    file_name: 'query_photo.jpg',
+  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({
     results: [{
       frame_id: 'img-result-1',
       video_id: 'V02',
@@ -760,78 +762,86 @@ test('detects uploaded image and executes image search API on submit', async () 
       timestamp_ms: 2000,
       frame_ids: ['img-result-1'],
       timestamps_ms: [2000],
+      score: 0.95,
       scores: { visual: 0.95 },
     }],
-    warnings: [],
-    latency: SEARCH_LATENCY,
-  });
+  }));
 
   renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
 
-  // Initially search is disabled with no query
-  const searchBtn = screen.getByRole('button', { name: 'Search' });
-  expect(searchBtn.disabled).toBe(true);
-
-  // Upload an image file
+  // Attach an image file via the unified composer
   const testFile = new File(['dummy content'], 'query_photo.jpg', { type: 'image/jpeg' });
-  const fileInput = screen.getByTestId('image-search-file-input');
+  const fileInput = screen.getByLabelText(/attach image/i);
   fireEvent.change(fileInput, { target: { files: [testFile] } });
 
-  // Preview badge should now be visible with filename
-  expect(await screen.findByText('query_photo.jpg')).toBeTruthy();
-  // Search button should now be enabled
-  expect(screen.getByRole('button', { name: 'Search' }).disabled).toBe(false);
+  await waitFor(() => expect(uploadKisImage).toHaveBeenCalledWith(
+    expect.objectContaining({ imageFile: testFile }),
+  ));
+
+  const searchBtn = await screen.findByRole('button', { name: 'Search' });
+  await waitFor(() => expect(searchBtn.disabled).toBe(false));
 
   // Submit search
-  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+  fireEvent.click(searchBtn);
 
-  // It should automatically detect image search and call searchFramesByImage
-  await waitFor(() => expect(searchFramesByImage).toHaveBeenCalledWith(
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
     expect.objectContaining({
-      imageFile: testFile,
+      operation: expect.objectContaining({
+        kind: 'initial_resolve',
+        image_refs: expect.arrayContaining([expect.objectContaining({ asset_id: 'ast_test_1' })]),
+      }),
       topK: 20,
       userId: 'team-a',
     }),
   ));
-  expect(searchKis).not.toHaveBeenCalled();
 
-  // Results should render in FramesBox
   expect(await screen.findByAltText('Frame img-result-1')).toBeTruthy();
 });
 
-test('clearing the uploaded image restores text query input', async () => {
-  renderSearch({ topK: 20, setTopK: jest.fn() });
+test('Search-only rerun when only retrieval controls change with active intent', async () => {
+  const initialResponse = mockKisResponse({
+    queryText: 'red boat',
+    events: [{ id: 'E1', text: 'red boat' }],
+    revision: 1,
+    results: [{
+      frame_id: 'boat-1',
+      video_id: 'V01',
+      frame_idx: 10,
+      timestamp_ms: 1000,
+      frame_ids: ['boat-1'],
+      timestamps_ms: [1000],
+    }],
+  });
+  searchKis.mockResolvedValue(initialResponse);
 
-  const testFile = new File(['dummy'], 'sample.png', { type: 'image/png' });
-  const fileInput = screen.getByTestId('image-search-file-input');
-  fireEvent.change(fileInput, { target: { files: [testFile] } });
+  const { rerender } = renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('red boat');
 
-  expect(await screen.findByText('sample.png')).toBeTruthy();
+  await waitFor(() => expect(searchKis).toHaveBeenCalledTimes(1));
 
-  // Click remove button ✕
-  const clearBtn = screen.getByRole('button', { name: 'Remove image' });
-  fireEvent.click(clearBtn);
+  // Rerender with changed topK without a draft
+  rerender(<SearchWorkspace topK={50} setTopK={jest.fn()} />);
 
-  // Textarea should be restored
-  expect(screen.queryByText('sample.png')).toBeNull();
-  expect(document.getElementById('event-query')).toBeTruthy();
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
+    expect.objectContaining({
+      operation: { kind: 'search_only' },
+      topK: 50,
+      expectedRevision: 1,
+    }),
+  ));
 });
 
-test('New Search resets the uploaded image query', async () => {
+test('New Search resets KIS session', async () => {
   renderSearch({ topK: 20, setTopK: jest.fn() });
 
-  const testFile = new File(['dummy'], 'test.png', { type: 'image/png' });
-  const fileInput = screen.getByTestId('image-search-file-input');
-  fireEvent.change(fileInput, { target: { files: [testFile] } });
-
-  expect(await screen.findByText('test.png')).toBeTruthy();
+  const textarea = document.getElementById('event-query');
+  fireEvent.change(textarea, { target: { value: 'test draft' } });
+  expect(textarea.value).toBe('test draft');
 
   // Click New Search
   fireEvent.click(screen.getByRole('button', { name: 'New Search' }));
 
-  // Image query cleared and textarea restored
-  expect(screen.queryByText('test.png')).toBeNull();
-  expect(document.getElementById('event-query')).toBeTruthy();
+  expect(document.getElementById('event-query').value).toBe('');
 });
 
 test('submitting filter inputs calls filterFrames and displays results in FramesBox', async () => {

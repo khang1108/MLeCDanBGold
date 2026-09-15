@@ -1,4 +1,4 @@
-import { searchKis } from './kis';
+import { searchKis, uploadKisImage, kisImageAssetUrl } from './kis';
 
 const mockResponse = (payload, status = 200, headers = {}) => ({
   ok: status >= 200 && status < 300,
@@ -106,4 +106,30 @@ test('validates response contract', async () => {
   await expect(searchKis({
     operation: { kind: 'search_only' },
   })).rejects.toThrow('Search server returned an invalid response contract');
+});
+
+test('kisImageAssetUrl returns encoded asset URL', () => {
+  expect(kisImageAssetUrl('asset/123')).toBe('/api/v1/kis/assets/images/asset%2F123');
+});
+
+test('uploadKisImage sends FormData to /api/v1/kis/assets/images', async () => {
+  const assetRef = {
+    asset_id: 'ast_abc',
+    file_name: 'test.jpg',
+    content_type: 'image/jpeg',
+    byte_size: 1024,
+    sha256: 'deadbeef',
+  };
+  jest.spyOn(global, 'fetch').mockResolvedValue(mockResponse(assetRef, 201));
+
+  const file = new File(['test-bytes'], 'test.jpg', { type: 'image/jpeg' });
+  const result = await uploadKisImage({ imageFile: file });
+
+  expect(result.asset_id).toBe('ast_abc');
+  expect(global.fetch).toHaveBeenCalledWith(
+    expect.stringContaining('/api/v1/kis/assets/images'),
+    expect.objectContaining({
+      method: 'POST',
+    }),
+  );
 });

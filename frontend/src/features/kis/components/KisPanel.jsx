@@ -1,16 +1,19 @@
 import React from 'react';
+import IntentSummary from './IntentSummary';
+import EventList from './EventList';
+import QueryComposer from './QueryComposer';
 
 /**
- * Present one revisioned KIS session as clue history and resolved metadata.
- *
- * This component owns the sole text input for KIS. It intentionally presents
- * retrieval state rather than simulating a chat participant.
+ * Present one revisioned KIS session as multimodal event cards, canonical intent,
+ * and unified query composer.
  */
 const KisPanel = ({
   sessionState = {},
   onDraftChange,
   onSubmit,
   onReset,
+  onAttachImage,
+  onRemoveImage,
   disabled = false,
   inputRef,
   onFocusQueryInput,
@@ -21,20 +24,33 @@ const KisPanel = ({
 }) => {
   const {
     draft = '',
-    committedInputs = [],
     revision = 0,
     currentIntent = null,
+    stagedImages = {},
     isSearching = false,
     error = null,
   } = sessionState;
 
-  const handleKeyDown = (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      if (!isSearching && draft.trim()) {
-        onSubmit?.(event);
+  const handleEditEvent = (eventId) => {
+    const prefix = `${eventId}: `;
+    onDraftChange?.(prefix);
+    setTimeout(() => {
+      inputRef?.current?.focus();
+    }, 0);
+  };
+
+  const handleAddImageToEvent = (eventId) => {
+    // Open file picker specifically for this event
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = (e) => {
+      const files = e.target.files;
+      if (files && files.length > 0) {
+        onAttachImage?.(files[0], eventId);
       }
-    }
+    };
+    fileInput.click();
   };
 
   return (
@@ -61,41 +77,23 @@ const KisPanel = ({
       </div>
 
       <div className="kis-chat-body">
-        {committedInputs.length > 0 && (
-          <section className="kis-clue-history" aria-label="Committed clues">
-            <span className="kis-intent-sublabel">Clues:</span>
-            <ol>
-              {committedInputs.map((clue, index) => (
-                <li key={`${index}:${clue}`}>
-                  <strong>Q{index + 1}</strong> {typeof clue === 'string' ? clue : clue?.text}
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
+        <IntentSummary currentIntent={currentIntent} />
+
+        <EventList
+          events={currentIntent?.events || []}
+          stagedImages={stagedImages}
+          onEdit={handleEditEvent}
+          onAddImage={handleAddImageToEvent}
+          onRemoveImage={onRemoveImage}
+          disabled={isSearching || disabled}
+        />
 
         {currentIntent && (
-          <section className="kis-intent-summary" data-testid="kis-intent-summary">
-            {currentIntent.query_text && (
-              <div className="kis-intent-canonical" data-testid="kis-intent-canonical">
-                <span className="kis-intent-label">Resolved Query:</span>
-                <span className="kis-intent-query-text">{currentIntent.query_text}</span>
-              </div>
-            )}
-
-            {Array.isArray(currentIntent.events) && currentIntent.events.length > 0 && (
-              <div className="kis-intent-events" data-testid="kis-intent-events">
-                <span className="kis-intent-sublabel">Events:</span>
-                <div className="kis-events-list">
-                  {currentIntent.events.map((event) => (
-                    <span key={event.id} className="kis-event-badge" title={event.text}>
-                      <strong>{event.id}:</strong> {event.text}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
+          (Array.isArray(currentIntent.entities) && currentIntent.entities.length > 0)
+          || (Array.isArray(currentIntent.temporal_edges) && currentIntent.temporal_edges.length > 0)
+        ) && (
+          <details className="kis-semantic-details" data-testid="kis-semantic-details">
+            <summary className="kis-semantic-summary">Semantic details</summary>
             {Array.isArray(currentIntent.entities) && currentIntent.entities.length > 0 && (
               <div className="kis-intent-entities" data-testid="kis-intent-entities">
                 <span className="kis-intent-sublabel">Entities:</span>
@@ -125,7 +123,7 @@ const KisPanel = ({
                 </div>
               </div>
             )}
-          </section>
+          </details>
         )}
 
         {isSearching && <p className="kis-searching-msg">Searching…</p>}
@@ -133,32 +131,21 @@ const KisPanel = ({
       </div>
 
       <div className="kis-chat-footer">
-        <div className="kis-chat-input-wrapper">
-          <textarea
-            ref={inputRef}
-            id="event-query"
-            className="input-text kis-chat-textarea"
-            rows={2}
-            value={draft}
-            onChange={(event) => onDraftChange?.(event.target.value)}
-            placeholder="Search or add another clue…"
-            onFocus={onFocusQueryInput}
-            onBlur={onBlurQueryInput}
-            disabled={isSearching || disabled}
-            onKeyDown={handleKeyDown}
-          />
-        </div>
-        <div className="kis-chat-footer-actions">
-          {renderExtraActions?.()}
-          <button
-            type="button"
-            className="btn-primary kis-chat-send-btn"
-            disabled={isSearching || disabled || !draft.trim()}
-            onClick={onSubmit}
-          >
-            {isSearching ? 'Searching…' : submitLabel}
-          </button>
-        </div>
+        <QueryComposer
+          draft={draft}
+          onDraftChange={onDraftChange}
+          onSubmit={onSubmit}
+          onAttachImage={onAttachImage}
+          baseIntent={currentIntent}
+          stagedImages={stagedImages}
+          isSearching={isSearching}
+          disabled={disabled}
+          inputRef={inputRef}
+          onFocus={onFocusQueryInput}
+          onBlur={onBlurQueryInput}
+          renderExtraActions={renderExtraActions}
+          submitLabel={submitLabel}
+        />
       </div>
     </section>
   );

@@ -1,0 +1,219 @@
+import React, { useState, useRef } from 'react';
+import { parseComposerDraft } from '../parser';
+
+/**
+ * Unified multimodal composer: textual instructions, staged images, preview, and dynamic action verbs.
+ */
+const QueryComposer = ({
+  draft = '',
+  onDraftChange,
+  onSubmit,
+  onAttachImage,
+  baseIntent = null,
+  stagedImages = {},
+  isSearching = false,
+  disabled = false,
+  inputRef,
+  onFocus,
+  onBlur,
+  renderExtraActions,
+  submitLabel = 'Search',
+}) => {
+  const [pendingImageFile, setPendingImageFile] = useState(null);
+  const localTextareaRef = useRef(null);
+  const textareaRef = inputRef || localTextareaRef;
+
+  const events = Array.isArray(baseIntent?.events) ? baseIntent.events : [];
+  const hasStagedImages = Object.keys(stagedImages || {}).length > 0;
+  const preview = draft.trim() ? parseComposerDraft(draft, baseIntent) : null;
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      if (!isSearching && !disabled) {
+        onSubmit?.(event);
+      }
+    }
+  };
+
+  const handleAddEvent = () => {
+    const nextEventNum = events.length + 1;
+    const prefix = `E${nextEventNum}: `;
+    const updatedDraft = draft.trim() ? `${draft.trim()}\n${prefix}` : prefix;
+    onDraftChange?.(updatedDraft);
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  };
+
+  const resolveTargetEventId = (file) => {
+    // If draft has an explicit scoped header E#:
+    const headerMatch = draft.trim().match(/^E([1-9]\d*):/);
+    if (headerMatch) {
+      return `E${headerMatch[1]}`;
+    }
+    // If intent has at most 1 event (or 0 events):
+    if (events.length <= 1) {
+      return 'E1';
+    }
+    return null;
+  };
+
+  const handleAttach = (file) => {
+    if (!file) return;
+    const targetId = resolveTargetEventId(file);
+    if (targetId) {
+      onAttachImage?.(file, targetId);
+    } else {
+      setPendingImageFile(file);
+    }
+  };
+
+  const handleFileInputChange = (event) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      handleAttach(files[0]);
+    }
+    event.target.value = '';
+  };
+
+  const handlePaste = (event) => {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i += 1) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          event.preventDefault();
+          handleAttach(file);
+          break;
+        }
+      }
+    }
+  };
+
+  const handleSelectEventTarget = (eventId) => {
+    if (pendingImageFile) {
+      onAttachImage?.(pendingImageFile, eventId);
+      setPendingImageFile(null);
+    }
+  };
+
+  // Determine dynamic submit button label
+  let effectiveSubmitLabel = submitLabel;
+  if (isSearching) {
+    effectiveSubmitLabel = 'Searching…';
+  } else if (draft.trim().startsWith('/llm-rewrite')) {
+    effectiveSubmitLabel = 'Rewrite';
+  } else if (preview?.kind === 'patch_events') {
+    effectiveSubmitLabel = 'Update';
+  } else if (preview?.kind === 'global_rewrite') {
+    effectiveSubmitLabel = 'Rewrite';
+  }
+
+  return (
+    <div className="kis-query-composer" data-testid="kis-query-composer">
+      {pendingImageFile && (
+        <div className="kis-attach-target-chooser" role="region" aria-label="Event target chooser">
+          <span className="kis-chooser-label">Attach image to:</span>
+          <div className="kis-chooser-buttons">
+            {events.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                className="btn-sm kis-chooser-btn"
+                onClick={() => handleSelectEventTarget(e.id)}
+              >
+                {e.id}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="btn-sm btn-secondary"
+              onClick={() => setPendingImageFile(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {preview && (
+        <div className="kis-composer-preview-bar">
+          {preview.kind === 'patch_events' && (
+            <span className="kis-preview-badge kis-preview-patch">
+              Will update: {preview.affectedEventIds.join(', ')}
+            </span>
+          )}
+          {preview.kind === 'global_rewrite' && (
+            <span className="kis-preview-badge kis-preview-rewrite">
+              Global rewrite across all events
+            </span>
+          )}
+          {preview.error && (
+            <span className="kis-preview-error" role="alert">
+              ⚠️ {preview.error}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="kis-composer-textarea-wrapper">
+        <textarea
+          ref={textareaRef}
+          id="event-query"
+          className="input-text kis-chat-textarea"
+          rows={2}
+          value={draft}
+          onChange={(e) => onDraftChange?.(e.target.value)}
+          placeholder="Search or add another clue…"
+          onFocus={onFocus}
+          onBlur={onBlur}
+          disabled={isSearching || disabled}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+        />
+      </div>
+
+      <div className="kis-composer-controls">
+        <div className="kis-composer-left-actions">
+          <button
+            type="button"
+            className="btn-secondary btn-sm kis-add-event-btn"
+            onClick={handleAddEvent}
+            disabled={isSearching || disabled}
+          >
+            + Add Event
+          </button>
+
+          <label className="btn-secondary btn-sm kis-attach-label" htmlFor="kis-attach-file">
+            Attach image
+            <input
+              id="kis-attach-file"
+              type="file"
+              accept="image/*"
+              aria-label="Attach image"
+              style={{ display: 'none' }}
+              onChange={handleFileInputChange}
+              disabled={isSearching || disabled}
+            />
+          </label>
+        </div>
+
+        <div className="kis-composer-right-actions">
+          {renderExtraActions?.()}
+          <button
+            type="button"
+            className="btn-primary kis-chat-send-btn"
+            disabled={isSearching || disabled || (!draft.trim() && !events.length && !hasStagedImages)}
+            onClick={onSubmit}
+          >
+            {effectiveSubmitLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default QueryComposer;

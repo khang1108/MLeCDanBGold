@@ -1883,7 +1883,7 @@ git commit -m "feat: model KIS frontend state as semantic operations"
 - `QueryComposer` owns the temporary event-target chooser when an attached image has no explicit `E#` scope; it does not mutate canonical intent before submit succeeds.
 - Produces: one keyboard-first composer for initial natural text, `E#:` patches, `/llm-rewrite`, event-targeted image attach/remove, `+ Event`, and search-only reruns.
 
-- [ ] **Step 1: Write component tests for event cards, dynamic labels, and explicit image targeting**
+- [X] **Step 1: Write component tests for event cards, dynamic labels, and explicit image targeting**
 
 ```javascript
 const STATE_WITH_E1_E2 = {
@@ -1937,7 +1937,7 @@ test('asks for an event target when an image is attached without E# scope', asyn
 
 Add tests for initial image-only => E1, initial text+image => one E1, `E2:` + pasted image => E2, remove-image patch, and `/llm-rewrite` submit label `Rewrite`.
 
-- [ ] **Step 2: Run component/workspace tests and verify current separate image path fails**
+- [X] **Step 2: Run component/workspace tests and verify current separate image path fails**
 
 ```bash
 cd frontend
@@ -1948,7 +1948,7 @@ CI=true npm test -- --watchAll=false \
 
 Expected: FAIL because `selectedImageFile` still bypasses KIS.
 
-- [ ] **Step 3: Implement the focused display components and persisted-thumbnail URL contract**
+- [X] **Step 3: Implement the focused display components and persisted-thumbnail URL contract**
 
 `IntentSummary` shows only committed canonical query + revision. `EventList` maps stable event IDs to `EventCard`. `EventCard` shows text if present, image thumbnails, and actions `Edit`, `Add image`, `Remove image`; entities/bindings stay inside a collapsed `Semantic details` block in `KisPanel`.
 
@@ -1962,7 +1962,7 @@ export const kisImageAssetUrl = (assetId) => (
 
 Committed/replayed `KISImageRef` thumbnails use this URL. Browser `URL.createObjectURL()` may be used only for a temporary pre-upload preview and must be revoked after upload/cancel; it is never persisted in semantic or history state. Add an `EventCard`/replay test that constructs a saved `KISImageRef` and asserts the rendered image `src` points to `kisImageAssetUrl(asset_id)`, proving thumbnails survive reload without the original `File` object.
 
-- [ ] **Step 4: Implement `QueryComposer` as the sole textual input surface**
+- [X] **Step 4: Implement `QueryComposer` as the sole textual input surface**
 
 Requirements:
 
@@ -1977,7 +1977,7 @@ Search/Update/Rewrite dynamic submit copy
 
 Do not create inline permanent text fields for every event.
 
-- [ ] **Step 5: Add image upload client and staged attachment flow**
+- [X] **Step 5: Add image upload client and staged attachment flow**
 
 Import `requestFormData` from `frontend/src/api/client.js`, then add:
 
@@ -1991,19 +1991,19 @@ export const uploadKisImage = async ({ imageFile, signal }) => {
 
 Upload once, store returned ref in staged event patch state, and reuse the ref in subsequent revisions. Do not resend old files.
 
-- [ ] **Step 6: Remove `selectedImageFile` / `submitImageSearch()` branching from `SearchWorkspace`**
+- [X] **Step 6: Remove `selectedImageFile` / `submitImageSearch()` branching from `SearchWorkspace`**
 
 All KIS submits call `searchKis()`. `searchFramesByImage()` may remain in the generic search API only if another confirmed non-KIS consumer exists; `SearchWorkspace` must not branch around `KISIntent` for image input.
 
-- [ ] **Step 7: Add SearchOnly rerun when only retrieval controls change**
+- [X] **Step 7: Add SearchOnly rerun when only retrieval controls change**
 
 When an intent exists and user changes top-k/Dense/BM25 without a semantic draft, construct `operation: { kind: 'search_only' }` with the same base intent/revision. Do not increase revision or add history semantics indicating a semantic change.
 
-- [ ] **Step 8: Preserve transactional UI across all operation types**
+- [X] **Step 8: Preserve transactional UI across all operation types**
 
 While initial/patch/rewrite/search-only is pending, keep committed event cards and result grid interactive. On failure keep draft and staged image refs. On success atomically replace intent/results and clear only staged data consumed by the accepted operation.
 
-- [ ] **Step 9: Run unified composer tests**
+- [X] **Step 9: Run unified composer tests**
 
 ```bash
 cd frontend
@@ -2016,7 +2016,7 @@ CI=true npm test -- --watchAll=false \
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit the unified multimodal Query Composer**
+- [X] **Step 10: Commit the unified multimodal Query Composer**
 
 ```bash
 git add frontend/src/features/kis frontend/src/features/search/components frontend/src/api/kis.js frontend/src/styles

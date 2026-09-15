@@ -39,6 +39,7 @@ test('status and disconnect address an encoded participant ID without exposing c
 test('text and image search attach only a connected participant ID', async () => {
   const searchResponse = {
     intent: { revision: 1, inputs: ['boat'], events: [{ id: 'E1', text: 'boat' }] },
+    operation_summary: { operation_kind: 'initial_resolve', description: 'initial' },
     results: [],
     latency: { total_ms: 1 },
   };
@@ -47,8 +48,8 @@ test('text and image search attach only a connected participant ID', async () =>
     .mockResolvedValueOnce(response(searchResponse))
     .mockResolvedValueOnce(response({ results: [], latency: { total_ms: 1 } }));
 
-  await searchKis({ inputs: ['boat'], topK: 3, userId: 'team-a' });
-  await searchKis({ inputs: ['boat'], topK: 3, userId: '' });
+  await searchKis({ operation: { kind: 'initial_resolve', text: 'boat' }, topK: 3, userId: 'team-a' });
+  await searchKis({ operation: { kind: 'initial_resolve', text: 'boat' }, topK: 3, userId: '' });
   const file = new File(['image'], 'boat.png', { type: 'image/png' });
   await searchFramesByImage({ imageFile: file, topK: 3, userId: 'team-a' });
 
