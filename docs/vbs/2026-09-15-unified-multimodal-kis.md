@@ -532,7 +532,7 @@ git commit -m "refactor: align KIS retrieval and exploration through event plans
 - Produces: pending semantic request state that never destroys committed results before success.
 - Produces: one frame selection callback carrying the committed exploration snapshot.
 
-- [ ] **Step 1: Add regression tests for pending success/failure and single frame callback**
+- [x] **Step 1: Add regression tests for pending success/failure and single frame callback**
 
 Add tests equivalent to:
 
@@ -585,7 +585,7 @@ test('opens a KIS result exactly once and records one viewed-frame write', async
 
 Also add a failed-second-request case asserting first intent/results remain and the draft remains editable.
 
-- [ ] **Step 2: Run the frontend regression tests and verify failures on current clearing/double-callback behavior**
+- [x] **Step 2: Run the frontend regression tests and verify failures on current clearing/double-callback behavior**
 
 ```bash
 cd frontend
@@ -594,7 +594,7 @@ CI=true npm test -- --watchAll=false src/features/search/components/SearchWorksp
 
 Expected: pending-result and callback-count tests FAIL.
 
-- [ ] **Step 3: Make session state distinguish committed state from pending request metadata**
+- [x] **Step 3: Make session state distinguish committed state from pending request metadata**
 
 For this S0 task, retain the current clue request format but stop committing draft changes early. `prepareSearchRequest()` returns a payload plus pending metadata; it must not alter committed inputs/revision/current intent.
 
@@ -614,7 +614,7 @@ export const prepareSearchRequest = (state) => {
 
 Only `commitSearchSuccess()` changes committed semantic state.
 
-- [ ] **Step 4: Stop clearing committed KIS UI before the request succeeds**
+- [x] **Step 4: Stop clearing committed KIS UI before the request succeeds**
 
 In `SearchWorkspace.submit()` remove pre-request calls that clear:
 
@@ -628,7 +628,7 @@ active committed query context
 
 Set only pending/error UI fields before request. On success, atomically update committed response-derived state. On failure, leave committed state unchanged and call `commitSearchFailure()` so draft survives.
 
-- [ ] **Step 5: Fix `openCanonicalFrame()` to call `onFrameClick` once**
+- [x] **Step 5: Fix `openCanonicalFrame()` to call `onFrameClick` once**
 
 Replace the current two calls with:
 
@@ -644,7 +644,7 @@ const openCanonicalFrame = useCallback((frame) => {
 }, [onFrameClick, recordViewed]);
 ```
 
-- [ ] **Step 6: Make global active query follow committed intent, never draft**
+- [x] **Step 6: Make global active query follow committed intent, never draft**
 
 Remove draft-driven `onQueryChange` effects/callbacks. After successful commit call:
 
@@ -654,7 +654,7 @@ onQueryChange?.(response.intent?.query_text || '');
 
 Typing a new draft must not change `App.modalQuery`/inspector query until a semantic request succeeds.
 
-- [ ] **Step 7: Move history persistence after live commit and serialize writes per query**
+- [x] **Step 7: Move history persistence after live commit and serialize writes per query**
 
 The live KIS commit and search lock release happen immediately after retrieval success. History is best-effort, but it is not unordered. Create a per-query write queue in `SearchWorkspace` (or a focused helper) keyed by `queryId`:
 
@@ -676,11 +676,11 @@ Late history promises must never replace the active session. Capture the `queryI
 
 Add tests for: (1) a frame clicked before `createQueryHistory` resolves does not call `markFrameViewed` until creation resolves; (2) a late history completion from search A cannot overwrite active search B; and (3) history failure never rolls back live results.
 
-- [ ] **Step 8: Make replay read-only instead of copying historical query into draft**
+- [x] **Step 8: Make replay read-only instead of copying historical query into draft**
 
 On replay set a replay snapshot/mode and initialize live KIS session separately. `setDraft(createInitialKisSessionState(), item.query_text)` must disappear. Replay rendering uses stored snapshot only; `New Search` returns to a clean live session.
 
-- [ ] **Step 9: Run frontend S0 tests**
+- [x] **Step 9: Run frontend S0 tests**
 
 ```bash
 cd frontend
@@ -693,7 +693,7 @@ CI=true npm test -- --watchAll=false \
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit the transactional frontend stabilization**
+- [x] **Step 10: Commit the transactional frontend stabilization**
 
 ```bash
 git add frontend/src/features/kis frontend/src/features/search/components/SearchWorkspace.jsx frontend/src/features/search/components/SearchWorkspace.test.jsx frontend/src/App.jsx frontend/src/App.test.jsx frontend/src/features/workspace
