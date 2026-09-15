@@ -82,7 +82,6 @@ const SearchWorkspace = ({
     ? historyUserId.trim()
     : typeof userId === 'string' ? userId.trim() : '';
   const [kisSession, setKisSession] = useState(createInitialKisSessionState);
-  const eventDescription = kisSession.draft;
   const [useDense, setUseDense] = useState(true);
   const [useBm25, setUseBm25] = useState(true);
   const [resultType, setResultType] = useState(null);
@@ -109,8 +108,43 @@ const SearchWorkspace = ({
   const imageInputRef = useRef(null);
   const requestRef = useRef(null);
   const viewedPatchRef = useRef(new Set());
+  const historyQueuesRef = useRef(new Map());
+  const activeQuerySessionRef = useRef(null);
+  const historyGenerationRef = useRef(0);
   const lastReplayTokenRef = useRef(null);
   const liveKisSnapshotRef = useRef(null);
+
+  const enqueueHistoryWrite = useCallback((queryId, write) => {
+    const prior = historyQueuesRef.current.get(queryId) || Promise.resolve();
+    const next = prior.then(write);
+    historyQueuesRef.current.set(queryId, next);
+    next.catch(() => undefined);
+    return next;
+  }, []);
+
+  const activateHistorySession = useCallback((session) => {
+    const activeSession = {
+      ...session,
+      generation: historyGenerationRef.current + 1,
+    };
+    historyGenerationRef.current = activeSession.generation;
+    activeQuerySessionRef.current = activeSession;
+    setActiveQuerySession(activeSession);
+    return activeSession;
+  }, []);
+
+  const invalidateHistorySession = useCallback(() => {
+    historyGenerationRef.current += 1;
+    activeQuerySessionRef.current = null;
+    setActiveQuerySession(null);
+  }, []);
+
+  const isCurrentHistorySession = useCallback((session) => {
+    const current = activeQuerySessionRef.current;
+    return current?.queryId === session.queryId
+      && current?.generation === session.generation;
+  }, []);
+
   const setQueryTextareaRef = useCallback((node) => {
     if (queryInputRef) queryInputRef.current = node;
   }, [queryInputRef]);
@@ -195,10 +229,6 @@ const SearchWorkspace = ({
     return () => window.removeEventListener('paste', handlePaste);
   }, [handleImageFileSelect, isActive]);
 
-  useEffect(() => {
-    onQueryChange?.(eventDescription);
-  }, [eventDescription, onQueryChange]);
-
   const recordViewed = useCallback((frame) => {
     const frameId = frame?.frame_id;
     const session = activeQuerySession;
@@ -206,19 +236,29 @@ const SearchWorkspace = ({
     const patchKey = `${session.queryId}:${frameId}`;
     if (viewedPatchRef.current.has(patchKey)) return;
     viewedPatchRef.current.add(patchKey);
-    setActiveQuerySession((current) => current
-      ? { ...current, frameActivity: withViewedFrame(current.frameActivity, frameId) }
-      : current);
-    markFrameViewed({ queryId: session.queryId, frameId }).catch((patchError) => {
-      // Keep the optimistic color, but allow the next open of this frame to
-      // retry the failed activity patch without touching submission state.
-      viewedPatchRef.current.delete(patchKey);
-      setWarnings((current) => Array.from(new Set([
-        ...current,
-        `History view state was not recorded: ${patchError.message || 'request failed'}`,
-      ])));
+    setActiveQuerySession((current) => {
+      if (!current || current.queryId !== session.queryId || current.generation !== session.generation) {
+        return current;
+      }
+      const next = { ...current, frameActivity: withViewedFrame(current.frameActivity, frameId) };
+      activeQuerySessionRef.current = next;
+      return next;
     });
-  }, [activeQuerySession]);
+
+    enqueueHistoryWrite(session.queryId, async () => {
+      try {
+        await markFrameViewed({ queryId: session.queryId, frameId });
+      } catch (patchError) {
+        viewedPatchRef.current.delete(patchKey);
+        if (isCurrentHistorySession(session)) {
+          setWarnings((current) => Array.from(new Set([
+            ...current,
+            `History view state was not recorded: ${patchError.message || 'request failed'}`,
+          ])));
+        }
+      }
+    });
+  }, [activeQuerySession, enqueueHistoryWrite, isCurrentHistorySession]);
 
   const openCanonicalFrame = useCallback((frame) => {
     recordViewed(frame);
@@ -228,7 +268,6 @@ const SearchWorkspace = ({
         ? { explorationSnapshot: liveKisSnapshotRef.current }
         : {}),
     });
-    onFrameClick?.({ frame });
   }, [onFrameClick, recordViewed]);
 
   const openKisFrame = useCallback((frame) => openCanonicalFrame(frame), [openCanonicalFrame]);
@@ -245,20 +284,22 @@ const SearchWorkspace = ({
     requestRef.current?.abort();
     liveKisSnapshotRef.current = null;
     onExplorationInvalidated?.();
+    invalidateHistorySession();
     setIsSearching(false);
     setError(null);
     setWarnings([]);
     setFrames([]);
     setKisEvents([]);
     setSearchLatencyMs(null);
-    setKisSession(setDraft(createInitialKisSessionState(), item.query_text || ''));
+    setKisSession(createInitialKisSessionState());
+    onQueryChange?.(item.query_text || '');
     try {
       const kind = getSnapshotKind(item.result_snapshot);
       const normalizedActivity = normalizeFrameActivity(item.frame_activity);
       setReplaySnapshot(item.result_snapshot);
       setResultType(`replay-${kind}`);
       viewedPatchRef.current = new Set();
-      setActiveQuerySession({
+      activateHistorySession({
         queryId: item.query_id,
         ownerUserId: historyIdentity,
         queryText: item.query_text,
@@ -271,7 +312,14 @@ const SearchWorkspace = ({
       setResultType(null);
       setError(replayError.message);
     }
-  }, [replayRequest, historyIdentity, onExplorationInvalidated]);
+  }, [
+    activateHistorySession,
+    historyIdentity,
+    invalidateHistorySession,
+    onExplorationInvalidated,
+    onQueryChange,
+    replayRequest,
+  ]);
 
   const submitImageSearch = useCallback(async (event) => {
     event?.preventDefault?.();
@@ -280,6 +328,7 @@ const SearchWorkspace = ({
     requestRef.current?.abort();
     liveKisSnapshotRef.current = null;
     onExplorationInvalidated?.();
+    invalidateHistorySession();
     const controller = new AbortController();
     requestRef.current = controller;
 
@@ -291,7 +340,6 @@ const SearchWorkspace = ({
     setSearchLatencyMs(null);
     setResultType('image-retrieval');
     setReplaySnapshot(null);
-    setActiveQuerySession(null);
     lastReplayTokenRef.current = null;
 
     try {
@@ -316,7 +364,14 @@ const SearchWorkspace = ({
         setIsSearching(false);
       }
     }
-  }, [isSearching, onExplorationInvalidated, selectedImageFile, topK, userId]);
+  }, [
+    invalidateHistorySession,
+    isSearching,
+    onExplorationInvalidated,
+    selectedImageFile,
+    topK,
+    userId,
+  ]);
 
   const submit = useCallback(async (event) => {
     event?.preventDefault?.();
@@ -341,21 +396,13 @@ const SearchWorkspace = ({
 
     const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
     requestRef.current?.abort();
-    liveKisSnapshotRef.current = null;
-    onExplorationInvalidated?.();
     const controller = new AbortController();
     requestRef.current = controller;
     const queryId = historyIdentity ? createClientQueryId() : null;
+
     setIsSearching(true);
     setError(null);
     setWarnings([]);
-    setFrames([]);
-    setKisEvents([]);
-    setSearchLatencyMs(null);
-    setResultType(null);
-    setReplaySnapshot(null);
-    setActiveQuerySession(null);
-    lastReplayTokenRef.current = null;
     try {
       const response = await searchKis({
         inputs: requestPayload.inputs,
@@ -381,42 +428,56 @@ const SearchWorkspace = ({
         warnings: response.warnings || [],
       };
       const historySnapshot = buildKisSnapshot(response.results || [], snapshotOptions);
+
       // Keep the backend's committed scoring seed intact while the draft changes.
       liveKisSnapshotRef.current = response.exploration_seed || null;
       setResultType('retrieval');
+      setReplaySnapshot(null);
+      lastReplayTokenRef.current = null;
       setFrames(response.results || []);
       setKisEvents(eventTexts);
       setSearchLatencyMs(response.latency);
       setWarnings(response.warnings || []);
+      onQueryChange?.(queryText);
+
       if (queryId) {
-        try {
-          await createQueryHistory({
-            queryId,
-            userId: historyIdentity,
-            queryText,
-            resultSnapshot: historySnapshot,
-            signal: controller.signal,
-          });
-          if (controller.signal.aborted) return;
-          viewedPatchRef.current = new Set();
-          setActiveQuerySession({
-            queryId,
-            ownerUserId: historyIdentity,
-            queryText,
-            resultSnapshot: historySnapshot,
-            frameActivity: normalizeFrameActivity(),
-            source: 'live-search',
-          });
-          onHistoryRefresh?.();
-        } catch (historyError) {
-          if (historyError.name === 'AbortError') return;
-          setWarnings((current) => [...current, `History was not saved: ${historyError.message || 'request failed'}`]);
-        }
+        viewedPatchRef.current = new Set();
+        const historySession = activateHistorySession({
+          queryId,
+          ownerUserId: historyIdentity,
+          queryText,
+          resultSnapshot: historySnapshot,
+          frameActivity: normalizeFrameActivity(),
+          source: 'live-search',
+        });
+
+        enqueueHistoryWrite(queryId, async () => {
+          try {
+            await createQueryHistory({
+              queryId,
+              userId: historyIdentity,
+              queryText,
+              resultSnapshot: historySnapshot,
+              signal: controller.signal,
+            });
+            if (!controller.signal.aborted && isCurrentHistorySession(historySession)) {
+              onHistoryRefresh?.();
+            }
+          } catch (historyError) {
+            if (historyError.name === 'AbortError') return;
+            if (isCurrentHistorySession(historySession)) {
+              invalidateHistorySession();
+              setWarnings((current) => [...current, `History was not saved: ${historyError.message || 'request failed'}`]);
+            }
+            throw historyError;
+          }
+        });
+      } else {
+        invalidateHistorySession();
       }
     } catch (requestError) {
       if (requestError.name === 'AbortError') return;
       setKisSession((prev) => commitSearchFailure(prev, requestError));
-      setResultType('retrieval');
       setError(requestError.message || 'Search failed');
     } finally {
       if (requestRef.current === controller) {
@@ -425,11 +486,15 @@ const SearchWorkspace = ({
       }
     }
   }, [
+    enqueueHistoryWrite,
+    activateHistorySession,
     historyIdentity,
+    invalidateHistorySession,
     isSearching,
+    isCurrentHistorySession,
     kisSession,
-    onExplorationInvalidated,
     onHistoryRefresh,
+    onQueryChange,
     selectedImageFile,
     submitImageSearch,
     topK,
@@ -475,7 +540,7 @@ const SearchWorkspace = ({
     setWarnings([]);
     setResultType('filter');
     setReplaySnapshot(null);
-    setActiveQuerySession(null);
+    invalidateHistorySession();
     lastReplayTokenRef.current = null;
 
     try {
@@ -517,6 +582,7 @@ const SearchWorkspace = ({
     filterOcr,
     filterTitle,
     filterVideoId,
+    invalidateHistorySession,
     onExplorationInvalidated,
     userId,
   ]);
@@ -538,6 +604,7 @@ const SearchWorkspace = ({
     requestRef.current = null;
     liveKisSnapshotRef.current = null;
     onExplorationInvalidated?.();
+    invalidateHistorySession();
     setIsSearching(false);
     setKisSession(resetKisSession());
     setSelectedImageFile(null);
@@ -550,9 +617,9 @@ const SearchWorkspace = ({
     setError(null);
     setSearchLatencyMs(null);
     setReplaySnapshot(null);
-    setActiveQuerySession(null);
     lastReplayTokenRef.current = null;
-  }, [handleClearFilter, onExplorationInvalidated]);
+    onQueryChange?.('');
+  }, [handleClearFilter, invalidateHistorySession, onExplorationInvalidated, onQueryChange]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -610,6 +677,8 @@ const SearchWorkspace = ({
       </div>
     );
   };
+
+  const isReplay = resultType?.startsWith('replay-');
 
   return (
     <div className="adhoc-workspace search-workspace">
@@ -835,8 +904,8 @@ const SearchWorkspace = ({
           />
         </aside>
         <div className="adhoc-results">
-          <GifLoaderOverlay isVisible={isSearching} />
-          {!isSearching && renderResults()}
+          <GifLoaderOverlay isVisible={isSearching && frames.length === 0} />
+          {renderResults()}
         </div>
         {!selectedImageFile && (
           <aside className="kis-chat-sidebar" aria-label="KIS search">
@@ -849,11 +918,10 @@ const SearchWorkspace = ({
               inputRef={setQueryTextareaRef}
               onDraftChange={(val) => {
                 setKisSession((prev) => setDraft(prev, val));
-                onQueryChange?.(val);
               }}
               onSubmit={submit}
               onReset={handleNewSearch}
-              disabled={isSearching}
+              disabled={isReplay || isSearching}
             />
           </aside>
         )}

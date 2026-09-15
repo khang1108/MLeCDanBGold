@@ -28,6 +28,10 @@ describe('KIS revisioned session state transitions', () => {
     const { nextState, requestPayload } = prepareSearchRequest(state);
     expect(nextState.isSearching).toBe(true);
     expect(nextState.error).toBe(null);
+    expect(nextState.committedInputs).toEqual([]);
+    expect(nextState.revision).toBe(0);
+    expect(nextState.currentIntent).toBe(null);
+    expect(nextState.draft).toBe('  A woman stands in a kitchen.  ');
     expect(requestPayload).toEqual({
       inputs: [{ text: 'A woman stands in a kitchen.' }],
       expectedRevision: 0,

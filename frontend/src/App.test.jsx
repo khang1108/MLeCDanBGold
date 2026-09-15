@@ -10,7 +10,7 @@ const jsonResponse = (payload, status = 200) => ({
 });
 
 jest.mock("./features/search/components/SearchWorkspace", () => (
-  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, replayRequest, userId, historyUserId }) {
+  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, replayRequest, userId, historyUserId, onQueryChange }) {
     const frame = {
       frame_id: "f1",
       video_id: "V01",
@@ -25,6 +25,12 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
           onClick={() => onFrameClick({ frame })}
         >
           Open inspector
+        </button>
+        <button
+          type="button"
+          onClick={() => onQueryChange?.('committed search clue')}
+        >
+          Set committed query
         </button>
         <button
           type="button"
