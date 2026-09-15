@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from hcmai.common.config import EventTranslationConfig
 from hcmai.inference.errors import InferenceResponseError
 from hcmai.inference.llm import LLMClient
-from hcmai.retrieval.translation.cache import EventTranslationCache, cache_key
+from hcmai.retrieval.translation.cache import EventTranslationCache, translation_cache_key
 from hcmai.retrieval.translation.models import LiteralTranslation
 from hcmai.retrieval.translation.prompts import translation_messages
 from hcmai.temporal.events import normalize_event_texts
@@ -52,10 +52,10 @@ class EventTranslator:
         if language == "en":
             return normalized
 
-        key = cache_key(
+        key = translation_cache_key(
             operation="translate",
             events=normalized,
-            model_name=self._llm.model,
+            model=self._llm.model,
             prompt_version=self._config.prompt_version,
         )
         cached = self._cache.get(key) if self._config.cache_enabled else None

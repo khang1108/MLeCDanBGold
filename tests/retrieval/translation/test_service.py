@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from hcmai.common.config import EventTranslationConfig
+from hcmai.retrieval.translation import cache as translation_cache
 from hcmai.retrieval.translation.models import LiteralTranslation
 from hcmai.retrieval.translation.service import EventTranslationError, EventTranslator
 
@@ -51,3 +52,22 @@ def test_translator_rejects_event_count_mismatch() -> None:
 def test_translator_has_no_candidate_generation_api() -> None:
     """The retired query-expansion capability cannot re-enter this service."""
     assert not hasattr(EventTranslator, "generate_query_candidates")
+
+
+def test_translation_cache_key_keeps_operation_model_prompt_and_event_case() -> None:
+    """Cache entries remain isolated by every translation identity component."""
+    assert hasattr(translation_cache, "translation_cache_key")
+
+    key = translation_cache.translation_cache_key(
+        operation="translate",
+        events=("A woman enters",),
+        model="provider/model-a",
+        prompt_version="event-translation-v1",
+    )
+
+    assert key == (
+        "translate",
+        "provider/model-a",
+        "event-translation-v1",
+        "A woman enters",
+    )

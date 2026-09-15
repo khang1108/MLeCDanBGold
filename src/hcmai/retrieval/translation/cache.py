@@ -15,16 +15,16 @@ from hcmai.temporal.events import normalize_event_texts
 CacheKey = tuple[str, ...]
 
 
-def cache_key(
+def translation_cache_key(
     *,
     operation: str,
     events: Sequence[str],
-    model_name: str,
+    model: str,
     prompt_version: str,
 ) -> CacheKey:
     """Build a key from operation, live model identity, prompt, and events."""
     normalized_events = normalize_event_texts(events)
-    return (operation, model_name, prompt_version, *normalized_events)
+    return (operation, model, prompt_version, *normalized_events)
 
 
 class EventTranslationCache:
