@@ -24,6 +24,7 @@ import FilterPagination from '../../filter/components/FilterPagination';
 import {
   createQueryHistory,
   markFrameViewed,
+  recordQueryInteraction,
 } from '../../../api/history';
 import FramesBox from '../../frames/components/FramesBox';
 import ToolBox from '../../search-controls/components/ToolBox';
@@ -31,6 +32,7 @@ import GifLoaderOverlay from '../../search/components/GifLoaderOverlay';
 import ReplayResults from '../../workspace/components/ReplayResults';
 import {
   buildKisSnapshot,
+  buildOperationMetadata,
   getSnapshotKind,
   normalizeFrameActivity,
   withViewedFrame,
@@ -280,15 +282,52 @@ const SearchWorkspace = ({
 
   const openCanonicalFrame = useCallback((frame) => {
     recordViewed(frame);
+    const session = activeQuerySession;
+    if (session?.queryId) {
+      enqueueHistoryWrite(session.queryId, async () => {
+        try {
+          await recordQueryInteraction({
+            queryId: session.queryId,
+            eventType: 'result_open',
+            semanticRevision: kisSession.revision ?? 0,
+            frameId: frame?.frame_id,
+            videoId: frame?.video_id,
+            timestampMs: frame?.timestamp_ms,
+          });
+        } catch {
+          // Best-effort research logging
+        }
+      });
+    }
     onFrameClick?.({
       frame,
       ...(liveKisSnapshotRef.current
         ? { explorationSnapshot: liveKisSnapshotRef.current }
         : {}),
     });
-  }, [onFrameClick, recordViewed]);
+  }, [activeQuerySession, enqueueHistoryWrite, kisSession.revision, onFrameClick, recordViewed]);
 
   const openKisFrame = useCallback((frame) => openCanonicalFrame(frame), [openCanonicalFrame]);
+
+  const handleOpenSubmission = useCallback((payload) => {
+    const session = activeQuerySession;
+    if (session?.queryId) {
+      enqueueHistoryWrite(session.queryId, async () => {
+        try {
+          await recordQueryInteraction({
+            queryId: session.queryId,
+            eventType: 'submission',
+            semanticRevision: kisSession.revision ?? 0,
+            videoId: payload?.videoId,
+            timestampMs: payload?.startMs ?? payload?.endMs,
+          });
+        } catch {
+          // Best-effort research logging
+        }
+      });
+    }
+    onOpenSubmission?.(payload);
+  }, [activeQuerySession, enqueueHistoryWrite, kisSession.revision, onOpenSubmission]);
 
   useEffect(() => {
     const item = replayRequest?.item || replayRequest;
@@ -402,10 +441,38 @@ const SearchWorkspace = ({
         : [];
       const queryText = response.intent?.query_text || draftText || 'Multimodal search';
 
+      const imageAdded = [];
+      const imageRemoved = [];
+      if (Array.isArray(requestPayload.operation?.patches)) {
+        for (const patch of requestPayload.operation.patches) {
+          if (Array.isArray(patch.images_to_add)) {
+            imageAdded.push(...patch.images_to_add);
+          }
+          if (Array.isArray(patch.images_to_remove)) {
+            imageRemoved.push(...patch.images_to_remove);
+          }
+        }
+      }
+      if (requestPayload.operation?.kind === 'initial_resolve' && Array.isArray(requestPayload.operation.images)) {
+        imageAdded.push(...requestPayload.operation.images);
+      }
+
+      const operationMetadata = buildOperationMetadata({
+        semanticRevision: response.intent?.revision ?? kisSession.revision ?? 0,
+        operationKind: response.operation_summary?.operation_kind || requestPayload.operation?.kind || 'initial_resolve',
+        affectedEventIds: requestPayload.operation?.patches
+          ? requestPayload.operation.patches.map((p) => p.event_id)
+          : response.operation_summary?.affected_event_ids || [],
+        imageAdded,
+        imageRemoved,
+        searchOnly: requestPayload.operation?.kind === 'search_only',
+      });
+
       const snapshotOptions = {
         intent: response.intent,
         latency: response.latency,
         warnings: response.warnings || [],
+        operationMetadata,
       };
       const historySnapshot = buildKisSnapshot(response.results || [], snapshotOptions);
 
@@ -437,6 +504,7 @@ const SearchWorkspace = ({
               userId: historyIdentity,
               queryText,
               resultSnapshot: historySnapshot,
+              operationMetadata,
               signal: controller.signal,
             });
             if (!controller.signal.aborted && isCurrentHistorySession(historySession)) {
@@ -552,7 +620,7 @@ const SearchWorkspace = ({
           warnings={warnings}
           events={kisEvents}
           onFrameClick={openKisFrame}
-          onOpenSubmission={onOpenSubmission}
+          onOpenSubmission={handleOpenSubmission}
           isSubmissionOpening={isSubmissionOpening}
           getFrameClassName={getFrameClassName}
         />

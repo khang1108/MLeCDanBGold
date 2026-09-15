@@ -6,6 +6,7 @@ import { filterFrames } from '../../../api/filter';
 import {
   createQueryHistory,
   markFrameViewed,
+  recordQueryInteraction,
 } from '../../../api/history';
 
 jest.mock('../../../api/kis', () => ({
@@ -19,6 +20,7 @@ jest.mock('../../../api/filter', () => ({
 jest.mock('../../../api/history', () => ({
   createQueryHistory: jest.fn(),
   markFrameViewed: jest.fn(),
+  recordQueryInteraction: jest.fn(),
 }));
 const renderSearch = (props) => render(<SearchWorkspace {...props} />);
 
@@ -28,6 +30,7 @@ beforeEach(() => {
   filterFrames.mockReset();
   createQueryHistory.mockResolvedValue({});
   markFrameViewed.mockResolvedValue({});
+  recordQueryInteraction.mockResolvedValue({});
 });
 
 const SEARCH_LATENCY = {
@@ -326,7 +329,7 @@ test('opens a KIS result exactly once and records one viewed-frame write', async
   }));
 });
 
-test('a frame clicked before createQueryHistory resolves does not call markFrameViewed until creation resolves', async () => {
+test('a frame clicked before createQueryHistory resolves does not call markFrameViewed or recordQueryInteraction until creation resolves', async () => {
   let resolveHistory;
   createQueryHistory.mockImplementationOnce(() => new Promise((resolve) => { resolveHistory = resolve; }));
   searchKis.mockResolvedValueOnce(mockKisResponse({
@@ -341,12 +344,42 @@ test('a frame clicked before createQueryHistory resolves does not call markFrame
   fireEvent.click(frame);
 
   expect(markFrameViewed).not.toHaveBeenCalled();
+  expect(recordQueryInteraction).not.toHaveBeenCalled();
 
   resolveHistory({});
   await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(recordQueryInteraction).toHaveBeenCalledTimes(1));
   expect(markFrameViewed).toHaveBeenCalledWith(expect.objectContaining({
     frameId: 'frame-1',
   }));
+  expect(recordQueryInteraction).toHaveBeenCalledWith(expect.objectContaining({
+    eventType: 'result_open',
+    frameId: 'frame-1',
+  }));
+});
+
+test('opening submission from an active query enqueues submission interaction event with current revision', async () => {
+  const onOpenSubmission = jest.fn();
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'first',
+    revision: 2,
+    results: [frameResult('frame-1')],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a', onOpenSubmission });
+  submit('first');
+  const submitButton = await screen.findByRole('button', { name: /submit this frame to dres/i });
+  fireEvent.click(submitButton);
+
+  expect(onOpenSubmission).toHaveBeenCalledWith(expect.objectContaining({
+    videoId: 'V01',
+    startMs: 4000,
+  }));
+  await waitFor(() => expect(recordQueryInteraction).toHaveBeenCalledWith(expect.objectContaining({
+    eventType: 'submission',
+    semanticRevision: 2,
+    videoId: 'V01',
+  })));
 });
 
 test('skips a queued viewed-frame write when query history creation fails', async () => {

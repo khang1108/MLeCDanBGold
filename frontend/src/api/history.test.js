@@ -2,6 +2,7 @@ import {
   createQueryHistory,
   getQueryHistory,
   markFrameViewed,
+  recordQueryInteraction,
 } from './history';
 
 jest.mock('./client', () => {
@@ -68,5 +69,75 @@ test('sends the canonical viewed activity body', async () => {
 test('rejects invalid values before making a request', async () => {
   await expect(getQueryHistory({ userId: ' ' })).rejects.toThrow('userId');
   await expect(markFrameViewed({ queryId: 'q', frameId: ' ' })).rejects.toThrow('frameId');
+  expect(requestJson).not.toHaveBeenCalled();
+});
+
+test('createQueryHistory attaches operation_metadata when present', async () => {
+  requestJson.mockResolvedValueOnce({ ok: true });
+  const snapshot = { results: [] };
+  const operationMetadata = {
+    semantic_revision: 2,
+    operation_kind: 'patch_events',
+    affected_event_ids: ['E2'],
+    image_added: ['ast_1'],
+    image_removed: [],
+    search_only: false,
+  };
+
+  await createQueryHistory({
+    queryId: 'query-1',
+    userId: 'team-a',
+    queryText: 'sample',
+    resultSnapshot: snapshot,
+    operationMetadata,
+  });
+
+  expect(requestJson).toHaveBeenCalledWith('/api/v1/query-history', expect.objectContaining({
+    method: 'POST',
+    body: {
+      query_id: 'query-1',
+      user_id: 'team-a',
+      query_text: 'sample',
+      result_snapshot: snapshot,
+      operation_metadata: operationMetadata,
+    },
+  }));
+});
+
+test('recordQueryInteraction posts to the events endpoint', async () => {
+  requestJson.mockResolvedValueOnce({ sequence_id: 1 });
+
+  await recordQueryInteraction({
+    queryId: 'q/1',
+    eventType: 'result_open',
+    semanticRevision: 2,
+    eventId: 'E1',
+    frameId: 'frame-1',
+    videoId: 'V01',
+    timestampMs: 4000,
+  });
+
+  expect(requestJson).toHaveBeenCalledWith(
+    '/api/v1/query-history/q%2F1/events',
+    {
+      method: 'POST',
+      body: {
+        event_type: 'result_open',
+        semantic_revision: 2,
+        event_id: 'E1',
+        frame_id: 'frame-1',
+        video_id: 'V01',
+        timestamp_ms: 4000,
+      },
+      signal: undefined,
+    },
+  );
+});
+
+test('recordQueryInteraction rejects invalid eventType or queryId', async () => {
+  await expect(recordQueryInteraction({ queryId: ' ', eventType: 'result_open' }))
+    .rejects.toThrow('queryId');
+  await expect(recordQueryInteraction({ queryId: 'q1', eventType: 'unknown' }))
+    .rejects.toThrow('eventType');
   expect(requestJson).not.toHaveBeenCalled();
 });

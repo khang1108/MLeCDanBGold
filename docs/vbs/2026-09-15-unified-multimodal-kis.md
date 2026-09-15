@@ -2045,7 +2045,7 @@ git commit -m "feat: unify text and image KIS in the query composer"
 - Consumes: `KISOperationSummary`, canonical intent revision, history snapshots, frame/video activity, and submission actions.
 - Produces: replay metadata plus append-only `result_open` and `submission` interaction events keyed by query ID. Existing `viewed_frame_ids` remains the canonical frame-inspection log. This same event boundary can be extended with EventTrail-specific event types in the next design cycle.
 
-- [ ] **Step 1: Write history-contract tests for operation metadata**
+- [X] **Step 1: Write history-contract tests for operation metadata**
 
 Extend `QueryHistoryCreate`/record with a structured metadata object:
 
@@ -2073,7 +2073,7 @@ class QueryInteractionEventCreate(BaseModel):
 
 Test round-trip persistence and migration from existing v3 rows with metadata defaulting to an empty/legacy value. Test interaction events retain insertion order for one query.
 
-- [ ] **Step 2: Run history tests and verify schema failure**
+- [X] **Step 2: Run history tests and verify schema failure**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/api -q -k history
@@ -2081,11 +2081,11 @@ PYTHONPATH=src python -m pytest tests/api -q -k history
 
 Expected: FAIL because DB schema has no operation metadata column.
 
-- [ ] **Step 3: Migrate workspace DB to the next version without losing query history**
+- [X] **Step 3: Migrate workspace DB to the next version without losing query history**
 
 Increment `_DATABASE_VERSION`. Add `operation_metadata_json TEXT NOT NULL DEFAULT '{}'` to `query_history`, and create `query_interaction_events(query_id, sequence_id, event_type, semantic_revision, event_id, frame_id, video_id, timestamp_ms, created_at)` with a foreign key to `query_history`. Migrate old rows preserving `query_id`, user, query text, result snapshot, viewed frames, and created time. Keep `viewed_frame_ids_json` as the frame-inspection record rather than duplicating it into the interaction table.
 
-- [ ] **Step 4: Add an append-only interaction-event endpoint**
+- [X] **Step 4: Add an append-only interaction-event endpoint**
 
 Expose:
 
@@ -2095,21 +2095,21 @@ POST /api/v1/query-history/{query_id}/events
 
 The store assigns monotonically increasing `sequence_id` per query. Missing query IDs return 404; invalid event payloads return 422.
 
-- [ ] **Step 5: Persist semantic operation summary only after successful live commit**
+- [X] **Step 5: Persist semantic operation summary only after successful live commit**
 
 Frontend history create call sends operation metadata from the response plus deterministic image add/remove IDs known from the submitted operation. `SearchOnly` stores `search_only: true` and the same semantic revision.
 
-- [ ] **Step 6: Emit current S1 research events through the per-query history queue**
+- [X] **Step 6: Emit current S1 research events through the per-query history queue**
 
 Add `recordQueryInteraction()` in `frontend/src/api/history.js`. Reuse the per-query queue established in Task 3: `createQueryHistory()` remains the first write for a new query, and `markFrameViewed()` / `recordQueryInteraction()` are serialized behind it. `SearchWorkspace.openCanonicalFrame()` keeps recording the viewed frame and additionally enqueues `result_open`; wrap `onOpenSubmission` so a submission initiated from an active query enqueues `submission` with the current semantic revision before delegating to the existing submission callback.
 
 These writes are best-effort and must not block search, inspection, or submission. Add a test where the user opens a result before history creation resolves: neither `markFrameViewed` nor `recordQueryInteraction` may hit the API until creation succeeds, and their order must remain deterministic. Also assert that completion of an older query's queue cannot change the newer active session.
 
-- [ ] **Step 7: Keep replay semantic state inside snapshot, not draft reconstruction**
+- [X] **Step 7: Keep replay semantic state inside snapshot, not draft reconstruction**
 
 History snapshot stores the canonical intent required for read-only replay. Replay UI may display `Rev N · Updated E2` from operation metadata, but must not regenerate live composer state automatically.
 
-- [ ] **Step 8: Run backend/frontend history tests**
+- [X] **Step 8: Run backend/frontend history tests**
 
 ```bash
 PYTHONPATH=src python -m pytest tests/api -q -k history
@@ -2119,7 +2119,7 @@ CI=true npm test -- --watchAll=false src/api/history.test.js src/features/worksp
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit research-ready operation logging**
+- [X] **Step 9: Commit research-ready operation logging**
 
 ```bash
 git add src/hcmai/api frontend/src/api/history.js frontend/src/api/history.test.js frontend/src/features/search/components/SearchWorkspace.jsx frontend/src/features/workspace tests/api

@@ -16,6 +16,8 @@ from hcmai.api.contracts.history import (
     QueryHistoryList,
     QueryHistoryRecord,
     QueryHistoryViewedFrameUpdate,
+    QueryInteractionEventCreate,
+    QueryInteractionEventRecord,
 )
 from hcmai.api.history import WorkspaceStore
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
@@ -110,6 +112,29 @@ def create_history_router(service_container: dict[str, Any]) -> APIRouter:
                 _store().update_viewed_frame,
                 query_id,
                 data.frame_id,
+            )
+        except KeyError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(error),
+            ) from error
+
+    @router.post(
+        "/api/v1/query-history/{query_id}/events",
+        response_model=QueryInteractionEventRecord,
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def record_query_interaction_event(
+        query_id: str,
+        data: QueryInteractionEventCreate,
+    ) -> QueryInteractionEventRecord:
+        """Append one interaction event to a query's research event log."""
+
+        try:
+            return await run_in_threadpool(
+                _store().record_interaction_event,
+                query_id,
+                data,
             )
         except KeyError as error:
             raise HTTPException(

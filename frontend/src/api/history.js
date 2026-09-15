@@ -34,7 +34,7 @@ const validateHistoryItem = (item, index) => {
 
 /** Save one completed retrieval snapshot for the selected local history identity. */
 export const createQueryHistory = async ({
-  queryId, userId, queryText, resultSnapshot, signal,
+  queryId, userId, queryText, resultSnapshot, operationMetadata, signal,
 } = {}) => {
   requireText(queryId, 'queryId');
   requireText(userId, 'userId');
@@ -43,14 +43,19 @@ export const createQueryHistory = async ({
     throw new Error('resultSnapshot must be an object');
   }
 
+  const body = {
+    query_id: queryId,
+    user_id: userId,
+    query_text: queryText,
+    result_snapshot: resultSnapshot,
+  };
+  if (operationMetadata && typeof operationMetadata === 'object') {
+    body.operation_metadata = operationMetadata;
+  }
+
   return requestJson('/api/v1/query-history', {
     method: 'POST',
-    body: {
-      query_id: queryId,
-      user_id: userId,
-      query_text: queryText,
-      result_snapshot: resultSnapshot,
-    },
+    body,
     signal,
   });
 };
@@ -78,6 +83,37 @@ export const markFrameViewed = async ({ queryId, frameId, signal } = {}) => {
   return requestJson(`/api/v1/query-history/${encodeURIComponent(queryId)}/viewed-frame`, {
     method: 'PATCH',
     body: { frame_id: frameId },
+    signal,
+  });
+};
+
+/** Record an append-only interaction event (result_open or submission) for a query. */
+export const recordQueryInteraction = async ({
+  queryId,
+  eventType,
+  semanticRevision = 0,
+  eventId,
+  frameId,
+  videoId,
+  timestampMs,
+  signal,
+} = {}) => {
+  requireText(queryId, 'queryId');
+  if (eventType !== 'result_open' && eventType !== 'submission') {
+    throw new Error('eventType must be result_open or submission');
+  }
+  const body = {
+    event_type: eventType,
+    semantic_revision: typeof semanticRevision === 'number' ? semanticRevision : 0,
+  };
+  if (eventId) body.event_id = eventId;
+  if (frameId) body.frame_id = frameId;
+  if (videoId) body.video_id = videoId;
+  if (typeof timestampMs === 'number') body.timestamp_ms = timestampMs;
+
+  return requestJson(`/api/v1/query-history/${encodeURIComponent(queryId)}/events`, {
+    method: 'POST',
+    body,
     signal,
   });
 };

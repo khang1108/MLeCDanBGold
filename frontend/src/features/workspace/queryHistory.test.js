@@ -1,6 +1,7 @@
 import {
   activityStateForFrame,
   buildKisSnapshot,
+  buildOperationMetadata,
   getSnapshotKind,
   normalizeFrameActivity,
   withViewedFrame,
@@ -146,4 +147,46 @@ test('query history tracks viewed state only and ignores legacy submitted ids', 
   expect(withViewedFrame(activity, 'frame-3').viewedFrameIds).toEqual(
     new Set(['frame-1', 'frame-2', 'frame-3']),
   );
+});
+
+test('buildOperationMetadata normalizes camelCase and snake_case properties', () => {
+  const meta = buildOperationMetadata({
+    semanticRevision: 3,
+    operationKind: 'patch_events',
+    affectedEventIds: ['E2', 'E3'],
+    imageAdded: ['ast_1'],
+    imageRemoved: ['ast_old'],
+    searchOnly: false,
+  });
+  expect(meta).toEqual({
+    semantic_revision: 3,
+    operation_kind: 'patch_events',
+    affected_event_ids: ['E2', 'E3'],
+    image_added: ['ast_1'],
+    image_removed: ['ast_old'],
+    search_only: false,
+  });
+});
+
+test('buildKisSnapshot preserves operation_metadata when provided in options', () => {
+  const snapshot = buildKisSnapshot([], {
+    events: ['event 1'],
+    latency: { total_ms: 10 },
+    operationMetadata: {
+      semantic_revision: 1,
+      operation_kind: 'initial_resolve',
+      affected_event_ids: ['E1'],
+      image_added: [],
+      image_removed: [],
+      search_only: false,
+    },
+  });
+  expect(snapshot.operation_metadata).toEqual({
+    semantic_revision: 1,
+    operation_kind: 'initial_resolve',
+    affected_event_ids: ['E1'],
+    image_added: [],
+    image_removed: [],
+    search_only: false,
+  });
 });

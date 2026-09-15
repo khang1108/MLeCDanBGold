@@ -78,6 +78,45 @@ const normalizeMetadata = (metadata, field) => {
   return { ...metadata };
 };
 
+export const buildOperationMetadata = (meta = {}) => {
+  if (!meta || typeof meta !== 'object') return null;
+  const semanticRevision = typeof meta.semantic_revision === 'number'
+    ? meta.semantic_revision
+    : typeof meta.semanticRevision === 'number'
+      ? meta.semanticRevision
+      : 0;
+  const operationKind = typeof meta.operation_kind === 'string'
+    ? meta.operation_kind
+    : typeof meta.operationKind === 'string'
+      ? meta.operationKind
+      : 'initial_resolve';
+  const affectedEventIds = Array.isArray(meta.affected_event_ids)
+    ? meta.affected_event_ids
+    : Array.isArray(meta.affectedEventIds)
+      ? meta.affectedEventIds
+      : [];
+  const imageAdded = Array.isArray(meta.image_added)
+    ? meta.image_added
+    : Array.isArray(meta.imageAdded)
+      ? meta.imageAdded
+      : [];
+  const imageRemoved = Array.isArray(meta.image_removed)
+    ? meta.image_removed
+    : Array.isArray(meta.imageRemoved)
+      ? meta.imageRemoved
+      : [];
+  const searchOnly = Boolean(meta.search_only ?? meta.searchOnly);
+
+  return {
+    semantic_revision: semanticRevision,
+    operation_kind: operationKind,
+    affected_event_ids: affectedEventIds.slice(),
+    image_added: imageAdded.slice(),
+    image_removed: imageRemoved.slice(),
+    search_only: searchOnly,
+  };
+};
+
 const normalizeSnapshotOptions = (options, field) => {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {
     throw new Error(`${field} options must be an object`);
@@ -98,6 +137,9 @@ const normalizeSnapshotOptions = (options, field) => {
     throw new Error(`${field} must contain either intent or events array`);
   }
 
+  const rawMeta = options.operation_metadata ?? options.operationMetadata;
+  const operationMetadata = rawMeta ? buildOperationMetadata(rawMeta) : null;
+
   return {
     intent,
     events,
@@ -105,15 +147,23 @@ const normalizeSnapshotOptions = (options, field) => {
     warnings: options.warnings === undefined
       ? []
       : normalizeEvents(options.warnings, `${field}.warnings`),
+    ...(operationMetadata ? { operation_metadata: operationMetadata } : {}),
   };
 };
 
 export const buildKisSnapshot = (results, options) => {
   if (!Array.isArray(results)) throw new Error('KIS results must be an array');
-  const { intent, events, latency, warnings } = normalizeSnapshotOptions(options, 'KIS snapshot');
+  const {
+    intent,
+    events,
+    latency,
+    warnings,
+    operation_metadata: operationMetadata,
+  } = normalizeSnapshotOptions(options, 'KIS snapshot');
   return {
     ...(intent ? { intent } : {}),
     ...(events ? { events } : {}),
+    ...(operationMetadata ? { operation_metadata: operationMetadata } : {}),
     latency,
     warnings,
     results: results.map((result, index) => {
