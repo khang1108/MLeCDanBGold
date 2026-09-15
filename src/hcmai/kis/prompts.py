@@ -40,3 +40,49 @@ def build_kis_intent_messages(clues: Sequence[str]) -> list[dict[str, str]]:
         {"role": "system", "content": KIS_RESOLVER_SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
     ]
+
+
+KIS_SCOPED_RESOLVER_SYSTEM_PROMPT = """Resolve only the explicitly granted KIS event IDs.
+Return one resolution for each granted ID and no other IDs. Preserve canonical entity IDs;
+use only IDs supplied in the base intent and retain every model-supplied non-blank binding role.
+Do not invent entities, roles, images, timestamps, or event IDs. Event text must be self-contained.
+Return language as vi or en and use the base language when one is already established."""
+
+
+def build_kis_scoped_messages(
+    base_description: str, instructions: Sequence[tuple[str, str]]
+) -> list[dict[str, str]]:
+    """Build prompts for a model resolution restricted to named event IDs."""
+    formatted = "\n".join(f"{event_id}: {instruction}" for event_id, instruction in instructions)
+    return [
+        {"role": "system", "content": KIS_SCOPED_RESOLVER_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                "Base intent:\n"
+                f"{base_description}\n\n"
+                "Resolve exactly these event instructions:\n"
+                f"{formatted}"
+            ),
+        },
+    ]
+
+
+KIS_GLOBAL_REWRITER_SYSTEM_PROMPT = """Rewrite the KIS intent globally while preserving its event topology.
+Return exactly one event resolution for every existing event ID, in the same order.
+Never add, remove, reorder, or rename events. An image-only event must remain text=null:
+the model has no image pixels and must not invent visual semantics. Preserve supplied entity
+IDs and use bindings with non-blank roles. Do not emit images, timestamps, or revision."""
+
+
+def build_kis_global_rewrite_messages(
+    base_description: str, instruction: str
+) -> list[dict[str, str]]:
+    """Build prompts for an explicit topology-preserving global rewrite."""
+    return [
+        {"role": "system", "content": KIS_GLOBAL_REWRITER_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": f"Base intent:\n{base_description}\n\nInstruction:\n{instruction}",
+        },
+    ]

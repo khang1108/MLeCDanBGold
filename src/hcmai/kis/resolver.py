@@ -34,13 +34,13 @@ class KISIntentResolver:
         """Initialize with a capability-level LLMClient."""
         self._llm = llm
 
-    def resolve_initial(self, query: str, *, revision: int) -> KISIntent:
+    def resolve_initial(self, text: str, revision: int) -> KISIntent:
         """Resolve one initial natural-language query at a server-owned revision.
 
         The returned intent is a semantic snapshot and deliberately does not
         retain raw client input history.
         """
-        return self._resolve((query,), revision=revision)
+        return self._resolve((text,), revision=revision)
 
     def resolve(self, inputs: Sequence[str], *, revision: int) -> KISIntent:
         """Resolve legacy ordered inputs while callers migrate to ``resolve_initial``.

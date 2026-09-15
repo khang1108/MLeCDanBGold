@@ -11,6 +11,13 @@ from .models import (
     KISTemporalEdge,
 )
 from .resolver import KISIntentResolver, KISResolutionError
+from .rewriter import GlobalRewriteEvent, GlobalRewriteResolution, KISGlobalRewriter
+from .scoped_resolver import (
+    KISScopedResolver,
+    ScopedResolvedEvent,
+    ScopedResolutionBatch,
+    apply_scoped_resolutions,
+)
 
 __all__ = [
     "KISEntity",
@@ -22,5 +29,12 @@ __all__ = [
     "KISResolutionEntity",
     "KISResolutionEvent",
     "KISResolutionError",
+    "KISGlobalRewriter",
+    "GlobalRewriteEvent",
+    "GlobalRewriteResolution",
+    "KISScopedResolver",
+    "ScopedResolvedEvent",
+    "ScopedResolutionBatch",
+    "apply_scoped_resolutions",
     "KISTemporalEdge",
 ]
