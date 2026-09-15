@@ -56,13 +56,17 @@ def test_parser_rejects_malformed_event_prefix() -> None:
     "command,base_event_count",
     [
         ("E 1: woman enters", 0),
+        ("Efoo: woman enters", 0),
+        ("E-1: woman enters", 0),
+        ("E+1: woman enters", 0),
         ("E1: woman enters\nE 2: she sits", 1),
+        ("E1: woman enters\nE+2: she sits", 1),
     ],
 )
 def test_parser_rejects_whitespace_separated_event_prefixes(
     command: str, base_event_count: int
 ) -> None:
-    """Whitespace inside an event ID cannot become natural text or continuation."""
+    """Malformed E-like headers cannot become natural text or continuation."""
     with pytest.raises(KISCommandError, match="Malformed"):
         parse_kis_command(command, base_event_count=base_event_count)
 
