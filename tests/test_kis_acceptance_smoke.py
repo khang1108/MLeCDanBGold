@@ -307,10 +307,6 @@ class KISAcceptanceSmokeTest(unittest.TestCase):
         self.assertEqual(len(response.results[0].frame_ids), 1)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 def resolution_from_intent(intent: KISIntent) -> KISResolution:
     """Project a canonical fixture into the semantic shape returned by the LLM."""
     entity_indices = {entity.id: index for index, entity in enumerate(intent.entities)}
@@ -329,3 +325,7 @@ def resolution_from_intent(intent: KISIntent) -> KISResolution:
             for event in intent.events
         ],
     )
+
+
+if __name__ == "__main__":
+    unittest.main()
