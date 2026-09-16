@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
+from typing import Literal
 
+from hcmai.event_trail.decoder import ConstraintSnapshot
 from hcmai.orchestration.workflows.temporal_search import DecoderConfigSnapshot
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+from hcmai.temporal.constraints import Interval
+from hcmai.temporal.dp import AlignedPath
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,3 +46,156 @@ def freeze_video_scores(video: VideoEventScores) -> VideoEventScores:
         value.setflags(write=False)
         arrays[name] = value
     return replace(video, **arrays)
+
+
+@dataclass(frozen=True, slots=True)
+class SubmissionSelection:
+    """Explicitly selected frame for competition submission."""
+
+    event_id: str
+    frame_id: str
+    frame_idx: int
+    timestamp_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class TrailCheckpoint:
+    """Snapshot of session constraints and selection for undo history."""
+
+    constraints: ConstraintSnapshot
+    submission_selection: SubmissionSelection | None
+
+
+@dataclass(frozen=True, slots=True)
+class EventTrailSession:
+    """Immutable state for one active EventTrail exploration session."""
+
+    session_id: str
+    snapshot_id: str
+    result_id: str
+    video_id: str
+    kis_revision: int
+    scoring_revision: str
+    event_ids: tuple[str, ...]
+    video_evidence: VideoEventScores
+    decoder_config: DecoderConfigSnapshot
+    trail_revision: int
+    constraints: ConstraintSnapshot
+    current_path: AlignedPath | None
+    last_valid_path: AlignedPath | None
+    history: tuple[TrailCheckpoint, ...]
+    submission_selection: SubmissionSelection | None
+    status: Literal["active", "exhausted"]
+
+
+@dataclass(frozen=True, slots=True)
+class ApproveEvent:
+    """Anchor the currently aligned candidate frame for an event."""
+
+    event_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class UseFrame:
+    """Anchor a specific frame for an event and designate it for submission."""
+
+    event_id: str
+    frame_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class DeclineCandidate:
+    """Exclude the temporal neighborhood cell around an event's candidate."""
+
+    event_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ClearAnchor:
+    """Release any hard anchor on an event."""
+
+    event_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class SetWindow:
+    """Restrict alignment to a sub-range [start_ms, end_ms]."""
+
+    start_ms: int
+    end_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class ClearWindow:
+    """Reset the alignment window to the full video."""
+
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class Undo:
+    """Revert the most recent constraint mutation."""
+
+    pass
+
+
+TrailAction = (
+    ApproveEvent
+    | UseFrame
+    | DeclineCandidate
+    | ClearAnchor
+    | SetWindow
+    | ClearWindow
+    | Undo
+)
+
+
+@dataclass(frozen=True, slots=True)
+class EventCandidate:
+    """Projected candidate frame for one event in a trail path."""
+
+    event_id: str
+    frame_id: str
+    frame_idx: int
+    timestamp_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateDiff:
+    """Diff describing how one event's candidate moved between revisions."""
+
+    event_id: str
+    before_frame_id: str | None
+    after_frame_id: str | None
+    before_timestamp_ms: int | None
+    after_timestamp_ms: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class TrailTransition:
+    """Summary of changes and latency resulting from one committed action."""
+
+    action_event_id: str | None
+    direct_changed_event_ids: tuple[str, ...]
+    indirect_changed_event_ids: tuple[str, ...]
+    candidate_diffs: tuple[CandidateDiff, ...]
+    latency_ms: float
+
+
+@dataclass(frozen=True, slots=True)
+class TrailView:
+    """UI-ready presentation projection of an EventTrail session."""
+
+    session_id: str
+    result_id: str
+    video_id: str
+    kis_revision: int
+    trail_revision: int
+    status: Literal["active", "exhausted"]
+    path: tuple[EventCandidate, ...] | None
+    last_valid_path: tuple[EventCandidate, ...] | None
+    approved_event_ids: tuple[str, ...]
+    rejected_counts: dict[str, int]
+    window: Interval | None
+    submission_selection: SubmissionSelection | None
+    transition: TrailTransition | None

@@ -31,9 +31,11 @@ from hcmai.common.config import ApiConfig, SearchConfig
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
 from hcmai.event_trail.config import EventTrailSettings
+from hcmai.event_trail.decoder import TemporalConstraintDecoder
 from hcmai.event_trail.errors import EventTrailError
 from hcmai.event_trail.models import EvidenceSnapshot, SnapshotResult, freeze_video_scores
-from hcmai.event_trail.store import EvidenceSnapshotStore
+from hcmai.event_trail.service import EventTrailService
+from hcmai.event_trail.store import EventTrailSessionStore, EvidenceSnapshotStore
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.utils.health import build_health_report
 from hcmai.orchestration.utils.materializer import SearchMaterializer
@@ -167,6 +169,21 @@ class SearchService:
             temporal,
             self.config.max_temporal_event_count,
         )
+
+        self.event_trail_sessions = EventTrailSessionStore(
+            ttl_seconds=self.event_trail_settings.session_ttl_seconds,
+            max_entries=self.event_trail_settings.max_sessions,
+        )
+        if self.kis.temporal is not None:
+            self.event_trail_decoder = TemporalConstraintDecoder(self.kis.temporal)
+            self.event_trail = EventTrailService(
+                snapshot_store=self.event_trail_snapshots,
+                session_store=self.event_trail_sessions,
+                decoder=self.event_trail_decoder,
+            )
+        else:
+            self.event_trail_decoder = None
+            self.event_trail = None
 
     @staticmethod
     def load(messages: list[str]) -> SearchService:
