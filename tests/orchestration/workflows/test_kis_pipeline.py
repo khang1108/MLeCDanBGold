@@ -53,7 +53,9 @@ class KISPipelineTest(unittest.TestCase):
         search_result.paths = [Mock()]
         search_result.retrieval_ms = 12.0
         search_result.alignment_ms = 3.5
-        temporal.search_plan.return_value = search_result
+        temporal.search_plan_artifact.return_value = Mock(
+            result=search_result, video_scores=(), decoder_config=Mock()
+        )
 
         pipeline = KISPipeline(corpus=corpus, temporal=temporal)
         mock_materializer = Mock()
@@ -85,7 +87,7 @@ class KISPipelineTest(unittest.TestCase):
             translation_ms=3.0,
         )
 
-        temporal.search_plan.assert_called_once_with(
+        temporal.search_plan_artifact.assert_called_once_with(
             plan,
             image_component=None,
             use_dense=True,
@@ -105,7 +107,9 @@ class KISPipelineTest(unittest.TestCase):
         search_result.paths = []
         search_result.retrieval_ms = 10.0
         search_result.alignment_ms = 2.0
-        temporal.search_plan.return_value = search_result
+        temporal.search_plan_artifact.return_value = Mock(
+            result=search_result, video_scores=(), decoder_config=Mock()
+        )
 
         pipeline = KISPipeline(corpus=corpus, temporal=temporal)
         pipeline.materializer = Mock()
@@ -120,7 +124,7 @@ class KISPipelineTest(unittest.TestCase):
             top_k=5,
         )
 
-        temporal.search_plan.assert_called_once_with(
+        temporal.search_plan_artifact.assert_called_once_with(
             plan,
             image_component=None,
             use_dense=True,
@@ -187,14 +191,18 @@ def test_task2_step5_pipeline_uses_plan_text_and_accounts_for_translation():
     intent = KISPipelineTest()
     intent.setUp()
     temporal = Mock()
-    temporal.search_plan.return_value = Mock(paths=[], retrieval_ms=4, alignment_ms=5)
+    temporal.search_plan_artifact.return_value = Mock(
+        result=Mock(paths=[], retrieval_ms=4, alignment_ms=5),
+        video_scores=(),
+        decoder_config=Mock(),
+    )
     pipeline = KISPipeline(Mock(), temporal)
     plan = KISRetrievalPlan(events=tuple(
         KISRetrievalEvent(f"E{i}", f"canonical {i}", f"dense {i}", f"literal {i}")
         for i in (1, 2)
     ))
     result = pipeline.execute(intent=intent.intent, retrieval_plan=plan, use_dense=True, use_bm25=True, top_k=3, intent_ms=20, translation_ms=30)
-    temporal.search_plan.assert_called_once_with(plan, image_component=None, use_dense=True, use_bm25=True, top_k=3)
+    temporal.search_plan_artifact.assert_called_once_with(plan, image_component=None, use_dense=True, use_bm25=True, top_k=3)
     assert result.latency.intent_ms == 20
     assert result.latency.translation_ms == 30
     assert result.latency.query_ms == 50
@@ -246,7 +254,11 @@ def test_kis_pipeline_multimodal_plan_execution():
     
     temporal = Mock()
     mock_search_result = Mock(paths=[], retrieval_ms=10.0, alignment_ms=5.0)
-    temporal.search_plan.return_value = mock_search_result
+    temporal.search_plan_artifact.return_value = Mock(
+        result=mock_search_result,
+        video_scores=(),
+        decoder_config=Mock(),
+    )
     
     corpus = Mock()
     pipeline = KISPipeline(corpus=corpus, temporal=temporal, image_scorer=image_scorer)
@@ -259,7 +271,7 @@ def test_kis_pipeline_multimodal_plan_execution():
         top_k=5,
     )
     image_scorer.score_events.assert_called_once_with(plan.image_ref_rows)
-    temporal.search_plan.assert_called_once_with(
+    temporal.search_plan_artifact.assert_called_once_with(
         plan,
         image_component=image_component,
         use_dense=True,
@@ -271,14 +283,14 @@ def test_kis_pipeline_multimodal_plan_execution():
 class FakeTemporal:
     def __init__(self, result):
         self.result = result
-        self.search_plan_calls = 0
+        self.search_plan_artifact_calls = 0
 
-    def search_plan(self, *args, **kwargs):
-        self.search_plan_calls += 1
-        return self.result
+    def search_plan_artifact(self, *args, **kwargs):
+        self.search_plan_artifact_calls += 1
+        return Mock(result=self.result, video_scores=(), decoder_config=Mock())
 
 
-def test_kis_pipeline_uses_search_plan_only():
+def test_kis_pipeline_uses_search_plan_artifact_only():
     fake_temporal_result = Mock(paths=[], retrieval_ms=1.0, alignment_ms=1.0)
     corpus = Mock()
     temporal = FakeTemporal(fake_temporal_result)
@@ -292,14 +304,15 @@ def test_kis_pipeline_uses_search_plan_only():
         query_text="canonical 1",
         events=[KISEvent(id="E1", text="canonical 1")],
     )
-    pipeline.execute(
+    execution = pipeline.execute(
         intent=intent,
         retrieval_plan=plan,
         use_dense=True,
         use_bm25=False,
         top_k=5,
     )
-    assert temporal.search_plan_calls == 1
+    assert temporal.search_plan_artifact_calls == 1
+    assert execution.temporal_artifact is not None
 
 
 def test_no_unittest_mock_imported_in_production_workflows():

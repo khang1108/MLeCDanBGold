@@ -17,7 +17,10 @@ from hcmai.corpus import Corpus
 from hcmai.kis.models import KISIntent
 from hcmai.orchestration.utils.errors import InvalidQueryInputError
 from hcmai.orchestration.utils.materializer import SearchMaterializer
-from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.temporal_search import (
+    TemporalSearchArtifact,
+    TemporalSearchService,
+)
 from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
 from hcmai.retrieval.plan import KISRetrievalPlan
 
@@ -28,6 +31,7 @@ class KISSearchExecution:
 
     results: list[SearchResult]
     latency: SearchLatency
+    temporal_artifact: TemporalSearchArtifact | None = None
 
 
 class KISPipeline:
@@ -90,7 +94,7 @@ class KISPipeline:
                 raise InvalidQueryInputError("Image query scoring is unavailable")
             image_component = self.image_scorer.score_events(retrieval_plan.image_ref_rows)
 
-        search = self.temporal.search_plan(
+        artifact = self.temporal.search_plan_artifact(
             retrieval_plan,
             image_component=image_component,
             use_dense=use_dense,
@@ -99,7 +103,7 @@ class KISPipeline:
         )
 
         materialization_started = perf_counter()
-        results = [self.materializer.build_kis_result(path) for path in search.paths]
+        results = [self.materializer.build_kis_result(path) for path in artifact.result.paths]
         materialization_ms = (perf_counter() - materialization_started) * 1_000
         query_ms = intent_ms + translation_ms
         total_ms = (perf_counter() - started) * 1_000 + query_ms
@@ -108,9 +112,13 @@ class KISPipeline:
             intent_ms=intent_ms,
             translation_ms=translation_ms,
             query_ms=query_ms,
-            retrieval_ms=search.retrieval_ms,
-            alignment_ms=search.alignment_ms,
+            retrieval_ms=artifact.result.retrieval_ms,
+            alignment_ms=artifact.result.alignment_ms,
             materialization_ms=materialization_ms,
             total_ms=total_ms,
         )
-        return KISSearchExecution(results=results, latency=latency)
+        return KISSearchExecution(
+            results=results,
+            latency=latency,
+            temporal_artifact=artifact,
+        )

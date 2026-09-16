@@ -41,6 +41,15 @@ class DecoderConfigSnapshot:
     path_min_separation_ms: int
 
 
+@dataclass(frozen=True, slots=True)
+class TemporalSearchArtifact:
+    """Shared score matrix and aligned paths output for one retrieval plan."""
+
+    result: TemporalSearchResult
+    video_scores: tuple[VideoEventScores, ...]
+    decoder_config: DecoderConfigSnapshot
+
+
 class TemporalSearchService:
     """Score ordered events, decode monotonic paths, and preserve identity."""
 
@@ -114,6 +123,24 @@ class TemporalSearchService:
         top_k: int = 20,
     ) -> TemporalSearchResult:
         """Return canonical aligned paths for a multimodal retrieval plan."""
+        return self.search_plan_artifact(
+            plan,
+            image_component=image_component,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+            top_k=top_k,
+        ).result
+
+    def search_plan_artifact(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        image_component: TemporalScoreComponent | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+        top_k: int = 20,
+    ) -> TemporalSearchArtifact:
+        """Return canonical aligned paths and the exact score matrix artifact."""
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero")
 
@@ -140,10 +167,15 @@ class TemporalSearchService:
             self._materialize_aligned_path(row, score_by_video[row.video_id]) for row in rows
         )
         alignment_ms = (perf_counter() - alignment_started) * 1_000
-        return TemporalSearchResult(
+        result = TemporalSearchResult(
             paths=paths,
             retrieval_ms=retrieval_ms,
             alignment_ms=alignment_ms,
+        )
+        return TemporalSearchArtifact(
+            result=result,
+            video_scores=scores,
+            decoder_config=self.snapshot_decoder_config(),
         )
 
     def score_plan(
@@ -169,7 +201,9 @@ class TemporalSearchService:
         )
         retrieval_ms = (perf_counter() - retrieval_started) * 1_000
 
-        validated = tuple(self._validate_video_scores(item, plan.event_count) for item in scores)
+        validated = tuple(scores)
+        for video in validated:
+            self._validate_video_scores(plan.event_count, video)
         return validated, retrieval_ms
 
     def score_videos(
