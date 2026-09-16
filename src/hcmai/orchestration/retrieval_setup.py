@@ -43,7 +43,7 @@ def load_retrieval(
         return None
     try:
         visual = RetrievalService.load_index(index_dir)
-        visual_encoder = _query_encoder(models.visual_embedding, visual, llm, "visual")
+        visual_encoder = _query_encoder(models.visual_embedding, visual, "visual")
     except Exception as error:
         messages.append(
             f"Could not load required visual index {index_dir}: "
@@ -292,7 +292,6 @@ def _load_fast_track_retrieval(
             text_encoder = _query_encoder(
                 models.resolved_evidence_embedding,
                 sample,
-                llm,
                 "text",
             )
         except Exception as error:
@@ -350,20 +349,24 @@ def _load_fast_track_index(
 def _query_encoder(
     config: Any,
     index: Any,
-    embedding_client: Any = None,
     source: str = "text",
 ) -> Any:
     """Build a local or configured remote query encoder for one index."""
-    if not isinstance(embedding_client, EmbeddingClient):
-        try:
-            embedding_client = EmbeddingClient(load_embedding_endpoint())
-        except Exception:
-            embedding_client = None
-
-    if embedding_client is None:
+    remote_requested = any(
+        key in os.environ
+        for key in (
+            "HCMAI_EMBEDDING_BASE_URL",
+            "HCMAI_EMBEDDING_MODEL",
+            "HCMAI_EMBEDDING_API_KEY",
+            "HCMAI_EMBEDDING_TIMEOUT_SECONDS",
+        )
+    )
+    if not remote_requested:
         return EmbeddingService.create_text_adapter(config)
+
+    client = EmbeddingClient(load_embedding_endpoint())
     return EmbeddingService.create_remote_adapter(
-        embedding_client,
+        client,
         config,
         index.metadata.embedding_dim,
         source,

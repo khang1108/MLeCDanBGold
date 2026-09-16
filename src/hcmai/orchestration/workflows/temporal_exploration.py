@@ -127,31 +127,12 @@ class TemporalExploration:
                         binding.retrieval_plan.image_ref_rows
                     )
 
-                from unittest.mock import Mock
-
-                use_plan = hasattr(self._temporal, "score_plan")
-                if isinstance(self._temporal, Mock):
-                    use_plan = "score_plan" in getattr(self._temporal, "_mock_children", {})
-                if use_plan:
-                    scores, _ = self._temporal.score_plan(
-                        binding.retrieval_plan,
-                        image_component=image_component,
-                        use_dense=binding.use_dense,
-                        use_bm25=binding.use_bm25,
-                    )
-                else:
-                    scores, _ = self._temporal.score_videos(
-                        binding.retrieval_plan.canonical_texts,
-                        retrieval_events=(
-                            binding.retrieval_plan.dense_texts
-                            if binding.use_dense else binding.retrieval_plan.canonical_texts
-                        ),
-                        caption_events=(
-                            binding.retrieval_plan.bm25_texts if binding.use_bm25 else None
-                        ),
-                        use_dense=binding.use_dense,
-                        use_bm25=binding.use_bm25,
-                    )
+                scores, _ = self._temporal.score_plan(
+                    binding.retrieval_plan,
+                    image_component=image_component,
+                    use_dense=binding.use_dense,
+                    use_bm25=binding.use_bm25,
+                )
                 selected = next(
                     (video for video in scores if video.video_id == video_id),
                     None,

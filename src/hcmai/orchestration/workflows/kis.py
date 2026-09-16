@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from time import perf_counter
-from unittest.mock import Mock
 
 from hcmai.api.contracts.search import SearchLatency, SearchResult
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
@@ -91,34 +90,13 @@ class KISPipeline:
                 raise InvalidQueryInputError("Image query scoring is unavailable")
             image_component = self.image_scorer.score_events(retrieval_plan.image_ref_rows)
 
-        use_plan = hasattr(self.temporal, "search_plan")
-        if isinstance(self.temporal, Mock):
-            from unittest.mock import DEFAULT
-            if (
-                getattr(self.temporal.search, "_mock_return_value", DEFAULT) is not DEFAULT
-                and getattr(self.temporal.search_plan, "_mock_return_value", DEFAULT) is DEFAULT
-            ):
-                use_plan = False
-        if use_plan:
-            search = self.temporal.search_plan(
-                retrieval_plan,
-                image_component=image_component,
-                use_dense=use_dense,
-                use_bm25=use_bm25,
-                top_k=top_k,
-            )
-        else:
-            original_events = retrieval_plan.canonical_texts
-            retrieval_bundle = retrieval_plan.dense_texts if use_dense else original_events
-            caption_events = retrieval_plan.bm25_texts if use_bm25 else None
-            search = self.temporal.search(
-                original_events,
-                retrieval_events=retrieval_bundle,
-                caption_events=caption_events,
-                use_dense=use_dense,
-                use_bm25=use_bm25,
-                top_k=top_k,
-            )
+        search = self.temporal.search_plan(
+            retrieval_plan,
+            image_component=image_component,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+            top_k=top_k,
+        )
 
         materialization_started = perf_counter()
         results = [self.materializer.build_kis_result(path) for path in search.paths]
