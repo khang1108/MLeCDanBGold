@@ -1,6 +1,8 @@
 """Tests for EventTrailService and session action semantics."""
 
 from datetime import datetime, timezone
+import json
+import logging
 import numpy as np
 import pytest
 
@@ -128,6 +130,12 @@ class FakeTemporalSearchService:
                 timestamps_ms=tuple(int(video.timestamps_ms[i]) for i in chosen),
             ),
         )
+
+    def score_plan(self, *args, **kwargs):
+        raise NotImplementedError("score_plan should not be called")
+
+    def search_plan_artifact(self, *args, **kwargs):
+        raise NotImplementedError("search_plan_artifact should not be called")
 
 
 @pytest.fixture
@@ -304,3 +312,126 @@ def test_set_and_clear_window(
 
     view2 = service.act(view1.session_id, expected_trail_revision=1, action=ClearWindow())
     assert view2.window is None
+
+
+def test_decline_and_exhausting_decline_logging(
+    service: EventTrailService,
+    stores: Stores,
+    snapshot: EvidenceSnapshot,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="hcmai.event_trail.interactions")
+    stores.snapshots.put(snapshot)
+    view = service.open(snapshot.snapshot_id, "r_1", snapshot.kis_revision)
+
+    # 1. Normal Decline
+    updated = service.act(view.session_id, expected_trail_revision=0, action=DeclineCandidate("E2"))
+    assert updated.status == "active"
+
+    records = [
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "hcmai.event_trail.interactions"
+    ]
+    # Check open record
+    open_rec = [r for r in records if r["type"] == "trail_open"][0]
+    assert open_rec["trail_session_id"] == view.session_id
+    assert open_rec["trail_revision"] == 0
+    assert open_rec["payload"]["initial_path"]
+    assert open_rec["payload"]["total_ms"] >= 0
+
+    # Check decline record
+    decline_rec = [r for r in records if r["type"] == "trail_decline"][0]
+    assert decline_rec["type"] == "trail_decline"
+    assert decline_rec["event_id"] == "E2"
+    assert decline_rec["payload"]["path_before"]
+    assert "direct_changed_event_ids" in decline_rec["payload"]
+    assert "indirect_changed_event_ids" in decline_rec["payload"]
+    assert decline_rec["payload"]["total_ms"] >= 0
+    assert decline_rec["payload"]["outcome"] == "active"
+    assert decline_rec["payload"]["path_after"] is not None
+
+    # 2. Exhausting decline: decline until exhausted
+    # Decline E1 twice more so it pushes past available frames for subsequent events
+    rev = updated.trail_revision
+    exhausted_view = None
+    for _ in range(5):
+        try:
+            res = service.act(view.session_id, expected_trail_revision=rev, action=DeclineCandidate("E1"))
+            rev = res.trail_revision
+            if res.status == "exhausted":
+                exhausted_view = res
+                break
+        except EventTrailError:
+            break
+
+    assert exhausted_view is not None
+    assert exhausted_view.status == "exhausted"
+
+    records_after = [
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "hcmai.event_trail.interactions"
+    ]
+    exhaust_declines = [
+        r for r in records_after
+        if r["type"] == "trail_decline" and r["payload"]["outcome"] == "exhausted"
+    ]
+    assert len(exhaust_declines) >= 1
+    exhaust_rec = exhaust_declines[0]
+    assert exhaust_rec["payload"]["path_after"] is None
+    assert exhaust_rec["payload"]["total_ms"] >= 0
+
+    exhausted_events = [r for r in records_after if r["type"] == "trail_exhausted"]
+    assert len(exhausted_events) >= 1
+    assert exhausted_events[0]["payload"]["exhausted_by_event_id"] == "E1"
+    assert len(exhausted_events[0]["payload"]["last_valid_path"]) > 0
+
+
+def test_no_heavy_retrieval_dependency_in_action_loop(
+    service: EventTrailService,
+    stores: Stores,
+    snapshot: EvidenceSnapshot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stores.snapshots.put(snapshot)
+    view = service.open(snapshot.snapshot_id, "r_1", snapshot.kis_revision)
+
+    def fail_rescore(*args, **kwargs):
+        raise AssertionError("EventTrail action reran full-corpus scoring")
+
+    monkeypatch.setattr(service.decoder.temporal, "score_plan", fail_rescore)
+    service.act(view.session_id, view.trail_revision, DeclineCandidate(event_id="E2"))
+
+
+def test_use_frame_logs_submission_select(
+    service: EventTrailService,
+    stores: Stores,
+    snapshot: EvidenceSnapshot,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="hcmai.event_trail.interactions")
+    stores.snapshots.put(snapshot)
+    view = service.open(snapshot.snapshot_id, "r_1", snapshot.kis_revision)
+
+    service.act(
+        view.session_id,
+        expected_trail_revision=0,
+        action=UseFrame(event_id="E2", frame_id="f2"),
+    )
+
+    records = [
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "hcmai.event_trail.interactions"
+    ]
+    use_rec = [r for r in records if r["type"] == "trail_use"][0]
+    assert use_rec["event_id"] == "E2"
+    assert use_rec["payload"]["outcome"] == "active"
+
+    select_rec = [r for r in records if r["type"] == "submission_select"][0]
+    assert select_rec["event_id"] == "E2"
+    assert select_rec["payload"]["frame_id"] == "f2"
+    assert select_rec["payload"]["frame_idx"] == 2
+    assert select_rec["payload"]["timestamp_ms"] == 2000
+

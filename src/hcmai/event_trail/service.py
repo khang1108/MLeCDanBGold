@@ -40,6 +40,9 @@ from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.dp import AlignedPath
 
 
+from hcmai.event_trail.logging import log_trail_event
+
+
 def materialize_snapshot_path(
     result: SnapshotResult, video: VideoEventScores
 ) -> AlignedPath:
@@ -87,6 +90,7 @@ class EventTrailService:
         expected_kis_revision: int,
     ) -> TrailView:
         """Open a new EventTrail session initialized from one snapshot result."""
+        started = perf_counter()
         snapshot = self.snapshot_store.get(snapshot_id)
         if snapshot.kis_revision != expected_kis_revision:
             raise EventTrailError(
@@ -134,7 +138,24 @@ class EventTrailService:
             status="active",
         )
         self.session_store.put(session)
-        return self._build_trail_view(session)
+        view = self._build_trail_view(session)
+        total_ms = (perf_counter() - started) * 1000.0
+
+        log_trail_event(
+            event_type="trail_open",
+            kis_revision=snapshot.kis_revision,
+            snapshot_id=snapshot_id,
+            result_id=result_id,
+            video_id=snapshot_result.video_id,
+            trail_session_id=session_id,
+            trail_revision=0,
+            event_id=None,
+            payload={
+                "initial_path": list(snapshot_result.initial_path),
+                "total_ms": round(total_ms, 3),
+            },
+        )
+        return view
 
     def get(self, session_id: str) -> TrailView:
         """Fetch the current state projection of an active session."""
@@ -148,6 +169,7 @@ class EventTrailService:
         action: TrailAction,
     ) -> TrailView:
         """Apply a transactional feedback action to mutate a session's constraints."""
+        started = perf_counter()
         with self.session_store.locked(session_id) as slot:
             session = slot.session
             if session.trail_revision != expected_trail_revision:
@@ -157,7 +179,7 @@ class EventTrailService:
                 )
 
             if isinstance(action, Undo):
-                return self._act_undo(slot)
+                return self._act_undo(slot, started)
 
             if isinstance(action, (ApproveEvent, UseFrame, DeclineCandidate, ClearAnchor)):
                 if action.event_id not in session.event_ids:
@@ -168,24 +190,24 @@ class EventTrailService:
 
             if isinstance(action, ApproveEvent):
                 assert event_idx is not None
-                return self._act_approve(slot, action, event_idx)
+                return self._act_approve(slot, action, event_idx, started)
             elif isinstance(action, UseFrame):
                 assert event_idx is not None
-                return self._act_use_frame(slot, action, event_idx)
+                return self._act_use_frame(slot, action, event_idx, started)
             elif isinstance(action, DeclineCandidate):
                 assert event_idx is not None
-                return self._act_decline(slot, action, event_idx)
+                return self._act_decline(slot, action, event_idx, started)
             elif isinstance(action, ClearAnchor):
                 assert event_idx is not None
-                return self._act_clear_anchor(slot, action, event_idx)
+                return self._act_clear_anchor(slot, action, event_idx, started)
             elif isinstance(action, SetWindow):
-                return self._act_set_window(slot, action)
+                return self._act_set_window(slot, action, started)
             elif isinstance(action, ClearWindow):
-                return self._act_clear_window(slot)
+                return self._act_clear_window(slot, started)
             else:
                 raise EventTrailError("INVALID_ACTION", f"Unsupported action {action}")
 
-    def _act_undo(self, slot: SessionSlot) -> TrailView:
+    def _act_undo(self, slot: SessionSlot, started: float) -> TrailView:
         session = slot.session
         if not session.history:
             raise EventTrailError("CANNOT_UNDO", "No prior checkpoint to undo")
@@ -205,6 +227,7 @@ class EventTrailService:
             new_status = "exhausted"
             new_last_valid = session.last_valid_path
 
+        t_diff = perf_counter()
         diffs: list[CandidateDiff] = []
         indirect_changed: list[str] = []
         for i, eid in enumerate(session.event_ids):
@@ -215,6 +238,7 @@ class EventTrailService:
             if old_fid != new_fid:
                 diffs.append(CandidateDiff(eid, old_fid, new_fid, old_ts, new_ts))
                 indirect_changed.append(eid)
+        diff_ms = (perf_counter() - t_diff) * 1000.0
 
         transition = TrailTransition(
             action_event_id=None,
@@ -235,9 +259,48 @@ class EventTrailService:
             status=new_status,
         )
         slot.session = updated
+        total_ms = (perf_counter() - started) * 1000.0
+
+        log_trail_event(
+            event_type="trail_undo",
+            kis_revision=session.kis_revision,
+            snapshot_id=session.snapshot_id,
+            result_id=session.result_id,
+            video_id=session.video_id,
+            trail_session_id=session.session_id,
+            trail_revision=updated.trail_revision,
+            event_id=None,
+            payload={
+                "path_before": list(session.current_path.frame_ids) if session.current_path else [],
+                "path_after": list(new_path.frame_ids) if new_path else None,
+                "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+                "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+                "outcome": new_status,
+                "constraint_ms": round(outcome.constraint_ms, 3),
+                "dp_ms": round(outcome.dp_ms, 3),
+                "diff_ms": round(diff_ms, 3),
+                "total_ms": round(total_ms, 3),
+            },
+        )
+        if new_status == "exhausted" and session.status != "exhausted":
+            log_trail_event(
+                event_type="trail_exhausted",
+                kis_revision=session.kis_revision,
+                snapshot_id=session.snapshot_id,
+                result_id=session.result_id,
+                video_id=session.video_id,
+                trail_session_id=session.session_id,
+                trail_revision=updated.trail_revision,
+                event_id=None,
+                payload={
+                    "exhausted_by_event_id": None,
+                    "last_valid_path": list(new_last_valid.frame_ids) if new_last_valid else [],
+                    "total_ms": round(total_ms, 3),
+                },
+            )
         return self._build_trail_view(updated, transition)
 
-    def _act_approve(self, slot: SessionSlot, action: ApproveEvent, event_idx: int) -> TrailView:
+    def _act_approve(self, slot: SessionSlot, action: ApproveEvent, event_idx: int, started: float) -> TrailView:
         session = slot.session
         if session.current_path is None:
             raise EventTrailError("CONSTRAINT_CONFLICT", "Cannot approve when path is exhausted")
@@ -255,6 +318,7 @@ class EventTrailService:
                 "CONSTRAINT_CONFLICT", f"Approve contradicts constraints: {outcome.status}"
             )
 
+        t_diff = perf_counter()
         diffs: list[CandidateDiff] = []
         indirect_changed: list[str] = []
         for i, eid in enumerate(session.event_ids):
@@ -266,6 +330,7 @@ class EventTrailService:
                 diffs.append(CandidateDiff(eid, old_fid, new_fid, old_ts, new_ts))
                 if eid != action.event_id:
                     indirect_changed.append(eid)
+        diff_ms = (perf_counter() - t_diff) * 1000.0
 
         transition = TrailTransition(
             action_event_id=action.event_id,
@@ -288,9 +353,32 @@ class EventTrailService:
             status="active",
         )
         slot.session = updated
+        total_ms = (perf_counter() - started) * 1000.0
+
+        log_trail_event(
+            event_type="trail_approve",
+            kis_revision=session.kis_revision,
+            snapshot_id=session.snapshot_id,
+            result_id=session.result_id,
+            video_id=session.video_id,
+            trail_session_id=session.session_id,
+            trail_revision=updated.trail_revision,
+            event_id=action.event_id,
+            payload={
+                "path_before": list(session.current_path.frame_ids),
+                "path_after": list(outcome.path.frame_ids),  # type: ignore[union-attr]
+                "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+                "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+                "outcome": "active",
+                "constraint_ms": round(outcome.constraint_ms, 3),
+                "dp_ms": round(outcome.dp_ms, 3),
+                "diff_ms": round(diff_ms, 3),
+                "total_ms": round(total_ms, 3),
+            },
+        )
         return self._build_trail_view(updated, transition)
 
-    def _act_use_frame(self, slot: SessionSlot, action: UseFrame, event_idx: int) -> TrailView:
+    def _act_use_frame(self, slot: SessionSlot, action: UseFrame, event_idx: int, started: float) -> TrailView:
         session = slot.session
         if session.constraints.anchors[event_idx] is not None:
             raise EventTrailError("CONSTRAINT_CONFLICT", f"Event {action.event_id} is already anchored")
@@ -321,6 +409,7 @@ class EventTrailService:
                 "CONSTRAINT_CONFLICT", f"UseFrame contradicts constraints: {outcome.status}"
             )
 
+        t_diff = perf_counter()
         diffs: list[CandidateDiff] = []
         indirect_changed: list[str] = []
         for i, eid in enumerate(session.event_ids):
@@ -334,6 +423,7 @@ class EventTrailService:
                 diffs.append(CandidateDiff(eid, old_fid, new_fid, old_ts, new_ts))
                 if eid != action.event_id:
                     indirect_changed.append(eid)
+        diff_ms = (perf_counter() - t_diff) * 1000.0
 
         transition = TrailTransition(
             action_event_id=action.event_id,
@@ -357,9 +447,48 @@ class EventTrailService:
             status="active",
         )
         slot.session = updated
+        total_ms = (perf_counter() - started) * 1000.0
+
+        log_trail_event(
+            event_type="trail_use",
+            kis_revision=session.kis_revision,
+            snapshot_id=session.snapshot_id,
+            result_id=session.result_id,
+            video_id=session.video_id,
+            trail_session_id=session.session_id,
+            trail_revision=updated.trail_revision,
+            event_id=action.event_id,
+            payload={
+                "path_before": list(session.current_path.frame_ids) if session.current_path else [],
+                "path_after": list(outcome.path.frame_ids),  # type: ignore[union-attr]
+                "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+                "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+                "outcome": "active",
+                "constraint_ms": round(outcome.constraint_ms, 3),
+                "dp_ms": round(outcome.dp_ms, 3),
+                "diff_ms": round(diff_ms, 3),
+                "total_ms": round(total_ms, 3),
+            },
+        )
+        log_trail_event(
+            event_type="submission_select",
+            kis_revision=session.kis_revision,
+            snapshot_id=session.snapshot_id,
+            result_id=session.result_id,
+            video_id=session.video_id,
+            trail_session_id=session.session_id,
+            trail_revision=updated.trail_revision,
+            event_id=action.event_id,
+            payload={
+                "event_id": action.event_id,
+                "frame_id": action.frame_id,
+                "frame_idx": resolved_idx,
+                "timestamp_ms": resolved_ts,
+            },
+        )
         return self._build_trail_view(updated, transition)
 
-    def _act_decline(self, slot: SessionSlot, action: DeclineCandidate, event_idx: int) -> TrailView:
+    def _act_decline(self, slot: SessionSlot, action: DeclineCandidate, event_idx: int, started: float) -> TrailView:
         session = slot.session
         if session.current_path is None:
             raise EventTrailError("CONSTRAINT_CONFLICT", "Cannot decline when path is exhausted")
@@ -375,6 +504,7 @@ class EventTrailService:
 
         outcome = self.decoder.decode(session.video_evidence, new_constraints, session.decoder_config)
 
+        t_diff = perf_counter()
         if outcome.status == "ok":
             new_path = outcome.path
             new_status = "active"
@@ -419,6 +549,7 @@ class EventTrailService:
                 candidate_diffs=tuple(diffs),
                 latency_ms=outcome.constraint_ms + outcome.dp_ms,
             )
+        diff_ms = (perf_counter() - t_diff) * 1000.0
 
         checkpoint = TrailCheckpoint(
             constraints=session.constraints,
@@ -434,9 +565,48 @@ class EventTrailService:
             status=new_status,
         )
         slot.session = updated
+        total_ms = (perf_counter() - started) * 1000.0
+
+        log_trail_event(
+            event_type="trail_decline",
+            kis_revision=session.kis_revision,
+            snapshot_id=session.snapshot_id,
+            result_id=session.result_id,
+            video_id=session.video_id,
+            trail_session_id=session.session_id,
+            trail_revision=updated.trail_revision,
+            event_id=action.event_id,
+            payload={
+                "path_before": list(session.current_path.frame_ids),
+                "path_after": list(new_path.frame_ids) if new_path else None,
+                "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+                "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+                "outcome": new_status,
+                "constraint_ms": round(outcome.constraint_ms, 3),
+                "dp_ms": round(outcome.dp_ms, 3),
+                "diff_ms": round(diff_ms, 3),
+                "total_ms": round(total_ms, 3),
+            },
+        )
+        if new_status == "exhausted" and session.status != "exhausted":
+            log_trail_event(
+                event_type="trail_exhausted",
+                kis_revision=session.kis_revision,
+                snapshot_id=session.snapshot_id,
+                result_id=session.result_id,
+                video_id=session.video_id,
+                trail_session_id=session.session_id,
+                trail_revision=updated.trail_revision,
+                event_id=action.event_id,
+                payload={
+                    "exhausted_by_event_id": action.event_id,
+                    "last_valid_path": list(new_last_valid.frame_ids) if new_last_valid else [],
+                    "total_ms": round(total_ms, 3),
+                },
+            )
         return self._build_trail_view(updated, transition)
 
-    def _act_clear_anchor(self, slot: SessionSlot, action: ClearAnchor, event_idx: int) -> TrailView:
+    def _act_clear_anchor(self, slot: SessionSlot, action: ClearAnchor, event_idx: int, started: float) -> TrailView:
         session = slot.session
         new_anchors = list(session.constraints.anchors)
         new_anchors[event_idx] = None
@@ -461,6 +631,7 @@ class EventTrailService:
             new_status = "exhausted"
             new_last_valid = session.last_valid_path
 
+        t_diff = perf_counter()
         diffs: list[CandidateDiff] = []
         indirect_changed: list[str] = []
         for i, eid in enumerate(session.event_ids):
@@ -472,6 +643,7 @@ class EventTrailService:
                 diffs.append(CandidateDiff(eid, old_fid, new_fid, old_ts, new_ts))
                 if eid != action.event_id:
                     indirect_changed.append(eid)
+        diff_ms = (perf_counter() - t_diff) * 1000.0
 
         transition = TrailTransition(
             action_event_id=action.event_id,
@@ -495,9 +667,48 @@ class EventTrailService:
             status=new_status,
         )
         slot.session = updated
+        total_ms = (perf_counter() - started) * 1000.0
+
+        log_trail_event(
+            event_type="trail_clear_anchor",
+            kis_revision=session.kis_revision,
+            snapshot_id=session.snapshot_id,
+            result_id=session.result_id,
+            video_id=session.video_id,
+            trail_session_id=session.session_id,
+            trail_revision=updated.trail_revision,
+            event_id=action.event_id,
+            payload={
+                "path_before": list(session.current_path.frame_ids) if session.current_path else [],
+                "path_after": list(new_path.frame_ids) if new_path else None,
+                "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+                "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+                "outcome": new_status,
+                "constraint_ms": round(outcome.constraint_ms, 3),
+                "dp_ms": round(outcome.dp_ms, 3),
+                "diff_ms": round(diff_ms, 3),
+                "total_ms": round(total_ms, 3),
+            },
+        )
+        if new_status == "exhausted" and session.status != "exhausted":
+            log_trail_event(
+                event_type="trail_exhausted",
+                kis_revision=session.kis_revision,
+                snapshot_id=session.snapshot_id,
+                result_id=session.result_id,
+                video_id=session.video_id,
+                trail_session_id=session.session_id,
+                trail_revision=updated.trail_revision,
+                event_id=action.event_id,
+                payload={
+                    "exhausted_by_event_id": action.event_id,
+                    "last_valid_path": list(new_last_valid.frame_ids) if new_last_valid else [],
+                    "total_ms": round(total_ms, 3),
+                },
+            )
         return self._build_trail_view(updated, transition)
 
-    def _act_set_window(self, slot: SessionSlot, action: SetWindow) -> TrailView:
+    def _act_set_window(self, slot: SessionSlot, action: SetWindow, started: float) -> TrailView:
         session = slot.session
         if action.start_ms < 0 or action.start_ms > action.end_ms:
             raise EventTrailError("INVALID_WINDOW", "Window start must be <= end and >= 0")
@@ -509,6 +720,7 @@ class EventTrailService:
                 "CONSTRAINT_CONFLICT", f"SetWindow contradicts constraints: {outcome.status}"
             )
 
+        t_diff = perf_counter()
         diffs: list[CandidateDiff] = []
         indirect_changed: list[str] = []
         for i, eid in enumerate(session.event_ids):
@@ -521,6 +733,7 @@ class EventTrailService:
             if old_fid != new_fid:
                 diffs.append(CandidateDiff(eid, old_fid, new_fid, old_ts, new_ts))
                 indirect_changed.append(eid)
+        diff_ms = (perf_counter() - t_diff) * 1000.0
 
         transition = TrailTransition(
             action_event_id=None,
@@ -543,9 +756,35 @@ class EventTrailService:
             status="active",
         )
         slot.session = updated
+        total_ms = (perf_counter() - started) * 1000.0
+
+        log_trail_event(
+            event_type="trail_window",
+            kis_revision=session.kis_revision,
+            snapshot_id=session.snapshot_id,
+            result_id=session.result_id,
+            video_id=session.video_id,
+            trail_session_id=session.session_id,
+            trail_revision=updated.trail_revision,
+            event_id=None,
+            payload={
+                "operation": "set",
+                "start_ms": action.start_ms,
+                "end_ms": action.end_ms,
+                "path_before": list(session.current_path.frame_ids) if session.current_path else [],
+                "path_after": list(outcome.path.frame_ids),  # type: ignore[union-attr]
+                "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+                "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+                "outcome": "active",
+                "constraint_ms": round(outcome.constraint_ms, 3),
+                "dp_ms": round(outcome.dp_ms, 3),
+                "diff_ms": round(diff_ms, 3),
+                "total_ms": round(total_ms, 3),
+            },
+        )
         return self._build_trail_view(updated, transition)
 
-    def _act_clear_window(self, slot: SessionSlot) -> TrailView:
+    def _act_clear_window(self, slot: SessionSlot, started: float) -> TrailView:
         session = slot.session
         new_constraints = replace(session.constraints, window=None)
         outcome = self.decoder.decode(session.video_evidence, new_constraints, session.decoder_config)
@@ -558,6 +797,7 @@ class EventTrailService:
             new_status = "exhausted"
             new_last_valid = session.last_valid_path
 
+        t_diff = perf_counter()
         diffs: list[CandidateDiff] = []
         indirect_changed: list[str] = []
         for i, eid in enumerate(session.event_ids):
@@ -568,6 +808,7 @@ class EventTrailService:
             if old_fid != new_fid:
                 diffs.append(CandidateDiff(eid, old_fid, new_fid, old_ts, new_ts))
                 indirect_changed.append(eid)
+        diff_ms = (perf_counter() - t_diff) * 1000.0
 
         transition = TrailTransition(
             action_event_id=None,
@@ -590,6 +831,46 @@ class EventTrailService:
             status=new_status,
         )
         slot.session = updated
+        total_ms = (perf_counter() - started) * 1000.0
+
+        log_trail_event(
+            event_type="trail_window",
+            kis_revision=session.kis_revision,
+            snapshot_id=session.snapshot_id,
+            result_id=session.result_id,
+            video_id=session.video_id,
+            trail_session_id=session.session_id,
+            trail_revision=updated.trail_revision,
+            event_id=None,
+            payload={
+                "operation": "clear",
+                "path_before": list(session.current_path.frame_ids) if session.current_path else [],
+                "path_after": list(new_path.frame_ids) if new_path else None,
+                "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+                "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+                "outcome": new_status,
+                "constraint_ms": round(outcome.constraint_ms, 3),
+                "dp_ms": round(outcome.dp_ms, 3),
+                "diff_ms": round(diff_ms, 3),
+                "total_ms": round(total_ms, 3),
+            },
+        )
+        if new_status == "exhausted" and session.status != "exhausted":
+            log_trail_event(
+                event_type="trail_exhausted",
+                kis_revision=session.kis_revision,
+                snapshot_id=session.snapshot_id,
+                result_id=session.result_id,
+                video_id=session.video_id,
+                trail_session_id=session.session_id,
+                trail_revision=updated.trail_revision,
+                event_id=None,
+                payload={
+                    "exhausted_by_event_id": None,
+                    "last_valid_path": list(new_last_valid.frame_ids) if new_last_valid else [],
+                    "total_ms": round(total_ms, 3),
+                },
+            )
         return self._build_trail_view(updated, transition)
 
     def _build_trail_view(

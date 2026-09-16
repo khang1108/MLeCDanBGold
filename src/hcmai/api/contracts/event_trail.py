@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -11,17 +11,8 @@ from pydantic import (
     model_validator,
 )
 
-from hcmai.event_trail.models import (
-    ApproveEvent,
-    ClearAnchor,
-    ClearWindow,
-    DeclineCandidate,
-    SetWindow,
-    TrailAction,
-    TrailView,
-    Undo,
-    UseFrame,
-)
+if TYPE_CHECKING:
+    from hcmai.event_trail.models import TrailAction, TrailView
 
 
 class EventTrailOpenRequest(BaseModel):
@@ -104,6 +95,16 @@ class EventTrailActionRequest(BaseModel):
 
     def to_domain_action(self) -> TrailAction:
         """Map contract action to its corresponding immutable domain type."""
+        from hcmai.event_trail.models import (
+            ApproveEvent,
+            ClearAnchor,
+            ClearWindow,
+            DeclineCandidate,
+            SetWindow,
+            Undo,
+            UseFrame,
+        )
+
         action = self.action
         if isinstance(action, ApproveAction):
             return ApproveEvent(event_id=action.event_id)
