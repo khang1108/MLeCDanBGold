@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 
 from hcmai.api.history import WorkspaceStore
 from hcmai.api.routers import (
+    create_event_trail_router,
     create_frames_router,
     create_history_router,
     create_kis_router,
@@ -208,6 +209,7 @@ def create_app(
     app.include_router(create_history_router(service_container))
     app.include_router(create_vbs_router(service_container))
     app.include_router(create_video_router(service_container))
+    app.include_router(create_event_trail_router(service_container))
 
     return app
 

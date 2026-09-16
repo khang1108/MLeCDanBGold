@@ -30,6 +30,23 @@ from .search import (
     SearchResultMetadata,
 )
 from .trake import TRAKEPath, TRAKERequest, TRAKEResponse
+from .event_trail import (
+    ApproveAction,
+    ClearAnchorAction,
+    ClearWindowAction,
+    DeclineAction,
+    EventTrailActionContract,
+    EventTrailActionRequest,
+    EventTrailCandidateDiff,
+    EventTrailEventCandidate,
+    EventTrailOpenRequest,
+    EventTrailStateResponse,
+    EventTrailSubmissionSelection,
+    EventTrailTransition,
+    SetWindowAction,
+    UndoAction,
+    UseFrameAction,
+)
 from .vbs import (
     VbsDirectSubmissionNotRecorded,
     VbsDirectSubmissionOutcome,
@@ -85,4 +102,19 @@ __all__ = [
     "TRAKEPath",
     "TRAKERequest",
     "TRAKEResponse",
+    "ApproveAction",
+    "ClearAnchorAction",
+    "ClearWindowAction",
+    "DeclineAction",
+    "EventTrailActionContract",
+    "EventTrailActionRequest",
+    "EventTrailCandidateDiff",
+    "EventTrailEventCandidate",
+    "EventTrailOpenRequest",
+    "EventTrailStateResponse",
+    "EventTrailSubmissionSelection",
+    "EventTrailTransition",
+    "SetWindowAction",
+    "UndoAction",
+    "UseFrameAction",
 ]
