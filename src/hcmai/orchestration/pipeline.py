@@ -206,6 +206,27 @@ class SearchService:
         if self.llm is not None:
             self.llm.close()
 
+    def _canonical_image_refs(
+        self, refs: Sequence[KISImageRef | str]
+    ) -> list[KISImageRef]:
+        """Resolve incoming image references through the canonical asset store.
+
+        This ensures user-uploaded client metadata (such as client-provided
+        content_type) is replaced with the store's authoritative metadata.
+        """
+        if not refs:
+            return []
+        if self.kis_image_assets is None:
+            raise SearchServiceUnavailableError("KIS image asset store is unavailable")
+        canonical = []
+        for ref in refs:
+            asset_id = ref if isinstance(ref, str) else ref.asset_id
+            try:
+                canonical.append(self.kis_image_assets.ref(asset_id))
+            except (KeyError, ValueError) as exc:
+                raise InvalidQueryInputError(f"Unknown image asset: {asset_id}") from exc
+        return canonical
+
     def _resolve_operation(
         self, request: KISSearchRequest
     ) -> tuple[KISIntent, KISOperationSummary, float]:
@@ -253,7 +274,7 @@ class SearchService:
                     event = KISEvent(
                         id="E1",
                         text=None,
-                        images=list(op.image_refs),
+                        images=self._canonical_image_refs(op.image_refs),
                         bindings=[],
                     )
                     intent = KISIntent(
@@ -278,7 +299,8 @@ class SearchService:
                     )
                     intent_ms = (perf_counter() - t0) * 1_000.0
                     base_resolved = apply_scoped_resolutions(base=None, resolved=batch, revision=1)
-                    e1 = base_resolved.events[0].model_copy(update={"images": list(op.image_refs)})
+                    canonical_images = self._canonical_image_refs(op.image_refs)
+                    e1 = base_resolved.events[0].model_copy(update={"images": canonical_images})
                     intent = base_resolved.model_copy(update={"events": [e1]})
                     summary = KISOperationSummary(kind="initial_resolve", affected_event_ids=["E1"])
                     return intent, summary, intent_ms
@@ -297,17 +319,10 @@ class SearchService:
                     raise InvalidQueryInputError(f"Patch {p.event_id} requires text instruction or image")
 
             # Resolve image assets
-            patch_images: dict[str, list[KISImageRef]] = {}
-            for p in op.patches:
-                refs: list[KISImageRef] = []
-                for aid in p.add_image_ids:
-                    if self.kis_image_assets is None:
-                        raise SearchServiceUnavailableError("KIS image asset store is unavailable")
-                    try:
-                        refs.append(self.kis_image_assets.ref(aid))
-                    except (KeyError, ValueError) as exc:
-                        raise InvalidQueryInputError(f"Unknown image asset: {aid}") from exc
-                patch_images[p.event_id] = refs
+            patch_images: dict[str, list[KISImageRef]] = {
+                p.event_id: self._canonical_image_refs(p.add_image_ids)
+                for p in op.patches
+            }
 
             text_patches = [p for p in op.patches if p.instruction]
             if text_patches:
@@ -376,13 +391,7 @@ class SearchService:
                 for aid in p.remove_image_ids:
                     if p.event_id not in existing_images_by_id or aid not in existing_images_by_id[p.event_id]:
                         raise InvalidQueryInputError(f"Cannot remove asset {aid} from event {p.event_id}: not present")
-                for aid in p.add_image_ids:
-                    if self.kis_image_assets is None:
-                        raise SearchServiceUnavailableError("KIS image asset store is unavailable")
-                    try:
-                        self.kis_image_assets.ref(aid)
-                    except (KeyError, ValueError) as exc:
-                        raise InvalidQueryInputError(f"Unknown image asset: {aid}") from exc
+                self._canonical_image_refs(p.add_image_ids)
 
             text_patches = [p for p in op.patches if p.instruction]
             if text_patches:
@@ -397,35 +406,34 @@ class SearchService:
                 intermediate_intent = apply_scoped_resolutions(base, batch, revision=base.revision + 1)
             else:
                 intent_ms = 0.0
-                events = list(base.events)
-                for num in new_numbers:
-                    events.append(KISEvent(id=f"E{num}", text=None, images=[], bindings=[]))
-                edges = [KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}") for i in range(1, len(events))]
-                intermediate_intent = base.model_copy(
-                    update={"revision": base.revision + 1, "events": events, "temporal_edges": edges}
+                intermediate_intent = base.model_copy(update={"revision": base.revision + 1})
+
+            # Assemble patch events atomically and preserve appended bindings
+            assembled = {event.id: event for event in intermediate_intent.events}
+            for patch in op.patches:
+                previous = assembled.get(patch.event_id)
+                images = list(previous.images) if previous is not None else []
+                images = [image for image in images if image.asset_id not in set(patch.remove_image_ids)]
+                image_by_id = {image.asset_id: image for image in images}
+                for image in self._canonical_image_refs(patch.add_image_ids):
+                    image_by_id.setdefault(image.asset_id, image)
+                text = previous.text if previous is not None else None
+                bindings = list(previous.bindings) if previous is not None else []
+                if text is None and not image_by_id:
+                    raise InvalidQueryInputError(f"Event {patch.event_id} requires text or image evidence")
+                assembled[patch.event_id] = KISEvent(
+                    id=patch.event_id,
+                    text=text,
+                    images=list(image_by_id.values()),
+                    bindings=bindings,
                 )
 
-            # Apply add/remove images deterministically
-            patch_by_id = {p.event_id: p for p in op.patches}
-            final_events = []
-            for event in intermediate_intent.events:
-                patch = patch_by_id.get(event.id)
-                if patch is None:
-                    final_events.append(event)
-                    continue
-                imgs = [img for img in event.images if img.asset_id not in patch.remove_image_ids]
-                for aid in patch.add_image_ids:
-                    img_ref = self.kis_image_assets.ref(aid)
-                    if not any(x.asset_id == aid for x in imgs):
-                        imgs.append(img_ref)
-                if event.text is None and not imgs:
-                    raise InvalidQueryInputError(f"Event {event.id} requires text or image evidence")
-                final_events.append(event.model_copy(update={"images": imgs}))
-
+            final_events = [assembled[f"E{i}"] for i in range(1, len(assembled) + 1)]
+            edges = [KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}") for i in range(1, len(final_events))]
             q_text = canonical_query_text(final_events)
             lang = intermediate_intent.language if q_text is not None else None
             intent = intermediate_intent.model_copy(
-                update={"events": final_events, "query_text": q_text, "language": lang}
+                update={"events": final_events, "temporal_edges": edges, "query_text": q_text, "language": lang}
             )
             summary = KISOperationSummary(kind="patch_events", affected_event_ids=patch_ids)
             return intent, summary, intent_ms

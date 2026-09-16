@@ -85,6 +85,11 @@ class KISOrchestrationTest(unittest.TestCase):
     ) -> SearchService:
         corpus = Mock()
         retrieval = Mock()
+        if kis_image_assets is None:
+            kis_image_assets = Mock()
+            kis_image_assets.ref.side_effect = lambda aid: KISImageRef(
+                asset_id=aid, content_type="image/png"
+            )
         service = SearchService(
             corpus=corpus,
             retrieval=retrieval,

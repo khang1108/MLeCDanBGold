@@ -107,11 +107,21 @@ class KISSearchRequest(BaseModel):
     use_bm25: bool = True
     top_k: int = Field(default=20, ge=1)
 
+    def _request_may_have_image_evidence(self) -> bool:
+        if self.base_intent is not None and any(event.images for event in self.base_intent.events):
+            return True
+        operation = self.operation
+        if operation.kind == "initial_resolve":
+            return bool(operation.image_refs) or any(patch.add_image_ids for patch in operation.patches)
+        if operation.kind == "patch_events":
+            return any(patch.add_image_ids for patch in operation.patches)
+        return False
+
     @model_validator(mode="after")
     def validate_sources(self) -> Self:
-        """Require at least one retrieval evidence source."""
-        if not self.use_dense and not self.use_bm25:
-            raise ValueError("at least one of use_dense or use_bm25 must be true")
+        """Require at least one retrieval evidence source or image evidence."""
+        if not self.use_dense and not self.use_bm25 and not self._request_may_have_image_evidence():
+            raise ValueError("at least one retrieval source or image evidence must be available")
         return self
 
 

@@ -118,7 +118,13 @@ def apply_scoped_resolutions(
             events.append(event.model_copy(update={"text": patch.text, "bindings": bindings}))
         for number in new_numbers:
             patch = resolved_by_id[f"E{number}"]
-            events.append(KISEvent(id=f"E{number}", text=patch.text, bindings=[]))
+            events.append(
+                KISEvent(
+                    id=f"E{number}",
+                    text=patch.text,
+                    bindings=_validated_bindings(patch.bindings, base),
+                )
+            )
         language = resolved.language if base.language is None else base.language
         entities = base.entities
 

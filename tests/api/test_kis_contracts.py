@@ -142,6 +142,42 @@ class KISContractsTest(unittest.TestCase):
             })
 
 
+
+# ---- Task 1: evidence-aware source validation regressions ----
+
+def test_image_only_initial_request_allows_text_sources_disabled() -> None:
+    """Image-only initial resolve must be accepted even when both text toggles are false."""
+    request = KISSearchRequest.model_validate({
+        "base_intent": None,
+        "expected_revision": 0,
+        "operation": {
+            "kind": "initial_resolve",
+            "image_refs": [{"asset_id": "img_abc", "content_type": "image/png"}],
+        },
+        "use_dense": False,
+        "use_bm25": False,
+        "top_k": 20,
+    })
+    assert request.use_dense is False
+    assert request.use_bm25 is False
+
+
+def test_text_only_initial_request_rejects_all_text_sources_disabled() -> None:
+    """Text-only initial resolve must raise when both use_dense=False and use_bm25=False."""
+    try:
+        KISSearchRequest.model_validate({
+            "base_intent": None,
+            "expected_revision": 0,
+            "operation": {"kind": "initial_resolve", "text": "woman enters"},
+            "use_dense": False,
+            "use_bm25": False,
+        })
+    except ValueError as exc:
+        assert "retrieval source" in str(exc).lower()
+    else:
+        raise AssertionError("text-only request must require a text retrieval source")
+
+
 def test_seed_response_removes_prepared_string_aliases() -> None:
     from hcmai.api.contracts.kis import KISExplorationSeed
     from hcmai.api.contracts.latency import SearchLatency
