@@ -94,7 +94,7 @@ class EventTrailService:
         snapshot = self.snapshot_store.get(snapshot_id)
         if snapshot.kis_revision != expected_kis_revision:
             raise EventTrailError(
-                "KIS_REVISION_CONFLICT",
+                "KIS_REVISION_MISMATCH",
                 f"Expected KIS revision {expected_kis_revision} but snapshot has {snapshot.kis_revision}",
             )
         if result_id not in snapshot.results:
@@ -183,7 +183,7 @@ class EventTrailService:
 
             if isinstance(action, (ApproveEvent, UseFrame, DeclineCandidate, ClearAnchor)):
                 if action.event_id not in session.event_ids:
-                    raise EventTrailError("UNKNOWN_EVENT", f"Unknown event {action.event_id}")
+                    raise EventTrailError("INVALID_EVENT", f"Unknown event {action.event_id}")
                 event_idx = session.event_ids.index(action.event_id)
             else:
                 event_idx = None
@@ -210,7 +210,7 @@ class EventTrailService:
     def _act_undo(self, slot: SessionSlot, started: float) -> TrailView:
         session = slot.session
         if not session.history:
-            raise EventTrailError("CANNOT_UNDO", "No prior checkpoint to undo")
+            raise EventTrailError("NOTHING_TO_UNDO", "No prior checkpoint to undo")
 
         prev_checkpoint = session.history[-1]
         new_history = session.history[:-1]
@@ -386,7 +386,7 @@ class EventTrailService:
         indices = np.where(session.video_evidence.frame_ids == action.frame_id)[0]
         if len(indices) == 0:
             raise EventTrailError(
-                "FRAME_NOT_FOUND",
+                "INVALID_FRAME",
                 f"Frame {action.frame_id} not found in video {session.video_id}",
             )
         pos = indices[0]

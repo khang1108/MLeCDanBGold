@@ -286,7 +286,7 @@ def test_cannot_undo_empty_history(
     view = service.open(snapshot.snapshot_id, "r_1", snapshot.kis_revision)
     with pytest.raises(EventTrailError) as exc:
         service.act(view.session_id, expected_trail_revision=0, action=Undo())
-    assert exc.value.code == "CANNOT_UNDO"
+    assert exc.value.code == "NOTHING_TO_UNDO"
 
 
 def test_clear_anchor_relaxes_anchor(
