@@ -21,4 +21,5 @@ class SearchLatency(BaseModel):
     retrieval_ms: float = Field(default=0, ge=0)
     alignment_ms: float = Field(default=0, ge=0)
     materialization_ms: float = Field(default=0, ge=0)
+    snapshot_ms: float = Field(default=0.0, ge=0)
     total_ms: float = Field(default=0, ge=0)

@@ -15,6 +15,8 @@ from hcmai.api.contracts import (
     TRAKERequest,
     TRAKEResponse,
 )
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from hcmai.api.contracts.kis import (
     EventPatch,
@@ -23,10 +25,15 @@ from hcmai.api.contracts.kis import (
     KISOperationSummary,
     KISSearchRequest,
     KISSearchResponse,
+    KISSearchResult,
 )
 from hcmai.common.config import ApiConfig, SearchConfig
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
+from hcmai.event_trail.config import EventTrailSettings
+from hcmai.event_trail.errors import EventTrailError
+from hcmai.event_trail.models import EvidenceSnapshot, SnapshotResult, freeze_video_scores
+from hcmai.event_trail.store import EvidenceSnapshotStore
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.utils.health import build_health_report
 from hcmai.orchestration.utils.materializer import SearchMaterializer
@@ -86,6 +93,7 @@ class SearchService:
         scoped_resolver: KISScopedResolver | None = None,
         global_rewriter: KISGlobalRewriter | None = None,
         kis_image_assets: KISImageAssetStore | None = None,
+        event_trail_settings: EventTrailSettings | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
@@ -101,6 +109,12 @@ class SearchService:
         self.scoped_resolver = scoped_resolver
         self.global_rewriter = global_rewriter
         self.kis_image_assets = kis_image_assets
+        self.event_trail_settings = event_trail_settings or EventTrailSettings.from_env()
+        self.event_trail_snapshots = EvidenceSnapshotStore(
+            ttl_seconds=self.event_trail_settings.snapshot_ttl_seconds,
+            max_entries=self.event_trail_settings.max_snapshots,
+        )
+        self.event_trail_scoring_revision = str(uuid4())
 
         self.image_search = (
             ImageSearchService(
@@ -514,6 +528,86 @@ class SearchService:
             translation_ms=translation_ms,
         )
 
+        result_ids = [f"r_{uuid4().hex}" for _ in execution.results]
+        kis_results = [
+            KISSearchResult(result_id=rid, **result.model_dump())
+            for rid, result in zip(result_ids, execution.results, strict=True)
+        ]
+
+        warnings: list[str] = []
+        snapshot_id: str | None = None
+        snapshot_ms: float = 0.0
+
+        if execution.temporal_artifact is not None:
+            artifact = execution.temporal_artifact
+            if len(execution.results) != len(artifact.result.paths):
+                raise ValueError(
+                    f"Mismatch between execution results count ({len(execution.results)}) "
+                    f"and artifact paths count ({len(artifact.result.paths)})"
+                )
+
+            snapshot_started = perf_counter()
+            try:
+                try:
+                    score_map = {v.video_id: v for v in artifact.video_scores}
+                    returned_video_ids = {r.video_id for r in execution.results}
+                    video_evidence = {
+                        vid: freeze_video_scores(score_map[vid])
+                        for vid in returned_video_ids
+                    }
+                except MemoryError as exc:
+                    raise EventTrailError(
+                        "SNAPSHOT_UNAVAILABLE",
+                        "Insufficient memory to snapshot temporal evidence",
+                    ) from exc
+
+                created_at = datetime.now(timezone.utc)
+                expires_at = created_at + timedelta(
+                    seconds=self.event_trail_settings.snapshot_ttl_seconds
+                )
+                sid = f"snap_{uuid4().hex}"
+
+                snapshot_results = {
+                    rid: SnapshotResult(
+                        result_id=rid,
+                        video_id=result.video_id,
+                        initial_path=tuple(path.frame_ids),
+                        path_score=path.score,
+                    )
+                    for rid, result, path in zip(
+                        result_ids, execution.results, artifact.result.paths, strict=True
+                    )
+                }
+
+                snapshot = EvidenceSnapshot(
+                    snapshot_id=sid,
+                    kis_revision=intent.revision,
+                    scoring_revision=self.event_trail_scoring_revision,
+                    event_ids=tuple(event.id for event in intent.events),
+                    decoder_config=artifact.decoder_config,
+                    results=snapshot_results,
+                    video_evidence=video_evidence,
+                    created_at=created_at,
+                    expires_at=expires_at,
+                )
+                self.event_trail_snapshots.put(snapshot)
+                snapshot_id = sid
+            except EventTrailError as exc:
+                if exc.code == "SNAPSHOT_UNAVAILABLE":
+                    snapshot_id = None
+                    warnings.append("EVENT_TRAIL_UNAVAILABLE")
+                else:
+                    raise
+            finally:
+                snapshot_ms = (perf_counter() - snapshot_started) * 1_000.0
+
+        latency = execution.latency.model_copy(
+            update={
+                "snapshot_ms": snapshot_ms,
+                "total_ms": execution.latency.total_ms + snapshot_ms,
+            }
+        )
+
         return KISSearchResponse(
             intent=intent,
             operation_summary=summary,
@@ -534,8 +628,10 @@ class SearchService:
             ),
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
-            results=execution.results,
-            latency=execution.latency,
+            results=kis_results,
+            latency=latency,
+            evidence_snapshot_id=snapshot_id,
+            warnings=warnings,
         )
 
     def search_image(

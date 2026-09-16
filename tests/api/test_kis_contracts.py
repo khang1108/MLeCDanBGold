@@ -200,3 +200,35 @@ def test_seed_response_removes_prepared_string_aliases() -> None:
     assert "exploration_seed" in KISSearchResponse.model_fields
     assert "operation_summary" in KISSearchResponse.model_fields
     assert SearchLatency(intent_ms=1, translation_ms=2).translation_ms == 2
+
+
+def test_kis_search_result_requires_result_id() -> None:
+    from hcmai.api.contracts.kis import KISSearchResult
+    from hcmai.api.contracts.search import SearchResultMetadata
+
+    with pytest.raises(ValidationError):
+        KISSearchResult.model_validate({
+            "frame_id": "v1_f1",
+            "video_id": "v1",
+            "frame_idx": 10,
+            "timestamp_ms": 1000,
+            "score": 0.95,
+            "frame_ids": ["v1_f1"],
+            "timestamps_ms": [1000],
+            "metadata": {},
+        })
+
+    valid = KISSearchResult.model_validate({
+        "result_id": "r_abc123",
+        "frame_id": "v1_f1",
+        "video_id": "v1",
+        "frame_idx": 10,
+        "timestamp_ms": 1000,
+        "score": 0.95,
+        "frame_ids": ["v1_f1"],
+        "timestamps_ms": [1000],
+        "metadata": {},
+    })
+    assert valid.result_id == "r_abc123"
+    assert "evidence_snapshot_id" in KISSearchResponse.model_fields
+    assert "results" in KISSearchResponse.model_fields

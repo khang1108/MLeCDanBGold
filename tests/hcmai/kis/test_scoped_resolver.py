@@ -182,3 +182,21 @@ def test_initial_scoped_batch_has_contiguous_events_and_no_bindings() -> None:
     assert all(not event.bindings for event in intent.events)
     assert [(edge.source, edge.target) for edge in intent.temporal_edges] == [("E1", "E2")]
     assert intent.revision == 1
+
+
+def test_appended_text_event_preserves_validated_binding() -> None:
+    base = _base_intent()
+    resolved = ScopedResolutionBatch.model_validate({
+        "language": "en",
+        "events": [{
+            "event_id": "E3",
+            "text": "The same woman lifts a plate.",
+            "bindings": [{"entity_id": "X1", "role": "actor"}],
+        }],
+    })
+    updated = apply_scoped_resolutions(base, resolved, revision=base.revision + 1)
+    assert len(updated.events) == 3
+    assert updated.events[2].id == "E3"
+    assert len(updated.events[2].bindings) == 1
+    assert updated.events[2].bindings[0].entity_id == "X1"
+    assert updated.events[2].bindings[0].role == "actor"

@@ -7,7 +7,8 @@ session state or raw clue history.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
+from uuid import uuid4
 
 from pydantic import (
     BaseModel,
@@ -15,6 +16,7 @@ from pydantic import (
     Field,
     StrictBool,
     StringConstraints,
+    field_validator,
     model_validator,
 )
 
@@ -170,6 +172,12 @@ class KISExplorationSeed(BaseModel):
         return self
 
 
+class KISSearchResult(SearchResult):
+    """Ranked KIS result carrying an opaque result identifier for EventTrail handoff."""
+
+    result_id: str
+
+
 class KISSearchResponse(BaseModel):
     """Response payload for a successful revisioned KIS search."""
 
@@ -180,6 +188,25 @@ class KISSearchResponse(BaseModel):
     exploration_seed: KISExplorationSeed
     use_dense: bool
     use_bm25: bool
-    results: list[SearchResult] = Field(default_factory=list)
+    results: list[KISSearchResult] = Field(default_factory=list)
     latency: SearchLatency
+    evidence_snapshot_id: str | None = None
     warnings: list[str] = Field(default_factory=list)
+
+    @field_validator("results", mode="before")
+    @classmethod
+    def _coerce_results(cls, v: Any) -> Any:
+        if isinstance(v, list):
+            coerced = []
+            for item in v:
+                if isinstance(item, SearchResult) and not isinstance(item, KISSearchResult):
+                    coerced.append(
+                        KISSearchResult(
+                            result_id=f"r_{uuid4().hex}",
+                            **item.model_dump(),
+                        )
+                    )
+                else:
+                    coerced.append(item)
+            return coerced
+        return v
