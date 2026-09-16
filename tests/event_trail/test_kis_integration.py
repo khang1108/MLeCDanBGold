@@ -7,7 +7,15 @@ import pytest
 from hcmai.api.contracts.kis import InitialResolveOperation, KISSearchRequest
 from hcmai.api.contracts.search import SearchLatency, SearchResult, SearchResultMetadata
 from hcmai.corpus.models import Frame
-from hcmai.event_trail.models import EvidenceSnapshot
+from hcmai.event_trail.decoder import TemporalConstraintDecoder
+from hcmai.event_trail.models import (
+    ApproveEvent,
+    DeclineCandidate,
+    EvidenceSnapshot,
+    Undo,
+    UseFrame,
+)
+from hcmai.event_trail.service import EventTrailService
 from hcmai.kis.models import KISEvent, KISIntent
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.workflows.kis import KISSearchExecution
@@ -30,6 +38,11 @@ def corpus():
         timestamp_ms=1000,
         image_path="/tmp/f.jpg",
     )
+    c.title.return_value = "v1"
+    c.caption.return_value = "caption"
+    c.ocr.return_value = "ocr"
+    c.transcript.return_value = "asr"
+    c.objects.return_value = ()
     return c
 
 
@@ -259,4 +272,121 @@ def test_search_kis_degrades_gracefully_on_memory_error(corpus, mock_artifact, m
     assert response.evidence_snapshot_id is None
     assert "EVENT_TRAIL_UNAVAILABLE" in response.warnings
     assert response.latency.snapshot_ms >= 0
+
+
+def test_kis_snapshot_trail_lifecycle_with_scoring_call_counters(corpus, mock_artifact):
+    scoring_calls = 0
+
+    class CountingTemporal:
+        def search_plan_artifact(self, *args, **kwargs):
+            nonlocal scoring_calls
+            scoring_calls += 1
+            return mock_artifact
+
+        def decode_video(self, video, *, allowed, decoder_config=None):
+            return (
+                AlignedPath(
+                    video_id=video.video_id,
+                    score=1.0,
+                    frame_ids=tuple(str(f) for f in video.frame_ids),
+                    frame_idxs=tuple(int(i) for i in video.frame_idx),
+                    timestamps_ms=tuple(int(t) for t in video.timestamps_ms),
+                ),
+            )
+
+        def score_plan(self, *args, **kwargs):
+            nonlocal scoring_calls
+            scoring_calls += 1
+            raise AssertionError("score_plan should not be called")
+
+    counting_temporal = CountingTemporal()
+
+    service = SearchService(
+        corpus=corpus,
+        retrieval=Mock(),
+        temporal_evidence=Mock(),
+        intent_resolver=Mock(),
+        scoped_resolver=Mock(),
+        global_rewriter=Mock(),
+        event_translator=Mock(),
+        kis_image_assets=Mock(),
+    )
+    service.kis.temporal = counting_temporal
+    service.event_trail_decoder = TemporalConstraintDecoder(counting_temporal)  # type: ignore[arg-type]
+    service.event_trail = EventTrailService(
+        snapshot_store=service.event_trail_snapshots,
+        session_store=service.event_trail_sessions,
+        decoder=service.event_trail_decoder,
+    )
+
+    intent = KISIntent(
+        revision=1,
+        language="en",
+        query_text="woman enters",
+        entities=[],
+        events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],
+        temporal_edges=[],
+    )
+    service.intent_resolver.resolve_initial.return_value = intent
+
+    # 1. KIS search -> one full-corpus scoring pass
+    request = KISSearchRequest(
+        base_intent=None,
+        expected_revision=0,
+        operation=InitialResolveOperation(kind="initial_resolve", text="woman enters"),
+        use_dense=True,
+        use_bm25=False,
+    )
+    response = service.search_kis(request)
+    assert response.evidence_snapshot_id is not None
+    assert scoring_calls == 1
+
+    clicked_result = response.results[0]
+    snapshot = service.event_trail_snapshots.get(response.evidence_snapshot_id)
+    stored_result = snapshot.results[clicked_result.result_id]
+
+    # 2. Trail open -> zero scoring pass
+    view = service.event_trail.open(
+        response.evidence_snapshot_id,
+        clicked_result.result_id,
+        response.intent.revision,
+    )
+    assert scoring_calls == 1
+    assert tuple(c.frame_id for c in view.path) == stored_result.initial_path
+
+    # 3. Actions: Approve/Decline/Use/Undo -> zero scoring pass
+    # Approve
+    view1 = service.event_trail.act(
+        view.session_id, expected_trail_revision=view.trail_revision, action=ApproveEvent(event_id="E1")
+    )
+    assert scoring_calls == 1
+
+    # Undo
+    view2 = service.event_trail.act(
+        view.session_id, expected_trail_revision=view1.trail_revision, action=Undo()
+    )
+    assert scoring_calls == 1
+
+    # UseFrame
+    view3 = service.event_trail.act(
+        view.session_id,
+        expected_trail_revision=view2.trail_revision,
+        action=UseFrame(event_id="E1", frame_id="v1_f1"),
+    )
+    assert scoring_calls == 1
+
+    # Undo
+    view4 = service.event_trail.act(
+        view.session_id, expected_trail_revision=view3.trail_revision, action=Undo()
+    )
+    assert scoring_calls == 1
+
+    # Decline
+    view5 = service.event_trail.act(
+        view.session_id,
+        expected_trail_revision=view4.trail_revision,
+        action=DeclineCandidate(event_id="E1"),
+    )
+    assert scoring_calls == 1
+
 
