@@ -21,11 +21,12 @@
   flex-direction: column;
   width: min(92vw, 1340px);
   max-width: 1340px;
-  height: min(90vh, 920px);
+  height: auto;
+  max-height: min(90vh, 920px);
   border-radius: var(--rounded-lg);
-  overflow-y: auto; /* Entire pop up scrolls vertically */
+  overflow-y: auto; /* Entire pop up scrolls vertically when exceeding max-height */
   overflow-x: hidden;
-  background-color: #141414; /* Dark viewer base */
+  background-color: var(--color-surface, #ffffff);
   border: 1px solid var(--color-hairline);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
@@ -64,7 +65,7 @@
 }
 
 .modal-bottom-alignment-section {
-  flex: 0 0 auto;
+  flex: 1 0 auto;
   background-color: var(--color-surface, #ffffff);
   border-top: 1px solid var(--color-hairline, #e2e8f0);
   display: flex;
