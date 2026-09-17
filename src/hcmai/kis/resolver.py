@@ -13,14 +13,12 @@ from collections.abc import Sequence
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.inference.llm import LLMClient
 from hcmai.kis.models import (
-    KISEntity,
-    KISEntityBinding,
     KISEvent,
+    KISInitialResolution,
     KISIntent,
-    KISResolution,
     KISTemporalEdge,
 )
-from hcmai.kis.prompts import build_kis_intent_messages
+from hcmai.kis.prompts import build_kis_initial_messages
 
 
 class KISResolutionError(RuntimeError):
@@ -70,43 +68,21 @@ class KISIntentResolver:
         if revision < 1:
             raise ValueError("KIS revision must be at least 1")
 
-        messages = build_kis_intent_messages(normalized)
-        resolution = self._llm.generate_structured(messages, KISResolution)
+        messages = build_kis_initial_messages(normalized)
+        resolution = self._llm.generate_structured(
+            messages,
+            KISInitialResolution,
+            temperature=0.0,
+            max_tokens=512,
+        )
 
-        if len(resolution.events) > DEFAULT_MAX_TEMPORAL_EVENT_COUNT:
-            raise KISResolutionError(
-                f"Resolution event count ({len(resolution.events)}) exceeds maximum allowed "
-                f"({DEFAULT_MAX_TEMPORAL_EVENT_COUNT})"
-            )
-
-        query_text = resolution.query_text or " ".join(normalized)
-
-        entities = [
-            KISEntity(id=f"X{i+1}", kind=e.kind, description=e.description)
-            for i, e in enumerate(resolution.entities)
+        events = [
+            KISEvent(id=f"E{index + 1}", text=event.text, bindings=[])
+            for index, event in enumerate(resolution.events)
         ]
-
-        events = []
-        for event_index, event in enumerate(resolution.events):
-            if len(set(event.entity_indices)) != len(event.entity_indices):
-                raise KISResolutionError("event contains duplicate entity indices")
-            bindings = []
-            if entities:
-                for entity_index in event.entity_indices:
-                    if not 0 <= entity_index < len(entities):
-                        raise KISResolutionError(
-                            f"event references an out-of-range entity index: {entity_index}"
-                        )
-                    bindings.append(
-                        KISEntityBinding(
-                            entity_id=entities[entity_index].id,
-                            role="participant",
-                        )
-                    )
-            events.append(KISEvent(id=f"E{event_index+1}", text=event.text, bindings=bindings))
-
+        query_text = " ".join(event.text for event in events if event.text)
         edges = [
-            KISTemporalEdge(source=f"E{i}", target=f"E{i+1}")
+            KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}")
             for i in range(1, len(events))
         ]
 
@@ -114,9 +90,11 @@ class KISIntentResolver:
             return KISIntent(
                 revision=revision,
                 query_text=query_text,
-                entities=entities,
+                entities=[],
                 events=events,
                 temporal_edges=edges,
             )
         except ValueError as exc:
-            raise KISResolutionError(f"Canonical intent validation failed: {exc}") from exc
+            raise KISResolutionError(
+                f"Canonical intent validation failed: {exc}"
+            ) from exc
