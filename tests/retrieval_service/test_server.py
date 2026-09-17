@@ -169,3 +169,12 @@ def test_REQ_011_unexpected_error_maps_to_internal_without_stack_trace(grpc_serv
     assert "secret_path" not in caught.value.details()
     assert "db.py" not in caught.value.details()
 
+
+def test_REQ_015_readme_documents_separate_processes() -> None:
+    from pathlib import Path
+
+    readme = Path("README.md").read_text()
+    assert "hcmai.retrieval_service.server" in readme
+    assert "--port 8002" in readme
+    assert "uvicorn hcmai.app:app" in readme
+    assert "--reload" in readme

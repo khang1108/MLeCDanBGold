@@ -16,10 +16,10 @@ orchestration/
 ## Runtime path
 
 ```text
-FastAPI
+FastAPI (:8000)
     → SearchService
     → explicit KISPipeline or TRAKEPipeline
-    → TemporalSearchService + RetrievalService
+    → RemoteTemporalSearchService + RemoteImageSearchService (gRPC to :8002)
     → Corpus-backed canonical materialization
 ```
 

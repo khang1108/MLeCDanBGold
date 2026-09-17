@@ -91,9 +91,16 @@ cp .env.example .env
 #     HCMAI_EMBEDDING_API_KEY=sk-...
 #     HCMAI_EMBEDDING_MODEL=text-embedding-3-small
 
-# Start the FastAPI server
-uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
+# Start the services in two separate terminals:
+
+# Terminal 1: stable retrieval process; one process, no --reload
+aic/bin/python -m hcmai.retrieval_service.server --host 127.0.0.1 --port 8002
+
+# Terminal 2: reloadable public backend
+aic/bin/python -m uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+> **Note:** The retrieval service hosts the heavy SigLIP2 embedding models, FAISS vector indexes, BM25 retriever, and dynamic programming aligner. It must run as a single process without `--reload` and must not be launched with multiple worker processes. The FastAPI backend connects to retrieval over gRPC; if the retrieval service is not running when FastAPI starts, a warning is logged and FastAPI continues serving non-retrieval routes (filters, query history, video streaming) locally.
 
 Verify backend health:
 
