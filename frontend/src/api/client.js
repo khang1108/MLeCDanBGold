@@ -16,10 +16,6 @@ const resolveDefaultBaseUrl = () => {
 
 export const API_BASE_URL = resolveDefaultBaseUrl().replace(/\/+$/, '');
 export const DRES_LOG_STATUS_EVENT = 'hcmai:dres-log-status';
-const STRUCTURED_ERROR_CODES = new Set([
-  'TASK_SCOPE_MISMATCH',
-  'PARTICIPANT_NOT_CONNECTED',
-]);
 
 const publishDresLogStatus = (response, requestHeaders) => {
   const status = response.headers?.get?.('X-DRES-Log-Status');
@@ -90,7 +86,7 @@ export const requestJson = async (path, {
     const error = new Error(errorMessage(payload, response.status));
     error.status = response.status;
     const code = payload?.detail?.code;
-    if (typeof code === 'string' && STRUCTURED_ERROR_CODES.has(code)) error.code = code;
+    if (typeof code === 'string' && code.trim()) error.code = code;
     throw error;
   }
   return payload;
