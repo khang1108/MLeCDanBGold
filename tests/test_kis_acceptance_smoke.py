@@ -378,8 +378,8 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         self.assertIn("visual_image", adaptive_weights)
         self.assertGreater(adaptive_weights["visual_image"], 0.0)
 
-    def test_image_only_exploration_seed_compatibility(self) -> None:
-        """Verify image-only exploration seed can be constructed for temporal exploration."""
+    def test_image_only_kis_search_plan_preserves_images_and_no_exploration_seed(self) -> None:
+        """Verify image-only request creates valid retrieval plan and response has no exploration seed."""
         img_intent = KISIntent(
             revision=1,
             query_text=None,
@@ -408,13 +408,13 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         )
         res = service.search_kis(req)
 
-        self.assertIsNotNone(res.exploration_seed)
-        self.assertEqual(res.exploration_seed.semantic_revision, 1)
-        self.assertEqual(len(res.exploration_seed.events), 1)
-        self.assertEqual(res.exploration_seed.events[0].event_id, "E1")
-        self.assertIsNone(res.exploration_seed.events[0].canonical_text)
-        self.assertEqual(len(res.exploration_seed.events[0].image_refs), 1)
-        self.assertEqual(res.exploration_seed.events[0].image_refs[0].asset_id, "ast_query_photo")
+        plan = service.kis.execute.call_args.kwargs["retrieval_plan"]
+        self.assertEqual(len(plan.events), 1)
+        self.assertEqual(plan.events[0].event_id, "E1")
+        self.assertIsNone(plan.events[0].canonical_text)
+        self.assertEqual(len(plan.events[0].image_refs), 1)
+        self.assertEqual(plan.events[0].image_refs[0].asset_id, "ast_query_photo")
+        self.assertFalse(hasattr(res, "exploration_seed"))
 
     def test_retrieval_plan_projects_direct_multilingual_text_and_preserves_images(self) -> None:
         """Verify multilingual text is directly projected to dense and bm25 without translation, and image refs preserved."""

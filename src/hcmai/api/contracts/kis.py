@@ -14,7 +14,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    StrictBool,
     StringConstraints,
     field_validator,
     model_validator,
@@ -23,7 +22,6 @@ from pydantic import (
 from hcmai.api.contracts.latency import SearchLatency
 from hcmai.api.contracts.search import SearchResult
 from hcmai.kis.models import EventId, KISImageRef, KISIntent
-from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -127,51 +125,6 @@ class KISSearchRequest(BaseModel):
         return self
 
 
-class KISExplorationEventSeed(BaseModel):
-    """Transport one committed event's canonical, scoring text views, and image refs."""
-
-    model_config = ConfigDict(extra="forbid")
-    event_id: EventId
-    canonical_text: NonBlank | None = None
-    dense_text: NonBlank | None = None
-    bm25_text: NonBlank | None = None
-    image_refs: list[KISImageRef] = Field(default_factory=list)
-
-
-class KISExplorationSeed(BaseModel):
-    """Capture ordered scoring inputs for a committed semantic revision."""
-
-    model_config = ConfigDict(extra="forbid")
-    semantic_revision: int = Field(ge=1)
-    events: list[KISExplorationEventSeed] = Field(min_length=1)
-    use_dense: StrictBool
-    use_bm25: StrictBool
-
-    def to_plan(self) -> KISRetrievalPlan:
-        """Copy transport rows into an immutable, event-aligned plan."""
-        return KISRetrievalPlan(
-            events=tuple(
-                KISRetrievalEvent(
-                    event_id=event.event_id,
-                    canonical_text=event.canonical_text,
-                    dense_text=event.dense_text,
-                    bm25_text=event.bm25_text,
-                    image_refs=tuple(event.image_refs),
-                )
-                for event in self.events
-            )
-        )
-
-    @model_validator(mode="after")
-    def validate_text_snapshot(self) -> Self:
-        """Reject event order and missing scoring views."""
-        plan = self.to_plan()
-        plan.validate_text_sources(
-            use_dense=self.use_dense, use_bm25=self.use_bm25,
-        )
-        return self
-
-
 class KISSearchResult(SearchResult):
     """Ranked KIS result carrying an opaque result identifier for EventTrail handoff."""
 
@@ -185,7 +138,6 @@ class KISSearchResponse(BaseModel):
 
     intent: KISIntent
     operation_summary: KISOperationSummary
-    exploration_seed: KISExplorationSeed
     use_dense: bool
     use_bm25: bool
     results: list[KISSearchResult] = Field(default_factory=list)

@@ -20,8 +20,6 @@ from uuid import uuid4
 
 from hcmai.api.contracts.kis import (
     EventPatch,
-    KISExplorationEventSeed,
-    KISExplorationSeed,
     KISOperationSummary,
     KISSearchRequest,
     KISSearchResponse,
@@ -657,21 +655,6 @@ class SearchService:
         return KISSearchResponse(
             intent=intent,
             operation_summary=summary,
-            exploration_seed=KISExplorationSeed(
-                semantic_revision=intent.revision,
-                events=[
-                    KISExplorationEventSeed(
-                        event_id=event.event_id,
-                        canonical_text=event.canonical_text,
-                        dense_text=event.dense_text,
-                        bm25_text=event.bm25_text,
-                        image_refs=list(event.image_refs),
-                    )
-                    for event in plan.events
-                ],
-                use_dense=request.use_dense,
-                use_bm25=request.use_bm25,
-            ),
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
             results=kis_results,

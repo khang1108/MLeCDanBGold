@@ -156,10 +156,11 @@ class KISOrchestrationTest(unittest.TestCase):
         )
 
         response = service.search_kis(request)
-
-        event = response.exploration_seed.events[0]
+        plan = service.kis.execute.call_args.kwargs["retrieval_plan"]
+        event = plan.events[0]
         self.assertEqual(event.dense_text, "Một người phụ nữ trong bếp.")
         self.assertEqual(event.bm25_text, "Một người phụ nữ trong bếp.")
+        self.assertFalse(hasattr(response, "exploration_seed"))
         self.assertEqual(response.latency.translation_ms, 0.0)
 
     def test_search_kis_initial_resolve_image_only_makes_no_llm_call(self) -> None:
@@ -440,10 +441,7 @@ class KISOrchestrationTest(unittest.TestCase):
         self.assertEqual(plan.events[2].dense_text, "chiếc đĩa trắng")
         self.assertEqual(plan.events[2].bm25_text, "chiếc đĩa trắng")
         self.assertEqual(plan.events[2].image_refs, (img3,))
-
-        self.assertEqual(response.exploration_seed.events[0].image_refs, [])
-        self.assertEqual(response.exploration_seed.events[1].image_refs, [img2])
-        self.assertEqual(response.exploration_seed.events[2].image_refs, [img3])
+        self.assertFalse(hasattr(response, "exploration_seed"))
 
 
 if __name__ == "__main__":

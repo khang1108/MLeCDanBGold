@@ -68,18 +68,6 @@ def _make_response(query_text: str | None = "A woman cooks in kitchen.") -> KISS
         operation_summary=KISOperationSummary(
             kind="initial_resolve", affected_event_ids=["E1"]
         ),
-        exploration_seed={
-            "semantic_revision": 1,
-            "events": [{
-                "event_id": "E1",
-                "canonical_text": query_text,
-                "dense_text": query_text,
-                "bm25_text": query_text,
-                "image_refs": [{"asset_id": "sha256:abc", "content_type": "image/png"}] if query_text is None else [],
-            }],
-            "use_dense": True,
-            "use_bm25": True,
-        },
         use_dense=True,
         use_bm25=True,
         results=[
@@ -128,7 +116,7 @@ async def test_search_kis_success() -> None:
     data = resp.json()
     assert data["intent"]["query_text"] == "A woman cooks in kitchen."
     assert data["operation_summary"]["kind"] == "initial_resolve"
-    assert data["exploration_seed"]["events"][0]["dense_text"] == "A woman cooks in kitchen."
+    assert "exploration_seed" not in data
     assert "dense_events" not in data
     assert "bm25_events" not in data
     assert len(data["results"]) == 1

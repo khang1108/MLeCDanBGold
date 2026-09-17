@@ -177,26 +177,12 @@ def test_text_only_initial_request_rejects_all_text_sources_disabled() -> None:
         raise AssertionError("text-only request must require a text retrieval source")
 
 
-def test_seed_response_removes_prepared_string_aliases() -> None:
-    from hcmai.api.contracts.kis import KISExplorationSeed
+def test_kis_search_response_has_no_exploration_seed() -> None:
     from hcmai.api.contracts.latency import SearchLatency
 
-    seed = KISExplorationSeed(
-        semantic_revision=1,
-        events=[
-            {
-                "event_id": "E1",
-                "canonical_text": "boat",
-                "dense_text": "boat",
-            }
-        ],
-        use_dense=True,
-        use_bm25=False,
-    )
-    assert seed.model_dump()["events"][0]["dense_text"] == "boat"
     assert "dense_events" not in KISSearchResponse.model_fields
     assert "bm25_events" not in KISSearchResponse.model_fields
-    assert "exploration_seed" in KISSearchResponse.model_fields
+    assert "exploration_seed" not in KISSearchResponse.model_fields
     assert "operation_summary" in KISSearchResponse.model_fields
     assert SearchLatency(intent_ms=1, translation_ms=2).translation_ms == 2
 

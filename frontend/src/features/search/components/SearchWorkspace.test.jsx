@@ -351,12 +351,6 @@ test('opens a KIS result exactly once and records one viewed-frame write', async
         scores: { final: 0.91 },
       }],
     }),
-    exploration_seed: {
-      semantic_revision: 1,
-      events: [{ event_id: 'E1', canonical_text: 'red boat', dense_text: 'dense red boat', bm25_text: 'caption red boat' }],
-      use_dense: true,
-      use_bm25: true,
-    },
   };
   searchKis.mockResolvedValueOnce(response);
   renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick, userId: 'team-a' });

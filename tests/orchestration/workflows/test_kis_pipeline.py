@@ -314,9 +314,9 @@ def test_kis_pipeline_uses_search_plan_artifact_only():
 
 def test_no_unittest_mock_imported_in_production_workflows():
     import inspect
+    from hcmai.event_trail import service as et_service
     from hcmai.orchestration.workflows import kis as kis_wf
-    from hcmai.orchestration.workflows import temporal_exploration as exp_wf
     assert "unittest.mock" not in inspect.getsource(kis_wf)
-    assert "unittest.mock" not in inspect.getsource(exp_wf)
+    assert "unittest.mock" not in inspect.getsource(et_service)
 
 
