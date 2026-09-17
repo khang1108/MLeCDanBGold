@@ -23,6 +23,7 @@ class EventTrailOpenRequest(BaseModel):
     snapshot_id: str
     result_id: str
     expected_kis_revision: int = Field(ge=0)
+    search_session_id: str | None = None
 
 
 class ApproveAction(BaseModel):

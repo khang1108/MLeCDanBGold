@@ -86,6 +86,7 @@ class EventTrailSession:
     history: tuple[TrailCheckpoint, ...]
     submission_selection: SubmissionSelection | None
     status: Literal["active", "exhausted"]
+    search_session_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

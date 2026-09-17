@@ -88,6 +88,7 @@ class EventTrailService:
         snapshot_id: str,
         result_id: str,
         expected_kis_revision: int,
+        search_session_id: str | None = None,
     ) -> TrailView:
         """Open a new EventTrail session initialized from one snapshot result."""
         started = perf_counter()
@@ -136,6 +137,7 @@ class EventTrailService:
             history=(),
             submission_selection=None,
             status="active",
+            search_session_id=search_session_id,
         )
         self.session_store.put(session)
         view = self._build_trail_view(session)
@@ -150,12 +152,47 @@ class EventTrailService:
             trail_session_id=session_id,
             trail_revision=0,
             event_id=None,
+            search_session_id=search_session_id,
             payload={
                 "initial_path": list(snapshot_result.initial_path),
                 "total_ms": round(total_ms, 3),
             },
         )
         return view
+
+    def close(
+        self,
+        session_id: str,
+        expected_trail_revision: int | None = None,
+    ) -> None:
+        """Close an active exploration session and remove it from store."""
+        started = perf_counter()
+        with self.session_store.locked(session_id) as slot:
+            session = slot.session
+            if (
+                expected_trail_revision is not None
+                and session.trail_revision != expected_trail_revision
+            ):
+                raise EventTrailError(
+                    "TRAIL_REVISION_CONFLICT",
+                    f"Expected trail revision {expected_trail_revision} but session is at {session.trail_revision}",
+                )
+            self.session_store.remove(session_id)
+            total_ms = (perf_counter() - started) * 1000.0
+            log_trail_event(
+                event_type="trail_close",
+                kis_revision=session.kis_revision,
+                snapshot_id=session.snapshot_id,
+                result_id=session.result_id,
+                video_id=session.video_id,
+                trail_session_id=session.session_id,
+                trail_revision=session.trail_revision,
+                event_id=None,
+                search_session_id=session.search_session_id,
+                payload={
+                    "total_ms": round(total_ms, 3),
+                },
+            )
 
     def get(self, session_id: str) -> TrailView:
         """Fetch the current state projection of an active session."""
@@ -270,6 +307,7 @@ class EventTrailService:
             trail_session_id=session.session_id,
             trail_revision=updated.trail_revision,
             event_id=None,
+            search_session_id=session.search_session_id,
             payload={
                 "path_before": list(session.current_path.frame_ids) if session.current_path else [],
                 "path_after": list(new_path.frame_ids) if new_path else None,
@@ -292,6 +330,7 @@ class EventTrailService:
                 trail_session_id=session.session_id,
                 trail_revision=updated.trail_revision,
                 event_id=None,
+                search_session_id=session.search_session_id,
                 payload={
                     "exhausted_by_event_id": None,
                     "last_valid_path": list(new_last_valid.frame_ids) if new_last_valid else [],
@@ -364,6 +403,7 @@ class EventTrailService:
             trail_session_id=session.session_id,
             trail_revision=updated.trail_revision,
             event_id=action.event_id,
+            search_session_id=session.search_session_id,
             payload={
                 "path_before": list(session.current_path.frame_ids),
                 "path_after": list(outcome.path.frame_ids),  # type: ignore[union-attr]
@@ -458,6 +498,7 @@ class EventTrailService:
             trail_session_id=session.session_id,
             trail_revision=updated.trail_revision,
             event_id=action.event_id,
+            search_session_id=session.search_session_id,
             payload={
                 "path_before": list(session.current_path.frame_ids) if session.current_path else [],
                 "path_after": list(outcome.path.frame_ids),  # type: ignore[union-attr]
@@ -479,6 +520,7 @@ class EventTrailService:
             trail_session_id=session.session_id,
             trail_revision=updated.trail_revision,
             event_id=action.event_id,
+            search_session_id=session.search_session_id,
             payload={
                 "event_id": action.event_id,
                 "frame_id": action.frame_id,
@@ -576,6 +618,7 @@ class EventTrailService:
             trail_session_id=session.session_id,
             trail_revision=updated.trail_revision,
             event_id=action.event_id,
+            search_session_id=session.search_session_id,
             payload={
                 "path_before": list(session.current_path.frame_ids),
                 "path_after": list(new_path.frame_ids) if new_path else None,
@@ -598,6 +641,7 @@ class EventTrailService:
                 trail_session_id=session.session_id,
                 trail_revision=updated.trail_revision,
                 event_id=action.event_id,
+                search_session_id=session.search_session_id,
                 payload={
                     "exhausted_by_event_id": action.event_id,
                     "last_valid_path": list(new_last_valid.frame_ids) if new_last_valid else [],
@@ -678,6 +722,7 @@ class EventTrailService:
             trail_session_id=session.session_id,
             trail_revision=updated.trail_revision,
             event_id=action.event_id,
+            search_session_id=session.search_session_id,
             payload={
                 "path_before": list(session.current_path.frame_ids) if session.current_path else [],
                 "path_after": list(new_path.frame_ids) if new_path else None,
@@ -700,6 +745,7 @@ class EventTrailService:
                 trail_session_id=session.session_id,
                 trail_revision=updated.trail_revision,
                 event_id=action.event_id,
+                search_session_id=session.search_session_id,
                 payload={
                     "exhausted_by_event_id": action.event_id,
                     "last_valid_path": list(new_last_valid.frame_ids) if new_last_valid else [],
@@ -767,6 +813,7 @@ class EventTrailService:
             trail_session_id=session.session_id,
             trail_revision=updated.trail_revision,
             event_id=None,
+            search_session_id=session.search_session_id,
             payload={
                 "operation": "set",
                 "start_ms": action.start_ms,
@@ -842,6 +889,7 @@ class EventTrailService:
             trail_session_id=session.session_id,
             trail_revision=updated.trail_revision,
             event_id=None,
+            search_session_id=session.search_session_id,
             payload={
                 "operation": "clear",
                 "path_before": list(session.current_path.frame_ids) if session.current_path else [],
@@ -865,6 +913,7 @@ class EventTrailService:
                 trail_session_id=session.session_id,
                 trail_revision=updated.trail_revision,
                 event_id=None,
+                search_session_id=session.search_session_id,
                 payload={
                     "exhausted_by_event_id": None,
                     "last_valid_path": list(new_last_valid.frame_ids) if new_last_valid else [],

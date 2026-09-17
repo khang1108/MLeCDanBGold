@@ -55,6 +55,7 @@ def create_event_trail_router(service_container: dict[str, Any]) -> APIRouter:
                 request.snapshot_id,
                 request.result_id,
                 request.expected_kis_revision,
+                request.search_session_id,
             )
             return EventTrailStateResponse.from_domain(view)
         except EventTrailError as exc:
@@ -91,6 +92,25 @@ def create_event_trail_router(service_container: dict[str, Any]) -> APIRouter:
                 domain_action,
             )
             return EventTrailStateResponse.from_domain(view)
+        except EventTrailError as exc:
+            status = _STATUS_BY_CODE.get(exc.code, 500)
+            raise HTTPException(
+                status_code=status,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+
+    @router.delete("/{session_id}", status_code=204)
+    async def close_trail(
+        session_id: str,
+        expected_trail_revision: int | None = None,
+    ) -> None:
+        service = _get_event_trail_service(service_container)
+        try:
+            await run_in_threadpool(
+                service.close,
+                session_id,
+                expected_trail_revision,
+            )
         except EventTrailError as exc:
             status = _STATUS_BY_CODE.get(exc.code, 500)
             raise HTTPException(
