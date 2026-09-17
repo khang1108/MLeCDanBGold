@@ -170,7 +170,7 @@ describe('ToolBox component', () => {
     });
   });
 
-  test('renders frame size selector and calls setGridSize on change', () => {
+  test('renders frame size buttons and calls setGridSize on click', () => {
     const setGridSize = jest.fn();
     renderToolBox({
       topK: 20,
@@ -179,14 +179,17 @@ describe('ToolBox component', () => {
       setGridSize,
     });
 
-    const sizeSelect = screen.getByLabelText(/select frame display size/i);
-    expect(sizeSelect).toBeTruthy();
-    expect(sizeSelect.value).toBe('normal');
+    const compactBtn = screen.getByRole('button', { name: /compact/i });
+    const normalBtn = screen.getByRole('button', { name: /normal/i });
+    const largeBtn = screen.getByRole('button', { name: /large/i });
 
-    fireEvent.change(sizeSelect, { target: { value: 'large' } });
+    expect(normalBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(compactBtn.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(largeBtn);
     expect(setGridSize).toHaveBeenCalledWith('large');
 
-    fireEvent.change(sizeSelect, { target: { value: 'compact' } });
+    fireEvent.click(compactBtn);
     expect(setGridSize).toHaveBeenCalledWith('compact');
   });
 });

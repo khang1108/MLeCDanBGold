@@ -40,7 +40,6 @@ const ToolBox = ({
   const setSelectedTask = propSetSelectedTask ?? vbsSession.setSelectedTask ?? NOOP;
 
   const topKInputId = useId();
-  const gridSizeSelectId = useId();
   const datasetSelectId = useId();
   const taskSelectId = useId();
   const [topKText, setTopKText] = useState(String(topK));
@@ -139,20 +138,36 @@ const ToolBox = ({
 
       <div className="toolbox-section toolbox-grid-size-section">
         <div className="toolbox-label-row toolbox-grid-size-row">
-          <label htmlFor={gridSizeSelectId} className="toolbox-label">
-            Frame Size
-          </label>
-          <select
-            id={gridSizeSelectId}
-            className="toolbox-dataset-select toolbox-grid-size-select"
-            value={gridSize}
-            onChange={(e) => setGridSize?.(e.target.value)}
-            aria-label="Select frame display size"
+          <span className="toolbox-label">Frame Size</span>
+        </div>
+        <div className="toolbox-segmented-group" role="group" aria-label="Frame size selection">
+          <button
+            type="button"
+            className={`toolbox-segment-btn ${gridSize === 'compact' ? 'active' : ''}`}
+            onClick={() => setGridSize?.('compact')}
+            aria-pressed={gridSize === 'compact'}
+            title="Compact frame cards (180px)"
           >
-            <option value="compact">Compact</option>
-            <option value="normal">Normal</option>
-            <option value="large">Large</option>
-          </select>
+            Compact
+          </button>
+          <button
+            type="button"
+            className={`toolbox-segment-btn ${gridSize === 'normal' ? 'active' : ''}`}
+            onClick={() => setGridSize?.('normal')}
+            aria-pressed={gridSize === 'normal'}
+            title="Normal frame cards (270px)"
+          >
+            Normal
+          </button>
+          <button
+            type="button"
+            className={`toolbox-segment-btn ${gridSize === 'large' ? 'active' : ''}`}
+            onClick={() => setGridSize?.('large')}
+            aria-pressed={gridSize === 'large'}
+            title="Large frame cards (360px)"
+          >
+            Large
+          </button>
         </div>
       </div>
 

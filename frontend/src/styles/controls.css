@@ -259,6 +259,54 @@
 }
 
 /* ─────────────────────────────────────────────────────────── */
+/* TOOLBOX FRAME SIZE SEGMENTED CONTROL                        */
+/* ─────────────────────────────────────────────────────────── */
+.toolbox-grid-size-section {
+  margin-top: var(--spacing-xxs);
+  gap: 6px;
+}
+
+.toolbox-segmented-group {
+  display: flex;
+  gap: 3px;
+  background-color: var(--color-canvas-soft, #f1f5f9);
+  padding: 3px;
+  border-radius: var(--rounded-md, 6px);
+  border: 1px solid var(--color-hairline, #e2e8f0);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.toolbox-segment-btn {
+  flex: 1 1 0;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-ink-muted, #64748b);
+  font-family: var(--font-family);
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.toolbox-segment-btn:hover:not(.active) {
+  color: var(--color-ink, #0f172a);
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.toolbox-segment-btn.active {
+  background-color: var(--color-primary, #2563eb);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* ─────────────────────────────────────────────────────────── */
 /* TOOLBOX DATASET SELECTOR                                    */
 /* ─────────────────────────────────────────────────────────── */
 .toolbox-dataset-section {

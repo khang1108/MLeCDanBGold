@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import FrameMetadata from "./FrameMetadata";
 import VideoTimeline from "./VideoTimeline";
-import ExplorationPanel from "../../alignment/components/ExplorationPanel";
 import {
   displayVideoId,
   getStreamVideoUrl,
@@ -240,45 +239,12 @@ const ImageModal = ({
           </div>
           <div className="inspector-content">
             <FrameMetadata frame={frame} playbackTime={playbackTime} />
-            {exploration && (
-              <>
-                {!exploration.session && (
-                  <div className="exploration-launch">
-                    <button type="button" disabled={!videoDuration || exploration.pending} onClick={() => exploration.open(videoDuration)}>
-                      {exploration.pending ? "Opening…" : "Explore"}
-                    </button>
-                    {exploration.error && <p role="alert">{exploration.error}</p>}
-                  </div>
-                )}
-              <ExplorationPanel
-                events={exploration.events || exploration.session?.events || exploration.session?.view?.events || []}
-                session={exploration.session}
-                pending={exploration.pending}
-                error={exploration.error}
-                unsynced={exploration.unsynced}
-                onRefresh={exploration.refresh}
-                readCurrentTimeMs={() => {
-                  const seconds = Number(videoRef.current?.currentTime);
-                  return Number.isFinite(seconds) && seconds >= 0 ? Math.round(seconds * 1000) : null;
-                }}
-                onApprove={(payload) => exploration.act?.({ action: "confirm", ...payload })}
-                onDecline={(payload) => exploration.act?.({ action: "reject", ...payload })}
-                onSearchRange={(payload) => exploration.act?.({ action: "window", ...payload })}
-                onUndo={exploration.undo}
-                onBack={exploration.onBack}
-                onSeek={(timestampMs) => {
-                  const milliseconds = Number(timestampMs);
-                  if (Number.isFinite(milliseconds) && milliseconds >= 0) handleVideoSeek(milliseconds / 1000);
-                }}
-              />
-              </>
-            )}
           </div>
-        </div>
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };
 
 export default ImageModal;
