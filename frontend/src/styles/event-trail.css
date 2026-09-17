@@ -836,3 +836,82 @@
 .frame-card.trail-explored {
   border-color: #60a5fa;
 }
+
+/* ─── EventTrail Launcher in Inspector ─── */
+.event-trail-launch-card {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin-top: 20px;
+  padding: 8px 0;
+  box-sizing: border-box;
+}
+
+.event-trail-open-btn,
+.btn-primary.event-trail-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  border: 1px solid #1d4ed8;
+  border-radius: 6px;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.24), 0 1px 2px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+}
+
+.event-trail-open-btn:hover:not(:disabled),
+.btn-primary.event-trail-open-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+  border-color: #1e40af;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
+.event-trail-open-btn:active:not(:disabled),
+.btn-primary.event-trail-open-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+}
+
+.event-trail-open-btn:disabled,
+.btn-primary.event-trail-open-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.event-trail-btn-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  stroke: currentColor;
+}
+
+.event-trail-btn-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: eventTrailSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes eventTrailSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
