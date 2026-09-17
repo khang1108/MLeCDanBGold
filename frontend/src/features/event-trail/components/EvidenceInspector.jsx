@@ -57,16 +57,16 @@ const EvidenceInspector = ({
           </div>
           <div className="event-trail-inspector-details">
             <div className="event-trail-meta-row">
-              <span className="meta-label">Frame Coordinate:</span>
+              <span className="meta-label">Frame:</span>
               <span className="meta-value">#{candidate.frame_idx}</span>
             </div>
             <div className="event-trail-meta-row">
               <span className="meta-label">Timestamp:</span>
-              <span className="meta-value">{formatSeconds(candidate.timestamp_ms)} ({candidate.timestamp_ms} ms)</span>
+              <span className="meta-value">{formatSeconds(candidate.timestamp_ms)}</span>
             </div>
             {rejectedCount > 0 && (
               <div className="event-trail-meta-row">
-                <span className="meta-label">Declined candidates:</span>
+                <span className="meta-label">Declined:</span>
                 <span className="meta-value text-warning">{rejectedCount}</span>
               </div>
             )}

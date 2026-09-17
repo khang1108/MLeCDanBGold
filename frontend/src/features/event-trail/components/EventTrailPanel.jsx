@@ -139,27 +139,31 @@ const EventTrailPanel = ({
         onClearWindow={onClearWindow}
       />
 
-      <div className="event-trail-footer-actions">
+      <div className="event-trail-footer">
         {!state.submission_selection && !isExhausted && (
-          <p className="event-trail-submit-hint">Use a frame before submitting from EventTrail.</p>
+          <p className="event-trail-submit-hint">
+            Use a frame before submitting from EventTrail.
+          </p>
         )}
-        <button
-          type="button"
-          className="btn-secondary event-trail-footer-btn"
-          disabled={pending}
-          onClick={onUndo}
-        >
-          Undo
-        </button>
+        <div className="event-trail-footer-actions">
+          <button
+            type="button"
+            className="btn-secondary event-trail-footer-btn undo-btn"
+            disabled={pending}
+            onClick={onUndo}
+          >
+            Undo
+          </button>
 
-        <button
-          type="button"
-          className="btn-primary event-trail-footer-btn submit-btn"
-          disabled={!canSubmit}
-          onClick={() => onSubmit?.(state.submission_selection)}
-        >
-          Submit
-        </button>
+          <button
+            type="button"
+            className="btn-primary event-trail-footer-btn submit-btn"
+            disabled={!canSubmit}
+            onClick={() => onSubmit?.(state.submission_selection)}
+          >
+            Submit
+          </button>
+        </div>
       </div>
     </section>
   );
