@@ -104,24 +104,72 @@
 }
 
 .frame-card-header {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--color-hairline);
   border-top-left-radius: calc(var(--rounded-lg) - 1px);
   border-top-right-radius: calc(var(--rounded-lg) - 1px);
   background-color: var(--color-surface);
   display: flex;
+  justify-content: space-between;
   align-items: center;
+  gap: 6px;
 }
 
 .frame-index-text {
   min-width: 0;
   overflow: hidden;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-primary);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.frame-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.frame-time-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background-color: var(--color-canvas-soft);
+  padding: 2px 6px;
+  border-radius: var(--rounded-sm);
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.frame-card .frame-submit-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-radius: var(--rounded-sm);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.frame-card .frame-submit-button:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-primary);
+}
+
+.frame-card .frame-submit-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .frame-image-container {

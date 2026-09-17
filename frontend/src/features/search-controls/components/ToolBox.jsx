@@ -34,7 +34,6 @@ const ToolBox = ({
 }) => {
   const vbsSession = useVbsSession();
   const connectedUserId = propConnectedUserId ?? vbsSession.connectedUserId ?? '';
-  const evaluations = propEvaluations ?? vbsSession.evaluations ?? [];
   const selectedTask = propSelectedTask ?? vbsSession.selectedTask ?? null;
   const setSelectedTask = propSetSelectedTask ?? vbsSession.setSelectedTask ?? NOOP;
 
@@ -46,6 +45,7 @@ const ToolBox = ({
 
   const availableTasks = useMemo(() => {
     const list = [];
+    const evaluations = propEvaluations ?? vbsSession.evaluations;
     if (Array.isArray(evaluations)) {
       evaluations.forEach((ev) => {
         if (Array.isArray(ev.taskTemplates)) {
@@ -63,7 +63,7 @@ const ToolBox = ({
       });
     }
     return list;
-  }, [evaluations]);
+  }, [propEvaluations, vbsSession.evaluations]);
 
   const selectedKey = selectedTask
     ? `${selectedTask.evaluationId}:${selectedTask.taskName}`
@@ -135,25 +135,24 @@ const ToolBox = ({
       </div>
 
       <div className="toolbox-section toolbox-dataset-section">
-        <label htmlFor={datasetSelectId} className="toolbox-label">
-          Dataset
-        </label>
-        <select
-          id={datasetSelectId}
-          className="toolbox-dataset-select"
-          value={activeDataset}
-          onChange={(e) => setActiveDataset(e.target.value)}
-          aria-label="Select dataset"
-        >
-          {DATASETS.map((ds) => (
-            <option key={ds.id} value={ds.id} disabled={!ds.enabled}>
-              {ds.label}{!ds.enabled ? ' — Coming soon' : ''}
-            </option>
-          ))}
-        </select>
-        <p className="toolbox-help">
-          {DATASETS.find((ds) => ds.id === activeDataset)?.description}
-        </p>
+        <div className="toolbox-label-row toolbox-dataset-row">
+          <label htmlFor={datasetSelectId} className="toolbox-label">
+            Dataset
+          </label>
+          <select
+            id={datasetSelectId}
+            className="toolbox-dataset-select"
+            value={activeDataset}
+            onChange={(e) => setActiveDataset(e.target.value)}
+            aria-label="Select dataset"
+          >
+            {DATASETS.map((ds) => (
+              <option key={ds.id} value={ds.id} disabled={!ds.enabled}>
+                {ds.label}{!ds.enabled ? ' — Coming soon' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {showRetrievalSources && (
@@ -196,37 +195,34 @@ const ToolBox = ({
       )}
 
       <div className="toolbox-section toolbox-task-section">
-        <label htmlFor={taskSelectId} className="toolbox-label">
-          Evaluation Task
-        </label>
-        <select
-          id={taskSelectId}
-          className="toolbox-task-select"
-          value={selectedKey}
-          onChange={handleTaskChange}
-          disabled={!connectedUserId || availableTasks.length === 0}
-          aria-label="Select evaluation task"
-        >
-          {!connectedUserId ? (
-            <option value="">Connect VBS to load tasks</option>
-          ) : availableTasks.length === 0 ? (
-            <option value="">No tasks available</option>
-          ) : (
-            availableTasks.map((t) => (
-              <option
-                key={`${t.evaluationId}:${t.taskName}`}
-                value={`${t.evaluationId}:${t.taskName}`}
-              >
-                {t.taskName}
-              </option>
-            ))
-          )}
-        </select>
-        {selectedTask && (
-          <p className="toolbox-help">
-            {selectedTask.taskType || selectedTask.taskGroup || 'DRES task'}
-          </p>
-        )}
+        <div className="toolbox-label-row toolbox-task-row">
+          <label htmlFor={taskSelectId} className="toolbox-label">
+            Task
+          </label>
+          <select
+            id={taskSelectId}
+            className="toolbox-task-select"
+            value={selectedKey}
+            onChange={handleTaskChange}
+            disabled={!connectedUserId || availableTasks.length === 0}
+            aria-label="Select evaluation task"
+          >
+            {!connectedUserId ? (
+              <option value="">Connect VBS to load tasks</option>
+            ) : availableTasks.length === 0 ? (
+              <option value="">No tasks available</option>
+            ) : (
+              availableTasks.map((t) => (
+                <option
+                  key={`${t.evaluationId}:${t.taskName}`}
+                  value={`${t.evaluationId}:${t.taskName}`}
+                >
+                  {t.taskName}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
       </div>
       </aside>
     </div>

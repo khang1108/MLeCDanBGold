@@ -6,8 +6,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 12px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--rounded-full);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -15,6 +16,7 @@
   transition: all 0.2s ease;
   user-select: none;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .vim-dot {

@@ -95,7 +95,7 @@ describe('ToolBox component', () => {
     const select = screen.getByLabelText(/select dataset/i);
     expect(select).toBeTruthy();
     expect(select.value).toBe('aic');
-    expect(screen.getByText(/AI Challenge/)).toBeTruthy();
+    expect(select.selectedOptions[0].textContent).toBe('AIC');
   });
 
   test('shows unavailable datasets as disabled options', () => {

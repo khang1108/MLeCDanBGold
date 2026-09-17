@@ -6,6 +6,7 @@ import {
   displayVideoId,
   getStreamVideoUrl,
 } from "../videoSource";
+import { keyframeUrl } from "../../../api/keyframes";
 
 // The player page endpoint returns HTML, so the inspector uses the raw MP4
 // stream and seeks native media time to the selected canonical timestamp.
@@ -149,11 +150,6 @@ const ImageModal = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-frame-stack" onClick={(event) => event.stopPropagation()}>
-        {query?.trim() && (
-          <div className="modal-query-context" role="status" aria-label="Current query">
-            <p className="modal-query-text">{query.trim()}</p>
-          </div>
-        )}
         <div
           ref={modalCardRef}
           className="modal-card split-layout"
@@ -185,6 +181,17 @@ const ImageModal = ({
                 onTogglePlayback={togglePlayback}
               />
             </div>
+          ) : videoError && frame.frame_id ? (
+            <div className="modal-fallback-viewer">
+              <img
+                src={keyframeUrl(frame.frame_id)}
+                alt={`Frame ${frame.frame_id}`}
+                className="modal-viewer-fallback-image"
+              />
+              <div className="modal-video-fallback-notice">
+                <span>Video stream unavailable &bull; Showing keyframe preview</span>
+              </div>
+            </div>
           ) : (
             <div className="frame-image-placeholder">
               <p>
@@ -198,6 +205,12 @@ const ImageModal = ({
           )}
         </div>
         <div className="modal-inspector-column">
+          {query?.trim() && (
+            <div className="modal-query-context" role="status" aria-label="Current query">
+              <span className="query-context-label">Query:</span>
+              <p className="modal-query-text">{query.trim()}</p>
+            </div>
+          )}
           <div className="inspector-header">
             <span className="inspector-title">
       {videoLabel} · {Number.isFinite(frame.frame_idx) ? frame.frame_idx : `${frame.timestamp_ms} ms`}
