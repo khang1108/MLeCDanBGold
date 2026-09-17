@@ -265,4 +265,22 @@ describe('EventTrailPanel', () => {
     fireEvent.click(cycleBtn);
     expect(onSelectEvent).toHaveBeenCalledWith('E1');
   });
+
+  test('Exit EventTrail button triggers onExitTrail', () => {
+    const onExitTrail = jest.fn();
+    render(
+      <EventTrailPanel
+        events={mockEvents}
+        state={makeState()}
+        selectedEventId="E1"
+        onExitTrail={onExitTrail}
+      />
+    );
+
+    const exitBtn = screen.getByRole('button', { name: /exit eventtrail/i });
+    expect(exitBtn).toBeTruthy();
+    fireEvent.click(exitBtn);
+    expect(onExitTrail).toHaveBeenCalledTimes(1);
+  });
 });
+

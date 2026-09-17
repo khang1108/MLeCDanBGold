@@ -201,6 +201,10 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
             act: eventTrail.act,
             undo: eventTrail.undo,
             refresh: eventTrail.refresh,
+            close: async (options) => {
+              eventTrailKeyRef.current = null;
+              await eventTrail.close(options);
+            },
             back: async () => {
               setSelectedFrame(null);
               eventTrailKeyRef.current = null;

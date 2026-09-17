@@ -626,3 +626,42 @@ test('renders alignment section at modal bottom when events are present, omits w
   expect(bottomSection.querySelector('.alignment-accordion.always-open')).toBeTruthy();
 });
 
+test('Exit EventTrail button calls eventTrail.close', () => {
+  const closeMock = jest.fn();
+  const state = {
+    session_id: 'ses_1',
+    result_id: 'r_1',
+    video_id: 'L21_V001',
+    kis_revision: 1,
+    trail_revision: 2,
+    status: 'active',
+    path: [],
+    last_valid_path: null,
+    approved_event_ids: [],
+    rejected_counts: {},
+    window: null,
+    submission_selection: null,
+    transition: null,
+  };
+
+  render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [] },
+        state,
+        pending: false,
+        close: closeMock,
+      }}
+    />,
+  );
+
+  const exitButtons = screen.getAllByRole('button', { name: /exit eventtrail/i });
+  expect(exitButtons.length).toBeGreaterThanOrEqual(1);
+
+  fireEvent.click(exitButtons[0]);
+  expect(closeMock).toHaveBeenCalledWith({ suppressError: true });
+});
+
+

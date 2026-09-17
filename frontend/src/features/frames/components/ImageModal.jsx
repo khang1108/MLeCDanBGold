@@ -223,6 +223,12 @@ const ImageModal = ({
     await eventTrail.act({ type: 'clear_window' });
   }, [eventTrail]);
 
+  const handleExitTrail = useCallback(async () => {
+    if (eventTrail?.close) {
+      await eventTrail.close({ suppressError: true });
+    }
+  }, [eventTrail]);
+
   const handleBack = useCallback(async () => {
     if (eventTrail?.back) {
       await eventTrail.back();
@@ -352,8 +358,20 @@ const ImageModal = ({
             </div>
             <div className="modal-inspector-column">
               <div className="inspector-header">
-                <span className="inspector-title">Frame Inspector</span>
+                <span className="inspector-title">
+                  {eventTrail?.state ? 'EventTrail Exploration' : 'Frame Inspector'}
+                </span>
                 <div className="inspector-header-actions">
+                  {eventTrail?.state && (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm event-trail-exit-top-btn"
+                      onClick={handleExitTrail}
+                      title="Exit EventTrail and return to Frame Inspector"
+                    >
+                      Exit EventTrail
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="inspector-close-btn"
@@ -388,6 +406,7 @@ const ImageModal = ({
                     onSetWindow={handleSetWindow}
                     onClearWindow={handleClearWindow}
                     onBack={handleBack}
+                    onExitTrail={handleExitTrail}
                     onSubmit={handleSubmitFromTrail}
                   />
                 </div>

@@ -19,6 +19,7 @@ const EventTrailPanel = ({
   onSetWindow,
   onClearWindow,
   onBack,
+  onExitTrail,
   onSubmit,
 }) => {
   const activeEventId = useMemo(() => {
@@ -60,15 +61,28 @@ const EventTrailPanel = ({
             <span className="event-trail-badge badge-status-active">Active</span>
           )}
         </div>
-        {onBack && (
-          <button
-            type="button"
-            className="btn-secondary btn-sm event-trail-back-btn"
-            onClick={onBack}
-          >
-            Back to results
-          </button>
-        )}
+        <div className="event-trail-header-actions">
+          {onExitTrail && (
+            <button
+              type="button"
+              className="btn-secondary btn-sm event-trail-exit-btn"
+              onClick={onExitTrail}
+              title="Exit EventTrail and return to Frame Inspector"
+            >
+              Exit EventTrail
+            </button>
+          )}
+          {onBack && (
+            <button
+              type="button"
+              className="btn-secondary btn-sm event-trail-back-btn"
+              onClick={onBack}
+              title="Close popup and return to results"
+            >
+              Back to results
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
