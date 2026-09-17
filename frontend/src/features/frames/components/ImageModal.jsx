@@ -301,73 +301,6 @@ const ImageModal = ({
           onKeyDown={handleModalKeyDown}
           tabIndex={-1}
         >
-<<<<<<< HEAD
-        <div className="modal-viewer-column">
-          {streamUrl && targetTime !== null && !videoError ? (
-            <div className="modal-video-shell">
-              <video
-                ref={videoRef}
-                className="modal-viewer-video"
-                src={streamUrl}
-                autoPlay
-                muted
-                preload="metadata"
-                playsInline
-                aria-label={`Video for ${videoLabel}`}
-                onLoadedMetadata={handleVideoLoadedMetadata}
-                onTimeUpdate={handleVideoTimeUpdate}
-                onError={() => setVideoError('The MP4 stream could not be loaded or decoded.')}
-              />
-              <VideoTimeline
-                videoId={frame.video_id}
-                videoRef={videoRef}
-                currentTime={playbackTime}
-                duration={videoDuration}
-                onSeek={handleVideoSeek}
-                onTogglePlayback={togglePlayback}
-              />
-            </div>
-          ) : videoError && frame.frame_id ? (
-            <div className="modal-fallback-viewer">
-              <img
-                src={keyframeUrl(frame.frame_id)}
-                alt={`Frame ${frame.frame_id}`}
-                className="modal-viewer-fallback-image"
-              />
-              <div className="modal-video-fallback-notice">
-                <span>Video stream unavailable &bull; Showing keyframe preview</span>
-              </div>
-            </div>
-          ) : (
-            <div className="frame-image-placeholder">
-              <p>
-                Video playback is unavailable. {videoError || (
-                  targetTime === null
-                    ? 'The backend response is missing timestamp_ms.'
-                    : 'The backend response is missing a canonical video_id.'
-                )}
-              </p>
-            </div>
-          )}
-        </div>
-        <div className="modal-inspector-column">
-          <div className="inspector-header">
-            <span className="inspector-title">
-              {Number.isFinite(frame.timestamp_ms) ? `${videoLabel} · ${frame.timestamp_ms} ms` : videoLabel}
-            </span>
-            <div className="inspector-header-actions">
-              {typeof onOpenSubmission === 'function' && !eventTrail?.state && (
-                <button
-                  type="button"
-                  className="inspector-submit-answer-button"
-                  onClick={openCurrentVideoMoment}
-                  disabled={!isVideoReady || Boolean(videoError) || isSubmissionOpening}
-                  aria-label="Submit current video moment to DRES"
-                  title={isSubmissionOpening ? 'Loading the current DRES task' : 'Prepare this exact player time for DRES'}
-                >
-                  ↗ Submit
-                </button>
-=======
           <div className="modal-main-stage">
             <div className="modal-viewer-column">
               {streamUrl && targetTime !== null && !videoError ? (
@@ -415,7 +348,6 @@ const ImageModal = ({
                     )}
                   </p>
                 </div>
->>>>>>> origin/feat/ui-vbs
               )}
             </div>
             <div className="modal-inspector-column">
@@ -438,12 +370,47 @@ const ImageModal = ({
                   <p className="modal-query-text">{query.trim()}</p>
                 </div>
               )}
-              <div className="inspector-content">
-                <FrameMetadata frame={frame} playbackTime={playbackTime} />
-              </div>
+              {eventTrail?.state ? (
+                <div className="inspector-content">
+                  <EventTrailPanel
+                    events={effectiveTrailEvents}
+                    state={eventTrail.state}
+                    pending={eventTrail.pending}
+                    error={eventTrail.error}
+                    selectedEventId={selectedEventId}
+                    onSelectEvent={setSelectedEventId}
+                    onExplore={(candidate) => handleSeekFromTimestamp(candidate.timestamp_ms)}
+                    onUse={handleUse}
+                    onApprove={handleApprove}
+                    onDecline={handleDecline}
+                    onClearAnchor={handleClearAnchor}
+                    onUndo={handleUndo}
+                    onSetWindow={handleSetWindow}
+                    onClearWindow={handleClearWindow}
+                    onBack={handleBack}
+                    onSubmit={handleSubmitFromTrail}
+                  />
+                </div>
+              ) : (
+                <div className="inspector-content">
+                  <FrameMetadata frame={frame} playbackTime={playbackTime} />
+                  {eventTrail?.context && (
+                    <div className="event-trail-launch-card">
+                      <button
+                        type="button"
+                        className="btn-primary event-trail-open-btn"
+                        onClick={() => eventTrail.open(eventTrail.context)}
+                        disabled={eventTrail.pending}
+                      >
+                        {eventTrail.pending ? 'Opening EventTrail…' : 'Open EventTrail'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          {hasAlignment && (
+          {hasAlignment && !eventTrail?.state && (
             <div className="modal-bottom-alignment-section">
               <AlignmentAccordion
                 events={effectiveEvents}
@@ -454,73 +421,9 @@ const ImageModal = ({
               />
             </div>
           )}
-<<<<<<< HEAD
-          {eventTrail?.state ? (
-            <div className="inspector-content">
-              <EventTrailPanel
-                events={effectiveTrailEvents}
-                state={eventTrail.state}
-                pending={eventTrail.pending}
-                error={eventTrail.error}
-                selectedEventId={selectedEventId}
-                onSelectEvent={setSelectedEventId}
-                onExplore={(candidate) => handleSeekFromTimestamp(candidate.timestamp_ms)}
-                onUse={handleUse}
-                onApprove={handleApprove}
-                onDecline={handleDecline}
-                onClearAnchor={handleClearAnchor}
-                onUndo={handleUndo}
-                onSetWindow={handleSetWindow}
-                onClearWindow={handleClearWindow}
-                onBack={handleBack}
-                onSubmit={handleSubmitFromTrail}
-              />
-            </div>
-          ) : (
-            <div className="inspector-content">
-              <FrameMetadata frame={frame} playbackTime={playbackTime} />
-              <AlignmentAccordion
-                events={effectiveEvents}
-                frameIds={frameIds}
-                timestampsMs={timestampsMs}
-                onSeek={handleSeekFromTimestamp}
-                collapsible={false}
-              />
-              {eventTrail?.context && (
-                <div className="event-trail-launch-card">
-                  <button
-                    type="button"
-                    className="btn-primary event-trail-open-btn"
-                    onClick={() => eventTrail.open(eventTrail.context)}
-                    disabled={eventTrail.pending}
-                  >
-                    {eventTrail.pending ? 'Opening EventTrail…' : 'Open EventTrail'}
-                  </button>
-                </div>
-              )}
-              <div className="inspector-shortcuts-card">
-                <span className="shortcuts-card-title">Video Controls</span>
-                <div className="shortcuts-row">
-                  <kbd>Space</kbd> / <kbd>K</kbd> <span>Play / Pause</span>
-                </div>
-                <div className="shortcuts-row">
-                  <kbd>←</kbd> <kbd>→</kbd> <span>Seek ±5s</span>
-                </div>
-                <div className="shortcuts-row">
-                  <kbd>Esc</kbd> <span>Close</span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
-  </div>
-=======
-        </div>
-      </div>
-    </div>
->>>>>>> origin/feat/ui-vbs
   );
 };
 

@@ -609,6 +609,8 @@ test('Step 5: Trail Submit uses submission_selection and hides header submit but
     startMs: 12000,
     endMs: 12000,
   });
+});
+
 test('renders alignment section at modal bottom when events are present, omits when absent', () => {
   const { rerender } = render(<ImageModal frame={frame} onClose={jest.fn()} />);
   expect(document.querySelector('.modal-bottom-alignment-section')).toBeNull();
