@@ -46,9 +46,9 @@ def test_REQ_003_fastapi_lifespan_with_unused_grpc_port(monkeypatch) -> None:
         "hcmai.orchestration.setup.load_configured_corpus",
         lambda *args, **kwargs: fake_corpus,
     )
-    monkeypatch.setenv("HCMAI_RETRIEVAL_GRPC_TARGET", "127.0.0.1:59999")
-    monkeypatch.setenv("HCMAI_RETRIEVAL_CLIENT_TIMEOUT", "1.0")
-    monkeypatch.setenv("HCMAI_RETRIEVAL_CLIENT_HEALTH_TIMEOUT", "0.5")
+    monkeypatch.setenv("HCMAI_RETRIEVAL_TARGET", "127.0.0.1:59999")
+    monkeypatch.setenv("HCMAI_RETRIEVAL_TIMEOUT_SECONDS", "1.0")
+    monkeypatch.setenv("HCMAI_RETRIEVAL_HEALTH_TIMEOUT_SECONDS", "0.5")
 
     app = create_app()
     with TestClient(app) as client:
@@ -69,3 +69,36 @@ def test_REQ_003_fastapi_lifespan_with_unused_grpc_port(monkeypatch) -> None:
             },
         )
         assert kis_resp.status_code in (503, 502)
+
+
+def test_health_report_with_active_bm25_and_all_modalities(monkeypatch) -> None:
+    from tests.retrieval_service.fakes import make_fake_corpus
+
+    fake_corpus = make_fake_corpus()
+    monkeypatch.setattr(
+        "hcmai.orchestration.setup.load_configured_corpus",
+        lambda *args, **kwargs: fake_corpus,
+    )
+    status = RemoteRetrievalStatus(
+        target="127.0.0.1:8002",
+        reachable=True,
+        ready=True,
+        scoring_revision=1,
+        active_modalities=("visual", "context", "bm25", "asr"),
+        startup_messages=(),
+    )
+    monkeypatch.setattr(RetrievalGrpcClient, "probe", lambda self: status)
+
+    messages = []
+    service = load_search_service(messages)
+    health = service.health(messages)
+
+    assert health["status"] == "ok"
+    assert health["capabilities"]["bm25"] is True
+    assert health["capabilities"]["hybrid_temporal"] is True
+    assert health["retrieval_modalities"]["visual"]["active"] is True
+    assert health["retrieval_modalities"]["context"]["active"] is True
+    assert health["retrieval_modalities"]["caption"]["active"] is True
+    assert health["retrieval_modalities"]["ocr"]["active"] is True
+    assert health["retrieval_modalities"]["asr"]["active"] is True
+

@@ -87,10 +87,9 @@ def build_health_report(
         if "visual" in active_mods:
             active_sources.add(RetrievalSource.VISUAL)
         if "context" in active_mods:
+            active_sources.add(RetrievalSource.CONTEXT)
             active_sources.add(RetrievalSource.CAPTION)
             active_sources.add(RetrievalSource.OCR)
-        if "bm25" in active_mods:
-            active_sources.add(RetrievalSource.BM25)
         if "asr" in active_mods:
             active_sources.add(RetrievalSource.ASR)
     else:
