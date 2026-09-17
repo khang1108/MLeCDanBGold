@@ -166,5 +166,27 @@ describe('KisPanel unified multimodal component', () => {
     fireEvent.click(collapseBtn);
     expect(onCollapse).toHaveBeenCalledTimes(1);
   });
+
+  test('renders HCMUS logo and MLeCDanBGold 2026 watermark in initial idle state', () => {
+    const initialState = {
+      draft: '',
+      revision: 0,
+      currentIntent: null,
+      stagedImages: {},
+      isSearching: false,
+      error: null,
+      mode: 'live',
+    };
+    render(<KisPanel sessionState={initialState} />);
+    const badge = screen.getByTestId('kis-watermark-badge');
+    expect(badge).toBeTruthy();
+    expect(screen.getByAltText(/HCMUS - Ho Chi Minh University of Science/i)).toBeTruthy();
+    expect(screen.getByText(/MLeCDanBGold · 2026/i)).toBeTruthy();
+  });
+
+  test('does not render watermark when active intent is present', () => {
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} />);
+    expect(screen.queryByTestId('kis-watermark-badge')).toBeNull();
+  });
 });
 

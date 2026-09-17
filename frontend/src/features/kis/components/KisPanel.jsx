@@ -140,6 +140,17 @@ const KisPanel = ({
           </details>
         )}
 
+        {!currentIntent && !isSearching && !error && (
+          <div className="kis-watermark-badge" data-testid="kis-watermark-badge">
+            <img
+              src="/hcmus_logo.png"
+              alt="HCMUS - Ho Chi Minh University of Science"
+              className="kis-watermark-logo"
+            />
+            <span className="kis-watermark-title">MLeCDanBGold · 2026</span>
+          </div>
+        )}
+
         {isSearching && <p className="kis-searching-msg">Searching…</p>}
         {error && <div className="kis-session-error" role="alert">⚠️ {error}</div>}
       </div>

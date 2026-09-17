@@ -1034,6 +1034,40 @@
   border-radius: 9999px;
 }
 
+/* Center subtle watermark badge inside the KIS sidebar */
+.kis-watermark-badge {
+  margin: auto auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  user-select: none;
+  opacity: 0.35;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.kis-watermark-badge:hover {
+  opacity: 0.65;
+}
+
+.kis-watermark-logo {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+.kis-watermark-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-muted, #64748b);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .kis-intent-summary {
   background: #ffffff;
   border: 1px solid #cbd5e1;
