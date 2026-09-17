@@ -43,11 +43,12 @@ class DecoderConfigSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class TemporalSearchArtifact:
-    """Shared score matrix and aligned paths output for one retrieval plan."""
+    """Shared score matrix and paths, optionally tagged with a serving revision."""
 
     result: TemporalSearchResult
     video_scores: tuple[VideoEventScores, ...]
     decoder_config: DecoderConfigSnapshot
+    scoring_revision: str | None = None
 
 
 class TemporalSearchService:
