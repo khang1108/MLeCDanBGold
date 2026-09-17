@@ -9,7 +9,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 KIS_RESOLVER_SYSTEM_PROMPT = """You are an expert video retrieval query intent resolver for multimodal search competitions.
-Your task is to analyze an ordered history of clues revealed over time for a video segment and resolve them into a clean semantic resolution.
+Your task is to analyze either a single narrative containing multiple chronological moments or an ordered history of clues revealed over time for a video segment, then resolve the input into a clean semantic resolution.
+A clue is not an event: one clue may resolve to one or many chronological events.
 
 Required JSON Structure:
 You MUST output a JSON object containing ALL of the following fields:
@@ -18,14 +19,38 @@ You MUST output a JSON object containing ALL of the following fields:
 - "events": list of chronological events [{"text": "...", "entity_indices": [...]}, ...] (at least 1 event required)
 
 Guidelines:
-1. ENTITY TRACKING: Identify key entities (persons, objects, places, texts) appearing across the clue history.
+1. ENTITY TRACKING: Identify key entities (persons, objects, places, texts) appearing across the clue history or narrative.
 2. COREFERENCE & PRONOUNS: Resolve ambiguous pronouns ("he", "she", "they", "it", "that thing") to their canonical entity descriptions.
 3. CONTRADICTIONS & CORRECTIONS: If a subsequent clue explicitly corrects an earlier clue (e.g., "actually orange, not red"), the canonical query_text, entities, and events MUST reflect the correction instead of concatenating contradictions.
 4. TEMPORAL ORDERING: Output events in strictly chronological order even when clues reveal them out of order.
-5. MERGING & SPLITTING: Merge simultaneous descriptions of the same moment into one event; split sequential actions into separate events.
-6. EVENT TEXT: Write self-contained event text suitable for dense and lexical retrieval. Do not leave dangling pronouns.
-7. ENTITY INDICES: For each event, entity_indices must be a list of 0-based indices into the entities array. If entities is empty [], entity_indices MUST be empty [] for all events!
+5. TEMPORAL DECOMPOSITION:
+   - Identify distinct moments or actions that occur sequentially in the described video.
+   - Each distinct sequential moment MUST be a separate object in the "events" array.
+   - Do NOT combine several sequential moments into a single event text.
+   - Merge actions only when they occur as part of the same temporal moment or simultaneous scene.
+   - Temporal transition phrases such as "initially", "then", "afterward", "later", "bắt đầu khi", "sau đó", "ngay sau đó", and "tiếp theo" are examples of evidence for temporal change, not an exhaustive keyword list.
+6. EVENT TEXT: Write a concise, self-contained English description of exactly one temporal moment suitable for dense and lexical visual retrieval. Resolve pronouns to explicit entities where useful. Never write an Event 1/Event 2/Event 3 list or a multi-stage narrative inside a single event text.
+7. ENTITY INDICES: For each event, entity_indices must be a list of 0-based indices into the entities array. If entities is empty [], entity_indices MUST be empty [] for all events. The same entity index may appear in multiple events when that entity persists across time.
 8. RESTRICTIONS: Do not emit timestamps, candidate IDs, retrieval translations, event IDs, entity IDs, clue history copies, or edges.
+
+Example — one clue can contain multiple events:
+Input:
+A man first enters a room carrying a box. Then he puts the box on a table. Finally a woman opens the box.
+
+Output:
+{
+  "query_text": "A man enters a room carrying a box, places it on a table, and a woman later opens the box.",
+  "entities": [
+    {"kind": "person", "description": "a man carrying and placing a box"},
+    {"kind": "object", "description": "a box"},
+    {"kind": "person", "description": "a woman who opens the box"}
+  ],
+  "events": [
+    {"text": "A man enters a room carrying a box.", "entity_indices": [0, 1]},
+    {"text": "The man places the box on a table.", "entity_indices": [0, 1]},
+    {"text": "A woman opens the box on the table.", "entity_indices": [2, 1]}
+  ]
+}
 """
 
 
@@ -33,9 +58,11 @@ def build_kis_intent_messages(clues: Sequence[str]) -> list[dict[str, str]]:
     """Build OpenAI-style chat messages for KIS semantic intent resolution."""
     formatted_clues = "\n".join(f"Clue {idx + 1}: {clue}" for idx, clue in enumerate(clues))
     user_prompt = (
-        f"Analyze the following ordered history of {len(clues)} clue(s) for a video segment "
-        f"and resolve them into a semantic KISResolution:\n\n"
-        f"{formatted_clues}"
+        "The input may be either a single narrative containing multiple chronological "
+        "moments or an ordered history of progressively revealed clues. One clue may "
+        "produce multiple events when it describes sequential moments.\n\n"
+        f"Analyze the following {len(clues)} clue(s) for a video segment and resolve "
+        f"them into a semantic KISResolution:\n\n{formatted_clues}"
     )
 
     return [
