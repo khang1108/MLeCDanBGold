@@ -1,9 +1,9 @@
 import React from "react";
 import FrameCard from "./FrameCard";
 
-export const roundLatencyDisplay = (val) => {
-  if (typeof val !== 'number' || !Number.isFinite(val)) return val;
-  return Math.round(val * 100) / 100;
+export const formatLatencySeconds = (val) => {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return '';
+  return (val / 1000).toFixed(2) + 's';
 };
 
 // Keeps result, loading, error, warning, and welcome states in one result feature.
@@ -22,9 +22,8 @@ const FramesBox = ({
   const hasSearched = latencyMs !== null || error !== null;
   const hasLatency = latencyMs !== null && latencyMs !== undefined;
   const structuredLatency = typeof latencyMs === "object" && latencyMs !== null;
-  const totalLatencyMs = structuredLatency
-    ? roundLatencyDisplay(latencyMs.total_ms)
-    : roundLatencyDisplay(latencyMs);
+  const totalMs = structuredLatency ? latencyMs.total_ms : latencyMs;
+  const totalLatencySec = formatLatencySeconds(totalMs);
   if (isLoading) return null;
 
   return (
@@ -42,24 +41,24 @@ const FramesBox = ({
           <div className="latency-summary">
             Found <span className="latency-highlight">{results.length}</span>{" "}
             frames in{" "}
-            <span className="latency-highlight">{totalLatencyMs}ms</span>
+            <span className="latency-highlight">{totalLatencySec}</span>
           </div>
           {structuredLatency && (
             <div className="latency-stages">
               <span className="latency-stage-item">
-                Query: {roundLatencyDisplay(latencyMs.query_ms)}ms
+                Query: {formatLatencySeconds(latencyMs.query_ms)}
               </span>
-              <span className="latency-stage-divider">|</span>
+              <span className="latency-stage-divider">•</span>
               <span className="latency-stage-item">
-                Retrieval: {roundLatencyDisplay(latencyMs.retrieval_ms)}ms
+                Retrieval: {formatLatencySeconds(latencyMs.retrieval_ms)}
               </span>
-              <span className="latency-stage-divider">|</span>
+              <span className="latency-stage-divider">•</span>
               <span className="latency-stage-item">
-                Alignment: {roundLatencyDisplay(latencyMs.alignment_ms)}ms
+                Alignment: {formatLatencySeconds(latencyMs.alignment_ms)}
               </span>
-              <span className="latency-stage-divider">|</span>
+              <span className="latency-stage-divider">•</span>
               <span className="latency-stage-item">
-                Materialize: {roundLatencyDisplay(latencyMs.materialization_ms)}ms
+                Materialize: {formatLatencySeconds(latencyMs.materialization_ms)}
               </span>
             </div>
           )}

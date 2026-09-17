@@ -16,12 +16,13 @@ test('does not expose submission while the participant is disconnected', () => {
   expect(onOpenSubmission).not.toHaveBeenCalled();
 });
 
-test('shows the raw alignment score and representative alignment path', () => {
+test('shows the video id, timestamp, and representative alignment path', () => {
   const frame = {
     frame_id: 'representative-frame',
     video_id: 'L21_V001',
     frame_idx: 17794,
     score: 2.34567,
+    timestamp_ms: 1200,
     frame_ids: ['f1', 'f2'],
     timestamps_ms: [1200, 2400],
     metadata: { caption: 'A sample frame' },
@@ -34,8 +35,8 @@ test('shows the raw alignment score and representative alignment path', () => {
     />,
   );
 
-  expect(screen.getByText('Alignment score: 2.346')).toBeTruthy();
-  expect(screen.queryByText(/score details/i)).toBeNull();
+  expect(screen.getByText('L21_V001')).toBeTruthy();
+  expect(screen.getByText('1200 ms')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: /alignment/i }));
   expect(screen.getByText('roll')).toBeTruthy();
 });

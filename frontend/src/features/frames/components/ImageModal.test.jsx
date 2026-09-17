@@ -275,6 +275,16 @@ test('supports manual video inspection without inventing frame identity', async 
   expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
 });
 
+test('shows keyframe fallback preview when video stream errors', async () => {
+  render(<ImageModal frame={frame} onClose={jest.fn()} />);
+
+  const video = await screen.findByLabelText('Video for L21_V001');
+  fireEvent.error(video);
+
+  expect(await screen.findByText(/Showing keyframe preview/i)).toBeTruthy();
+  expect(screen.getByRole('img', { name: `Frame ${frame.frame_id}` })).toBeTruthy();
+});
+
 test('closes the inspector when Escape is pressed', () => {
   const onClose = jest.fn();
   const { unmount } = render(<ImageModal frame={frame} onClose={onClose} />);

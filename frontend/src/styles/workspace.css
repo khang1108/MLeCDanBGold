@@ -596,7 +596,23 @@
 .submission-open-error { color: var(--color-danger); }
 
 .submission-dialog-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 20px; background: rgba(18, 28, 40, .48); }
-.submission-connect-hint { margin: 8px 18px; color: var(--color-ink-muted); font-size: 12px; }
+.submission-connect-hint {
+  margin: 6px 20px 0;
+  padding: 6px 14px;
+  background-color: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  border-radius: var(--rounded-md);
+  color: var(--color-warning);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.submission-connect-hint::before {
+  content: "ℹ️";
+  font-size: 13px;
+}
 .submission-dialog { width: min(520px, 100%); box-sizing: border-box; padding: 24px; border: 1px solid var(--color-hairline); border-radius: var(--rounded-xl); background: var(--color-surface); box-shadow: 0 24px 80px rgba(10, 25, 40, .28); color: var(--color-ink); }
 .submission-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
 .submission-dialog-eyebrow { margin: 0 0 5px; color: var(--color-primary); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
@@ -841,10 +857,10 @@
 /* KIS semantic-search sidebar */
 .kis-chat-sidebar {
   align-self: stretch;
-  flex: 0 0 380px;
-  width: 380px;
-  max-width: 420px;
-  min-width: 300px;
+  flex: 0 0 340px;
+  width: 340px;
+  max-width: 380px;
+  min-width: 280px;
   box-sizing: border-box;
   height: 100%;
   max-height: 100%;

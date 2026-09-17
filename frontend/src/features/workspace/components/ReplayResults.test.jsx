@@ -40,10 +40,9 @@ test('replays KIS viewed state without deriving submission state from history', 
   );
 
   expect(screen.getByText((_, element) => element.classList.contains('latency-summary')).textContent)
-    .toBe('Found 1 frames in 7ms');
-  expect(screen.getByText('V01, 10')).toBeTruthy();
-  expect(screen.getAllByText('A person enters')).toHaveLength(2);
-  expect(screen.getByText('Alignment score: 0.900')).toBeTruthy();
+    .toBe('Found 1 frames in 0.01s');
+  expect(screen.getByText('V01')).toBeTruthy();
+  expect(screen.getByText('1000 ms')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Alignment' })).toBeTruthy();
   expect(screen.getByAltText('Frame f1').closest('.frame-card').className).toContain('viewed');
   expect(screen.getByAltText('Frame f1').closest('.frame-card').className).not.toContain('submitted');

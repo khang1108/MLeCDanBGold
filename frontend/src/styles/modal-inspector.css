@@ -44,6 +44,42 @@
   height: 100%;
 }
 
+.modal-fallback-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background-color: #0c0c0c;
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-viewer-fallback-image {
+  max-width: 100%;
+  max-height: calc(100% - 40px);
+  object-fit: contain;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.modal-video-fallback-notice {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(6px);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 5px 14px;
+  border-radius: var(--rounded-full);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
 .modal-video-shell {
   display: flex;
   flex-direction: column;

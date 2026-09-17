@@ -33,7 +33,7 @@ test("renders distinct DP paths that share a representative frame without duplic
   consoleError.mockRestore();
 });
 
-test("rounds latency display values to 2 decimal places in summary and stages", () => {
+test("rounds latency display values in seconds in summary and stages", () => {
   render(
     <FramesBox
       results={[{ frame_id: "f1", video_id: "V01", frame_idx: 1, frame_ids: ["f1"] }]}
@@ -49,9 +49,9 @@ test("rounds latency display values to 2 decimal places in summary and stages", 
     />,
   );
 
-  expect(screen.getByText("62.71ms")).toBeTruthy();
-  expect(screen.getByText("Query: 12.35ms")).toBeTruthy();
-  expect(screen.getByText("Retrieval: 45.68ms")).toBeTruthy();
-  expect(screen.getByText("Alignment: 3.46ms")).toBeTruthy();
-  expect(screen.getByText("Materialize: 1.23ms")).toBeTruthy();
+  expect(screen.getByText("0.06s")).toBeTruthy();
+  expect(screen.getByText("Query: 0.01s")).toBeTruthy();
+  expect(screen.getByText("Retrieval: 0.05s")).toBeTruthy();
+  expect(screen.getByText("Alignment: 0.00s")).toBeTruthy();
+  expect(screen.getByText("Materialize: 0.00s")).toBeTruthy();
 });
