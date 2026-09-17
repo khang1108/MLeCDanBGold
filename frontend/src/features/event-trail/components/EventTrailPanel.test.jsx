@@ -34,9 +34,8 @@ const makeState = (overrides = {}) => ({
 });
 
 describe('EventTrailPanel', () => {
-  test('Step 1: renders all events, timestamps, and thumbnails, and allows event selection and explore seek', () => {
+  test('Step 1: renders all events, timestamps, and thumbnails, and allows event selection', () => {
     const onSelectEvent = jest.fn();
-    const onExplore = jest.fn();
 
     render(
       <EventTrailPanel
@@ -44,7 +43,6 @@ describe('EventTrailPanel', () => {
         state={makeState()}
         selectedEventId="E1"
         onSelectEvent={onSelectEvent}
-        onExplore={onExplore}
       />
     );
 
@@ -57,13 +55,6 @@ describe('EventTrailPanel', () => {
     const e2Item = screen.getByTestId('event-rail-item-E2');
     fireEvent.click(e2Item);
     expect(onSelectEvent).toHaveBeenCalledWith('E2');
-
-    // Clicking Explore button on E2 candidate calls onExplore
-    const exploreButtons = screen.getAllByRole('button', { name: /explore/i });
-    fireEvent.click(exploreButtons[1]); // E2 explore button
-    expect(onExplore).toHaveBeenCalledWith(
-      expect.objectContaining({ event_id: 'E2', frame_id: 'f2', timestamp_ms: 2000 })
-    );
   });
 
   test('Step 2: action buttons respect approval and exhaustion state', () => {

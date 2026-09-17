@@ -368,11 +368,9 @@ test('Step 2: renders EventTrailPanel when state exists; selecting E2 + explore 
   fireEvent.loadedMetadata(video);
 
   expect(screen.getByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
-  // Click E2 explore
-  const exploreButtons = screen.getAllByRole('button', { name: /explore/i });
-  fireEvent.click(exploreButtons[1]); // E2
-
-  expect(currentTime).toBe(7);
+  // Select E2
+  fireEvent.click(screen.getByTestId('event-rail-item-E2'));
+  expect(screen.getAllByText('e2').length).toBeGreaterThanOrEqual(1);
 });
 
 test('Step 3: auto-seeks only on successful Decline replacement of selected event, not Approve or exhausted', async () => {

@@ -397,10 +397,6 @@ const ImageModal = ({
                     error={eventTrail.error}
                     selectedEventId={selectedEventId}
                     onSelectEvent={setSelectedEventId}
-                    onExplore={(candidate) => {
-                      if (candidate?.event_id) setSelectedEventId(candidate.event_id);
-                      handleSeekFromTimestamp(candidate.timestamp_ms, candidate.frame_id);
-                    }}
                     onUse={handleUse}
                     onApprove={handleApprove}
                     onDecline={handleDecline}

@@ -16,7 +16,6 @@ const EventRail = ({
   selectedEventId = null,
   transition = null,
   onSelectEvent,
-  onExplore,
 }) => {
   const candidates = isExhausted ? (lastValidPath || []) : (path || []);
 
@@ -88,17 +87,6 @@ const EventRail = ({
                     <span className="event-trail-coord">
                       #{candidate.frame_idx} · {formatSeconds(candidate.timestamp_ms)}
                     </span>
-                    <button
-                      type="button"
-                      className="btn-secondary btn-sm event-trail-explore-btn"
-                      aria-label={`Explore ${event.id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onExplore?.(candidate);
-                      }}
-                    >
-                      Explore
-                    </button>
                   </div>
                 </div>
               )}

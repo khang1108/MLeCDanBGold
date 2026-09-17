@@ -10,7 +10,6 @@ const EventTrailPanel = ({
   error = null,
   selectedEventId = null,
   onSelectEvent,
-  onExplore,
   onUse,
   onApprove,
   onDecline,
@@ -118,7 +117,6 @@ const EventTrailPanel = ({
         selectedEventId={activeEventId}
         transition={state.transition}
         onSelectEvent={onSelectEvent}
-        onExplore={onExplore}
       />
 
       <EvidenceInspector
