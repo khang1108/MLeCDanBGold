@@ -28,7 +28,6 @@ import {
 } from '../../../api/history';
 import FramesBox from '../../frames/components/FramesBox';
 import ToolBox from '../../search-controls/components/ToolBox';
-import GifLoaderOverlay from '../../search/components/GifLoaderOverlay';
 import ReplayResults from '../../workspace/components/ReplayResults';
 import {
   buildKisSnapshot,
@@ -614,7 +613,7 @@ const SearchWorkspace = ({
       <div className="frames-results-shell">
         <FramesBox
           results={frames}
-          isLoading={false}
+          isLoading={isSearching}
           error={error}
           latencyMs={searchLatencyMs}
           warnings={warnings}
@@ -775,7 +774,6 @@ const SearchWorkspace = ({
           />
         </aside>
         <div className="adhoc-results">
-          <GifLoaderOverlay isVisible={isSearching && frames.length === 0} />
           {renderResults()}
         </div>
         <aside className="kis-chat-sidebar" aria-label="KIS search">

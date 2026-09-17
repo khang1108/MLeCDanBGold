@@ -40,7 +40,7 @@ const GifLoaderOverlay = ({ isVisible }) => {
   const currentGifSrc = gifsList.length > 0 ? gifsList[currentIndex] : null;
 
   return (
-    <div className="gif-loader-overlay">
+    <div className="gif-loader-overlay" data-testid="gif-loader">
       {currentGifSrc ? (
         <img
           src={currentGifSrc}

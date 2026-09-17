@@ -55,3 +55,46 @@ test("rounds latency display values in seconds in summary and stages", () => {
   expect(screen.getByText("Alignment: 0.00s")).toBeTruthy();
   expect(screen.getByText("Materialize: 0.00s")).toBeTruthy();
 });
+
+test("renders GifLoaderOverlay when isLoading is true and results is empty", () => {
+  render(
+    <FramesBox
+      results={[]}
+      isLoading={true}
+      error={null}
+      latencyMs={null}
+    />,
+  );
+
+  expect(screen.getByTestId("gif-loader")).toBeTruthy();
+  expect(screen.queryByText("Welcome to HCMAI Frame Search")).toBeNull();
+});
+
+test("renders welcome empty state when not loading and no search has occurred", () => {
+  render(
+    <FramesBox
+      results={[]}
+      isLoading={false}
+      error={null}
+      latencyMs={null}
+    />,
+  );
+
+  expect(screen.getByText("Welcome to HCMAI Frame Search")).toBeTruthy();
+  expect(screen.queryByTestId("gif-loader")).toBeNull();
+});
+
+test("renders no-frames empty state when not loading and search returned empty", () => {
+  render(
+    <FramesBox
+      results={[]}
+      isLoading={false}
+      error={null}
+      latencyMs={100}
+    />,
+  );
+
+  expect(screen.getByText("No frames found matching your query")).toBeTruthy();
+  expect(screen.queryByTestId("gif-loader")).toBeNull();
+});
+
