@@ -43,13 +43,15 @@ const ImageModal = ({
     [frame.timestamp_ms, frame.video_id],
   );
   const [playbackTime, setPlaybackTime] = useState(targetTime);
+  const [activeFrameId, setActiveFrameId] = useState(frame.frame_id);
   const videoLabel = displayVideoId(frame.video_id);
 
   useEffect(() => {
     setPlaybackTime(targetTime);
+    setActiveFrameId(frame.frame_id);
     setVideoError(null);
     setVideoDuration(0);
-  }, [streamUrl, targetTime]);
+  }, [streamUrl, targetTime, frame.frame_id]);
 
   useEffect(() => {
     const closeOnEscape = (event) => {
@@ -96,10 +98,15 @@ const ImageModal = ({
     updatePlaybackTime(nextTime);
   }, [updatePlaybackTime]);
 
-  const handleSeekFromTimestamp = useCallback((timestampMs) => {
+  const handleSeekFromTimestamp = useCallback((timestampMs, candidateFrameId) => {
     if (!Number.isFinite(timestampMs) || timestampMs < 0) return;
-    handleVideoSeek(timestampMs / 1000);
-  }, [handleVideoSeek]);
+    const timeSec = timestampMs / 1000;
+    handleVideoSeek(timeSec);
+    updatePlaybackTime(timeSec);
+    if (candidateFrameId) {
+      setActiveFrameId(candidateFrameId);
+    }
+  }, [handleVideoSeek, updatePlaybackTime]);
 
   const resolvedEvents = useMemo(() => {
     if (Array.isArray(events) && events.length > 0) return events;
@@ -159,7 +166,7 @@ const ImageModal = ({
         const actedEventId = currentState.transition?.action_event_id || lastAction.eventId;
         const candidate = currentState.path?.find((c) => c.event_id === actedEventId);
         if (candidate && Number.isFinite(candidate.timestamp_ms)) {
-          handleSeekFromTimestamp(candidate.timestamp_ms);
+          handleSeekFromTimestamp(candidate.timestamp_ms, candidate.frame_id);
         }
       }
       lastActionRef.current = null;
@@ -333,15 +340,18 @@ const ImageModal = ({
                     onTogglePlayback={togglePlayback}
                   />
                 </div>
-              ) : videoError && frame.frame_id ? (
+              ) : videoError && (activeFrameId || frame.frame_id) ? (
                 <div className="modal-fallback-viewer">
                   <img
-                    src={keyframeUrl(frame.frame_id)}
-                    alt={`Frame ${frame.frame_id}`}
+                    src={keyframeUrl(activeFrameId || frame.frame_id)}
+                    alt={`Frame ${activeFrameId || frame.frame_id}`}
                     className="modal-viewer-fallback-image"
                   />
                   <div className="modal-video-fallback-notice">
-                    <span>Video stream unavailable &bull; Showing keyframe preview</span>
+                    <span>
+                      Video stream unavailable &bull; Showing keyframe preview #{activeFrameId || frame.frame_id}
+                      {Number.isFinite(playbackTime) && ` (${playbackTime.toFixed(1)}s)`}
+                    </span>
                   </div>
                 </div>
               ) : (
@@ -387,7 +397,10 @@ const ImageModal = ({
                     error={eventTrail.error}
                     selectedEventId={selectedEventId}
                     onSelectEvent={setSelectedEventId}
-                    onExplore={(candidate) => handleSeekFromTimestamp(candidate.timestamp_ms)}
+                    onExplore={(candidate) => {
+                      if (candidate?.event_id) setSelectedEventId(candidate.event_id);
+                      handleSeekFromTimestamp(candidate.timestamp_ms, candidate.frame_id);
+                    }}
                     onUse={handleUse}
                     onApprove={handleApprove}
                     onDecline={handleDecline}
