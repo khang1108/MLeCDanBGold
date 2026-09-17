@@ -1,6 +1,7 @@
 """FastAPI routers backed by HCMAI services and stores."""
 
 from hcmai.api.routers.event_trail import create_event_trail_router
+from hcmai.api.routers.feedback import create_feedback_router
 from hcmai.api.routers.frames import create_frames_router
 from hcmai.api.routers.history import create_history_router
 from hcmai.api.routers.kis import create_kis_router
@@ -13,6 +14,7 @@ from hcmai.api.routers.vbs import create_vbs_router
 
 __all__ = [
     "create_event_trail_router",
+    "create_feedback_router",
     "create_frames_router",
     "create_database_router",
     "create_kis_router",

@@ -34,6 +34,8 @@ from hcmai.event_trail.errors import EventTrailError
 from hcmai.event_trail.models import EvidenceSnapshot, SnapshotResult, freeze_video_scores
 from hcmai.event_trail.service import EventTrailService
 from hcmai.event_trail.store import EventTrailSessionStore, EvidenceSnapshotStore
+from hcmai.kis.feedback.service import FeedbackService
+from hcmai.kis.feedback.store import FeedbackSessionStore
 from hcmai.orchestration.utils.errors import (
     InvalidQueryInputError,
     RevisionConflictError,
@@ -210,6 +212,21 @@ class SearchService:
         else:
             self.event_trail_decoder = None
             self.event_trail = None
+
+        if self.feedback_resolver is not None:
+            self.feedback_sessions = FeedbackSessionStore(
+                ttl_seconds=self.event_trail_settings.session_ttl_seconds,
+                max_entries=self.event_trail_settings.max_sessions,
+            )
+            self.feedback = FeedbackService(
+                store=self.feedback_sessions,
+                resolver=self.feedback_resolver,
+                search_service=self,
+                event_trail_service=self.event_trail,
+            )
+        else:
+            self.feedback_sessions = None
+            self.feedback = None
 
     @staticmethod
     def load(messages: list[str]) -> SearchService:
