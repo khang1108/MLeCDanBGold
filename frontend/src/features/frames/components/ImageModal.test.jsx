@@ -20,8 +20,11 @@ test('streams the canonical video at the selected timestamp', async () => {
   expect(video.getAttribute('src')).toMatch(/\/videos\/L21_V001\/stream$/);
   expect(video.hasAttribute('controls')).toBe(false);
   expect(screen.getByRole('slider', { name: 'Video timeline' })).toBeTruthy();
+  expect(screen.getByText('Frame Inspector')).toBeTruthy();
+  expect(screen.getByText('L21_V001')).toBeTruthy();
   expect(screen.getByText('5000 ms')).toBeTruthy();
-  expect(screen.getByText('L21_V001 · 5000 ms')).toBeTruthy();
+  expect(screen.queryByText('Video Controls')).toBeNull();
+  expect(screen.queryByRole('button', { name: /submit/i })).toBeNull();
 });
 
 test('shows the active query above the frame inspector without a label', () => {
@@ -86,7 +89,8 @@ test('keeps canonical metadata while seeking manual inspection to the requested 
   fireEvent.loadedMetadata(video);
 
   expect(currentTime).toBe(12);
-  expect(screen.getByText('L21_V001 · 5000 ms')).toBeTruthy();
+  expect(screen.getByText('Frame Inspector')).toBeTruthy();
+  expect(screen.getByText('L21_V001')).toBeTruthy();
   expect(screen.getByText('12000 ms')).toBeTruthy();
 });
 
@@ -160,7 +164,7 @@ test('starts progressive playback automatically without waiting for the full fil
   expect(video.preload).toBe('metadata');
 });
 
-test('uses source time for metadata while keeping the selected frame in the header', async () => {
+test('uses source time for metadata while keeping Frame Inspector in the header', async () => {
   render(<ImageModal frame={{ ...frame, fps: 30 }} onClose={jest.fn()} />);
 
   const video = await screen.findByLabelText('Video for L21_V001');
@@ -168,13 +172,15 @@ test('uses source time for metadata while keeping the selected frame in the head
   fireEvent.timeUpdate(video);
 
   expect(screen.getByText('5200 ms')).toBeTruthy();
-  expect(screen.getByText('L21_V001 · 5000 ms')).toBeTruthy();
+  expect(screen.getByText('Frame Inspector')).toBeTruthy();
+  expect(screen.getByText('L21_V001')).toBeTruthy();
 });
 
-test('does not expose a DRES action while the participant is disconnected', async () => {
+test('does not expose a submit button even when onOpenSubmission is passed', async () => {
   render(
     <ImageModal
       frame={{ ...frame, fps: 30 }}
+      onOpenSubmission={jest.fn()}
       onClose={jest.fn()}
     />,
   );
@@ -182,67 +188,14 @@ test('does not expose a DRES action while the participant is disconnected', asyn
   const video = await screen.findByLabelText('Video for L21_V001');
   Object.defineProperty(video, 'currentTime', { configurable: true, value: 5.2 });
   fireEvent.timeUpdate(video);
-  expect(screen.queryByRole('button', { name: /submit current video moment/i })).toBeNull();
+  expect(screen.queryByRole('button', { name: /submit/i })).toBeNull();
 });
 
-test('freezes rounded live player time when opening direct submission', async () => {
-  const onOpenSubmission = jest.fn();
-  render(
-    <ImageModal
-      frame={{ ...frame, frame_idx: 900, timestamp_ms: 5_000 }}
-      onOpenSubmission={onOpenSubmission}
-      onClose={jest.fn()}
-    />,
-  );
+test('does not render redundant video controls shortcuts card', () => {
+  render(<ImageModal frame={frame} onClose={jest.fn()} />);
 
-  const video = await screen.findByLabelText('Video for L21_V001');
-  fireEvent.loadedMetadata(video);
-  Object.defineProperty(video, 'currentTime', { configurable: true, value: 12.3456 });
-  fireEvent.click(screen.getByRole('button', { name: 'Submit current video moment to DRES' }));
-
-  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'L21_V001', startMs: 12_346, endMs: 12_346 });
-});
-
-test('disables the inspector action while the active DRES task is loading', async () => {
-  render(
-    <ImageModal
-      frame={frame}
-      isSubmissionOpening
-      onOpenSubmission={jest.fn()}
-      onClose={jest.fn()}
-    />,
-  );
-
-  const video = await screen.findByLabelText('Video for L21_V001');
-  fireEvent.loadedMetadata(video);
-  expect(screen.getByRole('button', { name: 'Submit current video moment to DRES' }).disabled).toBe(true);
-});
-
-test('uses exact current time rather than FPS-derived frame index for submission', async () => {
-  const onOpenSubmission = jest.fn();
-  render(
-    <ImageModal
-      frame={{ ...frame, fps: 29.97 }}
-      onOpenSubmission={onOpenSubmission}
-      onClose={jest.fn()}
-    />,
-  );
-
-  const video = await screen.findByLabelText('Video for L21_V001');
-  let currentTime = 0;
-  Object.defineProperty(video, 'duration', { configurable: true, value: 30 });
-  Object.defineProperty(video, 'currentTime', {
-    configurable: true,
-    get: () => currentTime,
-    set: (value) => { currentTime = value; },
-  });
-  fireEvent.loadedMetadata(video);
-  currentTime = 5.25;
-  fireEvent.timeUpdate(video);
-  fireEvent.click(screen.getByRole('button', { name: 'Submit current video moment to DRES' }));
-
-  expect(screen.getByText('5250 ms')).toBeTruthy();
-  expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'L21_V001', startMs: 5_250, endMs: 5_250 });
+  expect(screen.queryByText('Video Controls')).toBeNull();
+  expect(screen.queryByText(/Play \/ Pause/i)).toBeNull();
 });
 
 test('shows an unavailable message when the stream cannot be built', async () => {
@@ -264,7 +217,9 @@ test('supports manual video inspection without inventing frame identity', async 
   render(<ImageModal frame={{ video_id: 'V01', timestamp_ms: 12_000 }} onClose={jest.fn()} />);
 
   expect(await screen.findByLabelText('Video for V01')).toBeTruthy();
-  expect(screen.getByText('V01 · 12000 ms')).toBeTruthy();
+  expect(screen.getByText('Frame Inspector')).toBeTruthy();
+  expect(screen.getByText('V01')).toBeTruthy();
+  expect(screen.getByText('12000 ms')).toBeTruthy();
   expect(screen.queryByText('Internal frame ID')).toBeNull();
   expect(screen.queryByText('BTC frame index')).toBeNull();
   expect(screen.queryByRole('button', { name: /submit current frame/i })).toBeNull();
@@ -334,3 +289,19 @@ test('seeking via alignment sequence row updates the video time', async () => {
   const video = await screen.findByLabelText('Video for L21_V001');
   expect(video.currentTime).toBe(2.4);
 });
+
+test('renders alignment section at modal bottom when events are present, omits when absent', () => {
+  const { rerender } = render(<ImageModal frame={frame} onClose={jest.fn()} />);
+  expect(document.querySelector('.modal-bottom-alignment-section')).toBeNull();
+
+  const alignedFrame = {
+    ...frame,
+    frame_ids: ['f1', 'f2'],
+    timestamps_ms: [1200, 2400],
+  };
+  rerender(<ImageModal frame={alignedFrame} events={['hold', 'roll']} onClose={jest.fn()} />);
+  const bottomSection = document.querySelector('.modal-bottom-alignment-section');
+  expect(bottomSection).toBeTruthy();
+  expect(bottomSection.querySelector('.alignment-accordion.always-open')).toBeTruthy();
+});
+

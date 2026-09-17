@@ -23,7 +23,6 @@ const ImageModal = ({
   const modalCardRef = React.useRef(null);
   const videoRef = React.useRef(null);
   const [videoError, setVideoError] = useState(null);
-  const [isVideoReady, setIsVideoReady] = useState(false);
   const [videoDuration, setVideoDuration] = useState(0);
   const targetTime = useMemo(
     () => {
@@ -48,7 +47,6 @@ const ImageModal = ({
     setPlaybackTime(targetTime);
     setVideoError(null);
     setVideoDuration(0);
-    setIsVideoReady(false);
   }, [streamUrl, targetTime]);
 
   useEffect(() => {
@@ -72,7 +70,6 @@ const ImageModal = ({
 
   const handleVideoLoadedMetadata = useCallback((event) => {
     const video = event.currentTarget;
-    setIsVideoReady(true);
     const duration = Number(video.duration);
     setVideoDuration(Number.isFinite(duration) && duration > 0 ? duration : 0);
     if (targetTime === null) return;
@@ -84,14 +81,7 @@ const ImageModal = ({
     updatePlaybackTime(seekTime);
   }, [targetTime, updatePlaybackTime]);
 
-  const openCurrentVideoMoment = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || typeof onOpenSubmission !== 'function') return;
-    const currentTime = video.currentTime;
-    if (!Number.isFinite(currentTime) || currentTime < 0) return;
-    const timestampMs = Math.round(video.currentTime * 1000);
-    onOpenSubmission({ videoId: frame.video_id, startMs: timestampMs, endMs: timestampMs });
-  }, [frame.video_id, onOpenSubmission]);
+
 
   const handleVideoTimeUpdate = useCallback((event) => {
     updatePlaybackTime(event.currentTarget.currentTime);
@@ -134,6 +124,13 @@ const ImageModal = ({
     }
     return [];
   }, [resolvedEvents, frameIds, timestampsMs]);
+
+  const hasAlignment = useMemo(() => (
+    Array.isArray(effectiveEvents)
+    && effectiveEvents.length > 0
+    && effectiveEvents.length === frameIds?.length
+    && effectiveEvents.length === timestampsMs?.length
+  ), [effectiveEvents, frameIds, timestampsMs]);
 
   const togglePlayback = useCallback(() => {
     const video = videoRef.current;
@@ -188,115 +185,95 @@ const ImageModal = ({
           onKeyDown={handleModalKeyDown}
           tabIndex={-1}
         >
-        <div className="modal-viewer-column">
-          {streamUrl && targetTime !== null && !videoError ? (
-            <div className="modal-video-shell">
-              <video
-                ref={videoRef}
-                className="modal-viewer-video"
-                src={streamUrl}
-                autoPlay
-                muted
-                preload="metadata"
-                playsInline
-                aria-label={`Video for ${videoLabel}`}
-                onLoadedMetadata={handleVideoLoadedMetadata}
-                onTimeUpdate={handleVideoTimeUpdate}
-                onError={() => setVideoError('The MP4 stream could not be loaded or decoded.')}
-              />
-              <VideoTimeline
-                videoId={frame.video_id}
-                videoRef={videoRef}
-                currentTime={playbackTime}
-                duration={videoDuration}
-                onSeek={handleVideoSeek}
-                onTogglePlayback={togglePlayback}
-              />
-            </div>
-          ) : videoError && frame.frame_id ? (
-            <div className="modal-fallback-viewer">
-              <img
-                src={keyframeUrl(frame.frame_id)}
-                alt={`Frame ${frame.frame_id}`}
-                className="modal-viewer-fallback-image"
-              />
-              <div className="modal-video-fallback-notice">
-                <span>Video stream unavailable &bull; Showing keyframe preview</span>
-              </div>
-            </div>
-          ) : (
-            <div className="frame-image-placeholder">
-              <p>
-                Video playback is unavailable. {videoError || (
-                  targetTime === null
-                    ? 'The backend response is missing timestamp_ms.'
-                    : 'The backend response is missing a canonical video_id.'
-                )}
-              </p>
-            </div>
-          )}
-        </div>
-        <div className="modal-inspector-column">
-          <div className="inspector-header">
-            <span className="inspector-title">
-              {Number.isFinite(frame.timestamp_ms) ? `${videoLabel} · ${frame.timestamp_ms} ms` : videoLabel}
-            </span>
-            <div className="inspector-header-actions">
-              {typeof onOpenSubmission === 'function' && (
-                <button
-                  type="button"
-                  className="inspector-submit-answer-button"
-                  onClick={openCurrentVideoMoment}
-                  disabled={!isVideoReady || Boolean(videoError) || isSubmissionOpening}
-                  aria-label="Submit current video moment to DRES"
-                  title={isSubmissionOpening ? 'Loading the current DRES task' : 'Prepare this exact player time for DRES'}
-                >
-                  ↗ Submit
-                </button>
+          <div className="modal-main-stage">
+            <div className="modal-viewer-column">
+              {streamUrl && targetTime !== null && !videoError ? (
+                <div className="modal-video-shell">
+                  <video
+                    ref={videoRef}
+                    className="modal-viewer-video"
+                    src={streamUrl}
+                    autoPlay
+                    muted
+                    preload="metadata"
+                    playsInline
+                    aria-label={`Video for ${videoLabel}`}
+                    onLoadedMetadata={handleVideoLoadedMetadata}
+                    onTimeUpdate={handleVideoTimeUpdate}
+                    onError={() => setVideoError('The MP4 stream could not be loaded or decoded.')}
+                  />
+                  <VideoTimeline
+                    videoId={frame.video_id}
+                    videoRef={videoRef}
+                    currentTime={playbackTime}
+                    duration={videoDuration}
+                    onSeek={handleVideoSeek}
+                    onTogglePlayback={togglePlayback}
+                  />
+                </div>
+              ) : videoError && frame.frame_id ? (
+                <div className="modal-fallback-viewer">
+                  <img
+                    src={keyframeUrl(frame.frame_id)}
+                    alt={`Frame ${frame.frame_id}`}
+                    className="modal-viewer-fallback-image"
+                  />
+                  <div className="modal-video-fallback-notice">
+                    <span>Video stream unavailable &bull; Showing keyframe preview</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="frame-image-placeholder">
+                  <p>
+                    Video playback is unavailable. {videoError || (
+                      targetTime === null
+                        ? 'The backend response is missing timestamp_ms.'
+                        : 'The backend response is missing a canonical video_id.'
+                    )}
+                  </p>
+                </div>
               )}
-              <button
-                type="button"
-                className="inspector-close-btn"
-                onClick={onClose}
-                aria-label="Close popup"
-              >
-                ×
-              </button>
+            </div>
+            <div className="modal-inspector-column">
+              <div className="inspector-header">
+                <span className="inspector-title">Frame Inspector</span>
+                <div className="inspector-header-actions">
+                  <button
+                    type="button"
+                    className="inspector-close-btn"
+                    onClick={onClose}
+                    aria-label="Close popup"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              {query?.trim() && (
+                <div className="modal-query-context" role="status" aria-label="Current query">
+                  <span className="query-context-label">Query:</span>
+                  <p className="modal-query-text">{query.trim()}</p>
+                </div>
+              )}
+              <div className="inspector-content">
+                <FrameMetadata frame={frame} playbackTime={playbackTime} />
+              </div>
             </div>
           </div>
-          {query?.trim() && (
-            <div className="modal-query-context" role="status" aria-label="Current query">
-              <span className="query-context-label">Query:</span>
-              <p className="modal-query-text">{query.trim()}</p>
+          {hasAlignment && (
+            <div className="modal-bottom-alignment-section">
+              <AlignmentAccordion
+                events={effectiveEvents}
+                frameIds={frameIds}
+                timestampsMs={timestampsMs}
+                onSeek={handleSeekFromTimestamp}
+                collapsible={false}
+              />
             </div>
           )}
-          <div className="inspector-content">
-            <FrameMetadata frame={frame} playbackTime={playbackTime} />
-            <AlignmentAccordion
-              events={effectiveEvents}
-              frameIds={frameIds}
-              timestampsMs={timestampsMs}
-              onSeek={handleSeekFromTimestamp}
-              collapsible={false}
-            />
-            <div className="inspector-shortcuts-card">
-              <span className="shortcuts-card-title">Video Controls</span>
-              <div className="shortcuts-row">
-                <kbd>Space</kbd> / <kbd>K</kbd> <span>Play / Pause</span>
-              </div>
-              <div className="shortcuts-row">
-                <kbd>←</kbd> <kbd>→</kbd> <span>Seek ±5s</span>
-              </div>
-              <div className="shortcuts-row">
-                <kbd>Esc</kbd> <span>Close</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
 };
 
 export default ImageModal;
