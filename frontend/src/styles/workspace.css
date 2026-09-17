@@ -1371,20 +1371,28 @@
   font-size: 11px;
 }
 
+.kis-query-composer {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
 .kis-composer-controls {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 6px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .kis-composer-left-actions {
   display: flex;
   gap: 6px;
   align-items: center;
-  flex: 1;
+  flex-shrink: 0;
 }
 
 .kis-composer-right-actions {
@@ -1392,6 +1400,7 @@
   gap: 6px;
   align-items: center;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .kis-btn-icon {
@@ -1403,22 +1412,23 @@
 .kis-composer-controls .kis-add-event-btn,
 .kis-composer-controls .kis-attach-label,
 .kis-composer-controls .kis-chat-send-btn {
-  height: 36px;
-  min-height: 36px;
-  max-height: 36px;
-  padding: 0 12px;
-  font-size: 12.5px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 0 10px;
+  font-size: 11.5px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
   white-space: nowrap;
   border-radius: var(--rounded-md, 6px);
   box-sizing: border-box;
   margin: 0;
   cursor: pointer;
   line-height: 1;
+  user-select: none;
 }
 
 .kis-composer-controls .kis-add-event-btn,
@@ -1427,19 +1437,19 @@
   background-color: var(--color-surface, #ffffff);
   color: var(--color-ink, #1e293b);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 
 .kis-composer-controls .kis-add-event-btn:hover:not(:disabled),
 .kis-composer-controls .kis-attach-label:hover:not(:disabled) {
   background-color: #f1f5f9;
-  border-color: var(--color-primary, #2563eb);
-  color: var(--color-primary, #2563eb);
+  border-color: #94a3b8;
+  color: #0f172a;
 }
 
 .kis-composer-controls .kis-add-event-btn:hover:not(:disabled) .kis-btn-icon,
 .kis-composer-controls .kis-attach-label:hover:not(:disabled) .kis-btn-icon {
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
 .kis-composer-controls .kis-add-event-btn:active:not(:disabled),
@@ -1448,21 +1458,21 @@
 }
 
 .kis-composer-controls .kis-chat-send-btn {
-  border: 1px solid var(--color-primary, #2563eb);
+  border: 1px solid #1d4ed8;
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: #ffffff;
-  min-width: 80px;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+  padding: 0 12px;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
 .kis-composer-controls .kis-chat-send-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
 }
 
 .kis-composer-controls .kis-chat-send-btn:hover:not(:disabled) .kis-btn-icon {
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
 .kis-composer-controls .kis-chat-send-btn:active:not(:disabled) {
@@ -1471,7 +1481,7 @@
 
 .kis-composer-controls button:disabled,
 .kis-composer-controls label:has(input:disabled) {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
   box-shadow: none;
 }

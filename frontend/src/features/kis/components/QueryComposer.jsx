@@ -184,8 +184,8 @@ const QueryComposer = ({
             disabled={isSearching || disabled}
           >
             <svg
-              width="13"
-              height="13"
+              width="12"
+              height="12"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -203,8 +203,8 @@ const QueryComposer = ({
 
           <label className="btn-secondary btn-sm kis-attach-label" htmlFor="kis-attach-file">
             <svg
-              width="13"
-              height="13"
+              width="12"
+              height="12"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -240,8 +240,8 @@ const QueryComposer = ({
             onClick={onSubmit}
           >
             <svg
-              width="13"
-              height="13"
+              width="12"
+              height="12"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
