@@ -541,7 +541,10 @@ const SearchWorkspace = ({
 
       if (turnResp.status === 'applied') {
         if (Array.isArray(turnResp.results)) {
-          setFrames(turnResp.results);
+          setFrames([...turnResp.results]);
+          if (turnResp.latency) {
+            setSearchLatencyMs(turnResp.latency);
+          }
           if (historyIdentity) {
             const feedbackQueryId = createClientQueryId();
             const feedbackQueryText = turnResp.intent?.query_text || kisSession.currentIntent?.query_text || message;
@@ -635,7 +638,10 @@ const SearchWorkspace = ({
       setFeedbackSession((prev) => applyUndoSuccess(prev, undoResp));
 
       if (Array.isArray(undoResp.results)) {
-        setFrames(undoResp.results);
+        setFrames([...undoResp.results]);
+        if (undoResp.latency) {
+          setSearchLatencyMs(undoResp.latency);
+        }
         if (historyIdentity) {
           const undoQueryId = createClientQueryId();
           const undoQueryText = undoResp.intent?.query_text || kisSession.currentIntent?.query_text || 'Undo';

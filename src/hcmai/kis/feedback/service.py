@@ -213,6 +213,7 @@ class FeedbackService:
                     changed_event_ids=list(action.event_ids),
                     scope=session.state.scope,
                     can_undo=True,
+                    latency=getattr(search_exec, "latency", None),
                 )
                 return commit_feedback_turn(session, request, new_state)
 
@@ -259,6 +260,7 @@ class FeedbackService:
                     changed_event_ids=list(action.event_ids),
                     scope=session.state.scope,
                     can_undo=True,
+                    latency=getattr(search_exec, "latency", None),
                 )
                 return commit_feedback_turn(session, request, new_state)
 
@@ -323,6 +325,7 @@ class FeedbackService:
                     changed_event_ids=[ev.id for ev in canonical_events],
                     scope=session.state.scope,
                     can_undo=True,
+                    latency=getattr(search_exec, "latency", None),
                 )
                 return commit_feedback_turn(session, request, new_state)
 
@@ -381,12 +384,49 @@ class FeedbackService:
                     changed_event_ids=[target_eid],
                     scope=session.state.scope,
                     can_undo=True,
+                    latency=getattr(search_exec, "latency", None),
                 )
                 return commit_feedback_turn(
                     session, request, new_state, exclusions=new_exclusions
                 )
 
-            # Fallback for repair_event or anchor
+            if action.type == "repair_event":
+                target_eid = action.event_id
+                overrides = dict(session.state.retrieval_overrides)
+                # If message contains descriptive clues, use them as visual keyword refinement
+                if request.message and len(request.message.strip()) > 0:
+                    overrides[target_eid] = RetrievalOverride(
+                        dense_text=request.message.strip(),
+                        bm25_text=request.message.strip(),
+                    )
+
+                search_exec = self._execute_search(
+                    intent=session.state.intent,
+                    overrides=overrides,
+                    use_dense=session.use_dense,
+                    use_bm25=session.use_bm25,
+                    top_k=session.top_k,
+                    exclusions=session.exclusions,
+                )
+                next_feedback_rev = session.feedback_revision + 1
+                new_state = FeedbackStateResponse(
+                    session_id=session_id,
+                    status="applied",
+                    feedback_revision=next_feedback_rev,
+                    intent=session.state.intent,
+                    retrieval_overrides=overrides,
+                    results=search_exec.results,
+                    evidence_snapshot_id=search_exec.evidence_snapshot_id,
+                    trail=session.state.trail,
+                    assistant_message=f"Re-searched event {target_eid}.",
+                    changed_event_ids=[target_eid],
+                    scope=session.state.scope,
+                    can_undo=True,
+                    latency=getattr(search_exec, "latency", None),
+                )
+                return commit_feedback_turn(session, request, new_state)
+
+            # Fallback for anchor or other actions
             search_exec = self._execute_search(
                 intent=session.state.intent,
                 overrides=session.state.retrieval_overrides,
@@ -409,6 +449,7 @@ class FeedbackService:
                 changed_event_ids=[getattr(action, "event_id", "")],
                 scope=session.state.scope,
                 can_undo=True,
+                latency=getattr(search_exec, "latency", None),
             )
             return commit_feedback_turn(session, request, new_state)
 
@@ -476,11 +517,25 @@ class FeedbackService:
                     filtered.append(r)
             kis_results = filtered
 
+        latency_dict = None
+        if hasattr(execution, "latency"):
+            lat = execution.latency
+            if hasattr(lat, "model_dump"):
+                latency_dict = lat.model_dump()
+            elif isinstance(lat, dict):
+                latency_dict = lat
+        elif hasattr(execution, "results"):
+            latency_dict = {"total_ms": 0.0}
+
         snap_id = f"snap_{uuid4().hex[:12]}"
         return type(
             "SearchExecutionResult",
             (),
-            {"results": kis_results, "evidence_snapshot_id": snap_id},
+            {
+                "results": kis_results,
+                "evidence_snapshot_id": snap_id,
+                "latency": latency_dict,
+            },
         )()
 
 

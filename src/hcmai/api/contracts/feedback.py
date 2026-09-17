@@ -77,6 +77,7 @@ class FeedbackStateResponse(BaseModel):
     changed_event_ids: list[str] = Field(default_factory=list)
     scope: str = "all_videos"
     can_undo: bool = False
+    latency: dict[str, Any] | None = None
 
 
 class FeedbackOpenResponse(BaseModel):

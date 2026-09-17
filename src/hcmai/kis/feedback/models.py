@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from hcmai.api.contracts.feedback import (
     FeedbackStateResponse,
@@ -110,6 +110,28 @@ class FeedbackResolution(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: FeedbackAction
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ensure_action_type(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            act = data.get("action")
+            if isinstance(act, dict) and "type" not in act:
+                if "refinements" in act:
+                    act["type"] = "refine_retrieval"
+                elif "replacement_texts" in act:
+                    act["type"] = "edit_intent"
+                elif "new_events" in act:
+                    act["type"] = "restructure"
+                elif "candidate_frame_id" in act:
+                    act["type"] = "reject_candidate"
+                elif "question" in act:
+                    act["type"] = "clarify"
+                elif "frame_id" in act:
+                    act["type"] = "anchor"
+                elif "event_id" in act:
+                    act["type"] = "repair_event"
+        return data
 
 
 class FeedbackChatTurn(BaseModel):
