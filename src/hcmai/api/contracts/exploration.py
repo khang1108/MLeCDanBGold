@@ -52,7 +52,7 @@ class ExplorationActionRequest(BaseModel):
 
     expected_revision: Annotated[int, Field(strict=True, ge=1)]
     event_version: UUID
-    scoring_revision: UUID
+    scoring_revision: _NonBlankString
     action: Literal["confirm", "reject", "window", "undo"]
     event_index: Annotated[int, Field(strict=True, ge=0)] | None = None
     interval: _Interval | None = None

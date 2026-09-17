@@ -144,7 +144,6 @@ class SearchService:
             ttl_seconds=self.event_trail_settings.snapshot_ttl_seconds,
             max_entries=self.event_trail_settings.max_snapshots,
         )
-        self.event_trail_scoring_revision = str(uuid4())
 
         if image_search is not None:
             self.image_search = image_search
@@ -606,6 +605,16 @@ class SearchService:
                     f"and artifact paths count ({len(artifact.result.paths)})"
                 )
 
+            scoring_revision = artifact.scoring_revision or (
+                getattr(artifact.result, "scoring_revision", None)
+                if artifact.result
+                else None
+            )
+            if not scoring_revision or not scoring_revision.strip():
+                raise SearchServiceGatewayError(
+                    "Temporal search artifact missing nonblank scoring revision."
+                )
+
             snapshot_started = perf_counter()
             try:
                 try:
@@ -642,7 +651,7 @@ class SearchService:
                 snapshot = EvidenceSnapshot(
                     snapshot_id=sid,
                     kis_revision=intent.revision,
-                    scoring_revision=self.event_trail_scoring_revision,
+                    scoring_revision=scoring_revision,
                     event_ids=tuple(event.id for event in intent.events),
                     decoder_config=artifact.decoder_config,
                     results=snapshot_results,

@@ -79,6 +79,7 @@ def mock_artifact():
         result=res,
         video_scores=scores,
         decoder_config=config,
+        scoring_revision="rev-local",
     )
 
 
@@ -186,6 +187,7 @@ def test_search_kis_multiple_results_share_same_video_evidence(corpus):
         result=res,
         video_scores=scores,
         decoder_config=DecoderConfigSnapshot(0.5, 1.0, 2.0, 1000),
+        scoring_revision="rev-local",
     )
     mock_exec = KISSearchExecution(
         results=[
@@ -390,3 +392,116 @@ def test_kis_snapshot_trail_lifecycle_with_scoring_call_counters(corpus, mock_ar
     assert scoring_calls == 1
 
 
+def test_REQ_008_kis_snapshot_uses_remote_scoring_revision(corpus, mock_artifact) -> None:
+    service = SearchService(
+        corpus=corpus,
+        retrieval=Mock(),
+        temporal_evidence=Mock(),
+        intent_resolver=Mock(),
+        scoped_resolver=Mock(),
+        global_rewriter=Mock(),
+        event_translator=Mock(),
+        kis_image_assets=Mock(),
+    )
+    intent = KISIntent(
+        revision=1,
+        language="en",
+        query_text="woman enters",
+        entities=[],
+        events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],
+        temporal_edges=[],
+    )
+    service.intent_resolver.resolve_initial.return_value = intent
+
+    mock_exec = KISSearchExecution(
+        results=[
+            SearchResult(
+                frame_id="v1_f1",
+                video_id="v1",
+                frame_idx=10,
+                timestamp_ms=1000,
+                score=0.95,
+                frame_ids=["v1_f1"],
+                timestamps_ms=[1000],
+                metadata=SearchResultMetadata(),
+            )
+        ],
+        latency=SearchLatency(retrieval_ms=10.0, alignment_ms=5.0),
+        temporal_artifact=mock_artifact,
+    )
+    service.kis = Mock()
+    service.kis.execute.return_value = mock_exec
+
+    object.__setattr__(mock_artifact, "scoring_revision", "remote-v7")
+
+    request = KISSearchRequest(
+        base_intent=None,
+        expected_revision=0,
+        operation=InitialResolveOperation(
+            kind="initial_resolve",
+            text="woman enters",
+        ),
+        use_dense=True,
+        use_bm25=False,
+        top_k=5,
+    )
+
+    response = service.search_kis(request)
+    snapshot = service.event_trail_snapshots.get(response.evidence_snapshot_id)
+    assert snapshot.scoring_revision == "remote-v7"
+
+
+def test_search_kis_rejects_missing_scoring_revision(corpus, mock_artifact) -> None:
+    from hcmai.orchestration.utils.errors import SearchServiceGatewayError
+
+    service = SearchService(
+        corpus=corpus,
+        retrieval=Mock(),
+        temporal_evidence=Mock(),
+        intent_resolver=Mock(),
+        scoped_resolver=Mock(),
+        global_rewriter=Mock(),
+        event_translator=Mock(),
+        kis_image_assets=Mock(),
+    )
+    intent = KISIntent(
+        revision=1,
+        language="en",
+        query_text="woman enters",
+        entities=[],
+        events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],
+        temporal_edges=[],
+    )
+    service.intent_resolver.resolve_initial.return_value = intent
+
+    object.__setattr__(mock_artifact, "scoring_revision", "")
+
+    mock_exec = KISSearchExecution(
+        results=[
+            SearchResult(
+                frame_id="v1_f1",
+                video_id="v1",
+                frame_idx=10,
+                timestamp_ms=1000,
+                score=0.95,
+                frame_ids=["v1_f1"],
+                timestamps_ms=[1000],
+                metadata=SearchResultMetadata(),
+            )
+        ],
+        latency=SearchLatency(retrieval_ms=10.0, alignment_ms=5.0),
+        temporal_artifact=mock_artifact,
+    )
+    service.kis = Mock()
+    service.kis.execute.return_value = mock_exec
+
+    request = KISSearchRequest(
+        base_intent=None,
+        expected_revision=0,
+        operation=InitialResolveOperation(kind="initial_resolve", text="woman enters"),
+        use_dense=True,
+        use_bm25=False,
+        top_k=5,
+    )
+    with pytest.raises(SearchServiceGatewayError, match="missing nonblank scoring revision"):
+        service.search_kis(request)

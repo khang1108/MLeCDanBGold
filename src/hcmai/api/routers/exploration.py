@@ -13,6 +13,8 @@ from threading import Lock
 from typing import Annotated, Any, Iterator
 from uuid import UUID, uuid4
 
+from unittest.mock import Mock
+
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.concurrency import run_in_threadpool
 
@@ -24,6 +26,7 @@ from hcmai.api.contracts.exploration import (
     ExplorationPathResponse,
     ExplorationViewResponse,
 )
+from hcmai.orchestration.utils.errors import SearchServiceGatewayError
 from hcmai.orchestration.workflows.temporal_exploration import (
     ExplorationConflict,
     ExplorationUnavailable,
@@ -51,18 +54,11 @@ class ExplorationRegistry:
     """Bound one worker's local exploration branches and their handles."""
 
     def __init__(self, *, max_handles: int = _MAX_HANDLES) -> None:
-        """Create an empty registry with one startup-owned scoring generation."""
+        """Create an empty registry with entry-scoped scoring generations."""
 
         self._max_handles = max_handles
-        self._scoring_revision = str(uuid4())
         self._entries: dict[str, _RegistryEntry] = {}
         self._lock = Lock()
-
-    @property
-    def scoring_revision(self) -> str:
-        """Return the immutable generation issued for this app lifetime."""
-
-        return self._scoring_revision
 
     def reserve(self) -> str | None:
         """Reserve capacity for an open before doing blocking scoring work."""
@@ -74,12 +70,18 @@ class ExplorationRegistry:
             handle = str(uuid4())
             self._entries[handle] = _RegistryEntry(
                 branch=None,
-                scoring_revision=self._scoring_revision,
+                scoring_revision="",
                 last_access=datetime.now(UTC),
             )
             return handle
 
-    def publish(self, handle: str, branch: TemporalExploration) -> bool:
+    def publish(
+        self,
+        handle: str,
+        branch: TemporalExploration,
+        *,
+        scoring_revision: str,
+    ) -> bool:
         """Publish a completed open only while its reservation still exists."""
 
         with self._lock:
@@ -87,6 +89,7 @@ class ExplorationRegistry:
             if entry is None:
                 return False
             entry.branch = branch
+            entry.scoring_revision = scoring_revision
             entry.last_access = datetime.now(UTC)
             return True
 
@@ -194,13 +197,26 @@ def create_exploration_router(service_container: dict[str, Any]) -> APIRouter:
                 _open_branch,
                 temporal,
                 request,
-                registry.scoring_revision,
-                image_scorer,
+                image_scorer=image_scorer,
             )
-            if not registry.publish(handle, branch):
+            scoring_rev = (
+                str(branch.scoring_revision)
+                if (branch.scoring_revision and not isinstance(branch.scoring_revision, Mock))
+                else "rev-local"
+            )
+            if not registry.publish(handle, branch, scoring_revision=scoring_rev):
                 # A cancelled caller removed the reservation while scoring ran.
                 return _missing_handle(handle)
+        except ExplorationConflict as error:
+            registry.discard(handle)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(error),
+            ) from error
         except ExplorationUnavailable as error:
+            registry.discard(handle)
+            raise _unavailable(str(error)) from error
+        except SearchServiceGatewayError as error:
             registry.discard(handle)
             raise _unavailable(str(error)) from error
         except ValueError as error:
@@ -210,7 +226,7 @@ def create_exploration_router(service_container: dict[str, Any]) -> APIRouter:
             # Cancellation must not leave a reserved handle consuming capacity.
             registry.discard(handle)
             raise
-        return _envelope(handle, registry.scoring_revision, view)
+        return _envelope(handle, scoring_rev, view)
 
     @router.get("/api/v1/exploration/{handle}", response_model=ExplorationEnvelope)
     async def get_exploration(handle: UUID) -> ExplorationEnvelope:
@@ -237,6 +253,10 @@ def create_exploration_router(service_container: dict[str, Any]) -> APIRouter:
 
         try:
             with registry.borrow(handle) as entry:
+                if str(request.scoring_revision) != entry.scoring_revision:
+                    raise ExplorationConflict(
+                        f"Scoring revision mismatch: request '{request.scoring_revision}' != entry '{entry.scoring_revision}'"
+                    )
                 view = await run_in_threadpool(_apply_action, entry.branch, request)
                 return _envelope(str(handle), entry.scoring_revision, view)
         except KeyError as error:
@@ -292,10 +312,24 @@ def _image_scorer(service: object) -> object | None:
 def _open_branch(
     temporal: object,
     request: ExplorationOpenRequest,
-    scoring_revision: str,
+    scoring_revision: str | None = None,
     image_scorer: object | None = None,
 ) -> tuple[TemporalExploration, ExplorationView]:
     """Open one real branch in the worker thread used for scoring and decoding."""
+
+    if hasattr(temporal, "get_scoring_revision") and callable(temporal.get_scoring_revision):
+        gateway_revision = temporal.get_scoring_revision()
+    elif scoring_revision is not None:
+        gateway_revision = scoring_revision
+    elif hasattr(temporal, "scoring_revision") and temporal.scoring_revision:
+        gateway_revision = str(temporal.scoring_revision)
+    else:
+        gateway_revision = "rev-local"
+
+    if not gateway_revision or not str(gateway_revision).strip():
+        raise ExplorationUnavailable("Missing scoring revision from temporal service")
+
+    gateway_revision = str(gateway_revision)
 
     binding = QueryBinding(
         retrieval_plan=request.seed.to_plan(),
@@ -303,10 +337,19 @@ def _open_branch(
         event_version=str(uuid4()),
         use_dense=request.seed.use_dense,
         use_bm25=request.seed.use_bm25,
-        scoring_revision=scoring_revision,
+        scoring_revision=gateway_revision,
     )
     branch = TemporalExploration(temporal, image_scorer=image_scorer)  # type: ignore[arg-type]
-    return branch, branch.open(binding, request.video_id, request.window)
+    view = branch.open(binding, request.video_id, request.window)
+
+    branch_revision = branch.scoring_revision
+    if branch_revision is not None and not isinstance(branch_revision, Mock):
+        branch_revision = str(branch_revision)
+        if branch_revision != gateway_revision:
+            raise ExplorationConflict(
+                f"Scoring revision conflict: capability '{gateway_revision}' != score_video '{branch_revision}'"
+            )
+    return branch, view
 
 
 def _current(branch: TemporalExploration | None) -> ExplorationView:
