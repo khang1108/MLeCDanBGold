@@ -47,33 +47,45 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .event-trail-exit-btn,
 .event-trail-exit-top-btn {
   height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.2px;
   border-radius: 5px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #1e293b;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: 1px solid #dc2626;
+  color: #ffffff;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.25);
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
 }
 
 .event-trail-exit-btn:hover,
 .event-trail-exit-top-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-  color: #0f172a;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  border-color: #b91c1c;
+  color: #ffffff;
+  box-shadow: 0 2px 5px rgba(220, 38, 38, 0.35);
+  transform: translateY(-1px);
+}
+
+.event-trail-exit-btn:active,
+.event-trail-exit-top-btn:active {
+  background: #b91c1c;
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2);
 }
 
 .event-trail-back-btn {

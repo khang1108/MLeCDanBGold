@@ -187,16 +187,16 @@ describe('EventTrailPanel', () => {
 
     expect(screen.getByText(/No valid path remains in this video/i)).toBeTruthy();
 
-    // Undo and Back remain clickable
+    // Undo and Exit remain clickable
     const undoBtn = screen.getByRole('button', { name: /^undo$/i });
-    const backBtn = screen.getByRole('button', { name: /back to results/i });
+    const exitBtn = screen.getByRole('button', { name: /^exit$/i });
     expect(undoBtn.disabled).toBe(false);
-    expect(backBtn.disabled).toBe(false);
+    expect(exitBtn.disabled).toBe(false);
 
     fireEvent.click(undoBtn);
     expect(onUndo).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(backBtn);
+    fireEvent.click(exitBtn);
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
@@ -266,7 +266,7 @@ describe('EventTrailPanel', () => {
     expect(onSelectEvent).toHaveBeenCalledWith('E1');
   });
 
-  test('Exit EventTrail button triggers onExitTrail', () => {
+  test('Exit button triggers onExitTrail', () => {
     const onExitTrail = jest.fn();
     render(
       <EventTrailPanel
@@ -277,7 +277,7 @@ describe('EventTrailPanel', () => {
       />
     );
 
-    const exitBtn = screen.getByRole('button', { name: /exit eventtrail/i });
+    const exitBtn = screen.getByRole('button', { name: /^exit$/i });
     expect(exitBtn).toBeTruthy();
     fireEvent.click(exitBtn);
     expect(onExitTrail).toHaveBeenCalledTimes(1);

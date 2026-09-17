@@ -657,7 +657,7 @@ test('Exit EventTrail button calls eventTrail.close', () => {
     />,
   );
 
-  const exitButtons = screen.getAllByRole('button', { name: /exit eventtrail/i });
+  const exitButtons = screen.getAllByRole('button', { name: /^exit$/i });
   expect(exitButtons.length).toBeGreaterThanOrEqual(1);
 
   fireEvent.click(exitButtons[0]);

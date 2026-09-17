@@ -62,24 +62,14 @@ const EventTrailPanel = ({
           )}
         </div>
         <div className="event-trail-header-actions">
-          {onExitTrail && (
+          {(onExitTrail || onBack) && (
             <button
               type="button"
-              className="btn-secondary btn-sm event-trail-exit-btn"
-              onClick={onExitTrail}
+              className="btn-danger btn-sm event-trail-exit-btn"
+              onClick={() => (onExitTrail ? onExitTrail() : onBack?.())}
               title="Exit EventTrail and return to Frame Inspector"
             >
-              Exit EventTrail
-            </button>
-          )}
-          {onBack && (
-            <button
-              type="button"
-              className="btn-secondary btn-sm event-trail-back-btn"
-              onClick={onBack}
-              title="Close popup and return to results"
-            >
-              Back to results
+              Exit
             </button>
           )}
         </div>
@@ -93,7 +83,7 @@ const EventTrailPanel = ({
 
       {isExhausted && (
         <div className="event-trail-exhausted-banner" role="alert">
-          <strong>No valid path remains in this video.</strong> Use Undo or Back to results to recover.
+          <strong>No valid path remains in this video.</strong> Use Undo or Exit to recover.
         </div>
       )}
 

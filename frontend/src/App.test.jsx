@@ -410,9 +410,9 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
   fireEvent.click(openTrailBtn2);
   await screen.findByRole('region', { name: /eventtrail exploration/i });
 
-  // Click 'Back to results' -> explicitly closes trail and modal
-  const backBtn = screen.getByRole('button', { name: /back to results/i });
-  fireEvent.click(backBtn);
+  // Click 'Exit' -> explicitly closes trail
+  const exitBtn = screen.getByRole('button', { name: /^exit$/i });
+  fireEvent.click(exitBtn);
   await waitFor(() => {
     expect(closeEventTrail).toHaveBeenCalledWith('trail_2', { expectedTrailRevision: 0 });
     expect(screen.queryByRole('region', { name: /eventtrail exploration/i })).toBeNull();
