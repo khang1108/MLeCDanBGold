@@ -44,7 +44,7 @@
 
 .modal-bottom-alignment-section {
   flex: 0 0 auto;
-  max-height: 390px;
+  max-height: 420px;
   background-color: var(--color-surface, #ffffff);
   border-top: 1px solid var(--color-hairline, #e2e8f0);
   display: flex;
@@ -722,7 +722,7 @@
   padding: 12px 16px;
   margin: 0;
   list-style: none;
-  max-height: 340px;
+  max-height: 370px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -787,8 +787,11 @@
 .alignment-accordion.always-open .alignment-thumbnail {
   grid-area: thumb;
   width: 100%;
+  height: auto;
   aspect-ratio: 16 / 9;
-  max-height: 240px;
+  min-height: 180px;
+  max-height: 280px;
+  display: block;
   border-radius: 8px;
   object-fit: cover;
   border: 1px solid #cbd5e1;
