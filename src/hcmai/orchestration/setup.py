@@ -19,6 +19,7 @@ from hcmai.common.environment import load_repository_environment
 from hcmai.common.utils.logging import get_logger
 from hcmai.inference import LLMClient, load_llm_endpoint
 from hcmai.kis.assets import KISImageAssetStore
+from hcmai.kis.feedback.resolver import FeedbackResolver
 from hcmai.kis.resolver import KISIntentResolver
 from hcmai.kis.rewriter import KISGlobalRewriter
 from hcmai.kis.scoped_resolver import KISScopedResolver
@@ -63,6 +64,7 @@ def load_search_service(messages: list[str]) -> SearchService:
     intent_resolver = _load_intent_resolver(messages, llm=llm_client)
     scoped_resolver = _load_scoped_resolver(messages, llm=llm_client)
     global_rewriter = _load_global_rewriter(messages, llm=llm_client)
+    feedback_resolver = _load_feedback_resolver(messages, llm=llm_client)
     kis_image_assets = load_kis_image_assets(settings, messages)
 
     literal_text = LiteralTextIndex(corpus) if corpus is not None else None
@@ -104,6 +106,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         intent_resolver=intent_resolver,
         scoped_resolver=scoped_resolver,
         global_rewriter=global_rewriter,
+        feedback_resolver=feedback_resolver,
         kis_image_assets=kis_image_assets,
     )
 
@@ -194,6 +197,17 @@ def _load_global_rewriter(
         messages.append("KIS global rewriter unavailable: LLM client not configured")
         return None
     return KISGlobalRewriter(llm)
+
+
+def _load_feedback_resolver(
+    messages: list[str],
+    llm: LLMClient | None = None,
+) -> FeedbackResolver | None:
+    """Construct KIS chat feedback resolver using the shared LLM client."""
+    if llm is None:
+        messages.append("KIS feedback resolver unavailable: LLM client not configured")
+        return None
+    return FeedbackResolver(llm)
 
 
 def load_kis_image_assets(

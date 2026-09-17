@@ -111,6 +111,7 @@ class SearchService:
         intent_resolver: KISIntentResolver | None = None,
         scoped_resolver: KISScopedResolver | None = None,
         global_rewriter: KISGlobalRewriter | None = None,
+        feedback_resolver: Any | None = None,
         kis_image_assets: KISImageAssetStore | None = None,
         event_trail_settings: EventTrailSettings | None = None,
         *,
@@ -132,6 +133,7 @@ class SearchService:
         self.intent_resolver = intent_resolver
         self.scoped_resolver = scoped_resolver
         self.global_rewriter = global_rewriter
+        self.feedback_resolver = feedback_resolver
         self.kis_image_assets = kis_image_assets
         self.remote_retrieval = remote_retrieval
         self.event_trail_settings = event_trail_settings or EventTrailSettings.from_env()
