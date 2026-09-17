@@ -44,7 +44,7 @@
 
 .modal-bottom-alignment-section {
   flex: 0 0 auto;
-  max-height: 220px;
+  max-height: 255px;
   background-color: var(--color-surface, #ffffff);
   border-top: 1px solid var(--color-hairline, #e2e8f0);
   display: flex;
@@ -715,21 +715,21 @@
 .alignment-accordion.always-open .alignment-accordion-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
+  gap: 10px 14px;
   padding: 10px 14px;
   margin: 0;
   list-style: none;
-  max-height: 180px;
+  max-height: 205px;
   overflow-y: auto;
 }
 
 .alignment-accordion.always-open .alignment-accordion-row {
   display: grid;
-  grid-template-columns: auto 54px minmax(0, 1fr) auto;
+  grid-template-columns: auto 136px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 8px;
   border: 1px solid var(--color-hairline, #e2e8f0);
   background-color: var(--color-canvas-soft, #f8fafc);
   transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -738,7 +738,7 @@
 .alignment-accordion.always-open .alignment-accordion-row:hover {
   background-color: #f1f5f9;
   border-color: var(--color-primary, #2563eb);
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12);
 }
 
 .alignment-accordion.always-open .alignment-event-label {
@@ -746,41 +746,64 @@
   font-weight: 700;
   color: #1e40af;
   background-color: #dbeafe;
-  padding: 2px 6px;
+  padding: 3px 6px;
   border-radius: 4px;
+  white-space: nowrap;
+  align-self: center;
 }
 
 .alignment-accordion.always-open .alignment-thumbnail {
-  width: 52px;
-  height: 34px;
-  border-radius: 4px;
+  width: 136px;
+  height: 76px;
+  min-width: 136px;
+  border-radius: 6px;
   object-fit: cover;
   border: 1px solid #cbd5e1;
+  background-color: #0f172a;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.alignment-accordion.always-open .alignment-accordion-row:hover .alignment-thumbnail {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
 }
 
 .alignment-accordion.always-open .alignment-event-text {
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.35;
   color: var(--color-ink, #1e293b);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
   font-weight: 500;
 }
 
 .alignment-accordion.always-open .alignment-timestamp {
-  font-size: 11px;
+  font-size: 10.5px;
   font-family: monospace;
   font-weight: 600;
   color: var(--color-primary, #2563eb);
   background: transparent;
   border: 1px solid rgba(37, 99, 235, 0.25);
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 3px 7px;
   cursor: pointer;
   transition: background-color 0.12s ease;
   white-space: nowrap;
+  align-self: center;
 }
 
 .alignment-accordion.always-open .alignment-timestamp:hover {
   background-color: rgba(37, 99, 235, 0.1);
+}
+
+@media (max-width: 960px) {
+  .alignment-accordion.always-open .alignment-accordion-list {
+    grid-template-columns: 1fr;
+  }
 }
