@@ -21,11 +21,31 @@
   flex-direction: column;
   width: min(92vw, 1340px);
   max-width: 1340px;
-  height: min(88vh, 880px);
+  height: min(90vh, 920px);
   border-radius: var(--rounded-lg);
-  overflow: hidden; /* Keep ImageModal size fixed */
+  overflow-y: auto; /* Entire pop up scrolls vertically */
+  overflow-x: hidden;
   background-color: #141414; /* Dark viewer base */
   border: 1px solid var(--color-hairline);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.modal-card.split-layout::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal-card.split-layout::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.modal-card.split-layout::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 4px;
+}
+
+.modal-card.split-layout::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .modal-frame-stack > .modal-card.split-layout {
@@ -36,20 +56,20 @@
 .modal-main-stage {
   display: flex;
   flex-direction: row;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  height: 600px; /* Video player retains full original size */
+  min-height: 560px;
   width: 100%;
   overflow: hidden;
 }
 
 .modal-bottom-alignment-section {
   flex: 0 0 auto;
-  max-height: 290px;
   background-color: var(--color-surface, #ffffff);
   border-top: 1px solid var(--color-hairline, #e2e8f0);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .modal-bottom-alignment-section .alignment-accordion.always-open {
@@ -716,33 +736,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 14px;
-  padding: 10px 14px;
+  padding: 12px 16px 16px;
   margin: 0;
   list-style: none;
-  max-height: 240px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(37, 99, 235, 0.4) rgba(0, 0, 0, 0.05);
-  scroll-behavior: smooth;
-}
-
-.alignment-accordion.always-open .alignment-accordion-list::-webkit-scrollbar {
-  width: 7px;
-}
-
-.alignment-accordion.always-open .alignment-accordion-list::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 4px;
-}
-
-.alignment-accordion.always-open .alignment-accordion-list::-webkit-scrollbar-thumb {
-  background: rgba(37, 99, 235, 0.35);
-  border-radius: 4px;
-}
-
-.alignment-accordion.always-open .alignment-accordion-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(37, 99, 235, 0.6);
+  overflow: visible;
 }
 
 .alignment-accordion.always-open .alignment-accordion-row {
