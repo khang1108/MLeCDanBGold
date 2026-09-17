@@ -31,9 +31,9 @@ from hcmai.orchestration.retrieval_setup import (
     select_visual_retriever,
 )
 from hcmai.retrieval.evidence.literal import LiteralTextIndex
-from hcmai.retrieval_service.client import RetrievalGrpcClient
-from hcmai.retrieval_service.config import RetrievalClientSettings
-from hcmai.retrieval_service.remote import (
+from hcmai.retrieval.serving.client import RetrievalHttpClient
+from hcmai.retrieval.serving.utils.config import RetrievalClientSettings
+from hcmai.retrieval.serving.remote import (
     RemoteImageSearchService,
     RemoteTemporalSearchService,
 )
@@ -74,7 +74,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         )
 
     client_settings = RetrievalClientSettings.from_env()
-    client = RetrievalGrpcClient(client_settings)
+    client = RetrievalHttpClient(client_settings)
     probe_status = client.probe()
     if not probe_status.ready:
         messages.append(
@@ -205,8 +205,10 @@ def load_kis_image_assets(
     Returns None only when storage initialisation fails; the store directory
     is created on first write so a missing directory at startup is not an error.
     """
+    storage_dir = resolve_repository_path(settings.api.kis_query_asset_dir)
+    if not storage_dir.is_dir():
+        return None
     try:
-        storage_dir = resolve_repository_path(settings.api.kis_query_asset_dir)
         store = KISImageAssetStore(
             storage_dir,
             max_upload_bytes=settings.api.image_max_upload_bytes,

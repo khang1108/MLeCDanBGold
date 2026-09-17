@@ -19,6 +19,8 @@ class ModelEndpointConfig:
     api_key: str | None = None
     model: str = ""
     timeout_seconds: float = 30.0
+    enable_thinking: bool | None = None
+    max_tokens: int | None = None
 
 
 def _load(prefix: str, *, default_timeout: float = 30.0) -> ModelEndpointConfig:
@@ -46,11 +48,29 @@ def _load(prefix: str, *, default_timeout: float = 30.0) -> ModelEndpointConfig:
     if timeout <= 0:
         raise ValueError(f"HCMAI_{prefix}_TIMEOUT_SECONDS must be positive")
 
+    enable_thinking_str = os.getenv(f"HCMAI_{prefix}_ENABLE_THINKING")
+    if enable_thinking_str is not None:
+        enable_thinking: bool | None = enable_thinking_str.strip().lower() in ("true", "1", "yes")
+    elif any(kw in model.lower() for kw in ("qwen", "deepseek")):
+        enable_thinking = False
+    else:
+        enable_thinking = None
+
+    max_tokens_str = os.getenv(f"HCMAI_{prefix}_MAX_TOKENS")
+    max_tokens: int | None = None
+    if max_tokens_str is not None:
+        try:
+            max_tokens = int(max_tokens_str)
+        except ValueError as exc:
+            raise ValueError(f"HCMAI_{prefix}_MAX_TOKENS must be a valid integer") from exc
+
     return ModelEndpointConfig(
         base_url=base_url,
         api_key=api_key,
         model=model,
         timeout_seconds=timeout,
+        enable_thinking=enable_thinking,
+        max_tokens=max_tokens,
     )
 
 

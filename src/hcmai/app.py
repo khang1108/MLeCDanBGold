@@ -178,7 +178,7 @@ def create_app(
     ]
     cors_origin_regex = os.getenv(
         "HCMAI_CORS_ORIGIN_REGEX",
-        r"^https?://(localhost|127\.0\.0\.1|(.+\.)?iamphuckhang\.dev|(.+\.)?iamphuckhnag\.dev)(:\d+)?$",
+        r"^https?://(localhost|127\.0\.0\.1|(.+\.)?iamphuckhang\.dev|(.+\.)?iamphuckhang\.dev)(:\d+)?$",
     )
 
     app.add_middleware(

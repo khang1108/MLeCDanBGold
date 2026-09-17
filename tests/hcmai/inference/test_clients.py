@@ -84,6 +84,8 @@ def test_llm_client_preserves_json_schema_payload() -> None:
     endpoint = ModelEndpointConfig(
         base_url="https://api.example/v1",
         model="Qwen/Qwen3-4B",
+        enable_thinking=False,
+        max_tokens=4096,
     )
     transport = FakeTransport(
         response_data={
@@ -98,9 +100,27 @@ def test_llm_client_preserves_json_schema_payload() -> None:
     assert len(transport.calls) == 1
     payload = transport.calls[0].payload
     assert payload["model"] == "Qwen/Qwen3-4B"
+    assert payload["max_tokens"] == 4096
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["name"] == "SampleResponse"
     assert "properties" in payload["response_format"]["json_schema"]["schema"]
+
+
+def test_llm_client_reports_length_exceeded_clearly() -> None:
+    """Verify finish_reason='length' produces a clear, actionable error."""
+    endpoint = ModelEndpointConfig(base_url="https://api.example/v1", model="Qwen/Qwen3-4B")
+    transport = FakeTransport(
+        response_data={
+            "choices": [
+                {"finish_reason": "length", "message": {"content": "", "reasoning_content": "rambling..."}}
+            ]
+        }
+    )
+    client = LLMClient(endpoint, transport=transport)
+    with pytest.raises(InferenceResponseError) as exc_info:
+        client.generate_structured([{"role": "user", "content": "hi"}], SampleResponse)
+    assert "finish_reason='length'" in str(exc_info.value)
 
 
 def test_llm_client_maps_invalid_content_to_response_error() -> None:

@@ -135,10 +135,31 @@ class LiteralTextIndex:
         if not corpus.has_object_counts():
             return tuple({} for _ in self.frames)
 
-        return tuple(
-            self._normalize_object_counts(corpus.object_counts(frame.frame_id))
-            for frame in self.frames
-        )
+        label_cache: dict[str, str] = {}
+
+        def get_normalized_label(raw: str) -> str:
+            if raw not in label_cache:
+                arr = normalize_literal_text(pa.array([raw]))
+                label_cache[raw] = arr[0].as_py() or ""
+            return label_cache[raw]
+
+        projections: list[dict[str, int]] = []
+        for frame in self.frames:
+            counts = corpus.object_counts(frame.frame_id)
+            if not counts:
+                projections.append({})
+                continue
+            normalized_counts: dict[str, int] = {}
+            for raw_label, count in counts.items():
+                normalized_label = get_normalized_label(str(raw_label))
+                if not normalized_label:
+                    continue
+                normalized_counts[normalized_label] = (
+                    normalized_counts.get(normalized_label, 0) + int(count)
+                )
+            projections.append(normalized_counts)
+
+        return tuple(projections)
 
     @staticmethod
     def _normalize_object_counts(

@@ -43,7 +43,7 @@ class LLMClient:
         response_model: type[T],
         *,
         temperature: float = 0.0,
-        max_tokens: int = 2048,
+        max_tokens: int | None = None,
     ) -> T:
         """Send the response schema and validate the returned JSON locally.
 
@@ -69,11 +69,12 @@ class LLMClient:
         if self._endpoint.api_key:
             headers["Authorization"] = f"Bearer {self._endpoint.api_key}"
 
+        tokens_budget = max_tokens or self._endpoint.max_tokens or 4096
         payload: dict[str, Any] = {
             "model": self._endpoint.model,
             "messages": list(messages),
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            "max_tokens": tokens_budget,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
@@ -82,6 +83,8 @@ class LLMClient:
                 },
             },
         }
+        if self._endpoint.enable_thinking is not None:
+            payload["chat_template_kwargs"] = {"enable_thinking": self._endpoint.enable_thinking}
 
         data = self._transport.post_json(
             url,
@@ -94,8 +97,16 @@ class LLMClient:
         if not choices:
             raise InferenceResponseError(f"OpenAI completion returned empty choices: {data}")
 
-        content = choices[0].get("message", {}).get("content")
+        choice = choices[0]
+        content = choice.get("message", {}).get("content")
         if not content:
+            finish_reason = choice.get("finish_reason")
+            if finish_reason == "length":
+                raise InferenceResponseError(
+                    f"OpenAI completion exceeded max_tokens limit ({tokens_budget}) before producing content "
+                    f"(finish_reason='length', model={self._endpoint.model!r}). "
+                    "Set HCMAI_LLM_ENABLE_THINKING=false or increase HCMAI_LLM_MAX_TOKENS."
+                )
             raise InferenceResponseError(f"OpenAI completion message content was empty: {data}")
 
         try:

@@ -18,16 +18,71 @@ import pandas as pd
 from hcmai.corpus.models import VideoMetadata
 
 
-@dataclass(frozen=True)
 class ObjectCountsRecord:
     """One object-count projection retaining canonical frame alignment."""
 
-    frame_id: str
-    video_id: str
-    frame_idx: int
-    timestamp_ms: int
-    counts: dict[str, int]
-    status: str
+    __slots__ = (
+        "frame_id",
+        "video_id",
+        "frame_idx",
+        "timestamp_ms",
+        "_counts_raw",
+        "status",
+        "_counts_cache",
+        "artifact_path",
+    )
+
+    def __init__(
+        self,
+        frame_id: str,
+        video_id: str,
+        frame_idx: int,
+        timestamp_ms: int,
+        counts: dict[str, int] | str,
+        status: str,
+        artifact_path: Path | None = None,
+    ) -> None:
+        self.frame_id = frame_id
+        self.video_id = video_id
+        self.frame_idx = frame_idx
+        self.timestamp_ms = timestamp_ms
+        self.status = status
+        self.artifact_path = artifact_path
+        if isinstance(counts, dict):
+            self._counts_raw = None
+            self._counts_cache = counts
+        else:
+            self._counts_raw = counts
+            self._counts_cache = None
+
+    @property
+    def counts(self) -> dict[str, int]:
+        if self._counts_cache is not None:
+            return self._counts_cache
+        parsed = _object_counts(
+            self._counts_raw, self.artifact_path or Path("<object_counts>")
+        )
+        self._counts_cache = parsed
+        return parsed
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ObjectCountsRecord):
+            return False
+        return (
+            self.frame_id == other.frame_id
+            and self.video_id == other.video_id
+            and self.frame_idx == other.frame_idx
+            and self.timestamp_ms == other.timestamp_ms
+            and self.status == other.status
+            and self.counts == other.counts
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"ObjectCountsRecord(frame_id={self.frame_id!r}, "
+            f"video_id={self.video_id!r}, frame_idx={self.frame_idx}, "
+            f"timestamp_ms={self.timestamp_ms}, status={self.status!r})"
+        )
 
 
 def _non_blank_text(value: object) -> str | None:
@@ -74,7 +129,7 @@ class ObjectCountsStore:
             raise FileNotFoundError(
                 f"Object counts artifact does not exist: {self.artifact_path}"
             )
-        table = pd.read_parquet(self.artifact_path).astype(object)
+        table = pd.read_parquet(self.artifact_path)
         required = {
             "frame_id",
             "video_id",
@@ -89,54 +144,47 @@ class ObjectCountsStore:
                 f"{self.artifact_path} is missing columns: {', '.join(missing)}"
             )
 
-        self._records_by_frame_id: dict[str, ObjectCountsRecord] = {}
-        frame_store_ids: set[str] = set()
-        for row in table.where(table.notna(), cast(Any, None)).to_dict(orient="records"):
-            frame_id = _non_blank_text(row["frame_id"])
-            video_id = _non_blank_text(row["video_id"])
-            if frame_id is None or video_id is None:
+        fids = table["frame_id"].tolist()
+        vids = table["video_id"].tolist()
+        fidxs = table["frame_idx"].tolist()
+        tss = table["timestamp_ms"].tolist()
+        counts_jsons = table["counts_json"].tolist()
+        statuses = table["status"].tolist()
+
+        if "frame_store_id" in table.columns:
+            fs_ids = table["frame_store_id"].dropna().unique().tolist()
+            if len(fs_ids) > 1:
                 raise ValueError(
-                    f"Object counts identity is missing in {self.artifact_path}"
+                    f"Object counts use multiple frame_store_id values in "
+                    f"{self.artifact_path}"
                 )
-            frame_idx = row["frame_idx"]
-            timestamp_ms = row["timestamp_ms"]
-            if (
-                isinstance(frame_idx, bool)
-                or not isinstance(frame_idx, int)
-                or frame_idx < 0
-                or isinstance(timestamp_ms, bool)
-                or not isinstance(timestamp_ms, int)
-                or timestamp_ms < 0
-            ):
-                raise ValueError(
-                    f"Object counts coordinate is invalid in {self.artifact_path}"
-                )
-            status = row["status"]
-            if status not in {"pending", "processing", "completed", "failed"}:
-                raise ValueError(
-                    f"Object counts status is invalid in {self.artifact_path}"
-                )
-            if frame_id in self._records_by_frame_id:
-                raise ValueError(
-                    f"Duplicate frame_id {frame_id!r} in {self.artifact_path}"
-                )
-            frame_store_id = _non_blank_text(row.get("frame_store_id"))
-            if frame_store_id is not None:
-                frame_store_ids.add(frame_store_id)
-            self._records_by_frame_id[frame_id] = ObjectCountsRecord(
-                frame_id=frame_id,
-                video_id=video_id,
-                frame_idx=frame_idx,
-                timestamp_ms=timestamp_ms,
-                counts=_object_counts(row["counts_json"], self.artifact_path),
-                status=status,
+            self.frame_store_id = fs_ids[0] if fs_ids else None
+        else:
+            self.frame_store_id = None
+
+        records = [
+            ObjectCountsRecord(
+                frame_id=fid,
+                video_id=vid,
+                frame_idx=int(fidx),
+                timestamp_ms=int(ts),
+                counts=cj,
+                status=st,
+                artifact_path=self.artifact_path,
             )
-        if len(frame_store_ids) > 1:
-            raise ValueError(
-                f"Object counts use multiple frame_store_id values in "
-                f"{self.artifact_path}"
+            for fid, vid, fidx, ts, cj, st in zip(
+                fids, vids, fidxs, tss, counts_jsons, statuses
             )
-        self.frame_store_id = next(iter(frame_store_ids), None)
+        ]
+        self._records_by_frame_id = {r.frame_id: r for r in records}
+        if len(self._records_by_frame_id) != len(records):
+            seen = set()
+            for r in records:
+                if r.frame_id in seen:
+                    raise ValueError(
+                        f"Duplicate frame_id {r.frame_id!r} in {self.artifact_path}"
+                    )
+                seen.add(r.frame_id)
 
     def get_counts(self, frame_id: str) -> dict[str, int] | None:
         """Return completed counts, preserving empty results and missing status."""
