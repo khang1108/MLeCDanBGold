@@ -34,6 +34,21 @@ const AlignmentAccordion = ({
     && events.length === timestampsMs?.length
   );
 
+  const [previewFrame, setPreviewFrame] = useState(null);
+
+  React.useEffect(() => {
+    if (!previewFrame) return;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setPreviewFrame(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [previewFrame]);
+
   if (!hasAlignment) return null;
 
   const toggle = (event) => {
@@ -74,12 +89,29 @@ const AlignmentAccordion = ({
               style={{ cursor: onSeek ? 'pointer' : 'default' }}
             >
               <span className="alignment-event-label">E{index + 1}</span>
-              <img
-                className="alignment-thumbnail"
-                src={keyframeUrl(frameIds[index])}
-                alt={`Aligned frame ${frameIds[index]}`}
-                loading="lazy"
-              />
+              <div
+                className="alignment-thumbnail-wrapper"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewFrame({
+                    frameId: frameIds[index],
+                    eventText: typeof event === 'string' ? event : event?.text || `Event ${index + 1}`,
+                    timestampMs: timestampsMs[index],
+                    eventLabel: `E${index + 1}`,
+                  });
+                }}
+                title="Click to preview keyframe in popup"
+              >
+                <img
+                  className="alignment-thumbnail"
+                  src={keyframeUrl(frameIds[index])}
+                  alt={`Aligned frame ${frameIds[index]}`}
+                  loading="lazy"
+                />
+                <div className="alignment-thumbnail-zoom-hint" aria-hidden="true">
+                  <span>🔍</span>
+                </div>
+              </div>
               <span
                 className="alignment-event-text"
                 title={typeof event === 'string' ? event : event?.text || ''}
@@ -104,6 +136,59 @@ const AlignmentAccordion = ({
             </li>
           ))}
         </ol>
+      )}
+      {previewFrame && (
+        <div
+          className="alignment-preview-overlay"
+          onClick={() => setPreviewFrame(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Keyframe preview"
+        >
+          <div
+            className="alignment-preview-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="alignment-preview-header">
+              <div className="alignment-preview-title-group">
+                <span className="alignment-event-label">{previewFrame.eventLabel}</span>
+                <span className="alignment-preview-title">Keyframe Preview</span>
+              </div>
+              <button
+                type="button"
+                className="alignment-preview-close-btn"
+                onClick={() => setPreviewFrame(null)}
+                aria-label="Close preview"
+              >
+                ×
+              </button>
+            </div>
+            <div className="alignment-preview-body">
+              <img
+                src={keyframeUrl(previewFrame.frameId)}
+                alt={`Keyframe preview ${previewFrame.frameId}`}
+                className="alignment-preview-image"
+              />
+            </div>
+            <div className="alignment-preview-footer">
+              <p className="alignment-preview-caption">
+                {previewFrame.eventText}
+              </p>
+              {onSeek && Number.isFinite(previewFrame.timestampMs) && (
+                <button
+                  type="button"
+                  className="alignment-preview-seek-btn"
+                  onClick={() => {
+                    onSeek(previewFrame.timestampMs);
+                    setPreviewFrame(null);
+                  }}
+                >
+                  ⏱ Tua video ({formatTimestampMs(previewFrame.timestampMs)})
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
