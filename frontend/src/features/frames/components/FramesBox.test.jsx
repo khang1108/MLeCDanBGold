@@ -67,10 +67,10 @@ test("renders GifLoaderOverlay when isLoading is true and results is empty", () 
   );
 
   expect(screen.getByTestId("gif-loader")).toBeTruthy();
-  expect(screen.queryByText("Welcome to HCMAI Frame Search")).toBeNull();
+  expect(screen.queryByTestId("hcmus-copyright-badge")).toBeNull();
 });
 
-test("renders welcome empty state when not loading and no search has occurred", () => {
+test("renders copyright empty state when not loading and no search has occurred", () => {
   render(
     <FramesBox
       results={[]}
@@ -80,7 +80,8 @@ test("renders welcome empty state when not loading and no search has occurred", 
     />,
   );
 
-  expect(screen.getByText("Welcome to HCMAI Frame Search")).toBeTruthy();
+  expect(screen.getByTestId("hcmus-copyright-badge")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: /MLeCDanBGold/ })).toBeTruthy();
   expect(screen.queryByTestId("gif-loader")).toBeNull();
 });
 

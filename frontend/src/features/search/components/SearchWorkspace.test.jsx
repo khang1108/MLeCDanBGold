@@ -1040,13 +1040,13 @@ test('shows gif loader in place of welcome empty state while search is in progre
   searchKis.mockImplementationOnce(() => new Promise((resolve) => { resolveSearch = resolve; }));
 
   renderSearch({ topK: 20, setTopK: jest.fn() });
-  expect(screen.getByText('Welcome to HCMAI Frame Search')).toBeTruthy();
+  expect(screen.getByTestId('hcmus-copyright-badge')).toBeTruthy();
   expect(screen.queryByTestId('gif-loader')).toBeNull();
 
   submit('test search');
 
   expect(await screen.findByTestId('gif-loader')).toBeTruthy();
-  expect(screen.queryByText('Welcome to HCMAI Frame Search')).toBeNull();
+  expect(screen.queryByTestId('hcmus-copyright-badge')).toBeNull();
 
   resolveSearch(mockKisResponse({ queryText: 'test search', revision: 1, results: [frameResult('frame-1')] }));
   expect(await screen.findByAltText('Frame frame-1')).toBeTruthy();
