@@ -74,6 +74,12 @@ const AlignmentAccordion = ({
               style={{ cursor: onSeek ? 'pointer' : 'default' }}
             >
               <span className="alignment-event-label">E{index + 1}</span>
+              <img
+                className="alignment-thumbnail"
+                src={keyframeUrl(frameIds[index])}
+                alt={`Aligned frame ${frameIds[index]}`}
+                loading="lazy"
+              />
               <span
                 className="alignment-event-text"
                 title={typeof event === 'string' ? event : event?.text || ''}
@@ -95,12 +101,6 @@ const AlignmentAccordion = ({
               ) : (
                 <time className="alignment-timestamp">{formatTimestampMs(timestampsMs[index])}</time>
               )}
-              <img
-                className="alignment-thumbnail"
-                src={keyframeUrl(frameIds[index])}
-                alt={`Aligned frame ${frameIds[index]}`}
-                loading="lazy"
-              />
             </li>
           ))}
         </ol>

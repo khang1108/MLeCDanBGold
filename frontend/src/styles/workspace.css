@@ -875,6 +875,8 @@
 }
 
 .kis-chat-sidebar.collapsed {
+  align-self: flex-start;
+  height: auto;
   flex: 0 0 36px;
   width: 36px;
   min-width: 36px;
@@ -991,7 +993,7 @@
 
 .kis-chat-expand-btn:hover {
   background-color: var(--color-surface-hover, #f1f5f9);
-  color: var(--color-ink, #0f172a);
+  color: var(--color-primary, #6366f1);
 }
 
 .kis-chat-expand-btn .sidebar-expand-icon {
@@ -1010,8 +1012,16 @@
 }
 
 .kis-chat-expand-btn .sidebar-expand-arrow {
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-ink-muted, #64748b);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.kis-chat-expand-btn:hover .sidebar-expand-arrow {
+  transform: translateX(-2px);
+  color: var(--color-primary, #6366f1);
 }
 
 .kis-chat-body {

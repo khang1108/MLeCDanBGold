@@ -941,7 +941,22 @@ const SearchWorkspace = ({
             >
               <span className="sidebar-expand-icon">🔍</span>
               <span className="sidebar-expand-text">Search</span>
-              <span className="sidebar-expand-arrow">◂</span>
+              <span className="sidebar-expand-arrow">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="sidebar-arrow-icon"
+                  aria-hidden="true"
+                >
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </span>
             </button>
           ) : (
             <KisPanel
