@@ -64,7 +64,7 @@ const AlignmentAccordion = ({
       className={`alignment-accordion ${!collapsible ? 'always-open' : ''} ${className}`.trim()}
       onClick={(event) => event.stopPropagation()}
     >
-      {collapsible ? (
+      {collapsible && (
         <button
           type="button"
           className="alignment-accordion-toggle"
@@ -73,11 +73,6 @@ const AlignmentAccordion = ({
         >
           Alignment
         </button>
-      ) : (
-        <div className="alignment-accordion-header">
-          <span className="alignment-header-title">Event Alignment</span>
-          <span className="alignment-header-count">{events.length} events</span>
-        </div>
       )}
       {isExpanded && (
         <ol className="alignment-accordion-list">

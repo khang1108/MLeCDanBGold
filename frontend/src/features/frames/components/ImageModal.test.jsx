@@ -264,8 +264,7 @@ test('renders alignment sequence in order and immediately open upon display', ()
     />,
   );
 
-  expect(screen.getByText('Event Alignment')).toBeTruthy();
-  expect(screen.getByText('2 events')).toBeTruthy();
+  expect(screen.queryByText('Event Alignment')).toBeNull();
   expect(screen.getByText('E1')).toBeTruthy();
   expect(screen.getByText('hold')).toBeTruthy();
   expect(screen.getByText('00:01.200')).toBeTruthy();
