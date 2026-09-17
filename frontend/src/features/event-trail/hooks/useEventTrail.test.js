@@ -299,6 +299,25 @@ describe('useEventTrail', () => {
     );
   });
 
+  test('SNAPSHOT_NOT_FOUND on open sets restart/expired search prompt', async () => {
+    const snapshotNotFoundError = new Error('Snapshot not found');
+    snapshotNotFoundError.code = 'SNAPSHOT_NOT_FOUND';
+    snapshotNotFoundError.status = 404;
+    openEventTrail.mockRejectedValueOnce(snapshotNotFoundError);
+
+    const { result } = renderHook(() => useEventTrail());
+
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_missing', resultId: 'r_1', kisRevision: 2 });
+    });
+
+    expect(result.current.session).toBeNull();
+    expect(result.current.error).toContain(
+      'EventTrail snapshot not found (server was restarted or search expired). Please rerun the search.'
+    );
+  });
+
+
   test('late open response from superseded branch is cleaned up and ignored', async () => {
     const slowOpen = deferred();
     const fastOpen = deferred();

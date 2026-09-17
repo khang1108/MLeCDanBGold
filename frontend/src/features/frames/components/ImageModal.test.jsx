@@ -323,6 +323,32 @@ test('Step 1: shows Open EventTrail button under inspector when context exists w
   expect(onOpen).toHaveBeenCalledWith(context);
 });
 
+test('shows error banner under launcher button when open error exists without active state', () => {
+  const context = {
+    snapshotId: 'snap_1',
+    resultId: 'r_1',
+    kisRevision: 1,
+    events: [{ id: 'E1', text: 'event 1' }],
+  };
+  render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context,
+        state: null,
+        pending: false,
+        error: 'EventTrail snapshot not found (server was restarted or search expired). Please rerun the search.',
+        open: jest.fn(),
+      }}
+    />,
+  );
+
+  const errorAlert = screen.getByRole('alert');
+  expect(errorAlert).toBeTruthy();
+  expect(errorAlert.textContent).toContain('EventTrail snapshot not found');
+});
+
 test('Step 2: renders EventTrailPanel when state exists; selecting E2 + explore seeks player to candidate', async () => {
   const state = {
     session_id: 'ses_1',

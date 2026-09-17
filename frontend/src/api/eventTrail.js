@@ -70,14 +70,26 @@ export const actOnEventTrail = async (
 
 export const closeEventTrail = async (
   sessionId,
-  expectedTrailRevision,
-  { signal } = {},
+  expectedRevisionOrOptions,
+  options = {},
 ) => {
-  const query = expectedTrailRevision !== undefined
-    ? `?expected_trail_revision=${encodeURIComponent(expectedTrailRevision)}`
+  let revision;
+  let signal;
+  if (typeof expectedRevisionOrOptions === 'number') {
+    revision = expectedRevisionOrOptions;
+    signal = options?.signal;
+  } else if (expectedRevisionOrOptions && typeof expectedRevisionOrOptions === 'object') {
+    revision = expectedRevisionOrOptions.expectedTrailRevision;
+    signal = expectedRevisionOrOptions.signal || options?.signal;
+  } else {
+    signal = options?.signal;
+  }
+  const query = Number.isInteger(revision)
+    ? `?expected_trail_revision=${encodeURIComponent(revision)}`
     : '';
   return requestJson(`/api/v1/event-trail/${encodeURIComponent(sessionId)}${query}`, {
     method: 'DELETE',
     signal,
   });
 };
+

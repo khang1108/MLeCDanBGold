@@ -142,4 +142,21 @@ describe('eventTrail API transport', () => {
       expect.objectContaining({ method: 'DELETE' }),
     );
   });
+
+  test('closeEventTrail supports options object with expectedTrailRevision', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      headers: { get: () => null },
+      json: async () => null,
+    });
+
+    await closeEventTrail('trail_1', { expectedTrailRevision: 3 });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/v1\/event-trail\/trail_1\?expected_trail_revision=3$/),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
 });
+

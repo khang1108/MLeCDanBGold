@@ -116,6 +116,10 @@ export const useEventTrail = () => {
             setError(
               'EventTrail snapshot expired. Rerun the current search to create a fresh snapshot.'
             );
+          } else if (openError?.code === 'SNAPSHOT_NOT_FOUND' || openError?.status === 404) {
+            setError(
+              'EventTrail snapshot not found (server was restarted or search expired). Please rerun the search.'
+            );
           } else {
             setError(openError?.message || 'Failed to open EventTrail');
           }

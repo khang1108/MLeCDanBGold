@@ -447,6 +447,11 @@ const ImageModal = ({
                           </>
                         )}
                       </button>
+                      {eventTrail.error && (
+                        <div className="event-trail-launch-error" role="alert">
+                          {eventTrail.error}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

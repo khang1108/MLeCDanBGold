@@ -824,13 +824,28 @@
 /* ─── EventTrail Launcher in Inspector ─── */
 .event-trail-launch-card {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 10px;
   width: 100%;
   margin-top: 20px;
   padding: 8px 0;
   box-sizing: border-box;
 }
+
+.event-trail-launch-error {
+  max-width: 90%;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
+  text-align: center;
+}
+
 
 .event-trail-open-btn,
 .btn-primary.event-trail-open-btn {
