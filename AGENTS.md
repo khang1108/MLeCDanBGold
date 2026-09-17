@@ -21,9 +21,7 @@ Before executing tasks, **YOU MUST inspect and follow the instructions in the co
 - **Systematic Debugging**: `.agents/skills/systematic-debugging/SKILL.md`
 - **Project Documentation / README**: `.agents/skills/documenter/SKILL.md`
 - **Caveman / Low-Token Mode**: `.agents/skills/caveman/SKILL.md` and `.agents/rules/caveman.md`
-- **Task Execution & Verification**: `.agents/skills/executing-plans/SKILL.md` and `.agents/skills/verification-before-completion/SKILL.md`
-
-Always inspect the relevant `.agents/skills/<skill-name>/SKILL.md` file before generating code or taking action.
+- **Task Execution & Verification**: `.agents/skills/executing-plans/SKILL.md` and `.agents/skills/verification-before-completion/SKILL.md`Always inspect the relevant `.agents/skills/<skill-name>/SKILL.md` file before generating code or taking action.
 
 ---
 
