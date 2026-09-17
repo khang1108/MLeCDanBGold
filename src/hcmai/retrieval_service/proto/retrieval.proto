@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package hcmai.retrieval.v1;
+
+message GetCapabilitiesRequest {}
+
+message GetCapabilitiesResponse {
+  bool ready = 1;
+  string scoring_revision = 2;
+  repeated string active_modalities = 3;
+  repeated string startup_messages = 4;
+  uint32 max_temporal_event_count = 5;
+  uint64 image_max_upload_bytes = 6;
+  uint64 image_max_pixels = 7;
+}
+
+message RetrievalEvent {
+  string event_id = 1;
+  optional string canonical_text = 2;
+  optional string dense_text = 3;
+  optional string bm25_text = 4;
+  repeated string image_asset_ids = 5;
+}
+
+message SearchPlanRequest {
+  repeated RetrievalEvent events = 1;
+  bool use_dense = 2;
+  bool use_bm25 = 3;
+  uint32 top_k = 4;
+}
+
+message SearchEventsRequest {
+  repeated string original_events = 1;
+  repeated string retrieval_events = 2;
+  repeated string caption_events = 3;
+  bool has_caption_events = 4;
+  bool use_dense = 5;
+  bool use_bm25 = 6;
+  uint32 top_k = 7;
+}
+
+message AlignedPath {
+  string video_id = 1;
+  double score = 2;
+  repeated string frame_ids = 3;
+  repeated int64 frame_idxs = 4;
+  repeated int64 timestamps_ms = 5;
+}
+
+message DecoderConfig {
+  double lambda_gap = 1;
+  double event_power = 2;
+  double cluster_delta = 3;
+  int64 path_min_separation_ms = 4;
+}
+
+message VideoScores {
+  uint32 encoding_version = 1;
+  string video_id = 2;
+  repeated string frame_ids = 3;
+  bytes frame_idxs_i64_le = 4;
+  bytes timestamps_ms_i64_le = 5;
+  bytes scores_f32_le = 6;
+  uint32 event_count = 7;
+  uint32 frame_count = 8;
+}
+
+message TemporalSearchResult {
+  repeated AlignedPath paths = 1;
+  double retrieval_ms = 2;
+  double alignment_ms = 3;
+  string scoring_revision = 4;
+}
+
+message TemporalSearchArtifact {
+  TemporalSearchResult result = 1;
+  repeated VideoScores video_scores = 2;
+  DecoderConfig decoder_config = 3;
+}
+
+message ScoreVideoRequest {
+  SearchPlanRequest plan = 1;
+  string video_id = 2;
+}
+
+message SelectedVideoScore {
+  VideoScores video_scores = 1;
+  double retrieval_ms = 2;
+  DecoderConfig decoder_config = 3;
+  string scoring_revision = 4;
+}
+
+message SearchImageRequest {
+  bytes payload = 1;
+  string content_type = 2;
+  uint32 top_k = 3;
+}
+
+message ImageCandidate {
+  string video_id = 1;
+  string frame_id = 2;
+  int64 frame_idx = 3;
+  int64 timestamp_ms = 4;
+  double score = 5;
+}
+
+message ImageSearchCandidates {
+  repeated ImageCandidate candidates = 1;
+  double query_ms = 2;
+  double retrieval_ms = 3;
+}
+
+service RetrievalService {
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+  rpc SearchPlan(SearchPlanRequest) returns (TemporalSearchArtifact);
+  rpc SearchEvents(SearchEventsRequest) returns (TemporalSearchResult);
+  rpc ScoreVideo(ScoreVideoRequest) returns (SelectedVideoScore);
+  rpc SearchImage(SearchImageRequest) returns (ImageSearchCandidates);
+}
