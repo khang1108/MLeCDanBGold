@@ -289,7 +289,7 @@ const SearchWorkspace = ({
     filterTitle,
     filterVideoId,
     invalidateHistorySession,
-    onExplorationInvalidated,
+    notifyEventTrailInvalidated,
     userId,
   ]);
 
@@ -440,7 +440,7 @@ const SearchWorkspace = ({
     handleClearFilter,
     historyIdentity,
     invalidateHistorySession,
-    onExplorationInvalidated,
+    notifyEventTrailInvalidated,
     onQueryChange,
     replayRequest,
   ]);
@@ -625,12 +625,14 @@ const SearchWorkspace = ({
     isCurrentHistorySession,
     isSearching,
     kisSession,
+    notifyEventTrailInvalidated,
     onHistoryRefresh,
     onQueryChange,
     topK,
     useBm25,
     useDense,
     userId,
+    activeQuerySession?.queryId,
   ]);
 
   // Step 7: Search-only rerun when only retrieval controls change
