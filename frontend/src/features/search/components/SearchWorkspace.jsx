@@ -444,6 +444,7 @@ const SearchWorkspace = ({
     setSearchLatencyMs(null);
     handleClearFilter();
     setKisSession(createInitialKisSessionState());
+    setFeedbackSession(createInitialFeedbackSession());
     onQueryChange?.(item.query_text || '');
 
     try {
@@ -541,6 +542,46 @@ const SearchWorkspace = ({
       if (turnResp.status === 'applied') {
         if (Array.isArray(turnResp.results)) {
           setFrames(turnResp.results);
+          if (historyIdentity) {
+            const feedbackQueryId = createClientQueryId();
+            const feedbackQueryText = turnResp.intent?.query_text || kisSession.currentIntent?.query_text || message;
+            const opMeta = buildOperationMetadata({
+              semanticRevision: turnResp.intent?.revision ?? kisSession.currentIntent?.revision ?? 1,
+              operationKind: 'chat_feedback',
+              action: turnResp.action,
+              scope: turnResp.scope,
+              affectedEventIds: turnResp.affected_event_ids || [],
+              feedbackRevision: turnResp.feedback_revision,
+            });
+            const historySnapshot = buildKisSnapshot(turnResp.results, {
+              intent: turnResp.intent || kisSession.currentIntent,
+              latency: turnResp.latency || { total_ms: 0 },
+              warnings: [],
+              operationMetadata: opMeta,
+            });
+            activateHistorySession({
+              queryId: feedbackQueryId,
+              ownerUserId: historyIdentity,
+              queryText: feedbackQueryText,
+              resultSnapshot: historySnapshot,
+              frameActivity: normalizeFrameActivity(),
+              source: 'live-search',
+            });
+            enqueueHistoryWrite(feedbackQueryId, async () => {
+              try {
+                await createQueryHistory({
+                  queryId: feedbackQueryId,
+                  userId: historyIdentity,
+                  queryText: feedbackQueryText,
+                  resultSnapshot: historySnapshot,
+                  operationMetadata: opMeta,
+                });
+                onHistoryRefresh?.();
+              } catch (historyErr) {
+                // Non-fatal history write
+              }
+            });
+          }
         }
         if (turnResp.intent) {
           setKisSession((prev) => ({
@@ -574,6 +615,10 @@ const SearchWorkspace = ({
     useBm25,
     topK,
     eventTrail,
+    historyIdentity,
+    activateHistorySession,
+    enqueueHistoryWrite,
+    onHistoryRefresh,
   ]);
 
   const handleUndoFeedback = useCallback(async () => {
@@ -591,6 +636,44 @@ const SearchWorkspace = ({
 
       if (Array.isArray(undoResp.results)) {
         setFrames(undoResp.results);
+        if (historyIdentity) {
+          const undoQueryId = createClientQueryId();
+          const undoQueryText = undoResp.intent?.query_text || kisSession.currentIntent?.query_text || 'Undo';
+          const opMeta = buildOperationMetadata({
+            semanticRevision: undoResp.intent?.revision ?? 1,
+            operationKind: 'chat_feedback_undo',
+            action: 'undo',
+            feedbackRevision: undoResp.feedback_revision,
+          });
+          const historySnapshot = buildKisSnapshot(undoResp.results, {
+            intent: undoResp.intent,
+            latency: undoResp.latency || { total_ms: 0 },
+            warnings: [],
+            operationMetadata: opMeta,
+          });
+          activateHistorySession({
+            queryId: undoQueryId,
+            ownerUserId: historyIdentity,
+            queryText: undoQueryText,
+            resultSnapshot: historySnapshot,
+            frameActivity: normalizeFrameActivity(),
+            source: 'live-search',
+          });
+          enqueueHistoryWrite(undoQueryId, async () => {
+            try {
+              await createQueryHistory({
+                queryId: undoQueryId,
+                userId: historyIdentity,
+                queryText: undoQueryText,
+                resultSnapshot: historySnapshot,
+                operationMetadata: opMeta,
+              });
+              onHistoryRefresh?.();
+            } catch (historyErr) {
+              // Non-fatal history write
+            }
+          });
+        }
       }
       if (undoResp.intent) {
         setKisSession((prev) => ({
@@ -611,7 +694,16 @@ const SearchWorkspace = ({
     } finally {
       setIsSearching(false);
     }
-  }, [feedbackSession, isSearching, eventTrail]);
+  }, [
+    feedbackSession,
+    isSearching,
+    eventTrail,
+    historyIdentity,
+    activateHistorySession,
+    enqueueHistoryWrite,
+    onHistoryRefresh,
+    kisSession.currentIntent,
+  ]);
 
   const handleSelectContext = useCallback((eventId) => {
     setFeedbackSession((prev) => {
@@ -818,6 +910,7 @@ const SearchWorkspace = ({
     useDense,
     userId,
     activeQuerySession?.queryId,
+    handleFeedbackTurn,
   ]);
 
   // Step 7: Search-only rerun when only retrieval controls change

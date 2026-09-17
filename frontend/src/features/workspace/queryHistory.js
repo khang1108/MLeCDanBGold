@@ -106,6 +106,13 @@ export const buildOperationMetadata = (meta = {}) => {
       ? meta.imageRemoved
       : [];
   const searchOnly = Boolean(meta.search_only ?? meta.searchOnly);
+  const action = typeof meta.action === 'string' ? meta.action : null;
+  const scope = typeof meta.scope === 'string' ? meta.scope : null;
+  const feedbackRevision = typeof meta.feedback_revision === 'number'
+    ? meta.feedback_revision
+    : typeof meta.feedbackRevision === 'number'
+      ? meta.feedbackRevision
+      : null;
 
   return {
     semantic_revision: semanticRevision,
@@ -114,6 +121,9 @@ export const buildOperationMetadata = (meta = {}) => {
     image_added: imageAdded.slice(),
     image_removed: imageRemoved.slice(),
     search_only: searchOnly,
+    ...(action ? { action } : {}),
+    ...(scope ? { scope } : {}),
+    ...(feedbackRevision !== null ? { feedback_revision: feedbackRevision } : {}),
   };
 };
 

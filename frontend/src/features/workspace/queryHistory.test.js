@@ -189,3 +189,17 @@ test('buildKisSnapshot preserves operation_metadata when provided in options', (
     search_only: false,
   });
 });
+
+test('buildOperationMetadata preserves feedback action, scope, and revision', () => {
+  const meta = buildOperationMetadata({
+    semanticRevision: 2,
+    operationKind: 'chat_feedback',
+    action: 'refine_retrieval',
+    scope: 'selected_video',
+    feedbackRevision: 3,
+  });
+  expect(meta.action).toBe('refine_retrieval');
+  expect(meta.scope).toBe('selected_video');
+  expect(meta.feedback_revision).toBe(3);
+});
+

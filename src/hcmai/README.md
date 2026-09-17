@@ -21,17 +21,17 @@ FastAPI router
 ### Progressive multimodal KIS retrieval flow
 
 ```text
-Query Composer
-  -> InitialResolve | PatchEvents | GlobalRewrite | SearchOnly
-  -> KISIntent
+Query Composer / Feedback Loop
+  -> InitialResolve | FeedbackTurn (edit_intent, refine_retrieval, reject_candidate, repair_event, anchor, clarify)
+  -> KISIntent / FeedbackSession (revisioned, transactional)
   -> KISRetrievalPlan
   -> text/image temporal evidence
   -> existing fusion
-  -> DP
+  -> DP / Local temporal repair
   -> ranked results
 ```
 
-Note: EventTrail is the next design cycle, not part of S0/S1. KIS semantic interactions are stateless per-request operations against explicit base intents.
+Note: Conversational feedback runs through `/api/v1/kis/feedback/sessions` with revisioned state, bounded LLM action resolution, transactional execution, and full Undo support. Canonical identity (`video_id`, `frame_id`, `frame_idx`, `timestamp_ms`) is strictly preserved across all operations.
 
 
 `Corpus.open(...)` is the read-only boundary for existing canonical frames,
