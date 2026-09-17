@@ -7,3 +7,7 @@ class InvalidQueryInputError(ValueError):
 
 class RevisionConflictError(ValueError):
     """Signal a revision index conflict between client expected revision and input history."""
+
+
+class SearchServiceGatewayError(RuntimeError):
+    """Signal an unrecoverable protocol or internal error from an upstream gateway."""

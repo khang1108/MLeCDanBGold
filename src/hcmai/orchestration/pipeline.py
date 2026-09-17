@@ -36,14 +36,32 @@ from hcmai.event_trail.errors import EventTrailError
 from hcmai.event_trail.models import EvidenceSnapshot, SnapshotResult, freeze_video_scores
 from hcmai.event_trail.service import EventTrailService
 from hcmai.event_trail.store import EventTrailSessionStore, EvidenceSnapshotStore
-from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
+from hcmai.orchestration.utils.errors import (
+    InvalidQueryInputError,
+    RevisionConflictError,
+    SearchServiceGatewayError,
+)
 from hcmai.orchestration.utils.health import build_health_report
 from hcmai.orchestration.utils.materializer import SearchMaterializer
-from hcmai.orchestration.workflows.image_search import ImageSearchService
-from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.image_search import (
+    ImageQueryTooLargeError,
+    ImageSearchService,
+)
+from hcmai.orchestration.workflows.temporal_search import (
+    TemporalSearchGateway,
+    TemporalSearchService,
+)
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
+from hcmai.retrieval_service.errors import (
+    RetrievalClientError,
+    RetrievalInvalidRequestError,
+    RetrievalNotFoundError,
+    RetrievalProtocolError,
+    RetrievalTooLargeError,
+    RetrievalUnavailableError,
+)
 from hcmai.kis.models import (
     DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
     KISEvent,
@@ -69,6 +87,11 @@ if TYPE_CHECKING:
     from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
     from hcmai.retrieval.retriever.models.contracts import VectorRetriever
     from hcmai.retrieval.retriever.pipeline import RetrievalService
+    from hcmai.retrieval_service.client import RetrievalGrpcClient
+    from hcmai.retrieval_service.remote import (
+        RemoteImageSearchService,
+        RemoteTemporalSearchService,
+    )
     from llm.pipeline import LLMService
 
 
@@ -82,20 +105,24 @@ class SearchService:
     def __init__(
         self,
         corpus: Corpus | None,
-        retrieval: RetrievalService | None,
         config: SearchConfig | None = None,
-        llm: LLMService | None = None,
+        temporal: TemporalSearchGateway | None = None,
+        image_search: RemoteImageSearchService | ImageSearchService | None = None,
+        remote_retrieval: RetrievalGrpcClient | None = None,
         event_translator: EventTranslator | None = None,
-        temporal_evidence: TemporalEvidenceScorer | None = None,
-        image_encoder: ImageEmbeddingAdapter | None = None,
         api_config: ApiConfig | None = None,
         literal_text: LiteralTextIndex | None = None,
-        visual_retriever: VectorRetriever | None = None,
         intent_resolver: KISIntentResolver | None = None,
         scoped_resolver: KISScopedResolver | None = None,
         global_rewriter: KISGlobalRewriter | None = None,
         kis_image_assets: KISImageAssetStore | None = None,
         event_trail_settings: EventTrailSettings | None = None,
+        *,
+        retrieval: RetrievalService | None = None,
+        temporal_evidence: TemporalEvidenceScorer | None = None,
+        image_encoder: ImageEmbeddingAdapter | None = None,
+        visual_retriever: VectorRetriever | None = None,
+        llm: LLMService | None = None,
     ) -> None:
         """Initialize explicit task workflows over one temporal service."""
 
@@ -111,6 +138,7 @@ class SearchService:
         self.scoped_resolver = scoped_resolver
         self.global_rewriter = global_rewriter
         self.kis_image_assets = kis_image_assets
+        self.remote_retrieval = remote_retrieval
         self.event_trail_settings = event_trail_settings or EventTrailSettings.from_env()
         self.event_trail_snapshots = EvidenceSnapshotStore(
             ttl_seconds=self.event_trail_settings.snapshot_ttl_seconds,
@@ -118,55 +146,57 @@ class SearchService:
         )
         self.event_trail_scoring_revision = str(uuid4())
 
-        self.image_search = (
-            ImageSearchService(
+        if image_search is not None:
+            self.image_search = image_search
+        elif (
+            corpus is not None
+            and visual_retriever is not None
+            and image_encoder is not None
+        ):
+            self.image_search = ImageSearchService(
                 corpus,
                 visual_retriever,
                 image_encoder,
                 max_upload_bytes=self.api_config.image_max_upload_bytes,
                 max_pixels=self.api_config.image_max_pixels,
             )
-            if (
-                corpus is not None
-                and visual_retriever is not None
-                and image_encoder is not None
-            )
-            else None
-        )
+        else:
+            self.image_search = None
 
-        self.image_query_scorer = (
-            ImageQueryTemporalScorer(
+        if (
+            visual_retriever is not None
+            and image_encoder is not None
+            and kis_image_assets is not None
+        ):
+            self.image_query_scorer = ImageQueryTemporalScorer(
                 visual_index=visual_retriever.index,
                 image_encoder=image_encoder,
                 asset_store=kis_image_assets,
                 chunk_size=self.config.alignment.chunk_size,
             )
-            if (
-                visual_retriever is not None
-                and image_encoder is not None
-                and kis_image_assets is not None
-            )
-            else None
-        )
+        else:
+            self.image_query_scorer = None
 
-        temporal = (
-            TemporalSearchService(
+        if temporal is not None:
+            self.temporal = temporal
+        elif self.corpus is not None and self.temporal_evidence is not None:
+            self.temporal = TemporalSearchService(
                 self.corpus,
                 self.temporal_evidence,
                 self.config.alignment,
                 self.config.max_temporal_event_count,
             )
-            if self.corpus is not None and self.temporal_evidence is not None
-            else None
-        )
+        else:
+            self.temporal = None
+
         self.kis = KISPipeline(
             self.corpus,
-            temporal,
+            self.temporal,
             self.config.max_temporal_event_count,
             image_scorer=self.image_query_scorer,
         )
         self.trake = TRAKEPipeline(
-            temporal,
+            self.temporal,
             self.config.max_temporal_event_count,
         )
 
@@ -232,10 +262,12 @@ class SearchService:
         return build_health_report(self, startup_messages=startup_messages)
 
     def close(self) -> None:
-        """Close optional inference resources owned by the service."""
+        """Close optional inference resources and remote gRPC client."""
 
         if self.llm is not None:
             self.llm.close()
+        if self.remote_retrieval is not None:
+            self.remote_retrieval.close()
 
     def _canonical_image_refs(
         self, refs: Sequence[KISImageRef | str]
@@ -535,15 +567,26 @@ class SearchService:
         if plan.event_ids != tuple(event.id for event in intent.events):
             raise ValueError("retrieval plan event IDs must match intent event order")
 
-        execution = self.kis.execute(
-            intent=intent,
-            retrieval_plan=plan,
-            use_dense=request.use_dense,
-            use_bm25=request.use_bm25,
-            top_k=request.top_k,
-            intent_ms=intent_ms,
-            translation_ms=translation_ms,
-        )
+        try:
+            execution = self.kis.execute(
+                intent=intent,
+                retrieval_plan=plan,
+                use_dense=request.use_dense,
+                use_bm25=request.use_bm25,
+                top_k=request.top_k,
+                intent_ms=intent_ms,
+                translation_ms=translation_ms,
+            )
+        except RetrievalUnavailableError as error:
+            raise SearchServiceUnavailableError(str(error)) from error
+        except RetrievalInvalidRequestError as error:
+            raise InvalidQueryInputError(str(error)) from error
+        except RetrievalNotFoundError as error:
+            raise KeyError(str(error)) from error
+        except RetrievalTooLargeError as error:
+            raise ImageQueryTooLargeError(str(error)) from error
+        except (RetrievalProtocolError, RetrievalClientError) as error:
+            raise SearchServiceGatewayError(str(error)) from error
 
         result_ids = [f"r_{uuid4().hex}" for _ in execution.results]
         kis_results = [
@@ -664,11 +707,22 @@ class SearchService:
             raise SearchServiceUnavailableError(
                 "Image search dependencies not loaded: visual image encoder"
             )
-        return self.image_search.search(
-            payload,
-            content_type=content_type,
-            top_k=top_k,
-        )
+        try:
+            return self.image_search.search(
+                payload,
+                content_type=content_type,
+                top_k=top_k,
+            )
+        except RetrievalUnavailableError as error:
+            raise SearchServiceUnavailableError(str(error)) from error
+        except RetrievalInvalidRequestError as error:
+            raise InvalidQueryInputError(str(error)) from error
+        except RetrievalNotFoundError as error:
+            raise KeyError(str(error)) from error
+        except RetrievalTooLargeError as error:
+            raise ImageQueryTooLargeError(str(error)) from error
+        except (RetrievalProtocolError, RetrievalClientError) as error:
+            raise SearchServiceGatewayError(str(error)) from error
 
     def filter_frames(self, request: FilterRequest) -> FilterResponse:
         """Filter raw evidence without semantic retrieval or reranking."""
@@ -718,7 +772,18 @@ class SearchService:
         """Execute a validated TRAKE request through the explicit TRAKE workflow."""
 
         self._ensure_search_ready()
-        return self.trake.execute(request)
+        try:
+            return self.trake.execute(request)
+        except RetrievalUnavailableError as error:
+            raise SearchServiceUnavailableError(str(error)) from error
+        except RetrievalInvalidRequestError as error:
+            raise InvalidQueryInputError(str(error)) from error
+        except RetrievalNotFoundError as error:
+            raise KeyError(str(error)) from error
+        except RetrievalTooLargeError as error:
+            raise ImageQueryTooLargeError(str(error)) from error
+        except (RetrievalProtocolError, RetrievalClientError) as error:
+            raise SearchServiceGatewayError(str(error)) from error
 
     def _ensure_search_ready(self) -> None:
         """Reject online search when canonical data or retrieval is unavailable."""
@@ -726,8 +791,8 @@ class SearchService:
         missing: list[str] = []
         if self.corpus is None:
             missing.append("canonical frame data")
-        if self.temporal_evidence is None:
-            missing.append("temporal evidence service")
+        if self.temporal is None:
+            missing.append("temporal search gateway")
         if missing:
             raise SearchServiceUnavailableError(
                 f"Search dependencies not loaded: {', '.join(missing)}"

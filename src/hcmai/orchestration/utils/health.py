@@ -17,6 +17,7 @@ def build_health_report(
     service: Any,
     *,
     startup_messages: Sequence[str] = (),
+    remote_status: Any | None = None,
 ) -> dict[str, Any]:
     """Build readiness and capability state from composed dependencies.
 
@@ -27,6 +28,41 @@ def build_health_report(
     corpus = getattr(service, "corpus", None)
     retrieval = getattr(service, "retrieval", None)
     temporal_evidence = getattr(service, "temporal_evidence", None)
+    remote_client = getattr(service, "remote_retrieval", None)
+
+    if remote_status is None and remote_client is not None:
+        try:
+            remote_status = remote_client.probe()
+        except Exception:
+            remote_status = None
+
+    if remote_status is not None:
+        remote_report = {
+            "configured": True,
+            "reachable": bool(remote_status.reachable),
+            "ready": bool(remote_status.ready),
+            "target": remote_status.target,
+            "scoring_revision": remote_status.scoring_revision,
+            "active_modalities": list(remote_status.active_modalities),
+        }
+    elif remote_client is not None:
+        remote_report = {
+            "configured": True,
+            "reachable": False,
+            "ready": False,
+            "target": getattr(getattr(remote_client, "settings", None), "target", None),
+            "scoring_revision": None,
+            "active_modalities": [],
+        }
+    else:
+        remote_report = {
+            "configured": False,
+            "reachable": False,
+            "ready": False,
+            "target": None,
+            "scoring_revision": None,
+            "active_modalities": [],
+        }
 
     # Minimal health fixtures may expose only the capabilities under test. A
     # real SearchService always declares ``corpus``, so an explicitly missing
@@ -35,36 +71,58 @@ def build_health_report(
     corpus_ready = (
         corpus is not None
         if hasattr(service, "corpus")
-        else temporal_evidence is not None
+        else (temporal_evidence is not None or remote_report["ready"])
     )
-    retriever_loaded = retrieval is not None
-    retrieval_ready = corpus_ready and temporal_evidence is not None
+
+    if remote_client is not None:
+        retriever_loaded = remote_report["ready"]
+        retrieval_ready = corpus_ready and retriever_loaded
+        active_mods = set(remote_report["active_modalities"])
+        visual_dense_ready = "visual" in active_mods
+        context_dense_ready = "context" in active_mods
+        asr_dense_ready = "asr" in active_mods
+        dense_temporal_ready = visual_dense_ready or context_dense_ready or asr_dense_ready
+        bm25_ready = "bm25" in active_mods
+        active_sources = set()
+        if "visual" in active_mods:
+            active_sources.add(RetrievalSource.VISUAL)
+        if "context" in active_mods:
+            active_sources.add(RetrievalSource.CAPTION)
+            active_sources.add(RetrievalSource.OCR)
+        if "bm25" in active_mods:
+            active_sources.add(RetrievalSource.BM25)
+        if "asr" in active_mods:
+            active_sources.add(RetrievalSource.ASR)
+    else:
+        retriever_loaded = retrieval is not None
+        retrieval_ready = corpus_ready and temporal_evidence is not None
+        dense_temporal_ready = (
+            temporal_evidence is not None
+            and getattr(temporal_evidence, "dense", None) is not None
+        )
+        visual_dense_ready = bool(
+            getattr(temporal_evidence, "visual_dense_ready", dense_temporal_ready)
+        )
+        context_dense_ready = bool(
+            getattr(temporal_evidence, "context_dense_ready", dense_temporal_ready)
+        )
+        asr_dense_ready = bool(
+            getattr(temporal_evidence, "asr_dense_ready", dense_temporal_ready)
+        )
+        bm25_ready = (
+            temporal_evidence is not None
+            and getattr(temporal_evidence, "bm25", None) is not None
+        )
+        active_sources = (
+            set(getattr(retrieval, "active_sources", (RetrievalSource.VISUAL,)))
+            if retrieval is not None
+            else set()
+        )
+
     intent_resolution_ready = getattr(service, "intent_resolver", None) is not None
     event_translation_ready = getattr(service, "event_translator", None) is not None
     kis_ready = retrieval_ready and intent_resolution_ready
-    dense_temporal_ready = (
-        temporal_evidence is not None
-        and getattr(temporal_evidence, "dense", None) is not None
-    )
-    visual_dense_ready = bool(
-        getattr(temporal_evidence, "visual_dense_ready", dense_temporal_ready)
-    )
-    context_dense_ready = bool(
-        getattr(temporal_evidence, "context_dense_ready", dense_temporal_ready)
-    )
-    asr_dense_ready = bool(
-        getattr(temporal_evidence, "asr_dense_ready", dense_temporal_ready)
-    )
-    bm25_ready = (
-        temporal_evidence is not None
-        and getattr(temporal_evidence, "bm25", None) is not None
-    )
     asset_status = _frame_asset_status(corpus)
-    active_sources = (
-        set(getattr(retrieval, "active_sources", (RetrievalSource.VISUAL,)))
-        if retrieval is not None
-        else set()
-    )
     llm = getattr(service, "llm", None)
     # Readiness is intentionally observational. Calling provider health or
     # capability methods here can perform network/model work on a health poll.
@@ -95,6 +153,7 @@ def build_health_report(
         "ready": corpus_ready and retriever_loaded,
         "frame_store_loaded": corpus_ready,
         "retriever_loaded": retriever_loaded,
+        "remote_retrieval": remote_report,
         "total_frames": corpus_length(),
         "evidence_stores": {
             source.value: has_evidence(source)
@@ -148,6 +207,9 @@ def _frame_asset_status(corpus: Any | None) -> dict[str, int | bool]:
     if corpus is None:
         return {"ready": False, "checked": 0, "available": 0, "missing": 0}
     try:
-        return corpus.frame_asset_status().as_dict()
-    except (AttributeError, OSError, RuntimeError, TypeError):
+        status = corpus.frame_asset_status().as_dict()
+        if isinstance(status, dict):
+            return status
+        return {"ready": False, "checked": 0, "available": 0, "missing": 0}
+    except Exception:
         return {"ready": False, "checked": 0, "available": 0, "missing": 0}

@@ -18,6 +18,7 @@ from hcmai.api.contracts import (
 )
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
+from hcmai.orchestration.utils.errors import SearchServiceGatewayError
 from hcmai.orchestration.workflows.image_search import (
     ImageQueryTooLargeError,
     InvalidImageQueryError,
@@ -100,6 +101,12 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
         except InvalidImageQueryError as error:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
+        except SearchServiceGatewayError as error:
+            logger.error("API image search upstream gateway error=%s", error)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=str(error),
             ) from error
         except SearchServiceUnavailableError as error:

@@ -10,6 +10,10 @@ from fastapi.concurrency import run_in_threadpool
 from hcmai.api.contracts import TRAKERequest, TRAKEResponse
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
+from hcmai.orchestration.utils.errors import (
+    InvalidQueryInputError,
+    SearchServiceGatewayError,
+)
 
 logger = get_logger(__name__)
 
@@ -29,6 +33,17 @@ def create_trake_router(service_container: dict[str, Any]) -> APIRouter:
             )
         try:
             return await run_in_threadpool(service.search_trake, request)
+        except InvalidQueryInputError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
+        except SearchServiceGatewayError as error:
+            logger.error("API TRAKE upstream gateway error=%s", error)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(error),
+            ) from error
         except SearchServiceUnavailableError as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

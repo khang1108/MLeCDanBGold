@@ -32,6 +32,18 @@ def make_fake_corpus(frames: dict[str, Frame] | None = None) -> Mock:
     corpus.ocr.return_value = "OCR"
     corpus.objects.return_value = ()
     corpus.transcript.return_value = ""
+    corpus.transcript_segments_for_video.return_value = ()
+    corpus.iter_frames.return_value = tuple(frames.values())
+    corpus.has_evidence.return_value = True
+    corpus.has_titles.return_value = True
+    corpus.has_object_counts.return_value = True
+    corpus.object_counts.return_value = {}
+    corpus.frame_asset_status.return_value.as_dict.return_value = {
+        "ready": True,
+        "checked": 4,
+        "available": 4,
+        "missing": 0,
+    }
     return corpus
 
 

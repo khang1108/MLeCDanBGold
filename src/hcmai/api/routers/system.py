@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.concurrency import run_in_threadpool
 
 
 def create_system_router(service_container: dict[str, Any]) -> APIRouter:
@@ -21,6 +22,14 @@ def create_system_router(service_container: dict[str, Any]) -> APIRouter:
                 "ready": False,
                 "frame_store_loaded": False,
                 "retriever_loaded": False,
+                "remote_retrieval": {
+                    "configured": False,
+                    "reachable": False,
+                    "ready": False,
+                    "target": None,
+                    "scoring_revision": None,
+                    "active_modalities": [],
+                },
                 "total_frames": 0,
                 "evidence_stores": {
                     "caption": False,
@@ -42,8 +51,9 @@ def create_system_router(service_container: dict[str, Any]) -> APIRouter:
                 "startup_messages": [],
             }
         else:
-            payload = service.health(
-                service_container.get("startup_messages", ())
+            payload = await run_in_threadpool(
+                service.health,
+                service_container.get("startup_messages", ()),
             )
 
         return payload

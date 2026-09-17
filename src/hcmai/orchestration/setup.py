@@ -32,6 +32,12 @@ from hcmai.orchestration.retrieval_setup import (
 )
 from hcmai.retrieval.evidence.literal import LiteralTextIndex
 from hcmai.retrieval.translation.service import EventTranslator
+from hcmai.retrieval_service.client import RetrievalGrpcClient
+from hcmai.retrieval_service.config import RetrievalClientSettings
+from hcmai.retrieval_service.remote import (
+    RemoteImageSearchService,
+    RemoteTemporalSearchService,
+)
 # pyrefly: ignore [missing-import]
 from llm.config import LLMServiceConfig
 # pyrefly: ignore [missing-import]
@@ -47,7 +53,6 @@ def load_search_service(messages: list[str]) -> SearchService:
     load_repository_environment()
 
     settings = load_app_config()
-    models = load_model_config()
     if os.getenv("HCMAI_RETRIEVAL_PROFILE") is not None:
         raise ValueError(
             "HCMAI_RETRIEVAL_PROFILE is no longer supported; "
@@ -55,43 +60,50 @@ def load_search_service(messages: list[str]) -> SearchService:
         )
 
     corpus = load_configured_corpus(settings, messages)
-    llm = load_remote_inference(settings, messages)
     llm_client = _load_llm_client(messages)
     event_translator = _load_event_translator(settings, messages, llm=llm_client)
     intent_resolver = _load_intent_resolver(messages, llm=llm_client)
     scoped_resolver = _load_scoped_resolver(messages, llm=llm_client)
     global_rewriter = _load_global_rewriter(messages, llm=llm_client)
-    retrieval = load_retrieval(settings, models, llm, messages, corpus=corpus)
-    visual_retriever = select_visual_retriever(retrieval)
-    image_encoder = load_image_encoder(models, visual_retriever, llm, messages)
-    temporal_evidence = load_temporal_evidence(
-        settings,
-        retrieval,
-        visual_retriever,
-        messages,
-    )
+    kis_image_assets = load_kis_image_assets(settings, messages)
+
     literal_text = LiteralTextIndex(corpus) if corpus is not None else None
-    if literal_text is not None:
+    if literal_text is not None and corpus is not None:
         logger.info(
             "Literal filter loaded frames=%d sources=%s",
             len(corpus),
             ",".join(literal_text.available_sources) or "none",
         )
 
-    kis_image_assets = load_kis_image_assets(settings, messages)
+    client_settings = RetrievalClientSettings.from_env()
+    client = RetrievalGrpcClient(client_settings)
+    probe_status = client.probe()
+    if not probe_status.ready:
+        messages.append(
+            f"Remote retrieval service unavailable at {client_settings.target}"
+        )
 
+    temporal = RemoteTemporalSearchService(corpus, client) if corpus is not None else None
+    image_search = (
+        RemoteImageSearchService(
+            corpus,
+            client,
+            max_upload_bytes=settings.api.image_max_upload_bytes,
+            max_pixels=settings.api.image_max_pixels,
+        )
+        if corpus is not None
+        else None
+    )
 
     return SearchService(
         corpus=corpus,
-        retrieval=retrieval,
         config=settings.search,
-        llm=llm,
+        temporal=temporal,
+        image_search=image_search,
+        remote_retrieval=client,
         event_translator=event_translator,
-        temporal_evidence=temporal_evidence,
-        image_encoder=image_encoder,
         api_config=settings.api,
         literal_text=literal_text,
-        visual_retriever=visual_retriever,
         intent_resolver=intent_resolver,
         scoped_resolver=scoped_resolver,
         global_rewriter=global_rewriter,
