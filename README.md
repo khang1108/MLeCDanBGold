@@ -62,7 +62,6 @@ Canonical frame identity must remain intact across all retrieval and ranking sta
 
 - **Python 3.11+**
 - **Node.js 18+** and **npm**
-- (Optional) Docker for running the local DRES mock server
 
 ### 1. Backend Setup
 
@@ -94,13 +93,13 @@ cp .env.example .env
 # Start the services in two separate terminals:
 
 # Terminal 1: stable retrieval process; one process, no --reload
-aic/bin/python -m hcmai.retrieval_service.server --host 127.0.0.1 --port 8002
+aic/bin/python -m hcmai.retrieval.serving.server --host 127.0.0.1 --port 8002
 
 # Terminal 2: reloadable public backend
 aic/bin/python -m uvicorn hcmai.app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-> **Note:** The retrieval service hosts the heavy SigLIP2 embedding models, FAISS vector indexes, BM25 retriever, and dynamic programming aligner. It must run as a single process without `--reload` and must not be launched with multiple worker processes. The FastAPI backend connects to retrieval over gRPC; if the retrieval service is not running when FastAPI starts, a warning is logged and FastAPI continues serving non-retrieval routes (filters, query history, video streaming) locally.
+> **Note:** The retrieval service hosts the heavy SigLIP2 embedding models, FAISS vector indexes, BM25 retriever, and dynamic programming aligner. It must run as a single process without `--reload` and must not be launched with multiple worker processes. The FastAPI backend connects to retrieval over HTTP; if the retrieval service is not running when FastAPI starts, a warning is logged and FastAPI continues serving non-retrieval routes (filters, query history, video streaming) locally.
 
 Verify backend health:
 
@@ -145,12 +144,6 @@ pip install -e .
 python -m dres_mock_server.app
 ```
 
-Or via Docker:
-
-```bash
-docker build -t dres-mock dres-mock-server/
-docker run -p 8080:8080 dres-mock
-```
 ---
 
 ## 4. Repository Structure

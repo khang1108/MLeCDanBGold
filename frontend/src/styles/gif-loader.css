@@ -1,10 +1,15 @@
 /* Clean Raw GIF Loader Overlay Styles */
 .gif-loader-overlay {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   padding: 32px;
   width: 100%;
+  max-width: 520px;
+  min-height: 260px;
+  margin: auto;
+  box-sizing: border-box;
   animation: gifFadeIn 0.25s ease-out forwards;
 }
 

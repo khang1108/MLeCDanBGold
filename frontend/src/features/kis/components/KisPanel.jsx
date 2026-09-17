@@ -21,6 +21,7 @@ const KisPanel = ({
   renderExtraActions,
   submitLabel = 'Search',
   resetLabel = 'New Search',
+  onCollapse,
 }) => {
   const {
     draft = '',
@@ -64,16 +65,29 @@ const KisPanel = ({
             </span>
           )}
         </div>
-        {onReset && (
-          <button
-            type="button"
-            className="kis-chat-reset-btn"
-            onClick={onReset}
-            title="Start a new KIS search"
-          >
-            {resetLabel}
-          </button>
-        )}
+        <div className="kis-chat-header-actions">
+          {onReset && (
+            <button
+              type="button"
+              className="kis-chat-reset-btn"
+              onClick={onReset}
+              title="Start a new KIS search"
+            >
+              {resetLabel}
+            </button>
+          )}
+          {onCollapse && (
+            <button
+              type="button"
+              className="kis-chat-collapse-btn"
+              onClick={onCollapse}
+              title="Collapse KIS search panel"
+              aria-label="Collapse KIS search panel"
+            >
+              ▸
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="kis-chat-body">

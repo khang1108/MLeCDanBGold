@@ -1,5 +1,6 @@
 import React from "react";
 import FrameCard from "./FrameCard";
+import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 
 export const formatLatencySeconds = (val) => {
   if (typeof val !== 'number' || !Number.isFinite(val)) return '';
@@ -25,7 +26,6 @@ const FramesBox = ({
   const structuredLatency = typeof latencyMs === "object" && latencyMs !== null;
   const totalMs = structuredLatency ? latencyMs.total_ms : latencyMs;
   const totalLatencySec = formatLatencySeconds(totalMs);
-  if (isLoading) return null;
 
   return (
     <section className="frames-container">
@@ -37,7 +37,7 @@ const FramesBox = ({
           </div>
         </div>
       )}
-      {!error && hasLatency && (
+      {!error && (!isLoading || results.length > 0) && hasLatency && (
         <div className="latency-banner">
           <div className="latency-summary">
             Found <span className="latency-highlight">{results.length}</span>{" "}
@@ -91,6 +91,8 @@ const FramesBox = ({
                 />
               ))}
             </div>
+          ) : isLoading ? (
+            <GifLoaderOverlay isVisible={true} />
           ) : (
             <div className="frames-empty-state">
               <p className="body-md frames-empty-text">

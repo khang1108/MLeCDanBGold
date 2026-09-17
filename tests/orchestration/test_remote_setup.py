@@ -2,7 +2,7 @@
 
 import pytest
 from hcmai.orchestration.setup import load_search_service
-from hcmai.retrieval_service.client import RemoteRetrievalStatus, RetrievalGrpcClient
+from hcmai.retrieval.serving.client import RemoteRetrievalStatus, RetrievalHttpClient
 
 
 def _unavailable_status(target: str = "127.0.0.1:8002") -> RemoteRetrievalStatus:
@@ -17,7 +17,7 @@ def _unavailable_status(target: str = "127.0.0.1:8002") -> RemoteRetrievalStatus
 
 
 def test_REQ_001_backend_setup_never_loads_local_retrieval(monkeypatch) -> None:
-    from tests.retrieval_service.fakes import make_fake_corpus
+    from tests.retrieval.serving.fakes import make_fake_corpus
     fake_corpus = make_fake_corpus()
     monkeypatch.setattr(
         "hcmai.orchestration.setup.load_configured_corpus",
@@ -27,7 +27,7 @@ def test_REQ_001_backend_setup_never_loads_local_retrieval(monkeypatch) -> None:
         "hcmai.orchestration.retrieval_setup.load_retrieval",
         lambda *args, **kwargs: pytest.fail("FastAPI attempted local index loading"),
     )
-    monkeypatch.setattr(RetrievalGrpcClient, "probe", lambda self: _unavailable_status())
+    monkeypatch.setattr(RetrievalHttpClient, "probe", lambda self: _unavailable_status())
 
     messages = []
     service = load_search_service(messages)
@@ -39,7 +39,7 @@ def test_REQ_001_backend_setup_never_loads_local_retrieval(monkeypatch) -> None:
 def test_REQ_003_fastapi_lifespan_with_unused_grpc_port(monkeypatch) -> None:
     from fastapi.testclient import TestClient
     from hcmai.app import create_app
-    from tests.retrieval_service.fakes import make_fake_corpus
+    from tests.retrieval.serving.fakes import make_fake_corpus
 
     fake_corpus = make_fake_corpus()
     monkeypatch.setattr(
@@ -72,7 +72,7 @@ def test_REQ_003_fastapi_lifespan_with_unused_grpc_port(monkeypatch) -> None:
 
 
 def test_health_report_with_active_bm25_and_all_modalities(monkeypatch) -> None:
-    from tests.retrieval_service.fakes import make_fake_corpus
+    from tests.retrieval.serving.fakes import make_fake_corpus
 
     fake_corpus = make_fake_corpus()
     monkeypatch.setattr(
@@ -87,7 +87,7 @@ def test_health_report_with_active_bm25_and_all_modalities(monkeypatch) -> None:
         active_modalities=("visual", "context", "bm25", "asr"),
         startup_messages=(),
     )
-    monkeypatch.setattr(RetrievalGrpcClient, "probe", lambda self: status)
+    monkeypatch.setattr(RetrievalHttpClient, "probe", lambda self: status)
 
     messages = []
     service = load_search_service(messages)

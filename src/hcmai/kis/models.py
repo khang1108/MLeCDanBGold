@@ -37,8 +37,21 @@ class KISResolutionEvent(BaseModel):
     """Semantic event returned by LLM with zero-based entity index references."""
 
     model_config = ConfigDict(extra="forbid")
-    text: NonBlank
-    entity_indices: list[int] = Field(default_factory=list)
+    text: NonBlank = Field(
+        description=(
+            "Self-contained English retrieval description of exactly one temporal "
+            "moment or simultaneous scene. Never combine distinct sequential moments "
+            "inside one event text."
+        )
+    )
+    entity_indices: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Zero-based indices into the entities array for entities participating in "
+            "this event. The same entity index may appear in multiple events when the "
+            "entity persists across time."
+        ),
+    )
 
 
 class KISResolution(BaseModel):
@@ -47,7 +60,13 @@ class KISResolution(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query_text: NonBlank | None = None
     entities: list[KISResolutionEntity] = Field(default_factory=list)
-    events: list[KISResolutionEvent] = Field(min_length=1)
+    events: list[KISResolutionEvent] = Field(
+        min_length=1,
+        description=(
+            "Chronologically ordered distinct temporal moments. One input clue may "
+            "produce multiple events; sequential moments must be separate list items."
+        ),
+    )
 
 
 class KISEntity(BaseModel):

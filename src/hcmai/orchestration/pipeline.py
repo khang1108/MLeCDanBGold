@@ -54,7 +54,7 @@ from hcmai.orchestration.workflows.temporal_search import (
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
-from hcmai.retrieval_service.errors import (
+from hcmai.retrieval.serving.utils.errors import (
     RetrievalClientError,
     RetrievalInvalidRequestError,
     RetrievalNotFoundError,
@@ -86,8 +86,8 @@ if TYPE_CHECKING:
     from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
     from hcmai.retrieval.retriever.models.contracts import VectorRetriever
     from hcmai.retrieval.retriever.pipeline import RetrievalService
-    from hcmai.retrieval_service.client import RetrievalGrpcClient
-    from hcmai.retrieval_service.remote import (
+    from hcmai.retrieval.serving.client import RetrievalHttpClient
+    from hcmai.retrieval.serving.remote import (
         RemoteImageSearchService,
         RemoteTemporalSearchService,
     )
@@ -107,7 +107,7 @@ class SearchService:
         config: SearchConfig | None = None,
         temporal: TemporalSearchGateway | None = None,
         image_search: RemoteImageSearchService | ImageSearchService | None = None,
-        remote_retrieval: RetrievalGrpcClient | None = None,
+        remote_retrieval: RetrievalHttpClient | None = None,
         api_config: ApiConfig | None = None,
         literal_text: LiteralTextIndex | None = None,
         intent_resolver: KISIntentResolver | None = None,

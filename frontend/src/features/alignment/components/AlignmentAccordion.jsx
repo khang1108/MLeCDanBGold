@@ -17,8 +17,16 @@ export const formatTimestampMs = (timestampMs) => {
     : `${twoDigits(minutes)}:${twoDigits(seconds)}.${millisecondsText}`;
 };
 
-const AlignmentAccordion = ({ events, frameIds, timestampsMs, onSeek }) => {
-  const [isOpen, setIsOpen] = useState(false);
+const AlignmentAccordion = ({
+  events,
+  frameIds,
+  timestampsMs,
+  onSeek,
+  collapsible = true,
+  defaultOpen = false,
+  className = '',
+}) => {
+  const [isOpen, setIsOpen] = useState(collapsible ? defaultOpen : true);
   const hasAlignment = (
     Array.isArray(events)
     && events.length > 0
@@ -29,30 +37,59 @@ const AlignmentAccordion = ({ events, frameIds, timestampsMs, onSeek }) => {
   if (!hasAlignment) return null;
 
   const toggle = (event) => {
-    // The accordion lives inside a clickable card, so expanding it must not
-    // also open the representative-frame inspector.
+    if (!collapsible) return;
     event.stopPropagation();
     setIsOpen((open) => !open);
   };
 
+  const isExpanded = collapsible ? isOpen : true;
+
   return (
-    <div className="alignment-accordion" onClick={(event) => event.stopPropagation()}>
-      <button
-        type="button"
-        className="alignment-accordion-toggle"
-        aria-expanded={isOpen}
-        onClick={toggle}
-      >
-        Alignment
-      </button>
-      {isOpen && (
+    <div
+      className={`alignment-accordion ${!collapsible ? 'always-open' : ''} ${className}`.trim()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {collapsible ? (
+        <button
+          type="button"
+          className="alignment-accordion-toggle"
+          aria-expanded={isExpanded}
+          onClick={toggle}
+        >
+          Alignment
+        </button>
+      ) : (
+        <div className="alignment-accordion-header">
+          <span className="alignment-header-title">Event Alignment</span>
+          <span className="alignment-header-count">{events.length} events</span>
+        </div>
+      )}
+      {isExpanded && (
         <ol className="alignment-accordion-list">
           {events.map((event, index) => (
-            <li className="alignment-accordion-row" key={`${frameIds[index]}-${index}`}>
+            <li
+              className="alignment-accordion-row"
+              key={`${frameIds[index]}-${index}`}
+              onClick={() => onSeek?.(timestampsMs[index])}
+              style={{ cursor: onSeek ? 'pointer' : 'default' }}
+            >
               <span className="alignment-event-label">E{index + 1}</span>
-              <span className="alignment-event-text">{event}</span>
+              <span
+                className="alignment-event-text"
+                title={typeof event === 'string' ? event : event?.text || ''}
+              >
+                {typeof event === 'string' ? event : event?.text || ''}
+              </span>
               {onSeek ? (
-                <button type="button" className="alignment-timestamp" onClick={() => onSeek(timestampsMs[index])}>
+                <button
+                  type="button"
+                  className="alignment-timestamp"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSeek(timestampsMs[index]);
+                  }}
+                  title="Seek to this event"
+                >
                   {formatTimestampMs(timestampsMs[index])}
                 </button>
               ) : (

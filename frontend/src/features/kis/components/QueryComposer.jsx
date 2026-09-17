@@ -183,11 +183,42 @@ const QueryComposer = ({
             onClick={handleAddEvent}
             disabled={isSearching || disabled}
           >
-            + Add Event
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="kis-btn-icon"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>Add Event</span>
           </button>
 
           <label className="btn-secondary btn-sm kis-attach-label" htmlFor="kis-attach-file">
-            Attach image
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="kis-btn-icon"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+            <span>Attach image</span>
             <input
               id="kis-attach-file"
               type="file"
@@ -208,7 +239,22 @@ const QueryComposer = ({
             disabled={isSearching || disabled || (!draft.trim() && !events.length && !hasStagedImages)}
             onClick={onSubmit}
           >
-            {effectiveSubmitLabel}
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="kis-btn-icon"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <span>{effectiveSubmitLabel}</span>
           </button>
         </div>
       </div>

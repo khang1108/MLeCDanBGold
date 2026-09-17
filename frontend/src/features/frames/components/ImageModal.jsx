@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import FrameMetadata from "./FrameMetadata";
 import VideoTimeline from "./VideoTimeline";
+import AlignmentAccordion from "../../alignment/components/AlignmentAccordion";
 import {
   displayVideoId,
   getStreamVideoUrl,
@@ -11,6 +12,7 @@ import { keyframeUrl } from "../../../api/keyframes";
 // stream and seeks native media time to the selected canonical timestamp.
 const ImageModal = ({
   frame = {},
+  events = [],
   initialTimestampMs,
   query,
   onClose,
@@ -101,6 +103,37 @@ const ImageModal = ({
     video.currentTime = nextTime;
     updatePlaybackTime(nextTime);
   }, [updatePlaybackTime]);
+
+  const handleSeekFromTimestamp = useCallback((timestampMs) => {
+    if (!Number.isFinite(timestampMs) || timestampMs < 0) return;
+    handleVideoSeek(timestampMs / 1000);
+  }, [handleVideoSeek]);
+
+  const resolvedEvents = useMemo(() => {
+    if (Array.isArray(events) && events.length > 0) return events;
+    if (Array.isArray(frame.events) && frame.events.length > 0) return frame.events;
+    if (Array.isArray(frame.aligned_events) && frame.aligned_events.length > 0) return frame.aligned_events;
+    if (Array.isArray(exploration?.events) && exploration.events.length > 0) return exploration.events;
+    return [];
+  }, [events, frame.events, frame.aligned_events, exploration?.events]);
+
+  const frameIds = useMemo(
+    () => frame.frame_ids || frame.aligned_frame_ids || [],
+    [frame.frame_ids, frame.aligned_frame_ids],
+  );
+
+  const timestampsMs = useMemo(
+    () => frame.timestamps_ms || frame.aligned_timestamps_ms || [],
+    [frame.timestamps_ms, frame.aligned_timestamps_ms],
+  );
+
+  const effectiveEvents = useMemo(() => {
+    if (resolvedEvents.length > 0) return resolvedEvents;
+    if (frameIds.length > 1 && timestampsMs.length === frameIds.length) {
+      return frameIds.map((_, idx) => `Event ${idx + 1}`);
+    }
+    return [];
+  }, [resolvedEvents, frameIds, timestampsMs]);
 
   const togglePlayback = useCallback(() => {
     const video = videoRef.current;
@@ -204,12 +237,6 @@ const ImageModal = ({
           )}
         </div>
         <div className="modal-inspector-column">
-          {query?.trim() && (
-            <div className="modal-query-context" role="status" aria-label="Current query">
-              <span className="query-context-label">Query:</span>
-              <p className="modal-query-text">{query.trim()}</p>
-            </div>
-          )}
           <div className="inspector-header">
             <span className="inspector-title">
               {Number.isFinite(frame.timestamp_ms) ? `${videoLabel} · ${frame.timestamp_ms} ms` : videoLabel}
@@ -237,8 +264,33 @@ const ImageModal = ({
               </button>
             </div>
           </div>
+          {query?.trim() && (
+            <div className="modal-query-context" role="status" aria-label="Current query">
+              <span className="query-context-label">Query:</span>
+              <p className="modal-query-text">{query.trim()}</p>
+            </div>
+          )}
           <div className="inspector-content">
             <FrameMetadata frame={frame} playbackTime={playbackTime} />
+            <AlignmentAccordion
+              events={effectiveEvents}
+              frameIds={frameIds}
+              timestampsMs={timestampsMs}
+              onSeek={handleSeekFromTimestamp}
+              collapsible={false}
+            />
+            <div className="inspector-shortcuts-card">
+              <span className="shortcuts-card-title">Video Controls</span>
+              <div className="shortcuts-row">
+                <kbd>Space</kbd> / <kbd>K</kbd> <span>Play / Pause</span>
+              </div>
+              <div className="shortcuts-row">
+                <kbd>←</kbd> <kbd>→</kbd> <span>Seek ±5s</span>
+              </div>
+              <div className="shortcuts-row">
+                <kbd>Esc</kbd> <span>Close</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

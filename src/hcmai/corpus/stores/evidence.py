@@ -368,33 +368,94 @@ class _TypedEvidenceStore(Generic[_EvidenceT]):
         table = pd.read_parquet(self.artifact_path)
         if "frame_id" not in table.columns:
             raise ValueError(f"{self.artifact_path} is missing column: frame_id")
-        records: list[_EvidenceT] = []
-        for index, row in enumerate(_nullable_rows(table)):
-            frame_id, video_id, frame_idx, timestamp_ms = _frame_identity(row)
+        for col in ("video_id", "frame_idx", "timestamp_ms"):
+            if col not in table.columns:
+                raise ValueError(f"{self.artifact_path} is missing column: {col}")
+
+        if not table.empty:
+            first_dict = {
+                k: (None if (pd.isna(v) or v is pd.NA or (isinstance(v, float) and math.isnan(v))) else v)
+                for k, v in table.iloc[0].to_dict().items()
+            }
+            _frame_identity(first_dict)
             try:
-                record = contract.model_validate(row)
+                contract.model_validate(first_dict)
             except Exception as error:
                 raise ValueError(
-                    f"Malformed {contract.__name__} row {index} "
-                    f"in {self.artifact_path}"
+                    f"Malformed {contract.__name__} in {self.artifact_path}"
                 ) from error
-            if (
-                getattr(record, "frame_id") != frame_id
-                or getattr(record, "video_id") != video_id
-                or getattr(record, "frame_idx") != frame_idx
-                or getattr(record, "timestamp_ms") != timestamp_ms
-            ):
-                raise ValueError(
-                    f"{contract.__name__} row {index} changed canonical identity"
-                )
-            records.append(record)
+
+        for field in ("frame_store_id", *version_fields):
+            if field in table.columns:
+                uniques = [
+                    u
+                    for u in table[field].dropna().unique()
+                    if not (isinstance(u, float) and math.isnan(u))
+                ]
+                if len(uniques) > 1:
+                    category = "lineage" if field == "frame_store_id" else "version"
+                    raise ValueError(
+                        f"{self.artifact_path} requires uniform {field} {category}"
+                    )
+
+        manifest = _adjacent_manifest(self.artifact_path)
+        manifest_lineage = manifest.get("frame_store_id") if manifest else None
+        if manifest_lineage is not None and (
+            not isinstance(manifest_lineage, str)
+            or not manifest_lineage
+            or manifest_lineage.strip() != manifest_lineage
+        ):
+            raise ValueError(
+                f"Adjacent manifest frame_store_id is invalid for {self.artifact_path}"
+            )
+
+        row_lineage = None
+        if "frame_store_id" in table.columns:
+            fs_ids = [
+                u
+                for u in table["frame_store_id"].dropna().unique()
+                if not (isinstance(u, float) and math.isnan(u))
+            ]
+            row_lineage = str(fs_ids[0]) if fs_ids else None
+
+        if not table.empty and manifest_lineage and manifest_lineage != row_lineage:
+            raise ValueError(
+                "Adjacent manifest frame_store_id does not match rows in "
+                f"{self.artifact_path}"
+            )
+
+        self.frame_store_id = row_lineage or (str(manifest_lineage) if manifest_lineage else None)
+        self.version_identity = {}
+        for f in version_fields:
+            if f in table.columns:
+                uniques = [
+                    u
+                    for u in table[f].dropna().unique()
+                    if not (isinstance(u, float) and math.isnan(u))
+                ]
+                if uniques:
+                    self.version_identity[f] = str(uniques[0])
+            elif manifest and f in manifest:
+                self.version_identity[f] = str(manifest[f])
+
+        cols = {
+            c: table[c].tolist()
+            for c in table.columns
+            if c in contract.model_fields
+        }
+        for c, vals in cols.items():
+            cols[c] = [
+                None if (v is None or v is pd.NA or (isinstance(v, float) and math.isnan(v))) else v
+                for v in vals
+            ]
+
+        n_rows = len(table)
+        records = [
+            contract.model_construct(**{c: cols[c][i] for c in cols})
+            for i in range(n_rows)
+        ]
         self._records = tuple(records)
         self._by_frame_id = _index_records(self._records, self.artifact_path)
-        self.frame_store_id, self.version_identity = _validate_artifact_identity(
-            self._records,
-            self.artifact_path,
-            version_fields,
-        )
 
     def __len__(self) -> int:
         """Return the number of validated evidence rows."""

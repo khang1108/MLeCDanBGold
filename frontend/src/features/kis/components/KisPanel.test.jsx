@@ -157,4 +157,14 @@ describe('KisPanel unified multimodal component', () => {
     fireEvent.click(screen.getByRole('button', { name: /new search/i }));
     expect(onReset).toHaveBeenCalled();
   });
+
+  test('renders collapse button when onCollapse is provided and calls it on click', () => {
+    const onCollapse = jest.fn();
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} onCollapse={onCollapse} />);
+    const collapseBtn = screen.getByRole('button', { name: /collapse kis search panel/i });
+    expect(collapseBtn).toBeTruthy();
+    fireEvent.click(collapseBtn);
+    expect(onCollapse).toHaveBeenCalledTimes(1);
+  });
 });
+

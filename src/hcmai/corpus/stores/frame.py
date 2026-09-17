@@ -93,14 +93,70 @@ class FrameStore:
 
         self.metadata_path = Path(metadata_path)
         table = pd.read_parquet(self.metadata_path)
-        rows = cast(
-            list[dict[str, object]],
-            table.to_dict(orient="records"),
+        required_columns = (
+            "frame_id",
+            "video_id",
+            "frame_idx",
+            "timestamp_ms",
+            "image_path",
         )
-        self._records = tuple(
-            self._record_from_row(row)
-            for row in rows
+        missing = [col for col in required_columns if col not in table.columns]
+        if missing:
+            raise ValueError(
+                f"Missing required columns in {self.metadata_path}: {missing}"
+            )
+
+        if not table.empty:
+            first_dict = table.iloc[0].to_dict()
+            self._record_from_row(first_dict)
+
+        fids = table["frame_id"].tolist()
+        vids = table["video_id"].tolist()
+        fidxs = table["frame_idx"].tolist()
+        tss = table["timestamp_ms"].tolist()
+        imgs = table["image_path"].tolist()
+        thumbs = (
+            table["thumbnail_path"].tolist()
+            if "thumbnail_path" in table.columns
+            else [None] * len(table)
         )
+        fps_list = (
+            table["fps"].tolist()
+            if "fps" in table.columns
+            else [None] * len(table)
+        )
+
+        records = [
+            Frame(
+                frame_id=fid,
+                video_id=vid,
+                frame_idx=int(fidx),
+                timestamp_ms=int(ts),
+                image_path=img,
+                thumbnail_path=(
+                    None
+                    if (
+                        thumb is None
+                        or thumb is pd.NA
+                        or (isinstance(thumb, float) and math.isnan(thumb))
+                    )
+                    else str(thumb)
+                ),
+                fps=(
+                    None
+                    if (
+                        fps is None
+                        or fps is pd.NA
+                        or (isinstance(fps, float) and math.isnan(fps))
+                    )
+                    else float(fps)
+                ),
+            )
+            for fid, vid, fidx, ts, img, thumb, fps in zip(
+                fids, vids, fidxs, tss, imgs, thumbs, fps_list
+            )
+        ]
+        self._records = tuple(records)
         self._records_by_id = {
             record.frame_id: record for record in self._records
         }

@@ -52,18 +52,31 @@ def load_transcript_records(
     )
     records = []
     for path in paths:
-        table = pd.read_parquet(path).astype(object)
-        rows = table.where(table.notna(), cast(Any, None)).to_dict(orient="records")
-        for row in rows:
-            artifact_record = _TranscriptArtifact.model_validate(row)
+        table = pd.read_parquet(path)
+        if table.empty:
+            continue
+        _TranscriptArtifact.model_validate(table.iloc[0].to_dict())
+
+        sids = table["segment_id"].tolist()
+        vids = table["video_id"].tolist()
+        sidxs = table["segment_index"].tolist()
+        starts = table["start_ms"].tolist()
+        ends = table["end_ms"].tolist()
+        texts = table["text"].tolist()
+
+        for sid, vid, sidx, sms, ems, txt in zip(sids, vids, sidxs, starts, ends, texts):
+            sms_int = int(sms)
+            ems_int = int(ems)
+            if ems_int <= sms_int:
+                raise ValueError("end_ms must be greater than start_ms")
             records.append(
                 TranscriptSegment(
-                    segment_id=artifact_record.segment_id,
-                    video_id=artifact_record.video_id,
-                    segment_index=artifact_record.segment_index,
-                    start_ms=artifact_record.start_ms,
-                    end_ms=artifact_record.end_ms,
-                    text=artifact_record.text,
+                    segment_id=str(sid),
+                    video_id=str(vid),
+                    segment_index=int(sidx),
+                    start_ms=sms_int,
+                    end_ms=ems_int,
+                    text=str(txt),
                 )
             )
 

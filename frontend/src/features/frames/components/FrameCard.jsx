@@ -1,6 +1,5 @@
 import React from "react";
 import { keyframeUrl } from "../../../api/keyframes";
-import AlignmentAccordion from "../../alignment/components/AlignmentAccordion";
 import { displayVideoId } from "../videoSource";
 
 // Compact result card; clicking opens the inspector while controls stop propagation.
@@ -73,12 +72,6 @@ const FrameCard = ({
           </div>
         )}
       </div>
-      <AlignmentAccordion
-        events={events}
-        frameIds={displayFrame.frame_ids}
-        timestampsMs={displayFrame.timestamps_ms}
-        onSeek={onSeek}
-      />
     </div>
   );
 };
