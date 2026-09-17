@@ -1,11 +1,39 @@
 """Contract tests for the private retrieval protobuf surface."""
 
+from pathlib import Path
+import tomllib
+
 import grpc
 import google.protobuf
 from google.protobuf.descriptor import FieldDescriptor
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 from hcmai.retrieval_service.proto import retrieval_pb2
 from hcmai.retrieval_service.proto import retrieval_pb2_grpc
+
+
+def test_REQ_002_codegen_pin_matches_committed_generator_version() -> None:
+    """Keep both dev install paths on the toolchain used for committed bindings."""
+    project_file = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    with project_file.open("rb") as metadata_file:
+        metadata = tomllib.load(metadata_file)
+
+    for dependencies in (
+        metadata["project"]["optional-dependencies"]["dev"],
+        metadata["dependency-groups"]["dev"],
+    ):
+        requirements = [Requirement(dependency) for dependency in dependencies]
+        generators = [
+            requirement
+            for requirement in requirements
+            if canonicalize_name(requirement.name) == "grpcio-tools"
+        ]
+        assert len(generators) == 1
+        assert str(generators[0].specifier) == "==1.76.0"
+        assert generators[0].marker is None
+
+    assert retrieval_pb2_grpc.GRPC_GENERATED_VERSION == "1.76.0"
 
 
 def _version_tuple(version: str) -> tuple[int, ...]:

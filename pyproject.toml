@@ -85,7 +85,7 @@ pipeline = [
 ]
 dev = [
     "httpx>=0.28.1",
-    "grpcio-tools>=1.76,<2.0",
+    "grpcio-tools==1.76.0",
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]
@@ -97,7 +97,7 @@ include = ["hcmai*", "llm*", "offline*"]
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
-    "grpcio-tools>=1.76,<2.0",
+    "grpcio-tools==1.76.0",
     "pytest>=9.1.1",
 ]
 
