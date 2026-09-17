@@ -16,7 +16,7 @@ test('does not expose submission while the participant is disconnected', () => {
   expect(onOpenSubmission).not.toHaveBeenCalled();
 });
 
-test('shows the video id, timestamp, and representative alignment path', () => {
+test('shows the video id and timestamp without embedding alignment accordion inside the card', () => {
   const frame = {
     frame_id: 'representative-frame',
     video_id: 'L21_V001',
@@ -37,8 +37,7 @@ test('shows the video id, timestamp, and representative alignment path', () => {
 
   expect(screen.getByText('L21_V001')).toBeTruthy();
   expect(screen.getByText('1200 ms')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: /alignment/i }));
-  expect(screen.getByText('roll')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /alignment/i })).toBeNull();
 });
 
 test('shows a loading placeholder while page details are fetched', () => {

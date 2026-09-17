@@ -4,7 +4,7 @@ Replay never invokes retrieval. The snapshot supplies the same result and
 metadata fields returned by live search, so the inspector opens without a
 second frame-detail request. Legacy path snapshots remain unsupported.
 */
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import FramesBox from '../../frames/components/FramesBox';
 import { activityStateForFrame } from '../queryHistory';
 
@@ -13,9 +13,19 @@ const ReplayResults = ({
   frameActivity,
   onFrameClick,
 }) => {
+  const replayEvents = useMemo(
+    () => (Array.isArray(resultSnapshot?.intent?.events)
+      ? resultSnapshot.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
+      : (resultSnapshot?.events || [])),
+    [resultSnapshot?.intent?.events, resultSnapshot?.events],
+  );
+
   const openFrame = useCallback((frame) => {
-    onFrameClick?.(frame);
-  }, [onFrameClick]);
+    onFrameClick?.({
+      ...frame,
+      events: frame.events || replayEvents,
+    });
+  }, [onFrameClick, replayEvents]);
 
   const getFrameClassName = useCallback(
     (frameOrId) => activityStateForFrame(
@@ -26,10 +36,6 @@ const ReplayResults = ({
   );
 
   if (Array.isArray(resultSnapshot?.results)) {
-    const replayEvents = Array.isArray(resultSnapshot?.intent?.events)
-      ? resultSnapshot.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
-      : (resultSnapshot?.events || []);
-
     return (
       <FramesBox
         results={resultSnapshot.results}

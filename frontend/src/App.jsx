@@ -109,7 +109,15 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
 
       {selectedFrame && (
         <ImageModal
-          frame={selectedFrame.frame}
+          frame={selectedFrame.frame || selectedFrame}
+          events={
+            selectedFrame.events
+            || selectedFrame.frame?.events
+            || selectedFrame.explorationSnapshot?.events?.map(
+              (event) => (typeof event === 'string' ? event : event?.canonical_text || event?.text || ''),
+            )
+            || []
+          }
           query={modalQuery}
           initialTimestampMs={selectedFrame.initialTimestampMs}
           onOpenSubmission={connectedUserId ? submission.open : undefined}

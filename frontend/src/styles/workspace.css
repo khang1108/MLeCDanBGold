@@ -955,40 +955,23 @@
 }
 
 .kis-chat-collapse-btn {
-  background: var(--color-surface, #ffffff);
+  background: transparent;
   border: 1px solid var(--color-hairline, #e2e8f0);
-  border-radius: 6px;
+  border-radius: var(--rounded-sm, 4px);
   color: var(--color-ink-muted, #64748b);
   cursor: pointer;
-  width: 28px;
-  height: 28px;
-  padding: 0;
+  padding: 2px 6px;
+  font-size: 13px;
+  line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .kis-chat-collapse-btn:hover {
   background-color: var(--color-surface-hover, #f1f5f9);
-  color: var(--color-primary, #6366f1);
-  border-color: var(--color-primary, #6366f1);
-  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.12);
-}
-
-.kis-chat-collapse-btn:active {
-  transform: scale(0.92);
-}
-
-.kis-chat-collapse-btn .sidebar-arrow-icon {
-  display: block;
-  flex-shrink: 0;
-  transition: transform 0.15s ease;
-}
-
-.kis-chat-collapse-btn:hover .sidebar-arrow-icon {
-  transform: translateX(2px);
+  color: var(--color-ink, #0f172a);
 }
 
 .kis-chat-expand-btn {
@@ -1008,18 +991,27 @@
 
 .kis-chat-expand-btn:hover {
   background-color: var(--color-surface-hover, #f1f5f9);
-  color: var(--color-primary, #6366f1);
+  color: var(--color-ink, #0f172a);
 }
 
-.kis-chat-expand-btn .sidebar-arrow-icon {
-  display: block;
-  flex-shrink: 0;
-  transition: transform 0.15s ease;
+.kis-chat-expand-btn .sidebar-expand-icon {
+  font-size: 14px;
 }
 
-.kis-chat-expand-btn:hover .sidebar-arrow-icon {
-  transform: translateX(-2px);
-  color: var(--color-primary, #6366f1);
+.kis-chat-expand-btn .sidebar-expand-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted, #64748b);
+}
+
+.kis-chat-expand-btn .sidebar-expand-arrow {
+  font-size: 11px;
+  color: var(--color-ink-muted, #64748b);
 }
 
 .kis-chat-body {
@@ -1217,8 +1209,56 @@
 
 .kis-event-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-left: auto;
+  align-items: center;
+}
+
+.kis-event-actions .kis-event-edit-btn,
+.kis-event-actions .kis-event-add-image-btn {
+  height: 26px;
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: var(--rounded-md, 6px);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+  box-sizing: border-box;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.kis-event-actions .kis-event-edit-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+}
+
+.kis-event-actions .kis-event-edit-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.kis-event-actions .kis-event-add-image-btn {
+  border: 1px solid color-mix(in srgb, var(--color-primary, #2563eb) 30%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #2563eb) 8%, #ffffff);
+  color: var(--color-primary, #2563eb);
+}
+
+.kis-event-actions .kis-event-add-image-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary, #2563eb) 16%, #ffffff);
+  border-color: var(--color-primary, #2563eb);
+}
+
+.kis-event-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .kis-event-images {
@@ -1335,7 +1375,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-top: 8px;
   width: 100%;
 }
@@ -1344,14 +1384,14 @@
   display: flex;
   gap: 6px;
   align-items: center;
-  flex-shrink: 0;
+  flex: 1;
 }
 
 .kis-composer-right-actions {
   display: flex;
   gap: 6px;
   align-items: center;
-  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .kis-btn-icon {
@@ -1360,96 +1400,80 @@
   transition: transform 0.15s ease;
 }
 
-.kis-add-event-btn,
-.kis-attach-label {
+.kis-composer-controls .kis-add-event-btn,
+.kis-composer-controls .kis-attach-label,
+.kis-composer-controls .kis-chat-send-btn {
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  height: 30px;
-  padding: 0 8px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
+  gap: 5px;
   white-space: nowrap;
-  border-radius: 6px;
-  background: var(--color-surface, #ffffff);
+  border-radius: var(--rounded-md, 6px);
+  box-sizing: border-box;
+  margin: 0;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.kis-composer-controls .kis-add-event-btn,
+.kis-composer-controls .kis-attach-label {
   border: 1px solid var(--color-hairline, #cbd5e1);
+  background-color: var(--color-surface, #ffffff);
   color: var(--color-ink, #1e293b);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  cursor: pointer;
-  margin: 0;
-  box-sizing: border-box;
-  flex-shrink: 0;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.kis-add-event-btn:hover:not(:disabled),
-.kis-attach-label:hover {
-  background-color: var(--color-surface-hover, #f8fafc);
-  border-color: var(--color-primary, #6366f1);
-  color: var(--color-primary, #6366f1);
-  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.12);
+.kis-composer-controls .kis-add-event-btn:hover:not(:disabled),
+.kis-composer-controls .kis-attach-label:hover:not(:disabled) {
+  background-color: #f1f5f9;
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #2563eb);
 }
 
-.kis-add-event-btn:hover:not(:disabled) .kis-btn-icon,
-.kis-attach-label:hover .kis-btn-icon {
+.kis-composer-controls .kis-add-event-btn:hover:not(:disabled) .kis-btn-icon,
+.kis-composer-controls .kis-attach-label:hover:not(:disabled) .kis-btn-icon {
   transform: scale(1.1);
 }
 
-.kis-add-event-btn:active:not(:disabled),
-.kis-attach-label:active {
-  transform: scale(0.96);
+.kis-composer-controls .kis-add-event-btn:active:not(:disabled),
+.kis-composer-controls .kis-attach-label:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
-.kis-add-event-btn:disabled {
+.kis-composer-controls .kis-chat-send-btn {
+  border: 1px solid var(--color-primary, #2563eb);
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  min-width: 80px;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.kis-composer-controls .kis-chat-send-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+}
+
+.kis-composer-controls .kis-chat-send-btn:hover:not(:disabled) .kis-btn-icon {
+  transform: scale(1.1);
+}
+
+.kis-composer-controls .kis-chat-send-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.kis-composer-controls button:disabled,
+.kis-composer-controls label:has(input:disabled) {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
-}
-
-.kis-chat-send-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 30px;
-  padding: 0 10px;
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  border-radius: 6px;
-  border: none;
-  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
-  color: #ffffff;
-  cursor: pointer;
-  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.35), 0 1px 2px rgba(0, 0, 0, 0.06);
-  box-sizing: border-box;
-  flex-shrink: 0;
-  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-}
-
-.kis-chat-send-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
-  box-shadow: 0 3px 8px rgba(79, 70, 229, 0.45);
-  transform: translateY(-1px);
-}
-
-.kis-chat-send-btn:hover:not(:disabled) .kis-btn-icon {
-  transform: scale(1.1);
-}
-
-.kis-chat-send-btn:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
-.kis-chat-send-btn:disabled {
-  background: #e2e8f0;
-  color: #94a3b8;
-  box-shadow: none;
-  cursor: not-allowed;
-  transform: none;
 }
 
 .kis-session-error {

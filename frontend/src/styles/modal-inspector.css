@@ -392,6 +392,52 @@
   width: 100%;
 }
 
+.inspector-shortcuts-card {
+  margin-top: auto;
+  padding: 10px 12px;
+  background-color: var(--color-canvas-soft, #f8fafc);
+  border: 1px solid var(--color-hairline, #e2e8f0);
+  border-radius: var(--rounded-md, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shortcuts-card-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-muted, #64748b);
+  margin-bottom: 2px;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--color-ink, #334155);
+}
+
+.shortcuts-row kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-family: monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
+  color: #1e293b;
+}
+
+.shortcuts-row span {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
 /* Technical metadata grid box */
 .inspector-meta-box {
   background-color: var(--color-canvas-soft);
@@ -597,4 +643,117 @@
   color: var(--color-primary);
   font-weight: 700;
   font-family: monospace;
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/* ALIGNMENT SEQUENCE IN IMAGE MODAL INSPECTOR                 */
+/* ─────────────────────────────────────────────────────────── */
+.alignment-accordion.always-open {
+  border: 1px solid var(--color-hairline, #cbd5e1);
+  border-radius: var(--rounded-md, 8px);
+  background: var(--color-surface, #ffffff);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0;
+}
+
+.alignment-accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: var(--color-canvas-soft, #f8fafc);
+  border-bottom: 1px solid var(--color-hairline, #e2e8f0);
+}
+
+.alignment-header-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-muted, #64748b);
+}
+
+.alignment-header-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary, #2563eb);
+  background-color: color-mix(in srgb, var(--color-primary, #2563eb) 12%, transparent);
+  padding: 2px 7px;
+  border-radius: 9999px;
+}
+
+.alignment-accordion.always-open .alignment-accordion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.alignment-accordion.always-open .alignment-accordion-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--color-hairline, #e2e8f0);
+  background-color: var(--color-canvas-soft, #f8fafc);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.alignment-accordion.always-open .alignment-accordion-row:hover {
+  background-color: #f1f5f9;
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
+}
+
+.alignment-accordion.always-open .alignment-event-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e40af;
+  background-color: #dbeafe;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.alignment-accordion.always-open .alignment-event-text {
+  font-size: 12px;
+  color: var(--color-ink, #1e293b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.alignment-accordion.always-open .alignment-timestamp {
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--color-primary, #2563eb);
+  background: transparent;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+  white-space: nowrap;
+}
+
+.alignment-accordion.always-open .alignment-timestamp:hover {
+  background-color: rgba(37, 99, 235, 0.1);
+}
+
+.alignment-accordion.always-open .alignment-thumbnail {
+  width: 48px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid #cbd5e1;
 }

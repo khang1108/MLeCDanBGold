@@ -43,7 +43,7 @@ test('replays KIS viewed state without deriving submission state from history', 
     .toBe('Found 1 frames in 0.01s');
   expect(screen.getByText('V01')).toBeTruthy();
   expect(screen.getByText('1000 ms')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Alignment' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Alignment' })).toBeNull();
   expect(screen.getByAltText('Frame f1').closest('.frame-card').className).toContain('viewed');
   expect(screen.getByAltText('Frame f1').closest('.frame-card').className).not.toContain('submitted');
   expect(screen.queryByText('Replay')).toBeNull();

@@ -24,21 +24,23 @@ const EventCard = ({
         <div className="kis-event-actions">
           <button
             type="button"
-            className="btn-sm kis-event-edit-btn"
+            className="kis-event-edit-btn"
             onClick={() => onEdit?.(event.id)}
             disabled={disabled}
             aria-label={`Edit ${event.id}`}
           >
-            Edit
+            <span className="kis-btn-icon" aria-hidden="true">✎</span>
+            <span>Edit</span>
           </button>
           <button
             type="button"
-            className="btn-sm kis-event-add-image-btn"
+            className="kis-event-add-image-btn"
             onClick={() => onAddImage?.(event.id)}
             disabled={disabled}
             aria-label={`Add image to ${event.id}`}
           >
-            Add image
+            <span className="kis-btn-icon" aria-hidden="true">+</span>
+            <span>Add image</span>
           </button>
         </div>
       </div>

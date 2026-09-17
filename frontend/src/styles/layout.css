@@ -398,27 +398,38 @@
 
 .search-filter-actions {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 8px;
-  width: 100%;
+  flex-shrink: 0;
 }
 
-.search-filter-btn {
-  display: flex;
+.search-filter-btn,
+.search-filter-clear-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 38px;
-  padding: 0 16px;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--rounded-md);
-  background: var(--color-primary);
-  color: var(--color-on-primary, #ffffff);
+  min-height: 38px;
+  max-height: 38px;
+  width: 78px;
+  min-width: 78px;
+  max-width: 78px;
+  padding: 0;
+  margin: 0;
+  border-radius: var(--rounded-md, 6px);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+  line-height: 1;
   cursor: pointer;
-  flex: 1 1 0;
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.search-filter-btn {
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary, #ffffff);
 }
 
 .search-filter-btn:hover:not(:disabled) {
@@ -436,26 +447,24 @@
 }
 
 .search-filter-clear-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 38px;
-  padding: 0 16px;
   border: 1px solid var(--color-hairline);
   background: var(--color-surface);
   color: var(--color-ink-muted);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  flex: 1 1 0;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
 }
 
 .search-filter-clear-btn:hover:not(:disabled) {
   border-color: var(--color-ink-muted);
   color: var(--color-ink);
   background: var(--color-surface-hover, rgba(0, 0, 0, 0.04));
+}
+
+.search-filter-clear-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.search-filter-clear-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .search-filter-clear-btn:active:not(:disabled) {
