@@ -19,7 +19,7 @@ from hcmai.orchestration.utils.errors import InvalidQueryInputError
 from hcmai.orchestration.utils.materializer import SearchMaterializer
 from hcmai.orchestration.workflows.temporal_search import (
     TemporalSearchArtifact,
-    TemporalSearchService,
+    TemporalSearchGateway,
 )
 from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
 from hcmai.retrieval.plan import KISRetrievalPlan
@@ -40,7 +40,7 @@ class KISPipeline:
     def __init__(
         self,
         corpus: Corpus | None,
-        temporal: TemporalSearchService | None,
+        temporal: TemporalSearchGateway | None,
         max_temporal_event_count: int = DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
         image_scorer: ImageQueryTemporalScorer | None = None,
     ) -> None:
@@ -89,10 +89,9 @@ class KISPipeline:
 
         image_component = None
         has_any_images = any(len(ev.image_refs) > 0 for ev in retrieval_plan.events)
-        if has_any_images:
-            if self.image_scorer is None:
-                raise InvalidQueryInputError("Image query scoring is unavailable")
+        if has_any_images and self.image_scorer is not None:
             image_component = self.image_scorer.score_events(retrieval_plan.image_ref_rows)
+
 
         artifact = self.temporal.search_plan_artifact(
             retrieval_plan,

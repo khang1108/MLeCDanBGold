@@ -14,7 +14,7 @@ from hcmai.api.contracts import SearchLatency, TRAKERequest, TRAKEResponse
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.utils.materializer import SearchMaterializer
-from hcmai.orchestration.workflows.temporal_search import TemporalSearchService
+from hcmai.orchestration.workflows.temporal_search import TemporalSearchGateway
 
 
 logger = get_logger(__name__)
@@ -25,13 +25,14 @@ class TRAKEPipeline:
 
     def __init__(
         self,
-        temporal: TemporalSearchService | None,
+        temporal: TemporalSearchGateway | None,
         max_temporal_event_count: int = DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
     ) -> None:
         """Bind the shared temporal-search service used by this task head."""
 
         self.temporal = temporal
         self.max_temporal_event_count = max_temporal_event_count
+
 
     def execute(self, request: TRAKERequest) -> TRAKEResponse:
         """Align explicit events and project paths without video-level merging.

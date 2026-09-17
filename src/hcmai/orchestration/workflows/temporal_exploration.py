@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Literal
 
 from hcmai.orchestration.workflows.temporal_search import (
     DecoderConfigSnapshot,
-    TemporalSearchService,
+    TemporalSearchGateway,
 )
 from hcmai.retrieval.plan import KISRetrievalPlan
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
@@ -77,7 +77,7 @@ class TemporalExploration:
 
     def __init__(
         self,
-        temporal: TemporalSearchService,
+        temporal: TemporalSearchGateway,
         image_scorer: ImageQueryTemporalScorer | None = None,
     ) -> None:
         """Bind the temporal scoring service and optional image query scorer."""
@@ -87,12 +87,23 @@ class TemporalExploration:
         self._binding: QueryBinding | None = None
         self._video: VideoEventScores | None = None
         self._decoder_config: DecoderConfigSnapshot | None = None
+        self._scoring_revision: str | None = None
         self._conditions: Conditions | None = None
         self._history: list[Conditions] = []
         self._revision = 0
         self._view: ExplorationView | None = None
         # One lock makes guard, evaluation, and publication one local transaction.
         self._lock = RLock()
+
+    @property
+    def scoring_revision(self) -> str | None:
+        """Return the serving revision of the current selected video scores."""
+        return self._scoring_revision
+
+    @property
+    def decoder_config(self) -> DecoderConfigSnapshot | None:
+        """Return the decoder configuration snapshot of the current branch."""
+        return self._decoder_config
 
     def open(
         self,
@@ -120,37 +131,30 @@ class TemporalExploration:
                 has_any_images = any(
                     len(ev.image_refs) > 0 for ev in binding.retrieval_plan.events
                 )
-                if has_any_images:
-                    if self._image_scorer is None:
-                        raise ExplorationUnavailable("image scoring is unavailable")
+                if has_any_images and self._image_scorer is not None:
                     image_component = self._image_scorer.score_events(
                         binding.retrieval_plan.image_ref_rows
                     )
 
-                scores, _ = self._temporal.score_plan(
+                selected_result = self._temporal.score_video(
                     binding.retrieval_plan,
+                    video_id=video_id,
                     image_component=image_component,
                     use_dense=binding.use_dense,
                     use_bm25=binding.use_bm25,
                 )
-                selected = next(
-                    (video for video in scores if video.video_id == video_id),
-                    None,
-                )
-                if selected is None:
-                    raise ExplorationUnavailable(
-                        "selected video scoring is unavailable"
-                    )
-                frozen = _freeze_video(selected)
-                snapshot = getattr(
-                    self._temporal, "snapshot_decoder_config", None
-                )
-                decoder_config = snapshot() if callable(snapshot) else None
+                frozen = _freeze_video(selected_result.video)
+                decoder_config = selected_result.decoder_config
+                scoring_revision = selected_result.scoring_revision
                 status, paths = self._evaluate_video(
                     frozen,
                     conditions,
                     decoder_config,
                 )
+            except KeyError as error:
+                raise ExplorationUnavailable(
+                    "selected video scoring is unavailable"
+                ) from error
             except OSError as error:
                 raise ExplorationUnavailable(
                     "temporal exploration scoring is unavailable"
@@ -172,10 +176,12 @@ class TemporalExploration:
             self._binding = binding
             self._video = frozen
             self._decoder_config = decoder_config
+            self._scoring_revision = scoring_revision
             self._conditions = conditions
             self._revision = revision
             self._view = view
             return view
+
 
     def apply(
         self,
@@ -276,9 +282,11 @@ class TemporalExploration:
             self._binding = None
             self._video = None
             self._decoder_config = None
+            self._scoring_revision = None
             self._conditions = None
             self._history.clear()
             self._view = None
+
 
     def current(self) -> ExplorationView:
         """Return the current immutable branch snapshot."""

@@ -4,6 +4,10 @@ import unittest
 
 import numpy as np
 
+from hcmai.orchestration.workflows.temporal_search import (
+    DecoderConfigSnapshot,
+    SelectedVideoScoreResult,
+)
 from hcmai.orchestration.workflows.temporal_exploration import (
     QueryBinding,
     TemporalExploration,
@@ -37,6 +41,25 @@ class _TemporalSearch:
         """Return score matrix from score_plan."""
         return self.score_videos(*args, **kwargs)
 
+    def score_video(self, plan: object, *, video_id: str, **kwargs: object) -> SelectedVideoScoreResult:
+        """Return SelectedVideoScoreResult for the requested video."""
+        scores, ms = self.score_videos(*(), **kwargs)
+        for v in scores:
+
+            if v.video_id == video_id:
+                return SelectedVideoScoreResult(
+                    video=v,
+                    retrieval_ms=ms,
+                    decoder_config=DecoderConfigSnapshot(
+                        lambda_gap=0.1,
+                        event_power=1.0,
+                        cluster_delta=0.5,
+                        path_min_separation_ms=1000,
+                    ),
+                    scoring_revision="scores-v1",
+                )
+        raise KeyError(f"video {video_id!r} not found")
+
     def snapshot_decoder_config(self) -> None:
         """Use the fake decoder's default configuration."""
         return None
@@ -45,6 +68,7 @@ class _TemporalSearch:
         """Record a decode attempt without constructing a path."""
         self.decode_calls += 1
         return ()
+
 
 
 class TemporalExplorationTest(unittest.TestCase):

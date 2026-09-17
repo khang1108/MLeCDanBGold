@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from time import perf_counter
+from typing import Protocol
 import numpy as np
 
 from hcmai.common.config import AlignmentConfig, DEFAULT_MAX_TEMPORAL_EVENT_COUNT
@@ -42,6 +43,16 @@ class DecoderConfigSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class SelectedVideoScoreResult:
+    """Scored frames and decoder settings for one selected video."""
+
+    video: VideoEventScores
+    retrieval_ms: float
+    decoder_config: DecoderConfigSnapshot
+    scoring_revision: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class TemporalSearchArtifact:
     """Shared score matrix and paths, optionally tagged with a serving revision."""
 
@@ -49,6 +60,52 @@ class TemporalSearchArtifact:
     video_scores: tuple[VideoEventScores, ...]
     decoder_config: DecoderConfigSnapshot
     scoring_revision: str | None = None
+
+
+class TemporalSearchGateway(Protocol):
+    """High-level gateway protocol for temporal retrieval and alignment."""
+
+    corpus: Corpus
+
+    def search(
+        self,
+        original_events: Sequence[str],
+        *,
+        top_k: int,
+        retrieval_events: Sequence[str] | None = None,
+        caption_events: Sequence[str] | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+    ) -> TemporalSearchResult: ...
+
+    def search_plan_artifact(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        image_component: TemporalScoreComponent | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+        top_k: int = 20,
+    ) -> TemporalSearchArtifact: ...
+
+    def score_video(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        video_id: str,
+        image_component: TemporalScoreComponent | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+    ) -> SelectedVideoScoreResult: ...
+
+    def decode_video(
+        self,
+        video: VideoEventScores,
+        *,
+        allowed: np.ndarray,
+        decoder_config: DecoderConfigSnapshot | None = None,
+    ) -> tuple[AlignedPath, ...]: ...
+
 
 
 class TemporalSearchService:
@@ -259,6 +316,32 @@ class TemporalSearchService:
             self._validate_video_scores(len(original), video)
         return validated, retrieval_ms
 
+    def score_video(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        video_id: str,
+        image_component: TemporalScoreComponent | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+    ) -> SelectedVideoScoreResult:
+        """Score a multimodal retrieval plan and return scores for one video."""
+        scores, retrieval_ms = self.score_plan(
+            plan,
+            image_component=image_component,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+        )
+        selected = next((v for v in scores if v.video_id == video_id), None)
+        if selected is None:
+            raise KeyError(f"video {video_id!r} was not found in scored plan")
+        return SelectedVideoScoreResult(
+            video=selected,
+            retrieval_ms=retrieval_ms,
+            decoder_config=self.snapshot_decoder_config(),
+            scoring_revision=None,
+        )
+
     def decode_video(
         self,
         video: VideoEventScores,
@@ -277,17 +360,12 @@ class TemporalSearchService:
             if decoder_config is None
             else decoder_config
         )
-
-        rows = align_video(
+        return decode_video_scores(
+            self.corpus,
             video,
-            lambda_gap=config.lambda_gap,
-            paths=1,
-            event_power=config.event_power,
-            cluster_delta=config.cluster_delta,
-            min_separation_ms=config.path_min_separation_ms,
             allowed=allowed,
+            decoder_config=config,
         )
-        return tuple(self._materialize_aligned_path(row, video) for row in rows)
 
     def snapshot_decoder_config(self) -> DecoderConfigSnapshot:
         """Copy all selected-video decoder settings into an immutable value."""
@@ -330,27 +408,56 @@ class TemporalSearchService:
         video: VideoEventScores,
     ) -> AlignedPath:
         """Resolve one decoded DP row into canonical frame indices and times."""
+        return _materialize_aligned_path(self.materializer, row, video)
 
-        positions = {str(frame_id): position for position, frame_id in enumerate(video.frame_ids)}
-        frame_idxs: list[int] = []
-        timestamps_ms: list[int] = []
 
-        for frame_id, frame_idx in zip(row.frame_ids, row.frame_idx, strict=True):
-            position = positions.get(frame_id)
-            if position is None:
-                raise ValueError("decoded path frame_id is missing from score metadata")
-            if int(video.frame_idx[position]) != frame_idx:
-                raise ValueError("decoded path frame_idx conflicts with score metadata")
+def decode_video_scores(
+    corpus: Corpus,
+    video: VideoEventScores,
+    *,
+    allowed: np.ndarray,
+    decoder_config: DecoderConfigSnapshot,
+) -> tuple[AlignedPath, ...]:
+    """Decode one scored video under a mask and explicit config snapshot."""
+    rows = align_video(
+        video,
+        lambda_gap=decoder_config.lambda_gap,
+        paths=1,
+        event_power=decoder_config.event_power,
+        cluster_delta=decoder_config.cluster_delta,
+        min_separation_ms=decoder_config.path_min_separation_ms,
+        allowed=allowed,
+    )
+    materializer = SearchMaterializer(corpus)
+    return tuple(_materialize_aligned_path(materializer, row, video) for row in rows)
 
-            frame_idxs.append(frame_idx)
-            timestamps_ms.append(round(float(video.timestamps_ms[position])))
 
-        path = AlignedPath(
-            video_id=row.video_id,
-            score=row.score,
-            frame_ids=row.frame_ids,
-            frame_idxs=tuple(frame_idxs),
-            timestamps_ms=tuple(timestamps_ms),
-        )
-        self.materializer.validate_aligned_path(path)
-        return path
+def _materialize_aligned_path(
+    materializer: SearchMaterializer,
+    row: DPPath,
+    video: VideoEventScores,
+) -> AlignedPath:
+    """Resolve one decoded DP row into canonical frame indices and times."""
+    positions = {str(frame_id): position for position, frame_id in enumerate(video.frame_ids)}
+    frame_idxs: list[int] = []
+    timestamps_ms: list[int] = []
+
+    for frame_id, frame_idx in zip(row.frame_ids, row.frame_idx, strict=True):
+        position = positions.get(frame_id)
+        if position is None:
+            raise ValueError("decoded path frame_id is missing from score metadata")
+        if int(video.frame_idx[position]) != frame_idx:
+            raise ValueError("decoded path frame_idx conflicts with score metadata")
+
+        frame_idxs.append(frame_idx)
+        timestamps_ms.append(round(float(video.timestamps_ms[position])))
+
+    path = AlignedPath(
+        video_id=row.video_id,
+        score=row.score,
+        frame_ids=row.frame_ids,
+        frame_idxs=tuple(frame_idxs),
+        timestamps_ms=tuple(timestamps_ms),
+    )
+    materializer.validate_aligned_path(path)
+    return path

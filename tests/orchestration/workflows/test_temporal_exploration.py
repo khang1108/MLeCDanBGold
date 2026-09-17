@@ -8,12 +8,17 @@ from hcmai.kis.models import KISImageRef
 from hcmai.orchestration.workflows.temporal_exploration import QueryBinding, TemporalExploration
 from hcmai.retrieval.evidence.components import TemporalScoreComponent
 from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
-from orchestration.test_temporal_exploration import _TemporalSearch
+try:
+    from tests.orchestration.test_temporal_exploration import _TemporalSearch
+except ImportError:
+    from orchestration.test_temporal_exploration import _TemporalSearch
+
 
 
 @pytest.mark.parametrize("use_dense,use_bm25", [(True, True), (True, False), (False, True)])
 def test_task2_step8_binding_scores_the_committed_plan(use_dense, use_bm25):
     temporal = _TemporalSearch()
+    temporal.score_video = Mock(wraps=temporal.score_video)
     temporal.score_plan = Mock(wraps=temporal.score_plan)
     plan = KISRetrievalPlan(events=(KISRetrievalEvent("E1", "canonical", "translated" if use_dense else None, "literal" if use_bm25 else None),))
     binding = QueryBinding(
@@ -25,12 +30,14 @@ def test_task2_step8_binding_scores_the_committed_plan(use_dense, use_bm25):
         use_bm25=use_bm25,
     )
     TemporalExploration(temporal).open(binding, "video-1", (0, 100))
-    temporal.score_plan.assert_called_once_with(
+    temporal.score_video.assert_called_once_with(
         plan,
+        video_id="video-1",
         image_component=None,
         use_dense=use_dense,
         use_bm25=use_bm25,
     )
+    temporal.score_plan.assert_not_called()
 
 
 def test_task2_step8_binding_rejects_no_textual_scoring_source_before_scoring():
@@ -42,11 +49,13 @@ def test_task2_step8_binding_rejects_no_textual_scoring_source_before_scoring():
     )
     with pytest.raises(ValueError):
         TemporalExploration(temporal).open(binding, "video-1", (0, 100))
+    temporal.score_video.assert_not_called()
     temporal.score_plan.assert_not_called()
 
 
 def test_task9_binding_opens_image_only_event():
     temporal = _TemporalSearch()
+    temporal.score_video = Mock(wraps=temporal.score_video)
     temporal.score_plan = Mock(wraps=temporal.score_plan)
     image_scorer = Mock()
     image_scorer.score_events.return_value = TemporalScoreComponent(
@@ -69,5 +78,5 @@ def test_task9_binding_opens_image_only_event():
     assert view.video_id == "video-1"
     assert view.status == "no_valid_path"
     image_scorer.score_events.assert_called_once_with(((img,),))
-    temporal.score_plan.assert_called_once()
-
+    temporal.score_video.assert_called_once()
+    temporal.score_plan.assert_not_called()

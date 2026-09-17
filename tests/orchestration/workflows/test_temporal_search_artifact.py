@@ -101,3 +101,23 @@ def test_score_plan_validation_returns_video_event_scores(temporal_service, plan
     assert isinstance(scores[0], VideoEventScores)
     assert scores[0].video_id == "v1"
     assert retrieval_ms >= 0.0
+
+
+def test_REQ_010_score_video_returns_only_requested_video(temporal_service, plan) -> None:
+    selected = temporal_service.score_video(
+        plan,
+        video_id="v1",
+        use_dense=True,
+        use_bm25=False,
+    )
+
+    assert selected.video.video_id == "v1"
+    assert selected.retrieval_ms >= 0
+
+    with pytest.raises(KeyError, match="video 'unknown' was not found"):
+        temporal_service.score_video(
+            plan,
+            video_id="unknown",
+            use_dense=True,
+            use_bm25=False,
+        )
