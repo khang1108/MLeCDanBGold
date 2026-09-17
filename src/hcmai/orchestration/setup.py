@@ -22,7 +22,7 @@ from hcmai.kis.assets import KISImageAssetStore
 from hcmai.kis.resolver import KISIntentResolver
 from hcmai.kis.rewriter import KISGlobalRewriter
 from hcmai.kis.scoped_resolver import KISScopedResolver
-from hcmai.orchestration.corpus_setup import load_corpus
+from hcmai.orchestration.corpus_setup import load_configured_corpus, load_corpus
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.retrieval_setup import (
     load_image_encoder,
@@ -46,28 +46,16 @@ def load_search_service(messages: list[str]) -> SearchService:
     # runtime paths before any data or model capability is constructed.
     load_repository_environment()
 
-    settings = _load_app_config()
-    models = _load_model_config()
+    settings = load_app_config()
+    models = load_model_config()
     if os.getenv("HCMAI_RETRIEVAL_PROFILE") is not None:
         raise ValueError(
             "HCMAI_RETRIEVAL_PROFILE is no longer supported; "
             "use the context/asr-segment runtime artifacts"
         )
 
-    metadata_path = resolve_repository_path(
-        os.getenv("HCMAI_METADATA_PATH", str(settings.dataset.frames_path))
-    )
-    configured_dataset_root = os.getenv("HCMAI_DATASET_ROOT", str(settings.dataset.root))
-    dataset_root = resolve_dataset_root(configured_dataset_root)
-    configured_dataset_path = resolve_repository_path(configured_dataset_root)
-    if dataset_root != configured_dataset_path:
-        messages.append(
-            "Migrated legacy HCMAI_DATASET_ROOT from "
-            f"{configured_dataset_path} to {dataset_root}"
-        )
-
-    corpus = load_corpus(settings, metadata_path, dataset_root, messages)
-    llm = _load_remote_llm(settings, messages)
+    corpus = load_configured_corpus(settings, messages)
+    llm = load_remote_inference(settings, messages)
     llm_client = _load_llm_client(messages)
     event_translator = _load_event_translator(settings, messages, llm=llm_client)
     intent_resolver = _load_intent_resolver(messages, llm=llm_client)
@@ -90,7 +78,8 @@ def load_search_service(messages: list[str]) -> SearchService:
             ",".join(literal_text.available_sources) or "none",
         )
 
-    kis_image_assets = _load_kis_image_assets(settings, messages)
+    kis_image_assets = load_kis_image_assets(settings, messages)
+
 
     return SearchService(
         corpus=corpus,
@@ -110,7 +99,7 @@ def load_search_service(messages: list[str]) -> SearchService:
     )
 
 
-def _load_app_config() -> AppConfig:
+def load_app_config() -> AppConfig:
     """Load the repository-owned application configuration."""
     path = resolve_repository_path(os.getenv("HCMAI_CONFIG_PATH", "configs/baseline.yaml"))
     if not path.is_file():
@@ -118,7 +107,10 @@ def _load_app_config() -> AppConfig:
     return AppConfig.from_yaml(path)
 
 
-def _load_model_config() -> LLMServiceConfig:
+_load_app_config = load_app_config
+
+
+def load_model_config() -> LLMServiceConfig:
     """Load the configuration for legacy remote model capabilities."""
     path = resolve_repository_path(os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml"))
     if not path.is_file():
@@ -126,7 +118,10 @@ def _load_model_config() -> LLMServiceConfig:
     return LLMServiceConfig.from_yaml(path)
 
 
-def _load_remote_llm(
+_load_model_config = load_model_config
+
+
+def load_remote_inference(
     settings: AppConfig,
     messages: list[str],
 ) -> LLMService | None:
@@ -144,6 +139,10 @@ def _load_remote_llm(
             f"{category or type(error).__name__}"
         )
     return service
+
+
+_load_remote_llm = load_remote_inference
+
 
 
 def _load_llm_client(messages: list[str]) -> LLMClient | None:
@@ -200,7 +199,7 @@ def _load_event_translator(
     return EventTranslator(llm, settings.event_translation)
 
 
-def _load_kis_image_assets(
+def load_kis_image_assets(
     settings: AppConfig,
     messages: list[str],
 ) -> KISImageAssetStore | None:
@@ -221,3 +220,5 @@ def _load_kis_image_assets(
     except Exception as error:
         messages.append(f"KIS image asset store unavailable ({error})")
         return None
+
+_load_kis_image_assets = load_kis_image_assets

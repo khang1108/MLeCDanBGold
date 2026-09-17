@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from hcmai.common.config import AppConfig, resolve_repository_path
+from hcmai.common.config import (
+    AppConfig,
+    resolve_dataset_root,
+    resolve_repository_path,
+)
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
 from hcmai.corpus.corpus import _CorpusFrameLoadError
@@ -18,12 +22,29 @@ from hcmai.retrieval.models import RetrievalSource
 logger = get_logger(__name__)
 
 
+def load_configured_corpus(settings: AppConfig, messages: list[str]) -> Corpus | None:
+    """Resolve configured metadata roots and load the canonical Corpus."""
+    metadata_path = resolve_repository_path(
+        os.getenv("HCMAI_METADATA_PATH", str(settings.dataset.frames_path))
+    )
+    configured_dataset_root = os.getenv("HCMAI_DATASET_ROOT", str(settings.dataset.root))
+    dataset_root = resolve_dataset_root(configured_dataset_root)
+    configured_dataset_path = resolve_repository_path(configured_dataset_root)
+    if dataset_root != configured_dataset_path:
+        messages.append(
+            "Migrated legacy HCMAI_DATASET_ROOT from "
+            f"{configured_dataset_path} to {dataset_root}"
+        )
+    return load_corpus(settings, metadata_path, dataset_root, messages)
+
+
 def load_corpus(
     settings: AppConfig,
     metadata_path: Path,
     dataset_root: Path,
     messages: list[str],
 ) -> Corpus | None:
+
     """Load the canonical corpus and append optional-artifact diagnostics."""
     if not metadata_path.is_file() or metadata_path.stat().st_size == 0:
         raise FileNotFoundError(f"Metadata not available at {metadata_path}")
