@@ -1231,8 +1231,9 @@
 
 .kis-event-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+  width: 100%;
 }
 
 .kis-event-id-badge {
@@ -1243,19 +1244,23 @@
   padding: 2px 6px;
   border-radius: 4px;
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
 .kis-event-text {
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: #1e293b;
   flex: 1;
+  word-break: break-word;
 }
 
 .kis-event-actions {
   display: flex;
   gap: 6px;
-  margin-left: auto;
   align-items: center;
+  justify-content: flex-start;
+  margin-top: 2px;
 }
 
 .kis-event-actions .kis-event-edit-btn,
