@@ -171,23 +171,40 @@
 }
 
 .adhoc-sidebar-collapse-btn {
-  background: transparent;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--rounded-sm, 4px);
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-hairline, #e2e8f0);
+  border-radius: 6px;
   color: var(--color-ink-muted, #64748b);
   cursor: pointer;
-  padding: 2px 6px;
-  font-size: 13px;
-  line-height: 1;
-  display: flex;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .adhoc-sidebar-collapse-btn:hover {
   background-color: var(--color-surface-hover, #f1f5f9);
-  color: var(--color-ink, #0f172a);
+  color: var(--color-primary, #6366f1);
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.12);
+}
+
+.adhoc-sidebar-collapse-btn:active {
+  transform: scale(0.92);
+}
+
+.adhoc-sidebar-collapse-btn .sidebar-arrow-icon {
+  display: block;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.adhoc-sidebar-collapse-btn:hover .sidebar-arrow-icon {
+  transform: translateX(-2px);
 }
 
 .adhoc-sidebar-expand-btn {
@@ -207,7 +224,7 @@
 
 .adhoc-sidebar-expand-btn:hover {
   background-color: var(--color-surface-hover, #f1f5f9);
-  color: var(--color-ink, #0f172a);
+  color: var(--color-primary, #6366f1);
 }
 
 .sidebar-expand-icon {
@@ -226,8 +243,16 @@
 }
 
 .sidebar-expand-arrow {
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-ink-muted, #64748b);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.adhoc-sidebar-expand-btn:hover .sidebar-expand-arrow {
+  transform: translateX(2px);
+  color: var(--color-primary, #6366f1);
 }
 
 .adhoc-sidebar::-webkit-scrollbar {
