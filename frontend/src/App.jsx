@@ -89,6 +89,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
         (event.key === '1' || event.code === 'Digit1')
       ) {
         event.preventDefault();
+        event.stopPropagation();
         setActivePage('query');
         return;
       }
@@ -101,6 +102,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
         (event.key === '2' || event.code === 'Digit2')
       ) {
         event.preventDefault();
+        event.stopPropagation();
         setActivePage('workspace');
         return;
       }
@@ -113,6 +115,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
         (event.key.toLowerCase() === 'i' || event.code === 'KeyI')
       ) {
         event.preventDefault();
+        event.stopPropagation();
         if (userIdInputRef.current) {
           userIdInputRef.current.focus();
           userIdInputRef.current.select?.();
@@ -121,8 +124,8 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
       }
     };
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
   }, [setActivePage]);
 
   return (

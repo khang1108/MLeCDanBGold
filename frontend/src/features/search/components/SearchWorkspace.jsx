@@ -694,6 +694,7 @@ const SearchWorkspace = ({
         (event.key.toLowerCase() === 'b' || event.code === 'KeyB')
       ) {
         event.preventDefault();
+        event.stopPropagation();
         handleToggleOptions(!isOptionsCollapsed);
         return;
       }
@@ -706,6 +707,7 @@ const SearchWorkspace = ({
         (event.key.toLowerCase() === 'b' || event.code === 'KeyB')
       ) {
         event.preventDefault();
+        event.stopPropagation();
         handleToggleChat(!isChatCollapsed);
         return;
       }
@@ -718,6 +720,7 @@ const SearchWorkspace = ({
         (event.key.toLowerCase() === 'k' || event.code === 'KeyK')
       ) {
         event.preventDefault();
+        event.stopPropagation();
         if (isChatCollapsed) {
           handleToggleChat(false);
         }
@@ -735,6 +738,7 @@ const SearchWorkspace = ({
         (event.key.toLowerCase() === 'n' || event.code === 'KeyN')
       ) {
         event.preventDefault();
+        event.stopPropagation();
         handleNewSearch();
         setTimeout(() => {
           focusQueryInput();
@@ -752,6 +756,7 @@ const SearchWorkspace = ({
         event.target.tagName !== 'TEXTAREA'
       ) {
         event.preventDefault();
+        event.stopPropagation();
         handleNewSearch();
         return;
       }
@@ -762,36 +767,42 @@ const SearchWorkspace = ({
         const code = event.code;
         if (key === '1' || code === 'Digit1') {
           event.preventDefault();
+          event.stopPropagation();
           filterFolderIdRef.current?.focus();
           filterFolderIdRef.current?.select?.();
           return;
         }
         if (key === '2' || code === 'Digit2') {
           event.preventDefault();
+          event.stopPropagation();
           filterVideoIdRef.current?.focus();
           filterVideoIdRef.current?.select?.();
           return;
         }
         if (key === '3' || code === 'Digit3') {
           event.preventDefault();
+          event.stopPropagation();
           filterTitleRef.current?.focus();
           filterTitleRef.current?.select?.();
           return;
         }
         if (key === '4' || code === 'Digit4') {
           event.preventDefault();
+          event.stopPropagation();
           filterAsrRef.current?.focus();
           filterAsrRef.current?.select?.();
           return;
         }
         if (key === '5' || code === 'Digit5') {
           event.preventDefault();
+          event.stopPropagation();
           filterOcrRef.current?.focus();
           filterOcrRef.current?.select?.();
           return;
         }
         if (key === '6' || code === 'Digit6') {
           event.preventDefault();
+          event.stopPropagation();
           filterObjectRef.current?.focus();
           filterObjectRef.current?.select?.();
           return;
@@ -799,8 +810,8 @@ const SearchWorkspace = ({
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [
     isActive,
     isChatCollapsed,
