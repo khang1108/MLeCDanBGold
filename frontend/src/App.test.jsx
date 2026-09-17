@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 import { getCurrentDresTask, submitDresAnswer } from "./api/submissions";
+import { openEventTrail, closeEventTrail } from "./api/eventTrail";
 
 const jsonResponse = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -9,8 +10,15 @@ const jsonResponse = (payload, status = 200) => ({
   json: jest.fn().mockResolvedValue(payload),
 });
 
+jest.mock("./api/eventTrail", () => ({
+  openEventTrail: jest.fn(),
+  getEventTrail: jest.fn(),
+  actOnEventTrail: jest.fn(),
+  closeEventTrail: jest.fn(),
+}));
+
 jest.mock("./features/search/components/SearchWorkspace", () => (
-  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, replayRequest, userId, historyUserId, onQueryChange }) {
+  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, replayRequest, userId, historyUserId, onQueryChange, onEventTrailInvalidated }) {
     const frame = {
       frame_id: "f1",
       video_id: "V01",
@@ -22,9 +30,39 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
         Unified search workspace
         <button
           type="button"
-          onClick={() => onFrameClick({ frame })}
+          onClick={() => onFrameClick({
+            frame,
+            eventTrailContext: {
+              snapshotId: 'snap_1',
+              resultId: 'r_1',
+              kisRevision: 1,
+              events: [{ id: 'E1', text: 'woman enters' }],
+              searchSessionId: 'q1',
+            },
+          })}
         >
           Open inspector
+        </button>
+        <button
+          type="button"
+          onClick={() => onFrameClick({
+            frame: { ...frame, frame_id: 'f2', result_id: 'r_2' },
+            eventTrailContext: {
+              snapshotId: 'snap_1',
+              resultId: 'r_2',
+              kisRevision: 1,
+              events: [{ id: 'E1', text: 'woman enters' }],
+              searchSessionId: 'q1',
+            },
+          })}
+        >
+          Open inspector result 2
+        </button>
+        <button
+          type="button"
+          onClick={() => onEventTrailInvalidated?.()}
+        >
+          Invalidate trail
         </button>
         <button
           type="button"
@@ -300,4 +338,85 @@ test('leaves a failed session editable without persisting or using that identity
   expect(screen.getByTestId('query-history-user-id').textContent).toBe('unknown-member');
   expect(screen.queryByLabelText(/password|username|credential/i)).toBeNull();
 });
+
+test('manages EventTrail session lifecycle across inspector, modal close, result change, and replay', async () => {
+  openEventTrail.mockReset().mockResolvedValue({
+    session_id: 'trail_1',
+    result_id: 'r_1',
+    video_id: 'V01',
+    kis_revision: 1,
+    trail_revision: 0,
+    status: 'active',
+    path: [{ event_id: 'E1', frame_id: 'f1', frame_idx: 125, timestamp_ms: 5000 }],
+    last_valid_path: null,
+    approved_event_ids: [],
+    rejected_counts: {},
+    window: null,
+    submission_selection: null,
+    transition: null,
+  });
+  closeEventTrail.mockReset().mockResolvedValue();
+
+  render(<App />);
+
+  // 1. Open inspector for result 1
+  fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
+  const openTrailBtn = await screen.findByRole('button', { name: /open eventtrail/i });
+  fireEvent.click(openTrailBtn);
+
+  await waitFor(() => expect(openEventTrail).toHaveBeenCalledTimes(1));
+  expect(openEventTrail).toHaveBeenCalledWith({
+    snapshotId: 'snap_1',
+    resultId: 'r_1',
+    expectedKisRevision: 1,
+    searchSessionId: 'q1',
+  }, expect.any(Object));
+
+  expect(await screen.findByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+
+  // 2. Close modal with Escape -> session preserved, close not called
+  fireEvent.keyDown(window, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('region', { name: /eventtrail exploration/i })).toBeNull());
+  expect(closeEventTrail).not.toHaveBeenCalled();
+
+  // 3. Reopen same result -> active session reused, openEventTrail NOT called again
+  fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
+  expect(await screen.findByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+  expect(openEventTrail).toHaveBeenCalledTimes(1);
+
+  // 4. Select different result -> old session closed before opening new result
+  fireEvent.click(screen.getByRole('button', { name: 'Open inspector result 2' }));
+  await waitFor(() => {
+    expect(closeEventTrail).toHaveBeenCalledWith('trail_1', { expectedTrailRevision: 0 });
+  });
+
+  // 5. Open trail on result 2
+  openEventTrail.mockResolvedValueOnce({
+    session_id: 'trail_2',
+    result_id: 'r_2',
+    video_id: 'V01',
+    kis_revision: 1,
+    trail_revision: 0,
+    status: 'active',
+    path: [{ event_id: 'E1', frame_id: 'f2', frame_idx: 130, timestamp_ms: 5200 }],
+    last_valid_path: null,
+    approved_event_ids: [],
+    rejected_counts: {},
+    window: null,
+    submission_selection: null,
+    transition: null,
+  });
+  const openTrailBtn2 = await screen.findByRole('button', { name: /open eventtrail/i });
+  fireEvent.click(openTrailBtn2);
+  await screen.findByRole('region', { name: /eventtrail exploration/i });
+
+  // Click 'Back to results' -> explicitly closes trail and modal
+  const backBtn = screen.getByRole('button', { name: /back to results/i });
+  fireEvent.click(backBtn);
+  await waitFor(() => {
+    expect(closeEventTrail).toHaveBeenCalledWith('trail_2', { expectedTrailRevision: 0 });
+    expect(screen.queryByRole('region', { name: /eventtrail exploration/i })).toBeNull();
+  });
+});
+
 

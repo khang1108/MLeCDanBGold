@@ -48,7 +48,7 @@ describe('EventTrailPanel', () => {
       />
     );
 
-    expect(screen.getByText(/EventTrail/i)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'EventTrail' })).toBeTruthy();
     expect(screen.getAllByText('woman enters').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('woman sits')).toBeTruthy();
     expect(screen.getByText('woman talks')).toBeTruthy();

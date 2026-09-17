@@ -6,14 +6,13 @@ import { SearchWorkspace } from './features/search';
 import { WorkspacePage } from './features/workspace';
 import { useHealthCheck } from './features/health';
 import { ApiDocsModal } from './features/docs';
-import { useTemporalExploration } from './features/alignment/hooks/useTemporalExploration';
+import { useEventTrail } from './features/event-trail';
 import { VbsSessionProvider, useVbsSession } from './features/vbs/contexts/VbsSessionContext';
 import { SubmissionDialog, useDirectSubmission } from './features/submission';
 
-const explorationSelectionKey = (selection) => {
-  const seed = selection?.explorationSnapshot;
-  const videoId = selection?.frame?.video_id;
-  return seed && videoId ? JSON.stringify([seed, videoId]) : null;
+const eventTrailSelectionKey = (selection) => {
+  const c = selection?.eventTrailContext;
+  return c ? JSON.stringify([c.snapshotId, c.resultId, c.kisRevision]) : null;
 };
 
 const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTask }) => {
@@ -26,38 +25,38 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
   const [replayRequest, setReplayRequest] = useState(null);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
   const replayTokenRef = useRef(0);
-  const explorationKeyRef = useRef(null);
+  const eventTrailKeyRef = useRef(null);
   const userIdInputRef = useRef(null);
   const queryInputRef = useRef(null);
   const { isHealthy, healthData } = useHealthCheck();
-  const exploration = useTemporalExploration();
-  const { close: closeTemporalExploration } = exploration;
+  const eventTrail = useEventTrail();
+  const { close: closeEventTrailSession } = eventTrail;
   const submission = useDirectSubmission({
     userId: connectedUserId,
     selectedTask,
     onSessionRejected: invalidateSession,
   });
 
-  const closeExploration = useCallback(async () => {
-    explorationKeyRef.current = null;
-    await closeTemporalExploration({ suppressError: true });
-  }, [closeTemporalExploration]);
+  const handleEventTrailInvalidated = useCallback(async () => {
+    eventTrailKeyRef.current = null;
+    await closeEventTrailSession({ suppressError: true });
+  }, [closeEventTrailSession]);
 
   const handleQueryFrameClick = (selection) => {
-    const nextKey = explorationSelectionKey(selection);
-    if (!nextKey || (explorationKeyRef.current && explorationKeyRef.current !== nextKey)) {
-      closeExploration();
+    const nextKey = eventTrailSelectionKey(selection);
+    if (!nextKey || (eventTrailKeyRef.current && eventTrailKeyRef.current !== nextKey)) {
+      eventTrailKeyRef.current = null;
+      closeEventTrailSession({ suppressError: true });
+    }
+    if (nextKey) {
+      eventTrailKeyRef.current = nextKey;
     }
     setSelectedFrame(selection);
     setModalQuery(activeQuery);
   };
 
-
-
-
-
   const handleReplay = (historyItem) => {
-    closeExploration();
+    handleEventTrailInvalidated();
     replayTokenRef.current += 1;
     setReplayRequest({ item: historyItem, token: replayTokenRef.current });
     setActivePage('query');
@@ -94,7 +93,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
             queryInputRef={queryInputRef}
             onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
             replayRequest={replayRequest}
-            onExplorationInvalidated={closeExploration}
+            onEventTrailInvalidated={handleEventTrailInvalidated}
           />
         </div>
         <div className="workspace-panel" hidden={activePage !== 'workspace'}>
@@ -113,8 +112,8 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
           events={
             selectedFrame.events
             || selectedFrame.frame?.events
-            || selectedFrame.explorationSnapshot?.events?.map(
-              (event) => (typeof event === 'string' ? event : event?.canonical_text || event?.text || ''),
+            || selectedFrame.eventTrailContext?.events?.map(
+              (event) => (typeof event === 'string' ? event : event?.text || event?.canonical_text || ''),
             )
             || []
           }
@@ -123,28 +122,22 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
           onOpenSubmission={connectedUserId ? submission.open : undefined}
           isSubmissionOpening={submission.opening}
           onClose={() => setSelectedFrame(null)}
-          exploration={selectedFrame.explorationSnapshot ? {
-            events: selectedFrame.explorationSnapshot.events.map(
-              (event) => event.canonical_text,
-            ),
-            session: exploration.session,
-            pending: exploration.pending,
-            error: exploration.error,
-            unsynced: exploration.unsynced,
-            open: (durationSeconds) => {
-              explorationKeyRef.current = explorationSelectionKey(selectedFrame);
-              return exploration.open({
-                snapshot: selectedFrame.explorationSnapshot,
-                videoId: selectedFrame.frame.video_id,
-                durationSeconds,
-              });
+          eventTrail={selectedFrame.eventTrailContext ? {
+            context: selectedFrame.eventTrailContext,
+            state: eventTrail.session,
+            pending: eventTrail.pending,
+            error: eventTrail.error,
+            open: (ctx) => {
+              eventTrailKeyRef.current = eventTrailSelectionKey(selectedFrame);
+              return eventTrail.open(ctx || selectedFrame.eventTrailContext);
             },
-            act: exploration.act,
-            undo: exploration.undo,
-            refresh: exploration.refresh,
-            onBack: async () => {
+            act: eventTrail.act,
+            undo: eventTrail.undo,
+            refresh: eventTrail.refresh,
+            back: async () => {
               setSelectedFrame(null);
-              await closeExploration();
+              eventTrailKeyRef.current = null;
+              await eventTrail.close({ suppressError: true });
             },
           } : undefined}
         />

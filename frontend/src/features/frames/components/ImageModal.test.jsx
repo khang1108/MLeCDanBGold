@@ -1,6 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ImageModal from './ImageModal';
+import { resolveFrameAtTimestamp } from '../../../api/frames';
+
+jest.mock('../../../api/frames', () => ({
+  resolveFrameAtTimestamp: jest.fn(),
+}));
 
 const frame = {
   frame_id: 'f1',
@@ -334,3 +339,320 @@ test('seeking via alignment sequence row updates the video time', async () => {
   const video = await screen.findByLabelText('Video for L21_V001');
   expect(video.currentTime).toBe(2.4);
 });
+
+test('Step 1: shows Open EventTrail button under inspector when context exists without active state', () => {
+  const onOpen = jest.fn();
+  const context = {
+    snapshotId: 'snap_1',
+    resultId: 'r_1',
+    kisRevision: 1,
+    events: [{ id: 'E1', text: 'event 1' }],
+  };
+  render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context,
+        state: null,
+        pending: false,
+        open: onOpen,
+      }}
+    />,
+  );
+
+  const openBtn = screen.getByRole('button', { name: /open eventtrail/i });
+  expect(openBtn).toBeTruthy();
+  expect(openBtn.disabled).toBe(false);
+
+  fireEvent.click(openBtn);
+  expect(onOpen).toHaveBeenCalledWith(context);
+});
+
+test('Step 2: renders EventTrailPanel when state exists; selecting E2 + explore seeks player to candidate', async () => {
+  const state = {
+    session_id: 'ses_1',
+    result_id: 'r_1',
+    video_id: 'L21_V001',
+    kis_revision: 1,
+    trail_revision: 1,
+    status: 'active',
+    path: [
+      { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
+      { event_id: 'E2', frame_id: 'f2', frame_idx: 20, timestamp_ms: 7000 },
+    ],
+    last_valid_path: null,
+    approved_event_ids: [],
+    rejected_counts: {},
+    window: null,
+    submission_selection: null,
+    transition: null,
+  };
+
+  render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state,
+        pending: false,
+        act: jest.fn(),
+      }}
+    />,
+  );
+
+  const video = await screen.findByLabelText('Video for L21_V001');
+  let currentTime = 0;
+  Object.defineProperty(video, 'duration', { configurable: true, value: 30 });
+  Object.defineProperty(video, 'currentTime', {
+    configurable: true,
+    get: () => currentTime,
+    set: (value) => { currentTime = value; },
+  });
+  fireEvent.loadedMetadata(video);
+
+  expect(screen.getByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+  // Click E2 explore
+  const exploreButtons = screen.getAllByRole('button', { name: /explore/i });
+  fireEvent.click(exploreButtons[1]); // E2
+
+  expect(currentTime).toBe(7);
+});
+
+test('Step 3: auto-seeks only on successful Decline replacement of selected event, not Approve or exhausted', async () => {
+  let currentState = {
+    session_id: 'ses_1',
+    result_id: 'r_1',
+    video_id: 'L21_V001',
+    kis_revision: 1,
+    trail_revision: 1,
+    status: 'active',
+    path: [
+      { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
+      { event_id: 'E2', frame_id: 'f2', frame_idx: 20, timestamp_ms: 7000 },
+    ],
+    last_valid_path: null,
+    approved_event_ids: [],
+    rejected_counts: {},
+    window: null,
+    submission_selection: null,
+    transition: null,
+  };
+
+  const actMock = jest.fn();
+
+  const { rerender } = render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state: currentState,
+        pending: false,
+        act: actMock,
+      }}
+    />,
+  );
+
+  const video = await screen.findByLabelText('Video for L21_V001');
+  let currentTime = 2;
+  Object.defineProperty(video, 'duration', { configurable: true, value: 30 });
+  Object.defineProperty(video, 'currentTime', {
+    configurable: true,
+    get: () => currentTime,
+    set: (value) => { currentTime = value; },
+  });
+  fireEvent.loadedMetadata(video);
+
+  // Select E2
+  fireEvent.click(screen.getByTestId('event-rail-item-E2'));
+
+  // Decline E2
+  actMock.mockImplementation(async () => {
+    currentState = {
+      ...currentState,
+      trail_revision: 2,
+      path: [
+        { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
+        { event_id: 'E2', frame_id: 'f2_new', frame_idx: 25, timestamp_ms: 9500 },
+      ],
+      transition: {
+        action_event_id: 'E2',
+        direct_changed_event_ids: ['E2'],
+        indirect_changed_event_ids: [],
+        candidate_diffs: [
+          { event_id: 'E2', before_frame_id: 'f2', after_frame_id: 'f2_new', before_timestamp_ms: 7000, after_timestamp_ms: 9500 },
+        ],
+      },
+    };
+  });
+
+  const declineBtn = screen.getByRole('button', { name: /^decline$/i });
+  fireEvent.click(declineBtn);
+  expect(actMock).toHaveBeenCalledWith({ type: 'decline', event_id: 'E2' });
+
+  // Rerender with updated state
+  rerender(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state: currentState,
+        pending: false,
+        act: actMock,
+      }}
+    />
+  );
+
+  expect(currentTime).toBe(9.5);
+});
+
+test('Step 4: Use resolves canonical frame at player time and acts on EventTrail', async () => {
+  resolveFrameAtTimestamp.mockResolvedValueOnce({
+    frame_id: 'f12',
+    video_id: 'L21_V001',
+    requested_timestamp_ms: 12345,
+    frame_idx: 300,
+    timestamp_ms: 12000,
+    metadata: {},
+  });
+
+  const actMock = jest.fn();
+  const state = {
+    session_id: 'ses_1',
+    result_id: 'r_1',
+    video_id: 'L21_V001',
+    kis_revision: 1,
+    trail_revision: 1,
+    status: 'active',
+    path: [
+      { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
+      { event_id: 'E2', frame_id: 'f2', frame_idx: 20, timestamp_ms: 7000 },
+    ],
+    last_valid_path: null,
+    approved_event_ids: [],
+    rejected_counts: {},
+    window: null,
+    submission_selection: null,
+    transition: null,
+  };
+
+  render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state,
+        pending: false,
+        act: actMock,
+      }}
+    />,
+  );
+
+  const video = await screen.findByLabelText('Video for L21_V001');
+  let currentTime = 0;
+  Object.defineProperty(video, 'duration', { configurable: true, value: 30 });
+  Object.defineProperty(video, 'currentTime', {
+    configurable: true,
+    get: () => currentTime,
+    set: (value) => { currentTime = value; },
+  });
+  fireEvent.loadedMetadata(video);
+  currentTime = 12.345;
+
+  // Select E2
+  fireEvent.click(screen.getByTestId('event-rail-item-E2'));
+
+  // Click Use
+  const useBtn = screen.getByRole('button', { name: /^use$/i });
+  fireEvent.click(useBtn);
+
+  await waitFor(() => {
+    expect(resolveFrameAtTimestamp).toHaveBeenCalledWith({
+      videoId: 'L21_V001',
+      timestampMs: 12345,
+    });
+    expect(actMock).toHaveBeenCalledWith({
+      type: 'use_frame',
+      event_id: 'E2',
+      frame_id: 'f12',
+    });
+  });
+});
+
+test('Step 5: Trail Submit uses submission_selection and hides header submit button', async () => {
+  const onOpenSubmission = jest.fn();
+  const state = {
+    session_id: 'ses_1',
+    result_id: 'r_1',
+    video_id: 'L21_V001',
+    kis_revision: 1,
+    trail_revision: 2,
+    status: 'active',
+    path: [
+      { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
+      { event_id: 'E2', frame_id: 'f12', frame_idx: 300, timestamp_ms: 12000 },
+    ],
+    last_valid_path: null,
+    approved_event_ids: ['E2'],
+    rejected_counts: {},
+    window: null,
+    submission_selection: {
+      event_id: 'E2',
+      frame_id: 'f12',
+      frame_idx: 300,
+      timestamp_ms: 12000,
+    },
+    transition: null,
+  };
+
+  const { rerender } = render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      onOpenSubmission={onOpenSubmission}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state: { ...state, submission_selection: null },
+        pending: false,
+        act: jest.fn(),
+      }}
+    />,
+  );
+
+  // Header submit button is hidden while Trail is active
+  expect(screen.queryByRole('button', { name: 'Submit current video moment to DRES' })).toBeNull();
+
+  // Trail submit is disabled without submission_selection and displays hint
+  const submitBtn = screen.getByRole('button', { name: /^submit$/i });
+  expect(submitBtn.disabled).toBe(true);
+  expect(screen.getByText('Use a frame before submitting from EventTrail.')).toBeTruthy();
+
+  // Rerender with submission_selection
+  rerender(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      onOpenSubmission={onOpenSubmission}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state,
+        pending: false,
+        act: jest.fn(),
+      }}
+    />,
+  );
+
+  expect(submitBtn.disabled).toBe(false);
+  fireEvent.click(submitBtn);
+
+  expect(onOpenSubmission).toHaveBeenCalledWith({
+    videoId: 'L21_V001',
+    startMs: 12000,
+    endMs: 12000,
+  });
+});
+

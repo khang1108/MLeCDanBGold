@@ -122,6 +122,9 @@ const EventTrailPanel = ({
       />
 
       <div className="event-trail-footer-actions">
+        {!state.submission_selection && !isExhausted && (
+          <p className="event-trail-submit-hint">Use a frame before submitting from EventTrail.</p>
+        )}
         <button
           type="button"
           className="btn-secondary event-trail-footer-btn"

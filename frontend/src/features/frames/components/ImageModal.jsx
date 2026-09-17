@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FrameMetadata from "./FrameMetadata";
 import VideoTimeline from "./VideoTimeline";
 import AlignmentAccordion from "../../alignment/components/AlignmentAccordion";
+import EventTrailPanel from "../../event-trail/components/EventTrailPanel";
+import { resolveFrameAtTimestamp } from "../../../api/frames";
 import {
   displayVideoId,
   getStreamVideoUrl,
@@ -16,7 +18,7 @@ const ImageModal = ({
   initialTimestampMs,
   query,
   onClose,
-  exploration,
+  eventTrail,
   onOpenSubmission,
   isSubmissionOpening = false,
 }) => {
@@ -113,9 +115,22 @@ const ImageModal = ({
     if (Array.isArray(events) && events.length > 0) return events;
     if (Array.isArray(frame.events) && frame.events.length > 0) return frame.events;
     if (Array.isArray(frame.aligned_events) && frame.aligned_events.length > 0) return frame.aligned_events;
-    if (Array.isArray(exploration?.events) && exploration.events.length > 0) return exploration.events;
     return [];
-  }, [events, frame.events, frame.aligned_events, exploration?.events]);
+  }, [events, frame.events, frame.aligned_events]);
+
+  const effectiveTrailEvents = useMemo(() => {
+    if (Array.isArray(eventTrail?.context?.events) && eventTrail.context.events.length > 0) {
+      return eventTrail.context.events;
+    }
+    if (Array.isArray(events) && events.length > 0) {
+      return events.map((e, idx) => (
+        typeof e === 'string'
+          ? { id: `E${idx + 1}`, text: e }
+          : { id: e.id || `E${idx + 1}`, text: e.text || e.canonical_text || '' }
+      ));
+    }
+    return [];
+  }, [eventTrail?.context?.events, events]);
 
   const frameIds = useMemo(
     () => frame.frame_ids || frame.aligned_frame_ids || [],
@@ -134,6 +149,108 @@ const ImageModal = ({
     }
     return [];
   }, [resolvedEvents, frameIds, timestampsMs]);
+
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const lastActionRef = useRef(null);
+  const prevTrailRevRef = useRef(eventTrail?.state?.trail_revision);
+
+  useEffect(() => {
+    const currentState = eventTrail?.state;
+    if (!currentState) {
+      prevTrailRevRef.current = undefined;
+      return;
+    }
+    const prevRev = prevTrailRevRef.current;
+    prevTrailRevRef.current = currentState.trail_revision;
+
+    if (prevRev !== undefined && currentState.trail_revision !== prevRev) {
+      const lastAction = lastActionRef.current;
+      if (lastAction?.type === 'decline' && currentState.status === 'active') {
+        const actedEventId = currentState.transition?.action_event_id || lastAction.eventId;
+        const candidate = currentState.path?.find((c) => c.event_id === actedEventId);
+        if (candidate && Number.isFinite(candidate.timestamp_ms)) {
+          handleSeekFromTimestamp(candidate.timestamp_ms);
+        }
+      }
+      lastActionRef.current = null;
+    }
+  }, [eventTrail?.state, handleSeekFromTimestamp]);
+
+  const handleUse = useCallback(async (eventId) => {
+    if (!eventId || !eventTrail?.act) return;
+    const video = videoRef.current;
+    const currentTime = video?.currentTime ?? playbackTime ?? 0;
+    const timestampMs = Math.max(0, Math.round(currentTime * 1000));
+    const videoId = frame.video_id;
+    try {
+      const resolved = await resolveFrameAtTimestamp({ videoId, timestampMs });
+      if (resolved?.frame_id && resolved?.video_id === videoId) {
+        lastActionRef.current = { type: 'use_frame', eventId };
+        await eventTrail.act({
+          type: 'use_frame',
+          event_id: eventId,
+          frame_id: resolved.frame_id,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to resolve canonical frame for Use:', err);
+    }
+  }, [eventTrail, frame.video_id, playbackTime]);
+
+  const handleApprove = useCallback(async (eventId) => {
+    if (!eventId || !eventTrail?.act) return;
+    lastActionRef.current = { type: 'approve', eventId };
+    await eventTrail.act({ type: 'approve', event_id: eventId });
+  }, [eventTrail]);
+
+  const handleDecline = useCallback(async (eventId) => {
+    if (!eventId || !eventTrail?.act) return;
+    lastActionRef.current = { type: 'decline', eventId };
+    await eventTrail.act({ type: 'decline', event_id: eventId });
+  }, [eventTrail]);
+
+  const handleClearAnchor = useCallback(async (eventId) => {
+    if (!eventId || !eventTrail?.act) return;
+    lastActionRef.current = { type: 'clear_anchor', eventId };
+    await eventTrail.act({ type: 'clear_anchor', event_id: eventId });
+  }, [eventTrail]);
+
+  const handleUndo = useCallback(async () => {
+    if (!eventTrail?.undo) return;
+    lastActionRef.current = { type: 'undo' };
+    await eventTrail.undo();
+  }, [eventTrail]);
+
+  const handleSetWindow = useCallback(async (action) => {
+    if (!eventTrail?.act) return;
+    lastActionRef.current = { type: 'set_window' };
+    await eventTrail.act(action);
+  }, [eventTrail]);
+
+  const handleClearWindow = useCallback(async () => {
+    if (!eventTrail?.act) return;
+    lastActionRef.current = { type: 'clear_window' };
+    await eventTrail.act({ type: 'clear_window' });
+  }, [eventTrail]);
+
+  const handleBack = useCallback(async () => {
+    if (eventTrail?.back) {
+      await eventTrail.back();
+    }
+    onClose();
+  }, [eventTrail, onClose]);
+
+  const handleSubmitFromTrail = useCallback((selection) => {
+    if (!selection || !Number.isFinite(selection.timestamp_ms)) return;
+    if (typeof onOpenSubmission === 'function') {
+      const videoId = eventTrail?.state?.video_id || frame.video_id;
+      onOpenSubmission({
+        videoId,
+        startMs: selection.timestamp_ms,
+        endMs: selection.timestamp_ms,
+      });
+    }
+  }, [eventTrail?.state?.video_id, frame.video_id, onOpenSubmission]);
 
   const togglePlayback = useCallback(() => {
     const video = videoRef.current;
@@ -242,7 +359,7 @@ const ImageModal = ({
               {Number.isFinite(frame.timestamp_ms) ? `${videoLabel} · ${frame.timestamp_ms} ms` : videoLabel}
             </span>
             <div className="inspector-header-actions">
-              {typeof onOpenSubmission === 'function' && (
+              {typeof onOpenSubmission === 'function' && !eventTrail?.state && (
                 <button
                   type="button"
                   className="inspector-submit-answer-button"
@@ -270,33 +387,68 @@ const ImageModal = ({
               <p className="modal-query-text">{query.trim()}</p>
             </div>
           )}
-          <div className="inspector-content">
-            <FrameMetadata frame={frame} playbackTime={playbackTime} />
-            <AlignmentAccordion
-              events={effectiveEvents}
-              frameIds={frameIds}
-              timestampsMs={timestampsMs}
-              onSeek={handleSeekFromTimestamp}
-              collapsible={false}
-            />
-            <div className="inspector-shortcuts-card">
-              <span className="shortcuts-card-title">Video Controls</span>
-              <div className="shortcuts-row">
-                <kbd>Space</kbd> / <kbd>K</kbd> <span>Play / Pause</span>
-              </div>
-              <div className="shortcuts-row">
-                <kbd>←</kbd> <kbd>→</kbd> <span>Seek ±5s</span>
-              </div>
-              <div className="shortcuts-row">
-                <kbd>Esc</kbd> <span>Close</span>
+          {eventTrail?.state ? (
+            <div className="inspector-content">
+              <EventTrailPanel
+                events={effectiveTrailEvents}
+                state={eventTrail.state}
+                pending={eventTrail.pending}
+                error={eventTrail.error}
+                selectedEventId={selectedEventId}
+                onSelectEvent={setSelectedEventId}
+                onExplore={(candidate) => handleSeekFromTimestamp(candidate.timestamp_ms)}
+                onUse={handleUse}
+                onApprove={handleApprove}
+                onDecline={handleDecline}
+                onClearAnchor={handleClearAnchor}
+                onUndo={handleUndo}
+                onSetWindow={handleSetWindow}
+                onClearWindow={handleClearWindow}
+                onBack={handleBack}
+                onSubmit={handleSubmitFromTrail}
+              />
+            </div>
+          ) : (
+            <div className="inspector-content">
+              <FrameMetadata frame={frame} playbackTime={playbackTime} />
+              <AlignmentAccordion
+                events={effectiveEvents}
+                frameIds={frameIds}
+                timestampsMs={timestampsMs}
+                onSeek={handleSeekFromTimestamp}
+                collapsible={false}
+              />
+              {eventTrail?.context && (
+                <div className="event-trail-launch-card">
+                  <button
+                    type="button"
+                    className="btn-primary event-trail-open-btn"
+                    onClick={() => eventTrail.open(eventTrail.context)}
+                    disabled={eventTrail.pending}
+                  >
+                    {eventTrail.pending ? 'Opening EventTrail…' : 'Open EventTrail'}
+                  </button>
+                </div>
+              )}
+              <div className="inspector-shortcuts-card">
+                <span className="shortcuts-card-title">Video Controls</span>
+                <div className="shortcuts-row">
+                  <kbd>Space</kbd> / <kbd>K</kbd> <span>Play / Pause</span>
+                </div>
+                <div className="shortcuts-row">
+                  <kbd>←</kbd> <kbd>→</kbd> <span>Seek ±5s</span>
+                </div>
+                <div className="shortcuts-row">
+                  <kbd>Esc</kbd> <span>Close</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
   </div>
-);
+  );
 };
 
 export default ImageModal;
