@@ -36,7 +36,8 @@
   flex-direction: column;
   align-items: stretch;
   gap: 10px;
-  width: min(88vw, 1280px);
+  width: min(96vw, 1560px);
+  max-width: 1560px;
   max-height: calc(100vh - 24px);
 }
 

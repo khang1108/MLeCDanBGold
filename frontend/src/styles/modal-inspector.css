@@ -19,9 +19,9 @@
 .modal-card.split-layout {
   display: flex;
   flex-direction: column;
-  width: min(92vw, 1340px);
-  max-width: 1340px;
-  height: min(88vh, 880px);
+  width: min(96vw, 1540px);
+  max-width: 1540px;
+  height: min(92vh, 940px);
   border-radius: var(--rounded-lg);
   overflow: hidden;
   background-color: #141414; /* Dark viewer base */
@@ -318,13 +318,16 @@
 }
 
 .modal-inspector-column {
-  width: 280px;
+  width: 440px;
+  min-width: 400px;
+  max-width: 480px;
   flex-shrink: 0;
   background-color: var(--color-surface);
   border-left: 1px solid var(--color-hairline);
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow-x: hidden;
 }
 
 .inspector-header {

@@ -9,8 +9,11 @@
   color: var(--color-ink, #0f172a);
   font-family: inherit;
   overflow-y: auto;
+  overflow-x: hidden;
   max-height: 100%;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .event-trail-header {
@@ -19,12 +22,16 @@
   align-items: center;
   border-bottom: 1px solid var(--color-hairline, #e2e8f0);
   padding-bottom: 8px;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .event-trail-title-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .event-trail-heading {
@@ -32,56 +39,65 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--color-ink, #0f172a);
+  white-space: nowrap;
 }
 
 .event-trail-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .event-trail-exit-btn,
 .event-trail-exit-top-btn {
-  height: 26px;
-  padding: 0 8px;
-  font-size: 11px;
-  font-weight: 500;
-  border-radius: 4px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 5px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
-  color: #475569;
+  color: #1e293b;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s ease;
+  box-sizing: border-box;
 }
 
 .event-trail-exit-btn:hover,
 .event-trail-exit-top-btn:hover {
-  background: #f8fafc;
+  background: #f1f5f9;
   border-color: #94a3b8;
   color: #0f172a;
 }
 
 .event-trail-back-btn {
-  height: 26px;
-  padding: 0 8px;
-  font-size: 11px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
   font-weight: 500;
-  border-radius: 4px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #334155;
+  border-radius: 5px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
 }
 
 .event-trail-back-btn:hover {
-  background: #f8fafc;
-  border-color: #94a3b8;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
   color: #0f172a;
 }
 
@@ -93,6 +109,8 @@
   font-weight: 600;
   border-radius: 4px;
   line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .badge-rev {
@@ -152,6 +170,7 @@
   border-radius: 6px;
   font-size: 12px;
   line-height: 1.4;
+  box-sizing: border-box;
 }
 
 .event-trail-exhausted-banner {
@@ -162,6 +181,7 @@
   border-radius: 6px;
   font-size: 12px;
   line-height: 1.4;
+  box-sizing: border-box;
 }
 
 .event-trail-transition-banner {
@@ -174,6 +194,7 @@
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 12px;
+  box-sizing: border-box;
 }
 
 /* ─── Rail ─── */
@@ -181,6 +202,10 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .event-trail-rail.event-trail-rail-dimmed {
@@ -192,9 +217,9 @@
   justify-content: space-between;
   align-items: center;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   color: #64748b;
 }
 
@@ -204,7 +229,10 @@
   gap: 6px;
   max-height: 220px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 2px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .event-trail-rail-item {
@@ -218,6 +246,8 @@
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .event-trail-rail-item:hover {
@@ -239,6 +269,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .event-trail-event-tag {
@@ -266,6 +298,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .event-trail-item-badges {
@@ -282,6 +315,8 @@
   border: 1px solid #f1f5f9;
   padding: 4px 6px;
   border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .event-trail-thumb-wrapper {
@@ -327,29 +362,32 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .event-trail-explore-btn {
   height: 24px;
-  padding: 0 8px;
+  padding: 0 10px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: 4px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
-  color: #334155;
+  color: #0075de;
   cursor: pointer;
+  white-space: nowrap;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s ease;
+  box-sizing: border-box;
 }
 
 .event-trail-explore-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-  color: #0f172a;
+  background: #f0f7ff;
+  border-color: #0075de;
+  color: #005bab;
 }
 
 /* ─── Evidence Inspector ─── */
@@ -362,6 +400,9 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .event-trail-inspector.empty {
@@ -375,6 +416,8 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .event-trail-inspector-title {
@@ -382,6 +425,7 @@
   align-items: flex-start;
   gap: 8px;
   flex: 1;
+  min-width: 0;
 }
 
 .event-trail-event-desc {
@@ -389,6 +433,7 @@
   font-weight: 500;
   color: #0f172a;
   line-height: 1.45;
+  word-break: break-word;
 }
 
 .event-trail-inspector-card {
@@ -399,6 +444,8 @@
   border: 1px solid #f1f5f9;
   padding: 8px;
   border-radius: 6px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .event-trail-inspector-preview {
@@ -472,26 +519,28 @@
   color: #a16207;
 }
 
-/* ─── Action Buttons (Normal size, clean standard design) ─── */
+/* ─── Action Buttons (Clean 3-column grid with normal styling) ─── */
 .event-trail-actions-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   width: 100%;
-  margin-top: 2px;
+  margin-top: 4px;
+  box-sizing: border-box;
 }
 
 .event-trail-action-btn {
-  height: 32px;
-  padding: 0 8px;
+  height: 34px;
+  padding: 0 10px;
   font-size: 13px;
   font-weight: 600;
-  border-radius: 5px;
+  border-radius: 6px;
   border: 1px solid transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  white-space: nowrap;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
   box-sizing: border-box;
 }
@@ -533,7 +582,7 @@
 /* Use: Clean standard secondary button */
 .event-trail-action-btn.use-btn {
   background-color: #ffffff;
-  color: #334155;
+  color: #1e293b;
   border-color: #cbd5e1;
 }
 
@@ -546,13 +595,13 @@
 /* Clear Anchor: Spans across row if visible */
 .event-trail-action-btn.clear-anchor-btn {
   grid-column: 1 / -1;
-  height: 30px;
+  height: 32px;
   font-size: 12px;
   font-weight: 500;
   background-color: #ffffff;
   color: #dc2626;
   border: 1px dashed #f87171;
-  border-radius: 5px;
+  border-radius: 6px;
 }
 
 .event-trail-action-btn.clear-anchor-btn:hover:not(:disabled) {
@@ -566,6 +615,8 @@
   border-radius: 6px;
   overflow: hidden;
   background: #ffffff;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .event-trail-window-toggle {
@@ -582,6 +633,8 @@
   cursor: pointer;
   text-align: left;
   transition: background-color 0.15s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .event-trail-window-toggle:hover {
@@ -596,6 +649,7 @@
   gap: 8px;
   background: #ffffff;
   border-top: 1px solid #f1f5f9;
+  box-sizing: border-box;
 }
 
 .event-trail-window-inputs {
@@ -643,6 +697,7 @@
   font-weight: 500;
   border-radius: 4px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 /* ─── Footer Section (Undo & Submit) ─── */
@@ -653,6 +708,8 @@
   margin-top: auto;
   padding-top: 10px;
   border-top: 1px solid #e2e8f0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .event-trail-submit-hint {
@@ -666,14 +723,15 @@
 
 .event-trail-footer-actions {
   display: grid;
-  grid-template-columns: 1fr 1.5fr;
-  gap: 8px;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .event-trail-footer-btn {
-  height: 36px;
-  padding: 0 14px;
+  height: 38px;
+  padding: 0 16px;
   font-size: 13px;
   font-weight: 600;
   border-radius: 6px;
@@ -681,6 +739,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.15s ease;
   border: 1px solid transparent;
   box-sizing: border-box;
@@ -736,6 +795,7 @@
   font-weight: 500;
   cursor: pointer;
   margin-left: 6px;
+  white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -754,6 +814,7 @@
   border-radius: 3px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 .frame-trail-badge.badge-explored {

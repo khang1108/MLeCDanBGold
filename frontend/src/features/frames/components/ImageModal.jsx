@@ -362,16 +362,6 @@ const ImageModal = ({
                   {eventTrail?.state ? 'EventTrail Exploration' : 'Frame Inspector'}
                 </span>
                 <div className="inspector-header-actions">
-                  {eventTrail?.state && (
-                    <button
-                      type="button"
-                      className="btn-secondary btn-sm event-trail-exit-top-btn"
-                      onClick={handleExitTrail}
-                      title="Exit EventTrail and return to Frame Inspector"
-                    >
-                      Exit EventTrail
-                    </button>
-                  )}
                   <button
                     type="button"
                     className="inspector-close-btn"
