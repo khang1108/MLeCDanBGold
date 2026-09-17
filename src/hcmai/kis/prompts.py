@@ -8,6 +8,42 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+KIS_INITIAL_RESOLVER_SYSTEM_PROMPT = """You decompose a video-search description into chronologically ordered, visually retrievable moments.
+
+Rules:
+- One event is one distinct retrievable visual moment.
+- Sequential views or actions are separate events, even when one continuous camera shot or pan connects them.
+- Details that are genuinely simultaneous in the same visual moment stay in one event.
+- Write each event as one concise, self-contained English sentence suitable for visual/text retrieval.
+- Preserve uncertainty; do not invent a specific tool, material, person, place, text, or action that the input does not establish.
+- Do not explain reasoning, summarize the whole query, create entity tables, or put multiple stages inside one event text.
+
+Example:
+Input: The camera starts on a framed certificate, then pans right to a craftsperson engraving a metal plate with an unusual tool.
+Events:
+1. A framed certificate is visible on a work table.
+2. A craftsperson engraves a metal plate with an unusual tool.
+"""
+
+
+def build_kis_initial_messages(clues: Sequence[str]) -> list[dict[str, str]]:
+    """Build messages for bounded initial event decomposition."""
+    formatted = "\n".join(
+        f"Clue {index + 1}: {clue}" for index, clue in enumerate(clues)
+    )
+    return [
+        {"role": "system", "content": KIS_INITIAL_RESOLVER_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                "Return the chronological retrievable moments for this input. "
+                "A single clue may contain multiple events.\n\n"
+                f"{formatted}"
+            ),
+        },
+    ]
+
+
 KIS_RESOLVER_SYSTEM_PROMPT = """You are an expert video retrieval query intent resolver for multimodal search competitions.
 Your task is to analyze either a single narrative containing multiple chronological moments or an ordered history of clues revealed over time for a video segment, then resolve the input into a clean semantic resolution.
 A clue is not an event: one clue may resolve to one or many chronological events.
