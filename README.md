@@ -2,7 +2,9 @@
 
 MLeCDanBGold is an interactive multimodal video retrieval and reasoning system developed by team MLeCDanBGold from Ho Chi Minh University of Science (HCMUS) for the **Video Browser Showdown (VBS)** and **HCMAI 2026**. It allows search operators to query large-scale video archives using natural language, image similarity, and metadata filters, inspect synchronized keyframe evidence, and submit validated answers directly to competition evaluation servers.
 
-![Search Process Demo](docs/assets/search_demo.gif)
+<p align="center">
+  <img src="docs/assets/search_demo.gif" alt="Search Process Demo" width="100%" />
+</p>
 
 ---
 
