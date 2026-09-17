@@ -23,6 +23,33 @@ from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 EntityId = Annotated[str, StringConstraints(pattern=r"^X[1-9]\d*$")]
 EventId = Annotated[str, StringConstraints(pattern=r"^E[1-9]\d*$")]
+InitialEventText = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=240),
+]
+
+
+class KISInitialResolutionEvent(BaseModel):
+    """One concise retrievable visual moment returned by the initial resolver."""
+
+    model_config = ConfigDict(extra="forbid")
+    text: InitialEventText = Field(
+        description=(
+            "One concise self-contained English description of exactly one distinct "
+            "retrievable visual moment. Do not combine sequential moments or explain reasoning."
+        )
+    )
+
+
+class KISInitialResolution(BaseModel):
+    """Event-only output contract for initial natural-language KIS resolution."""
+
+    model_config = ConfigDict(extra="forbid")
+    events: list[KISInitialResolutionEvent] = Field(
+        min_length=1,
+        max_length=DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
+        description="Chronologically ordered distinct retrievable visual moments.",
+    )
 
 
 class KISResolutionEntity(BaseModel):
