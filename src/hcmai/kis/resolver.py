@@ -2,7 +2,7 @@
 
 This module owns transforming initial natural-language queries into a validated
 KISIntent graph. It delegates semantic reasoning to an LLMClient producing a
-semantic KISResolution, then canonicalizes IDs, revision, bindings, and temporal
+bounded KISInitialResolution, then canonicalizes IDs, revision, bindings, and temporal
 chains server-side.
 """
 
@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
 from hcmai.inference.llm import LLMClient
 from hcmai.kis.models import (
     KISEvent,

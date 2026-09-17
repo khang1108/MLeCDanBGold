@@ -22,3 +22,12 @@ def test_initial_resolution_rejects_too_many_events() -> None:
     ]
     with pytest.raises(ValidationError):
         KISInitialResolution(events=events)
+
+
+def test_legacy_initial_semantic_models_are_not_exported() -> None:
+    import hcmai.kis as kis
+
+    assert not hasattr(kis, "KISResolution")
+    assert not hasattr(kis, "KISResolutionEntity")
+    assert not hasattr(kis, "KISResolutionEvent")
+

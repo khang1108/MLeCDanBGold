@@ -10,8 +10,8 @@ from hcmai.kis.models import (
     KISEntityBinding,
     KISEvent,
     KISImageRef,
+    KISInitialResolution,
     KISIntent,
-    KISResolution,
     KISTemporalEdge,
 )
 
@@ -41,7 +41,7 @@ class KISIntentModelTest(unittest.TestCase):
     def test_REQ_001_kis_contracts_do_not_expose_language(self) -> None:
         self.assertNotIn("language", KISIntent.model_fields)
         self.assertNotIn("language", KISIntent.model_json_schema()["properties"])
-        self.assertNotIn("language", KISResolution.model_fields)
+        self.assertNotIn("language", KISInitialResolution.model_fields)
 
     def test_REQ_002_legacy_language_is_input_only(self) -> None:
         intent = KISIntent.model_validate({**VALID, "language": "vi"})

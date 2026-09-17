@@ -1,13 +1,13 @@
 """Domain package for KIS semantic intent resolution and models."""
 
 from .models import (
+    InitialEventText,
     KISEntity,
     KISEntityBinding,
     KISEvent,
+    KISInitialResolution,
+    KISInitialResolutionEvent,
     KISIntent,
-    KISResolution,
-    KISResolutionEntity,
-    KISResolutionEvent,
     KISTemporalEdge,
 )
 from .resolver import KISIntentResolver, KISResolutionError
@@ -20,14 +20,14 @@ from .scoped_resolver import (
 )
 
 __all__ = [
+    "InitialEventText",
     "KISEntity",
     "KISEntityBinding",
     "KISEvent",
+    "KISInitialResolution",
+    "KISInitialResolutionEvent",
     "KISIntent",
     "KISIntentResolver",
-    "KISResolution",
-    "KISResolutionEntity",
-    "KISResolutionEvent",
     "KISResolutionError",
     "KISGlobalRewriter",
     "GlobalRewriteEvent",
@@ -38,3 +38,4 @@ __all__ = [
     "apply_scoped_resolutions",
     "KISTemporalEdge",
 ]
+
