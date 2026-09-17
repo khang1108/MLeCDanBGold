@@ -11,6 +11,7 @@ import numpy as np
 from hcmai.event_trail.decoder import (
     ConstraintSnapshot,
     TemporalConstraintDecoder,
+    repair_block,
 )
 from hcmai.event_trail.errors import EventTrailError
 from hcmai.event_trail.models import (
@@ -21,6 +22,7 @@ from hcmai.event_trail.models import (
     DeclineCandidate,
     EventCandidate,
     EventTrailSession,
+    RepairEvent,
     SetWindow,
     SnapshotResult,
     SubmissionSelection,
@@ -218,7 +220,7 @@ class EventTrailService:
             if isinstance(action, Undo):
                 return self._act_undo(slot, started)
 
-            if isinstance(action, (ApproveEvent, UseFrame, DeclineCandidate, ClearAnchor)):
+            if isinstance(action, (ApproveEvent, UseFrame, DeclineCandidate, ClearAnchor, RepairEvent)):
                 if action.event_id not in session.event_ids:
                     raise EventTrailError("INVALID_EVENT", f"Unknown event {action.event_id}")
                 event_idx = session.event_ids.index(action.event_id)
@@ -237,6 +239,9 @@ class EventTrailService:
             elif isinstance(action, ClearAnchor):
                 assert event_idx is not None
                 return self._act_clear_anchor(slot, action, event_idx, started)
+            elif isinstance(action, RepairEvent):
+                assert event_idx is not None
+                return self._act_repair(slot, action, event_idx, started)
             elif isinstance(action, SetWindow):
                 return self._act_set_window(slot, action, started)
             elif isinstance(action, ClearWindow):
@@ -337,6 +342,75 @@ class EventTrailService:
                     "total_ms": round(total_ms, 3),
                 },
             )
+        return self._build_trail_view(updated, transition)
+
+    def _act_repair(
+        self, slot: SessionSlot, action: RepairEvent, event_idx: int, started: float
+    ) -> TrailView:
+        session = slot.session
+        if session.constraints.anchors[event_idx] is not None:
+            raise EventTrailError(
+                "INVALID_EVENT",
+                f"Event {action.event_id} is still anchored; clear anchor before repair",
+            )
+
+        outcome = self.decoder.repair(
+            session.video_evidence,
+            session.constraints,
+            session.decoder_config,
+            session.current_path or session.last_valid_path,
+            event_idx,
+        )
+
+        checkpoint = TrailCheckpoint(
+            constraints=session.constraints,
+            submission_selection=session.submission_selection,
+        )
+        new_history = (*session.history, checkpoint)
+
+        start_idx, end_idx = repair_block(session.constraints.anchors, event_idx)
+        diffs: list[CandidateDiff] = []
+        indirect_changed: list[str] = []
+
+        if outcome.status == "ok" and outcome.path is not None:
+            new_path = outcome.path
+            new_status = "active"
+            new_last_valid = outcome.path
+
+            ref_path = session.current_path or session.last_valid_path
+            if ref_path is not None:
+                for i in range(start_idx, end_idx + 1):
+                    eid = session.event_ids[i]
+                    old_fid = ref_path.frame_ids[i]
+                    new_fid = new_path.frame_ids[i]
+                    old_ts = int(ref_path.timestamps_ms[i])
+                    new_ts = int(new_path.timestamps_ms[i])
+                    if old_fid != new_fid:
+                        diffs.append(CandidateDiff(eid, old_fid, new_fid, old_ts, new_ts))
+                        if eid != action.event_id:
+                            indirect_changed.append(eid)
+        else:
+            new_path = None
+            new_status = "exhausted"
+            new_last_valid = session.last_valid_path
+
+        transition = TrailTransition(
+            action_event_id=action.event_id,
+            direct_changed_event_ids=(action.event_id,),
+            indirect_changed_event_ids=tuple(indirect_changed),
+            candidate_diffs=tuple(diffs),
+            latency_ms=outcome.constraint_ms + outcome.dp_ms,
+        )
+
+        updated = replace(
+            session,
+            trail_revision=session.trail_revision + 1,
+            current_path=new_path,
+            last_valid_path=new_last_valid,
+            status=new_status,
+            history=new_history,
+        )
+        slot.session = updated
         return self._build_trail_view(updated, transition)
 
     def _act_approve(self, slot: SessionSlot, action: ApproveEvent, event_idx: int, started: float) -> TrailView:

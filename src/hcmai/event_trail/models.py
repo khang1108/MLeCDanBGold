@@ -134,6 +134,13 @@ class ClearWindow:
 
 
 @dataclass(frozen=True, slots=True)
+class RepairEvent:
+    """Repair candidates within bounded event block bounded by nearest anchors."""
+
+    event_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class Undo:
     """Revert the most recent constraint mutation."""
 
@@ -147,6 +154,7 @@ TrailAction = (
     | ClearAnchor
     | SetWindow
     | ClearWindow
+    | RepairEvent
     | Undo
 )
 

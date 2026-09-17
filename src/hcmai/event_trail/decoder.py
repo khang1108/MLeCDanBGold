@@ -6,6 +6,7 @@ pure temporal frame masks and executing DP decoding for a single video.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
@@ -163,3 +164,165 @@ class TemporalConstraintDecoder:
             constraint_ms=constraint_ms,
             dp_ms=dp_ms,
         )
+
+    def repair(
+        self,
+        video: VideoEventScores,
+        constraints: ConstraintSnapshot,
+        decoder_config: DecoderConfigSnapshot,
+        current_path: AlignedPath | None,
+        target_event_index: int,
+    ) -> DecodeOutcome:
+        """Decode paths for one video under local temporal repair constraints."""
+        c_start = perf_counter()
+
+        if constraints.anchors[target_event_index] is not None:
+            raise ValueError(
+                f"Target event index {target_event_index} is still anchored; "
+                "must clear anchor before repair."
+            )
+
+        start_idx, end_idx = repair_block(constraints.anchors, target_event_index)
+
+        t_left: int | None = None
+        t_right: int | None = None
+
+        if start_idx > 0 and constraints.anchors[start_idx - 1] is not None:
+            t_left = timestamp_for_frame(video, constraints.anchors[start_idx - 1])
+
+        if end_idx < len(constraints.anchors) - 1 and constraints.anchors[end_idx + 1] is not None:
+            t_right = timestamp_for_frame(video, constraints.anchors[end_idx + 1])
+
+        if t_left is not None and t_right is not None and t_left >= t_right:
+            constraint_ms = (perf_counter() - c_start) * 1_000.0
+            return DecodeOutcome(
+                status="contradictory_conditions",
+                path=None,
+                constraint_ms=constraint_ms,
+                dp_ms=0.0,
+            )
+
+        confirmed: list[Interval | None] = []
+        for anchor_fid in constraints.anchors:
+            if anchor_fid is None:
+                confirmed.append(None)
+            else:
+                t = timestamp_for_frame(video, anchor_fid)
+                confirmed.append((t, t))
+
+        window = constraints.window or (
+            int(video.timestamps_ms[0]),
+            int(video.timestamps_ms[-1]),
+        )
+
+        rejected_cells = constraints.rejected_cells
+        if len(rejected_cells) != len(constraints.anchors):
+            rejected_cells = tuple(() for _ in constraints.anchors)
+
+        conditions = Conditions(
+            window=window,
+            confirmed=tuple(confirmed),
+            rejected=rejected_cells,
+        )
+
+        try:
+            mask, domain_status = build_mask(video.timestamps_ms, conditions)
+        except ValueError:
+            constraint_ms = (perf_counter() - c_start) * 1_000.0
+            return DecodeOutcome(
+                status="contradictory_conditions",
+                path=None,
+                constraint_ms=constraint_ms,
+                dp_ms=0.0,
+            )
+
+        if domain_status in ("contradictory_conditions", "no_indexed_frames"):
+            constraint_ms = (perf_counter() - c_start) * 1_000.0
+            return DecodeOutcome(
+                status=domain_status,
+                path=None,
+                constraint_ms=constraint_ms,
+                dp_ms=0.0,
+            )
+
+        for e in range(start_idx, end_idx + 1):
+            if t_left is not None:
+                mask[e] &= (video.timestamps_ms > t_left)
+            if t_right is not None:
+                mask[e] &= (video.timestamps_ms < t_right)
+
+        fixed_assignments: dict[int, str] = {}
+        if current_path is not None:
+            for e in range(len(video.scores)):
+                if e < start_idx or e > end_idx:
+                    if e < len(current_path.frame_ids):
+                        fixed_assignments[e] = current_path.frame_ids[e]
+
+        for e, anchor_fid in enumerate(constraints.anchors):
+            if anchor_fid is not None:
+                fixed_assignments[e] = anchor_fid
+
+        for e, frame_id in fixed_assignments.items():
+            mask[e] &= (video.frame_ids == frame_id)
+
+        if any(mask[e].sum() == 0 for e in range(len(video.scores))):
+            constraint_ms = (perf_counter() - c_start) * 1_000.0
+            return DecodeOutcome(
+                status="no_valid_path",
+                path=None,
+                constraint_ms=constraint_ms,
+                dp_ms=0.0,
+            )
+
+        constraint_ms = (perf_counter() - c_start) * 1_000.0
+
+        dp_start = perf_counter()
+        paths = self.temporal.decode_video(
+            video,
+            allowed=mask,
+            decoder_config=decoder_config,
+        )
+        dp_ms = (perf_counter() - dp_start) * 1_000.0
+
+        if paths:
+            return DecodeOutcome(
+                status="ok",
+                path=paths[0],
+                constraint_ms=constraint_ms,
+                dp_ms=dp_ms,
+            )
+
+        return DecodeOutcome(
+            status="no_valid_path",
+            path=None,
+            constraint_ms=constraint_ms,
+            dp_ms=dp_ms,
+        )
+
+
+def repair_block(
+    anchors: Sequence[str | None],
+    target_event_index: int,
+) -> tuple[int, int]:
+    """Return inclusive unconfirmed block indices [start_idx, end_idx] bounded by nearest anchors."""
+    n = len(anchors)
+    if target_event_index < 0 or target_event_index >= n:
+        raise ValueError(
+            f"target_event_index {target_event_index} out of bounds for {n} events"
+        )
+
+    left_anchor = -1
+    for i in range(target_event_index - 1, -1, -1):
+        if anchors[i] is not None:
+            left_anchor = i
+            break
+    start_idx = left_anchor + 1
+
+    right_anchor = n
+    for i in range(target_event_index + 1, n):
+        if anchors[i] is not None:
+            right_anchor = i
+            break
+    end_idx = right_anchor - 1
+
+    return (start_idx, end_idx)
