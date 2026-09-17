@@ -32,6 +32,23 @@ Remove `language` from:
 `query_text` remains the canonical aggregate text. It is present whenever any
 event contains text and absent only for image-only intents.
 
+## Requirements
+
+- **REQ-001:** New KIS intent and LLM response schemas must not expose or
+  require a `language` field.
+- **REQ-002:** A legacy serialized `KISIntent` containing `language` must still
+  parse, while its new serialization must omit that key.
+- **REQ-003:** Initial, scoped, and global semantic operations must build valid
+  canonical intents from model output that contains no language metadata.
+- **REQ-004:** KIS dense and BM25 retrieval views must use the canonical event
+  text directly for every language.
+- **REQ-005:** KIS runtime setup, search, and readiness must not construct,
+  require, or invoke event translation.
+- **REQ-006:** KIS latency responses must retain `translation_ms` for public
+  compatibility and report it as `0.0`.
+- **REQ-007:** Existing canonical identity, event authorization, entity binding,
+  topology, and image-only invariants must remain unchanged.
+
 ## Runtime Flow
 
 Initial, scoped, and global semantic operations return only semantic content.
@@ -101,4 +118,3 @@ Use a red/green migration:
 - Claiming a retrieval-quality improvement without an HCMAI experiment.
 - Deleting the generic translation package or its configuration.
 - Changing canonical frame/video identity or temporal alignment behavior.
-
