@@ -72,7 +72,7 @@ from hcmai.kis.scoped_resolver import (
     apply_scoped_resolutions,
     canonical_query_text,
 )
-from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
+from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan, build_retrieval_plan
 
 if TYPE_CHECKING:
     from hcmai.kis.assets import KISImageAssetStore
@@ -523,23 +523,11 @@ class SearchService:
 
         self._ensure_search_ready()
 
-        dense_map = {
-            index: event.text
-            for index, event in enumerate(intent.events)
-            if request.use_dense and event.text is not None
-        }
-
-        plan = KISRetrievalPlan(
-            events=tuple(
-                KISRetrievalEvent(
-                    event_id=event.id,
-                    canonical_text=event.text,
-                    dense_text=dense_map.get(index) if request.use_dense else None,
-                    bm25_text=event.text if request.use_bm25 else None,
-                    image_refs=tuple(event.images),
-                )
-                for index, event in enumerate(intent.events)
-            )
+        plan = build_retrieval_plan(
+            intent,
+            overrides=None,
+            use_dense=request.use_dense,
+            use_bm25=request.use_bm25,
         )
         if plan.event_ids != tuple(event.id for event in intent.events):
             raise ValueError("retrieval plan event IDs must match intent event order")

@@ -5,6 +5,7 @@ event IDs.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from hcmai.kis.models import KISImageRef
 
@@ -106,3 +107,48 @@ class KISRetrievalPlan:
                     raise ValueError("every event with text requires BM25 text when BM25 is enabled")
             elif not event.image_refs:
                 raise ValueError("events without text require image evidence")
+
+
+def build_retrieval_plan(
+    intent: Any,
+    overrides: dict[str, Any] | None = None,
+    *,
+    use_dense: bool = True,
+    use_bm25: bool = True,
+) -> KISRetrievalPlan:
+    """Build an immutable retrieval plan from intent and optional retrieval overrides.
+
+    Canonical text always originates from the intent event. Dense and BM25 views
+    incorporate overrides when provided.
+    """
+    rows: list[KISRetrievalEvent] = []
+    for event in intent.events:
+        override = (overrides or {}).get(event.id)
+        dense_text: str | None = None
+        if use_dense:
+            if override is not None and getattr(override, "dense_text", None) is not None:
+                dense_text = override.dense_text
+            elif isinstance(override, dict) and override.get("dense_text") is not None:
+                dense_text = override["dense_text"]
+            else:
+                dense_text = event.text
+
+        bm25_text: str | None = None
+        if use_bm25:
+            if override is not None and getattr(override, "bm25_text", None) is not None:
+                bm25_text = override.bm25_text
+            elif isinstance(override, dict) and override.get("bm25_text") is not None:
+                bm25_text = override["bm25_text"]
+            else:
+                bm25_text = event.text
+
+        rows.append(
+            KISRetrievalEvent(
+                event_id=event.id,
+                canonical_text=event.text,
+                dense_text=dense_text,
+                bm25_text=bm25_text,
+                image_refs=tuple(event.images),
+            )
+        )
+    return KISRetrievalPlan(events=tuple(rows))
