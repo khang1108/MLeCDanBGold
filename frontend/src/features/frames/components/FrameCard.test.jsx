@@ -117,3 +117,18 @@ test('freezes the canonical video and timestamp when display details differ', ()
   fireEvent.click(screen.getByRole('button', { name: 'Submit this frame to DRES' }));
   expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'V01', startMs: 12_345, endMs: 12_345 });
 });
+
+test('Step 2 (Task 7): renders non-ranking badge when explored or exhausted without hiding or altering metadata', () => {
+  const frame = { frame_id: 'f1', video_id: 'V01', timestamp_ms: 5000 };
+
+  const { rerender } = render(<FrameCard frame={frame} annotation="explored" />);
+  expect(screen.getByText('Explored')).toBeTruthy();
+
+  rerender(<FrameCard frame={frame} annotation="exhausted" />);
+  expect(screen.getByText('Exhausted')).toBeTruthy();
+
+  rerender(<FrameCard frame={frame} annotation="unvisited" />);
+  expect(screen.queryByText('Explored')).toBeNull();
+  expect(screen.queryByText('Exhausted')).toBeNull();
+});
+

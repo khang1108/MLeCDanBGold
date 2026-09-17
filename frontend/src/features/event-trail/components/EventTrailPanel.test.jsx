@@ -238,4 +238,31 @@ describe('EventTrailPanel', () => {
     fireEvent.click(clearBtn);
     expect(onClearWindow).toHaveBeenCalledTimes(1);
   });
+
+  test('Step 3 (Task 7): cycles selection through indirect_changed_event_ids when review button is clicked', () => {
+    const onSelectEvent = jest.fn();
+    const transitionState = makeState({
+      transition: {
+        action_event_id: 'E2',
+        direct_changed_event_ids: ['E2'],
+        indirect_changed_event_ids: ['E1', 'E3'],
+        candidate_diffs: [],
+      },
+    });
+
+    render(
+      <EventTrailPanel
+        events={mockEvents}
+        state={transitionState}
+        selectedEventId="E2"
+        onSelectEvent={onSelectEvent}
+      />
+    );
+
+    const cycleBtn = screen.getByRole('button', { name: /2 other events updated/i });
+    expect(cycleBtn).toBeTruthy();
+
+    fireEvent.click(cycleBtn);
+    expect(onSelectEvent).toHaveBeenCalledWith('E1');
+  });
 });

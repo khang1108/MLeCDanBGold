@@ -458,3 +458,61 @@
   color: white;
   font-weight: 700;
 }
+
+.event-trail-cycle-btn {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #a5b4fc;
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.event-trail-cycle-btn:hover {
+  background: rgba(99, 102, 241, 0.3);
+  color: #ffffff;
+}
+
+.event-trail-submit-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  margin: 0 0 6px 0;
+  font-style: italic;
+}
+
+/* ─── Result Grid Badges ─── */
+.frame-trail-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.frame-trail-badge.badge-explored {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.frame-trail-badge.badge-exhausted {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.frame-card.trail-exhausted {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.frame-card.trail-explored {
+  border-color: rgba(59, 130, 246, 0.35);
+}
+

@@ -10,6 +10,7 @@ const FrameCard = ({
   detailStatus = 'idle',
   imageLoading = 'lazy',
   className = '',
+  annotation = 'unvisited',
   onOpenSubmission,
   isSubmissionOpening = false,
   onClick,
@@ -17,7 +18,10 @@ const FrameCard = ({
 }) => {
   const displayFrame = detail ? { ...frame, ...detail } : frame;
   const frameId = displayFrame.frame_id;
-  const cardClassName = [className].filter(Boolean).join(' ');
+  const cardClassName = [
+    className,
+    annotation && annotation !== 'unvisited' ? `trail-${annotation}` : '',
+  ].filter(Boolean).join(' ');
   const previewUrl = frameId ? keyframeUrl(frameId) : null;
   const hasTimestamp = Number.isFinite(displayFrame.timestamp_ms);
   const canSubmitFrame = typeof onOpenSubmission === 'function'
@@ -32,6 +36,12 @@ const FrameCard = ({
           {displayVideoId(displayFrame.video_id)}
         </span>
         <div className="frame-header-meta">
+          {annotation === 'explored' && (
+            <span className="frame-trail-badge badge-explored">Explored</span>
+          )}
+          {annotation === 'exhausted' && (
+            <span className="frame-trail-badge badge-exhausted">Exhausted</span>
+          )}
           {hasTimestamp && (
             <span className="frame-time-badge">{displayFrame.timestamp_ms} ms</span>
           )}

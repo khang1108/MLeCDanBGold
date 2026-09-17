@@ -77,6 +77,7 @@ const SearchWorkspace = ({
   isActive = true,
   onExplorationInvalidated,
   onEventTrailInvalidated,
+  eventTrailAnnotations = {},
 }) => {
   const notifyEventTrailInvalidated = useCallback(() => {
     onEventTrailInvalidated?.();
@@ -694,6 +695,13 @@ const SearchWorkspace = ({
         />
       );
     }
+    const getFrameAnnotation = (frame) => {
+      const snapshotId = liveEventTrailContextRef.current?.snapshotId;
+      if (!frame?.result_id || !snapshotId) return 'unvisited';
+      const key = `${snapshotId}:${frame.result_id}`;
+      return eventTrailAnnotations?.[key] || 'unvisited';
+    };
+
     return (
       <div className="frames-results-shell">
         <FramesBox
@@ -707,6 +715,7 @@ const SearchWorkspace = ({
           onOpenSubmission={handleOpenSubmission}
           isSubmissionOpening={isSubmissionOpening}
           getFrameClassName={getFrameClassName}
+          getFrameAnnotation={getFrameAnnotation}
           gridSize={gridSize}
         />
         {resultType === 'filter' && filterTotalPages > 1 && (

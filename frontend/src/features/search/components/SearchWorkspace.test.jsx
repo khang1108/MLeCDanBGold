@@ -1099,3 +1099,43 @@ test('shows gif loader in place of welcome empty state while search is in progre
   expect(screen.queryByTestId('gif-loader')).toBeNull();
 });
 
+test('Step 1 & 2 (Task 7): preserves ranked result order and shows Trail annotations without reranking or hiding results', async () => {
+  const response = mockKisResponse({
+    queryText: 'test order preservation',
+    evidenceSnapshotId: 'snap_order',
+    results: [
+      { result_id: 'r_1', frame_id: 'f1', video_id: 'V01', frame_idx: 10, timestamp_ms: 1000, score: 0.95 },
+      { result_id: 'r_2', frame_id: 'f2', video_id: 'V02', frame_idx: 20, timestamp_ms: 2000, score: 0.85 },
+    ],
+  });
+  searchKis.mockResolvedValueOnce(response);
+
+  renderSearch({
+    topK: 20,
+    setTopK: jest.fn(),
+    eventTrailAnnotations: {
+      'snap_order:r_1': 'exhausted',
+      'snap_order:r_2': 'explored',
+    },
+  });
+
+  submit('test order preservation');
+
+  expect(await screen.findByAltText('Frame f1')).toBeTruthy();
+  expect(await screen.findByAltText('Frame f2')).toBeTruthy();
+
+  // Annotations are rendered
+  expect(screen.getByText('Exhausted')).toBeTruthy();
+  expect(screen.getByText('Explored')).toBeTruthy();
+
+  // The order is preserved: f1 is first, f2 is second
+  const images = screen.getAllByRole('img');
+  const frameImages = images.filter((img) => img.alt && img.alt.startsWith('Frame '));
+  expect(frameImages[0].getAttribute('alt')).toBe('Frame f1');
+  expect(frameImages[1].getAttribute('alt')).toBe('Frame f2');
+
+  // searchKis called only once for the search, not again for annotations
+  expect(searchKis).toHaveBeenCalledTimes(1);
+});
+
+

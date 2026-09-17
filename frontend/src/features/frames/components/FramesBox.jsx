@@ -19,6 +19,7 @@ const FramesBox = ({
   onOpenSubmission,
   isSubmissionOpening = false,
   getFrameClassName,
+  getFrameAnnotation,
   gridSize = 'normal',
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
@@ -85,6 +86,7 @@ const FramesBox = ({
                   frame={frame}
                   events={events}
                   className={getFrameClassName?.(frame)}
+                  annotation={getFrameAnnotation?.(frame)}
                   onOpenSubmission={onOpenSubmission}
                   isSubmissionOpening={isSubmissionOpening}
                   onClick={() => onFrameClick(frame)}

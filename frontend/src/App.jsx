@@ -1,5 +1,5 @@
 /** Application shell composed from modular feature components. */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppHeader } from './features/header';
 import { ImageModal } from './features/frames';
 import { SearchWorkspace } from './features/search';
@@ -24,6 +24,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [replayRequest, setReplayRequest] = useState(null);
   const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const [eventTrailAnnotations, setEventTrailAnnotations] = useState({});
   const replayTokenRef = useRef(0);
   const eventTrailKeyRef = useRef(null);
   const userIdInputRef = useRef(null);
@@ -37,8 +38,24 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
     onSessionRejected: invalidateSession,
   });
 
+  useEffect(() => {
+    const session = eventTrail.session;
+    if (!session) return;
+    const key = selectedFrame?.eventTrailContext
+      ? `${selectedFrame.eventTrailContext.snapshotId}:${session.result_id}`
+      : null;
+    if (!key) return;
+
+    if (session.status === 'exhausted') {
+      setEventTrailAnnotations((prev) => (prev[key] === 'exhausted' ? prev : { ...prev, [key]: 'exhausted' }));
+    } else if (session.status === 'active') {
+      setEventTrailAnnotations((prev) => (prev[key] === 'explored' ? prev : { ...prev, [key]: 'explored' }));
+    }
+  }, [eventTrail.session, selectedFrame]);
+
   const handleEventTrailInvalidated = useCallback(async () => {
     eventTrailKeyRef.current = null;
+    setEventTrailAnnotations({});
     await closeEventTrailSession({ suppressError: true });
   }, [closeEventTrailSession]);
 
@@ -94,6 +111,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
             onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
             replayRequest={replayRequest}
             onEventTrailInvalidated={handleEventTrailInvalidated}
+            eventTrailAnnotations={eventTrailAnnotations}
           />
         </div>
         <div className="workspace-panel" hidden={activePage !== 'workspace'}>

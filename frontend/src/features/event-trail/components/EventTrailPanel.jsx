@@ -39,6 +39,15 @@ const EventTrailPanel = ({
   const indirectCount = state.transition?.indirect_changed_event_ids?.length || 0;
   const canSubmit = !isExhausted && Boolean(state.submission_selection) && !pending;
 
+  const handleCycleIndirectEvents = () => {
+    const indirectIds = state.transition?.indirect_changed_event_ids;
+    if (!Array.isArray(indirectIds) || indirectIds.length === 0) return;
+    const currentIndex = indirectIds.indexOf(activeEventId);
+    const nextIndex = (currentIndex + 1) % indirectIds.length;
+    const nextEventId = indirectIds[nextIndex];
+    onSelectEvent?.(nextEventId);
+  };
+
   return (
     <section className="event-trail-panel" aria-label="EventTrail Exploration">
       <div className="event-trail-header">
@@ -81,8 +90,17 @@ const EventTrailPanel = ({
             {state.transition.action_event_id
               ? `Action applied to ${state.transition.action_event_id}`
               : 'Window range applied'}
-            {indirectCount > 0 && ` (${indirectCount} other events updated)`}
           </span>
+          {indirectCount > 0 && (
+            <button
+              type="button"
+              className="event-trail-cycle-btn"
+              onClick={handleCycleIndirectEvents}
+              title="Cycle through updated events"
+            >
+              {indirectCount} other events updated
+            </button>
+          )}
         </div>
       )}
 
