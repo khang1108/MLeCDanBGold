@@ -19,14 +19,19 @@ def make_fake_corpus(frames: dict[str, Frame] | None = None) -> Mock:
     """Create a minimal corpus fake with canonical frame records."""
     if frames is None:
         frames = {
-            "v1_f1": Frame("v1", "v1_f1", 10, 1000, "/tmp/v1_f1.jpg", 25.0),
-            "v1_f2": Frame("v1", "v1_f2", 20, 2000, "/tmp/v1_f2.jpg", 25.0),
-            "v2_f1": Frame("v2", "v2_f1", 10, 1000, "/tmp/v2_f1.jpg", 25.0),
-            "v2_f2": Frame("v2", "v2_f2", 20, 2000, "/tmp/v2_f2.jpg", 25.0),
+            "v1_f1": Frame("v1_f1", "video-1", 10, 1000, "/tmp/v1_f1.jpg", fps=25.0),
+            "v1_f2": Frame("v1_f2", "video-1", 20, 2000, "/tmp/v1_f2.jpg", fps=25.0),
+            "v2_f1": Frame("v2_f1", "video-2", 10, 1000, "/tmp/v2_f1.jpg", fps=25.0),
+            "v2_f2": Frame("v2_f2", "video-2", 20, 2000, "/tmp/v2_f2.jpg", fps=25.0),
         }
     corpus = Mock()
     corpus.frame.side_effect = lambda fid: frames[fid]
     corpus.__len__ = Mock(return_value=len(frames))
+    corpus.title.return_value = "Video title"
+    corpus.caption.return_value = "Caption"
+    corpus.ocr.return_value = "OCR"
+    corpus.objects.return_value = ()
+    corpus.transcript.return_value = ""
     return corpus
 
 
