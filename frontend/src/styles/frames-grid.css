@@ -415,7 +415,7 @@
   white-space: nowrap;
 }
 
-.alignment-thumbnail {
+.frame-card .alignment-thumbnail {
   width: 48px;
   height: 32px;
   border-radius: var(--rounded-sm);
