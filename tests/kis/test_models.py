@@ -11,13 +11,13 @@ from hcmai.kis.models import (
     KISEvent,
     KISImageRef,
     KISIntent,
+    KISResolution,
     KISTemporalEdge,
 )
 
 
 VALID = {
     "revision": 7,
-    "language": "en",
     "query_text": "A woman talks to a man in a kitchen.",
     "entities": [
         {"id": "X1", "kind": "person", "description": "woman in a kitchen"},
@@ -38,11 +38,73 @@ VALID = {
 
 
 class KISIntentModelTest(unittest.TestCase):
+    def test_REQ_001_kis_contracts_do_not_expose_language(self) -> None:
+        self.assertNotIn("language", KISIntent.model_fields)
+        self.assertNotIn("language", KISIntent.model_json_schema()["properties"])
+        self.assertNotIn("language", KISResolution.model_fields)
+
+    def test_REQ_002_legacy_language_is_input_only(self) -> None:
+        intent = KISIntent.model_validate({**VALID, "language": "vi"})
+        self.assertNotIn("language", intent.model_dump())
+
+    def test_REQ_007_text_and_query_text_presence_match(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "query_text"):
+            KISIntent.model_validate({**VALID, "query_text": None})
+
+    def test_REQ_007_query_text_remains_required_input(self) -> None:
+        self.assertIn("query_text", KISIntent.model_json_schema()["required"])
+
+    def test_REQ_007_image_only_intent_rejects_query_text(self) -> None:
+        invalid = {
+            "revision": 11,
+            "query_text": "text does not match image-only evidence",
+            "entities": [],
+            "events": [
+                {
+                    "id": "E1",
+                    "text": None,
+                    "images": [
+                        {"asset_id": "sha256:image", "content_type": "image/jpeg"}
+                    ],
+                }
+            ],
+            "temporal_edges": [],
+        }
+
+        with self.assertRaisesRegex(ValidationError, "query_text"):
+            KISIntent.model_validate(invalid)
+
+    def test_REQ_007_one_textual_event_satisfies_query_text_requirement(self) -> None:
+        intent = KISIntent.model_validate(
+            {
+                "revision": 12,
+                "query_text": "A person enters after an image-only clue.",
+                "entities": [],
+                "events": [
+                    {
+                        "id": "E1",
+                        "text": None,
+                        "images": [
+                            {
+                                "asset_id": "sha256:image",
+                                "content_type": "image/jpeg",
+                            }
+                        ],
+                    },
+                    {"id": "E2", "text": "A person enters", "bindings": []},
+                ],
+                "temporal_edges": [
+                    {"source": "E1", "relation": "before", "target": "E2"}
+                ],
+            }
+        )
+
+        self.assertEqual(intent.query_text, "A person enters after an image-only clue.")
+
     def test_accepts_resolved_entity_event_graph(self) -> None:
         intent = KISIntent.model_validate(VALID)
         self.assertEqual(intent.events[0].id, "E1")
         self.assertEqual(len(intent.entities), 2)
-        self.assertEqual(intent.language, "en")
         self.assertEqual(intent.revision, 7)
 
     def test_accepts_image_only_event(self) -> None:
@@ -73,7 +135,6 @@ class KISIntentModelTest(unittest.TestCase):
     def test_accepts_image_only_intent_without_language_or_query_text(self) -> None:
         intent = KISIntent(
             revision=11,
-            language=None,
             query_text=None,
             entities=[],
             events=[
@@ -91,24 +152,6 @@ class KISIntentModelTest(unittest.TestCase):
         )
 
         self.assertEqual(intent.revision, 11)
-
-    def test_rejects_missing_language_or_query_for_textual_intent(self) -> None:
-        invalid = {**VALID, "language": None, "query_text": None}
-
-        with self.assertRaisesRegex(ValidationError, "image-only"):
-            KISIntent.model_validate(invalid)
-
-    def test_rejects_language_without_query_text(self) -> None:
-        invalid = {**VALID, "query_text": None}
-
-        with self.assertRaisesRegex(ValidationError, "both be present or absent"):
-            KISIntent.model_validate(invalid)
-
-    def test_rejects_query_text_without_language(self) -> None:
-        invalid = {**VALID, "language": None}
-
-        with self.assertRaisesRegex(ValidationError, "both be present or absent"):
-            KISIntent.model_validate(invalid)
 
     def test_rejects_unknown_entity_binding(self) -> None:
         invalid = {

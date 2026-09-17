@@ -45,8 +45,7 @@ class KISResolution(BaseModel):
     """Semantic-only response requested from LLM without server-owned fields."""
 
     model_config = ConfigDict(extra="forbid")
-    language: Literal["vi", "en"]
-    query_text: NonBlank
+    query_text: NonBlank | None = None
     entities: list[KISResolutionEntity] = Field(default_factory=list)
     events: list[KISResolutionEvent] = Field(min_length=1)
 
@@ -113,22 +112,29 @@ class KISIntent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     revision: int = Field(ge=1)
-    language: Literal["vi", "en"] | None
     query_text: NonBlank | None
     entities: list[KISEntity] = Field(default_factory=list)
     events: list[KISEvent] = Field(min_length=1)
     temporal_edges: list[KISTemporalEdge] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_language(cls, value: object) -> object:
+        """Accept legacy language input without retaining it in the contract."""
+        if isinstance(value, dict) and "language" in value:
+            return {
+                key: item for key, item in value.items() if key != "language"
+            }
+        return value
+
     @model_validator(mode="after")
     def validate_graph(self) -> Self:
         """Validate identity uniqueness, referential integrity, and edge ordering."""
-        if self.language is None or self.query_text is None:
-            if self.language is not None or self.query_text is not None:
-                raise ValueError("language and query_text must both be present or absent")
-            if any(event.text is not None for event in self.events):
-                raise ValueError(
-                    "language and query_text may be absent only for image-only intents"
-                )
+        has_text = any(event.text is not None for event in self.events)
+        if has_text != (self.query_text is not None):
+            raise ValueError(
+                "query_text must be present exactly when the intent contains text"
+            )
 
         # 1. Unique entity IDs
         entity_ids = [entity.id for entity in self.entities]

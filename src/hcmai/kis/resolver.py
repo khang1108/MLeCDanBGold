@@ -1,7 +1,7 @@
 """Domain resolver for semantic KIS intent graphs using an LLM.
 
 This module owns transforming initial natural-language queries into a validated
-KISIntent graph. It delegates language reasoning to an LLMClient producing a
+KISIntent graph. It delegates semantic reasoning to an LLMClient producing a
 semantic KISResolution, then canonicalizes IDs, revision, bindings, and temporal
 chains server-side.
 """
@@ -79,6 +79,8 @@ class KISIntentResolver:
                 f"({DEFAULT_MAX_TEMPORAL_EVENT_COUNT})"
             )
 
+        query_text = resolution.query_text or " ".join(normalized)
+
         entities = [
             KISEntity(id=f"X{i+1}", kind=e.kind, description=e.description)
             for i, e in enumerate(resolution.entities)
@@ -89,17 +91,18 @@ class KISIntentResolver:
             if len(set(event.entity_indices)) != len(event.entity_indices):
                 raise KISResolutionError("event contains duplicate entity indices")
             bindings = []
-            for entity_index in event.entity_indices:
-                if not 0 <= entity_index < len(entities):
-                    raise KISResolutionError(
-                        f"event references an out-of-range entity index: {entity_index}"
+            if entities:
+                for entity_index in event.entity_indices:
+                    if not 0 <= entity_index < len(entities):
+                        raise KISResolutionError(
+                            f"event references an out-of-range entity index: {entity_index}"
+                        )
+                    bindings.append(
+                        KISEntityBinding(
+                            entity_id=entities[entity_index].id,
+                            role="participant",
+                        )
                     )
-                bindings.append(
-                    KISEntityBinding(
-                        entity_id=entities[entity_index].id,
-                        role="participant",
-                    )
-                )
             events.append(KISEvent(id=f"E{event_index+1}", text=event.text, bindings=bindings))
 
         edges = [
@@ -110,8 +113,7 @@ class KISIntentResolver:
         try:
             return KISIntent(
                 revision=revision,
-                language=resolution.language,
-                query_text=resolution.query_text,
+                query_text=query_text,
                 entities=entities,
                 events=events,
                 temporal_edges=edges,

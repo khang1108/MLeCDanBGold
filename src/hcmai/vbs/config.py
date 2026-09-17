@@ -36,13 +36,16 @@ class DresSettings:
     evaluation_id: str | None = None
     credentials: Mapping[str, DresCredential] = field(default_factory=dict, repr=False)
     media_id_prefix_to_strip: str = ""
+    admin_credential: DresCredential | None = field(default=None, repr=False)
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "DresSettings":
         """Build settings from an environment mapping without leaking secret text."""
 
         values = os.environ if environ is None else environ
-        raw_url = values.get("HCMAI_DRES_BASE_URL", "").strip()
+        raw_url = values.get("HCMAI_DRES_BASE_URL", "").strip().rstrip("/")
+        if raw_url.endswith("/api/v2"):
+            raw_url = raw_url[:-len("/api/v2")].rstrip("/")
         parsed_url = urlsplit(raw_url)
         if (
             parsed_url.scheme not in {"http", "https"}
@@ -70,12 +73,24 @@ class DresSettings:
         credentials = _parse_credentials(values.get("HCMAI_DRES_USERS_JSON", "{}"))
         media_prefix = values.get("HCMAI_DRES_MEDIA_ID_PREFIX_TO_STRIP", "")
 
+        admin_user = values.get("HCMAI_DRES_ADMIN_USERNAME", "").strip()
+        admin_pass = values.get("HCMAI_DRES_ADMIN_PASSWORD", "")
+        admin_credential = None
+        if admin_user and admin_pass:
+            admin_credential = DresCredential(
+                username=admin_user,
+                password=SecretStr(admin_pass),
+            )
+        elif "admin" in credentials:
+            admin_credential = credentials["admin"]
+
         return cls(
-            base_url=raw_url.rstrip("/"),
+            base_url=raw_url,
             timeout_seconds=timeout,
             evaluation_id=evaluation_id,
             credentials=credentials,
             media_id_prefix_to_strip=media_prefix,
+            admin_credential=admin_credential,
         )
 
 

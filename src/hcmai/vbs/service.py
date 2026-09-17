@@ -109,14 +109,52 @@ class DresService:
         )
         return task
 
-    async def resolve_scope(self, user_id: str) -> DresTaskScope:
-        """Return a deterministic backend scope for the active DRES task template."""
+    async def resolve_task_by_name(
+        self,
+        user_id: str,
+        evaluation_id: str,
+        task_name: str,
+    ) -> DresTaskTemplateInfo:
+        """Find a task template by name from the evaluation's templates."""
 
-        evaluation_id = await self.resolve_evaluation(user_id)
-        task = await self.resolve_task(user_id, evaluation_id)
+        evaluations = await self.list_evaluations(user_id)
+        matching_eval = next((e for e in evaluations if e.id == evaluation_id), None)
+        if matching_eval is None:
+            raise DresNoActiveTaskError(f"Evaluation {evaluation_id!r} was not found")
+
+        matching_template = next(
+            (t for t in matching_eval.task_templates if t.name == task_name),
+            None,
+        )
+        if matching_template is None:
+            raise DresNoActiveTaskError(
+                f"Task {task_name!r} was not found in evaluation {evaluation_id!r}"
+            )
+
+        return DresTaskTemplateInfo(
+            name=matching_template.name,
+            task_group=matching_template.task_group,
+            task_type=matching_template.task_type,
+            duration=matching_template.duration,
+        )
+
+    async def resolve_scope(
+        self,
+        user_id: str,
+        evaluation_id: str | None = None,
+        task_name: str | None = None,
+    ) -> DresTaskScope:
+        """Return a deterministic backend scope for the requested or active DRES task."""
+
+        target_evaluation_id = evaluation_id or await self.resolve_evaluation(user_id)
+        if task_name:
+            task = await self.resolve_task_by_name(user_id, target_evaluation_id, task_name)
+        else:
+            task = await self.resolve_task(user_id, target_evaluation_id)
+
         return DresTaskScope(
-            evaluation_id=evaluation_id,
-            task_scope_key=_task_scope_key(evaluation_id, task),
+            evaluation_id=target_evaluation_id,
+            task_scope_key=_task_scope_key(target_evaluation_id, task),
             task_name=task.name,
             task_group=task.task_group,
             task_type=task.task_type,
@@ -161,19 +199,123 @@ class DresService:
             end=end_ms,
         )
 
+    async def _admin_session(self) -> str | None:
+        """Obtain or cache an admin session token if admin credentials exist."""
+
+        if not self.settings.admin_credential:
+            return None
+        async with self._lock("__admin__"):
+            session_id = self._sessions.get("__admin__")
+            if session_id is None:
+                try:
+                    user = await self.client.login(
+                        self.settings.admin_credential.username,
+                        self.settings.admin_credential.password.get_secret_value(),
+                    )
+                    session_id = user.session_id
+                    self._sessions["__admin__"] = session_id
+                except Exception:
+                    return None
+            return session_id
+
+    async def ensure_task_running(
+        self,
+        evaluation_id: str,
+        task_name: str,
+    ) -> bool:
+        """If admin credentials are configured, ensure the specified task is actively RUNNING."""
+
+        admin_session = await self._admin_session()
+        if not admin_session:
+            return False
+
+        try:
+            evaluations = await self.client.list_evaluations(admin_session)
+        except DresAuthenticationError:
+            self._sessions.pop("__admin__", None)
+            admin_session = await self._admin_session()
+            if not admin_session:
+                return False
+            try:
+                evaluations = await self.client.list_evaluations(admin_session)
+            except Exception:
+                return False
+        except Exception:
+            return False
+
+        matching_eval = next((e for e in evaluations if e.id == evaluation_id), None)
+        if not matching_eval:
+            return False
+
+        task_idx = next(
+            (i for i, t in enumerate(matching_eval.task_templates) if t.name == task_name),
+            None,
+        )
+        if task_idx is None:
+            return False
+
+        target_template = matching_eval.task_templates[task_idx]
+
+        try:
+            state = await self.client.get_evaluation_state(evaluation_id, admin_session)
+            current_status = state.get("taskStatus")
+
+            cur_task_name = None
+            if current_status == "RUNNING":
+                try:
+                    cur_task_info = await self.client.get_current_task(evaluation_id, admin_session)
+                    cur_task_name = cur_task_info.name
+                except Exception:
+                    pass
+
+            if current_status == "RUNNING" and cur_task_name == task_name:
+                return True
+
+            if current_status == "RUNNING":
+                try:
+                    await self.client.abort_task(evaluation_id, admin_session)
+                except Exception:
+                    pass
+
+            await self.client.switch_task(evaluation_id, task_idx, admin_session)
+            await self.client.start_task(evaluation_id, admin_session)
+
+            for _ in range(6):
+                await asyncio.sleep(0.5)
+                st = await self.client.get_evaluation_state(evaluation_id, admin_session)
+                if st.get("taskStatus") == "RUNNING":
+                    return True
+
+            return True
+        except Exception:
+            return False
+
     async def submit(
         self,
         user_id: str,
         evaluation_id: str,
         payload: ApiClientSubmission,
+        task_name: str | None = None,
     ):
-        """Send one answer once and evict only this user's session on a 401."""
+        """Send one answer once; if task is not running and admin is configured, activate and retry once."""
 
-        return await self._with_session(
-            user_id,
-            lambda session_id: self.client.submit(evaluation_id, session_id, payload),
-            retry_auth=False,
-        )
+        try:
+            return await self._with_session(
+                user_id,
+                lambda session_id: self.client.submit(evaluation_id, session_id, payload),
+                retry_auth=False,
+            )
+        except DresError as err:
+            err_text = str(err).lower()
+            if "not running" in err_text and task_name and self.settings.admin_credential:
+                activated = await self.ensure_task_running(evaluation_id, task_name)
+                if activated:
+                    return await self._with_session(
+                        user_id,
+                        lambda session_id: self.client.submit(evaluation_id, session_id, payload),
+                        retry_auth=False,
+                    )
+            raise
 
     async def log_results(
         self,

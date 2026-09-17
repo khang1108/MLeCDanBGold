@@ -153,6 +153,74 @@ class DresClient:
         )
         return _status_body(response, "result log")
 
+    async def get_evaluation_state(
+        self,
+        evaluation_id: str,
+        session_id: str,
+    ) -> dict[str, Any]:
+        """Fetch the current task status and timer for an evaluation."""
+
+        response = await self._request(
+            "GET",
+            f"/api/v2/evaluation/{quote(evaluation_id, safe='')}/state",
+            operation="get evaluation state",
+            params={"session": session_id},
+            sensitive_values=(session_id,),
+        )
+        try:
+            return response.json()
+        except (ValueError, json.JSONDecodeError):
+            raise DresUnavailableError("DRES evaluation state returned invalid JSON") from None
+
+    async def switch_task(
+        self,
+        evaluation_id: str,
+        task_idx: int,
+        session_id: str,
+    ) -> DresStatus:
+        """Switch the active task index (admin only)."""
+
+        response = await self._request(
+            "POST",
+            f"/api/v2/evaluation/admin/{quote(evaluation_id, safe='')}/task/switch/{task_idx}",
+            operation="switch task",
+            params={"session": session_id},
+            sensitive_values=(session_id,),
+        )
+        return _status_body(response, "switch task")
+
+    async def start_task(
+        self,
+        evaluation_id: str,
+        session_id: str,
+    ) -> DresStatus:
+        """Start the active task run (admin only)."""
+
+        response = await self._request(
+            "POST",
+            f"/api/v2/evaluation/admin/{quote(evaluation_id, safe='')}/task/start",
+            operation="start task",
+            params={"session": session_id},
+            sensitive_values=(session_id,),
+        )
+        return _status_body(response, "start task")
+
+    async def abort_task(
+        self,
+        evaluation_id: str,
+        session_id: str,
+    ) -> DresStatus:
+        """Abort the active task run (admin only)."""
+
+        response = await self._request(
+            "POST",
+            f"/api/v2/evaluation/admin/{quote(evaluation_id, safe='')}/task/abort",
+            operation="abort task",
+            params={"session": session_id},
+            sensitive_values=(session_id,),
+        )
+        return _status_body(response, "abort task")
+
     async def aclose(self) -> None:
         """Close the reusable underlying HTTPX connection pool."""
 
@@ -191,7 +259,13 @@ class DresClient:
             raise DresAuthenticationError(f"DRES {operation} was unauthorized: {detail}")
         if response.status_code == 404 and operation == "get current task":
             raise DresNoActiveTaskError(f"DRES has no active task: {detail}")
-        if response.status_code in {400, 404, 412}:
+        if response.status_code in {400, 404, 412} or (
+            operation == "submit answers"
+            and any(
+                phrase in detail.lower()
+                for phrase in ("not running", "ended", "cannot submit", "no active task")
+            )
+        ):
             raise DresRejectedSubmissionError(
                 f"DRES rejected {operation} (HTTP {response.status_code}): {detail}"
             )

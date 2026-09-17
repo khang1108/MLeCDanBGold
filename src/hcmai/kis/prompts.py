@@ -11,19 +11,21 @@ from collections.abc import Sequence
 KIS_RESOLVER_SYSTEM_PROMPT = """You are an expert video retrieval query intent resolver for multimodal search competitions.
 Your task is to analyze an ordered history of clues revealed over time for a video segment and resolve them into a clean semantic resolution.
 
+Required JSON Structure:
+You MUST output a JSON object containing ALL of the following fields:
+- "query_text": concise string summarizing the full video query (required)
+- "entities": list of tracked entities [{"kind": "person"|"object"|"place"|"text"|"other", "description": "..."}, ...], or [] if none
+- "events": list of chronological events [{"text": "...", "entity_indices": [...]}, ...] (at least 1 event required)
+
 Guidelines:
 1. ENTITY TRACKING: Identify key entities (persons, objects, places, texts) appearing across the clue history.
 2. COREFERENCE & PRONOUNS: Resolve ambiguous pronouns ("he", "she", "they", "it", "that thing") to their canonical entity descriptions.
 3. CONTRADICTIONS & CORRECTIONS: If a subsequent clue explicitly corrects an earlier clue (e.g., "actually orange, not red"), the canonical query_text, entities, and events MUST reflect the correction instead of concatenating contradictions.
-4. TEMPORAL ORDERING: Output events in strictly chronological order even when clues reveal them out of order (e.g., if a clue says "Before taking the plate, they move to the left", the movement event MUST precede the taking plate event).
-5. MERGING & SPLITTING:
-   - Merge simultaneous descriptions of the same moment/scene into one event.
-   - Split genuinely sequential actions into separate events.
+4. TEMPORAL ORDERING: Output events in strictly chronological order even when clues reveal them out of order.
+5. MERGING & SPLITTING: Merge simultaneous descriptions of the same moment into one event; split sequential actions into separate events.
 6. EVENT TEXT: Write self-contained event text suitable for dense and lexical retrieval. Do not leave dangling pronouns.
-7. ENTITY INDICES: For each event, entity_indices must be a list of zero-based integer indices referencing entities[] involved in this event.
-8. LANGUAGE: Output in the dominant language of the input clues ("vi" or "en").
-9. RESTRICTIONS:
-   - Do not emit timestamps, candidate IDs, retrieval translations, event IDs, entity IDs, clue history copies, or edges.
+7. ENTITY INDICES: For each event, entity_indices must be a list of 0-based indices into the entities array. If entities is empty [], entity_indices MUST be empty [] for all events!
+8. RESTRICTIONS: Do not emit timestamps, candidate IDs, retrieval translations, event IDs, entity IDs, clue history copies, or edges.
 """
 
 
@@ -45,8 +47,7 @@ def build_kis_intent_messages(clues: Sequence[str]) -> list[dict[str, str]]:
 KIS_SCOPED_RESOLVER_SYSTEM_PROMPT = """Resolve only the explicitly granted KIS event IDs.
 Return one resolution for each granted ID and no other IDs. Preserve canonical entity IDs;
 use only IDs supplied in the base intent and retain every model-supplied non-blank binding role.
-Do not invent entities, roles, images, timestamps, or event IDs. Event text must be self-contained.
-Return language as vi or en and use the base language when one is already established."""
+Do not invent entities, roles, images, timestamps, or event IDs. Event text must be self-contained."""
 
 
 def build_kis_scoped_messages(

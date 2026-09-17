@@ -16,7 +16,6 @@ class KISPipelineTest(unittest.TestCase):
     def setUp(self) -> None:
         self.intent = KISIntent(
             revision=2,
-            language="en",
             query_text="A woman talks to a man before taking a white plate.",
             entities=[
                 KISEntity(id="X1", kind="person", description="woman"),
@@ -84,7 +83,6 @@ class KISPipelineTest(unittest.TestCase):
             use_bm25=True,
             top_k=10,
             intent_ms=2.0,
-            translation_ms=3.0,
         )
 
         temporal.search_plan_artifact.assert_called_once_with(
@@ -96,7 +94,8 @@ class KISPipelineTest(unittest.TestCase):
         )
         self.assertIsInstance(execution, KISSearchExecution)
         self.assertEqual(execution.results, [mock_result])
-        self.assertEqual(execution.latency.query_ms, 5.0)
+        self.assertEqual(execution.latency.query_ms, 2.0)
+        self.assertEqual(execution.latency.translation_ms, 0.0)
         self.assertEqual(execution.latency.retrieval_ms, 12.0)
         self.assertEqual(execution.latency.alignment_ms, 3.5)
 
@@ -187,7 +186,7 @@ def test_task2_step1_plan_rejects_nonsequential_ids(ids):
         KISRetrievalPlan(events=tuple(KISRetrievalEvent(i, "text", "text", None) for i in ids))
 
 
-def test_task2_step5_pipeline_uses_plan_text_and_accounts_for_translation():
+def test_task2_step5_pipeline_uses_plan_text_without_translation():
     intent = KISPipelineTest()
     intent.setUp()
     temporal = Mock()
@@ -201,12 +200,12 @@ def test_task2_step5_pipeline_uses_plan_text_and_accounts_for_translation():
         KISRetrievalEvent(f"E{i}", f"canonical {i}", f"dense {i}", f"literal {i}")
         for i in (1, 2)
     ))
-    result = pipeline.execute(intent=intent.intent, retrieval_plan=plan, use_dense=True, use_bm25=True, top_k=3, intent_ms=20, translation_ms=30)
+    result = pipeline.execute(intent=intent.intent, retrieval_plan=plan, use_dense=True, use_bm25=True, top_k=3, intent_ms=20)
     temporal.search_plan_artifact.assert_called_once_with(plan, image_component=None, use_dense=True, use_bm25=True, top_k=3)
     assert result.latency.intent_ms == 20
-    assert result.latency.translation_ms == 30
-    assert result.latency.query_ms == 50
-    assert result.latency.total_ms >= 50
+    assert result.latency.translation_ms == 0.0
+    assert result.latency.query_ms == 20
+    assert result.latency.total_ms >= 20
 
 
 @pytest.mark.parametrize("dense,bm25", [(None, "literal"), ("dense", None)])
@@ -227,7 +226,6 @@ def test_kis_pipeline_multimodal_plan_execution():
     
     intent = KISIntent(
         revision=1,
-        language="en",
         query_text="E1 and E3",
         events=[
             KISEvent(id="E1", text="text one"),
@@ -300,7 +298,6 @@ def test_kis_pipeline_uses_search_plan_artifact_only():
     ))
     intent = KISIntent(
         revision=1,
-        language="en",
         query_text="canonical 1",
         events=[KISEvent(id="E1", text="canonical 1")],
     )

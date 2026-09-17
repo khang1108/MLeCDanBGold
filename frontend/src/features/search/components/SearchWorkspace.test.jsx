@@ -54,7 +54,6 @@ const mockKisResponse = ({
   intent: {
     revision,
     inputs,
-    language: 'en',
     query_text: queryText,
     entities: [],
     events,

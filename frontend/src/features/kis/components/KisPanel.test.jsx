@@ -8,7 +8,6 @@ const STATE_WITH_E1_E2 = {
   revision: 2,
   currentIntent: {
     revision: 2,
-    language: 'en',
     query_text: 'woman enters, then chef appears',
     entities: [
       { id: 'X1', kind: 'person', description: 'woman' },

@@ -97,6 +97,7 @@ class DresUser(_DresModel):
 class DresTaskTemplate(_DresModel):
     """One task template exposed by an evaluation listing."""
 
+    id: str | None = None
     name: str
     task_group: str = Field(alias="taskGroup")
     task_type: str = Field(alias="taskType")

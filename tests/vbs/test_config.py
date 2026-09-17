@@ -25,6 +25,15 @@ def test_dres_settings_defaults_logging_off_and_parses_private_credentials() -> 
     assert "super-secret" not in repr(settings.credentials["member-1"])
 
 
+def test_dres_settings_strips_trailing_api_v2_suffix() -> None:
+    """Normalize base URL when configured with trailing /api/v2 or /api/v2/."""
+
+    settings = DresSettings.from_env({
+        "HCMAI_DRES_BASE_URL": "https://dres.example.test/api/v2/",
+    })
+    assert settings.base_url == "https://dres.example.test"
+
+
 @pytest.mark.parametrize(
     "base_url",
     ["", "ftp://dres.example.test", "https:///missing-host"],
@@ -83,3 +92,26 @@ def test_credential_entries_require_username_and_password() -> None:
             "HCMAI_DRES_BASE_URL": "https://dres.example.test",
             "HCMAI_DRES_USERS_JSON": '{"member":{"username":"u"}}',
         })
+
+
+def test_admin_credential_parsed_from_env_or_users_json() -> None:
+    """Parse admin credentials from explicit env vars or fallback to users JSON."""
+
+    settings_env = DresSettings.from_env({
+        "HCMAI_DRES_BASE_URL": "https://dres.example.test",
+        "HCMAI_DRES_ADMIN_USERNAME": "admin-user",
+        "HCMAI_DRES_ADMIN_PASSWORD": "admin-password",
+    })
+    assert settings_env.admin_credential is not None
+    assert settings_env.admin_credential.username == "admin-user"
+    assert settings_env.admin_credential.password.get_secret_value() == "admin-password"
+    assert "admin-password" not in repr(settings_env)
+
+    settings_json = DresSettings.from_env({
+        "HCMAI_DRES_BASE_URL": "https://dres.example.test",
+        "HCMAI_DRES_USERS_JSON": '{"admin":{"username":"adm","password":"admpass"}}',
+    })
+    assert settings_json.admin_credential is not None
+    assert settings_json.admin_credential.username == "adm"
+    assert settings_json.admin_credential.password.get_secret_value() == "admpass"
+

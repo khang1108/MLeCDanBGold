@@ -37,7 +37,6 @@ def image_store() -> Mock:
 def base_intent() -> KISIntent:
     return KISIntent(
         revision=1,
-        language="en",
         query_text="A woman stands in a kitchen.",
         entities=[
             KISEntity(id="X1", kind="person", description="woman in kitchen"),
@@ -62,7 +61,6 @@ def search_service(image_store: Mock) -> SearchService:
         intent_resolver=Mock(),
         scoped_resolver=Mock(),
         global_rewriter=Mock(),
-        event_translator=Mock(),
         kis_image_assets=image_store,
     )
     service.kis = Mock()

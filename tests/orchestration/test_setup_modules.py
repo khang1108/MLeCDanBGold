@@ -6,11 +6,9 @@ import unittest
 from unittest.mock import Mock
 
 from hcmai.common.config import AppConfig, EventTranslationConfig
-from hcmai.orchestration.setup import _load_event_translator
 from hcmai.orchestration.corpus_setup import load_corpus
 from hcmai.orchestration.retrieval_setup import select_visual_retriever
 from hcmai.retrieval.models import RetrievalSource
-from hcmai.retrieval.translation.service import EventTranslator
 
 
 class _Retrieval:
@@ -62,32 +60,12 @@ class SetupModuleTest(unittest.TestCase):
             ),
         )
 
-    def test_event_translator_loader_uses_configured_translation_settings(self) -> None:
-        """Startup composes translation from the shared LLM client and config."""
-        settings = AppConfig(
-            event_translation=EventTranslationConfig(prompt_version="test-prompt-v1")
-        )
-        llm = Mock(model="provider/model-a")
-        messages: list[str] = []
-
-        translator = _load_event_translator(settings, messages, llm=llm)
-
-        self.assertIsInstance(translator, EventTranslator)
-        self.assertIs(translator._llm, llm)
-        self.assertEqual(translator._config, settings.event_translation)
-        self.assertEqual(messages, [])
-
-    def test_event_translator_loader_reports_missing_llm_client(self) -> None:
-        """Startup reports when translation cannot use the shared LLM client."""
-        messages: list[str] = []
-
-        translator = _load_event_translator(AppConfig(), messages, llm=None)
-
-        self.assertIsNone(translator)
-        self.assertEqual(
-            messages,
-            ["Event translation unavailable: LLM client not configured"],
-        )
+    def test_search_service_has_no_event_translator_dependency(self) -> None:
+        """SearchService must not declare an event_translator parameter."""
+        import inspect
+        from hcmai.orchestration.pipeline import SearchService
+        sig = inspect.signature(SearchService.__init__)
+        self.assertNotIn("event_translator", sig.parameters)
 
 
 if __name__ == "__main__":

@@ -227,3 +227,23 @@ def test_http_transport_translates_errors(monkeypatch: pytest.MonkeyPatch) -> No
     with pytest.raises(InferenceResponseError):
         transport.post_json("http://example.test", {}, {}, 1.0)
 
+
+def test_scoped_resolution_without_language_parses_from_raw_transport() -> None:
+    """Verify raw model payload without language validates as ScopedResolutionBatch."""
+    from hcmai.kis.scoped_resolver import ScopedResolutionBatch
+
+    raw_json = '{"events":[{"event_id":"E1","text":"Con chó được cập nhật","bindings":[]}]}'
+    endpoint = ModelEndpointConfig(base_url="https://api.example/v1", model="Qwen/Qwen3-4B")
+    transport = FakeTransport(
+        response_data={
+            "choices": [
+                {"message": {"role": "assistant", "content": raw_json}}
+            ]
+        }
+    )
+    client = LLMClient(endpoint, transport=transport)
+    result = client.generate_structured([{"role": "user", "content": "patch"}], ScopedResolutionBatch)
+    assert len(result.events) == 1
+    assert result.events[0].event_id == "E1"
+    assert result.events[0].text == "Con chó được cập nhật"
+

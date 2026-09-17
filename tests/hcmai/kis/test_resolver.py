@@ -21,11 +21,15 @@ Q2 = "She is talking to a man."
 Q3 = "Before taking a white plate, they move to the left."
 
 
+def test_REQ_001_kis_resolution_schema_omits_language() -> None:
+    assert "language" not in KISResolution.model_fields
+    assert "language" not in KISResolution.model_json_schema().get("properties", {})
+
+
 def test_resolver_canonicalizes_initial_natural_resolution() -> None:
     """Verify resolver constructs canonical revision, IDs, bindings, and temporal edges."""
     llm = Mock()
     llm.generate_structured.return_value = KISResolution(
-        language="en",
         query_text="A woman talks to a man, moves to the left, and takes a white plate.",
         entities=[
             KISResolutionEntity(kind="person", description="woman in kitchen"),
@@ -65,7 +69,6 @@ def test_legacy_resolver_adapter_uses_explicit_revision_not_input_count() -> Non
     """The temporary clue-sequence adapter keeps revision server-owned."""
     llm = Mock()
     llm.generate_structured.return_value = KISResolution(
-        language="en",
         query_text="A woman enters.",
         entities=[],
         events=[KISResolutionEvent(text="A woman enters")],
@@ -83,7 +86,6 @@ def test_resolver_rejects_out_of_range_entity_index() -> None:
     """Out-of-range entity index raises KISResolutionError."""
     llm = Mock()
     llm.generate_structured.return_value = KISResolution(
-        language="en",
         query_text="A woman talks to someone.",
         entities=[KISResolutionEntity(kind="person", description="woman")],
         events=[KISResolutionEvent(text="talks", entity_indices=[99])],
@@ -97,7 +99,6 @@ def test_resolver_rejects_duplicate_entity_index_in_event() -> None:
     """Duplicate entity index in single event raises KISResolutionError."""
     llm = Mock()
     llm.generate_structured.return_value = KISResolution(
-        language="en",
         query_text="A woman talks to herself.",
         entities=[KISResolutionEntity(kind="person", description="woman")],
         events=[KISResolutionEvent(text="talks", entity_indices=[0, 0])],
@@ -115,7 +116,6 @@ def test_resolver_rejects_too_many_events() -> None:
         for i in range(DEFAULT_MAX_TEMPORAL_EVENT_COUNT + 1)
     ]
     llm.generate_structured.return_value = KISResolution(
-        language="en",
         query_text="Too many events.",
         entities=[],
         events=events,

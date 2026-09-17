@@ -60,7 +60,6 @@ class KISPipeline:
         use_bm25: bool,
         top_k: int,
         intent_ms: float = 0.0,
-        translation_ms: float = 0.0,
     ) -> KISSearchExecution:
         """Search temporal paths using resolved intent events and materialize each midpoint.
 
@@ -104,12 +103,12 @@ class KISPipeline:
         materialization_started = perf_counter()
         results = [self.materializer.build_kis_result(path) for path in artifact.result.paths]
         materialization_ms = (perf_counter() - materialization_started) * 1_000
-        query_ms = intent_ms + translation_ms
+        query_ms = intent_ms
         total_ms = (perf_counter() - started) * 1_000 + query_ms
 
         latency = SearchLatency(
             intent_ms=intent_ms,
-            translation_ms=translation_ms,
+            translation_ms=0.0,
             query_ms=query_ms,
             retrieval_ms=artifact.result.retrieval_ms,
             alignment_ms=artifact.result.alignment_ms,

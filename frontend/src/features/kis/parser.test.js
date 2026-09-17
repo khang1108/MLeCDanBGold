@@ -2,7 +2,6 @@ import { parseComposerDraft } from './parser';
 
 const BASE_INTENT = {
   revision: 3,
-  language: 'en',
   query_text: 'woman enters, talks, then leaves',
   entities: [],
   events: [

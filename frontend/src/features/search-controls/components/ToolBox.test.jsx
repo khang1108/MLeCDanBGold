@@ -115,4 +115,59 @@ describe('ToolBox component', () => {
       expect(opt.textContent).toContain('Coming soon');
     });
   });
+
+  test('renders disabled task selector when VBS participant is not connected', () => {
+    renderToolBox({ topK: 20, setTopK: jest.fn() });
+
+    const taskSelect = screen.getByLabelText(/select evaluation task/i);
+    expect(taskSelect).toBeTruthy();
+    expect(taskSelect.disabled).toBe(true);
+    expect(screen.getByText('Connect VBS to load tasks')).toBeTruthy();
+  });
+
+  test('renders task options and triggers setSelectedTask on user selection', () => {
+    const setSelectedTask = jest.fn();
+    const mockEvaluations = [
+      {
+        id: 'eval-1',
+        name: 'Evaluation 1',
+        status: 'ACTIVE',
+        taskTemplates: [
+          { name: 'task-1', taskGroup: 'KIS', taskType: 'Textual Known Item Search', duration: 300 },
+          { name: 'task-2', taskGroup: 'KIS', taskType: 'Textual Known Item Search', duration: 300 },
+        ],
+      },
+    ];
+
+    renderToolBox({
+      topK: 20,
+      setTopK: jest.fn(),
+      connectedUserId: 'team-a',
+      evaluations: mockEvaluations,
+      selectedTask: {
+        evaluationId: 'eval-1',
+        evaluationName: 'Evaluation 1',
+        taskName: 'task-1',
+        taskGroup: 'KIS',
+        taskType: 'Textual Known Item Search',
+        duration: 300,
+      },
+      setSelectedTask,
+    });
+
+    const taskSelect = screen.getByLabelText(/select evaluation task/i);
+    expect(taskSelect.disabled).toBe(false);
+    expect(taskSelect.value).toBe('eval-1:task-1');
+
+    fireEvent.change(taskSelect, { target: { value: 'eval-1:task-2' } });
+    expect(setSelectedTask).toHaveBeenCalledWith({
+      evaluationId: 'eval-1',
+      evaluationName: 'Evaluation 1',
+      taskName: 'task-2',
+      taskGroup: 'KIS',
+      taskType: 'Textual Known Item Search',
+      duration: 300,
+    });
+  });
 });
+

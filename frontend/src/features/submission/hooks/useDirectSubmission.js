@@ -5,7 +5,7 @@ import { formatTemporalAnswer, parseAnswerLine } from '../answerFormat';
 const recordedOutcomes = new Set(['RECORDED', 'NOT_RECORDED', 'UNKNOWN']);
 
 /** Hold one task-scoped draft in React memory and forward it exactly once. */
-export const useDirectSubmission = ({ userId, onSessionRejected } = {}) => {
+export const useDirectSubmission = ({ userId, selectedTask, onSessionRejected } = {}) => {
   const [dialog, setDialog] = useState(null);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState('');
@@ -25,7 +25,10 @@ export const useDirectSubmission = ({ userId, onSessionRejected } = {}) => {
     setOpening(true);
     setOpenError('');
     try {
-      const task = await getCurrentDresTask(participantId);
+      const task = await getCurrentDresTask(participantId, {
+        evaluationId: selectedTask?.evaluationId,
+        taskName: selectedTask?.taskName,
+      });
       const taskScopeKey = task?.task_scope_key;
       if (typeof taskScopeKey !== 'string' || !taskScopeKey.trim()) {
         throw new Error('The backend did not provide a current DRES task scope.');
@@ -36,6 +39,8 @@ export const useDirectSubmission = ({ userId, onSessionRejected } = {}) => {
         id,
         userId: participantId,
         expectedTaskScopeKey: taskScopeKey,
+        evaluationId: selectedTask?.evaluationId || task.evaluation_id,
+        taskName: selectedTask?.taskName || task.task_name,
         task,
         value: initialValue,
         outcome: null,
@@ -47,7 +52,7 @@ export const useDirectSubmission = ({ userId, onSessionRejected } = {}) => {
       openingRef.current = false;
       setOpening(false);
     }
-  }, [userId]);
+  }, [userId, selectedTask]);
 
   const updateValue = useCallback((value) => {
     setDialog((current) => current ? { ...current, value, error: '' } : current);
@@ -78,6 +83,8 @@ export const useDirectSubmission = ({ userId, onSessionRejected } = {}) => {
       const outcome = await submitDresAnswer({
         userId: dialog.userId,
         expectedTaskScopeKey: dialog.expectedTaskScopeKey,
+        evaluationId: dialog.evaluationId,
+        taskName: dialog.taskName,
         answer,
       });
       if (!outcome || !recordedOutcomes.has(outcome.state)) {

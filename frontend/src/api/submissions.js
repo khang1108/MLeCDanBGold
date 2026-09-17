@@ -110,24 +110,40 @@ const safeOutcome = (payload) => {
 };
 
 /** Resolve the selected participant's secret-free live DRES task metadata. */
-export const getCurrentDresTask = async (value, { signal } = {}) => {
+export const getCurrentDresTask = async (value, { evaluationId, taskName, signal } = {}) => {
   const userId = normalizeUserId(value);
-  const payload = await requestJson(`/api/v1/vbs/task/${encodeURIComponent(userId)}`, { signal });
+  const params = new URLSearchParams();
+  if (nonBlank(evaluationId)) params.set('evaluation_id', evaluationId.trim());
+  if (nonBlank(taskName)) params.set('task_name', taskName.trim());
+  const query = params.toString();
+  const url = `/api/v1/vbs/task/${encodeURIComponent(userId)}${query ? `?${query}` : ''}`;
+  const payload = await requestJson(url, { signal });
   return safeTask(payload, userId);
 };
 
 /** Submit exactly one answer against the popup's frozen DRES task scope. */
-export const submitDresAnswer = async ({ userId: value, expectedTaskScopeKey, answer, signal } = {}) => {
+export const submitDresAnswer = async ({
+  userId: value,
+  expectedTaskScopeKey,
+  answer,
+  evaluationId,
+  taskName,
+  signal,
+} = {}) => {
   const userId = normalizeUserId(value);
   if (!nonBlank(expectedTaskScopeKey)) throw new Error('A DRES task scope key is required');
 
+  const body = {
+    user_id: userId,
+    expected_task_scope_key: expectedTaskScopeKey,
+    answer: safeAnswer(answer),
+  };
+  if (nonBlank(evaluationId)) body.evaluation_id = evaluationId.trim();
+  if (nonBlank(taskName)) body.task_name = taskName.trim();
+
   const payload = await requestJson('/api/v1/vbs/submit', {
     method: 'POST',
-    body: {
-      user_id: userId,
-      expected_task_scope_key: expectedTaskScopeKey,
-      answer: safeAnswer(answer),
-    },
+    body,
     signal,
   });
   return safeOutcome(payload);

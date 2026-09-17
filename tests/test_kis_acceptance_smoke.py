@@ -54,7 +54,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
 
         self.mock_intent_rev1 = KISIntent(
             revision=1,
-            language="en",
             query_text="A woman is standing in a kitchen, then talks to a man.",
             entities=[
                 KISEntity(id="X1", kind="person", description="woman"),
@@ -88,7 +87,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         intent_resolver=None,
         scoped_resolver=None,
         global_rewriter=None,
-        event_translator=None,
         kis_image_assets=None,
     ) -> SearchService:
         service = SearchService(
@@ -98,7 +96,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
             intent_resolver=intent_resolver,
             scoped_resolver=scoped_resolver,
             global_rewriter=global_rewriter,
-            event_translator=event_translator,
             kis_image_assets=kis_image_assets,
         )
         service.kis = Mock()
@@ -110,7 +107,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         intent_resolver = Mock()
         scoped_resolver = Mock()
         global_rewriter = Mock()
-        event_translator = Mock()
         image_assets = Mock(spec=KISImageAssetStore)
         image_assets.ref.side_effect = lambda aid: KISImageRef(asset_id=aid, content_type="image/jpeg")
 
@@ -118,7 +114,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
             intent_resolver=intent_resolver,
             scoped_resolver=scoped_resolver,
             global_rewriter=global_rewriter,
-            event_translator=event_translator,
             kis_image_assets=image_assets,
         )
 
@@ -153,7 +148,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         # 2. PatchEvents: update E2 -> Rev 2
         # ---------------------------------------------------------------------
         scoped_resolver.resolve.return_value = ScopedResolutionBatch(
-            language="en",
             events=[
                 ScopedResolvedEvent(
                     event_id="E2",
@@ -226,7 +220,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         # ---------------------------------------------------------------------
         img_only_base = KISIntent(
             revision=1,
-            language=None,
             query_text=None,
             entities=[],
             events=[
@@ -240,7 +233,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
             temporal_edges=[],
         )
         scoped_resolver.resolve.return_value = ScopedResolutionBatch(
-            language="en",
             events=[
                 ScopedResolvedEvent(
                     event_id="E1",
@@ -262,7 +254,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
             top_k=20,
         )
         res_4 = service.search_kis(req_4)
-        self.assertEqual(res_4.intent.language, "en")
         self.assertEqual(res_4.intent.events[0].text, "the woman is holding a plate")
         self.assertEqual(res_4.intent.events[0].images[0].asset_id, "ast_plate_photo")
 
@@ -270,7 +261,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         # 5. Append on the main flow: E3 -> Rev 4
         # ---------------------------------------------------------------------
         scoped_resolver.resolve.return_value = ScopedResolutionBatch(
-            language="en",
             events=[
                 ScopedResolvedEvent(
                     event_id="E3",
@@ -302,7 +292,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         # ---------------------------------------------------------------------
         intent_rev5 = KISIntent(
             revision=5,
-            language="en",
             query_text="A woman stands in kitchen. She speaks with a chef wearing black. Finally, she takes a white plate.",
             entities=res_5.intent.entities,
             events=[
@@ -393,7 +382,6 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         """Verify image-only exploration seed can be constructed for temporal exploration."""
         img_intent = KISIntent(
             revision=1,
-            language=None,
             query_text=None,
             entities=[],
             events=[
@@ -428,14 +416,10 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         self.assertEqual(len(res.exploration_seed.events[0].image_refs), 1)
         self.assertEqual(res.exploration_seed.events[0].image_refs[0].asset_id, "ast_query_photo")
 
-    def test_retrieval_plan_translates_only_text_bearing_rows_and_preserves_images(self) -> None:
-        """Verify only text-bearing rows are translated and image refs are preserved."""
-        event_translator = Mock()
-        event_translator.translate.return_value = ("A woman standing", "A chef cooking")
-
+    def test_retrieval_plan_projects_direct_multilingual_text_and_preserves_images(self) -> None:
+        """Verify multilingual text is directly projected to dense and bm25 without translation, and image refs preserved."""
         mixed_intent = KISIntent(
             revision=1,
-            language="vi",
             query_text="Một người phụ nữ đứng, một đầu bếp nấu ăn.",
             entities=[],
             events=[
@@ -454,7 +438,7 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
             ],
         )
 
-        service = self._make_service(event_translator=event_translator)
+        service = self._make_service()
         service.kis.execute.return_value = self.mock_execution
 
         req = KISSearchRequest(
@@ -467,20 +451,14 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
         )
         service.search_kis(req)
 
-        # Translator was called ONLY for text-bearing events (E1, E3)
-        event_translator.translate.assert_called_once_with(
-            ("Một người phụ nữ đứng", "Một đầu bếp nấu ăn"),
-            language="vi",
-        )
-
-        # Retrieval plan preserved exact order and image refs
+        # Retrieval plan preserved exact order, direct multilingual text, and image refs
         call = service.kis.execute.call_args[1]
         plan = call["retrieval_plan"]
         self.assertEqual(plan.event_ids, ("E1", "E2", "E3"))
 
         self.assertEqual(plan.events[0].event_id, "E1")
         self.assertEqual(plan.events[0].canonical_text, "Một người phụ nữ đứng")
-        self.assertEqual(plan.events[0].dense_text, "A woman standing")
+        self.assertEqual(plan.events[0].dense_text, "Một người phụ nữ đứng")
         self.assertEqual(plan.events[0].bm25_text, "Một người phụ nữ đứng")
         self.assertEqual(len(plan.events[0].image_refs), 0)
 
@@ -493,7 +471,7 @@ class KISMultimodalAcceptanceSmokeTest(unittest.TestCase):
 
         self.assertEqual(plan.events[2].event_id, "E3")
         self.assertEqual(plan.events[2].canonical_text, "Một đầu bếp nấu ăn")
-        self.assertEqual(plan.events[2].dense_text, "A chef cooking")
+        self.assertEqual(plan.events[2].dense_text, "Một đầu bếp nấu ăn")
         self.assertEqual(plan.events[2].bm25_text, "Một đầu bếp nấu ăn")
         self.assertEqual(len(plan.events[2].image_refs), 0)
 

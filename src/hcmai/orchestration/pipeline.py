@@ -81,7 +81,6 @@ if TYPE_CHECKING:
     from hcmai.kis.resolver import KISIntentResolver
     from hcmai.kis.rewriter import KISGlobalRewriter
     from hcmai.kis.scoped_resolver import KISScopedResolver
-    from hcmai.retrieval.translation.service import EventTranslator
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
     from hcmai.retrieval.evidence.literal import LiteralTextIndex
     from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
@@ -109,7 +108,6 @@ class SearchService:
         temporal: TemporalSearchGateway | None = None,
         image_search: RemoteImageSearchService | ImageSearchService | None = None,
         remote_retrieval: RetrievalGrpcClient | None = None,
-        event_translator: EventTranslator | None = None,
         api_config: ApiConfig | None = None,
         literal_text: LiteralTextIndex | None = None,
         intent_resolver: KISIntentResolver | None = None,
@@ -130,7 +128,6 @@ class SearchService:
         self.retrieval = retrieval
         self.config = config or SearchConfig()
         self.llm = llm
-        self.event_translator = event_translator
         self.literal_text = literal_text
         self.temporal_evidence = temporal_evidence
         self.api_config = api_config or ApiConfig()
@@ -341,7 +338,6 @@ class SearchService:
                     )
                     intent = KISIntent(
                         revision=1,
-                        language=None,
                         query_text=None,
                         entities=[],
                         events=[event],
@@ -402,11 +398,9 @@ class SearchService:
                     txt = resolved_by_id[p.event_id].text if p.event_id in resolved_by_id else None
                     events.append(KISEvent(id=p.event_id, text=txt, images=patch_images[p.event_id], bindings=[]))
                 q_text = canonical_query_text(events)
-                lang = batch.language if q_text is not None else None
                 edges = [KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}") for i in range(1, len(events))]
                 intent = KISIntent(
                     revision=1,
-                    language=lang,
                     query_text=q_text,
                     entities=[],
                     events=events,
@@ -421,7 +415,6 @@ class SearchService:
                 edges = [KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}") for i in range(1, len(events))]
                 intent = KISIntent(
                     revision=1,
-                    language=None,
                     query_text=None,
                     entities=[],
                     events=events,
@@ -493,9 +486,8 @@ class SearchService:
             final_events = [assembled[f"E{i}"] for i in range(1, len(assembled) + 1)]
             edges = [KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}") for i in range(1, len(final_events))]
             q_text = canonical_query_text(final_events)
-            lang = intermediate_intent.language if q_text is not None else None
             intent = intermediate_intent.model_copy(
-                update={"events": final_events, "temporal_edges": edges, "query_text": q_text, "language": lang}
+                update={"events": final_events, "temporal_edges": edges, "query_text": q_text}
             )
             summary = KISOperationSummary(kind="patch_events", affected_event_ids=patch_ids)
             return intent, summary, intent_ms
@@ -531,25 +523,11 @@ class SearchService:
 
         self._ensure_search_ready()
 
-        text_positions = [i for i, event in enumerate(intent.events) if event.text is not None]
-        text_values = tuple(intent.events[i].text for i in text_positions)  # type: ignore[misc]
-        dense_map: dict[int, str] = {}
-        translation_started = perf_counter()
-        if request.use_dense and text_values:
-            if intent.language is not None and intent.language != "en":
-                if self.event_translator is None:
-                    raise SearchServiceUnavailableError(
-                        "Event translation capability is unavailable"
-                    )
-                translated = self.event_translator.translate(
-                    text_values, language=intent.language,
-                )
-                for pos, trans in zip(text_positions, translated, strict=True):
-                    dense_map[pos] = trans
-            else:
-                for pos, val in zip(text_positions, text_values, strict=True):
-                    dense_map[pos] = val
-        translation_ms = (perf_counter() - translation_started) * 1_000.0
+        dense_map = {
+            index: event.text
+            for index, event in enumerate(intent.events)
+            if request.use_dense and event.text is not None
+        }
 
         plan = KISRetrievalPlan(
             events=tuple(
@@ -574,7 +552,6 @@ class SearchService:
                 use_bm25=request.use_bm25,
                 top_k=request.top_k,
                 intent_ms=intent_ms,
-                translation_ms=translation_ms,
             )
         except RetrievalUnavailableError as error:
             raise SearchServiceUnavailableError(str(error)) from error

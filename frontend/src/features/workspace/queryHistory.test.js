@@ -61,7 +61,6 @@ test('preserves full KIS semantic intent graph with entities, events, and tempor
   const mockIntent = {
     revision: 2,
     inputs: ['A woman enters the kitchen', 'She takes a white plate'],
-    language: 'en',
     query_text: 'A woman enters the kitchen and takes a white plate',
     entities: [
       { id: 'X1', kind: 'person', description: 'woman' },

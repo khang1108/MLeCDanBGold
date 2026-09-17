@@ -11,6 +11,7 @@ import {
   connectVbsSession,
   disconnectVbsSession,
   getVbsSessionStatus,
+  getVbsEvaluations,
 } from '../../../api/vbs';
 import { DRES_LOG_STATUS_EVENT } from '../../../api/client';
 
@@ -43,8 +44,47 @@ export const VbsSessionProvider = ({ children }) => {
   const [connectionState, setConnectionState] = useState(initialUserId ? 'connecting' : 'editing');
   const [error, setError] = useState('');
   const [dresLogStatus, setDresLogStatus] = useState(null);
+  const [evaluations, setEvaluations] = useState([]);
+  const [selectedTask, setSelectedTask] = useState(null);
   const requestGenerationRef = useRef(0);
   const restorePromiseRef = useRef(null);
+
+  const refreshEvaluations = useCallback(async (userId = connectedUserId) => {
+    const targetUserId = (userId || '').trim();
+    if (!targetUserId) {
+      setEvaluations([]);
+      setSelectedTask(null);
+      return [];
+    }
+    try {
+      const data = await getVbsEvaluations(targetUserId);
+      const list = Array.isArray(data) ? data : [];
+      setEvaluations(list);
+      setSelectedTask((prev) => {
+        if (prev) {
+          const exists = list.some((e) =>
+            e.id === prev.evaluationId && e.taskTemplates.some((t) => t.name === prev.taskName)
+          );
+          if (exists) return prev;
+        }
+        const activeEval = list.find((e) => e.status === 'ACTIVE' && e.taskTemplates?.length > 0)
+          || list.find((e) => e.taskTemplates?.length > 0);
+        const first = activeEval?.taskTemplates?.[0];
+        if (!first) return null;
+        return {
+          evaluationId: activeEval.id,
+          evaluationName: activeEval.name,
+          taskName: first.name,
+          taskGroup: first.taskGroup,
+          taskType: first.taskType,
+          duration: first.duration,
+        };
+      });
+      return list;
+    } catch {
+      return [];
+    }
+  }, [connectedUserId]);
 
   const setDraftUserId = useCallback((value) => {
     setDraftUserIdState(String(value ?? ''));
@@ -87,6 +127,8 @@ export const VbsSessionProvider = ({ children }) => {
     setConnectionState('editing');
     setError('');
     setDresLogStatus(null);
+    setEvaluations([]);
+    setSelectedTask(null);
     writeStoredUserId('');
     if (!userId) return;
 
@@ -106,6 +148,8 @@ export const VbsSessionProvider = ({ children }) => {
     setConnectedUserId('');
     setConnectionState('editing');
     setDresLogStatus(null);
+    setEvaluations([]);
+    setSelectedTask(null);
     setError('DRES rejected this cached session. Connect the participant again before submitting.');
     writeStoredUserId('');
     return true;
@@ -120,6 +164,15 @@ export const VbsSessionProvider = ({ children }) => {
     window.addEventListener(DRES_LOG_STATUS_EVENT, handleDresLogStatus);
     return () => window.removeEventListener(DRES_LOG_STATUS_EVENT, handleDresLogStatus);
   }, [connectedUserId]);
+
+  useEffect(() => {
+    if (connectedUserId) {
+      refreshEvaluations(connectedUserId);
+    } else {
+      setEvaluations([]);
+      setSelectedTask(null);
+    }
+  }, [connectedUserId, refreshEvaluations]);
 
   useEffect(() => {
     const storedUserId = initialUserId;
@@ -166,10 +219,28 @@ export const VbsSessionProvider = ({ children }) => {
     connectionState,
     error,
     dresLogStatus,
+    evaluations,
+    selectedTask,
+    setSelectedTask,
+    refreshEvaluations,
     connect,
     disconnect,
     invalidateSession,
-  }), [draftUserId, setDraftUserId, connectedUserId, connectionState, error, dresLogStatus, connect, disconnect, invalidateSession]);
+  }), [
+    draftUserId,
+    setDraftUserId,
+    connectedUserId,
+    connectionState,
+    error,
+    dresLogStatus,
+    evaluations,
+    selectedTask,
+    setSelectedTask,
+    refreshEvaluations,
+    connect,
+    disconnect,
+    invalidateSession,
+  ]);
 
   return <VbsSessionContext.Provider value={value}>{children}</VbsSessionContext.Provider>;
 };
@@ -177,6 +248,5 @@ export const VbsSessionProvider = ({ children }) => {
 /** Read the current participant draft, handshake state, and connected identity. */
 export const useVbsSession = () => {
   const context = useContext(VbsSessionContext);
-  if (!context) throw new Error('useVbsSession must be used within VbsSessionProvider');
-  return context;
+  return context || {};
 };

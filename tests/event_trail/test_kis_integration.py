@@ -91,13 +91,11 @@ def test_search_kis_captures_snapshot_and_assigns_result_ids(corpus, mock_artifa
         intent_resolver=Mock(),
         scoped_resolver=Mock(),
         global_rewriter=Mock(),
-        event_translator=Mock(),
         kis_image_assets=Mock(),
     )
     # Intent resolver returning 1 event
     intent = KISIntent(
         revision=1,
-        language="en",
         query_text="woman enters",
         entities=[],
         events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],
@@ -158,12 +156,10 @@ def test_search_kis_multiple_results_share_same_video_evidence(corpus):
         intent_resolver=Mock(),
         scoped_resolver=Mock(),
         global_rewriter=Mock(),
-        event_translator=Mock(),
         kis_image_assets=Mock(),
     )
     intent = KISIntent(
         revision=1,
-        language="en",
         query_text="woman enters",
         entities=[],
         events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],
@@ -231,12 +227,10 @@ def test_search_kis_degrades_gracefully_on_memory_error(corpus, mock_artifact, m
         intent_resolver=Mock(),
         scoped_resolver=Mock(),
         global_rewriter=Mock(),
-        event_translator=Mock(),
         kis_image_assets=Mock(),
     )
     intent = KISIntent(
         revision=1,
-        language="en",
         query_text="woman enters",
         entities=[],
         events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],
@@ -310,7 +304,6 @@ def test_kis_snapshot_trail_lifecycle_with_scoring_call_counters(corpus, mock_ar
         intent_resolver=Mock(),
         scoped_resolver=Mock(),
         global_rewriter=Mock(),
-        event_translator=Mock(),
         kis_image_assets=Mock(),
     )
     service.kis.temporal = counting_temporal
@@ -323,7 +316,6 @@ def test_kis_snapshot_trail_lifecycle_with_scoring_call_counters(corpus, mock_ar
 
     intent = KISIntent(
         revision=1,
-        language="en",
         query_text="woman enters",
         entities=[],
         events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],
@@ -400,12 +392,10 @@ def test_REQ_008_kis_snapshot_uses_remote_scoring_revision(corpus, mock_artifact
         intent_resolver=Mock(),
         scoped_resolver=Mock(),
         global_rewriter=Mock(),
-        event_translator=Mock(),
         kis_image_assets=Mock(),
     )
     intent = KISIntent(
         revision=1,
-        language="en",
         query_text="woman enters",
         entities=[],
         events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],
@@ -461,12 +451,10 @@ def test_search_kis_rejects_missing_scoring_revision(corpus, mock_artifact) -> N
         intent_resolver=Mock(),
         scoped_resolver=Mock(),
         global_rewriter=Mock(),
-        event_translator=Mock(),
         kis_image_assets=Mock(),
     )
     intent = KISIntent(
         revision=1,
-        language="en",
         query_text="woman enters",
         entities=[],
         events=[KISEvent(id="E1", text="woman enters", images=[], bindings=[])],

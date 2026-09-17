@@ -27,7 +27,6 @@ from hcmai.kis.scoped_resolver import (
 def _base_intent() -> KISIntent:
     return KISIntent(
         revision=1,
-        language="en",
         query_text="A woman talks to a man, then takes a plate.",
         entities=[
             KISEntity(id="X1", kind="person", description="woman"),
@@ -59,10 +58,28 @@ def _base_multimodal_intent() -> KISIntent:
     )
 
 
+def test_REQ_001_scoped_batch_does_not_expose_language() -> None:
+    assert "language" not in ScopedResolutionBatch.model_fields
+    assert "language" not in ScopedResolutionBatch.model_json_schema().get("properties", {})
+
+
+def test_REQ_003_scoped_response_without_language_updates_textual_intent() -> None:
+    llm = Mock()
+    llm.generate_structured.return_value = ScopedResolutionBatch(
+        events=[ScopedResolvedEvent(event_id="E2", text="Con chó được cập nhật")]
+    )
+    result = KISScopedResolver(llm).resolve(
+        _base_intent(),
+        [EventPatchInstruction(event_id="E2", instruction="cập nhật con chó")],
+    )
+    updated = apply_scoped_resolutions(_base_intent(), result, revision=2)
+    assert updated.events[1].text == "Con chó được cập nhật"
+    assert "language" not in result.model_dump()
+
+
 def test_scoped_resolver_returns_only_named_events() -> None:
     llm = Mock()
     llm.generate_structured.return_value = ScopedResolutionBatch(
-        language="en",
         events=[
             ScopedResolvedEvent(
                 event_id="E2",
@@ -86,7 +103,6 @@ def test_scoped_resolver_returns_only_named_events() -> None:
 def test_scoped_resolver_rejects_model_widening_scope() -> None:
     llm = Mock()
     llm.generate_structured.return_value = ScopedResolutionBatch(
-        language="en",
         events=[
             ScopedResolvedEvent(event_id="E1", text="unrelated"),
             ScopedResolvedEvent(event_id="E2", text="updated"),
@@ -103,7 +119,6 @@ def test_scoped_resolver_rejects_model_widening_scope() -> None:
 def test_apply_scoped_preserves_unrelated_event_and_images() -> None:
     base = _base_multimodal_intent()
     resolved = ScopedResolutionBatch(
-        language="en",
         events=[ScopedResolvedEvent(event_id="E2", text="Updated plate action")],
     )
 
@@ -118,23 +133,20 @@ def test_apply_scoped_preserves_unrelated_event_and_images() -> None:
     assert result.query_text == "A woman talks to a man. Updated plate action"
 
 
-def test_first_textual_scoped_update_establishes_language_for_image_only_intent() -> None:
+def test_first_textual_scoped_update_populates_query_text_for_image_only_intent() -> None:
     base = KISIntent(
         revision=1,
-        language=None,
         query_text=None,
         entities=[],
         events=[KISEvent(id="E1", text=None, images=[KISImageRef(asset_id="a", content_type="image/png")])],
         temporal_edges=[],
     )
     resolved = ScopedResolutionBatch(
-        language="en",
         events=[ScopedResolvedEvent(event_id="E1", text="The woman is holding a plate")],
     )
 
     result = apply_scoped_resolutions(base, resolved, revision=2)
 
-    assert result.language == "en"
     assert result.query_text == "The woman is holding a plate"
     assert result.events[0].text == "The woman is holding a plate"
     assert result.events[0].images == base.events[0].images
@@ -143,7 +155,6 @@ def test_first_textual_scoped_update_establishes_language_for_image_only_intent(
 def test_scoped_resolver_rejects_unknown_binding_entity_and_blank_role() -> None:
     llm = Mock()
     llm.generate_structured.return_value = ScopedResolutionBatch(
-        language="en",
         events=[
             ScopedResolvedEvent(
                 event_id="E1",
@@ -161,7 +172,6 @@ def test_scoped_resolver_rejects_unknown_binding_entity_and_blank_role() -> None
 def test_initial_scoped_batch_has_contiguous_events_and_no_bindings() -> None:
     llm = Mock()
     llm.generate_structured.return_value = ScopedResolutionBatch(
-        language="vi",
         events=[
             ScopedResolvedEvent(event_id="E1", text="Mot nguoi di bo"),
             ScopedResolvedEvent(event_id="E2", text="Nguoi ay ngoi xuong"),
@@ -177,7 +187,6 @@ def test_initial_scoped_batch_has_contiguous_events_and_no_bindings() -> None:
     )
     intent = apply_scoped_resolutions(None, result, revision=1)
 
-    assert intent.language == "vi"
     assert [event.id for event in intent.events] == ["E1", "E2"]
     assert all(not event.bindings for event in intent.events)
     assert [(edge.source, edge.target) for edge in intent.temporal_edges] == [("E1", "E2")]
@@ -187,7 +196,6 @@ def test_initial_scoped_batch_has_contiguous_events_and_no_bindings() -> None:
 def test_appended_text_event_preserves_validated_binding() -> None:
     base = _base_intent()
     resolved = ScopedResolutionBatch.model_validate({
-        "language": "en",
         "events": [{
             "event_id": "E3",
             "text": "The same woman lifts a plate.",

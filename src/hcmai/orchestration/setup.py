@@ -31,7 +31,6 @@ from hcmai.orchestration.retrieval_setup import (
     select_visual_retriever,
 )
 from hcmai.retrieval.evidence.literal import LiteralTextIndex
-from hcmai.retrieval.translation.service import EventTranslator
 from hcmai.retrieval_service.client import RetrievalGrpcClient
 from hcmai.retrieval_service.config import RetrievalClientSettings
 from hcmai.retrieval_service.remote import (
@@ -61,7 +60,6 @@ def load_search_service(messages: list[str]) -> SearchService:
 
     corpus = load_configured_corpus(settings, messages)
     llm_client = _load_llm_client(messages)
-    event_translator = _load_event_translator(settings, messages, llm=llm_client)
     intent_resolver = _load_intent_resolver(messages, llm=llm_client)
     scoped_resolver = _load_scoped_resolver(messages, llm=llm_client)
     global_rewriter = _load_global_rewriter(messages, llm=llm_client)
@@ -101,7 +99,6 @@ def load_search_service(messages: list[str]) -> SearchService:
         temporal=temporal,
         image_search=image_search,
         remote_retrieval=client,
-        event_translator=event_translator,
         api_config=settings.api,
         literal_text=literal_text,
         intent_resolver=intent_resolver,
@@ -197,18 +194,6 @@ def _load_global_rewriter(
         messages.append("KIS global rewriter unavailable: LLM client not configured")
         return None
     return KISGlobalRewriter(llm)
-
-
-def _load_event_translator(
-    settings: AppConfig,
-    messages: list[str],
-    llm: LLMClient | None = None,
-) -> EventTranslator | None:
-    """Construct event translation using the provider-agnostic LLM client."""
-    if llm is None:
-        messages.append("Event translation unavailable: LLM client not configured")
-        return None
-    return EventTranslator(llm, settings.event_translation)
 
 
 def load_kis_image_assets(

@@ -24,7 +24,6 @@ from hcmai.kis.rewriter import (
 def _base_intent() -> KISIntent:
     return KISIntent(
         revision=1,
-        language="en",
         query_text="A woman talks to a man, then takes a plate.",
         entities=[
             KISEntity(id="X1", kind="person", description="woman"),
@@ -56,10 +55,14 @@ def _base_multimodal_intent() -> KISIntent:
     )
 
 
+def test_REQ_001_global_rewrite_does_not_expose_language() -> None:
+    assert "language" not in GlobalRewriteResolution.model_fields
+    assert "language" not in GlobalRewriteResolution.model_json_schema().get("properties", {})
+
+
 def test_global_rewrite_preserves_ids_order_and_images() -> None:
     llm = Mock()
     llm.generate_structured.return_value = GlobalRewriteResolution(
-        language="en",
         query_text="A woman talks to a man, then takes a plate.",
         entities=[],
         events=[
@@ -82,7 +85,6 @@ def test_global_rewrite_preserves_ids_order_and_images() -> None:
 def test_global_rewrite_rejects_different_event_count() -> None:
     llm = Mock()
     llm.generate_structured.return_value = GlobalRewriteResolution(
-        language="en",
         query_text="Only one event",
         entities=[],
         events=[GlobalRewriteEvent(event_id="E1", text="one")],
@@ -104,7 +106,6 @@ def test_global_rewrite_does_not_invent_text_for_image_only_event() -> None:
     )
     llm = Mock()
     llm.generate_structured.return_value = GlobalRewriteResolution(
-        language="en",
         query_text="The woman takes a plate.",
         entities=[],
         events=[
@@ -120,7 +121,6 @@ def test_global_rewrite_does_not_invent_text_for_image_only_event() -> None:
 def test_global_rewrite_preserves_revision_from_caller_not_model() -> None:
     llm = Mock()
     llm.generate_structured.return_value = GlobalRewriteResolution(
-        language="en",
         query_text="A woman talks to a man.",
         entities=[],
         events=[GlobalRewriteEvent(event_id="E1", text="A woman talks to a man.")],

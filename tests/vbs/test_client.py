@@ -320,3 +320,67 @@ def test_client_translates_network_failures_without_request_url(failure: Excepti
         await client.aclose()
 
     asyncio.run(exercise())
+
+
+def test_client_translates_500_task_not_running_to_rejection() -> None:
+    """Classify DRES 500 'not running' as a definite submission rejection, not unavailable."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            500,
+            json={"status": False, "description": "Task run 'Run.1' is currently not running."},
+        )
+
+    async def exercise() -> None:
+        client = DresClient(_settings(), transport=httpx.MockTransport(handler))
+        payload = ApiClientSubmission(answer_sets=[ApiClientAnswerSet(
+            task_name="KIS",
+            answers=[ApiClientAnswer(media_item_name="video-1", start=1, end=2)],
+        )])
+        try:
+            with pytest.raises(DresRejectedSubmissionError) as exc:
+                await client.submit("eval-1", "session-1", payload)
+            assert "not running" in str(exc.value)
+        finally:
+            await client.aclose()
+
+    asyncio.run(exercise())
+
+
+def test_client_admin_task_control_endpoints() -> None:
+    """Exercise admin get_evaluation_state, switch_task, start_task, abort_task."""
+
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/v2/evaluation/eval-1/state":
+            return httpx.Response(200, json={"taskStatus": "RUNNING", "timeLeft": 100})
+        if request.url.path == "/api/v2/evaluation/admin/eval-1/task/switch/2":
+            return httpx.Response(200, json={"status": True, "description": "switched"})
+        if request.url.path == "/api/v2/evaluation/admin/eval-1/task/start":
+            return httpx.Response(200, json={"status": True, "description": "started"})
+        if request.url.path == "/api/v2/evaluation/admin/eval-1/task/abort":
+            return httpx.Response(200, json={"status": True, "description": "aborted"})
+        return httpx.Response(404)
+
+    async def exercise() -> None:
+        client = DresClient(_settings(), transport=httpx.MockTransport(handler))
+        try:
+            state = await client.get_evaluation_state("eval-1", "admin-session")
+            assert state["taskStatus"] == "RUNNING"
+
+            sw = await client.switch_task("eval-1", 2, "admin-session")
+            assert sw.status is True
+
+            st = await client.start_task("eval-1", "admin-session")
+            assert st.status is True
+
+            ab = await client.abort_task("eval-1", "admin-session")
+            assert ab.status is True
+        finally:
+            await client.aclose()
+
+    asyncio.run(exercise())
+    assert len(requests) == 4
+

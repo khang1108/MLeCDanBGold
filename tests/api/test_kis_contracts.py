@@ -25,7 +25,6 @@ from hcmai.kis.models import (
 def _base_intent() -> KISIntent:
     return KISIntent(
         revision=2,
-        language="en",
         query_text="woman enters, then talks",
         entities=[],
         events=[

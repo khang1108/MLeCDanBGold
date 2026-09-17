@@ -67,6 +67,22 @@ def _harness(
             state["task_reads"].append(request.url.params.get("session", ""))
             return httpx.Response(200, json=dict(state["task"]))
 
+        if request.url.path == "/api/v2/client/evaluation/list":
+            return httpx.Response(200, json=[{
+                "id": "eval-1",
+                "name": "Evaluation 1",
+                "type": "SYNCHRONOUS",
+                "status": "ACTIVE",
+                "templateId": "template-1",
+                "teams": ["team-1"],
+                "taskTemplates": [{
+                    "name": "task-alpha",
+                    "taskGroup": "KIS",
+                    "taskType": "KIS",
+                    "duration": 300,
+                }],
+            }])
+
         if request.url.path == "/api/v2/submit/eval-1":
             state["submissions"].append((
                 request.url.params.get("session", ""),
@@ -695,3 +711,105 @@ def test_missing_dres_configuration_has_stable_structured_error() -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "DRES_NOT_CONFIGURED"
+
+
+def test_list_evaluations_lifecycle(api: tuple[TestClient, DresService, dict[str, Any]]) -> None:
+    """List evaluations succeeds for connected participants and fails for disconnected."""
+
+    client, _service, _state = api
+    unauth = client.get("/api/v1/vbs/evaluations/member-1")
+    assert unauth.status_code == 401
+
+    _connect(client, "member-1")
+    response = client.get("/api/v1/vbs/evaluations/member-1")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == "eval-1"
+    assert data[0]["name"] == "Evaluation 1"
+    assert len(data[0]["task_templates"]) == 1
+    assert data[0]["task_templates"][0]["name"] == "task-alpha"
+
+
+def test_current_task_with_evaluation_and_task_name(api: tuple[TestClient, DresService, dict[str, Any]]) -> None:
+    """Fetch task metadata explicitly targeting evaluation_id and task_name."""
+
+    client, _service, _state = api
+    _connect(client, "member-1")
+    response = client.get("/api/v1/vbs/task/member-1?evaluation_id=eval-1&task_name=task-alpha")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["evaluation_id"] == "eval-1"
+    assert data["task_name"] == "task-alpha"
+    assert data["task_group"] == "KIS"
+
+
+def test_submit_with_custom_evaluation_and_task_name(api: tuple[TestClient, DresService, dict[str, Any]]) -> None:
+    """Submit answer with explicit evaluation_id and task_name in request payload."""
+
+    client, _service, state = api
+    _connect(client, "member-1")
+    task_scope = client.get("/api/v1/vbs/task/member-1?evaluation_id=eval-1&task_name=task-alpha").json()
+
+    submit_req = {
+        "user_id": "member-1",
+        "expected_task_scope_key": task_scope["task_scope_key"],
+        "evaluation_id": "eval-1",
+        "task_name": "task-alpha",
+        "answer": {
+            "kind": "TEMPORAL",
+            "video_id": "prefix.L21_V001",
+            "start_ms": 1000,
+            "end_ms": 2000,
+        },
+    }
+    response = client.post("/api/v1/vbs/submit", json=submit_req)
+    assert response.status_code == 200
+    assert response.json()["state"] == "RECORDED"
+    assert response.json()["verdict"] == "CORRECT"
+    assert len(state["submissions"]) == 1
+
+
+def test_activate_task_requires_admin_credential(api: tuple[TestClient, DresService, dict[str, Any]]) -> None:
+    """Reject task activation if admin credentials are not configured."""
+
+    client, service, _state = api
+    # Default fixture has no admin credential
+    res = client.post(
+        "/api/v1/vbs/task/activate",
+        params={"evaluation_id": "eval-1", "task_name": "task-alpha"},
+    )
+    assert res.status_code == 403
+    assert res.json()["detail"]["code"] == "ADMIN_NOT_CONFIGURED"
+
+
+def test_activate_task_with_admin_credential_succeeds(
+    api: tuple[TestClient, DresService, dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Successfully activate task when admin credentials are configured."""
+
+    client, service, _state = api
+    # Set mock admin credential
+    from hcmai.vbs.config import DresCredential
+    from pydantic import SecretStr
+    object.__setattr__(
+        service.settings,
+        "admin_credential",
+        DresCredential(username="admin", password=SecretStr("admin-pass")),
+    )
+
+    async def mock_ensure(evaluation_id: str, task_name: str) -> bool:
+        return True
+
+    monkeypatch.setattr(service, "ensure_task_running", mock_ensure)
+
+    res = client.post(
+        "/api/v1/vbs/task/activate",
+        params={"evaluation_id": "eval-1", "task_name": "task-alpha"},
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"
+    assert res.json()["task_name"] == "task-alpha"
+
+

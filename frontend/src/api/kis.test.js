@@ -13,7 +13,6 @@ test('posts revisioned KIS search request with base_intent and operation to /api
   const payload = {
     intent: {
       revision: 1,
-      language: 'en',
       query_text: 'chef cooks',
       entities: [],
       events: [{ id: 'E1', text: 'chef cooks' }],

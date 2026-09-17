@@ -32,7 +32,6 @@ class KISOrchestrationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.mock_intent_en = KISIntent(
             revision=1,
-            language="en",
             query_text="A man enters a room and talks to a woman.",
             entities=[
                 KISEntity(id="X1", kind="person", description="man"),
@@ -80,7 +79,6 @@ class KISOrchestrationTest(unittest.TestCase):
         intent_resolver=None,
         scoped_resolver=None,
         global_rewriter=None,
-        event_translator=None,
         kis_image_assets=None,
     ) -> SearchService:
         corpus = Mock()
@@ -97,7 +95,6 @@ class KISOrchestrationTest(unittest.TestCase):
             intent_resolver=intent_resolver,
             scoped_resolver=scoped_resolver,
             global_rewriter=global_rewriter,
-            event_translator=event_translator,
             kis_image_assets=kis_image_assets,
         )
         service.kis = Mock()
@@ -107,11 +104,9 @@ class KISOrchestrationTest(unittest.TestCase):
     def test_search_kis_initial_resolve_natural_text_english(self) -> None:
         intent_resolver = Mock()
         intent_resolver.resolve_initial.return_value = self.mock_intent_en
-        event_translator = Mock()
 
         service = self._make_service(
             intent_resolver=intent_resolver,
-            event_translator=event_translator,
         )
 
         request = KISSearchRequest(
@@ -131,37 +126,22 @@ class KISOrchestrationTest(unittest.TestCase):
         intent_resolver.resolve_initial.assert_called_once_with(
             "A man enters a room and talks to a woman.", revision=1
         )
-        event_translator.translate.assert_not_called()
         self.assertEqual(response.intent, self.mock_intent_en)
         self.assertEqual(response.operation_summary.kind, "initial_resolve")
         self.assertEqual(response.operation_summary.affected_event_ids, ["E1", "E2"])
         self.assertEqual(len(response.results), 1)
 
-    def test_search_kis_initial_resolve_vietnamese_translates_dense(self) -> None:
-        intent_vi = KISIntent(
+    def test_REQ_004_vietnamese_text_uses_direct_multilingual_views(self) -> None:
+        intent = KISIntent(
             revision=1,
-            language="vi",
             query_text="Một người phụ nữ trong bếp.",
-            entities=[KISEntity(id="X1", kind="person", description="phụ nữ")],
-            events=[
-                KISEvent(
-                    id="E1",
-                    text="Một người phụ nữ trong bếp",
-                    bindings=[KISEntityBinding(entity_id="X1", role="actor")],
-                )
-            ],
+            entities=[],
+            events=[KISEvent(id="E1", text="Một người phụ nữ trong bếp.")],
             temporal_edges=[],
         )
-
         intent_resolver = Mock()
-        intent_resolver.resolve_initial.return_value = intent_vi
-        event_translator = Mock()
-        event_translator.translate.return_value = ("A woman in a kitchen",)
-
-        service = self._make_service(
-            intent_resolver=intent_resolver,
-            event_translator=event_translator,
-        )
+        intent_resolver.resolve_initial.return_value = intent
+        service = self._make_service(intent_resolver=intent_resolver)
 
         request = KISSearchRequest(
             base_intent=None,
@@ -177,18 +157,10 @@ class KISOrchestrationTest(unittest.TestCase):
 
         response = service.search_kis(request)
 
-        event_translator.translate.assert_called_once_with(
-            ("Một người phụ nữ trong bếp",),
-            language="vi",
-        )
-        self.assertEqual(
-            [event.dense_text for event in response.exploration_seed.events],
-            ["A woman in a kitchen"],
-        )
-        self.assertEqual(
-            [event.bm25_text for event in response.exploration_seed.events],
-            ["Một người phụ nữ trong bếp"],
-        )
+        event = response.exploration_seed.events[0]
+        self.assertEqual(event.dense_text, "Một người phụ nữ trong bếp.")
+        self.assertEqual(event.bm25_text, "Một người phụ nữ trong bếp.")
+        self.assertEqual(response.latency.translation_ms, 0.0)
 
     def test_search_kis_initial_resolve_image_only_makes_no_llm_call(self) -> None:
         intent_resolver = Mock()
@@ -214,7 +186,6 @@ class KISOrchestrationTest(unittest.TestCase):
         intent_resolver.resolve_initial.assert_not_called()
         scoped_resolver.resolve.assert_not_called()
         self.assertEqual(response.intent.revision, 1)
-        self.assertIsNone(response.intent.language)
         self.assertIsNone(response.intent.query_text)
         self.assertEqual(len(response.intent.events), 1)
         self.assertEqual(response.intent.events[0].id, "E1")
@@ -226,7 +197,6 @@ class KISOrchestrationTest(unittest.TestCase):
     def test_search_kis_initial_resolve_text_plus_image(self) -> None:
         scoped_resolver = Mock()
         scoped_resolver.resolve.return_value = ScopedResolutionBatch(
-            language="en",
             events=[ScopedResolvedEvent(event_id="E1", text="Woman in kitchen")],
         )
 
@@ -254,7 +224,6 @@ class KISOrchestrationTest(unittest.TestCase):
     def test_search_kis_patch_events_text_instruction(self) -> None:
         scoped_resolver = Mock()
         scoped_resolver.resolve.return_value = ScopedResolutionBatch(
-            language="en",
             events=[
                 ScopedResolvedEvent(
                     event_id="E2",
@@ -431,7 +400,6 @@ class KISOrchestrationTest(unittest.TestCase):
         img3 = KISImageRef(asset_id="sha256:img3", content_type="image/png")
         intent_vi = KISIntent(
             revision=1,
-            language="vi",
             query_text="người phụ nữ và đĩa",
             events=[
                 KISEvent(id="E1", text="người phụ nữ"),
@@ -443,10 +411,8 @@ class KISOrchestrationTest(unittest.TestCase):
                 KISTemporalEdge(source="E2", relation="before", target="E3"),
             ],
         )
-        translator = Mock()
-        translator.translate.return_value = ("a woman", "a white plate")
 
-        service = self._make_service(event_translator=translator)
+        service = self._make_service()
         request = KISSearchRequest(
             base_intent=intent_vi,
             expected_revision=1,
@@ -457,16 +423,11 @@ class KISOrchestrationTest(unittest.TestCase):
 
         response = service.search_kis(request)
 
-        translator.translate.assert_called_once_with(
-            ("người phụ nữ", "chiếc đĩa trắng"),
-            language="vi",
-        )
-
         plan = service.kis.execute.call_args.kwargs["retrieval_plan"]
         self.assertEqual(plan.event_ids, ("E1", "E2", "E3"))
 
         self.assertEqual(plan.events[0].canonical_text, "người phụ nữ")
-        self.assertEqual(plan.events[0].dense_text, "a woman")
+        self.assertEqual(plan.events[0].dense_text, "người phụ nữ")
         self.assertEqual(plan.events[0].bm25_text, "người phụ nữ")
         self.assertEqual(plan.events[0].image_refs, ())
 
@@ -476,7 +437,7 @@ class KISOrchestrationTest(unittest.TestCase):
         self.assertEqual(plan.events[1].image_refs, (img2,))
 
         self.assertEqual(plan.events[2].canonical_text, "chiếc đĩa trắng")
-        self.assertEqual(plan.events[2].dense_text, "a white plate")
+        self.assertEqual(plan.events[2].dense_text, "chiếc đĩa trắng")
         self.assertEqual(plan.events[2].bm25_text, "chiếc đĩa trắng")
         self.assertEqual(plan.events[2].image_refs, (img3,))
 

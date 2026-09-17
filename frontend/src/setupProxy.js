@@ -21,7 +21,9 @@ module.exports = function (app) {
             `/static/js/bundle.js?_v=${Date.now()}`
           );
           chunk = Buffer.from(content, 'utf8');
-          res.setHeader('Content-Length', chunk.length);
+          if (!res.headersSent) {
+            res.setHeader('Content-Length', chunk.length);
+          }
         }
       }
       return originalEnd.call(this, chunk, encoding);

@@ -155,6 +155,8 @@ test('opens the editable direct-submission popup after participant connection an
   expect(submitDresAnswer).toHaveBeenCalledWith({
     userId: 'team-a',
     expectedTaskScopeKey: 'dres-task-v1:key-1',
+    evaluationId: 'eval-1',
+    taskName: 'KIS task',
     answer: { kind: 'TEMPORAL', video_id: 'V01', start_ms: 5000, end_ms: 5000 },
   });
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

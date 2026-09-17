@@ -7,8 +7,6 @@ model-invented text.
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from hcmai.inference.llm import LLMClient
@@ -39,7 +37,6 @@ class GlobalRewriteResolution(BaseModel):
     """Structured global rewrite response with no server-owned topology fields."""
 
     model_config = ConfigDict(extra="forbid")
-    language: Literal["vi", "en"] | None
     query_text: NonBlank | None
     entities: list[KISEntity] = Field(default_factory=list)
     events: list[GlobalRewriteEvent] = Field(min_length=1)
@@ -64,10 +61,6 @@ class KISGlobalRewriter:
         if returned_ids != expected_ids:
             raise KISResolutionError(
                 f"Global rewrite must return event IDs in base order {expected_ids}, got {returned_ids}"
-            )
-        if resolved.language is not None and resolved.language != base.language:
-            raise KISResolutionError(
-                f"Rewrite language {resolved.language!r} does not match base language {base.language!r}"
             )
 
         known_entities = {entity.id for entity in resolved.entities}
@@ -96,11 +89,6 @@ class KISGlobalRewriter:
         query_text = resolved.query_text or canonical_query_text(events)
         if canonical_query_text(events) is None:
             query_text = None
-            language = None
-        else:
-            language = resolved.language or base.language
-            if language is None:
-                raise KISResolutionError("Textual global rewrite requires a language")
 
         temporal_edges = [
             KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}")
@@ -109,7 +97,6 @@ class KISGlobalRewriter:
         try:
             return KISIntent(
                 revision=base.revision + 1,
-                language=language,
                 query_text=query_text,
                 entities=resolved.entities,
                 events=events,

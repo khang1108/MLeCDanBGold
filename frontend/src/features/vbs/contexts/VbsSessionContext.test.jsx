@@ -4,12 +4,13 @@ import {
   VbsSessionProvider,
   useVbsSession,
 } from './VbsSessionContext';
-import { connectVbsSession, getVbsSessionStatus } from '../../../api/vbs';
+import { connectVbsSession, getVbsSessionStatus, getVbsEvaluations } from '../../../api/vbs';
 
 jest.mock('../../../api/vbs', () => ({
   connectVbsSession: jest.fn(),
   disconnectVbsSession: jest.fn(),
   getVbsSessionStatus: jest.fn(),
+  getVbsEvaluations: jest.fn().mockResolvedValue([]),
 }));
 
 const Probe = () => {
@@ -29,6 +30,7 @@ const Probe = () => {
 beforeEach(() => {
   localStorage.clear();
   jest.clearAllMocks();
+  getVbsEvaluations.mockResolvedValue([]);
 });
 
 afterEach(() => { delete window.vbsSessionProbe; });
@@ -90,3 +92,35 @@ test('invalidates a rejected participant session and requires a later explicit c
   expect(localStorage.getItem('hcmai_user_id')).toBeNull();
   expect(connectVbsSession).not.toHaveBeenCalled();
 });
+
+test('fetches evaluations and sets the default selected task upon connection', async () => {
+  connectVbsSession.mockResolvedValueOnce({ user_id: 'team-a', connected: true });
+  getVbsEvaluations.mockResolvedValueOnce([
+    {
+      id: 'eval-123',
+      name: 'Evaluation Run 1',
+      status: 'ACTIVE',
+      taskTemplates: [
+        { name: 'task-1', taskGroup: 'KIS', taskType: 'KIS', duration: 300 },
+        { name: 'task-2', taskGroup: 'KIS', taskType: 'KIS', duration: 300 },
+      ],
+    },
+  ]);
+
+  render(<VbsSessionProvider><Probe /></VbsSessionProvider>);
+  act(() => window.vbsSessionProbe.setDraftUserId('team-a'));
+  await act(async () => { await window.vbsSessionProbe.connect(); });
+
+  await waitFor(() => {
+    expect(window.vbsSessionProbe.evaluations).toHaveLength(1);
+    expect(window.vbsSessionProbe.selectedTask).toEqual({
+      evaluationId: 'eval-123',
+      evaluationName: 'Evaluation Run 1',
+      taskName: 'task-1',
+      taskGroup: 'KIS',
+      taskType: 'KIS',
+      duration: 300,
+    });
+  });
+});
+

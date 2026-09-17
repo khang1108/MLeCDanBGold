@@ -15,7 +15,6 @@ import {
 describe('KIS session state model', () => {
   const MOCK_INTENT_REV1 = {
     revision: 1,
-    language: 'en',
     query_text: 'chef cooking pasta',
     entities: [{ id: 'X1', kind: 'person', description: 'chef' }],
     events: [{ id: 'E1', text: 'chef cooking pasta', images: [], bindings: [] }],
@@ -24,7 +23,6 @@ describe('KIS session state model', () => {
 
   const MOCK_INTENT_REV2 = {
     revision: 2,
-    language: 'en',
     query_text: 'chef cooking pasta then plating it',
     entities: [
       { id: 'X1', kind: 'person', description: 'chef' },

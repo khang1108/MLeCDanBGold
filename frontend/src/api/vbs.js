@@ -44,3 +44,28 @@ export const disconnectVbsSession = async (value) => {
   });
   return safeSessionStatus(payload, userId);
 };
+
+/** Fetch evaluations and their task templates for the connected participant. */
+export const getVbsEvaluations = async (value, { signal } = {}) => {
+  const userId = normalizeUserId(value);
+  const payload = await requestJson(`/api/v1/vbs/evaluations/${encodeURIComponent(userId)}`, { signal });
+  if (!Array.isArray(payload)) {
+    throw new Error('VBS evaluation list returned an invalid response contract');
+  }
+  return payload.map((item) => ({
+    id: String(item.id || ''),
+    name: String(item.name || ''),
+    type: String(item.type || ''),
+    status: String(item.status || ''),
+    templateId: String(item.template_id || ''),
+    taskTemplates: Array.isArray(item.task_templates)
+      ? item.task_templates.map((t) => ({
+          name: String(t.name || ''),
+          taskGroup: String(t.task_group || ''),
+          taskType: String(t.task_type || ''),
+          duration: typeof t.duration === 'number' ? t.duration : null,
+        }))
+      : [],
+  }));
+};
+

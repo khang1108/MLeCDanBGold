@@ -19,7 +19,6 @@ from hcmai.kis.models import KISImageRef
 from hcmai.kis.resolver import KISResolutionError
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
-from hcmai.retrieval.translation.service import EventTranslationError
 from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer
 
 logger = get_logger(__name__)
@@ -64,12 +63,14 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(error),
             ) from error
-        except (KISResolutionError, EventTranslationError, InferenceResponseError) as error:
+        except (KISResolutionError, InferenceResponseError) as error:
+            logger.error("KIS semantic resolution error (502): %s", error, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=str(error),
             ) from error
         except (InferenceUnavailableError, SearchServiceUnavailableError) as error:
+            logger.error("KIS service unavailable error (503): %s", error, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(error),

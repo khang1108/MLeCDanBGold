@@ -18,6 +18,7 @@ from hcmai.vbs.config import DresCredential, DresSettings
 from hcmai.vbs.models import (
     ApiClientSubmission,
     DresEvaluation,
+    DresStatus,
     DresSubmissionStatus,
     DresTaskTemplateInfo,
     DresUser,
@@ -42,7 +43,14 @@ def _evaluation(identifier: str, status: str = "ACTIVE") -> DresEvaluation:
         "status": status,
         "templateId": "template-1",
         "teams": ["team"],
-        "taskTemplates": [],
+        "taskTemplates": [
+            {
+                "name": "KIS task",
+                "taskGroup": "KIS",
+                "taskType": "KIS",
+                "duration": 300,
+            }
+        ],
     })
 
 
@@ -63,6 +71,10 @@ class _Client:
         self.logged_results: list[tuple[str, str, object]] = []
         self.submit_errors: list[Exception] = []
         self.submissions: list[tuple[str, str, object]] = []
+        self.state: dict[str, Any] = {"taskStatus": "RUNNING", "taskTemplateId": None}
+        self.switches: list[int] = []
+        self.starts: int = 0
+        self.aborts: int = 0
 
     async def login(self, username: str, password: str) -> DresUser:
         self.logins.append((username, password))
@@ -82,6 +94,22 @@ class _Client:
         if self.task_error is not None:
             raise self.task_error
         return self.task
+
+    async def get_evaluation_state(self, evaluation_id: str, session_id: str) -> dict[str, Any]:
+        return self.state
+
+    async def switch_task(self, evaluation_id: str, task_idx: int, session_id: str) -> DresStatus:
+        self.switches.append(task_idx)
+        return DresStatus(status=True, description="switched")
+
+    async def start_task(self, evaluation_id: str, session_id: str) -> DresStatus:
+        self.starts += 1
+        self.state["taskStatus"] = "RUNNING"
+        return DresStatus(status=True, description="started")
+
+    async def abort_task(self, evaluation_id: str, session_id: str) -> DresStatus:
+        self.aborts += 1
+        return DresStatus(status=True, description="aborted")
 
     async def log_results(self, evaluation_id: str, session_id: str, payload) -> None:
         """Capture actor session propagation for QueryResultLog calls."""
@@ -104,9 +132,19 @@ class _Client:
         return None
 
 
-def _service(client: _Client, *, evaluation_id: str | None = None) -> DresService:
+def _service(
+    client: _Client,
+    *,
+    evaluation_id: str | None = None,
+    with_admin: bool = False,
+) -> DresService:
     """Create one service with two independent private participant mappings."""
 
+    admin_credential = (
+        DresCredential(username="admin", password=SecretStr("admin-pass"))
+        if with_admin
+        else None
+    )
     settings = DresSettings(
         base_url="https://dres.test",
         evaluation_id=evaluation_id,
@@ -120,6 +158,7 @@ def _service(client: _Client, *, evaluation_id: str | None = None) -> DresServic
                 password=SecretStr("other-private-password"),
             ),
         },
+        admin_credential=admin_credential,
     )
     return DresService(settings, client=client)
 
@@ -489,3 +528,45 @@ def test_temporal_mapping_rejects_blank_or_prefix_only_media_ids(video_id: str) 
 
     with pytest.raises(ValueError, match="media item name"):
         service.temporal_answer(video_id, 0)
+
+
+def test_service_ensure_task_running_aborts_switches_and_starts() -> None:
+    """If admin is configured and task is not running, ensure_task_running activates it."""
+
+    async def exercise() -> None:
+        client = _Client()
+        client.state = {"taskStatus": "ENDED", "taskTemplateId": None}
+        service = _service(client, with_admin=True)
+
+        ok = await service.ensure_task_running("eval-1", "KIS task")
+        assert ok is True
+        assert len(client.switches) == 1
+        assert client.switches[0] == 0
+        assert client.starts == 1
+
+    asyncio.run(exercise())
+
+
+def test_service_submit_auto_activates_and_retries_when_task_not_running() -> None:
+    """When submission fails because task is not running, activate task and retry once."""
+
+    from hcmai.vbs.client import DresRejectedSubmissionError
+
+    async def exercise() -> None:
+        client = _Client()
+        client.state = {"taskStatus": "ENDED", "taskTemplateId": None}
+        # First submit call fails with 'not running', retry succeeds
+        client.submit_errors = [
+            DresRejectedSubmissionError("Task run is currently not running.")
+        ]
+        service = _service(client, with_admin=True)
+        await service.connect("member-1")
+
+        payload = ApiClientSubmission(answer_sets=[])
+        res = await service.submit("member-1", "eval-1", payload, task_name="KIS task")
+        assert res.submission == "CORRECT"
+        assert len(client.submissions) == 2
+        assert client.starts == 1
+
+    asyncio.run(exercise())
+

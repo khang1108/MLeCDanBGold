@@ -17,7 +17,7 @@ const explorationSelectionKey = (selection) => {
   return seed && videoId ? JSON.stringify([seed, videoId]) : null;
 };
 
-const AppShell = ({ connectedUserId, draftUserId, invalidateSession }) => {
+const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTask }) => {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
   const [activePage, setActivePage] = useState('query');
@@ -35,6 +35,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession }) => {
   const { close: closeTemporalExploration } = exploration;
   const submission = useDirectSubmission({
     userId: connectedUserId,
+    selectedTask,
     onSessionRejected: invalidateSession,
   });
   const vim = useVimMode({
@@ -176,11 +177,12 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession }) => {
 };
 
 const AppContent = () => {
-  const { connectedUserId, draftUserId, invalidateSession } = useVbsSession();
+  const { connectedUserId, draftUserId, invalidateSession, selectedTask } = useVbsSession();
   return <AppShell
     connectedUserId={connectedUserId}
     draftUserId={draftUserId}
     invalidateSession={invalidateSession}
+    selectedTask={selectedTask}
   />;
 };
 

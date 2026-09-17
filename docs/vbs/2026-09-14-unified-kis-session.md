@@ -913,7 +913,7 @@ from fastapi import APIRouter, Header, HTTPException, Response, status
 from fastapi.concurrency import run_in_threadpool
 from hcmai.api.contracts.kis import KISRevisionSearchRequest, KISRevisionSearchResponse
 from hcmai.api.dres_logging import record_dres_result_log
-from hcmai.orchestration.errors import InvalidQueryInputError
+from hcmai.orchestration.utils.errors import InvalidQueryInputError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 
 

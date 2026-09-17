@@ -27,14 +27,13 @@ from hcmai.kis.models import (
 from hcmai.kis.resolver import KISResolutionError
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
-from hcmai.retrieval.translation.service import EventTranslationError
+from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer
 
 
 def _make_intent(query_text: str | None = "A woman cooks in kitchen.") -> KISIntent:
     if query_text:
         return KISIntent(
             revision=1,
-            language="en",
             query_text=query_text,
             entities=[KISEntity(id="X1", kind="person", description="woman")],
             events=[
@@ -48,7 +47,6 @@ def _make_intent(query_text: str | None = "A woman cooks in kitchen.") -> KISInt
         )
     return KISIntent(
         revision=1,
-        language=None,
         query_text=None,
         entities=[],
         events=[
@@ -252,7 +250,6 @@ async def test_search_kis_error_mapping() -> None:
         # Semantic-response contract failures are bad gateway responses.
         for error in (
             KISResolutionError("invalid semantic resolution"),
-            EventTranslationError("invalid event translation"),
             InferenceResponseError("malformed provider response"),
         ):
             service.search_kis.side_effect = error

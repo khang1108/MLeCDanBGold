@@ -119,7 +119,6 @@ def build_health_report(
         )
 
     intent_resolution_ready = getattr(service, "intent_resolver", None) is not None
-    event_translation_ready = getattr(service, "event_translator", None) is not None
     kis_ready = retrieval_ready and intent_resolution_ready
     asset_status = _frame_asset_status(corpus)
     llm = getattr(service, "llm", None)
@@ -188,7 +187,6 @@ def build_health_report(
             "dense_temporal": dense_temporal_ready,
             "bm25": bm25_ready,
             "hybrid_temporal": dense_temporal_ready and bm25_ready,
-            "event_translation": event_translation_ready,
             "filter": bool(
                 getattr(service, "literal_text", None) is not None
                 and getattr(service.literal_text, "available_sources", ())

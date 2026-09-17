@@ -651,107 +651,109 @@ const SearchWorkspace = ({
     <div className="adhoc-workspace search-workspace">
       <form className="search-query-form" onSubmit={(e) => { e.preventDefault(); submitFilter(); }}>
         <div className="search-filter-row">
-          <input
-            type="text"
-            className="input-text search-filter-input"
-            placeholder="Folder ID"
-            aria-label="Filter Folder ID"
-            value={filterFolderId}
-            onChange={(e) => setFilterFolderId(e.target.value)}
-            disabled={isSearching}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submitFilter({ pageId: 1 });
-              }
-            }}
-          />
-          <input
-            type="text"
-            className="input-text search-filter-input"
-            placeholder="Video ID"
-            aria-label="Filter Video ID"
-            value={filterVideoId}
-            onChange={(e) => setFilterVideoId(e.target.value)}
-            disabled={isSearching}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submitFilter({ pageId: 1 });
-              }
-            }}
-          />
-          <input
-            type="text"
-            className="input-text search-filter-input"
-            placeholder="Title"
-            aria-label="Filter Title"
-            value={filterTitle}
-            onChange={(e) => setFilterTitle(e.target.value)}
-            disabled={isSearching}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submitFilter({ pageId: 1 });
-              }
-            }}
-          />
-          <input
-            type="text"
-            className="input-text search-filter-input"
-            placeholder="ASR"
-            aria-label="Filter ASR"
-            value={filterAsr}
-            onChange={(e) => setFilterAsr(e.target.value)}
-            disabled={isSearching}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submitFilter({ pageId: 1 });
-              }
-            }}
-          />
-          <input
-            type="text"
-            className="input-text search-filter-input"
-            placeholder="OCR"
-            aria-label="Filter OCR"
-            value={filterOcr}
-            onChange={(e) => setFilterOcr(e.target.value)}
-            disabled={isSearching}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submitFilter({ pageId: 1 });
-              }
-            }}
-          />
-          <input
-            type="text"
-            className="input-text search-filter-input"
-            placeholder="Object (name: count)"
-            aria-label="Filter Object"
-            value={filterObject}
-            onChange={(e) => setFilterObject(e.target.value)}
-            disabled={isSearching}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submitFilter({ pageId: 1 });
-              }
-            }}
-          />
+          <div className="search-filter-inputs-wrapper">
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="Folder ID"
+              aria-label="Filter Folder ID"
+              value={filterFolderId}
+              onChange={(e) => setFilterFolderId(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="Video ID"
+              aria-label="Filter Video ID"
+              value={filterVideoId}
+              onChange={(e) => setFilterVideoId(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="Title"
+              aria-label="Filter Title"
+              value={filterTitle}
+              onChange={(e) => setFilterTitle(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="ASR"
+              aria-label="Filter ASR"
+              value={filterAsr}
+              onChange={(e) => setFilterAsr(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="OCR"
+              aria-label="Filter OCR"
+              value={filterOcr}
+              onChange={(e) => setFilterOcr(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+            <input
+              type="text"
+              className="input-text search-filter-input"
+              placeholder="Object (name: count)"
+              aria-label="Filter Object"
+              value={filterObject}
+              onChange={(e) => setFilterObject(e.target.value)}
+              disabled={isSearching}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitFilter({ pageId: 1 });
+                }
+              }}
+            />
+          </div>
           <div className="search-filter-actions">
             <button
               type="submit"
-              className="btn-primary filter-submit-btn"
+              className="btn-primary search-filter-btn filter-submit-btn"
               disabled={isSearching || !hasAnyFilterValue}
             >
               Filter
             </button>
             <button
               type="button"
-              className="btn-secondary filter-clear-btn"
+              className="btn-secondary search-filter-clear-btn filter-clear-btn"
               onClick={handleClearFilter}
               disabled={isSearching || !hasAnyFilterValue}
             >

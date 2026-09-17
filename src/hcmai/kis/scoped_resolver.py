@@ -8,7 +8,6 @@ natural-language initial resolution or global rewriting.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,7 +38,6 @@ class ScopedResolutionBatch(BaseModel):
     """Model output for exactly the event IDs authorized by a patch batch."""
 
     model_config = ConfigDict(extra="forbid")
-    language: Literal["vi", "en"]
     events: list[ScopedResolvedEvent] = Field(min_length=1)
 
 
@@ -57,16 +55,6 @@ def _edges_for(events: Sequence[KISEvent]) -> list[KISTemporalEdge]:
     ]
 
 
-def _validate_language(base: KISIntent | None, language: str) -> None:
-    """Enforce established language and the supported language vocabulary."""
-    if language not in {"vi", "en"}:
-        raise KISResolutionError(f"Unsupported resolution language: {language!r}")
-    if base is not None and base.language is not None and language != base.language:
-        raise KISResolutionError(
-            f"Resolution language {language!r} does not match base language {base.language!r}"
-        )
-
-
 def apply_scoped_resolutions(
     base: KISIntent | None,
     resolved: ScopedResolutionBatch,
@@ -76,7 +64,6 @@ def apply_scoped_resolutions(
     """Apply only resolved event IDs while preserving all other canonical evidence."""
     if revision < 1:
         raise ValueError("KIS revision must be at least 1")
-    _validate_language(base, resolved.language)
 
     resolved_by_id = {event.event_id: event for event in resolved.events}
     if len(resolved_by_id) != len(resolved.events):
@@ -94,7 +81,6 @@ def apply_scoped_resolutions(
             KISEvent(id=event.event_id, text=event.text, bindings=[])
             for event in resolved.events
         ]
-        language = resolved.language
         entities = []
     else:
         base_ids = [event.id for event in base.events]
@@ -125,19 +111,13 @@ def apply_scoped_resolutions(
                     bindings=_validated_bindings(patch.bindings, base),
                 )
             )
-        language = resolved.language if base.language is None else base.language
         entities = base.entities
 
     query_text = canonical_query_text(events)
-    if query_text is None:
-        language = None
-    elif language is None:
-        raise KISResolutionError("Textual scoped resolution requires a language")
 
     try:
         return KISIntent(
             revision=revision,
-            language=language,
             query_text=query_text,
             entities=entities,
             events=events,
@@ -186,7 +166,6 @@ class KISScopedResolver:
             description, [(item.event_id, item.instruction) for item in instructions]
         )
         resolved = self._llm.generate_structured(messages, ScopedResolutionBatch)
-        _validate_language(base, resolved.language)
         returned_ids = [event.event_id for event in resolved.events]
         if set(returned_ids) != set(target_ids) or len(returned_ids) != len(target_ids):
             raise KISResolutionError(

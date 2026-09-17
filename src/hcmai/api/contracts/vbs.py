@@ -47,6 +47,30 @@ class VbsTaskResponse(BaseModel):
     duration: int | None = Field(default=None, ge=0, strict=True)
 
 
+class VbsTaskTemplateItem(BaseModel):
+    """One task template metadata item within an evaluation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: NonBlank
+    task_group: NonBlank
+    task_type: NonBlank
+    duration: int | None = Field(default=None, ge=0, strict=True)
+
+
+class VbsEvaluationSummary(BaseModel):
+    """Safe evaluation and task summary visible to a connected participant."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: NonBlank
+    name: NonBlank
+    type: NonBlank
+    status: Literal["CREATED", "ACTIVE", "TERMINATED"]
+    template_id: NonBlank
+    task_templates: list[VbsTaskTemplateItem]
+
+
 class VbsTemporalAnswer(BaseModel):
     """One canonical video interval expressed in competition milliseconds."""
 
@@ -89,6 +113,8 @@ class VbsDirectSubmissionRequest(BaseModel):
     user_id: NonBlank
     expected_task_scope_key: NonBlank
     answer: VbsAnswer
+    evaluation_id: NonBlank | None = None
+    task_name: NonBlank | None = None
 
 
 class VbsDirectSubmissionRecorded(BaseModel):
@@ -139,9 +165,11 @@ __all__ = [
     "VbsDirectSubmissionRecorded",
     "VbsDirectSubmissionRequest",
     "VbsDirectSubmissionUnknown",
+    "VbsEvaluationSummary",
     "VbsSessionConnectRequest",
     "VbsSessionStatus",
     "VbsTaskResponse",
+    "VbsTaskTemplateItem",
     "VbsTemporalAnswer",
     "VbsTextAnswer",
 ]
