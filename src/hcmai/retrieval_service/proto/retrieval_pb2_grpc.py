@@ -5,7 +5,7 @@ import warnings
 
 from hcmai.retrieval_service.proto import retrieval_pb2 as hcmai_dot_retrieval__service_dot_proto_dot_retrieval__pb2
 
-GRPC_GENERATED_VERSION = '1.81.1'
+GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -25,7 +25,7 @@ if _version_not_supported:
     )
 
 
-class RetrievalServiceStub:
+class RetrievalServiceStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -61,7 +61,7 @@ class RetrievalServiceStub:
                 _registered_method=True)
 
 
-class RetrievalServiceServicer:
+class RetrievalServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetCapabilities(self, request, context):
@@ -130,7 +130,7 @@ def add_RetrievalServiceServicer_to_server(servicer, server):
 
 
  # This class is part of an EXPERIMENTAL API.
-class RetrievalService:
+class RetrievalService(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
