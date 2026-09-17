@@ -49,7 +49,7 @@ def test_resolver_canonicalizes_initial_natural_resolution() -> None:
     llm.generate_structured.assert_called_once()
     messages, response_model = llm.generate_structured.call_args.args
     assert response_model is KISInitialResolution
-    assert llm.generate_structured.call_args.kwargs.get("max_tokens") == 512
+    assert llm.generate_structured.call_args.kwargs.get("max_tokens") == 256
     assert llm.generate_structured.call_args.kwargs.get("temperature") == 0.0
     # Prompt should not ask model for revision, inputs, or IDs
     assert "revision" not in messages[0]["content"]

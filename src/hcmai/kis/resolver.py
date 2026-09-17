@@ -24,12 +24,21 @@ class KISResolutionError(RuntimeError):
     """Raised when an LLM resolution violates semantic or referential integrity."""
 
 
+DEFAULT_INITIAL_RESOLVER_MAX_TOKENS = 256
+
+
 class KISIntentResolver:
     """Resolves initial natural-language KIS input into a semantic graph."""
 
-    def __init__(self, llm: LLMClient) -> None:
+    def __init__(
+        self,
+        llm: LLMClient,
+        *,
+        max_tokens: int = DEFAULT_INITIAL_RESOLVER_MAX_TOKENS,
+    ) -> None:
         """Initialize with a capability-level LLMClient."""
         self._llm = llm
+        self._max_tokens = max_tokens
 
     def resolve_initial(self, text: str, revision: int) -> KISIntent:
         """Resolve one initial natural-language query at a server-owned revision.
@@ -72,7 +81,7 @@ class KISIntentResolver:
             messages,
             KISInitialResolution,
             temperature=0.0,
-            max_tokens=512,
+            max_tokens=self._max_tokens,
         )
 
         events = [

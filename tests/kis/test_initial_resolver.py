@@ -26,7 +26,7 @@ class CapturingLLM:
         return self.result
 
 
-def test_initial_resolver_uses_event_only_schema_and_512_token_budget() -> None:
+def test_initial_resolver_uses_event_only_schema_and_256_token_budget() -> None:
     llm = CapturingLLM(
         KISInitialResolution(
             events=[KISInitialResolutionEvent(text="A framed photograph is visible.")]
@@ -37,7 +37,7 @@ def test_initial_resolver_uses_event_only_schema_and_512_token_budget() -> None:
     call = llm.calls[0]
     assert call["response_model"] is KISInitialResolution
     assert call["temperature"] == 0.0
-    assert call["max_tokens"] == 512
+    assert call["max_tokens"] == 256
 
 
 def test_initial_resolver_canonicalizes_two_events_without_entities() -> None:
