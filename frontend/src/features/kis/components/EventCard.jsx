@@ -21,28 +21,6 @@ const EventCard = ({
       <div className="kis-event-card-header">
         <span className="kis-event-id-badge">{event.id}</span>
         {event.text && <span className="kis-event-text">{event.text}</span>}
-        <div className="kis-event-actions">
-          <button
-            type="button"
-            className="kis-event-edit-btn"
-            onClick={() => onEdit?.(event.id)}
-            disabled={disabled}
-            aria-label={`Edit ${event.id}`}
-          >
-            <span className="kis-btn-icon" aria-hidden="true">✎</span>
-            <span>Edit</span>
-          </button>
-          <button
-            type="button"
-            className="kis-event-add-image-btn"
-            onClick={() => onAddImage?.(event.id)}
-            disabled={disabled}
-            aria-label={`Add image to ${event.id}`}
-          >
-            <span className="kis-btn-icon" aria-hidden="true">+</span>
-            <span>Add image</span>
-          </button>
-        </div>
       </div>
 
       {allImages.length > 0 && (
@@ -71,6 +49,29 @@ const EventCard = ({
           })}
         </div>
       )}
+
+      <div className="kis-event-actions">
+        <button
+          type="button"
+          className="kis-event-edit-btn"
+          onClick={() => onEdit?.(event.id)}
+          disabled={disabled}
+          aria-label={`Edit ${event.id}`}
+        >
+          <span className="kis-btn-icon" aria-hidden="true">✎</span>
+          <span>Edit</span>
+        </button>
+        <button
+          type="button"
+          className="kis-event-add-image-btn"
+          onClick={() => onAddImage?.(event.id)}
+          disabled={disabled}
+          aria-label={`Add image to ${event.id}`}
+        >
+          <span className="kis-btn-icon" aria-hidden="true">+</span>
+          <span>Add image</span>
+        </button>
+      </div>
     </article>
   );
 };
