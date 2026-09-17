@@ -18,6 +18,9 @@ const QueryComposer = ({
   onBlur,
   renderExtraActions,
   submitLabel = 'Search',
+  placeholder = 'Search or add another clue…',
+  selectedContext = null,
+  onClearContext = null,
 }) => {
   const [pendingImageFile, setPendingImageFile] = useState(null);
   const localTextareaRef = useRef(null);
@@ -109,10 +112,30 @@ const QueryComposer = ({
     effectiveSubmitLabel = 'Update';
   } else if (preview?.kind === 'global_rewrite') {
     effectiveSubmitLabel = 'Rewrite';
+  } else if (baseIntent && submitLabel === 'Search') {
+    effectiveSubmitLabel = 'Feedback';
   }
 
   return (
     <div className="kis-query-composer" data-testid="kis-query-composer">
+      {selectedContext && (
+        <div className="kis-composer-context-bar" data-testid="kis-composer-context-bar">
+          <span className="feedback-chip chip-context">
+            Context: {selectedContext.eventId || selectedContext.resultId || 'Selected item'}
+            {onClearContext && (
+              <button
+                type="button"
+                className="kis-context-clear-btn"
+                onClick={onClearContext}
+                aria-label="Clear selected context"
+              >
+                ×
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+
       {pendingImageFile && (
         <div className="kis-attach-target-chooser" role="region" aria-label="Event target chooser">
           <span className="kis-chooser-label">Attach image to:</span>
@@ -166,7 +189,7 @@ const QueryComposer = ({
           rows={2}
           value={draft}
           onChange={(e) => onDraftChange?.(e.target.value)}
-          placeholder="Search or add another clue…"
+          placeholder={placeholder}
           onFocus={onFocus}
           onBlur={onBlur}
           disabled={isSearching || disabled}

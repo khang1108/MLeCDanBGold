@@ -10,6 +10,8 @@ const EventCard = ({
   onEdit,
   onAddImage,
   onRemoveImage,
+  onSelect,
+  isSelected = false,
   disabled = false,
 }) => {
   if (!event) return null;
@@ -17,7 +19,19 @@ const EventCard = ({
   const allImages = [...(event.images || []), ...stagedImages];
 
   return (
-    <article className="kis-event-card" data-testid={`kis-event-card-${event.id}`}>
+    <article
+      className={`kis-event-card ${isSelected ? 'kis-event-card-selected' : ''}`}
+      data-testid={`kis-event-card-${event.id}`}
+      onClick={() => onSelect?.(event.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect?.(event.id);
+        }
+      }}
+    >
       <div className="kis-event-card-header">
         <span className="kis-event-id-badge">{event.id}</span>
         {event.text && <span className="kis-event-text">{event.text}</span>}
@@ -39,7 +53,10 @@ const EventCard = ({
                   type="button"
                   className="kis-event-remove-image-btn"
                   aria-label={`Remove image ${img.file_name || assetId}`}
-                  onClick={() => onRemoveImage?.(event.id, assetId)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveImage?.(event.id, assetId);
+                  }}
                   disabled={disabled}
                 >
                   ×
@@ -54,7 +71,10 @@ const EventCard = ({
         <button
           type="button"
           className="kis-event-edit-btn"
-          onClick={() => onEdit?.(event.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit?.(event.id);
+          }}
           disabled={disabled}
           aria-label={`Edit ${event.id}`}
         >
@@ -64,7 +84,10 @@ const EventCard = ({
         <button
           type="button"
           className="kis-event-add-image-btn"
-          onClick={() => onAddImage?.(event.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddImage?.(event.id);
+          }}
           disabled={disabled}
           aria-label={`Add image to ${event.id}`}
         >

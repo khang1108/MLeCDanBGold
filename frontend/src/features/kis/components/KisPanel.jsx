@@ -2,6 +2,7 @@ import React from 'react';
 import IntentSummary from './IntentSummary';
 import EventList from './EventList';
 import QueryComposer from './QueryComposer';
+import FeedbackThread from './FeedbackThread';
 
 /**
  * Present one revisioned KIS session as multimodal event cards, canonical intent,
@@ -9,6 +10,10 @@ import QueryComposer from './QueryComposer';
  */
 const KisPanel = ({
   sessionState = {},
+  feedbackSession = null,
+  onUndoFeedback = null,
+  onSelectContext = null,
+  onClearContext = null,
   onDraftChange,
   onSubmit,
   onReset,
@@ -99,8 +104,19 @@ const KisPanel = ({
           onEdit={handleEditEvent}
           onAddImage={handleAddImageToEvent}
           onRemoveImage={onRemoveImage}
+          onSelectContext={onSelectContext}
+          selectedEventId={feedbackSession?.selectedContext?.eventId}
           disabled={isSearching || disabled}
         />
+
+        {feedbackSession && (
+          <FeedbackThread
+            messages={feedbackSession.messages || []}
+            canUndo={!!feedbackSession.canUndo}
+            onUndo={onUndoFeedback}
+            isPending={feedbackSession.status === 'pending'}
+          />
+        )}
 
         {currentIntent && (
           (Array.isArray(currentIntent.entities) && currentIntent.entities.length > 0)
@@ -170,6 +186,8 @@ const KisPanel = ({
           onBlur={onBlurQueryInput}
           renderExtraActions={renderExtraActions}
           submitLabel={submitLabel}
+          selectedContext={feedbackSession?.selectedContext}
+          onClearContext={onClearContext}
         />
       </div>
     </section>

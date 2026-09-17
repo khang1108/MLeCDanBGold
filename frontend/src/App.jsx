@@ -161,6 +161,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
             replayRequest={replayRequest}
             onEventTrailInvalidated={handleEventTrailInvalidated}
             eventTrailAnnotations={eventTrailAnnotations}
+            eventTrail={eventTrail}
           />
         </div>
         <div className="workspace-panel" hidden={activePage !== 'workspace'}>

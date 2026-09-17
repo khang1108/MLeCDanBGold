@@ -10,6 +10,8 @@ const EventList = ({
   onEdit,
   onAddImage,
   onRemoveImage,
+  onSelectContext,
+  selectedEventId = null,
   disabled = false,
 }) => {
   if (!Array.isArray(events) || events.length === 0) return null;
@@ -24,6 +26,8 @@ const EventList = ({
           onEdit={onEdit}
           onAddImage={onAddImage}
           onRemoveImage={onRemoveImage}
+          onSelect={onSelectContext}
+          isSelected={selectedEventId === event.id}
           disabled={disabled}
         />
       ))}

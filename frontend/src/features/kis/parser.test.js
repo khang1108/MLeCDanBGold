@@ -70,10 +70,10 @@ describe('parseComposerDraft', () => {
     expect(result.error).toMatch(/missing E1/i);
   });
 
-  test('reports error on unscoped progressive text when base intent exists', () => {
+  test('previews natural feedback text when base intent exists', () => {
     const result = parseComposerDraft('unscoped progressive text', BASE_INTENT);
-    expect(result.kind).toBe('invalid');
-    expect(result.error).toMatch(/explicit E#: event instructions/i);
+    expect(result.kind).toBe('feedback');
+    expect(result.error).toBeNull();
   });
 
   test('reports error on duplicate event IDs', () => {

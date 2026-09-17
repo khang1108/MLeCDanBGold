@@ -125,9 +125,9 @@ export const parseComposerDraft = (draft, baseIntent = null) => {
     }
     if (baseEventCount > 0) {
       return {
-        kind: 'invalid',
+        kind: 'feedback',
         affectedEventIds: [],
-        error: 'Existing KIS intents require explicit E#: event instructions',
+        error: null,
       };
     }
     return {

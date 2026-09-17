@@ -1543,3 +1543,162 @@
   border-radius: 4px;
   font-size: 12px;
 }
+
+/* KIS Chat Feedback Thread & Context Chips */
+.kis-event-card.kis-event-card-selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.feedback-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.feedback-thread-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+}
+
+.feedback-thread-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.feedback-undo-button {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.feedback-undo-button:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+
+.feedback-messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.feedback-message {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.feedback-message-user {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  align-self: flex-end;
+  width: 90%;
+}
+
+.feedback-message-assistant {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  align-self: flex-start;
+  width: 95%;
+}
+
+.feedback-message-clarification {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.feedback-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.feedback-role-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.feedback-message-body {
+  color: #1e293b;
+  word-break: break-word;
+}
+
+.feedback-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chip-clarification {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.chip-scope {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.chip-events {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.chip-context {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.kis-composer-context-bar {
+  margin-bottom: 6px;
+}
+
+.kis-context-clear-btn {
+  background: transparent;
+  border: none;
+  color: #1e40af;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.feedback-pending-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-style: italic;
+}

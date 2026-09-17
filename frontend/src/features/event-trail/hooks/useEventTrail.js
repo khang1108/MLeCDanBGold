@@ -300,6 +300,10 @@ export const useEventTrail = () => {
     setError(null);
   }, [invalidate, setCurrentSession]);
 
+  const syncSession = useCallback((externalTrailState, key = null) => {
+    setCurrentSession(externalTrailState, key ?? keyRef.current);
+  }, [setCurrentSession]);
+
   return {
     session,
     sessionKey,
@@ -312,5 +316,6 @@ export const useEventTrail = () => {
     refresh,
     close,
     clearLocal,
+    syncSession,
   };
 };

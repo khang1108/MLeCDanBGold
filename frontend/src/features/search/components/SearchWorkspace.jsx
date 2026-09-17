@@ -6,6 +6,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { searchKis, uploadKisImage } from '../../../api/kis';
+import { openFeedbackSession, sendFeedbackTurn, undoFeedback } from '../../../api/feedback';
 import KisPanel from '../../kis/components/KisPanel';
 import {
   createInitialKisSessionState,
@@ -18,6 +19,17 @@ import {
   commitSearchFailure,
   resetKisSession,
 } from '../../kis/session';
+import {
+  createInitialFeedbackSession,
+  initFeedbackSession,
+  startFeedbackTurn,
+  applyFeedbackSuccess,
+  applyFeedbackFailure,
+  applyUndoSuccess,
+  setSelectedContext,
+  clearSelectedContext,
+  resetFeedbackSession,
+} from '../../kis/feedbackSession';
 import { parseComposerDraft } from '../../kis/parser';
 import { filterFrames } from '../../../api/filter';
 import FilterPagination from '../../filter/components/FilterPagination';
@@ -78,6 +90,7 @@ const SearchWorkspace = ({
   onExplorationInvalidated,
   onEventTrailInvalidated,
   eventTrailAnnotations = {},
+  eventTrail = null,
 }) => {
   const notifyEventTrailInvalidated = useCallback(() => {
     onEventTrailInvalidated?.();
@@ -87,6 +100,7 @@ const SearchWorkspace = ({
     ? historyUserId.trim()
     : typeof userId === 'string' ? userId.trim() : '';
   const [kisSession, setKisSession] = useState(createInitialKisSessionState);
+  const [feedbackSession, setFeedbackSession] = useState(createInitialFeedbackSession);
   const [useDense, setUseDense] = useState(true);
   const [useBm25, setUseBm25] = useState(true);
   const [resultType, setResultType] = useState(null);
@@ -461,6 +475,157 @@ const SearchWorkspace = ({
     replayRequest,
   ]);
 
+  const handleFeedbackTurn = useCallback(async (message) => {
+    const activeSnapshotId = liveEventTrailContextRef.current?.snapshotId;
+    if (!activeSnapshotId) {
+      setError('No active search snapshot found. Please search first.');
+      return;
+    }
+
+    let activeSessionId = feedbackSession.sessionId;
+    let activeFeedbackRev = feedbackSession.feedbackRevision;
+
+    // Open feedback session lazily on first turn
+    if (!activeSessionId) {
+      try {
+        setIsSearching(true);
+        const openResp = await openFeedbackSession({
+          intent: kisSession.currentIntent,
+          originalQuery: kisSession.currentIntent?.query_text || message,
+          evidenceSnapshotId: activeSnapshotId,
+          useDense,
+          useBm25,
+          topK,
+        });
+        activeSessionId = openResp.session_id;
+        activeFeedbackRev = openResp.feedback_revision;
+        setFeedbackSession((prev) => initFeedbackSession(prev, {
+          sessionId: activeSessionId,
+          feedbackRevision: activeFeedbackRev,
+          state: openResp.state,
+          originalQuery: kisSession.currentIntent?.query_text || message,
+        }));
+      } catch (openErr) {
+        setIsSearching(false);
+        setError(openErr?.message || 'Failed to open feedback session');
+        return;
+      }
+    }
+
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const selectedCtx = feedbackSession.selectedContext;
+
+    setFeedbackSession((prev) => startFeedbackTurn(prev, {
+      requestId,
+      message,
+      selectedContext: selectedCtx,
+    }));
+    setKisSession((prev) => setDraft(prev, ''));
+    setIsSearching(true);
+    setError(null);
+
+    try {
+      const turnResp = await sendFeedbackTurn(activeSessionId, {
+        requestId,
+        expectedFeedbackRevision: activeFeedbackRev,
+        expectedKisRevision: kisSession.currentIntent?.revision ?? 1,
+        expectedTrailRevision: eventTrail?.session?.trail_revision,
+        message,
+        selectedResultId: selectedCtx?.resultId,
+        selectedEventId: selectedCtx?.eventId,
+        selectedFrameId: selectedCtx?.frameId,
+      });
+
+      setFeedbackSession((prev) => applyFeedbackSuccess(prev, turnResp, { requestId }));
+
+      if (turnResp.status === 'applied') {
+        if (Array.isArray(turnResp.results)) {
+          setFrames(turnResp.results);
+        }
+        if (turnResp.intent) {
+          setKisSession((prev) => ({
+            ...prev,
+            currentIntent: turnResp.intent,
+            revision: turnResp.intent.revision,
+          }));
+          const eventTexts = Array.isArray(turnResp.intent?.events)
+            ? turnResp.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
+            : [];
+          setKisEvents(eventTexts);
+        }
+        if (turnResp.evidence_snapshot_id && liveEventTrailContextRef.current) {
+          liveEventTrailContextRef.current.snapshotId = turnResp.evidence_snapshot_id;
+          liveEventTrailContextRef.current.kisRevision = turnResp.intent?.revision ?? liveEventTrailContextRef.current.kisRevision;
+        }
+        if (turnResp.trail && eventTrail?.syncSession) {
+          eventTrail.syncSession(turnResp.trail);
+        }
+      }
+    } catch (turnErr) {
+      setFeedbackSession((prev) => applyFeedbackFailure(prev, turnErr, { requestId }));
+      setError(turnErr?.message || 'Feedback turn failed');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [
+    feedbackSession,
+    kisSession.currentIntent,
+    useDense,
+    useBm25,
+    topK,
+    eventTrail,
+  ]);
+
+  const handleUndoFeedback = useCallback(async () => {
+    if (!feedbackSession.sessionId || !feedbackSession.canUndo || isSearching) return;
+
+    const requestId = `undo_${Date.now()}`;
+    setIsSearching(true);
+    try {
+      const undoResp = await undoFeedback(feedbackSession.sessionId, {
+        requestId,
+        expectedFeedbackRevision: feedbackSession.feedbackRevision,
+      });
+
+      setFeedbackSession((prev) => applyUndoSuccess(prev, undoResp));
+
+      if (Array.isArray(undoResp.results)) {
+        setFrames(undoResp.results);
+      }
+      if (undoResp.intent) {
+        setKisSession((prev) => ({
+          ...prev,
+          currentIntent: undoResp.intent,
+          revision: undoResp.intent.revision,
+        }));
+        const eventTexts = Array.isArray(undoResp.intent?.events)
+          ? undoResp.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
+          : [];
+        setKisEvents(eventTexts);
+      }
+      if (undoResp.trail && eventTrail?.syncSession) {
+        eventTrail.syncSession(undoResp.trail);
+      }
+    } catch (undoErr) {
+      setError(undoErr?.message || 'Undo failed');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [feedbackSession, isSearching, eventTrail]);
+
+  const handleSelectContext = useCallback((eventId) => {
+    setFeedbackSession((prev) => {
+      if (prev.selectedContext?.eventId === eventId) {
+        return clearSelectedContext(prev);
+      }
+      return setSelectedContext(prev, { eventId });
+    });
+  }, []);
+
+  const handleClearContext = useCallback(() => {
+    setFeedbackSession((prev) => clearSelectedContext(prev));
+  }, []);
+
   const submit = useCallback(async (event) => {
     event?.preventDefault?.();
     if (isSearching) return;
@@ -475,6 +640,9 @@ const SearchWorkspace = ({
         if (preview.error) {
           setError(preview.error);
           return;
+        }
+        if (preview.kind === 'feedback' && kisSession.currentIntent) {
+          return handleFeedbackTurn(draftText);
         }
         prepared = prepareSemanticRequest(kisSession, preview);
       } else if (hasStagedImages) {
@@ -517,6 +685,7 @@ const SearchWorkspace = ({
       if (controller.signal.aborted) return;
 
       setKisSession((prev) => commitSearchSuccess(prev, response));
+      setFeedbackSession(resetFeedbackSession());
 
       const eventTexts = Array.isArray(response.intent?.events)
         ? response.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
@@ -658,6 +827,7 @@ const SearchWorkspace = ({
     prevControlsRef.current = { topK, useDense, useBm25 };
 
     if (controlsChanged && kisSession.currentIntent && !kisSession.draft?.trim() && !isSearching) {
+      setFeedbackSession(resetFeedbackSession());
       submit();
     }
   }, [topK, useDense, useBm25, kisSession.currentIntent, kisSession.draft, isSearching, submit]);
@@ -670,6 +840,7 @@ const SearchWorkspace = ({
     invalidateHistorySession();
     setIsSearching(false);
     setKisSession(resetKisSession());
+    setFeedbackSession(resetFeedbackSession());
     handleClearFilter();
     setFrames([]);
     setKisEvents([]);
@@ -1121,6 +1292,10 @@ const SearchWorkspace = ({
                 isSearching: isSearching || kisSession.isSearching,
                 error: error || kisSession.error,
               }}
+              feedbackSession={feedbackSession}
+              onUndoFeedback={handleUndoFeedback}
+              onSelectContext={handleSelectContext}
+              onClearContext={handleClearContext}
               inputRef={setQueryTextareaRef}
               onDraftChange={(val) => {
                 setKisSession((prev) => setDraft(prev, val));
