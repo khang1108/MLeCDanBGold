@@ -110,6 +110,40 @@ const SearchWorkspace = ({
   const liveKisSnapshotRef = useRef(null);
   const prevControlsRef = useRef({ topK, useDense, useBm25 });
 
+  const [gridSize, setGridSize] = useState(() => {
+    try {
+      return localStorage.getItem('hcmai_grid_size') || 'normal';
+    } catch {
+      return 'normal';
+    }
+  });
+
+  const [isOptionsCollapsed, setIsOptionsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('hcmai_options_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleSetGridSize = useCallback((size) => {
+    setGridSize(size);
+    try {
+      localStorage.setItem('hcmai_grid_size', size);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleToggleOptions = useCallback((collapsed) => {
+    setIsOptionsCollapsed(collapsed);
+    try {
+      localStorage.setItem('hcmai_options_collapsed', String(collapsed));
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const enqueueHistoryWrite = useCallback((queryId, write) => {
     const prior = historyQueuesRef.current.get(queryId) || Promise.resolve();
     const next = prior.then(write);
@@ -622,6 +656,7 @@ const SearchWorkspace = ({
           onOpenSubmission={handleOpenSubmission}
           isSubmissionOpening={isSubmissionOpening}
           getFrameClassName={getFrameClassName}
+          gridSize={gridSize}
         />
         {resultType === 'filter' && filterTotalPages > 1 && (
           <FilterPagination
@@ -762,16 +797,45 @@ const SearchWorkspace = ({
         </div>
       </form>
       <div className="adhoc-workspace-body">
-        <aside className="adhoc-sidebar">
-          <h3 className="adhoc-sidebar-title">Options</h3>
-          <ToolBox
-            topK={topK}
-            setTopK={setTopK}
-            useDense={useDense}
-            setUseDense={setUseDense}
-            useBm25={useBm25}
-            setUseBm25={setUseBm25}
-          />
+        <aside className={`adhoc-sidebar ${isOptionsCollapsed ? 'collapsed' : ''}`}>
+          {isOptionsCollapsed ? (
+            <button
+              type="button"
+              className="adhoc-sidebar-expand-btn"
+              onClick={() => handleToggleOptions(false)}
+              title="Expand Options panel"
+              aria-label="Expand Options panel"
+            >
+              <span className="sidebar-expand-icon">⚙</span>
+              <span className="sidebar-expand-text">Options</span>
+              <span className="sidebar-expand-arrow">▸</span>
+            </button>
+          ) : (
+            <>
+              <div className="adhoc-sidebar-header">
+                <h3 className="adhoc-sidebar-title">Options</h3>
+                <button
+                  type="button"
+                  className="adhoc-sidebar-collapse-btn"
+                  onClick={() => handleToggleOptions(true)}
+                  title="Collapse Options panel"
+                  aria-label="Collapse Options panel"
+                >
+                  ◂
+                </button>
+              </div>
+              <ToolBox
+                topK={topK}
+                setTopK={setTopK}
+                useDense={useDense}
+                setUseDense={setUseDense}
+                useBm25={useBm25}
+                setUseBm25={setUseBm25}
+                gridSize={gridSize}
+                setGridSize={handleSetGridSize}
+              />
+            </>
+          )}
         </aside>
         <div className="adhoc-results">
           {renderResults()}

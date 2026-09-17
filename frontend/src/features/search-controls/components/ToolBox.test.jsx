@@ -169,5 +169,26 @@ describe('ToolBox component', () => {
       duration: 300,
     });
   });
+
+  test('renders frame size selector and calls setGridSize on change', () => {
+    const setGridSize = jest.fn();
+    renderToolBox({
+      topK: 20,
+      setTopK: jest.fn(),
+      gridSize: 'normal',
+      setGridSize,
+    });
+
+    const sizeSelect = screen.getByLabelText(/select frame display size/i);
+    expect(sizeSelect).toBeTruthy();
+    expect(sizeSelect.value).toBe('normal');
+
+    fireEvent.change(sizeSelect, { target: { value: 'large' } });
+    expect(setGridSize).toHaveBeenCalledWith('large');
+
+    fireEvent.change(sizeSelect, { target: { value: 'compact' } });
+    expect(setGridSize).toHaveBeenCalledWith('compact');
+  });
 });
+
 

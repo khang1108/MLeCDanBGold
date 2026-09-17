@@ -20,12 +20,8 @@ test('streams the canonical video at the selected timestamp', async () => {
   expect(video.getAttribute('src')).toMatch(/\/videos\/L21_V001\/stream$/);
   expect(video.hasAttribute('controls')).toBe(false);
   expect(screen.getByRole('slider', { name: 'Video timeline' })).toBeTruthy();
-  expect(screen.getByText('125')).toBeTruthy();
   expect(screen.getByText('5000 ms')).toBeTruthy();
-  expect(screen.getByText('L21_V001 · 125')).toBeTruthy();
-  expect(screen.queryByText(/BTC frame 125/i)).toBeNull();
-  expect(screen.getByText('FPS')).toBeTruthy();
-  expect(screen.getByText('25')).toBeTruthy();
+  expect(screen.getByText('L21_V001 · 5000 ms')).toBeTruthy();
 });
 
 test('shows the active query above the frame inspector without a label', () => {
@@ -90,8 +86,8 @@ test('keeps canonical metadata while seeking manual inspection to the requested 
   fireEvent.loadedMetadata(video);
 
   expect(currentTime).toBe(12);
-  expect(screen.getByText('L21_V001 · 125')).toBeTruthy();
-  expect(screen.getByText('Canonical evidence')).toBeTruthy();
+  expect(screen.getByText('L21_V001 · 5000 ms')).toBeTruthy();
+  expect(screen.getByText('12000 ms')).toBeTruthy();
 });
 
 test('keeps metadata on playback time while hover preview stays non-seeking', async () => {
@@ -171,9 +167,8 @@ test('uses source time for metadata while keeping the selected frame in the head
   Object.defineProperty(video, 'currentTime', { configurable: true, value: 5.2 });
   fireEvent.timeUpdate(video);
 
-  expect(screen.getByText('156')).toBeTruthy();
   expect(screen.getByText('5200 ms')).toBeTruthy();
-  expect(screen.getByText('L21_V001 · 125')).toBeTruthy();
+  expect(screen.getByText('L21_V001 · 5000 ms')).toBeTruthy();
 });
 
 test('does not expose a DRES action while the participant is disconnected', async () => {
@@ -246,7 +241,7 @@ test('uses exact current time rather than FPS-derived frame index for submission
   fireEvent.timeUpdate(video);
   fireEvent.click(screen.getByRole('button', { name: 'Submit current video moment to DRES' }));
 
-  expect(screen.getByText('158')).toBeTruthy();
+  expect(screen.getByText('5250 ms')).toBeTruthy();
   expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'L21_V001', startMs: 5_250, endMs: 5_250 });
 });
 

@@ -291,7 +291,7 @@
 }
 
 .modal-inspector-column {
-  width: 380px;
+  width: 280px;
   flex-shrink: 0;
   background-color: var(--color-surface);
   border-left: 1px solid var(--color-hairline);

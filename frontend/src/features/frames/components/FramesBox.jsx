@@ -19,6 +19,7 @@ const FramesBox = ({
   onOpenSubmission,
   isSubmissionOpening = false,
   getFrameClassName,
+  gridSize = 'normal',
 }) => {
   const hasSearched = latencyMs !== null || error !== null;
   const hasLatency = latencyMs !== null && latencyMs !== undefined;
@@ -77,7 +78,7 @@ const FramesBox = ({
       <div className="frames-scroll-region">
         {(results.length > 0 || !error) &&
           (results.length ? (
-            <div className="frames-grid">
+            <div className={`frames-grid size-${gridSize}`}>
               {results.map((frame, index) => (
                   <FrameCard
                   key={`${frame.video_id}:${(frame.frame_ids || [frame.frame_id]).join("|")}:${index}`}
