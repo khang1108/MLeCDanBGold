@@ -22,7 +22,9 @@ test('posts revisioned KIS search request with base_intent and operation to /api
       kind: 'initial_resolve',
       affected_event_ids: ['E1'],
     },
+    evidence_snapshot_id: 'snap_1',
     results: [{
+      result_id: 'r_1',
       frame_id: 'f1',
       video_id: 'L21_V001',
       frame_idx: 125,
@@ -60,8 +62,10 @@ test('posts revisioned KIS search request with base_intent and operation to /api
   });
 
   expect(result.intent.query_text).toBe('chef cooks');
+  expect(result.evidence_snapshot_id).toBe('snap_1');
   expect(result.operation_summary.kind).toBe('initial_resolve');
   expect(result.results[0].frame_id).toBe('f1');
+  expect(result.results[0].result_id).toBe('r_1');
   expect(global.fetch).toHaveBeenCalledWith(
     expect.stringContaining('/api/v1/kis/search'),
     expect.objectContaining({

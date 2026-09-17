@@ -76,7 +76,12 @@ const SearchWorkspace = ({
   onReplayHandled,
   isActive = true,
   onExplorationInvalidated,
+  onEventTrailInvalidated,
 }) => {
+  const notifyEventTrailInvalidated = useCallback(() => {
+    onEventTrailInvalidated?.();
+    onExplorationInvalidated?.();
+  }, [onEventTrailInvalidated, onExplorationInvalidated]);
   const historyIdentity = typeof historyUserId === 'string'
     ? historyUserId.trim()
     : typeof userId === 'string' ? userId.trim() : '';
@@ -107,7 +112,7 @@ const SearchWorkspace = ({
   const activeQuerySessionRef = useRef(null);
   const historyGenerationRef = useRef(0);
   const lastReplayTokenRef = useRef(null);
-  const liveKisSnapshotRef = useRef(null);
+  const liveEventTrailContextRef = useRef(null);
   const prevControlsRef = useRef({ topK, useDense, useBm25 });
 
   const [gridSize, setGridSize] = useState(() => {
@@ -230,8 +235,8 @@ const SearchWorkspace = ({
     if (!hasCriteria && !overrideParams) return;
 
     requestRef.current?.abort();
-    liveKisSnapshotRef.current = null;
-    onExplorationInvalidated?.();
+    liveEventTrailContextRef.current = null;
+    notifyEventTrailInvalidated();
     const controller = new AbortController();
     requestRef.current = controller;
 
@@ -349,13 +354,23 @@ const SearchWorkspace = ({
         }
       });
     }
+    const trailContext = (
+      resultType === 'retrieval'
+      && liveEventTrailContextRef.current
+      && frame?.result_id
+    ) ? {
+      snapshotId: liveEventTrailContextRef.current.snapshotId,
+      resultId: frame.result_id,
+      kisRevision: liveEventTrailContextRef.current.kisRevision,
+      events: liveEventTrailContextRef.current.events,
+      searchSessionId: liveEventTrailContextRef.current.searchSessionId,
+    } : null;
+
     onFrameClick?.({
       frame,
-      ...(liveKisSnapshotRef.current
-        ? { explorationSnapshot: liveKisSnapshotRef.current }
-        : {}),
+      ...(trailContext ? { eventTrailContext: trailContext } : {}),
     });
-  }, [activeQuerySession, enqueueHistoryWrite, kisSession.revision, onFrameClick, recordViewed]);
+  }, [activeQuerySession, enqueueHistoryWrite, kisSession.revision, onFrameClick, recordViewed, resultType]);
 
   const openKisFrame = useCallback((frame) => openCanonicalFrame(frame), [openCanonicalFrame]);
 
@@ -387,8 +402,8 @@ const SearchWorkspace = ({
     lastReplayTokenRef.current = token;
 
     requestRef.current?.abort();
-    liveKisSnapshotRef.current = null;
-    onExplorationInvalidated?.();
+    liveEventTrailContextRef.current = null;
+    notifyEventTrailInvalidated();
     invalidateHistorySession();
     setIsSearching(false);
     setError(null);
@@ -526,7 +541,26 @@ const SearchWorkspace = ({
       };
       const historySnapshot = buildKisSnapshot(response.results || [], snapshotOptions);
 
-      liveKisSnapshotRef.current = response.exploration_seed || null;
+      notifyEventTrailInvalidated();
+      const activeQueryId = (queryId && requestPayload.operation?.kind !== 'search_only')
+        ? queryId
+        : (activeQuerySession?.queryId || null);
+
+      if (response.evidence_snapshot_id) {
+        liveEventTrailContextRef.current = {
+          snapshotId: response.evidence_snapshot_id,
+          kisRevision: response.intent?.revision ?? 1,
+          events: (response.intent?.events || []).map(({ id, text, images }) => ({
+            id,
+            text,
+            images: images || [],
+          })),
+          searchSessionId: activeQueryId,
+        };
+      } else {
+        liveEventTrailContextRef.current = null;
+      }
+
       setResultType('retrieval');
       setReplaySnapshot(null);
       lastReplayTokenRef.current = null;
@@ -612,8 +646,8 @@ const SearchWorkspace = ({
   const handleNewSearch = useCallback(() => {
     requestRef.current?.abort();
     requestRef.current = null;
-    liveKisSnapshotRef.current = null;
-    onExplorationInvalidated?.();
+    liveEventTrailContextRef.current = null;
+    notifyEventTrailInvalidated();
     invalidateHistorySession();
     setIsSearching(false);
     setKisSession(resetKisSession());
@@ -627,7 +661,7 @@ const SearchWorkspace = ({
     setReplaySnapshot(null);
     lastReplayTokenRef.current = null;
     onQueryChange?.('');
-  }, [handleClearFilter, invalidateHistorySession, onExplorationInvalidated, onQueryChange]);
+  }, [handleClearFilter, invalidateHistorySession, notifyEventTrailInvalidated, onQueryChange]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {

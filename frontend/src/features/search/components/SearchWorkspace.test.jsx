@@ -50,6 +50,7 @@ const mockKisResponse = ({
   warnings = [],
   latency = SEARCH_LATENCY,
   operationSummary = { kind: 'initial_resolve', affected_event_ids: ['E1'] },
+  evidenceSnapshotId = 'snap_1',
 } = {}) => ({
   intent: {
     revision,
@@ -59,6 +60,7 @@ const mockKisResponse = ({
     events,
     temporal_edges: [],
   },
+  evidence_snapshot_id: evidenceSnapshotId,
   operation_summary: operationSummary,
   results,
   warnings,
@@ -178,45 +180,88 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   });
 });
 
-test('passes the immutable live KIS scoring snapshot when opening a result', async () => {
+test('hands off exact live EventTrail context when opening a result', async () => {
   const onFrameClick = jest.fn();
-  const response = {
-    ...mockKisResponse({
-      inputs: ['red boat'],
-      queryText: 'red boat',
-      events: [{ id: 'E1', text: 'red boat' }],
-      results: [{
-        frame_id: 'frame-explore',
-        video_id: 'V01',
-        frame_idx: 125,
-        timestamp_ms: 10_010,
-        fps: 29.97,
-        caption: 'A red boat',
-        scores: { final: 0.91 },
-      }],
-    }),
-    exploration_seed: {
-      semantic_revision: 1,
-      events: [{ event_id: 'E1', canonical_text: 'red boat', dense_text: 'dense red boat', bm25_text: 'caption red boat' }],
-      use_dense: true,
-      use_bm25: true,
+  const response = mockKisResponse({
+    inputs: ['woman enters'],
+    queryText: 'woman enters',
+    revision: 3,
+    events: [
+      { id: 'E1', text: 'woman enters', images: [] },
+      { id: 'E2', text: 'woman sits', images: [] },
+    ],
+    results: [{
+      result_id: 'r_1',
+      frame_id: 'frame-explore',
+      video_id: 'V01',
+      frame_idx: 125,
+      timestamp_ms: 10_010,
+      fps: 29.97,
+      caption: 'woman enters',
+      scores: { final: 0.91 },
+    }],
+    evidenceSnapshotId: 'snap_1',
+  });
+  searchKis.mockResolvedValueOnce(response);
+  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick, userId: 'team-a' });
+  submit('woman enters');
+
+  fireEvent.click(await screen.findByAltText('Frame frame-explore'));
+
+  expect(onFrameClick).toHaveBeenCalledWith({
+    frame: expect.objectContaining({ result_id: 'r_1', frame_id: 'frame-explore', video_id: 'V01' }),
+    eventTrailContext: {
+      snapshotId: 'snap_1',
+      resultId: 'r_1',
+      kisRevision: 3,
+      events: [
+        { id: 'E1', text: 'woman enters', images: [] },
+        { id: 'E2', text: 'woman sits', images: [] },
+      ],
+      searchSessionId: expect.anything(),
     },
-    use_dense: true,
-    use_bm25: true,
-  };
+  });
+});
+
+test('omits eventTrailContext when evidence_snapshot_id is null or when in filter mode', async () => {
+  const onFrameClick = jest.fn();
+  const response = mockKisResponse({
+    inputs: ['red boat'],
+    queryText: 'red boat',
+    results: [{
+      result_id: 'r_1',
+      frame_id: 'frame-degraded',
+      video_id: 'V01',
+      frame_idx: 100,
+      timestamp_ms: 10_010,
+      score: 0.9,
+    }],
+    evidenceSnapshotId: null,
+  });
   searchKis.mockResolvedValueOnce(response);
   renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick });
   submit('red boat');
 
-  fireEvent.change(document.getElementById('event-query'), {
-    target: { value: 'a different draft query' },
-  });
-  fireEvent.click(await screen.findByAltText('Frame frame-explore'));
+  fireEvent.click(await screen.findByAltText('Frame frame-degraded'));
 
-  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
-    frame: expect.objectContaining({ frame_id: 'frame-explore', video_id: 'V01' }),
-    explorationSnapshot: response.exploration_seed,
+  expect(onFrameClick).toHaveBeenCalledWith({
+    frame: expect.objectContaining({ frame_id: 'frame-degraded' }),
+  });
+});
+
+test('calls onEventTrailInvalidated when a new search commits results', async () => {
+  const onEventTrailInvalidated = jest.fn();
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    inputs: ['query 1'],
+    queryText: 'query 1',
+    results: [{ frame_id: 'f1', video_id: 'V01', frame_idx: 100, timestamp_ms: 1000, score: 0.9 }],
   }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn(), onEventTrailInvalidated });
+  submit('query 1');
+
+  await screen.findByAltText('Frame f1');
+  expect(onEventTrailInvalidated).toHaveBeenCalledTimes(1);
 });
 
 const frameResult = (id) => ({
@@ -296,6 +341,7 @@ test('opens a KIS result exactly once and records one viewed-frame write', async
       queryText: 'red boat',
       revision: 1,
       results: [{
+        result_id: 'r_1',
         frame_id: 'frame-explore',
         video_id: 'V01',
         frame_idx: 125,
@@ -320,7 +366,7 @@ test('opens a KIS result exactly once and records one viewed-frame write', async
 
   expect(onFrameClick).toHaveBeenCalledTimes(1);
   expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
-    explorationSnapshot: expect.any(Object),
+    eventTrailContext: expect.any(Object),
   }));
   await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(1));
   expect(markFrameViewed).toHaveBeenCalledWith(expect.objectContaining({
