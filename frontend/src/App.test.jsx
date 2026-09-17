@@ -419,4 +419,34 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
   });
 });
 
+test('keyboard shortcut Windows 1 / Meta+1 and Windows 2 / Meta+2 switch pages', () => {
+  render(<App />);
+
+  const queryBtn = screen.getByRole('button', { name: 'Query' });
+  const workspaceBtn = screen.getByRole('button', { name: 'Workspace' });
+
+  expect(queryBtn.getAttribute('aria-pressed')).toBe('true');
+  expect(workspaceBtn.getAttribute('aria-pressed')).toBe('false');
+
+  // Press Windows 2 / Meta+2 -> switch to Workspace
+  fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
+  expect(queryBtn.getAttribute('aria-pressed')).toBe('false');
+  expect(workspaceBtn.getAttribute('aria-pressed')).toBe('true');
+
+  // Press Windows 1 / Meta+1 -> switch back to Query
+  fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true });
+  expect(queryBtn.getAttribute('aria-pressed')).toBe('true');
+  expect(workspaceBtn.getAttribute('aria-pressed')).toBe('false');
+});
+
+test('keyboard shortcut Ctrl+I focuses User ID input', () => {
+  render(<App />);
+  const userIdInput = screen.getByLabelText('User ID');
+  expect(document.activeElement).not.toBe(userIdInput);
+
+  // Press Ctrl+I
+  fireEvent.keyDown(window, { key: 'i', code: 'KeyI', ctrlKey: true });
+  expect(document.activeElement).toBe(userIdInput);
+});
+
 

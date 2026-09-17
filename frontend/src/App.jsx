@@ -79,6 +79,52 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
     setActivePage('query');
   };
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (event) => {
+      // Windows 1 / Meta + 1 -> Switch to Query tab
+      if (
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        (event.key === '1' || event.code === 'Digit1')
+      ) {
+        event.preventDefault();
+        setActivePage('query');
+        return;
+      }
+
+      // Windows 2 / Meta + 2 -> Switch to Workspace tab
+      if (
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        (event.key === '2' || event.code === 'Digit2')
+      ) {
+        event.preventDefault();
+        setActivePage('workspace');
+        return;
+      }
+
+      // Ctrl + I -> Focus User ID input in header
+      if (
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        (event.key.toLowerCase() === 'i' || event.code === 'KeyI')
+      ) {
+        event.preventDefault();
+        if (userIdInputRef.current) {
+          userIdInputRef.current.focus();
+          userIdInputRef.current.select?.();
+        }
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [setActivePage]);
+
   return (
     <div className="app-wrapper">
       <AppHeader

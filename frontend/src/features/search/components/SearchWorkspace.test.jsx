@@ -1181,5 +1181,94 @@ test('Step 2 (Task 8): EventTrail context passes searchSessionId only when real 
   );
 });
 
+test('keyboard shortcut Ctrl+B toggles KIS chat panel collapse state', () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  const chatSidebar = screen.getByRole('complementary', { name: 'KIS search' });
+  expect(chatSidebar.classList.contains('collapsed')).toBe(false);
+
+  // Press Ctrl+B to collapse
+  fireEvent.keyDown(window, { key: 'b', code: 'KeyB', ctrlKey: true });
+  expect(chatSidebar.classList.contains('collapsed')).toBe(true);
+
+  // Press Ctrl+B again to expand
+  fireEvent.keyDown(window, { key: 'b', code: 'KeyB', ctrlKey: true });
+  expect(chatSidebar.classList.contains('collapsed')).toBe(false);
+});
+
+test('keyboard shortcut Ctrl+Alt+B toggles options sidebar collapse state', () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  const optionsSidebar = document.querySelector('.adhoc-sidebar');
+  expect(optionsSidebar.classList.contains('collapsed')).toBe(false);
+
+  // Press Ctrl+Alt+B to collapse
+  fireEvent.keyDown(window, { key: 'b', code: 'KeyB', ctrlKey: true, altKey: true });
+  expect(optionsSidebar.classList.contains('collapsed')).toBe(true);
+
+  // Press Ctrl+Alt+B again to expand
+  fireEvent.keyDown(window, { key: 'b', code: 'KeyB', ctrlKey: true, altKey: true });
+  expect(optionsSidebar.classList.contains('collapsed')).toBe(false);
+});
+
+test('keyboard shortcut Ctrl+K focuses chat textarea and auto-expands panel if collapsed', async () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  const chatSidebar = screen.getByRole('complementary', { name: 'KIS search' });
+
+  // First collapse the chat panel
+  fireEvent.keyDown(window, { key: 'b', code: 'KeyB', ctrlKey: true });
+  expect(chatSidebar.classList.contains('collapsed')).toBe(true);
+
+  // Press Ctrl+K
+  fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });
+  expect(chatSidebar.classList.contains('collapsed')).toBe(false);
+
+  await waitFor(() => {
+    expect(document.activeElement).toBe(document.getElementById('event-query'));
+  });
+});
+
+test('keyboard shortcut Ctrl+N resets query and triggers new search', async () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  const textarea = document.getElementById('event-query');
+  fireEvent.change(textarea, { target: { value: 'some unfinished query' } });
+  expect(textarea.value).toBe('some unfinished query');
+
+  // Press Ctrl+N
+  fireEvent.keyDown(window, { key: 'n', code: 'KeyN', ctrlKey: true });
+
+  await waitFor(() => {
+    expect(document.getElementById('event-query').value).toBe('');
+    expect(document.activeElement).toBe(document.getElementById('event-query'));
+  });
+});
+
+test('keyboard shortcuts Ctrl+1 through Ctrl+6 focus search filter inputs', () => {
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+
+  const folderInput = screen.getByPlaceholderText('Folder ID');
+  const videoInput = screen.getByPlaceholderText('Video ID');
+  const titleInput = screen.getByPlaceholderText('Title');
+  const asrInput = screen.getByPlaceholderText('ASR');
+  const ocrInput = screen.getByPlaceholderText('OCR');
+  const objectInput = screen.getByPlaceholderText('Object (name: count)');
+
+  fireEvent.keyDown(window, { key: '1', code: 'Digit1', ctrlKey: true });
+  expect(document.activeElement).toBe(folderInput);
+
+  fireEvent.keyDown(window, { key: '2', code: 'Digit2', ctrlKey: true });
+  expect(document.activeElement).toBe(videoInput);
+
+  fireEvent.keyDown(window, { key: '3', code: 'Digit3', ctrlKey: true });
+  expect(document.activeElement).toBe(titleInput);
+
+  fireEvent.keyDown(window, { key: '4', code: 'Digit4', ctrlKey: true });
+  expect(document.activeElement).toBe(asrInput);
+
+  fireEvent.keyDown(window, { key: '5', code: 'Digit5', ctrlKey: true });
+  expect(document.activeElement).toBe(ocrInput);
+
+  fireEvent.keyDown(window, { key: '6', code: 'Digit6', ctrlKey: true });
+  expect(document.activeElement).toBe(objectInput);
+});
+
 
 

@@ -115,6 +115,13 @@ const SearchWorkspace = ({
   const lastReplayTokenRef = useRef(null);
   const liveEventTrailContextRef = useRef(null);
   const prevControlsRef = useRef({ topK, useDense, useBm25 });
+  const filterFolderIdRef = useRef(null);
+  const filterVideoIdRef = useRef(null);
+  const filterTitleRef = useRef(null);
+  const filterAsrRef = useRef(null);
+  const filterOcrRef = useRef(null);
+  const filterObjectRef = useRef(null);
+  const localQueryInputRef = useRef(null);
 
   const [gridSize, setGridSize] = useState(() => {
     try {
@@ -200,6 +207,15 @@ const SearchWorkspace = ({
 
   const setQueryTextareaRef = useCallback((node) => {
     if (queryInputRef) queryInputRef.current = node;
+    localQueryInputRef.current = node;
+  }, [queryInputRef]);
+
+  const focusQueryInput = useCallback(() => {
+    const el = queryInputRef?.current || localQueryInputRef.current || document.getElementById('event-query');
+    if (el) {
+      el.focus();
+      el.select?.();
+    }
   }, [queryInputRef]);
 
   const handleAttachImage = useCallback(async (file, targetEventId) => {
@@ -667,16 +683,133 @@ const SearchWorkspace = ({
   }, [handleClearFilter, invalidateHistorySession, notifyEventTrailInvalidated, onQueryChange]);
 
   useEffect(() => {
+    if (!isActive) return;
+
     const handleKeyDown = (event) => {
-      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
-      if (event.key.toLowerCase() === 'n') {
+      // 1. Ctrl + Alt + B -> Toggle Options tab
+      if (
+        event.ctrlKey &&
+        event.altKey &&
+        !event.metaKey &&
+        (event.key.toLowerCase() === 'b' || event.code === 'KeyB')
+      ) {
+        event.preventDefault();
+        handleToggleOptions(!isOptionsCollapsed);
+        return;
+      }
+
+      // 2. Ctrl + B (without Alt) -> Toggle Chat panel
+      if (
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        (event.key.toLowerCase() === 'b' || event.code === 'KeyB')
+      ) {
+        event.preventDefault();
+        handleToggleChat(!isChatCollapsed);
+        return;
+      }
+
+      // 3. Ctrl + K -> Focus chat input (expand if collapsed)
+      if (
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        (event.key.toLowerCase() === 'k' || event.code === 'KeyK')
+      ) {
+        event.preventDefault();
+        if (isChatCollapsed) {
+          handleToggleChat(false);
+        }
+        setTimeout(() => {
+          focusQueryInput();
+        }, 0);
+        return;
+      }
+
+      // 4. Ctrl + N -> New Search
+      if (
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        (event.key.toLowerCase() === 'n' || event.code === 'KeyN')
+      ) {
         event.preventDefault();
         handleNewSearch();
+        setTimeout(() => {
+          focusQueryInput();
+        }, 0);
+        return;
+      }
+
+      // 5. 'n' alone when not in input/textarea -> New Search
+      if (
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        event.key.toLowerCase() === 'n' &&
+        event.target.tagName !== 'INPUT' &&
+        event.target.tagName !== 'TEXTAREA'
+      ) {
+        event.preventDefault();
+        handleNewSearch();
+        return;
+      }
+
+      // 6. Ctrl + 1..6 -> Focus filter inputs
+      if (event.ctrlKey && !event.altKey && !event.metaKey) {
+        const key = event.key;
+        const code = event.code;
+        if (key === '1' || code === 'Digit1') {
+          event.preventDefault();
+          filterFolderIdRef.current?.focus();
+          filterFolderIdRef.current?.select?.();
+          return;
+        }
+        if (key === '2' || code === 'Digit2') {
+          event.preventDefault();
+          filterVideoIdRef.current?.focus();
+          filterVideoIdRef.current?.select?.();
+          return;
+        }
+        if (key === '3' || code === 'Digit3') {
+          event.preventDefault();
+          filterTitleRef.current?.focus();
+          filterTitleRef.current?.select?.();
+          return;
+        }
+        if (key === '4' || code === 'Digit4') {
+          event.preventDefault();
+          filterAsrRef.current?.focus();
+          filterAsrRef.current?.select?.();
+          return;
+        }
+        if (key === '5' || code === 'Digit5') {
+          event.preventDefault();
+          filterOcrRef.current?.focus();
+          filterOcrRef.current?.select?.();
+          return;
+        }
+        if (key === '6' || code === 'Digit6') {
+          event.preventDefault();
+          filterObjectRef.current?.focus();
+          filterObjectRef.current?.select?.();
+          return;
+        }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNewSearch]);
+  }, [
+    isActive,
+    isChatCollapsed,
+    isOptionsCollapsed,
+    handleToggleChat,
+    handleToggleOptions,
+    handleNewSearch,
+    focusQueryInput,
+  ]);
 
   const getFrameClassName = useCallback(
     (frameOrId) => {
@@ -749,10 +882,12 @@ const SearchWorkspace = ({
         <div className="search-filter-row">
           <div className="search-filter-inputs-wrapper">
             <input
+              ref={filterFolderIdRef}
               type="text"
               className="input-text search-filter-input"
               placeholder="Folder ID"
               aria-label="Filter Folder ID"
+              title="Filter Folder ID (Ctrl+1)"
               value={filterFolderId}
               onChange={(e) => setFilterFolderId(e.target.value)}
               disabled={isSearching}
@@ -764,10 +899,12 @@ const SearchWorkspace = ({
               }}
             />
             <input
+              ref={filterVideoIdRef}
               type="text"
               className="input-text search-filter-input"
               placeholder="Video ID"
               aria-label="Filter Video ID"
+              title="Filter Video ID (Ctrl+2)"
               value={filterVideoId}
               onChange={(e) => setFilterVideoId(e.target.value)}
               disabled={isSearching}
@@ -779,10 +916,12 @@ const SearchWorkspace = ({
               }}
             />
             <input
+              ref={filterTitleRef}
               type="text"
               className="input-text search-filter-input"
               placeholder="Title"
               aria-label="Filter Title"
+              title="Filter Title (Ctrl+3)"
               value={filterTitle}
               onChange={(e) => setFilterTitle(e.target.value)}
               disabled={isSearching}
@@ -794,10 +933,12 @@ const SearchWorkspace = ({
               }}
             />
             <input
+              ref={filterAsrRef}
               type="text"
               className="input-text search-filter-input"
               placeholder="ASR"
               aria-label="Filter ASR"
+              title="Filter ASR (Ctrl+4)"
               value={filterAsr}
               onChange={(e) => setFilterAsr(e.target.value)}
               disabled={isSearching}
@@ -809,10 +950,12 @@ const SearchWorkspace = ({
               }}
             />
             <input
+              ref={filterOcrRef}
               type="text"
               className="input-text search-filter-input"
               placeholder="OCR"
               aria-label="Filter OCR"
+              title="Filter OCR (Ctrl+5)"
               value={filterOcr}
               onChange={(e) => setFilterOcr(e.target.value)}
               disabled={isSearching}
@@ -824,10 +967,12 @@ const SearchWorkspace = ({
               }}
             />
             <input
+              ref={filterObjectRef}
               type="text"
               className="input-text search-filter-input"
               placeholder="Object (name: count)"
               aria-label="Filter Object"
+              title="Filter Object (Ctrl+6)"
               value={filterObject}
               onChange={(e) => setFilterObject(e.target.value)}
               disabled={isSearching}

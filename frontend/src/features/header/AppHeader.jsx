@@ -28,15 +28,16 @@ export const AppHeader = ({
       <VbsUserControl inputRef={userIdInputRef} />
       <nav className="workspace-nav" aria-label="Workspace selection">
         {[
-          ['query', 'Query'],
-          ['workspace', 'Workspace'],
-        ].map(([page, label]) => (
+          ['query', 'Query', 'Query (Win+1)'],
+          ['workspace', 'Workspace', 'Workspace (Win+2)'],
+        ].map(([page, label, title]) => (
           <button
             key={page}
             type="button"
             className={`workspace-nav-btn ${activePage === page ? 'active' : ''}`}
             onClick={() => onSelectPage(page)}
             aria-pressed={activePage === page}
+            title={title}
           >
             {label}
           </button>

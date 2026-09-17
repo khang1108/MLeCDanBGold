@@ -62,6 +62,7 @@ const VbsUserControl = ({ inputRef }) => {
             if (event.key === 'Enter') handleSubmit(event);
           }}
           placeholder="team-a"
+          title="User ID (Ctrl+I)"
           autoComplete="off"
           disabled={isLocked || isConnecting}
           aria-describedby={error ? 'app-user-id-error' : undefined}
