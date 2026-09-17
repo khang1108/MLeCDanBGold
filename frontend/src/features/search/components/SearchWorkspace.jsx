@@ -144,6 +144,23 @@ const SearchWorkspace = ({
     }
   }, []);
 
+  const [isChatCollapsed, setIsChatCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('hcmai_chat_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleChat = useCallback((collapsed) => {
+    setIsChatCollapsed(collapsed);
+    try {
+      localStorage.setItem('hcmai_chat_collapsed', String(collapsed));
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const enqueueHistoryWrite = useCallback((queryId, write) => {
     const prior = historyQueuesRef.current.get(queryId) || Promise.resolve();
     const next = prior.then(write);
@@ -868,24 +885,54 @@ const SearchWorkspace = ({
         <div className="adhoc-results">
           {renderResults()}
         </div>
-        <aside className="kis-chat-sidebar" aria-label="KIS search">
-          <KisPanel
-            sessionState={{
-              ...kisSession,
-              isSearching: isSearching || kisSession.isSearching,
-              error: error || kisSession.error,
-            }}
-            inputRef={setQueryTextareaRef}
-            onDraftChange={(val) => {
-              setKisSession((prev) => setDraft(prev, val));
-            }}
-            onSubmit={submit}
-            onReset={handleNewSearch}
-            onAttachImage={handleAttachImage}
-            onRemoveImage={handleRemoveImage}
-            disabled={isReplay || isSearching}
-            renderExtraActions={renderExtraActions}
-          />
+        <aside className={`kis-chat-sidebar ${isChatCollapsed ? 'collapsed' : ''}`} aria-label="KIS search">
+          {isChatCollapsed ? (
+            <button
+              type="button"
+              className="kis-chat-expand-btn"
+              onClick={() => handleToggleChat(false)}
+              title="Expand KIS search panel"
+              aria-label="Expand KIS search panel"
+            >
+              <span className="sidebar-expand-icon">💬</span>
+              <span className="sidebar-expand-text">KIS Chat</span>
+              <span className="sidebar-expand-arrow">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="sidebar-arrow-icon"
+                  aria-hidden="true"
+                >
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </span>
+            </button>
+          ) : (
+            <KisPanel
+              sessionState={{
+                ...kisSession,
+                isSearching: isSearching || kisSession.isSearching,
+                error: error || kisSession.error,
+              }}
+              inputRef={setQueryTextareaRef}
+              onDraftChange={(val) => {
+                setKisSession((prev) => setDraft(prev, val));
+              }}
+              onSubmit={submit}
+              onReset={handleNewSearch}
+              onAttachImage={handleAttachImage}
+              onRemoveImage={handleRemoveImage}
+              disabled={isReplay || isSearching}
+              renderExtraActions={renderExtraActions}
+              onCollapse={() => handleToggleChat(true)}
+            />
+          )}
         </aside>
       </div>
     </div>
