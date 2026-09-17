@@ -24,14 +24,28 @@ const VbsUserControl = ({ inputRef }) => {
           ? { label: 'Last log failed', className: 'failed' }
           : { label: 'Connected', className: 'connected' };
 
+  const isUnlockingRef = React.useRef(false);
+
   const handleSubmit = (event) => {
-    event.preventDefault();
-    if (!isLocked && !isConnecting) connect();
+    event?.preventDefault();
+    if (isUnlockingRef.current) return;
+    if (!isLocked && !isConnecting && draftUserId.trim()) {
+      connect();
+    }
   };
 
-  const handleUnlock = () => {
+  const handleUnlock = (event) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    isUnlockingRef.current = true;
     disconnect();
-    window.setTimeout(() => inputRef?.current?.focus(), 0);
+    window.setTimeout(() => {
+      isUnlockingRef.current = false;
+      if (inputRef?.current) {
+        inputRef.current.focus();
+        inputRef.current.select?.();
+      }
+    }, 100);
   };
 
   return (
@@ -55,6 +69,7 @@ const VbsUserControl = ({ inputRef }) => {
       </label>
       {isLocked ? (
         <button
+          key="vbs-btn-unlock"
           type="button"
           className="vbs-user-status connected"
           onClick={handleUnlock}
@@ -63,7 +78,13 @@ const VbsUserControl = ({ inputRef }) => {
           OK
         </button>
       ) : (
-        <button type="submit" className="vbs-user-status" disabled={isConnecting || !draftUserId.trim()}>
+        <button
+          key="vbs-btn-connect"
+          type="button"
+          className="vbs-user-status"
+          disabled={isConnecting || !draftUserId.trim()}
+          onClick={handleSubmit}
+        >
           {isConnecting ? 'Connecting…' : 'Connect'}
         </button>
       )}

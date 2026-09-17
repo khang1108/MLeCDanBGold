@@ -31,6 +31,8 @@ const ToolBox = ({
   selectedTask: propSelectedTask,
   setSelectedTask: propSetSelectedTask,
   connectedUserId: propConnectedUserId,
+  gridSize = 'normal',
+  setGridSize = NOOP,
 }) => {
   const vbsSession = useVbsSession();
   const connectedUserId = propConnectedUserId ?? vbsSession.connectedUserId ?? '';
@@ -38,6 +40,7 @@ const ToolBox = ({
   const setSelectedTask = propSetSelectedTask ?? vbsSession.setSelectedTask ?? NOOP;
 
   const topKInputId = useId();
+  const gridSizeSelectId = useId();
   const datasetSelectId = useId();
   const taskSelectId = useId();
   const [topKText, setTopKText] = useState(String(topK));
@@ -131,6 +134,25 @@ const ToolBox = ({
             placeholder="20"
             aria-label="Top-K value"
           />
+        </div>
+      </div>
+
+      <div className="toolbox-section toolbox-grid-size-section">
+        <div className="toolbox-label-row toolbox-grid-size-row">
+          <label htmlFor={gridSizeSelectId} className="toolbox-label">
+            Frame Size
+          </label>
+          <select
+            id={gridSizeSelectId}
+            className="toolbox-dataset-select toolbox-grid-size-select"
+            value={gridSize}
+            onChange={(e) => setGridSize?.(e.target.value)}
+            aria-label="Select frame display size"
+          >
+            <option value="compact">Compact</option>
+            <option value="normal">Normal</option>
+            <option value="large">Large</option>
+          </select>
         </div>
       </div>
 

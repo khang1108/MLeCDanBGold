@@ -9,8 +9,6 @@ test('uses the VBS 2027 competition title', () => {
       <AppHeader
         isHealthy
         healthData={{}}
-        vimMode="NORMAL"
-        onToggleVimMode={jest.fn()}
         onOpenDocs={jest.fn()}
         activePage="query"
         onSelectPage={jest.fn()}

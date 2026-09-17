@@ -5,7 +5,6 @@ import { ImageModal } from './features/frames';
 import { SearchWorkspace } from './features/search';
 import { WorkspacePage } from './features/workspace';
 import { useHealthCheck } from './features/health';
-import { useVimMode, TopKPromptModal, VimHelpModal } from './features/vim';
 import { ApiDocsModal } from './features/docs';
 import { useTemporalExploration } from './features/alignment/hooks/useTemporalExploration';
 import { VbsSessionProvider, useVbsSession } from './features/vbs/contexts/VbsSessionContext';
@@ -38,11 +37,6 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
     selectedTask,
     onSessionRejected: invalidateSession,
   });
-  const vim = useVimMode({
-    onCloseAllModals: () => setSelectedFrame(null),
-    queryInputRef,
-    enableTopK: activePage === 'query',
-  });
 
   const closeExploration = useCallback(async () => {
     explorationKeyRef.current = null;
@@ -74,8 +68,6 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
       <AppHeader
         isHealthy={isHealthy}
         healthData={healthData}
-        vimMode={vim.mode}
-        onToggleVimMode={() => (vim.mode === 'NORMAL' ? vim.enterInsertMode() : vim.enterNormalMode())}
         onOpenDocs={() => setIsDocsOpen(true)}
         userIdInputRef={userIdInputRef}
         activePage={activePage}
@@ -100,8 +92,6 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
             onFrameClick={handleQueryFrameClick}
             onQueryChange={setActiveQuery}
             queryInputRef={queryInputRef}
-            onFocusQueryInput={() => vim.setMode('INSERT')}
-            onBlurQueryInput={() => vim.setMode('NORMAL')}
             onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
             replayRequest={replayRequest}
             onExplorationInvalidated={closeExploration}
@@ -164,13 +154,6 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
         />
       )}
       {submission.openError && <div className="submission-open-error" role="alert">{submission.openError}</div>}
-      <TopKPromptModal
-        isOpen={vim.isTopKOpen && activePage === 'query'}
-        currentTopK={topK}
-        onSave={setTopK}
-        onClose={() => vim.setIsTopKOpen(false)}
-      />
-      <VimHelpModal isOpen={vim.isHelpOpen} onClose={() => vim.setIsHelpOpen(false)} />
       <ApiDocsModal isOpen={isDocsOpen} onClose={() => setIsDocsOpen(false)} />
     </div>
   );

@@ -10,29 +10,21 @@ const frame = {
   fps: 25,
 };
 
-test('uses the real playback time for frame index and timestamp metadata', () => {
+test('uses the real playback time for timestamp metadata', () => {
   render(<FrameMetadata frame={frame} playbackTime={6.24} />);
 
-  expect(screen.getByText('156')).toBeTruthy();
+  expect(screen.getByText('L21_V001')).toBeTruthy();
   expect(screen.getByText('6240 ms')).toBeTruthy();
-});
-
-test('uses normalized fps for the live BTC frame index', () => {
-  render(<FrameMetadata frame={{ ...frame, fps: 29.97 }} playbackTime={5.25} />);
-
-  expect(screen.getByText('158')).toBeTruthy();
-  expect(screen.getByText('5250 ms')).toBeTruthy();
-  expect(screen.getByText('30')).toBeTruthy();
 });
 
 test('falls back to canonical metadata before playback time is available', () => {
   render(<FrameMetadata frame={frame} />);
 
-  expect(screen.getByText('125')).toBeTruthy();
+  expect(screen.getByText('L21_V001')).toBeTruthy();
   expect(screen.getByText('5000 ms')).toBeTruthy();
 });
 
-test('renders the representative metadata without score-stage details', () => {
+test('renders only Video ID and Timestamp without ASR, objects, captions, or score', () => {
   render(
     <FrameMetadata
       frame={{
@@ -49,11 +41,12 @@ test('renders the representative metadata without score-stage details', () => {
     />,
   );
 
-  expect(screen.getByText('Kitchen scene')).toBeTruthy();
-  expect(screen.getByText('A chef coats food')).toBeTruthy();
-  expect(screen.getByText('FLOUR')).toBeTruthy();
-  expect(screen.getByText('bowl, person')).toBeTruthy();
-  expect(screen.getByText('Coat it with flour')).toBeTruthy();
-  expect(screen.getByText('1.235')).toBeTruthy();
-  expect(screen.queryByText(/final relevance/i)).toBeNull();
+  expect(screen.getByText('L21_V001')).toBeTruthy();
+  expect(screen.getByText('5000 ms')).toBeTruthy();
+  expect(screen.queryByText('Kitchen scene')).toBeNull();
+  expect(screen.queryByText('A chef coats food')).toBeNull();
+  expect(screen.queryByText('FLOUR')).toBeNull();
+  expect(screen.queryByText('bowl, person')).toBeNull();
+  expect(screen.queryByText('Coat it with flour')).toBeNull();
+  expect(screen.queryByText('1.235')).toBeNull();
 });

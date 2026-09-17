@@ -76,18 +76,7 @@ jest.mock("./api/submissions", () => ({
 jest.mock("./features/health/hooks/useHealthCheck", () => ({
   useHealthCheck: () => ({ isHealthy: true, healthData: {} }),
 }));
-jest.mock("./features/vim/hooks/useVimMode", () => ({
-  useVimMode: () => ({
-    mode: "NORMAL",
-    enterInsertMode: jest.fn(),
-    enterNormalMode: jest.fn(),
-    setMode: jest.fn(),
-    isTopKOpen: false,
-    setIsTopKOpen: jest.fn(),
-    isHelpOpen: false,
-    setIsHelpOpen: jest.fn(),
-  }),
-}));
+
 
 beforeEach(() => {
   localStorage.clear();

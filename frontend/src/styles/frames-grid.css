@@ -47,11 +47,26 @@
 /* ─────────────────────────────────────────────────────────── */
 .frames-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
   /* An expanded Alignment belongs only to its own card, not its whole row. */
   align-items: start;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
   width: 100%;
+}
+
+.frames-grid.size-compact {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--spacing-xs);
+}
+
+.frames-grid.size-normal {
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.frames-grid.size-large {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: var(--spacing-md);
 }
 
 .frames-empty-state {

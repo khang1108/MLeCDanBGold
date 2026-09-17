@@ -213,7 +213,7 @@ const ImageModal = ({
           )}
           <div className="inspector-header">
             <span className="inspector-title">
-      {videoLabel} · {Number.isFinite(frame.frame_idx) ? frame.frame_idx : `${frame.timestamp_ms} ms`}
+              {Number.isFinite(frame.timestamp_ms) ? `${videoLabel} · ${frame.timestamp_ms} ms` : videoLabel}
             </span>
             <div className="inspector-header-actions">
               {typeof onOpenSubmission === 'function' && (
