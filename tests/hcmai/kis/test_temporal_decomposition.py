@@ -42,3 +42,30 @@ def test_initial_prompt_contains_non_cycling_one_clue_multi_event_example() -> N
     assert "Finally a woman opens the box" in system
     assert '"events": [' in system
     assert system.count('"text":') >= 3
+
+
+def test_resolution_schema_describes_events_as_distinct_temporal_moments() -> None:
+    from hcmai.kis.models import KISResolution
+
+    schema = KISResolution.model_json_schema()
+    events = schema["properties"]["events"]
+
+    description = events["description"]
+    assert "One input clue may produce multiple events" in description
+    assert "sequential moments must be separate list items" in description
+
+
+def test_resolution_event_schema_limits_text_to_one_temporal_moment() -> None:
+    from hcmai.kis.models import KISResolution
+
+    schema = KISResolution.model_json_schema()
+    event_schema = schema["$defs"]["KISResolutionEvent"]
+
+    text_description = event_schema["properties"]["text"]["description"]
+    indices_description = event_schema["properties"]["entity_indices"]["description"]
+
+    assert "exactly one temporal moment" in text_description
+    assert "Never combine distinct sequential moments" in text_description
+    assert "Zero-based indices into the entities array" in indices_description
+    assert "same entity index may appear in multiple events" in indices_description
+
