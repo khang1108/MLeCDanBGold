@@ -1138,4 +1138,54 @@ test('Step 1 & 2 (Task 7): preserves ranked result order and shows Trail annotat
   expect(searchKis).toHaveBeenCalledTimes(1);
 });
 
+test('Step 2 (Task 8): EventTrail context passes searchSessionId only when real history query session exists', async () => {
+  const onFrameClick = jest.fn();
+  const response = mockKisResponse({
+    queryText: 'query correlation test',
+    evidenceSnapshotId: 'snap_corr',
+    results: [{
+      result_id: 'r_1',
+      frame_id: 'f1',
+      video_id: 'V01',
+      frame_idx: 10,
+      timestamp_ms: 1000,
+      score: 0.9,
+    }],
+  });
+  searchKis.mockResolvedValueOnce(response);
+
+  // Without userId -> searchSessionId must be null, not a generated surrogate
+  const { unmount } = renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick, userId: '' });
+  submit('query correlation test');
+
+  fireEvent.click(await screen.findByAltText('Frame f1'));
+  expect(onFrameClick).toHaveBeenCalledWith(
+    expect.objectContaining({
+      eventTrailContext: expect.objectContaining({
+        snapshotId: 'snap_corr',
+        searchSessionId: null,
+      }),
+    }),
+  );
+
+  unmount();
+
+  // With userId -> searchSessionId must be the real query ID string
+  onFrameClick.mockReset();
+  searchKis.mockResolvedValueOnce(response);
+  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick, userId: 'team-a' });
+  submit('query correlation test');
+
+  fireEvent.click(await screen.findByAltText('Frame f1'));
+  expect(onFrameClick).toHaveBeenCalledWith(
+    expect.objectContaining({
+      eventTrailContext: expect.objectContaining({
+        snapshotId: 'snap_corr',
+        searchSessionId: expect.stringMatching(/^query-/),
+      }),
+    }),
+  );
+});
+
+
 
