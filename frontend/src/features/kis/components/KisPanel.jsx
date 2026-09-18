@@ -129,7 +129,12 @@ const KisPanel = ({
     >
       <div className="kis-chat-header">
         <div className="kis-chat-header-title">
-          <span className="kis-chat-title-text">{mode === 'AVS' ? 'AVS Ad-Hoc Search' : 'KIS Semantic Search'}</span>
+          <span
+            className="kis-chat-title-text"
+            title={mode === 'AVS' ? 'AVS Ad-Hoc Search' : 'KIS Semantic Search'}
+          >
+            {mode === 'AVS' ? 'AVS Ad-Hoc Search' : 'KIS Semantic Search'}
+          </span>
           {revision > 0 && mode !== 'AVS' && (
             <span className="kis-revision-tag" title={`Revision ${revision}`}>
               Rev {revision}
@@ -144,8 +149,10 @@ const KisPanel = ({
               onClick={onUndoFeedback}
               disabled={feedbackSession?.status === 'pending'}
               title="Undo last feedback turn"
+              aria-label="Undo last feedback turn"
             >
-              ↺ Undo
+              <span className="kis-chat-undo-icon" aria-hidden="true">↺</span>
+              <span>Undo</span>
             </button>
           )}
           {onReset && (
