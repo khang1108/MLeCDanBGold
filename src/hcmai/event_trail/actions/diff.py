@@ -16,6 +16,7 @@ from hcmai.event_trail.models import (
     EventCandidate,
     EventTrailSession,
     SnapshotResult,
+    TemporalModeView,
     TrailTransition,
     TrailView,
 )
@@ -134,6 +135,35 @@ def build_trail_view(
         )
     }
 
+    alternatives = tuple(
+        TemporalModeView(
+            mode_id=alt.mode_id,
+            event_id=alt.event_id,
+            representative_frame_id=alt.representative_frame_id,
+            representative_frame_idx=alt.representative_frame_idx,
+            representative_timestamp_ms=alt.representative_timestamp_ms,
+            interval=alt.interval,
+            score=alt.score,
+            path=tuple(
+                EventCandidate(
+                    event_id=eid,
+                    frame_id=fid,
+                    frame_idx=fidx,
+                    timestamp_ms=ts,
+                )
+                for eid, fid, fidx, ts in zip(
+                    session.event_ids,
+                    alt.path.frame_ids,
+                    alt.path.frame_idxs,
+                    alt.path.timestamps_ms,
+                    strict=True,
+                )
+            ),
+            is_current=alt.is_current,
+        )
+        for alt in session.alternatives
+    )
+
     return TrailView(
         session_id=session.session_id,
         result_id=session.result_id,
@@ -148,4 +178,6 @@ def build_trail_view(
         window=session.constraints.window,
         submission_selection=session.submission_selection,
         transition=transition,
+        focused_event_id=session.focused_event_id,
+        alternatives=alternatives,
     )

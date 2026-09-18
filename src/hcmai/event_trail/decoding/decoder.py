@@ -7,9 +7,13 @@ pure temporal frame masks and executing DP decoding for a single video.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from hcmai.event_trail.config import EventTrailSettings
+    from hcmai.event_trail.models import TemporalMode
 
 import numpy as np
 
@@ -51,6 +55,46 @@ def timestamp_for_frame(video: VideoEventScores, frame_id: str) -> int:
     if len(indices) == 0:
         raise ValueError(f"Frame {frame_id} not found in video {video.video_id}")
     return int(video.timestamps_ms[indices[0]])
+
+
+def derive_mode_interval(
+    timestamp: int,
+    competing_timestamps: Sequence[int],
+    max_radius_ms: int,
+    domain: Interval | None = None,
+) -> Interval:
+    """Derive bounded non-overlapping temporal interval for a mode peak.
+
+    r_j = min(max_radius_ms, nearest_competing_peak_distance // 2).
+    With no competitor, r_j = max_radius_ms.
+    Interval is clipped to domain if provided.
+    """
+    if competing_timestamps:
+        nearest_dist = min(abs(timestamp - other_t) for other_t in competing_timestamps)
+        radius = min(max_radius_ms, nearest_dist // 2)
+    else:
+        radius = max_radius_ms
+
+    left = timestamp - radius
+    right = timestamp + radius
+    if domain is not None:
+        left = max(domain[0], left)
+        right = min(domain[1], right)
+
+    return (int(left), int(right))
+
+
+def derive_mode_intervals(
+    peaks: Sequence[int],
+    max_radius_ms: int,
+    domain: Interval | None = None,
+) -> list[Interval]:
+    """Derive bounded temporal intervals for a sequence of peak timestamps."""
+    intervals = []
+    for i, t in enumerate(peaks):
+        competing = [other_t for j, other_t in enumerate(peaks) if j != i]
+        intervals.append(derive_mode_interval(t, competing, max_radius_ms, domain=domain))
+    return intervals
 
 
 class TemporalConstraintDecoder:
@@ -164,6 +208,108 @@ class TemporalConstraintDecoder:
             constraint_ms=constraint_ms,
             dp_ms=dp_ms,
         )
+
+    def alternatives(
+        self,
+        video: VideoEventScores,
+        constraints: ConstraintSnapshot,
+        decoder_config: DecoderConfigSnapshot,
+        event_idx: int,
+        event_id: str,
+        settings: EventTrailSettings,
+        current_path: AlignedPath | None = None,
+    ) -> tuple[TemporalMode, ...]:
+        """Decode complete chronological paths conditioned on focused event modes."""
+        from uuid import uuid4
+        from hcmai.event_trail.models import TemporalMode
+
+        if event_idx < 0 or event_idx >= len(video.scores):
+            raise ValueError(
+                f"event_idx {event_idx} out of range for {len(video.scores)} events"
+            )
+
+        confirmed: list[Interval | None] = []
+        for anchor_fid in constraints.anchors:
+            if anchor_fid is None:
+                confirmed.append(None)
+            else:
+                t = timestamp_for_frame(video, anchor_fid)
+                confirmed.append((t, t))
+
+        window = constraints.window or (
+            int(video.timestamps_ms[0]),
+            int(video.timestamps_ms[-1]),
+        )
+
+        conditions = Conditions(
+            window=window,
+            confirmed=tuple(confirmed),
+            rejected=constraints.rejected_cells,
+        )
+
+        try:
+            mask, domain_status = build_mask(video.timestamps_ms, conditions)
+        except ValueError:
+            return ()
+
+        if domain_status in ("contradictory_conditions", "no_indexed_frames"):
+            return ()
+
+        conditioned_paths = self.temporal.decode_event_alternatives(
+            video,
+            allowed=mask,
+            focus_event_index=event_idx,
+            max_paths=settings.alternative_count,
+            min_separation_ms=settings.mode_min_separation_ms,
+            decoder_config=decoder_config,
+        )
+        if not conditioned_paths:
+            return ()
+
+        peaks = [cp.focus_timestamp_ms for cp in conditioned_paths]
+        intervals = derive_mode_intervals(
+            peaks,
+            max_radius_ms=settings.mode_max_radius_ms,
+            domain=window,
+        )
+
+        modes: list[TemporalMode] = []
+        for cp, interval in zip(conditioned_paths, intervals, strict=True):
+            mode_id = f"alt_{uuid4().hex[:12]}"
+            rep_frame_id = cp.path.frame_ids[event_idx]
+            rep_frame_idx = cp.path.frame_idxs[event_idx]
+            rep_ts = cp.focus_timestamp_ms
+
+            modes.append(
+                TemporalMode(
+                    mode_id=mode_id,
+                    event_id=event_id,
+                    representative_frame_id=rep_frame_id,
+                    representative_frame_idx=rep_frame_idx,
+                    representative_timestamp_ms=rep_ts,
+                    interval=interval,
+                    score=cp.score,
+                    path=cp.path,
+                    is_current=False,
+                )
+            )
+
+        if current_path is not None and event_idx < len(current_path.timestamps_ms):
+            cur_ts = int(current_path.timestamps_ms[event_idx])
+            matched_idx: int | None = None
+            for i, mode in enumerate(modes):
+                if mode.representative_timestamp_ms == cur_ts:
+                    matched_idx = i
+                    break
+            if matched_idx is None:
+                for i, mode in enumerate(modes):
+                    if mode.interval[0] <= cur_ts <= mode.interval[1]:
+                        matched_idx = i
+                        break
+            if matched_idx is not None:
+                modes[matched_idx] = replace(modes[matched_idx], is_current=True)
+
+        return tuple(modes)
 
     def repair(
         self,

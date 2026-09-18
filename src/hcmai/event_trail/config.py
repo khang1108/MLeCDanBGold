@@ -14,6 +14,9 @@ class EventTrailSettings:
     session_ttl_seconds: int = 1800
     max_snapshots: int = 64
     max_sessions: int = 128
+    alternative_count: int = 4
+    mode_min_separation_ms: int = 5_000
+    mode_max_radius_ms: int = 8_000
 
     @classmethod
     def from_env(cls) -> EventTrailSettings:
@@ -43,4 +46,13 @@ class EventTrailSettings:
             ),
             max_snapshots=parse_pos_int("HCMAI_EVENT_TRAIL_MAX_SNAPSHOTS", 64),
             max_sessions=parse_pos_int("HCMAI_EVENT_TRAIL_MAX_SESSIONS", 128),
+            alternative_count=parse_pos_int(
+                "HCMAI_EVENT_TRAIL_ALTERNATIVE_COUNT", 4
+            ),
+            mode_min_separation_ms=parse_pos_int(
+                "HCMAI_EVENT_TRAIL_MODE_MIN_SEPARATION_MS", 5_000
+            ),
+            mode_max_radius_ms=parse_pos_int(
+                "HCMAI_EVENT_TRAIL_MODE_MAX_RADIUS_MS", 8_000
+            ),
         )
