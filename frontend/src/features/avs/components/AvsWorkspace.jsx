@@ -5,6 +5,7 @@ import {
   createInitialAvsSelectionState,
 } from '../selectionState';
 import AvsQueryControls from './AvsQueryControls';
+import AvsHarvestGrid from './AvsHarvestGrid';
 
 /**
  * Dedicated workspace shell for Ad-Hoc Video Search (AVS).
@@ -17,6 +18,7 @@ const AvsWorkspace = ({
   selectedTask = null,
   setSelectedTask,
   onFrameClick,
+  onInspect,
   onSessionRejected,
 }) => {
   const [query, setQuery] = useState('');
@@ -72,6 +74,23 @@ const AvsWorkspace = ({
     }
   };
 
+  const handleToggle = (candidate) => {
+    const id = candidate.candidate_id || candidate.frame_id;
+    if (selectionState.pending.has(id)) {
+      dispatchSelection({ type: 'DESELECT', candidateId: id });
+    } else {
+      dispatchSelection({ type: 'SELECT', candidate });
+    }
+  };
+
+  const handleInspect = (candidate) => {
+    if (onInspect) {
+      onInspect(candidate);
+    } else if (onFrameClick) {
+      onFrameClick(candidate);
+    }
+  };
+
   return (
     <div className="avs-workspace">
       <AvsQueryControls
@@ -105,12 +124,21 @@ const AvsWorkspace = ({
           </div>
         )}
 
-        {searchState.status === 'success' && searchState.results.length > 0 && (
-          <div className="avs-results-summary">
-            Showing {searchState.results.length} candidates from{' '}
-            {searchState.response?.unique_videos ?? 0} videos (pool size:{' '}
-            {searchState.response?.candidate_pool_size ?? searchState.results.length})
-          </div>
+        {searchState.results.length > 0 && (
+          <>
+            <div className="avs-results-summary">
+              Showing {searchState.results.length} candidates from{' '}
+              {searchState.response?.unique_videos ?? 0} videos (pool size:{' '}
+              {searchState.response?.candidate_pool_size ?? searchState.results.length})
+            </div>
+            <AvsHarvestGrid
+              candidates={searchState.results}
+              pending={selectionState.pending}
+              submitted={selectionState.submitted}
+              onToggle={handleToggle}
+              onInspect={handleInspect}
+            />
+          </>
         )}
       </div>
     </div>

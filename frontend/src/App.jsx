@@ -171,7 +171,7 @@ const AppShell = ({
           }
           query={modalQuery}
           initialTimestampMs={selectedFrame.initialTimestampMs}
-          onOpenSubmission={connectedUserId ? submission.open : undefined}
+          onOpenSubmission={!isAvsTask && connectedUserId ? submission.open : undefined}
           isSubmissionOpening={submission.opening}
           onClose={() => setSelectedFrame(null)}
           eventTrail={selectedFrame.eventTrailContext ? {

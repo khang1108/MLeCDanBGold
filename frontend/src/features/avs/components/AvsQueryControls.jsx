@@ -51,7 +51,7 @@ const AvsQueryControls = ({
             className="avs-search-btn"
             disabled={isSearching || !query.trim()}
           >
-            {isSearching ? 'Searching...' : 'Search'}
+            {isSearching ? 'Searching...' : 'Search AVS'}
           </button>
         </div>
       </form>
