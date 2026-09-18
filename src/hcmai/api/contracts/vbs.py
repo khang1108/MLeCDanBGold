@@ -1,6 +1,6 @@
-"""Browser-safe private DRES session and one-answer submission contracts.
+"""Browser-safe private DRES session and task-aware direct submission contracts.
 
-Only a participant ID, frozen task-scope key, and one answer cross the API.
+Only a participant ID, frozen task-scope key, and answer batch cross the API.
 DRES credentials, session values, workspace state, and attempt identifiers stay
 outside these contracts.
 """
@@ -106,13 +106,13 @@ VbsAnswer = Annotated[
 
 
 class VbsDirectSubmissionRequest(BaseModel):
-    """Submit one answer against the task scope frozen by the open popup."""
+    """Task-aware direct submission against the frozen task scope."""
 
     model_config = ConfigDict(extra="forbid")
 
     user_id: NonBlank
     expected_task_scope_key: NonBlank
-    answer: VbsAnswer
+    answers: list[VbsAnswer] = Field(min_length=1)
     evaluation_id: NonBlank | None = None
     task_name: NonBlank | None = None
 

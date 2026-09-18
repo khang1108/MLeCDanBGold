@@ -121,26 +121,30 @@ export const getCurrentDresTask = async (value, { evaluationId, taskName, signal
   return safeTask(payload, userId);
 };
 
-/** Submit exactly one answer against the popup's frozen DRES task scope. */
-export const submitDresAnswer = async ({
+const safeAnswers = (answers) => {
+  if (!Array.isArray(answers) || answers.length === 0) {
+    throw new Error('At least one answer object is required');
+  }
+  return answers.map(safeAnswer);
+};
+
+export const submitDresAnswers = async ({
   userId: value,
   expectedTaskScopeKey,
-  answer,
+  answers,
   evaluationId,
   taskName,
   signal,
 } = {}) => {
   const userId = normalizeUserId(value);
   if (!nonBlank(expectedTaskScopeKey)) throw new Error('A DRES task scope key is required');
-
   const body = {
     user_id: userId,
     expected_task_scope_key: expectedTaskScopeKey,
-    answer: safeAnswer(answer),
+    answers: safeAnswers(answers),
   };
   if (nonBlank(evaluationId)) body.evaluation_id = evaluationId.trim();
   if (nonBlank(taskName)) body.task_name = taskName.trim();
-
   const payload = await requestJson('/api/v1/vbs/submit', {
     method: 'POST',
     body,
@@ -148,3 +152,8 @@ export const submitDresAnswer = async ({
   });
   return safeOutcome(payload);
 };
+
+/** Submit exactly one answer against the popup's frozen DRES task scope. */
+export const submitDresAnswer = ({ answer, ...rest } = {}) => (
+  submitDresAnswers({ ...rest, answers: [answer] })
+);

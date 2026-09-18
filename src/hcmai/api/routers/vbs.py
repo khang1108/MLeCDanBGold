@@ -34,6 +34,23 @@ from hcmai.vbs.models import ApiClientAnswer, ApiClientAnswerSet, ApiClientSubmi
 from hcmai.vbs.service import DresUnknownUserError
 
 
+def _task_family(scope: Any) -> str | None:
+    group = scope.task_group.strip().upper()
+    task_type = scope.task_type.strip().upper()
+    if task_type == "VQA" or group in {"VQA", "QA"} or "QUESTION ANSWERING" in task_type:
+        return "VQA"
+    if task_type == "AVS" or group == "AVS" or "AD-HOC" in task_type or "ADHOC" in task_type:
+        return "AVS"
+    if (
+        task_type in {"KIS", "TRAKE"}
+        or group in {"KIS", "TRAKE"}
+        or "KNOWN ITEM" in task_type
+        or "VIDEO SEARCH" in task_type
+    ):
+        return "TEMPORAL_SINGLE"
+    return None
+
+
 def create_vbs_router(service_container: dict[str, Any]) -> APIRouter:
     """Expose private participant sessions and stateless one-answer routes."""
 
@@ -161,7 +178,7 @@ def create_vbs_router(service_container: dict[str, Any]) -> APIRouter:
         response_model=VbsDirectSubmissionOutcome,
     )
     async def submit_one(data: VbsDirectSubmissionRequest) -> VbsDirectSubmissionOutcome:
-        """Validate the live task and forward exactly one answer once."""
+        """Validate the live task and forward validated answers once."""
 
         service = _dres()
         _require_connected(service, data.user_id)
@@ -179,39 +196,45 @@ def create_vbs_router(service_container: dict[str, Any]) -> APIRouter:
                 "The active DRES task changed; reopen the submission popup",
             )
 
-        task_group = scope.task_group.strip().upper()
-        task_type = scope.task_type.strip().upper()
-
-        is_qa = task_type == "VQA" or task_group in {"VQA", "QA"} or "QUESTION ANSWERING" in task_type
-        is_temporal = (
-            task_type in {"KIS", "AVS", "TRAKE"}
-            or task_group in {"KIS", "AVS", "TRAKE"}
-            or any(k in task_type for k in ("KNOWN ITEM", "AD-HOC", "ADHOC", "VIDEO SEARCH"))
-        )
-
-        if not is_qa and not is_temporal:
+        family = _task_family(scope)
+        if family is None:
             _raise_api_error(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "UNSUPPORTED_DRES_TASK_TYPE",
                 "The active DRES task type is not supported for direct submission",
             )
-        expected_kind = "TEXT" if is_qa else "TEMPORAL"
-        if data.answer.kind != expected_kind:
+        if family == "VQA" and (len(data.answers) != 1 or data.answers[0].kind != "TEXT"):
             _raise_api_error(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "ANSWER_KIND_MISMATCH",
-                f"The active {task_type} task requires a {expected_kind.lower()} answer",
+                "The active VQA task requires exactly one text answer",
+            )
+        if family == "TEMPORAL_SINGLE" and (
+            len(data.answers) != 1 or data.answers[0].kind != "TEMPORAL"
+        ):
+            _raise_api_error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "ANSWER_KIND_MISMATCH",
+                "The active KIS/TRAKE task requires exactly one temporal answer",
+            )
+        if family == "AVS" and any(answer.kind != "TEMPORAL" for answer in data.answers):
+            _raise_api_error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "ANSWER_KIND_MISMATCH",
+                "The active AVS task requires one or more temporal answers",
             )
 
         try:
-            if data.answer.kind == "TEMPORAL":
-                mapped_answer = service.temporal_range_answer(
-                    data.answer.video_id,
-                    data.answer.start_ms,
-                    data.answer.end_ms,
-                )
-            else:
-                mapped_answer = ApiClientAnswer(text=data.answer.text)
+            mapped_answers = []
+            for answer in data.answers:
+                if answer.kind == "TEMPORAL":
+                    mapped_answers.append(service.temporal_range_answer(
+                        answer.video_id,
+                        answer.start_ms,
+                        answer.end_ms,
+                    ))
+                else:
+                    mapped_answers.append(ApiClientAnswer(text=answer.text))
         except ValueError as error:
             _raise_api_error(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -222,7 +245,7 @@ def create_vbs_router(service_container: dict[str, Any]) -> APIRouter:
         payload = ApiClientSubmission(
             answer_sets=[ApiClientAnswerSet(
                 task_name=scope.task_name,
-                answers=[mapped_answer],
+                answers=mapped_answers,
             )],
         )
 
@@ -264,7 +287,7 @@ def create_vbs_router(service_container: dict[str, Any]) -> APIRouter:
             state="RECORDED",
             recorded=True,
             verdict=dres_status.submission,
-            message="DRES recorded the answer",
+            message="DRES recorded the answer batch",
         )
 
     @router.post("/api/v1/vbs/task/activate")
