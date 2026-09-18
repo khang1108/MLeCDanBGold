@@ -55,6 +55,15 @@ const renderWorkspace = ({ onInspect = jest.fn() } = {}) => {
   return { onInspect, setSelectedTask };
 };
 
+const runSearch = async (text) => {
+  fireEvent.change(screen.getByRole('textbox', { name: 'AVS query' }), {
+    target: { value: text },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Search AVS' }));
+  await waitFor(() => expect(searchAvs).toHaveBeenCalled());
+  await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+};
+
 describe('AvsWorkspace', () => {
   beforeEach(() => {
     searchAvs.mockReset().mockResolvedValue(responseWith([
@@ -117,5 +126,171 @@ describe('AvsWorkspace', () => {
     fireEvent.keyDown(card, { key: 'Enter' });
     expect(onInspect).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole('checkbox')[0].checked).toBe(true);
+  });
+
+  test('pending selections survive a later AVS search and remain reviewable', async () => {
+    searchAvs
+      .mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]))
+      .mockResolvedValueOnce(responseWith([candidate('f2', 'V2', 2000)]));
+    renderWorkspace();
+
+    await runSearch('first query');
+    fireEvent.click(await screen.findByRole('checkbox'));
+    await runSearch('second query');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review selections' }));
+    expect(screen.getByRole('dialog', { name: 'Selected AVS answers' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove f1 from selection' })).toBeTruthy();
+  });
+
+  test('review remove deletes only the chosen candidate', async () => {
+    searchAvs.mockResolvedValueOnce(responseWith([
+      candidate('f1', 'V1', 1000), candidate('f2', 'V2', 2000),
+    ]));
+    renderWorkspace();
+    await runSearch('seafood');
+    screen.getAllByRole('checkbox').forEach((checkbox) => fireEvent.click(checkbox));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review selections' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove f1 from selection' }));
+
+    expect(screen.queryByRole('button', { name: 'Remove f1 from selection' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove f2 from selection' })).toBeTruthy();
+  });
+
+  test('Clear asks for confirmation and preserves pending items when cancelled', async () => {
+    window.confirm = jest.fn().mockReturnValue(false);
+    searchAvs.mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]));
+    renderWorkspace();
+    await runSearch('seafood');
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selections' }));
+
+    expect(window.confirm).toHaveBeenCalledWith('Clear 1 pending AVS selection?');
+    expect(screen.getByRole('checkbox').checked).toBe(true);
+  });
+
+  test('Clear removes pending items only after explicit confirmation', async () => {
+    window.confirm = jest.fn().mockReturnValue(true);
+    searchAvs.mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]));
+    renderWorkspace();
+    await runSearch('seafood');
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selections' }));
+
+    expect(screen.getByRole('checkbox').checked).toBe(false);
+  });
+
+  const avsEvaluations = [{
+    id: 'eval-1',
+    name: 'VBS',
+    taskTemplates: [
+      { name: 'AVS task', taskGroup: 'AVS', taskType: 'AVS', duration: 300 },
+      { name: 'AVS task 2', taskGroup: 'AVS', taskType: 'AVS', duration: 300 },
+    ],
+  }];
+
+  const TaskHarness = () => {
+    const [selectedTask, setSelectedTask] = React.useState(task);
+    return (
+      <AvsWorkspace
+        connectedUserId="team-a"
+        evaluations={avsEvaluations}
+        selectedTask={selectedTask}
+        setSelectedTask={setSelectedTask}
+        onInspect={jest.fn()}
+        onSessionRejected={jest.fn()}
+      />
+    );
+  };
+
+  test('task switch cancellation keeps the current task and basket', async () => {
+    window.confirm = jest.fn().mockReturnValue(false);
+    searchAvs.mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]));
+    render(<TaskHarness />);
+    await runSearch('seafood');
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    fireEvent.change(screen.getByLabelText('Select evaluation task'), {
+      target: { value: 'eval-1:AVS task 2' },
+    });
+
+    expect(window.confirm).toHaveBeenCalled();
+    expect(screen.getByLabelText('Select evaluation task').value).toBe('eval-1:AVS task');
+    expect(screen.getByRole('checkbox').checked).toBe(true);
+  });
+
+  test('confirmed task switch waits for the new scope before clearing pending state', async () => {
+    window.confirm = jest.fn().mockReturnValue(true);
+    getCurrentDresTask.mockImplementation(async (_userId, { taskName }) => ({
+      user_id: 'team-a',
+      evaluation_id: 'eval-1',
+      task_scope_key: taskName === 'AVS task 2' ? 'scope-2' : 'scope-1',
+      task_name: taskName,
+      task_group: 'AVS',
+      task_type: 'AVS',
+      duration: 300,
+    }));
+    searchAvs.mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]));
+    render(<TaskHarness />);
+    await runSearch('seafood');
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    fireEvent.change(screen.getByLabelText('Select evaluation task'), {
+      target: { value: 'eval-1:AVS task 2' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Select evaluation task').value).toBe('eval-1:AVS task 2');
+    });
+    await waitFor(() => expect(screen.queryByText(/1 selected/)).toBeNull());
+  });
+
+  const ExternalTaskChangeHarness = () => {
+    const [selectedTask, setSelectedTask] = React.useState(task);
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setSelectedTask({ ...task, taskName: 'AVS task 2' })}
+        >
+          Simulate external task change
+        </button>
+        <AvsWorkspace
+          connectedUserId="team-a"
+          evaluations={avsEvaluations}
+          selectedTask={selectedTask}
+          setSelectedTask={setSelectedTask}
+          onInspect={jest.fn()}
+          onSessionRejected={jest.fn()}
+        />
+      </>
+    );
+  };
+
+  test('unexpected task-scope change preserves the old basket and blocks mutation', async () => {
+    getCurrentDresTask.mockImplementation(async (_userId, { taskName }) => ({
+      user_id: 'team-a',
+      evaluation_id: 'eval-1',
+      task_scope_key: taskName === 'AVS task 2' ? 'scope-2' : 'scope-1',
+      task_name: taskName,
+      task_group: 'AVS',
+      task_type: 'AVS',
+      duration: 300,
+    }));
+    searchAvs.mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]));
+    render(<ExternalTaskChangeHarness />);
+    await runSearch('seafood');
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate external task change' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/task scope changed/i);
+    expect(screen.getByRole('checkbox').disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Review selections' }));
+    expect(screen.getByRole('button', { name: 'Remove f1 from selection' })).toBeTruthy();
   });
 });

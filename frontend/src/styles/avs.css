@@ -227,3 +227,220 @@
   font-family: monospace;
   color: var(--color-ink-secondary);
 }
+
+/* Sticky Selection Bar */
+.avs-selection-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  box-shadow: var(--shadow-level-2);
+  z-index: 10;
+  margin-top: auto;
+}
+
+.avs-selection-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.avs-selection-separator {
+  color: var(--color-ink-faint);
+}
+
+.avs-selection-videos {
+  color: var(--color-ink-muted);
+}
+
+.avs-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.avs-bar-btn {
+  height: 32px;
+  padding: 0 var(--spacing-md);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.avs-bar-btn:hover:not(:disabled) {
+  background-color: var(--color-canvas-soft);
+  border-color: var(--color-ink-faint);
+}
+
+.avs-bar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.avs-clear-btn:hover:not(:disabled) {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.avs-submit-btn {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.avs-submit-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-active);
+  border-color: var(--color-primary-active);
+  color: var(--color-on-primary);
+}
+
+/* Selection Review Drawer */
+.avs-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.avs-drawer-content {
+  width: 420px;
+  max-width: 90vw;
+  height: 100%;
+  background-color: var(--color-surface);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+}
+
+.avs-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.avs-drawer-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.avs-drawer-close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  padding: var(--spacing-xxs);
+}
+
+.avs-drawer-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.avs-drawer-empty {
+  text-align: center;
+  color: var(--color-ink-muted);
+  font-size: 14px;
+  margin-top: var(--spacing-xl);
+}
+
+.avs-drawer-video-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.avs-drawer-video-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.avs-drawer-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.avs-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs);
+  background-color: var(--color-canvas-soft);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+}
+
+.avs-drawer-item-img {
+  width: 64px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: var(--rounded-xs);
+}
+
+.avs-drawer-item-info {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.avs-drawer-item-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avs-drawer-item-ts {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--color-ink-muted);
+}
+
+.avs-drawer-remove-btn {
+  padding: var(--spacing-xxs) var(--spacing-xs);
+  font-size: 12px;
+  color: var(--color-danger);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+  border-radius: var(--rounded-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.avs-drawer-remove-btn:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}

@@ -14,6 +14,7 @@ const AvsQueryControls = ({
   evaluations = [],
   selectedTask = null,
   setSelectedTask,
+  onRequestTaskChange,
   inputRef,
 }) => {
   const handleSubmit = (e) => {
@@ -30,7 +31,7 @@ const AvsQueryControls = ({
           connectedUserId={connectedUserId}
           evaluations={evaluations}
           selectedTask={selectedTask}
-          onRequestChange={setSelectedTask}
+          onRequestChange={onRequestTaskChange || setSelectedTask}
         />
       </div>
 
