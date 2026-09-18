@@ -42,8 +42,27 @@ const AppShell = ({
     onSessionRejected: invalidateSession,
   });
 
-  const activeTaskFamily = taskFamily(selectedTask);
+  const [workspaceOverride, setWorkspaceOverride] = useState(null);
+  const activeTaskFamily = workspaceOverride || taskFamily(selectedTask);
   const isAvsTask = activeTaskFamily === 'AVS';
+
+  const handleToggleWorkspace = useCallback((mode) => {
+    setWorkspaceOverride(mode);
+  }, []);
+
+  const handleSetSelectedTask = useCallback((task) => {
+    setWorkspaceOverride(null);
+    setSelectedTask?.(task);
+  }, [setSelectedTask]);
+
+  const effectiveSelectedTask = selectedTask || (isAvsTask ? {
+    evaluationId: 'local',
+    evaluationName: 'Local Workspace',
+    taskName: 'AVS Ad-Hoc Search',
+    taskGroup: 'AVS',
+    taskType: 'AVS',
+    duration: 300,
+  } : null);
 
   useEffect(() => {
     const session = eventTrail.session;
@@ -121,6 +140,8 @@ const AppShell = ({
         healthData={healthData}
         onOpenDocs={() => setIsDocsOpen(true)}
         userIdInputRef={userIdInputRef}
+        isAvsTask={isAvsTask}
+        onToggleWorkspace={handleToggleWorkspace}
       />
       {!connectedUserId && (
         <p className="submission-connect-hint" role="status">
@@ -134,8 +155,8 @@ const AppShell = ({
             <AvsWorkspace
               connectedUserId={connectedUserId}
               evaluations={evaluations}
-              selectedTask={selectedTask}
-              setSelectedTask={setSelectedTask}
+              selectedTask={effectiveSelectedTask}
+              setSelectedTask={handleSetSelectedTask}
               onFrameClick={handleQueryFrameClick}
               onSessionRejected={invalidateSession}
             />

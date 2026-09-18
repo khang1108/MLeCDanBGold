@@ -7,10 +7,30 @@ export const AppHeader = ({
   healthData,
   onOpenDocs,
   userIdInputRef,
+  isAvsTask = false,
+  onToggleWorkspace,
 }) => (
   <header className="app-header">
     <div className="app-title-group">
       <h1 className="app-title">VBS 2027 Video Retrieval</h1>
+      <div className="workspace-mode-toggle" role="group" aria-label="Workspace Mode">
+        <button
+          type="button"
+          className={`workspace-mode-btn ${!isAvsTask ? 'active' : ''}`}
+          onClick={() => onToggleWorkspace?.('KIS')}
+          title="Switch to KIS (Known Item Search)"
+        >
+          KIS
+        </button>
+        <button
+          type="button"
+          className={`workspace-mode-btn ${isAvsTask ? 'active' : ''}`}
+          onClick={() => onToggleWorkspace?.('AVS')}
+          title="Switch to AVS (Ad-Hoc Video Search)"
+        >
+          AVS
+        </button>
+      </div>
       <HealthBadge isHealthy={isHealthy} healthData={healthData} />
       <button
         type="button"
