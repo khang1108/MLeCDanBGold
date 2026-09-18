@@ -16,7 +16,7 @@ orchestration/
 │   ├── __init__.py          # Single application composition root
 │   ├── corpus.py            # Canonical frames and optional evidence artifacts loader
 │   └── retrieval.py         # Online retrieval indexes and temporal evidence loader
-└── materializer.py          # Representative evidence and asset URLs
+└── utils/                   # Shared orchestration utilities (materializer, errors, health)
 ```
 
 ## Runtime path
