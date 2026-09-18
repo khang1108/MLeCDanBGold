@@ -64,7 +64,9 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
       eventTrailKeyRef.current = nextKey;
     }
     setSelectedFrame(selection);
-    setModalQuery(activeQuery);
+    const frameObj = selection?.frame || selection;
+    const targetQuery = selection?.query || frameObj?.eventText || frameObj?.event_text;
+    setModalQuery(targetQuery || activeQuery);
   };
 
   useEffect(() => {

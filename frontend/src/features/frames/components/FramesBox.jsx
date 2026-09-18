@@ -97,12 +97,22 @@ const FramesBox = ({
                     <div className="frames-row-track">
                       {frameIds.map((fId, eventIndex) => {
                         const timestampMs = timestampsMs[eventIndex] ?? resultItem.timestamp_ms;
+                        const eventItem = events?.[eventIndex];
+                        const eventText = typeof eventItem === 'string'
+                          ? eventItem
+                          : (eventItem?.text || eventItem?.canonical_text || null);
+                        const eventLabel = hasMultipleEvents ? `E${eventIndex + 1}` : null;
                         const eventFrame = {
                           ...resultItem,
                           frame_id: fId,
                           timestamp_ms: timestampMs,
+                          event_index: eventIndex,
+                          eventIndex,
+                          event_label: eventLabel,
+                          eventLabel,
+                          event_text: eventText,
+                          eventText,
                         };
-                        const eventLabel = hasMultipleEvents ? `E${eventIndex + 1}` : null;
 
                         return (
                           <FrameCard
