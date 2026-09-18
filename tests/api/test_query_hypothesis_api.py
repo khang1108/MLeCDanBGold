@@ -127,3 +127,56 @@ def test_open_preview_commit_and_undo_endpoints(
         undo_resp.json()["intent"]["events"][0]["text"]
         == "người đàn ông ngồi xuống"
     )
+
+
+def test_search_kis_with_query_hypothesis_session_id(
+    client: TestClient, mock_search_service, seeded_query_hypothesis: dict
+) -> None:
+    session_id = seeded_query_hypothesis["session_id"]
+    from hcmai.api.contracts.kis import (
+        KISOperationSummary,
+        KISSearchResponse,
+        KISSearchResult,
+    )
+    from hcmai.api.contracts.search import SearchLatency, SearchResultMetadata
+
+    mock_search_service.search_kis.return_value = KISSearchResponse(
+        intent=mock_search_service.query_hypotheses.get(session_id).intent,
+        operation_summary=KISOperationSummary(
+            kind="search_only", affected_event_ids=[]
+        ),
+        use_dense=True,
+        use_bm25=False,
+        results=[
+            KISSearchResult(
+                result_id="r_123",
+                frame_id="v1_f1",
+                video_id="v1",
+                frame_idx=10,
+                timestamp_ms=1000,
+                score=0.9,
+                frame_ids=["v1_f1"],
+                timestamps_ms=[1000],
+                metadata=SearchResultMetadata(),
+            )
+        ],
+        latency=SearchLatency(query_ms=1.0, retrieval_ms=2.0),
+        query_hypothesis_session_id=session_id,
+    )
+
+    resp = client.post(
+        "/api/v1/kis/search",
+        json={
+            "query_hypothesis_session_id": session_id,
+            "expected_revision": 1,
+            "operation": {"kind": "search_only"},
+            "use_dense": True,
+            "use_bm25": False,
+            "top_k": 5,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["query_hypothesis_session_id"] == session_id
+    call_req = mock_search_service.search_kis.call_args[0][0]
+    assert call_req.query_hypothesis_session_id == session_id
+

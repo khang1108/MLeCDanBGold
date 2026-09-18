@@ -17,6 +17,7 @@ from hcmai.inference.errors import InferenceResponseError, InferenceUnavailableE
 from hcmai.kis.assets import InvalidImageError
 from hcmai.kis.models import KISImageRef
 from hcmai.kis.resolution import KISResolutionError
+from hcmai.kis.hypothesis.models import QueryHypothesisError
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer
@@ -57,6 +58,21 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=str(error),
+            ) from error
+        except QueryHypothesisError as error:
+            if error.code in {"QUERY_SESSION_NOT_FOUND", "QUERY_SESSION_EXPIRED"}:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=error.message,
+                ) from error
+            if error.code == "QUERY_REVISION_CONFLICT":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=error.message,
+                ) from error
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=error.message,
             ) from error
         except InvalidQueryInputError as error:
             raise HTTPException(

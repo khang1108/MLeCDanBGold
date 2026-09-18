@@ -124,6 +124,7 @@ class SearchService:
         kis_image_assets: KISImageAssetStore | None = None,
         event_trail_settings: EventTrailSettings | None = None,
         event_translator: EventTranslator | None = None,
+        query_hypotheses: QueryHypothesisService | None = None,
         *,
         retrieval: RetrievalService | None = None,
         temporal_evidence: TemporalEvidenceScorer | None = None,
@@ -157,13 +158,17 @@ class SearchService:
             max_entries=self.event_trail_settings.max_sessions,
         )
         self.query_hypotheses = (
-            QueryHypothesisService(
-                self.query_hypothesis_store,
-                self.intent_resolver,
-                self._canonical_image_refs,
+            query_hypotheses
+            if query_hypotheses is not None
+            else (
+                QueryHypothesisService(
+                    self.query_hypothesis_store,
+                    self.intent_resolver,
+                    self._canonical_image_refs,
+                )
+                if self.intent_resolver is not None
+                else None
             )
-            if self.intent_resolver is not None
-            else None
         )
 
         if image_search is not None:
@@ -663,7 +668,21 @@ class SearchService:
 
     def search_kis(self, request: KISSearchRequest) -> KISSearchResponse:
         """Execute a stateless semantic KIS search."""
-        intent, summary, intent_ms = self._resolve_operation(request)
+        if request.query_hypothesis_session_id:
+            if self.query_hypotheses is None:
+                raise SearchServiceUnavailableError("Query Hypothesis service is unavailable")
+            view = self.query_hypotheses.get(request.query_hypothesis_session_id)
+            if view.intent.revision != request.expected_revision:
+                raise RevisionConflictError(
+                    f"Expected revision {request.expected_revision} does not match query hypothesis {view.intent.revision}"
+                )
+            if request.operation.kind != "search_only":
+                raise InvalidQueryInputError("server-owned query hypotheses may only execute search_only through KIS search")
+            intent = view.intent
+            summary = KISOperationSummary(kind="search_only", affected_event_ids=[])
+            intent_ms = 0.0
+        else:
+            intent, summary, intent_ms = self._resolve_operation(request)
 
         self._ensure_search_ready()
 
@@ -726,6 +745,7 @@ class SearchService:
             results=kis_results,
             latency=latency,
             evidence_snapshot_id=snapshot_id,
+            query_hypothesis_session_id=request.query_hypothesis_session_id,
             warnings=warnings,
         )
 
