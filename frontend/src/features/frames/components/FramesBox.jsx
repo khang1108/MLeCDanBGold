@@ -1,6 +1,7 @@
 import React, { useCallback } from "react";
 import FrameCard from "./FrameCard";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
+import HcmusWatermarkBadge from "./HcmusWatermarkBadge";
 import { displayVideoId } from "../videoSource";
 
 export const formatLatencySeconds = (val) => {
@@ -259,31 +260,7 @@ const FramesBox = ({
                   </p>
                 </>
               ) : (
-                <div className="hcmus-copyright-badge" data-testid="hcmus-copyright-badge">
-                  <img
-                    src="/hcmus_logo.png"
-                    alt="HCMUS - Ho Chi Minh University of Science"
-                    className="hcmus-copyright-logo"
-                  />
-                  <div className="hcmus-copyright-content">
-                    <h3 className="hcmus-copyright-title">MLeCDanBGold · 2026</h3>
-                    <p className="hcmus-copyright-owner">
-                      Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM
-                    </p>
-                    <p className="hcmus-copyright-owner-en">
-                      Ho Chi Minh University of Science (VNU-HCM)
-                    </p>
-                    <div className="hcmus-copyright-legal">
-                      <p className="hcmus-copyright-statement">
-                        © 2026 Team MLeCDanBGold. All Rights Reserved.
-                      </p>
-                      <p className="hcmus-copyright-subnote">
-                        Proprietary Multimodal Video Retrieval & Reasoning System.
-                        Unauthorized copying, redistribution, or reverse engineering is strictly prohibited.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <HcmusWatermarkBadge />
               )}
             </div>
           ))}

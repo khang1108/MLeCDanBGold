@@ -45,6 +45,8 @@ import { parseComposerDraft } from '../../kis/parser';
 import { filterFrames } from '../../../api/filter';
 import FilterPagination from '../../filter/components/FilterPagination';
 import FramesBox from '../../frames/components/FramesBox';
+import HcmusWatermarkBadge from '../../frames/components/HcmusWatermarkBadge';
+import GifLoaderOverlay from './GifLoaderOverlay';
 import ToolBox from '../../search-controls/components/ToolBox';
 
 export const parseRetrievalDescription = (description) => {
@@ -85,6 +87,7 @@ const SearchWorkspace = ({
   setSelectedTask,
   evaluations = [],
   onSessionRejected,
+  onAvsSelectionChange,
 }) => {
   const notifyEventTrailInvalidated = useCallback(() => {
     onEventTrailInvalidated?.();
@@ -395,6 +398,15 @@ const SearchWorkspace = ({
     dispatchSelection({ type: 'CLEAR_PENDING' });
   }, []);
 
+  // Broadcast AVS selection state so App and ImageModal stay in sync
+  useEffect(() => {
+    onAvsSelectionChange?.({
+      pending: selectionState.pending,
+      submitted: selectionState.submitted,
+      onToggle: handleToggleCandidate,
+    });
+  }, [selectionState.pending, selectionState.submitted, handleToggleCandidate, onAvsSelectionChange]);
+
   const handleOpenAvsSubmit = useCallback(() => {
     if (selectionState.pending.size === 0) return;
     setActiveBatch(null);
@@ -403,10 +415,12 @@ const SearchWorkspace = ({
 
   const handleConfirmAvsSubmit = useCallback(async () => {
     const candidates = [...selectionState.pending.values()];
-    const candidateIds = candidates.map((c) => c.frame_id);
+    const candidateIds = candidates.map((c) => c.candidate_id || c.frame_id);
     const answers = candidates.map((c) => candidateToTemporalAnswer(c));
+    const batch = { candidateIds, answers };
+    setActiveBatch(batch);
 
-    const result = await avsSubmission.submitBatch(answers, candidateIds);
+    const result = await avsSubmission.submitBatch(batch);
 
     if (result?.error?.code === 'TASK_SCOPE_MISMATCH' || result?.error?.status === 409) {
       setIsSubmitDialogOpen(false);
@@ -1064,33 +1078,35 @@ const SearchWorkspace = ({
 
   const renderResults = () => {
     if (workspaceMode === 'AVS') {
+      const hasSearchedAvs = Boolean(avsResponse || avsResults.length > 0);
+
       return (
-        <div className="frames-results-shell avs-workspace-results">
+        <div className={`frames-results-shell avs-workspace-results ${isSearching ? 'whip-cursor-mode' : ''}`}>
           {scopeConflict && (
             <div className="avs-status-message error" role="alert">
               {scopeConflict}
             </div>
           )}
 
-          {isSearching && (
-            <div className="avs-status-message loading" role="status">
-              Searching AVS keyframes...
+          {isSearching ? (
+            <div className="avs-loader-container">
+              <GifLoaderOverlay isVisible={true} />
             </div>
-          )}
-
-          {error && (
+          ) : error ? (
             <div className="avs-status-message error" role="alert">
               {error}
             </div>
-          )}
-
-          {!isSearching && !error && avsResults.length === 0 && (
-            <div className="avs-status-message empty">
-              Enter an ad-hoc query in the Search panel to retrieve candidate frames.
-            </div>
-          )}
-
-          {avsResults.length > 0 && (
+          ) : avsResults.length === 0 ? (
+            hasSearchedAvs ? (
+              <div className="avs-status-message empty">
+                No candidates found matching your query.
+              </div>
+            ) : (
+              <div className="avs-watermark-container">
+                <HcmusWatermarkBadge />
+              </div>
+            )
+          ) : (
             <>
               <div className="avs-results-summary">
                 Showing {avsResults.length} candidates from{' '}

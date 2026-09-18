@@ -12,6 +12,8 @@ import AvsHarvestGrid from './AvsHarvestGrid';
 import AvsSelectionBar from './AvsSelectionBar';
 import AvsSelectionDrawer from './AvsSelectionDrawer';
 import AvsSubmitDialog from './AvsSubmitDialog';
+import GifLoaderOverlay from '../../search/components/GifLoaderOverlay';
+import HcmusWatermarkBadge from '../../frames/components/HcmusWatermarkBadge';
 
 /**
  * Dedicated workspace shell for Ad-Hoc Video Search (AVS).
@@ -162,12 +164,7 @@ const AvsWorkspace = ({
   };
 
   const handleToggle = (candidate) => {
-    const id = candidate.candidate_id || candidate.frame_id;
-    if (selectionState.pending.has(id)) {
-      dispatchSelection({ type: 'DESELECT', candidateId: id });
-    } else {
-      dispatchSelection({ type: 'SELECT', candidate });
-    }
+    dispatchSelection({ type: 'TOGGLE', candidate });
   };
 
   const handleRemoveCandidate = (candidateId) => {
@@ -231,7 +228,7 @@ const AvsWorkspace = ({
   const isSelectionDisabled = Boolean(scopeConflict) || Boolean(selectionState.unknownBatch);
 
   return (
-    <div className="avs-workspace">
+    <div className={`avs-workspace ${searchState.status === 'loading' ? 'whip-cursor-mode' : ''}`}>
       <AvsQueryControls
         query={query}
         onQueryChange={setQuery}
@@ -253,14 +250,20 @@ const AvsWorkspace = ({
         )}
 
         {searchState.status === 'loading' && (
-          <div className="avs-status-message loading" role="status">
-            Searching AVS keyframes...
+          <div className="avs-loader-container">
+            <GifLoaderOverlay isVisible={true} />
           </div>
         )}
 
         {searchState.status === 'error' && (
           <div className="avs-status-message error" role="alert">
             {searchState.error}
+          </div>
+        )}
+
+        {searchState.status === 'idle' && (
+          <div className="avs-watermark-container">
+            <HcmusWatermarkBadge />
           </div>
         )}
 

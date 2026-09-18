@@ -38,6 +38,9 @@ const AvsCandidateCard = ({
     submitted ? 'is-submitted' : '',
   ].filter(Boolean).join(' ');
 
+  const candidateId = candidate.candidate_id || candidate.frame_id;
+  const checkboxId = `avs-select-${candidateId}`;
+
   return (
     <article
       ref={cardRef}
@@ -46,24 +49,38 @@ const AvsCandidateCard = ({
       data-candidate-id={candidate.candidate_id}
       tabIndex={tabIndex}
       onKeyDown={onKeyDown}
+      onClick={() => onInspect?.(candidate)}
     >
-      <label className="avs-card-checkbox-label">
-        <input
-          type="checkbox"
-          className="avs-card-checkbox"
-          checked={selected}
-          disabled={selectionDisabled || submitted}
-          onChange={() => onToggle?.(candidate)}
-        />
-        <span className="avs-card-status-text">
-          {submitted ? 'Submitted' : selected ? 'Selected' : 'Select'}
+      <div className="avs-card-header" onClick={(e) => e.stopPropagation()}>
+        <label
+          htmlFor={checkboxId}
+          className={`avs-card-checkbox-label ${selected ? 'is-selected' : ''} ${submitted ? 'is-submitted' : ''}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            id={checkboxId}
+            type="checkbox"
+            className="avs-card-checkbox"
+            checked={selected}
+            disabled={selectionDisabled || submitted}
+            onChange={() => onToggle?.(candidate)}
+          />
+          <span className="avs-card-status-text">
+            {submitted ? 'Submitted' : selected ? 'Selected' : 'Select'}
+          </span>
+        </label>
+        <span className="avs-card-timestamp" title={`Timestamp: ${candidate.timestamp_ms}ms`}>
+          {formatTimestamp(candidate.timestamp_ms)}
         </span>
-      </label>
+      </div>
 
       <button
         type="button"
         className="avs-card-thumbnail-btn"
-        onClick={() => onInspect?.(candidate)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onInspect?.(candidate);
+        }}
         aria-label={`Inspect ${candidate.video_id} at ${candidate.timestamp_ms} ms`}
       >
         <img
@@ -75,8 +92,10 @@ const AvsCandidateCard = ({
       </button>
 
       <div className="avs-card-meta">
-        <span className="avs-card-video-id">{candidate.video_id}</span>
-        <span className="avs-card-timestamp">{formatTimestamp(candidate.timestamp_ms)}</span>
+        <span className="avs-card-video-id" title={candidate.video_id}>{candidate.video_id}</span>
+        {Number.isSafeInteger(candidate.retrieval_rank) && (
+          <span className="avs-card-rank-badge">#{candidate.retrieval_rank}</span>
+        )}
       </div>
     </article>
   );

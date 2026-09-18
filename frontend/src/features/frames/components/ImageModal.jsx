@@ -20,6 +20,9 @@ const ImageModal = ({
   eventTrail,
   onOpenSubmission,
   isSubmissionOpening = false,
+  isAvsMode = false,
+  isCandidateSelected = false,
+  onToggleCandidateSelection,
 }) => {
   const modalCardRef = React.useRef(null);
   const videoRef = React.useRef(null);
@@ -383,6 +386,8 @@ const ImageModal = ({
                     onTogglePlayback={togglePlayback}
                     onSubmit={canSubmitFrame && !eventTrail?.state ? handleDirectSubmit : undefined}
                     isSubmitting={isSubmissionOpening}
+                    onSelectCandidate={isAvsMode && onToggleCandidateSelection ? onToggleCandidateSelection : undefined}
+                    isCandidateSelected={isCandidateSelected}
                   />
                 </div>
               ) : videoError && (activeFrameId || frame.frame_id) ? (
@@ -411,12 +416,37 @@ const ImageModal = ({
                 </div>
               )}
             </div>
-            <div className="modal-inspector-column">
+            <div className={`modal-inspector-column ${eventTrail?.state ? 'trail-active' : 'kis-mode'}`}>
               <div className="inspector-header">
                 <span className="inspector-title">
                   {eventTrail?.state ? 'EventTrail Exploration' : 'Frame Inspector'}
                 </span>
                 <div className="inspector-header-actions">
+                  {isAvsMode && onToggleCandidateSelection && (
+                    <button
+                      type="button"
+                      className={`inspector-header-select-btn ${isCandidateSelected ? 'is-selected' : ''}`}
+                      onClick={onToggleCandidateSelection}
+                      aria-label={isCandidateSelected ? "Deselect candidate from AVS" : "Select candidate for AVS"}
+                      title={isCandidateSelected ? "Deselect candidate from AVS basket" : "Select candidate for AVS batch"}
+                    >
+                      <span className="select-btn-check" aria-hidden="true">{isCandidateSelected ? '✓' : '+'}</span>
+                      <span>{isCandidateSelected ? 'Selected' : 'Select'}</span>
+                    </button>
+                  )}
+                  {canSubmitFrame && !eventTrail?.state && (
+                    <button
+                      type="button"
+                      className="frame-submit-button inspector-header-submit-btn"
+                      disabled={isSubmissionOpening}
+                      onClick={handleDirectSubmit}
+                      aria-label="Submit this frame to DRES"
+                      title={`Submit ${frame.video_id} at ${currentTimestampMs} ms to DRES`}
+                    >
+                      <span className="submit-arrow-icon" aria-hidden="true">↗</span>
+                      <span>Submit</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="inspector-close-btn"
@@ -458,27 +488,9 @@ const ImageModal = ({
                   />
                 </div>
               ) : (
-                <>
-                  <div className="inspector-content">
-                    <FrameMetadata frame={frame} playbackTime={playbackTime} />
-                  </div>
-                  {canSubmitFrame && (
-                    <div className="inspector-footer">
-                      <button
-                        type="button"
-                        className="btn-primary inspector-submit-btn"
-                        disabled={isSubmissionOpening}
-                        onClick={handleDirectSubmit}
-                        aria-label="Submit this frame to DRES"
-                        title={`Submit ${frame.video_id} at ${currentTimestampMs} ms to DRES`}
-                      >
-                        <span className="inspector-submit-icon" aria-hidden="true">↗</span>
-                        <span>Submit to DRES</span>
-                        <span className="inspector-submit-time">({currentTimestampMs} ms)</span>
-                      </button>
-                    </div>
-                  )}
-                </>
+                <div className="inspector-content">
+                  <FrameMetadata frame={frame} playbackTime={playbackTime} />
+                </div>
               )}
             </div>
           </div>

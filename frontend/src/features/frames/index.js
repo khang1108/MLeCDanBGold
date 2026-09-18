@@ -3,4 +3,5 @@ export { default as FrameCard } from './components/FrameCard';
 export { default as FrameMetadata } from './components/FrameMetadata';
 export { default as ImageModal } from './components/ImageModal';
 export { default as VideoTimeline } from './components/VideoTimeline';
+export { default as HcmusWatermarkBadge } from './components/HcmusWatermarkBadge';
 export * from './videoSource';

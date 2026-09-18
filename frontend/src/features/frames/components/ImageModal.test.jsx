@@ -618,4 +618,40 @@ test('Exit EventTrail button calls eventTrail.close', () => {
   expect(closeMock).toHaveBeenCalledWith({ suppressError: true });
 });
 
+test('renders Select candidate button in AVS mode and toggles selection on click', () => {
+  const onToggleMock = jest.fn();
+  const { rerender } = render(
+    <ImageModal
+      frame={{ frame_id: 'f_avs', video_id: 'L21_V001', timestamp_ms: 5000 }}
+      onClose={jest.fn()}
+      isAvsMode={true}
+      isCandidateSelected={false}
+      onToggleCandidateSelection={onToggleMock}
+    />
+  );
+
+  const selectBtns = screen.getAllByRole('button', { name: /select candidate/i });
+  expect(selectBtns.length).toBeGreaterThanOrEqual(1);
+  expect(selectBtns[0].textContent).toContain('Select');
+
+  fireEvent.click(selectBtns[0]);
+  expect(onToggleMock).toHaveBeenCalledTimes(1);
+
+  // Rerender as selected
+  rerender(
+    <ImageModal
+      frame={{ frame_id: 'f_avs', video_id: 'L21_V001', timestamp_ms: 5000 }}
+      onClose={jest.fn()}
+      isAvsMode={true}
+      isCandidateSelected={true}
+      onToggleCandidateSelection={onToggleMock}
+    />
+  );
+
+  const deselectBtns = screen.getAllByRole('button', { name: /deselect candidate/i });
+  expect(deselectBtns.length).toBeGreaterThanOrEqual(1);
+  expect(deselectBtns[0].textContent).toContain('Selected');
+});
+
+
 

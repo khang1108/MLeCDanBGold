@@ -42,6 +42,11 @@ const AppShell = ({
   });
 
   const [workspaceOverride, setWorkspaceOverride] = useState(null);
+  const [avsSelectionInfo, setAvsSelectionInfo] = useState({
+    pending: new Map(),
+    submitted: new Map(),
+    onToggle: null,
+  });
   const activeTaskFamily = workspaceOverride || taskFamily(selectedTask);
   const isAvsTask = activeTaskFamily === 'AVS';
 
@@ -187,26 +192,41 @@ const AppShell = ({
             setSelectedTask={handleSetSelectedTask}
             evaluations={evaluations}
             onSessionRejected={invalidateSession}
+            onAvsSelectionChange={setAvsSelectionInfo}
           />
         </div>
       </main>
 
-      {selectedFrame && (
-        <ImageModal
-          frame={selectedFrame.frame || selectedFrame}
-          events={
-            selectedFrame.events
-            || selectedFrame.frame?.events
-            || selectedFrame.eventTrailContext?.events?.map(
-              (event) => (typeof event === 'string' ? event : event?.text || event?.canonical_text || ''),
-            )
-            || []
-          }
-          query={modalQuery}
-          initialTimestampMs={selectedFrame.initialTimestampMs}
-          onOpenSubmission={!isAvsTask && connectedUserId ? submission.open : undefined}
-          isSubmissionOpening={submission.opening}
-          onClose={() => setSelectedFrame(null)}
+      {selectedFrame && (() => {
+        const inspectedCandidate = selectedFrame.frame || selectedFrame;
+        const inspectedCandidateId = inspectedCandidate?.candidate_id || inspectedCandidate?.frame_id;
+        const isCandidateSelected = Boolean(
+          inspectedCandidateId && avsSelectionInfo.pending?.has(inspectedCandidateId)
+        );
+
+        return (
+          <ImageModal
+            frame={inspectedCandidate}
+            events={
+              selectedFrame.events
+              || selectedFrame.frame?.events
+              || selectedFrame.eventTrailContext?.events?.map(
+                (event) => (typeof event === 'string' ? event : event?.text || event?.canonical_text || ''),
+              )
+              || []
+            }
+            query={modalQuery}
+            initialTimestampMs={selectedFrame.initialTimestampMs}
+            onOpenSubmission={!isAvsTask && connectedUserId ? submission.open : undefined}
+            isSubmissionOpening={submission.opening}
+            onClose={() => setSelectedFrame(null)}
+            isAvsMode={isAvsTask}
+            isCandidateSelected={isCandidateSelected}
+            onToggleCandidateSelection={
+              isAvsTask && avsSelectionInfo.onToggle
+                ? () => avsSelectionInfo.onToggle(inspectedCandidate)
+                : undefined
+            }
           eventTrail={selectedFrame.eventTrailContext ? {
             context: selectedFrame.eventTrailContext,
             state: eventTrail.session,
@@ -230,7 +250,7 @@ const AppShell = ({
             },
           } : undefined}
         />
-      )}
+      ); })()}
       {submission.dialog && (
         <SubmissionDialog
           task={submission.dialog.task}

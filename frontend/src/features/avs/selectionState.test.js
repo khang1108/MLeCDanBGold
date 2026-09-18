@@ -38,6 +38,25 @@ describe('avsSelectionReducer', () => {
     expect(state.pending.size).toBe(0);
   });
 
+  test('toggle selects unselected candidate and deselects selected candidate', () => {
+    let state = createInitialAvsSelectionState();
+    state = avsSelectionReducer(state, { type: 'BIND_SCOPE', taskScopeKey: 'scope-1' });
+    state = avsSelectionReducer(state, { type: 'TOGGLE', candidate: candidate('f1') });
+    expect(state.pending.size).toBe(1);
+    expect(state.pending.has('f1')).toBe(true);
+
+    state = avsSelectionReducer(state, { type: 'TOGGLE', candidate: candidate('f1') });
+    expect(state.pending.size).toBe(0);
+  });
+
+  test('remove alias removes candidate from pending', () => {
+    let state = createInitialAvsSelectionState();
+    state = avsSelectionReducer(state, { type: 'BIND_SCOPE', taskScopeKey: 'scope-1' });
+    state = avsSelectionReducer(state, { type: 'SELECT', candidate: candidate('f1') });
+    state = avsSelectionReducer(state, { type: 'REMOVE', candidateId: 'f1' });
+    expect(state.pending.size).toBe(0);
+  });
+
   test('clear pending clears pending and unknownBatch', () => {
     let state = createInitialAvsSelectionState();
     state = avsSelectionReducer(state, { type: 'BIND_SCOPE', taskScopeKey: 'scope-1' });

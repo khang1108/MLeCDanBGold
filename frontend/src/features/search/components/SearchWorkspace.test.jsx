@@ -773,5 +773,63 @@ test('keyboard shortcuts Ctrl+Shift+1 and Ctrl+Shift+2 switch search mode', () =
   expect(onToggleMode).toHaveBeenCalledWith('KIS');
 });
 
+test('renders HCMUS watermark badge in initial idle state in AVS mode', () => {
+  renderSearch({
+    workspaceMode: 'AVS',
+  });
+
+  expect(screen.getByTestId('hcmus-copyright-badge')).toBeTruthy();
+  expect(screen.getAllByText(/MLeCDanBGold · 2026/i).length).toBeGreaterThanOrEqual(1);
+});
+
+test('toggling candidate checkbox in AVS mode updates selection and calls onAvsSelectionChange', async () => {
+  const onAvsSelectionChange = jest.fn();
+  searchAvs.mockResolvedValueOnce({
+    results: [
+      {
+        candidate_id: 'c_1',
+        frame_id: 'c_1',
+        video_id: 'L21_V001',
+        frame_idx: 120,
+        timestamp_ms: 4000,
+        fps: 30,
+        retrieval_rank: 1,
+        retrieval_score: 0.95,
+        metadata: { frame_idx: 120, timestamp_ms: 4000 },
+      },
+    ],
+    latency: { total_ms: 100, retrieval_ms: 80, coverage_ms: 10, materialization_ms: 10 },
+    candidate_pool_size: 1,
+    deduplicated_candidate_count: 1,
+    unique_videos: 1,
+    warnings: [],
+  });
+
+  renderSearch({
+    workspaceMode: 'AVS',
+    onAvsSelectionChange,
+  });
+
+  const input = document.getElementById('event-query');
+  fireEvent.change(input, { target: { value: 'test candidate' } });
+  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite)$/i }));
+
+  await screen.findByText(/showing 1 candidates from 1 videos/i);
+
+  const checkbox = screen.getByRole('checkbox');
+  expect(checkbox.checked).toBe(false);
+
+  // Click checkbox to select
+  fireEvent.click(checkbox);
+  expect(checkbox.checked).toBe(true);
+  expect(screen.getByText(/1 selected/i)).toBeTruthy();
+
+  // Click checkbox again to deselect
+  fireEvent.click(checkbox);
+  expect(checkbox.checked).toBe(false);
+  expect(screen.getByText(/0 selected/i)).toBeTruthy();
+});
+
+
 
 

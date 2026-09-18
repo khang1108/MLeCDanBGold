@@ -67,13 +67,41 @@ export const avsSelectionReducer = (state, action) => {
       };
     }
 
+    case 'REMOVE':
     case 'DESELECT': {
-      const id = action.candidateId;
+      const id = action.candidateId || action.id || action.candidate?.candidate_id || action.candidate?.frame_id;
       if (!id || !state.pending.has(id)) {
         return state;
       }
       const newPending = new Map(state.pending);
       newPending.delete(id);
+      return {
+        ...state,
+        pending: newPending,
+      };
+    }
+
+    case 'TOGGLE': {
+      const candidate = action.candidate;
+      if (!candidate || typeof candidate !== 'object') return state;
+      const id = candidate.candidate_id || candidate.frame_id;
+      if (!id) return state;
+      if (state.pending.has(id)) {
+        const newPending = new Map(state.pending);
+        newPending.delete(id);
+        return {
+          ...state,
+          pending: newPending,
+        };
+      }
+      if (state.submitted.has(id)) {
+        return state;
+      }
+      if (!isValidCandidate(candidate)) {
+        return state;
+      }
+      const newPending = new Map(state.pending);
+      newPending.set(id, candidate);
       return {
         ...state,
         pending: newPending,

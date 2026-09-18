@@ -25,6 +25,8 @@ const VideoTimeline = ({
   onTogglePlayback,
   onSubmit,
   isSubmitting = false,
+  onSelectCandidate,
+  isCandidateSelected = false,
 }) => {
   const timelineRef = useRef(null);
   const previewUrlCache = useRef(new Map());
@@ -217,6 +219,17 @@ const VideoTimeline = ({
         <span className="modal-video-time-readout">
           {formatVideoTime(safeCurrentTime)} / {formatVideoTime(safeDuration)}
         </span>
+        {onSelectCandidate && (
+          <button
+            type="button"
+            className={`modal-video-select-button ${isCandidateSelected ? 'is-selected' : ''}`}
+            onClick={onSelectCandidate}
+            title={isCandidateSelected ? "Deselect candidate" : "Select candidate"}
+            aria-label={isCandidateSelected ? "Deselect candidate" : "Select candidate"}
+          >
+            {isCandidateSelected ? "✓ Selected" : "+ Select"}
+          </button>
+        )}
         {onSubmit && (
           <button
             type="button"
