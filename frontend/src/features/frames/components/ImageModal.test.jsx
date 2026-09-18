@@ -250,49 +250,7 @@ test('closes the inspector when Escape is pressed', () => {
   unmount();
 });
 
-test('renders alignment sequence in order and immediately open upon display', () => {
-  const alignedFrame = {
-    ...frame,
-    frame_ids: ['f1', 'f2'],
-    timestamps_ms: [1200, 2400],
-  };
-  render(
-    <ImageModal
-      frame={alignedFrame}
-      events={['hold', 'roll']}
-      onClose={jest.fn()}
-    />,
-  );
 
-  expect(screen.queryByText('Event Alignment')).toBeNull();
-  expect(screen.getByText('E1')).toBeTruthy();
-  expect(screen.getByText('hold')).toBeTruthy();
-  expect(screen.getByText('00:01.200')).toBeTruthy();
-  expect(screen.getByText('E2')).toBeTruthy();
-  expect(screen.getByText('roll')).toBeTruthy();
-  expect(screen.getByText('00:02.400')).toBeTruthy();
-});
-
-test('seeking via alignment sequence row updates the video time', async () => {
-  const alignedFrame = {
-    ...frame,
-    frame_ids: ['f1', 'f2'],
-    timestamps_ms: [1200, 2400],
-  };
-  render(
-    <ImageModal
-      frame={alignedFrame}
-      events={['hold', 'roll']}
-      onClose={jest.fn()}
-    />,
-  );
-
-  const seekButton = screen.getByRole('button', { name: '00:02.400' });
-  fireEvent.click(seekButton);
-
-  const video = await screen.findByLabelText('Video for L21_V001');
-  expect(video.currentTime).toBe(2.4);
-});
 
 test('Step 1: shows Open EventTrail button under inspector when context exists without active state', () => {
   const onOpen = jest.fn();
@@ -634,19 +592,14 @@ test('Step 5: Trail Submit uses submission_selection and hides header submit but
   });
 });
 
-test('renders alignment section at modal bottom when events are present, omits when absent', () => {
-  const { rerender } = render(<ImageModal frame={frame} onClose={jest.fn()} />);
-  expect(document.querySelector('.modal-bottom-alignment-section')).toBeNull();
-
+test('does not render bottom alignment section in ImageModal', () => {
   const alignedFrame = {
     ...frame,
     frame_ids: ['f1', 'f2'],
     timestamps_ms: [1200, 2400],
   };
-  rerender(<ImageModal frame={alignedFrame} events={['hold', 'roll']} onClose={jest.fn()} />);
-  const bottomSection = document.querySelector('.modal-bottom-alignment-section');
-  expect(bottomSection).toBeTruthy();
-  expect(bottomSection.querySelector('.alignment-accordion.always-open')).toBeTruthy();
+  render(<ImageModal frame={alignedFrame} events={['hold', 'roll']} onClose={jest.fn()} />);
+  expect(document.querySelector('.modal-bottom-alignment-section')).toBeNull();
 });
 
 test('Exit EventTrail button calls eventTrail.close', () => {
