@@ -21,19 +21,23 @@ export const createInitialFeedbackSession = () => ({
 });
 
 export const initFeedbackSession = (state, { sessionId, feedbackRevision, state: serverState, originalQuery }) => {
-  const initialMessages = [];
-  if (originalQuery) {
+  let initialMessages = (Array.isArray(state?.messages) && state.messages.length > 0)
+    ? [...state.messages]
+    : [];
+  if (initialMessages.length === 0) {
+    if (originalQuery) {
+      initialMessages.push({
+        id: 'msg_initial_query',
+        role: 'user',
+        text: originalQuery,
+      });
+    }
     initialMessages.push({
-      id: 'msg_initial_query',
-      role: 'user',
-      text: originalQuery,
+      id: 'msg_session_opened',
+      role: 'assistant',
+      text: serverState?.assistant_message || 'Feedback session opened. How can I help refine the results?',
     });
   }
-  initialMessages.push({
-    id: 'msg_session_opened',
-    role: 'assistant',
-    text: serverState?.assistant_message || 'Feedback session opened. How can I help refine the results?',
-  });
 
   return {
     ...state,

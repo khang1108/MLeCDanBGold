@@ -1044,38 +1044,118 @@
   border-radius: 9999px;
 }
 
-/* Center subtle watermark badge inside the KIS sidebar */
-.kis-watermark-badge {
+/* Modern Empty State with Watermark Badge and Prompt Starters */
+.kis-chat-empty-state {
   margin: auto auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 16px;
+  gap: 16px;
+  width: 100%;
+  max-width: 330px;
+  padding: 16px 8px;
+  box-sizing: border-box;
+}
+
+.kis-watermark-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   user-select: none;
-  opacity: 0.35;
+  opacity: 0.8;
   transition: opacity 0.3s ease, transform 0.3s ease;
-  pointer-events: none;
 }
 
 .kis-watermark-badge:hover {
-  opacity: 0.65;
+  opacity: 1;
+  transform: translateY(-1px);
 }
 
 .kis-watermark-logo {
-  height: 52px;
+  height: 48px;
   width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.06));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
 }
 
 .kis-watermark-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--color-ink-muted, #64748b);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.kis-empty-prompt-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.kis-empty-guide-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.kis-empty-guide-subtitle {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0 0 6px 0;
+  line-height: 1.45;
+}
+
+.kis-quick-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.kis-quick-prompt-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 11.5px;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.kis-quick-prompt-btn:hover {
+  background: #f8fafc;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.12);
+}
+
+.kis-quick-prompt-btn .prompt-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.kis-quick-prompt-btn .prompt-text {
+  flex: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kis-intent-summary {
@@ -1544,46 +1624,91 @@
   font-size: 12px;
 }
 
-/* KIS Chat Feedback Thread & Context Chips */
+/* KIS Chat Stream, Feedback Thread & Context Chips */
 .kis-event-card.kis-event-card-selected {
   border-color: #3b82f6;
   background: #eff6ff;
   box-shadow: 0 0 0 1px #3b82f6;
 }
 
+.kis-conversation-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.kis-assistant-intro {
+  font-size: 12px;
+  color: #475569;
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+/* Header Undo Button */
+.kis-chat-undo-btn {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.kis-chat-undo-btn:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+.kis-chat-undo-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* KIS Chat Feedback Thread & Message Bubbles */
 .feedback-thread {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-  margin-bottom: 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px;
+  gap: 10px;
+  margin-top: 4px;
+  width: 100%;
 }
 
 .feedback-thread-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 6px;
+  padding: 2px 4px 6px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.feedback-thread-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #64748b;
 }
 
 .feedback-thread-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
 .feedback-undo-button {
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 4px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: #475569;
   padding: 2px 8px;
@@ -1600,30 +1725,65 @@
 .feedback-messages-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 260px;
-  overflow-y: auto;
+  gap: 10px;
+  width: 100%;
 }
 
 .feedback-message {
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 10px 13px;
+  border-radius: 12px;
   font-size: 12.5px;
-  line-height: 1.4;
+  line-height: 1.45;
+  box-sizing: border-box;
+  animation: feedbackFadeIn 0.2s ease-out;
+}
+
+@keyframes feedbackFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .feedback-message-user {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  border: none;
   align-self: flex-end;
-  width: 90%;
+  max-width: 90%;
+  border-bottom-right-radius: 3px;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.22);
+}
+
+.feedback-message-user .feedback-role-label {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.feedback-message-user .feedback-message-body {
+  color: #ffffff;
+  font-weight: 450;
 }
 
 .feedback-message-assistant {
   background: #ffffff;
   border: 1px solid #e2e8f0;
+  color: #1e293b;
   align-self: flex-start;
-  width: 95%;
+  width: 100%;
+  border-bottom-left-radius: 3px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.feedback-message-assistant .feedback-role-label {
+  color: #475569;
+}
+
+.feedback-message-assistant .feedback-message-body {
+  color: #1e293b;
 }
 
 .feedback-message-clarification {
@@ -1636,27 +1796,23 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .feedback-role-label {
   font-size: 11px;
   font-weight: 700;
-  color: #64748b;
-}
-
-.feedback-message-body {
-  color: #1e293b;
-  word-break: break-word;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .feedback-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 6px;
+  padding: 1px 7px;
   border-radius: 12px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
 }
 
@@ -1676,8 +1832,13 @@
 }
 
 .chip-context {
-  background: #dbeafe;
-  color: #1e40af;
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  backdrop-filter: blur(4px);
+}
+
+.feedback-context-chip-row {
+  margin-bottom: 5px;
 }
 
 .kis-composer-context-bar {
@@ -1687,18 +1848,67 @@
 .kis-context-clear-btn {
   background: transparent;
   border: none;
-  color: #1e40af;
+  color: currentColor;
   font-weight: bold;
   cursor: pointer;
   padding: 0 2px;
+  margin-left: 4px;
   font-size: 13px;
   line-height: 1;
+  opacity: 0.85;
 }
 
+.kis-context-clear-btn:hover {
+  opacity: 1;
+}
+
+/* Typing Indicator */
 .feedback-pending-indicator {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: #64748b;
   font-style: italic;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+}
+
+.feedback-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 2px;
+}
+
+.typing-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+  animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes typingBounce {
+  0%, 80%, 100% {
+    transform: scale(0.4);
+    opacity: 0.3;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }

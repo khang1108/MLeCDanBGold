@@ -833,14 +833,35 @@ const SearchWorkspace = ({
         userId: capturedUserId,
       });
       if (controller.signal.aborted) return;
-
       setKisSession((prev) => commitSearchSuccess(prev, response));
-      setFeedbackSession(resetFeedbackSession());
 
       const eventTexts = Array.isArray(response.intent?.events)
         ? response.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
         : [];
       const queryText = response.intent?.query_text || draftText || 'Multimodal search';
+
+      setFeedbackSession({
+        ...createInitialFeedbackSession(),
+        status: 'applied',
+        messages: [
+          {
+            id: 'msg_initial_query',
+            role: 'user',
+            text: queryText,
+          },
+          {
+            id: 'msg_initial_response',
+            role: 'assistant',
+            text: `Analyzed query into ${eventTexts.length} event${eventTexts.length === 1 ? '' : 's'}. You can refine results, reject candidates, or add clues below.`,
+            scope: 'all_videos',
+            changedEventIds: (response.intent?.events || []).map((e) => e.id),
+          },
+        ],
+        currentIntent: response.intent,
+        evidenceSnapshotId: response.evidence_snapshot_id || null,
+        results: response.results || [],
+        canUndo: false,
+      });
 
       const imageAdded = [];
       const imageRemoved = [];

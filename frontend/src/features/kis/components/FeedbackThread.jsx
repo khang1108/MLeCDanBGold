@@ -17,7 +17,23 @@ const FeedbackThread = ({
   return (
     <div className="feedback-thread" role="region" aria-label="Feedback history">
       <div className="feedback-thread-header">
-        <span className="feedback-thread-title">Feedback Thread</span>
+        <div className="feedback-thread-title-wrap">
+          <svg
+            className="feedback-thread-title-icon"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span className="feedback-thread-title">Feedback Thread</span>
+        </div>
         {canUndo && (
           <button
             type="button"
@@ -77,7 +93,11 @@ const FeedbackThread = ({
 
         {isPending && (
           <div className="feedback-message feedback-message-assistant feedback-pending-indicator">
-            <span className="feedback-spinner" aria-hidden="true">⋯</span>
+            <span className="feedback-typing-dots" aria-hidden="true">
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+            </span>
             <span>Refining retrieval...</span>
           </div>
         )}
