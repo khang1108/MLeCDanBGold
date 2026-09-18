@@ -80,18 +80,48 @@ const FramesBox = ({
         {(results.length > 0 || !error) &&
           (results.length ? (
             <div className={`frames-grid size-${gridSize}`}>
-              {results.map((frame, index) => (
-                  <FrameCard
-                  key={`${frame.video_id}:${(frame.frame_ids || [frame.frame_id]).join("|")}:${index}`}
-                  frame={frame}
-                  events={events}
-                  className={getFrameClassName?.(frame)}
-                  annotation={getFrameAnnotation?.(frame)}
-                  onOpenSubmission={onOpenSubmission}
-                  isSubmissionOpening={isSubmissionOpening}
-                  onClick={() => onFrameClick(frame)}
-                />
-              ))}
+              {results.map((resultItem, index) => {
+                const frameIds = Array.isArray(resultItem.frame_ids) && resultItem.frame_ids.length > 0
+                  ? resultItem.frame_ids
+                  : [resultItem.frame_id];
+                const timestampsMs = Array.isArray(resultItem.timestamps_ms) && resultItem.timestamps_ms.length > 0
+                  ? resultItem.timestamps_ms
+                  : [resultItem.timestamp_ms];
+                const hasMultipleEvents = frameIds.length > 1;
+
+                return (
+                  <div
+                    key={`${resultItem.video_id}:${frameIds.join("|")}:${index}`}
+                    className="frames-result-row"
+                  >
+                    <div className="frames-row-track">
+                      {frameIds.map((fId, eventIndex) => {
+                        const timestampMs = timestampsMs[eventIndex] ?? resultItem.timestamp_ms;
+                        const eventFrame = {
+                          ...resultItem,
+                          frame_id: fId,
+                          timestamp_ms: timestampMs,
+                        };
+                        const eventLabel = hasMultipleEvents ? `E${eventIndex + 1}` : null;
+
+                        return (
+                          <FrameCard
+                            key={`${fId}-${eventIndex}`}
+                            frame={eventFrame}
+                            eventLabel={eventLabel}
+                            events={events}
+                            className={getFrameClassName?.(eventFrame)}
+                            annotation={getFrameAnnotation?.(eventFrame)}
+                            onOpenSubmission={onOpenSubmission}
+                            isSubmissionOpening={isSubmissionOpening}
+                            onClick={() => onFrameClick(eventFrame)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : isLoading ? (
             <GifLoaderOverlay isVisible={true} />

@@ -46,27 +46,65 @@
 /* RESULT GRID                                                 */
 /* ─────────────────────────────────────────────────────────── */
 .frames-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
-  /* An expanded Alignment belongs only to its own card, not its whole row. */
-  align-items: start;
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-sm);
   width: 100%;
 }
 
-.frames-grid.size-compact {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: var(--spacing-xs);
+.frames-result-row {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg);
+  box-shadow: var(--shadow-level-0);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.frames-grid.size-normal {
-  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+.frames-result-row:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-hairline));
+  box-shadow: var(--shadow-level-1);
+}
+
+.frames-row-track {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   gap: var(--spacing-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.16) transparent;
 }
 
-.frames-grid.size-large {
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: var(--spacing-md);
+.frames-row-track::-webkit-scrollbar {
+  height: 4px;
+}
+
+.frames-row-track::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 999px;
+}
+
+.frames-row-track .frame-card {
+  flex-shrink: 0;
+  width: 270px;
+}
+
+.frames-grid.size-compact .frames-row-track .frame-card {
+  width: 190px;
+}
+
+.frames-grid.size-normal .frames-row-track .frame-card {
+  width: 270px;
+}
+
+.frames-grid.size-large .frames-row-track .frame-card {
+  width: 360px;
 }
 
 .frames-empty-state {
@@ -229,6 +267,29 @@
   justify-content: space-between;
   align-items: center;
   gap: 6px;
+}
+
+.frame-header-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.frame-event-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #1d4ed8;
+  background-color: #dbeafe;
+  padding: 1px 5px;
+  border-radius: var(--rounded-sm);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  line-height: 1.2;
 }
 
 .frame-index-text {

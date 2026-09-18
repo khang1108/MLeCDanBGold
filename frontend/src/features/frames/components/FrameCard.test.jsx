@@ -132,3 +132,10 @@ test('Step 2 (Task 7): renders non-ranking badge when explored or exhausted with
   expect(screen.queryByText('Exhausted')).toBeNull();
 });
 
+test('renders eventLabel badge when provided', () => {
+  const frame = { frame_id: 'f-event', video_id: 'V01', timestamp_ms: 1200 };
+  render(<FrameCard frame={frame} eventLabel="E2" />);
+  expect(screen.getByText('E2')).toBeTruthy();
+  expect(screen.getByText('V01')).toBeTruthy();
+});
+

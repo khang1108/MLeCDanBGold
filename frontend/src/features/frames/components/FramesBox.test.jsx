@@ -26,7 +26,7 @@ test("renders distinct DP paths that share a representative frame without duplic
     />,
   );
 
-  expect(screen.getAllByTestId("frame-card")).toHaveLength(2);
+  expect(screen.getAllByTestId("frame-card")).toHaveLength(6);
   expect(consoleError.mock.calls.flat().join(" ")).not.toContain(
     "same key",
   );
