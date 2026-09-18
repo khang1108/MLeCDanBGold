@@ -10,6 +10,7 @@ import {
   getEventTrail,
   actOnEventTrail,
   closeEventTrail,
+  getEventTrailAlternatives,
 } from '../../../api/eventTrail';
 
 export const computeSessionKey = (context) => {
@@ -30,6 +31,10 @@ export const useEventTrail = () => {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(null);
   const [unsynced, setUnsynced] = useState(false);
+  const [focusedEventId, setFocusedEventId] = useState(null);
+  const [alternatives, setAlternatives] = useState([]);
+  const [previewAlternativeState, setPreviewAlternativeState] = useState(null);
+  const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false);
 
   const generationRef = useRef(0);
   const sessionRef = useRef(null);
@@ -52,6 +57,10 @@ export const useEventTrail = () => {
     setPending(false);
     setUnsynced(false);
     setError(null);
+    setFocusedEventId(null);
+    setAlternatives([]);
+    setPreviewAlternativeState(null);
+    setIsLoadingAlternatives(false);
   }, []);
 
   const cleanupLateSession = useCallback((lateSession) => {
@@ -163,6 +172,8 @@ export const useEventTrail = () => {
 
         setCurrentSession(updated, keyRef.current);
         setError(null);
+        setPreviewAlternativeState(null);
+        setAlternatives([]);
         return updated;
       } catch (actError) {
         if (controller.signal.aborted) return null;
@@ -179,6 +190,8 @@ export const useEventTrail = () => {
             if (generation === generationRef.current) {
               setCurrentSession(refreshed, keyRef.current);
               setError(`Conflict detected: ${actError.message || 'revision updated'}`);
+              setPreviewAlternativeState(null);
+              setAlternatives([]);
             }
           } catch (refreshErr) {
             if (
@@ -215,6 +228,77 @@ export const useEventTrail = () => {
       }
     },
     [setCurrentSession]
+  );
+
+  const focusEvent = useCallback(async (eventId) => {
+    const current = sessionRef.current;
+    if (!current?.session_id || !Number.isInteger(current?.trail_revision)) return null;
+
+    setFocusedEventId(eventId);
+    setIsLoadingAlternatives(true);
+
+    const generation = generationRef.current;
+    const controller = new AbortController();
+
+    try {
+      const res = await getEventTrailAlternatives(
+        current.session_id,
+        {
+          eventId,
+          expectedTrailRevision: current.trail_revision,
+        },
+        { signal: controller.signal }
+      );
+
+      if (generation !== generationRef.current || controller.signal.aborted) {
+        return null;
+      }
+
+      setAlternatives(res?.alternatives || []);
+      return res;
+    } catch (err) {
+      if (controller.signal.aborted || generation !== generationRef.current) return null;
+      setError(err?.message || 'Failed to fetch alternatives');
+      setAlternatives([]);
+      return null;
+    } finally {
+      if (generation === generationRef.current) {
+        setIsLoadingAlternatives(false);
+      }
+    }
+  }, []);
+
+  const previewAlternative = useCallback((alt) => {
+    setPreviewAlternativeState(alt);
+  }, []);
+
+  const clearPreview = useCallback(() => {
+    setPreviewAlternativeState(null);
+  }, []);
+
+  const keep = useCallback(
+    (eventId) => act({ type: 'keep', event_id: eventId }),
+    [act]
+  );
+
+  const useAlternative = useCallback(
+    (eventId, alternativeId) =>
+      act({
+        type: 'use_alternative',
+        event_id: eventId,
+        alternative_id: alternativeId,
+      }),
+    [act]
+  );
+
+  const rejectMode = useCallback(
+    (eventId, modeId) =>
+      act({
+        type: 'reject_mode',
+        event_id: eventId,
+        mode_id: modeId,
+      }),
+    [act]
   );
 
   const undo = useCallback(() => act({ type: 'undo' }), [act]);
@@ -310,6 +394,10 @@ export const useEventTrail = () => {
     pending,
     error,
     unsynced,
+    focusedEventId,
+    alternatives,
+    previewAlternativeState,
+    isLoadingAlternatives,
     open,
     act,
     undo,
@@ -317,5 +405,11 @@ export const useEventTrail = () => {
     close,
     clearLocal,
     syncSession,
+    focusEvent,
+    previewAlternative,
+    clearPreview,
+    keep,
+    useAlternative,
+    rejectMode,
   };
 };

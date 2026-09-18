@@ -15,10 +15,16 @@ const EvidenceInspector = ({
   pending = false,
   rejectedCount = 0,
   diff = null,
+  currentModeId = null,
+  previewAlternative = null,
+  onKeep,
   onApprove,
+  onRejectMode,
   onDecline,
   onUse,
+  onUseAlternative,
   onClearAnchor,
+  onClearPreview,
 }) => {
   if (!selectedEventId) {
     return (
@@ -66,7 +72,7 @@ const EvidenceInspector = ({
             </div>
             {rejectedCount > 0 && (
               <div className="event-trail-meta-row">
-                <span className="meta-label">Declined:</span>
+                <span className="meta-label">Rejected:</span>
                 <span className="meta-value text-warning">{rejectedCount}</span>
               </div>
             )}
@@ -85,24 +91,56 @@ const EvidenceInspector = ({
       )}
 
       <div className="event-trail-actions-row">
+        {previewAlternative && (
+          <>
+            <button
+              type="button"
+              className="btn-primary event-trail-action-btn use-alt-btn"
+              disabled={isExhausted || pending}
+              onClick={() =>
+                onUseAlternative?.(
+                  selectedEventId,
+                  previewAlternative.alternative_id || previewAlternative.mode_id
+                )
+              }
+              title="Commit this complete-path alternative"
+            >
+              Use this occurrence
+            </button>
+            <button
+              type="button"
+              className="btn-secondary event-trail-action-btn clear-preview-btn"
+              disabled={pending}
+              onClick={() => onClearPreview?.()}
+              title="Clear path preview"
+            >
+              Clear preview
+            </button>
+          </>
+        )}
+
         <button
           type="button"
-          className="btn-primary event-trail-action-btn approve-btn"
+          className="btn-primary event-trail-action-btn keep-btn approve-btn"
           disabled={isApproved || isExhausted || pending}
-          onClick={() => onApprove?.(selectedEventId)}
-          title="Approve this candidate as an anchor"
+          onClick={() => (onKeep ? onKeep(selectedEventId) : onApprove?.(selectedEventId))}
+          title="Keep this candidate occurrence as an anchor"
         >
-          Approve
+          Keep
         </button>
 
         <button
           type="button"
-          className="btn-secondary event-trail-action-btn decline-btn"
+          className="btn-secondary event-trail-action-btn reject-btn decline-btn"
           disabled={isApproved || isExhausted || pending}
-          onClick={() => onDecline?.(selectedEventId)}
-          title="Decline this candidate to search elsewhere in this video"
+          onClick={() =>
+            onRejectMode
+              ? onRejectMode(selectedEventId, currentModeId)
+              : onDecline?.(selectedEventId)
+          }
+          title="Reject this candidate occurrence to explore other temporal modes"
         >
-          Decline
+          Reject occurrence
         </button>
 
         <button
@@ -112,7 +150,7 @@ const EvidenceInspector = ({
           onClick={() => onUse?.(selectedEventId)}
           title="Use current player time as canonical frame for this event"
         >
-          Use
+          Use (manual frame)
         </button>
 
         {isApproved && (

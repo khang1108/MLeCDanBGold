@@ -46,7 +46,7 @@ describe('EventTrailPanel', () => {
       />
     );
 
-    expect(screen.getByRole('heading', { name: 'EventTrail' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Hypothesis Explorer' })).toBeTruthy();
     expect(screen.getAllByText('woman enters').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('woman sits')).toBeTruthy();
     expect(screen.getByText('woman talks')).toBeTruthy();
@@ -75,19 +75,19 @@ describe('EventTrailPanel', () => {
       />
     );
 
-    const approveBtn = screen.getByRole('button', { name: /^approve$/i });
-    const declineBtn = screen.getByRole('button', { name: /^decline$/i });
-    const useBtn = screen.getByRole('button', { name: /^use$/i });
+    const keepBtn = screen.getByRole('button', { name: /^keep$/i });
+    const rejectBtn = screen.getByRole('button', { name: /reject occurrence/i });
+    const useBtn = screen.getByRole('button', { name: /use \(manual frame\)/i });
 
-    expect(approveBtn.disabled).toBe(false);
-    expect(declineBtn.disabled).toBe(false);
+    expect(keepBtn.disabled).toBe(false);
+    expect(rejectBtn.disabled).toBe(false);
     expect(useBtn.disabled).toBe(false);
     expect(screen.queryByRole('button', { name: /clear anchor/i })).toBeNull();
 
-    fireEvent.click(approveBtn);
+    fireEvent.click(keepBtn);
     expect(onApprove).toHaveBeenCalledWith('E1');
 
-    fireEvent.click(declineBtn);
+    fireEvent.click(rejectBtn);
     expect(onDecline).toHaveBeenCalledWith('E1');
 
     fireEvent.click(useBtn);
@@ -106,8 +106,8 @@ describe('EventTrailPanel', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: /^approve$/i }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: /^decline$/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /^keep$/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /reject occurrence/i }).disabled).toBe(true);
     const clearBtn = screen.getByRole('button', { name: /clear anchor/i });
     expect(clearBtn).toBeTruthy();
     fireEvent.click(clearBtn);
@@ -125,10 +125,56 @@ describe('EventTrailPanel', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: /^approve$/i }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: /^decline$/i }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: /^use$/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /^keep$/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /reject occurrence/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /use \(manual frame\)/i }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: /^submit$/i }).disabled).toBe(true);
+  });
+
+  test('reject occurrence submits mode id', () => {
+    const onRejectMode = jest.fn();
+    const propsWithFocusedMode = {
+      events: mockEvents,
+      state: makeState(),
+      selectedEventId: 'E2',
+      focusedModeId: 'mode_current',
+      onRejectMode,
+    };
+    render(<EventTrailPanel {...propsWithFocusedMode} />);
+    const rejectBtn = screen.getByRole('button', { name: /reject occurrence/i });
+    fireEvent.click(rejectBtn);
+    expect(onRejectMode).toHaveBeenCalledWith('E2', 'mode_current');
+  });
+
+  test('renders HypothesisPathPreview and commits alternative with onUseAlternative', () => {
+    const onUseAlternative = jest.fn();
+    const onClearPreview = jest.fn();
+    const previewAlt = {
+      alternative_id: 'alt_99',
+      event_id: 'E2',
+      path: [
+        { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 1000 },
+        { event_id: 'E2', frame_id: 'f2_new', frame_idx: 25, timestamp_ms: 2500 },
+        { event_id: 'E3', frame_id: 'f3_new', frame_idx: 35, timestamp_ms: 3500 },
+      ],
+    };
+    render(
+      <EventTrailPanel
+        events={mockEvents}
+        state={makeState()}
+        selectedEventId="E2"
+        previewAlternative={previewAlt}
+        onUseAlternative={onUseAlternative}
+        onClearPreview={onClearPreview}
+      />
+    );
+
+    expect(screen.getByTestId('hypothesis-path-preview')).toBeInTheDocument();
+    expect(screen.getByTestId('adjusted-event')).toHaveTextContent(/adjusted to maintain order/i);
+
+    const useAltBtns = screen.getAllByRole('button', { name: /use this occurrence/i });
+    fireEvent.click(useAltBtns[0]);
+    expect(onUseAlternative).toHaveBeenCalledWith('E2', 'alt_99');
   });
 
   test('Step 3: renders diff transitions and exhaustion messaging', () => {

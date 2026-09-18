@@ -328,7 +328,7 @@ test('Step 2: renders EventTrailPanel when state exists; selecting E2 + explore 
   });
   fireEvent.loadedMetadata(video);
 
-  expect(screen.getByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+  expect(screen.getByRole('region', { name: /hypothesis explorer|eventtrail exploration/i })).toBeTruthy();
   // Select E2
   fireEvent.click(screen.getByTestId('event-rail-item-E2'));
   expect(screen.getAllByText('e2').length).toBeGreaterThanOrEqual(1);
@@ -402,7 +402,7 @@ test('Step 3: auto-seeks only on successful Decline replacement of selected even
     };
   });
 
-  const declineBtn = screen.getByRole('button', { name: /^decline$/i });
+  const declineBtn = screen.getByRole('button', { name: /reject occurrence|^decline$/i });
   fireEvent.click(declineBtn);
   expect(actMock).toHaveBeenCalledWith({ type: 'decline', event_id: 'E2' });
 
@@ -423,35 +423,14 @@ test('Step 3: auto-seeks only on successful Decline replacement of selected even
   expect(currentTime).toBe(9.5);
 });
 
-test('Step 4: Use resolves canonical frame at player time and acts on EventTrail', async () => {
-  resolveFrameAtTimestamp.mockResolvedValueOnce({
-    frame_id: 'f12',
-    video_id: 'L21_V001',
-    requested_timestamp_ms: 12345,
-    frame_idx: 300,
-    timestamp_ms: 12000,
-    metadata: {},
-  });
-
+test('Step 4: Use current video timestamp replaces canonical candidate and sets submission_selection', async () => {
   const actMock = jest.fn();
-  const state = {
-    session_id: 'ses_1',
-    result_id: 'r_1',
+  resolveFrameAtTimestamp.mockResolvedValueOnce({
     video_id: 'L21_V001',
-    kis_revision: 1,
-    trail_revision: 1,
-    status: 'active',
-    path: [
-      { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
-      { event_id: 'E2', frame_id: 'f2', frame_idx: 20, timestamp_ms: 7000 },
-    ],
-    last_valid_path: null,
-    approved_event_ids: [],
-    rejected_counts: {},
-    window: null,
-    submission_selection: null,
-    transition: null,
-  };
+    frame_id: 'f12',
+    frame_idx: 120,
+    timestamp_ms: 12345,
+  });
 
   render(
     <ImageModal
@@ -459,11 +438,28 @@ test('Step 4: Use resolves canonical frame at player time and acts on EventTrail
       onClose={jest.fn()}
       eventTrail={{
         context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
-        state,
+        state: {
+          session_id: 'ses_1',
+          result_id: 'r_1',
+          video_id: 'L21_V001',
+          kis_revision: 1,
+          trail_revision: 0,
+          status: 'active',
+          path: [
+            { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
+            { event_id: 'E2', frame_id: 'f2', frame_idx: 20, timestamp_ms: 7000 },
+          ],
+          last_valid_path: null,
+          approved_event_ids: [],
+          rejected_counts: {},
+          window: null,
+          submission_selection: null,
+          transition: null,
+        },
         pending: false,
         act: actMock,
       }}
-    />,
+    />
   );
 
   const video = await screen.findByLabelText('Video for L21_V001');
@@ -481,7 +477,7 @@ test('Step 4: Use resolves canonical frame at player time and acts on EventTrail
   fireEvent.click(screen.getByTestId('event-rail-item-E2'));
 
   // Click Use
-  const useBtn = screen.getByRole('button', { name: /^use$/i });
+  const useBtn = screen.getByRole('button', { name: /use \(manual frame\)|^use$/i });
   fireEvent.click(useBtn);
 
   await waitFor(() => {

@@ -76,6 +76,7 @@ test('posts revisioned KIS search request with base_intent and operation to /api
         'X-VBS-User-ID': 'team-alpha',
       }),
       body: JSON.stringify({
+        query_hypothesis_session_id: null,
         base_intent: null,
         expected_revision: 0,
         operation,

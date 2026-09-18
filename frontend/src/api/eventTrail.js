@@ -51,6 +51,17 @@ export const getEventTrail = async (sessionId, { signal } = {}) => {
   return validateTrailState(data);
 };
 
+export const getEventTrailAlternatives = async (
+  sessionId,
+  { eventId, expectedTrailRevision, signal } = {},
+) => {
+  const query = `event_id=${encodeURIComponent(eventId)}&expected_trail_revision=${encodeURIComponent(expectedTrailRevision)}`;
+  return requestJson(
+    `/api/v1/event-trail/${encodeURIComponent(sessionId)}/alternatives?${query}`,
+    { method: 'GET', signal },
+  );
+};
+
 export const actOnEventTrail = async (
   sessionId,
   { expectedTrailRevision, action },
