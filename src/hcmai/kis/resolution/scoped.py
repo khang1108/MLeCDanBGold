@@ -11,7 +11,7 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from hcmai.inference.llm import LLMClient
+from hcmai.inference.clients.llm import LLMClient
 from hcmai.kis.models import (
     EventId,
     KISEntityBinding,

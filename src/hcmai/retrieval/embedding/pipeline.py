@@ -75,7 +75,7 @@ class EmbeddingService:
         source: str = "visual",
     ) -> TextEmbeddingAdapter:
         """Create a remote text adapter for evidence or visual queries."""
-        from hcmai.inference.embeddings import EmbeddingClient
+        from hcmai.inference.clients.embeddings import EmbeddingClient
         from hcmai.retrieval.embedding.adapters.remote import (
             RemoteEmbeddingAdapter,
         )

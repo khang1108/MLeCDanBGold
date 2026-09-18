@@ -8,8 +8,7 @@ from typing import Protocol, Sequence
 import numpy as np
 from PIL import Image
 
-from hcmai.common.config import EncoderConfig
-from hcmai.inference.embeddings import EmbeddingClient, TextEmbeddingBatch
+from hcmai.inference.clients.embeddings import EmbeddingClient, TextEmbeddingBatch
 from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse
 from hcmai.retrieval.embedding.models.stats import EncodingStats
 

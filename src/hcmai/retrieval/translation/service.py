@@ -11,7 +11,7 @@ from collections.abc import Sequence
 
 from hcmai.common.config import EventTranslationConfig
 from hcmai.inference.errors import InferenceResponseError
-from hcmai.inference.llm import LLMClient
+from hcmai.inference.clients.llm import LLMClient
 from hcmai.retrieval.translation.cache import EventTranslationCache, translation_cache_key
 from hcmai.retrieval.translation.models import LiteralTranslation
 from hcmai.retrieval.translation.prompts import translation_messages

@@ -14,9 +14,9 @@ from hcmai.inference.errors import (
     InferenceResponseError,
     InferenceUnavailableError,
 )
-from hcmai.inference.embeddings import EmbeddingClient
+from hcmai.inference.clients.embeddings import EmbeddingClient
 from hcmai.inference.http import HttpTransport
-from hcmai.inference.llm import LLMClient
+from hcmai.inference.clients.llm import LLMClient
 
 
 @dataclass

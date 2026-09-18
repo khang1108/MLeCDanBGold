@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import numpy as np
 
 from hcmai.common.config import EncoderConfig
-from hcmai.inference.embeddings import TextEmbeddingBatch
+from hcmai.inference.clients.embeddings import TextEmbeddingBatch
 from hcmai.retrieval.embedding.adapters.remote import RemoteEmbeddingAdapter
 from hcmai.retrieval.embedding.models.stats import EncodingStats
 

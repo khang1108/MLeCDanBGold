@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from hcmai.inference.llm import LLMClient
+from hcmai.inference.clients.llm import LLMClient
 from hcmai.kis.models import (
     KISEvent,
     KISInitialResolution,

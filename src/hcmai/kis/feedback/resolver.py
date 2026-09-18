@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from hcmai.inference.llm import LLMClient
+from hcmai.inference.clients.llm import LLMClient
 from hcmai.kis.feedback.models import (
     ClarifyAction,
     FeedbackAction,

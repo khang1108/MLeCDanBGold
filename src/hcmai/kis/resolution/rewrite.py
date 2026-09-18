@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from hcmai.inference.llm import LLMClient
+from hcmai.inference.clients.llm import LLMClient
 from hcmai.kis.models import (
     EventId,
     KISEntity,

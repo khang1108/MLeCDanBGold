@@ -5,8 +5,9 @@ from .config import (
     load_embedding_endpoint,
     load_llm_endpoint,
 )
-from .embeddings import (
+from .clients import (
     EmbeddingClient,
+    LLMClient,
     TextEmbeddingBatch,
 )
 from .errors import (
@@ -16,9 +17,6 @@ from .errors import (
     InferenceUnavailableError,
 )
 from .http import HttpTransport
-from .llm import (
-    LLMClient,
-)
 
 __all__ = [
     "EmbeddingClient",

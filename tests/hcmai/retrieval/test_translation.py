@@ -7,7 +7,7 @@ import pytest
 from hcmai.common.config import EventTranslationConfig
 from hcmai.inference.config import ModelEndpointConfig
 from hcmai.inference.errors import InferenceAuthError, InferenceUnavailableError
-from hcmai.inference.llm import LLMClient
+from hcmai.inference.clients.llm import LLMClient
 from hcmai.retrieval.translation import EventTranslationError, EventTranslator
 
 
