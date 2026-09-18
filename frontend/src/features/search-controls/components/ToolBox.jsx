@@ -1,5 +1,6 @@
-import React, { useEffect, useId, useMemo, useState } from "react";
+import React, { useEffect, useId, useState } from "react";
 import { useVbsSession } from "../../vbs/contexts/VbsSessionContext";
+import VbsTaskSelector from "../../vbs/components/VbsTaskSelector";
 import ManualVideoOpener from "./ManualVideoOpener";
 const TOP_K_MIN = 1;
 const NOOP = () => {};
@@ -43,43 +44,8 @@ const ToolBox = ({
 
   const topKInputId = useId();
   const datasetSelectId = useId();
-  const taskSelectId = useId();
   const [topKText, setTopKText] = useState(String(topK));
   const [activeDataset, setActiveDataset] = useState('aic');
-
-  const availableTasks = useMemo(() => {
-    const list = [];
-    const evaluations = propEvaluations ?? vbsSession.evaluations;
-    if (Array.isArray(evaluations)) {
-      evaluations.forEach((ev) => {
-        if (Array.isArray(ev.taskTemplates)) {
-          ev.taskTemplates.forEach((t) => {
-            list.push({
-              evaluationId: ev.id,
-              evaluationName: ev.name,
-              taskName: t.name,
-              taskGroup: t.taskGroup,
-              taskType: t.taskType,
-              duration: t.duration,
-            });
-          });
-        }
-      });
-    }
-    return list;
-  }, [propEvaluations, vbsSession.evaluations]);
-
-  const selectedKey = selectedTask
-    ? `${selectedTask.evaluationId}:${selectedTask.taskName}`
-    : '';
-
-  const handleTaskChange = (e) => {
-    const val = e.target.value;
-    const match = availableTasks.find((t) => `${t.evaluationId}:${t.taskName}` === val);
-    if (match) {
-      setSelectedTask(match);
-    }
-  };
 
   useEffect(() => {
     setTopKText(String(topK));
@@ -234,34 +200,12 @@ const ToolBox = ({
       )}
 
       <div className="toolbox-section toolbox-task-section">
-        <div className="toolbox-label-row toolbox-task-row">
-          <label htmlFor={taskSelectId} className="toolbox-label">
-            Task
-          </label>
-          <select
-            id={taskSelectId}
-            className="toolbox-task-select"
-            value={selectedKey}
-            onChange={handleTaskChange}
-            disabled={!connectedUserId || availableTasks.length === 0}
-            aria-label="Select evaluation task"
-          >
-            {!connectedUserId ? (
-              <option value="">Connect VBS to load tasks</option>
-            ) : availableTasks.length === 0 ? (
-              <option value="">No tasks available</option>
-            ) : (
-              availableTasks.map((t) => (
-                <option
-                  key={`${t.evaluationId}:${t.taskName}`}
-                  value={`${t.evaluationId}:${t.taskName}`}
-                >
-                  {t.taskName}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
+        <VbsTaskSelector
+          connectedUserId={connectedUserId}
+          evaluations={propEvaluations ?? vbsSession.evaluations}
+          selectedTask={selectedTask}
+          onRequestChange={setSelectedTask}
+        />
       </div>
 
       <ManualVideoOpener onOpenFrame={onOpenFrame} />

@@ -3,10 +3,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppHeader } from './features/header';
 import { ImageModal } from './features/frames';
 import { SearchWorkspace } from './features/search';
+import { AvsWorkspace } from './features/avs';
 import { useHealthCheck } from './features/health';
 import { ApiDocsModal } from './features/docs';
 import { useEventTrail } from './features/event-trail';
 import { VbsSessionProvider, useVbsSession } from './features/vbs/contexts/VbsSessionContext';
+import { taskFamily } from './features/vbs/taskFamily';
 import { SubmissionDialog, useDirectSubmission } from './features/submission';
 
 const eventTrailSelectionKey = (selection) => {
@@ -14,7 +16,14 @@ const eventTrailSelectionKey = (selection) => {
   return c ? JSON.stringify([c.snapshotId, c.resultId, c.kisRevision]) : null;
 };
 
-const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTask }) => {
+const AppShell = ({
+  connectedUserId,
+  draftUserId,
+  invalidateSession,
+  selectedTask,
+  evaluations,
+  setSelectedTask,
+}) => {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
   const [modalQuery, setModalQuery] = useState('');
@@ -32,6 +41,9 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
     selectedTask,
     onSessionRejected: invalidateSession,
   });
+
+  const activeTaskFamily = taskFamily(selectedTask);
+  const isAvsTask = activeTaskFamily === 'AVS';
 
   useEffect(() => {
     const session = eventTrail.session;
@@ -118,20 +130,31 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
 
       <main className="app-container adhoc-app">
         <div className="workspace-panel">
-          <SearchWorkspace
-            isActive={true}
-            onOpenSubmission={connectedUserId ? submission.open : undefined}
-            isSubmissionOpening={submission.opening}
-            userId={connectedUserId}
-            topK={topK}
-            setTopK={setTopK}
-            onFrameClick={handleQueryFrameClick}
-            onQueryChange={setActiveQuery}
-            queryInputRef={queryInputRef}
-            onEventTrailInvalidated={handleEventTrailInvalidated}
-            eventTrailAnnotations={eventTrailAnnotations}
-            eventTrail={workspaceEventTrail}
-          />
+          {isAvsTask ? (
+            <AvsWorkspace
+              connectedUserId={connectedUserId}
+              evaluations={evaluations}
+              selectedTask={selectedTask}
+              setSelectedTask={setSelectedTask}
+              onFrameClick={handleQueryFrameClick}
+              onSessionRejected={invalidateSession}
+            />
+          ) : (
+            <SearchWorkspace
+              isActive={true}
+              onOpenSubmission={connectedUserId ? submission.open : undefined}
+              isSubmissionOpening={submission.opening}
+              userId={connectedUserId}
+              topK={topK}
+              setTopK={setTopK}
+              onFrameClick={handleQueryFrameClick}
+              onQueryChange={setActiveQuery}
+              queryInputRef={queryInputRef}
+              onEventTrailInvalidated={handleEventTrailInvalidated}
+              eventTrailAnnotations={eventTrailAnnotations}
+              eventTrail={workspaceEventTrail}
+            />
+          )}
         </div>
       </main>
 
@@ -194,13 +217,24 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
 };
 
 const AppContent = () => {
-  const { connectedUserId, draftUserId, invalidateSession, selectedTask } = useVbsSession();
-  return <AppShell
-    connectedUserId={connectedUserId}
-    draftUserId={draftUserId}
-    invalidateSession={invalidateSession}
-    selectedTask={selectedTask}
-  />;
+  const {
+    connectedUserId,
+    draftUserId,
+    invalidateSession,
+    selectedTask,
+    evaluations,
+    setSelectedTask,
+  } = useVbsSession();
+  return (
+    <AppShell
+      connectedUserId={connectedUserId}
+      draftUserId={draftUserId}
+      invalidateSession={invalidateSession}
+      selectedTask={selectedTask}
+      evaluations={evaluations}
+      setSelectedTask={setSelectedTask}
+    />
+  );
 };
 
 const App = () => <VbsSessionProvider><AppContent /></VbsSessionProvider>;
