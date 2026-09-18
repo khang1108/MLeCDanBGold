@@ -113,34 +113,42 @@ def build_retrieval_plan(
     intent: Any,
     overrides: dict[str, Any] | None = None,
     *,
+    dense_text_by_event: dict[str, str] | None = None,
     use_dense: bool = True,
     use_bm25: bool = True,
 ) -> KISRetrievalPlan:
     """Build an immutable retrieval plan from intent and optional retrieval overrides.
 
     Canonical text always originates from the intent event. Dense and BM25 views
-    incorporate overrides when provided.
+    incorporate overrides when provided, and dense_text_by_event supplies translation
+    projection when no event-level dense override is present.
     """
     rows: list[KISRetrievalEvent] = []
     for event in intent.events:
         override = (overrides or {}).get(event.id)
+        override_dense = (
+            getattr(override, "dense_text", None)
+            if override is not None and not isinstance(override, dict)
+            else (override or {}).get("dense_text") if isinstance(override, dict) else None
+        )
+        override_bm25 = (
+            getattr(override, "bm25_text", None)
+            if override is not None and not isinstance(override, dict)
+            else (override or {}).get("bm25_text") if isinstance(override, dict) else None
+        )
+
         dense_text: str | None = None
         if use_dense:
-            if override is not None and getattr(override, "dense_text", None) is not None:
-                dense_text = override.dense_text
-            elif isinstance(override, dict) and override.get("dense_text") is not None:
-                dense_text = override["dense_text"]
+            if override_dense is not None:
+                dense_text = override_dense
+            elif dense_text_by_event is not None and event.id in dense_text_by_event:
+                dense_text = dense_text_by_event[event.id]
             else:
                 dense_text = event.text
 
         bm25_text: str | None = None
         if use_bm25:
-            if override is not None and getattr(override, "bm25_text", None) is not None:
-                bm25_text = override.bm25_text
-            elif isinstance(override, dict) and override.get("bm25_text") is not None:
-                bm25_text = override["bm25_text"]
-            else:
-                bm25_text = event.text
+            bm25_text = override_bm25 if override_bm25 is not None else event.text
 
         rows.append(
             KISRetrievalEvent(

@@ -77,6 +77,7 @@ from hcmai.kis.resolution import (
     canonical_query_text,
 )
 from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan, build_retrieval_plan
+from hcmai.retrieval.translation import EventTranslator
 
 if TYPE_CHECKING:
     from hcmai.kis.assets import KISImageAssetStore
@@ -120,6 +121,7 @@ class SearchService:
         feedback_resolver: Any | None = None,
         kis_image_assets: KISImageAssetStore | None = None,
         event_trail_settings: EventTrailSettings | None = None,
+        event_translator: EventTranslator | None = None,
         *,
         retrieval: RetrievalService | None = None,
         temporal_evidence: TemporalEvidenceScorer | None = None,
@@ -141,6 +143,7 @@ class SearchService:
         self.global_rewriter = global_rewriter
         self.feedback_resolver = feedback_resolver
         self.kis_image_assets = kis_image_assets
+        self.event_translator = event_translator
         self.remote_retrieval = remote_retrieval
         self.event_trail_settings = event_trail_settings or EventTrailSettings.from_env()
         self.event_trail_snapshots = EvidenceSnapshotStore(
@@ -634,6 +637,15 @@ class SearchService:
 
         return snapshot_id, snapshot_ms, warnings
 
+    def _dense_projection(self, intent: KISIntent) -> dict[str, str] | None:
+        text_events = [event for event in intent.events if event.text is not None]
+        if not text_events or intent.language == "en" or self.event_translator is None:
+            return None
+        translated = self.event_translator.translate(
+            [event.text for event in text_events], intent.language
+        )
+        return {event.id: text for event, text in zip(text_events, translated, strict=True)}
+
     def search_kis(self, request: KISSearchRequest) -> KISSearchResponse:
         """Execute a stateless semantic KIS search."""
         intent, summary, intent_ms = self._resolve_operation(request)
@@ -643,6 +655,7 @@ class SearchService:
         plan = build_retrieval_plan(
             intent,
             overrides=None,
+            dense_text_by_event=self._dense_projection(intent),
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
         )

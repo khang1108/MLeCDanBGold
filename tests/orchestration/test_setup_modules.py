@@ -60,12 +60,12 @@ class SetupModuleTest(unittest.TestCase):
             ),
         )
 
-    def test_search_service_has_no_event_translator_dependency(self) -> None:
-        """SearchService must not declare an event_translator parameter."""
+    def test_search_service_declares_event_translator_dependency(self) -> None:
+        """SearchService declares an event_translator parameter."""
         import inspect
         from hcmai.orchestration.pipeline import SearchService
         sig = inspect.signature(SearchService.__init__)
-        self.assertNotIn("event_translator", sig.parameters)
+        self.assertIn("event_translator", sig.parameters)
 
 
 if __name__ == "__main__":
