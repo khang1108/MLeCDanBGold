@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from hcmai.event_trail.decoder import ConstraintSnapshot
-from hcmai.orchestration.workflows.temporal_search import DecoderConfigSnapshot
+from hcmai.orchestration.workflows.search.temporal import DecoderConfigSnapshot
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.constraints import Interval
 from hcmai.temporal.dp import AlignedPath

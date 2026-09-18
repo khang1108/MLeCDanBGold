@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from hcmai.api.contracts import ImageSearchResponse, SearchLatency, SearchResult, SearchResultMetadata
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
     TemporalSearchArtifact,
     TemporalSearchResult,

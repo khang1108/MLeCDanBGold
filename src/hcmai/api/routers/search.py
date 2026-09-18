@@ -20,7 +20,7 @@ from hcmai.api.result_logging import record_dres_result_log
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.orchestration.utils.errors import SearchServiceGatewayError
-from hcmai.orchestration.workflows.image_search import (
+from hcmai.orchestration.workflows.search.image import (
     ImageQueryTooLargeError,
     InvalidImageQueryError,
 )

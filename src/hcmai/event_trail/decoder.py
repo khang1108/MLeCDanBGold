@@ -13,7 +13,7 @@ from typing import Literal
 
 import numpy as np
 
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
     TemporalSearchService,
 )

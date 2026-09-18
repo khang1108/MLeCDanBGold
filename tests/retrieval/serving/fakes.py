@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import numpy as np
 
 from hcmai.corpus.models import Frame
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
     SelectedVideoScoreResult,
     TemporalSearchArtifact,

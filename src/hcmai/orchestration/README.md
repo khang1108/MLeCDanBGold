@@ -7,7 +7,11 @@ retrieval, alignment, or materialization internals themselves.
 ```text
 orchestration/
 ├── pipeline.py              # Explicit SearchService public facade
-├── workflows/               # Thin KIS and TRAKE projections
+├── workflows/               # Task projections and search services
+│   ├── kis.py               # KIS workflow projection
+│   ├── trake.py             # TRAKE workflow projection
+│   ├── avs.py               # AVS coverage selection
+│   └── search/              # Search services (avs, image, temporal)
 ├── setup/                   # Setup subpackage: corpus, retrieval, and composition root
 │   ├── __init__.py          # Single application composition root
 │   ├── corpus.py            # Canonical frames and optional evidence artifacts loader

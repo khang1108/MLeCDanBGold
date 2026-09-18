@@ -19,7 +19,7 @@ from hcmai.event_trail.service import EventTrailService
 from hcmai.kis.models import KISEvent, KISIntent
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.workflows.kis import KISSearchExecution
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
     TemporalSearchArtifact,
     TemporalSearchResult,

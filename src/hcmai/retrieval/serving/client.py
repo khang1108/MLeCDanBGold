@@ -12,7 +12,7 @@ import httpx
 
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
     SelectedVideoScoreResult,
     TemporalSearchArtifact,

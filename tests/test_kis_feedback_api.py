@@ -81,7 +81,7 @@ def mock_feedback_environment():
         timestamps_ms=np.array([10000, 20000], dtype=np.int64),
         scores=np.array([[0.8, 0.9]], dtype=np.float32),
     )
-    from hcmai.orchestration.workflows.temporal_search import DecoderConfigSnapshot
+    from hcmai.orchestration.workflows.search.temporal import DecoderConfigSnapshot
 
     snap = EvidenceSnapshot(
         snapshot_id="snap_123",

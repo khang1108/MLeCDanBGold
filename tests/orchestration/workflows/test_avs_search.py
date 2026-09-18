@@ -1,7 +1,7 @@
 from hcmai.api.contracts.avs import AvsSearchRequest
 from hcmai.common.config import AvsConfig
 from hcmai.corpus.models import Frame
-from hcmai.orchestration.workflows.avs_search import AvsSearchService
+from hcmai.orchestration.workflows.search.avs import AvsSearchService
 from hcmai.retrieval.serving.client import RemoteTextCandidate, RemoteTextSearchResult
 
 

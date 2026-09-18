@@ -3,7 +3,7 @@
 import unittest
 
 from hcmai.orchestration.pipeline import SearchService
-from hcmai.orchestration.workflows.image_search import ImageSearchService
+from hcmai.orchestration.workflows.search.image import ImageSearchService
 
 
 class _RetrievalThatTracksInspection:

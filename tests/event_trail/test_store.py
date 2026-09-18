@@ -11,7 +11,7 @@ from hcmai.event_trail.models import (
     freeze_video_scores,
 )
 from hcmai.event_trail.store import EvidenceSnapshotStore
-from hcmai.orchestration.workflows.temporal_search import DecoderConfigSnapshot
+from hcmai.orchestration.workflows.search.temporal import DecoderConfigSnapshot
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 
 

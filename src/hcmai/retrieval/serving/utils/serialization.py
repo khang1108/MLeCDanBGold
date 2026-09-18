@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from hcmai.corpus import Corpus
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
     TemporalSearchArtifact,
     TemporalSearchResult,

@@ -23,8 +23,8 @@ from hcmai.orchestration.setup.retrieval import (
     select_visual_retriever,
 )
 
-from hcmai.orchestration.workflows.image_search import ImageSearchService
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.image import ImageSearchService
+from hcmai.orchestration.workflows.search.temporal import (
     SelectedVideoScoreResult,
     TemporalSearchArtifact,
     TemporalSearchResult,

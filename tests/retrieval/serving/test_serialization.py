@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
     TemporalSearchArtifact,
     TemporalSearchResult,

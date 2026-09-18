@@ -44,15 +44,15 @@ from hcmai.orchestration.utils.errors import (
 )
 from hcmai.orchestration.utils.health import build_health_report
 from hcmai.orchestration.utils.materializer import SearchMaterializer
-from hcmai.orchestration.workflows.image_search import (
+from hcmai.orchestration.workflows.search.image import (
     ImageQueryTooLargeError,
     ImageSearchService,
 )
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     TemporalSearchGateway,
     TemporalSearchService,
 )
-from hcmai.orchestration.workflows.avs_search import AvsSearchService
+from hcmai.orchestration.workflows.search.avs import AvsSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer

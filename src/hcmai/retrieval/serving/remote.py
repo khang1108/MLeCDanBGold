@@ -16,11 +16,11 @@ from hcmai.api.contracts import ImageSearchResponse, SearchLatency, SearchResult
 from hcmai.common.config import AlignmentConfig
 from hcmai.corpus import Corpus
 from hcmai.orchestration.utils.materializer import SearchMaterializer
-from hcmai.orchestration.workflows.image_search import (
+from hcmai.orchestration.workflows.search.image import (
     ImageQueryTooLargeError,
     InvalidImageQueryError,
 )
-from hcmai.orchestration.workflows.temporal_search import (
+from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
     SelectedVideoScoreResult,
     TemporalSearchArtifact,

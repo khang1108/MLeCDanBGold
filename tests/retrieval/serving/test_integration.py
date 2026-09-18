@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from hcmai.orchestration.workflows.temporal_search import AlignedPath
+from hcmai.orchestration.workflows.search.temporal import AlignedPath
 from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan
 from hcmai.retrieval.serving.client import RetrievalHttpClient
 from hcmai.retrieval.serving.remote import RemoteTemporalSearchService
