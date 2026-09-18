@@ -576,4 +576,53 @@
   background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)) !important;
 }
 
+/* Manual Video Opener in ToolBox */
+.toolbox-video-opener-section {
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-hairline);
+  margin-top: var(--spacing-sm);
+}
+
+.toolbox-video-opener-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolbox-video-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toolbox-field-caption {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.toolbox-video-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  background: var(--color-surface);
+  box-sizing: border-box;
+}
+
+.toolbox-video-submit-btn {
+  margin-top: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--rounded-md);
+}
+
+.toolbox-form-error {
+  color: #dc2626;
+  font-size: 11px;
+  margin: 2px 0 0;
+}
+
 

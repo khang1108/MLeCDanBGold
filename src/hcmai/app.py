@@ -17,12 +17,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from hcmai.api.history import WorkspaceStore
 from hcmai.api.routers import (
     create_event_trail_router,
     create_feedback_router,
     create_frames_router,
-    create_history_router,
     create_kis_router,
     create_search_router,
     create_system_router,
@@ -58,11 +56,10 @@ def _configure_backend_logging() -> None:
 
 def create_app(
     search_service: SearchService | None = None,
-    workspace_store: WorkspaceStore | None = None,
     video_catalog: VideoCatalog | None = None,
     vbs_service: DresService | None = None,
 ) -> FastAPI:
-    """Create the API with optional injected search, workspace, and video stores."""
+    """Create the API with optional injected search and video stores."""
 
     # The repository .env is the local runtime authority. Load it before any
     # logging, CORS, workspace, video, or retrieval setting is resolved.
@@ -70,7 +67,6 @@ def create_app(
 
     service_container: dict[str, Any] = {
         "service": search_service,
-        "workspace_store": workspace_store,
         "video_catalog": video_catalog,
         "vbs_service": vbs_service,
         "video_cache_control": "public, max-age=3600",
@@ -96,13 +92,6 @@ def create_app(
                     "Local video catalog loaded videos=%d",
                     len(service_container["video_catalog"]),
                 )
-        if service_container["workspace_store"] is None:
-            workspace_path = os.getenv("HCMAI_WORKSPACE_DB", "runtime/workspace.sqlite3")
-            try:
-                service_container["workspace_store"] = WorkspaceStore(workspace_path)
-            except Exception:
-                logger.exception("Workspace database initialization failed")
-                raise
         if service_container["vbs_service"] is None and any(
             key in os.environ
             for key in (
@@ -200,7 +189,6 @@ def create_app(
     app.include_router(create_search_router(service_container))
     app.include_router(create_trake_router(service_container))
     app.include_router(create_frames_router(service_container))
-    app.include_router(create_history_router(service_container))
     app.include_router(create_vbs_router(service_container))
     app.include_router(create_video_router(service_container))
     app.include_router(create_event_trail_router(service_container))

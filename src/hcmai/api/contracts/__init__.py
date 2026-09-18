@@ -3,12 +3,6 @@
 
 from .frames import CatalogTranscriptSegment, FrameCatalogEntry, FrameInspectionResponse
 from .filter import FilterMetadataFilters, FilterRequest, FilterResponse, FilterResult
-from .history import (
-    QueryHistoryCreate,
-    QueryHistoryList,
-    QueryHistoryRecord,
-    QueryHistoryViewedFrameUpdate,
-)
 from .kis import (
     EventPatch,
     GlobalRewriteOperation,
@@ -78,10 +72,6 @@ __all__ = [
     "KISSearchResponse",
     "PatchEventsOperation",
     "SearchOnlyOperation",
-    "QueryHistoryCreate",
-    "QueryHistoryList",
-    "QueryHistoryRecord",
-    "QueryHistoryViewedFrameUpdate",
     "SearchLatency",
     "SearchResult",
     "SearchResultMetadata",

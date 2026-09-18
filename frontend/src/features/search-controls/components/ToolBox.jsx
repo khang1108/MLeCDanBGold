@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useMemo, useState } from "react";
 import { useVbsSession } from "../../vbs/contexts/VbsSessionContext";
+import ManualVideoOpener from "./ManualVideoOpener";
 const TOP_K_MIN = 1;
 const NOOP = () => {};
 
@@ -33,6 +34,7 @@ const ToolBox = ({
   connectedUserId: propConnectedUserId,
   gridSize = 'normal',
   setGridSize = NOOP,
+  onOpenFrame,
 }) => {
   const vbsSession = useVbsSession();
   const connectedUserId = propConnectedUserId ?? vbsSession.connectedUserId ?? '';
@@ -261,6 +263,8 @@ const ToolBox = ({
           </select>
         </div>
       </div>
+
+      <ManualVideoOpener onOpenFrame={onOpenFrame} />
       </aside>
     </div>
   );

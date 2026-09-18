@@ -7,8 +7,6 @@ export const AppHeader = ({
   healthData,
   onOpenDocs,
   userIdInputRef,
-  activePage,
-  onSelectPage,
 }) => (
   <header className="app-header">
     <div className="app-title-group">
@@ -26,23 +24,6 @@ export const AppHeader = ({
     </div>
     <div className="app-header-tools">
       <VbsUserControl inputRef={userIdInputRef} />
-      <nav className="workspace-nav" aria-label="Workspace selection">
-        {[
-          ['query', 'Query', 'Query (Win+1)'],
-          ['workspace', 'Workspace', 'Workspace (Win+2)'],
-        ].map(([page, label, title]) => (
-          <button
-            key={page}
-            type="button"
-            className={`workspace-nav-btn ${activePage === page ? 'active' : ''}`}
-            onClick={() => onSelectPage(page)}
-            aria-pressed={activePage === page}
-            title={title}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
     </div>
   </header>
 );
