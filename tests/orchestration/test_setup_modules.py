@@ -6,8 +6,8 @@ import unittest
 from unittest.mock import Mock
 
 from hcmai.common.config import AppConfig, EventTranslationConfig
-from hcmai.orchestration.corpus_setup import load_corpus
-from hcmai.orchestration.retrieval_setup import select_visual_retriever
+from hcmai.orchestration.setup.corpus import load_corpus
+from hcmai.orchestration.setup.retrieval import select_visual_retriever
 from hcmai.retrieval.models import RetrievalSource
 
 

@@ -24,7 +24,7 @@ def test_REQ_001_backend_setup_never_loads_local_retrieval(monkeypatch) -> None:
         lambda *args, **kwargs: fake_corpus,
     )
     monkeypatch.setattr(
-        "hcmai.orchestration.retrieval_setup.load_retrieval",
+        "hcmai.orchestration.setup.retrieval.load_retrieval",
         lambda *args, **kwargs: pytest.fail("FastAPI attempted local index loading"),
     )
     monkeypatch.setattr(RetrievalHttpClient, "probe", lambda self: _unavailable_status())

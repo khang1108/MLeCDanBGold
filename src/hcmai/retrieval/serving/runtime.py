@@ -15,8 +15,8 @@ from hcmai.api.contracts import ImageSearchResponse
 from hcmai.common.environment import load_repository_environment
 from hcmai.common.utils.logging import get_logger
 from hcmai.corpus import Corpus
-from hcmai.orchestration.corpus_setup import load_configured_corpus
-from hcmai.orchestration.retrieval_setup import (
+from hcmai.orchestration.setup.corpus import load_configured_corpus
+from hcmai.orchestration.setup.retrieval import (
     load_image_encoder,
     load_retrieval,
     load_temporal_evidence,

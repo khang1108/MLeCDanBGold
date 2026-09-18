@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from time import monotonic
+from typing import TYPE_CHECKING
 
 from hcmai.common.config import (
     AppConfig,
@@ -23,9 +24,8 @@ from hcmai.kis.feedback.resolver import FeedbackResolver
 from hcmai.kis.resolver import KISIntentResolver
 from hcmai.kis.rewriter import KISGlobalRewriter
 from hcmai.kis.scoped_resolver import KISScopedResolver
-from hcmai.orchestration.corpus_setup import load_configured_corpus, load_corpus
-from hcmai.orchestration.pipeline import SearchService
-from hcmai.orchestration.retrieval_setup import (
+from hcmai.orchestration.setup.corpus import load_configured_corpus, load_corpus
+from hcmai.orchestration.setup.retrieval import (
     load_image_encoder,
     load_retrieval,
     load_temporal_evidence,
@@ -43,11 +43,15 @@ from llm.config import LLMServiceConfig
 # pyrefly: ignore [missing-import]
 from llm.pipeline import LLMService
 
+if TYPE_CHECKING:
+    from hcmai.orchestration.pipeline import SearchService
+
 logger = get_logger(__name__)
 
 
 def load_search_service(messages: list[str]) -> SearchService:
     """Compose the configured online service while retaining startup diagnostics."""
+    from hcmai.orchestration.pipeline import SearchService
     # Re-apply repository values here so stale terminal exports cannot redirect
     # runtime paths before any data or model capability is constructed.
     load_repository_environment()

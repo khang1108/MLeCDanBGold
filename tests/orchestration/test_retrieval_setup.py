@@ -3,7 +3,7 @@
 from unittest.mock import Mock
 import pytest
 
-from hcmai.orchestration.retrieval_setup import _query_encoder
+from hcmai.orchestration.setup.retrieval import _query_encoder
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
 
 

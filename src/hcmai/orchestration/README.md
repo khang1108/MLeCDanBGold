@@ -7,9 +7,11 @@ retrieval, alignment, or materialization internals themselves.
 ```text
 orchestration/
 ├── pipeline.py              # Explicit SearchService public facade
-├── temporal_search.py       # Shared scoring and aligned-path materialization
 ├── workflows/               # Thin KIS and TRAKE projections
-├── setup.py                 # Single application composition root
+├── setup/                   # Setup subpackage: corpus, retrieval, and composition root
+│   ├── __init__.py          # Single application composition root
+│   ├── corpus.py            # Canonical frames and optional evidence artifacts loader
+│   └── retrieval.py         # Online retrieval indexes and temporal evidence loader
 └── materializer.py          # Representative evidence and asset URLs
 ```
 
@@ -43,7 +45,7 @@ KIS handles progressive multimodal event graphs (`KISIntent`) with immutable
 revisions, while TRAKE accepts ordered events directly and returns every ranked
 path independently, including multiple paths from the same video.
 
-`setup.py` loads configuration and artifacts once, constructs the selected
+`setup/` loads configuration and artifacts once, constructs the selected
 services, and injects them into `SearchService`. Request handling does not
 create or modify offline artifacts.
 
