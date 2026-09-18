@@ -199,19 +199,26 @@ const FramesBox = ({
                     <div className="frames-row-track">
                       {frameIds.map((fId, eventIndex) => {
                         const eventLabel = hasMultipleEvents ? `E${eventIndex + 1}` : 'E1';
-                        const trailCand = trailCandidates?.find((c) => c.event_id === eventLabel);
-                        const effectiveFrameId = trailCand?.frame_id || fId;
-                        const effectiveTimestampMs = trailCand?.timestamp_ms ?? (timestampsMs[eventIndex] ?? resultItem.timestamp_ms);
-
-                        const eventFrame = {
-                          ...resultItem,
-                          frame_id: effectiveFrameId,
-                          timestamp_ms: effectiveTimestampMs,
-                        };
 
                         const isApproved = approvedEventIds.includes(eventLabel);
                         const rejectedCount = rejectedCounts[eventLabel] || 0;
-
+                        const timestampMs = timestampsMs[eventIndex] ?? resultItem.timestamp_ms;
+                        const eventItem = events?.[eventIndex];
+                        const eventText = typeof eventItem === 'string'
+                          ? eventItem
+                          : (eventItem?.text || eventItem?.canonical_text || null);
+                          
+                        const eventFrame = {
+                          ...resultItem,
+                          frame_id: fId,
+                          timestamp_ms: timestampMs,
+                          event_index: eventIndex,
+                          eventIndex,
+                          event_label: eventLabel,
+                          eventLabel,
+                          event_text: eventText,
+                          eventText,
+                        };
                         return (
                           <FrameCard
                             key={`${fId}-${eventIndex}`}

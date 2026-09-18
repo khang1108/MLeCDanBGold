@@ -132,6 +132,40 @@ const ImageModal = ({
   const lastActionRef = useRef(null);
   const prevTrailRevRef = useRef(eventTrail?.state?.trail_revision);
 
+  const eventLabel = useMemo(() => {
+    if (selectedEventId) return selectedEventId;
+    return frame.eventLabel || frame.event_label || null;
+  }, [selectedEventId, frame.eventLabel, frame.event_label]);
+
+  const displayQuery = useMemo(() => {
+    if (selectedEventId && effectiveTrailEvents?.length) {
+      const match = effectiveTrailEvents.find(
+        (e) => (typeof e === 'object' && e?.id === selectedEventId)
+      );
+      if (match?.text) return match.text;
+    }
+    if (frame?.eventText) return frame.eventText;
+    if (frame?.event_text) return frame.event_text;
+    if (Number.isInteger(frame?.eventIndex) && events?.[frame.eventIndex]) {
+      const ev = events[frame.eventIndex];
+      return typeof ev === 'string' ? ev : ev?.text || ev?.canonical_text || '';
+    }
+    if (Number.isInteger(frame?.event_index) && events?.[frame.event_index]) {
+      const ev = events[frame.event_index];
+      return typeof ev === 'string' ? ev : ev?.text || ev?.canonical_text || '';
+    }
+    return query || '';
+  }, [
+    selectedEventId,
+    effectiveTrailEvents,
+    frame?.eventText,
+    frame?.event_text,
+    frame?.eventIndex,
+    frame?.event_index,
+    events,
+    query,
+  ]);
+
   useEffect(() => {
     const currentState = eventTrail?.state;
     if (!currentState) {
@@ -357,10 +391,13 @@ const ImageModal = ({
                   </button>
                 </div>
               </div>
-              {query?.trim() && (
+              {displayQuery?.trim() && (
                 <div className="modal-query-context" role="status" aria-label="Current query">
+                  {eventLabel && (
+                    <span className="frame-event-badge">{eventLabel}</span>
+                  )}
                   <span className="query-context-label">Query:</span>
-                  <p className="modal-query-text">{query.trim()}</p>
+                  <p className="modal-query-text">{displayQuery.trim()}</p>
                 </div>
               )}
               {eventTrail?.state ? (

@@ -279,8 +279,10 @@ const SearchWorkspace = ({
       searchSessionId: liveEventTrailContextRef.current.searchSessionId,
     } : null;
 
+    const eventText = frame?.eventText || frame?.event_text;
     onFrameClick?.({
       frame,
+      ...(eventText ? { query: eventText } : {}),
       ...(trailContext ? { eventTrailContext: trailContext } : {}),
     });
   }, [onFrameClick, resultType]);
