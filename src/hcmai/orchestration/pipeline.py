@@ -37,6 +37,8 @@ from hcmai.event_trail.service import EventTrailService
 from hcmai.event_trail.storage import EventTrailSessionStore, EvidenceSnapshotStore
 from hcmai.kis.feedback.service import FeedbackService
 from hcmai.kis.feedback.store import FeedbackSessionStore
+from hcmai.kis.hypothesis.service import QueryHypothesisService
+from hcmai.kis.hypothesis.store import QueryHypothesisStore
 from hcmai.orchestration.utils.errors import (
     InvalidQueryInputError,
     RevisionConflictError,
@@ -149,6 +151,19 @@ class SearchService:
         self.event_trail_snapshots = EvidenceSnapshotStore(
             ttl_seconds=self.event_trail_settings.snapshot_ttl_seconds,
             max_entries=self.event_trail_settings.max_snapshots,
+        )
+        self.query_hypothesis_store = QueryHypothesisStore(
+            ttl_seconds=self.event_trail_settings.session_ttl_seconds,
+            max_entries=self.event_trail_settings.max_sessions,
+        )
+        self.query_hypotheses = (
+            QueryHypothesisService(
+                self.query_hypothesis_store,
+                self.intent_resolver,
+                self._canonical_image_refs,
+            )
+            if self.intent_resolver is not None
+            else None
         )
 
         if image_search is not None:

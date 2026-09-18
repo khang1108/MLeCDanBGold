@@ -5,6 +5,7 @@ from hcmai.api.routers.event_trail import create_event_trail_router
 from hcmai.api.routers.feedback import create_feedback_router
 from hcmai.api.routers.frames import create_frames_router
 from hcmai.api.routers.kis import create_kis_router
+from hcmai.api.routers.query_hypothesis import create_query_hypothesis_router
 from hcmai.api.routers.search import create_search_router
 from hcmai.api.routers.system import create_system_router
 from hcmai.api.routers.trake import create_trake_router
@@ -18,6 +19,7 @@ __all__ = [
     "create_feedback_router",
     "create_frames_router",
     "create_kis_router",
+    "create_query_hypothesis_router",
     "create_search_router",
     "create_system_router",
     "create_trake_router",
