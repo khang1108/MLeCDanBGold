@@ -92,12 +92,19 @@ class ClarifyAction(BaseModel):
     question: str
 
 
+class QueryEditProposalAction(BaseModel):
+    """Propose an action on the query hypothesis without committing directly."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["query_edit_proposal"] = "query_edit_proposal"
+    action: dict[str, Any]
+    explanation: str
+
+
 FeedbackAction = Annotated[
-    EditIntentAction
-    | RestructureAction
+    QueryEditProposalAction
     | RefineRetrievalAction
-    | AnchorAction
-    | RejectCandidateAction
     | RepairEventAction
     | ClarifyAction,
     Field(discriminator="type"),
@@ -117,18 +124,12 @@ class FeedbackResolution(BaseModel):
         if isinstance(data, dict):
             act = data.get("action")
             if isinstance(act, dict) and "type" not in act:
-                if "refinements" in act:
+                if "explanation" in act and "action" in act:
+                    act["type"] = "query_edit_proposal"
+                elif "refinements" in act:
                     act["type"] = "refine_retrieval"
-                elif "replacement_texts" in act:
-                    act["type"] = "edit_intent"
-                elif "new_events" in act:
-                    act["type"] = "restructure"
-                elif "candidate_frame_id" in act:
-                    act["type"] = "reject_candidate"
                 elif "question" in act:
                     act["type"] = "clarify"
-                elif "frame_id" in act:
-                    act["type"] = "anchor"
                 elif "event_id" in act:
                     act["type"] = "repair_event"
         return data
@@ -216,6 +217,7 @@ __all__ = [
     "FeedbackResolution",
     "FeedbackResolveContext",
     "FeedbackSession",
+    "QueryEditProposalAction",
     "RefineRetrievalAction",
     "RejectCandidateAction",
     "RepairEventAction",

@@ -284,20 +284,12 @@ def test_restructure_split_creates_canonical_edges_and_preserves_images():
         ),
     )
 
-    # Must have 3 events E1, E2, E3
-    assert len(state.intent.events) == 3
-    assert [ev.id for ev in state.intent.events] == ["E1", "E2", "E3"]
-    # E1 image preserved
-    assert len(state.intent.events[0].images) == 1
-    assert state.intent.events[0].images[0].asset_id == "asset_123"
-    # Canonical sequential temporal edges
-    assert len(state.intent.temporal_edges) == 2
-    assert state.intent.temporal_edges[0].source == "E1"
-    assert state.intent.temporal_edges[0].target == "E2"
-    assert state.intent.temporal_edges[1].source == "E2"
-    assert state.intent.temporal_edges[1].target == "E3"
-    # Revision bumped
-    assert state.intent.revision == 2
+    # Chat restructure returns proposal without mutating intent
+    assert state.status == "proposal"
+    assert len(state.intent.events) == 2
+    assert state.intent == opened.intent
+    assert state.query_proposal is not None
+    assert state.query_proposal["action"]["type"] == "split"
 
 
 def test_retrieval_error_rollback_preserves_active_state():

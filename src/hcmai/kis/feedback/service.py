@@ -21,6 +21,7 @@ from hcmai.kis.feedback.models import (
     FeedbackChatTurn,
     FeedbackResolveContext,
     FeedbackSession,
+    QueryEditProposalAction,
     RefineRetrievalAction,
     RejectCandidateAction,
     RepairEventAction,
@@ -217,117 +218,88 @@ class FeedbackService:
                 )
                 return commit_feedback_turn(session, request, new_state)
 
-            if action.type == "edit_intent":
-                new_events = []
-                for ev in session.state.intent.events:
-                    if ev.id in action.event_ids and ev.id in action.replacement_texts:
-                        new_events.append(
-                            ev.model_copy(
-                                update={"text": action.replacement_texts[ev.id]}
-                            )
-                        )
-                    else:
-                        new_events.append(ev)
-
-                query_text = " ".join(ev.text for ev in new_events if ev.text)
-                new_intent = session.state.intent.model_copy(
+            if action.type == "query_edit_proposal":
+                assistant_turn = FeedbackChatTurn(
+                    role="assistant",
+                    message=action.explanation,
+                    action_type="query_edit_proposal",
+                    timestamp_ms=perf_counter() * 1000,
+                )
+                session.chat_turns = (*session.chat_turns, assistant_turn)
+                proposal_state = session.state.model_copy(
                     update={
-                        "revision": session.state.intent.revision + 1,
-                        "events": new_events,
-                        "query_text": query_text or None,
+                        "status": "proposal",
+                        "assistant_message": action.explanation,
+                        "query_proposal": action.model_dump(),
+                        "changed_event_ids": [],
+                        "can_undo": session.state.can_undo,
                     }
                 )
+                session.committed_requests[request.request_id] = (
+                    request.model_dump(),
+                    proposal_state,
+                )
+                return proposal_state
 
-                search_exec = self._execute_search(
-                    intent=new_intent,
-                    overrides=session.state.retrieval_overrides,
-                    use_dense=session.use_dense,
-                    use_bm25=session.use_bm25,
-                    top_k=session.top_k,
-                    exclusions=session.exclusions,
+            if action.type == "edit_intent":
+                eid = action.event_ids[0] if action.event_ids else "E1"
+                rep_text = action.replacement_texts.get(eid, "")
+                prop = QueryEditProposalAction(
+                    action={"type": "edit", "event_id": eid, "text": rep_text},
+                    explanation=f"Proposed edit for {eid}",
                 )
-                next_feedback_rev = session.feedback_revision + 1
-                new_state = FeedbackStateResponse(
-                    session_id=session_id,
-                    status="applied",
-                    feedback_revision=next_feedback_rev,
-                    intent=new_intent,
-                    retrieval_overrides=session.state.retrieval_overrides,
-                    results=search_exec.results,
-                    evidence_snapshot_id=search_exec.evidence_snapshot_id,
-                    trail=session.state.trail,
-                    assistant_message=f"Updated intent for {', '.join(action.event_ids)}.",
-                    changed_event_ids=list(action.event_ids),
-                    scope=session.state.scope,
-                    can_undo=True,
-                    latency=getattr(search_exec, "latency", None),
+                assistant_turn = FeedbackChatTurn(
+                    role="assistant",
+                    message=prop.explanation,
+                    action_type="query_edit_proposal",
+                    timestamp_ms=perf_counter() * 1000,
                 )
-                return commit_feedback_turn(session, request, new_state)
+                session.chat_turns = (*session.chat_turns, assistant_turn)
+                proposal_state = session.state.model_copy(
+                    update={
+                        "status": "proposal",
+                        "assistant_message": prop.explanation,
+                        "query_proposal": prop.model_dump(),
+                        "changed_event_ids": [],
+                        "can_undo": session.state.can_undo,
+                    }
+                )
+                session.committed_requests[request.request_id] = (
+                    request.model_dump(),
+                    proposal_state,
+                )
+                return proposal_state
 
             if action.type == "restructure":
-                replaced_set = set(action.replaced_event_ids)
-                first_replaced_idx = 0
-                for idx, ev in enumerate(session.state.intent.events):
-                    if ev.id in replaced_set:
-                        first_replaced_idx = idx
-                        break
-
-                spliced_texts_and_images: list[tuple[str | None, list[Any]]] = []
-                for idx, ev in enumerate(session.state.intent.events):
-                    if idx < first_replaced_idx:
-                        spliced_texts_and_images.append((ev.text, list(ev.images)))
-                    elif idx == first_replaced_idx:
-                        for new_text in action.new_events:
-                            spliced_texts_and_images.append((new_text, []))
-                    elif ev.id not in replaced_set:
-                        spliced_texts_and_images.append((ev.text, list(ev.images)))
-
-                canonical_events = [
-                    KISEvent(
-                        id=f"E{i+1}",
-                        text=text,
-                        images=images,
-                    )
-                    for i, (text, images) in enumerate(spliced_texts_and_images)
-                ]
-                canonical_edges = [
-                    KISTemporalEdge(source=f"E{i}", target=f"E{i+1}", relation="before")
-                    for i in range(1, len(canonical_events))
-                ]
-                query_text = " ".join(ev.text for ev in canonical_events if ev.text)
-
-                new_intent = KISIntent(
-                    revision=session.state.intent.revision + 1,
-                    query_text=query_text or None,
-                    events=canonical_events,
-                    temporal_edges=canonical_edges,
+                prop = QueryEditProposalAction(
+                    action={
+                        "type": "split",
+                        "event_id": action.replaced_event_ids[0] if action.replaced_event_ids else "E1",
+                        "new_events": action.new_events,
+                    },
+                    explanation="Proposed event restructure",
                 )
-
-                search_exec = self._execute_search(
-                    intent=new_intent,
-                    overrides={},
-                    use_dense=session.use_dense,
-                    use_bm25=session.use_bm25,
-                    top_k=session.top_k,
-                    exclusions=session.exclusions,
+                assistant_turn = FeedbackChatTurn(
+                    role="assistant",
+                    message=prop.explanation,
+                    action_type="query_edit_proposal",
+                    timestamp_ms=perf_counter() * 1000,
                 )
-                next_feedback_rev = session.feedback_revision + 1
-                new_state = FeedbackStateResponse(
-                    session_id=session_id,
-                    status="applied",
-                    feedback_revision=next_feedback_rev,
-                    intent=new_intent,
-                    retrieval_overrides={},
-                    results=search_exec.results,
-                    evidence_snapshot_id=search_exec.evidence_snapshot_id,
-                    trail=None,
-                    assistant_message=f"Restructured events into {len(canonical_events)} steps.",
-                    changed_event_ids=[ev.id for ev in canonical_events],
-                    scope=session.state.scope,
-                    can_undo=True,
-                    latency=getattr(search_exec, "latency", None),
+                session.chat_turns = (*session.chat_turns, assistant_turn)
+                proposal_state = session.state.model_copy(
+                    update={
+                        "status": "proposal",
+                        "assistant_message": prop.explanation,
+                        "query_proposal": prop.model_dump(),
+                        "changed_event_ids": [],
+                        "can_undo": session.state.can_undo,
+                    }
                 )
-                return commit_feedback_turn(session, request, new_state)
+                session.committed_requests[request.request_id] = (
+                    request.model_dump(),
+                    proposal_state,
+                )
+                return proposal_state
 
             if action.type == "reject_candidate":
                 target_eid = action.event_id

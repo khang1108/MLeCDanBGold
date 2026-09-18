@@ -66,7 +66,7 @@ class FeedbackStateResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: str
-    status: Literal["applied", "clarification", "exhausted"]
+    status: Literal["applied", "clarification", "exhausted", "proposal"]
     feedback_revision: int = Field(ge=1)
     intent: KISIntent
     retrieval_overrides: dict[str, RetrievalOverride] = Field(default_factory=dict)
@@ -74,6 +74,7 @@ class FeedbackStateResponse(BaseModel):
     evidence_snapshot_id: str
     trail: EventTrailStateResponse | None = None
     assistant_message: str | None = None
+    query_proposal: dict[str, Any] | None = None
     changed_event_ids: list[str] = Field(default_factory=list)
     scope: str = "all_videos"
     can_undo: bool = False

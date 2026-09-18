@@ -12,37 +12,27 @@ Your job is to analyze the user's feedback message and return exactly one struct
 CRITICAL: Every action object MUST include the "type" field with the exact action type string.
 
 Action types and when to use them:
-1. "refine_retrieval": The user wants to adjust, refine, or focus the search keywords or visual details for specific event(s) without changing the overall temporal storyline structure.
-   - Provide "type": "refine_retrieval", "event_ids": list of event IDs, and "refinements": {event_id: "search description in English"}.
-   - Examples:
-     * "tập trung vào hình ảnh 2 đứa trẻ cầm banner" -> refine_retrieval for the relevant event (e.g. E1 or E2) with visual text: "two children holding a banner".
-     * "tìm thêm chữ festival", "focus on the blue banner", "chú ý xe màu đỏ", "người mặc áo dài".
-   - CRITICAL: Whenever the user provides new visual details, objects, people, colors, or search keywords (e.g. "tập trung vào...", "tìm theo...", "focus on...", "chú ý..."), you MUST use "refine_retrieval" or "edit_intent". NEVER use "repair_event" when descriptive keywords are provided!
+1. "query_edit_proposal": When the user asks to split, merge, reorder, add, or semantically edit canonical events.
+   - Provide "type": "query_edit_proposal", "action": dictionary describing the query action (e.g. {"type": "split", "event_id": "E1", ...}, {"type": "edit", "event_id": "E1", "text": "..."}), and "explanation": short description of the proposal.
+   - Never directly apply topology changes.
 
-2. "edit_intent": The user wants to change, add, or correct the core semantic definition of one or more existing events.
-   - Provide "type": "edit_intent", "event_ids": list of event IDs, and "replacement_texts": {event_id: "new full description in English"}.
-   - Examples: "ở E1 người đó mặc áo vàng", "người đó đi bộ chứ không chạy".
+2. "refine_retrieval": The user wants to adjust, refine, or focus the search keywords or visual details for specific event(s) without changing the overall temporal storyline structure.
+   - Provide "type": "refine_retrieval", "event_ids": list of event IDs, and "refinements": {event_id: "search description"}.
+   - Examples: "tập trung vào hình ảnh 2 đứa trẻ cầm banner", "tìm thêm chữ festival", "focus on the blue banner", "chú ý xe màu đỏ".
 
-3. "restructure": The user wants to split, merge, or re-order events (e.g., "tách thành 2 bước", "gộp E1 và E2").
-   - Provide "type": "restructure", "replaced_event_ids", "new_events", and "mapping".
-
-4. "anchor": The user explicitly says to use or anchor the currently selected frame/candidate (e.g., "dùng frame này", "chốt hình này cho E1").
-   - Provide "type": "anchor", "event_id". Do NOT invent frame IDs or timestamps.
-
-5. "reject_candidate": The user says the current frame or candidate for an event is wrong (e.g., "frame này không đúng", "bỏ candidate này").
-   - Provide "type": "reject_candidate", "event_id".
-
-6. "repair_event": The user wants to search again for an event WITHOUT providing any new description (e.g., "tìm lại E2", "thử lại E1", "search E1 again").
+3. "repair_event": The user wants to search again for an event WITHOUT providing any new description (e.g., "tìm lại E2", "thử lại E1", "search E1 again").
    - Provide "type": "repair_event", "event_id".
-   - CRITICAL: DO NOT use "repair_event" if the user provided search keywords or visual descriptions! Use "refine_retrieval"!
 
-7. "clarify": The user's request is ambiguous, refers to "đây"/"này" without any selected item, or requires missing information.
+4. "clarify": The user's request is ambiguous, refers to "đây"/"này" without any selected item, or requires missing information.
    - Provide "type": "clarify", "question".
 
 STRICT RULES:
+- When the user asks to split, merge, reorder, add, or semantically edit canonical events, return query_edit_proposal. Never directly apply topology changes.
+- Retrieval-only wording may use refine_retrieval.
+- Result-path anchors/rejections are handled by Hypothesis Explorer, not generic chat.
 - Never invent timestamps, frame numbers, or video IDs.
 - Never add details that the user did not mention.
-- Do not explain your reasoning. Output must strictly conform to the schema.
+- Do not explain your reasoning outside the schema. Output must strictly conform to the schema.
 - If the user uses deictic words like "đây", "này", "cái này" but NO item is currently selected in context, you MUST return a "clarify" action asking them to select an event or frame.
 """
 
