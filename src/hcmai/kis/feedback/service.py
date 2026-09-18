@@ -16,7 +16,6 @@ from hcmai.api.contracts.feedback import (
 )
 from hcmai.api.contracts.kis import KISSearchResult
 from hcmai.kis.feedback.models import (
-    EditIntentAction,
     FeedbackAction,
     FeedbackChatTurn,
     FeedbackResolveContext,
@@ -25,7 +24,6 @@ from hcmai.kis.feedback.models import (
     RefineRetrievalAction,
     RejectCandidateAction,
     RepairEventAction,
-    RestructureAction,
 )
 from hcmai.kis.feedback.resolver import FeedbackResolver
 from hcmai.kis.feedback.store import (

@@ -20,7 +20,6 @@ const EvidenceInspector = ({
   onKeep,
   onApprove,
   onRejectMode,
-  onDecline,
   onUse,
   onUseAlternative,
   onClearAnchor,
@@ -131,13 +130,9 @@ const EvidenceInspector = ({
 
         <button
           type="button"
-          className="btn-secondary event-trail-action-btn reject-btn decline-btn"
+          className="btn-secondary event-trail-action-btn reject-btn"
           disabled={isApproved || isExhausted || pending}
-          onClick={() =>
-            onRejectMode
-              ? onRejectMode(selectedEventId, currentModeId)
-              : onDecline?.(selectedEventId)
-          }
+          onClick={() => onRejectMode?.(selectedEventId, currentModeId)}
           title="Reject this candidate occurrence to explore other temporal modes"
         >
           Reject occurrence

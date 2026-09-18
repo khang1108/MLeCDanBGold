@@ -19,7 +19,6 @@ import {
 } from '../../avs';
 import { openFeedbackSession, sendFeedbackTurn, undoFeedback } from '../../../api/feedback';
 import {
-  openQueryHypothesis,
   previewQueryHypothesis,
   commitQueryHypothesis,
   undoQueryHypothesis,
@@ -27,11 +26,9 @@ import {
 import KisPanel from '../../kis/components/KisPanel';
 import {
   createInitialQueryHypothesisState,
-  receiveOpenedHypothesis,
   receivePreview,
   clearPreview,
   receiveCommit,
-  markSearchResults,
   isResultsStale,
 } from '../../kis/queryHypothesisSession';
 import {

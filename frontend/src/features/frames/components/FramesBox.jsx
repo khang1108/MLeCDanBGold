@@ -2,7 +2,6 @@ import React, { useCallback } from "react";
 import FrameCard from "./FrameCard";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 import HcmusWatermarkBadge from "./HcmusWatermarkBadge";
-import { displayVideoId } from "../videoSource";
 
 export const formatLatencySeconds = (val) => {
   if (typeof val !== 'number' || !Number.isFinite(val)) return '';
@@ -138,11 +137,6 @@ const FramesBox = ({
                   && activeTrailSession?.result_id
                   && activeTrailSession.result_id === resultItem.result_id,
                 );
-                const trailCandidates = isRowTrailActive && activeTrailSession
-                  ? (activeTrailSession.status === 'exhausted'
-                    ? (activeTrailSession.last_valid_path || [])
-                    : (activeTrailSession.path || []))
-                  : null;
                 const approvedEventIds = isRowTrailActive && activeTrailSession ? (activeTrailSession.approved_event_ids || []) : [];
                 const rejectedCounts = isRowTrailActive && activeTrailSession ? (activeTrailSession.rejected_counts || {}) : {};
                 const canStartTrail = Boolean(eventTrailContext?.snapshotId && resultItem?.result_id);

@@ -140,12 +140,6 @@ const ImageModal = ({
     }
   }, [handleVideoSeek, updatePlaybackTime]);
 
-  const resolvedEvents = useMemo(() => {
-    if (Array.isArray(events) && events.length > 0) return events;
-    if (Array.isArray(frame.events) && frame.events.length > 0) return frame.events;
-    if (Array.isArray(frame.aligned_events) && frame.aligned_events.length > 0) return frame.aligned_events;
-    return [];
-  }, [events, frame.events, frame.aligned_events]);
 
   const effectiveTrailEvents = useMemo(() => {
     if (Array.isArray(eventTrail?.context?.events) && eventTrail.context.events.length > 0) {
@@ -607,7 +601,9 @@ const ImageModal = ({
                     selectedEventId={selectedEventId}
                     onSelectEvent={setSelectedEventId}
                     onUse={handleUse}
+                    onKeep={handleApprove}
                     onApprove={handleApprove}
+                    onRejectMode={handleDecline}
                     onDecline={handleDecline}
                     onClearAnchor={handleClearAnchor}
                     onUndo={handleUndo}

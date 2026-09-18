@@ -59,7 +59,7 @@ describe('EventTrailPanel', () => {
 
   test('Step 2: action buttons respect approval and exhaustion state', () => {
     const onApprove = jest.fn();
-    const onDecline = jest.fn();
+    const onRejectMode = jest.fn();
     const onUse = jest.fn();
     const onClearAnchor = jest.fn();
 
@@ -70,7 +70,7 @@ describe('EventTrailPanel', () => {
         state={makeState()}
         selectedEventId="E1"
         onApprove={onApprove}
-        onDecline={onDecline}
+        onRejectMode={onRejectMode}
         onUse={onUse}
       />
     );
@@ -88,7 +88,7 @@ describe('EventTrailPanel', () => {
     expect(onApprove).toHaveBeenCalledWith('E1');
 
     fireEvent.click(rejectBtn);
-    expect(onDecline).toHaveBeenCalledWith('E1');
+    expect(onRejectMode).toHaveBeenCalledWith('E1', null);
 
     fireEvent.click(useBtn);
     expect(onUse).toHaveBeenCalledWith('E1');
@@ -100,7 +100,7 @@ describe('EventTrailPanel', () => {
         state={makeState({ approved_event_ids: ['E1'] })}
         selectedEventId="E1"
         onApprove={onApprove}
-        onDecline={onDecline}
+        onRejectMode={onRejectMode}
         onUse={onUse}
         onClearAnchor={onClearAnchor}
       />
@@ -120,7 +120,7 @@ describe('EventTrailPanel', () => {
         state={makeState({ status: 'exhausted', path: null })}
         selectedEventId="E1"
         onApprove={onApprove}
-        onDecline={onDecline}
+        onRejectMode={onRejectMode}
         onUse={onUse}
       />
     );

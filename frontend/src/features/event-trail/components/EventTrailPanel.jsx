@@ -16,7 +16,6 @@ const EventTrailPanel = ({
   onKeep,
   onApprove,
   onRejectMode,
-  onDecline,
   onClearAnchor,
   onUndo,
   onSetWindow,
@@ -81,11 +80,7 @@ const EventTrailPanel = ({
 
   const handleReject = (eventId, modeId) => {
     const targetMode = modeId || resolvedModeId;
-    if (onRejectMode) {
-      onRejectMode(eventId, targetMode);
-    } else {
-      onDecline?.(eventId);
-    }
+    onRejectMode?.(eventId, targetMode);
   };
 
   const handleCycleIndirectEvents = () => {
@@ -213,7 +208,6 @@ const EventTrailPanel = ({
         onKeep={handleKeep}
         onApprove={handleKeep}
         onRejectMode={handleReject}
-        onDecline={handleReject}
         onUse={onUse}
         onUseAlternative={onUseAlternative}
         onClearAnchor={onClearAnchor}

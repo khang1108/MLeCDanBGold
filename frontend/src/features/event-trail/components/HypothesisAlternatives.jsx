@@ -49,7 +49,6 @@ const HypothesisAlternatives = ({
             <button
               key={altId}
               type="button"
-              role="button"
               className={`hypothesis-alt-card ${isActive ? 'active' : ''} ${alt.is_current ? 'current' : ''}`}
               disabled={disabled}
               onClick={() => onPreview?.(alt)}
