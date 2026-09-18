@@ -16,6 +16,7 @@ from hcmai.api.contracts import (
     FilterResponse,
     ImageSearchResponse,
 )
+from hcmai.api.result_logging import record_dres_result_log
 from hcmai.common.utils.logging import get_logger
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.orchestration.utils.errors import SearchServiceGatewayError
@@ -23,7 +24,6 @@ from hcmai.orchestration.workflows.image_search import (
     ImageQueryTooLargeError,
     InvalidImageQueryError,
 )
-from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer
 
 logger = get_logger(__name__)
 
@@ -81,7 +81,7 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
                 content_type=image.content_type,
                 top_k=top_k,
             )
-            await _record_dres_result_log(
+            await record_dres_result_log(
                 service_container,
                 http_response,
                 user_id=user_id,
@@ -91,6 +91,7 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
                     f"sha256={hashlib.sha256(payload).hexdigest()}"
                 ),
                 results=result.results,
+                now_fn=_now_ms,
             )
             return result
         except ImageQueryTooLargeError as error:
@@ -162,7 +163,7 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
             predicates["folder_id"] = request.folder_id
         if request.video_id is not None:
             predicates["video_id"] = request.video_id
-        await _record_dres_result_log(
+        await record_dres_result_log(
             service_container,
             http_response,
             user_id=user_id,
@@ -175,71 +176,13 @@ def create_search_router(service_container: dict[str, Any]) -> APIRouter:
             ),
             results=result.results,
             rank_offset=(result.page_id - 1) * result.frames_per_pages,
+            now_fn=_now_ms,
         )
         return result
 
     return router
 
 
-async def _record_dres_result_log(
-    service_container: dict[str, Any],
-    response: Response,
-    *,
-    user_id: str | None,
-    category: str,
-    event_value: str,
-    results: list[Any],
-    rank_offset: int = 0,
-) -> None:
-    """Send an optional result log without changing successful retrieval."""
-
-    log_status = "skipped"
-    try:
-        vbs_service = service_container.get("vbs_service")
-        if (
-            user_id is not None
-            and user_id.strip()
-            and vbs_service is not None
-            and vbs_service.session_status(user_id).get("connected")
-        ):
-            evaluation_id = await vbs_service.resolve_evaluation(user_id)
-            timestamp = _now_ms()
-            ranked = [
-                RankedAnswer(
-                    rank=rank_offset + index + 1,
-                    answer=ApiClientAnswer(
-                        media_item_name=vbs_service.media_item_name(result.video_id),
-                        start=result.timestamp_ms,
-                        end=result.timestamp_ms,
-                    ),
-                )
-                for index, result in enumerate(results)
-            ]
-            payload = QueryResultLog(
-                timestamp=timestamp,
-                sort_type="list",
-                result_set_availability="",
-                results=ranked,
-                events=[QueryEvent(
-                    timestamp=timestamp,
-                    category=category,
-                    event_type="SEARCH",
-                    value=event_value,
-                )],
-            )
-            await vbs_service.log_results(user_id, evaluation_id, payload)
-            log_status = "sent"
-    except Exception as error:
-        # DRES is an optional secondary side effect; never mask retrieval.
-        logger.warning(
-            "DRES result logging failed status=failed error_type=%s",
-            type(error).__name__,
-        )
-        log_status = "failed"
-    response.headers["X-DRES-Log-Status"] = log_status
-
-
 def _now_ms() -> int:
     """Return the wall-clock Unix epoch used by DRES event and result logs."""
-
     return int(time.time() * 1000)
