@@ -6,8 +6,34 @@ FastAPI web application and the standalone retrieval service.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from hcmai.common.config import DEFAULT_MAX_TEMPORAL_EVENT_COUNT
+
+NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class TextSearchRequestSchema(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    query: NonBlank
+    top_k: int = Field(default=100, ge=1)
+
+
+class TextCandidateSchema(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    frame_id: NonBlank
+    rank: int = Field(ge=1)
+    score: float | None = None
+
+
+class TextSearchCandidatesSchema(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    candidates: list[TextCandidateSchema]
+    retrieval_ms: float = Field(ge=0)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class CapabilitiesResponse(BaseModel):

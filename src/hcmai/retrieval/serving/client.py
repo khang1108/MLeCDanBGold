@@ -27,6 +27,9 @@ from hcmai.retrieval.serving.schemas import (
     SelectedVideoScoreSchema,
     TemporalSearchArtifactSchema,
     TemporalSearchResultSchema,
+    TextCandidateSchema,
+    TextSearchCandidatesSchema,
+    TextSearchRequestSchema,
 )
 from hcmai.retrieval.serving.utils.config import RetrievalClientSettings
 from hcmai.retrieval.serving.utils.errors import (
@@ -74,6 +77,20 @@ class RemoteImageSearchResult:
     candidates: tuple[RemoteImageCandidate, ...]
     query_ms: float
     retrieval_ms: float
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteTextCandidate:
+    frame_id: str
+    rank: int
+    score: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteTextSearchResult:
+    candidates: tuple[RemoteTextCandidate, ...]
+    retrieval_ms: float
+    warnings: tuple[str, ...]
 
 
 class RetrievalHttpClient:
@@ -301,4 +318,24 @@ class RetrievalHttpClient:
         except httpx.RequestError as err:
             raise RetrievalUnavailableError(
                 f"Failed to search_image at {self.base_url}: {err}"
+            ) from err
+
+    def search_text(self, query: str, *, top_k: int = 100) -> RemoteTextSearchResult:
+        req = TextSearchRequestSchema(query=query, top_k=top_k)
+        try:
+            resp = self._client.post("/search_text", json=req.model_dump())
+            if resp.status_code != 200:
+                raise map_http_error(resp.status_code, resp.text)
+            data = TextSearchCandidatesSchema.model_validate(resp.json())
+            return RemoteTextSearchResult(
+                candidates=tuple(
+                    RemoteTextCandidate(frame_id=item.frame_id, rank=item.rank, score=item.score)
+                    for item in data.candidates
+                ),
+                retrieval_ms=data.retrieval_ms,
+                warnings=tuple(data.warnings),
+            )
+        except httpx.RequestError as err:
+            raise RetrievalUnavailableError(
+                f"Failed to search_text at {self.base_url}: {err}"
             ) from err

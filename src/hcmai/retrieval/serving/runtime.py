@@ -31,7 +31,9 @@ from hcmai.orchestration.workflows.temporal_search import (
     TemporalSearchService,
 )
 from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
+from hcmai.retrieval.models import RetrievalResult
 from hcmai.retrieval.plan import KISRetrievalPlan
+from hcmai.retrieval.retriever.pipeline import RetrievalService
 
 logger = get_logger(__name__)
 
@@ -54,6 +56,7 @@ class RetrievalRuntime:
     """Heavy retrieval composition facade serving requests."""
 
     corpus: Corpus
+    retrieval: RetrievalService
     temporal: TemporalSearchService
     image_scorer: ImageQueryTemporalScorer | None
     image_search: ImageSearchService | None
@@ -160,6 +163,7 @@ class RetrievalRuntime:
 
         return cls(
             corpus=corpus,
+            retrieval=retrieval,
             temporal=temporal,
             image_scorer=image_scorer,
             image_search=image_search,
@@ -170,6 +174,13 @@ class RetrievalRuntime:
             image_max_pixels=settings.api.image_max_pixels,
             scoring_revision=scoring_revision,
         )
+
+    def search_text(self, query: str, *, top_k: int) -> RetrievalResult:
+        if top_k <= 0:
+            raise ValueError("top_k must be greater than zero")
+        if not query.strip():
+            raise ValueError("query must not be blank")
+        return self.retrieval.search(query.strip(), top_k=top_k)
 
     def capabilities(self) -> RetrievalCapabilities:
         """Return declared capabilities and limits without executing retrieval."""

@@ -28,6 +28,9 @@ from hcmai.retrieval.serving.schemas import (
     SelectedVideoScoreSchema,
     TemporalSearchArtifactSchema,
     TemporalSearchResultSchema,
+    TextCandidateSchema,
+    TextSearchCandidatesSchema,
+    TextSearchRequestSchema,
 )
 from hcmai.retrieval.serving.utils.serialization import (
     artifact_to_schema,
@@ -190,6 +193,32 @@ def create_app(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=str(err),
             ) from err
+
+    @app.post("/search_text", response_model=TextSearchCandidatesSchema)
+    def search_text(req: TextSearchRequestSchema) -> TextSearchCandidatesSchema:
+        rt = _get_runtime()
+        try:
+            result = rt.search_text(req.query, top_k=req.top_k)
+            candidates = []
+            for rank, candidate in enumerate(result.candidates, start=1):
+                score = candidate.fusion_score
+                if score is None and candidate.source_scores:
+                    score = max(candidate.source_scores.values())
+                candidates.append(TextCandidateSchema(
+                    frame_id=candidate.frame_id,
+                    rank=rank,
+                    score=score,
+                ))
+            return TextSearchCandidatesSchema(
+                candidates=candidates,
+                retrieval_ms=result.trace.total_duration_ms,
+                warnings=list(result.warnings),
+            )
+        except ValueError as err:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
+        except Exception as err:
+            logger.exception("Error in /search_text: %s", err)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(err)) from err
 
     @app.post("/search_image", response_model=ImageSearchCandidatesSchema)
     async def search_image(
