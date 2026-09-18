@@ -18,7 +18,7 @@ export const AppHeader = ({
           type="button"
           className={`workspace-mode-btn ${!isAvsTask ? 'active' : ''}`}
           onClick={() => onToggleWorkspace?.('KIS')}
-          title="Switch to KIS (Known Item Search)"
+          title="Switch to KIS (Ctrl+Shift+1)"
         >
           KIS
         </button>
@@ -26,7 +26,7 @@ export const AppHeader = ({
           type="button"
           className={`workspace-mode-btn ${isAvsTask ? 'active' : ''}`}
           onClick={() => onToggleWorkspace?.('AVS')}
-          title="Switch to AVS (Ad-Hoc Video Search)"
+          title="Switch to AVS (Ctrl+Shift+2)"
         >
           AVS
         </button>

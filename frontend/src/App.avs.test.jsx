@@ -68,3 +68,17 @@ test('allows toggling between KIS and AVS mode in unified workspace', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Switch to AVS' }));
   expect(screen.getByText('Unified search workspace (mode: AVS)')).toBeTruthy();
 });
+
+test('allows switching search modes via Ctrl+Shift+1 and Ctrl+Shift+2 shortcuts', () => {
+  render(<App />);
+
+  expect(screen.getByText('Unified search workspace (mode: AVS)')).toBeTruthy();
+
+  // Press Ctrl+Shift+1 to switch to KIS
+  fireEvent.keyDown(window, { key: '1', code: 'Digit1', ctrlKey: true, shiftKey: true });
+  expect(screen.getByText('Unified search workspace (mode: KIS)')).toBeTruthy();
+
+  // Press Ctrl+Shift+2 to switch to AVS
+  fireEvent.keyDown(window, { key: '2', code: 'Digit2', ctrlKey: true, shiftKey: true });
+  expect(screen.getByText('Unified search workspace (mode: AVS)')).toBeTruthy();
+});

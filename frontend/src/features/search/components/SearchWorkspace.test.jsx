@@ -755,5 +755,23 @@ test('submitting a query in AVS mode calls searchAvs and displays AvsHarvestGrid
   expect(searchKis).not.toHaveBeenCalled();
 });
 
+test('keyboard shortcuts Ctrl+Shift+1 and Ctrl+Shift+2 switch search mode', () => {
+  const onToggleMode = jest.fn();
+  renderSearch({
+    topK: 20,
+    setTopK: jest.fn(),
+    workspaceMode: 'KIS',
+    onToggleMode,
+  });
+
+  // Ctrl + Shift + 2 -> AVS
+  fireEvent.keyDown(window, { key: '2', code: 'Digit2', ctrlKey: true, shiftKey: true });
+  expect(onToggleMode).toHaveBeenCalledWith('AVS');
+
+  // Ctrl + Shift + 1 -> KIS
+  fireEvent.keyDown(window, { key: '1', code: 'Digit1', ctrlKey: true, shiftKey: true });
+  expect(onToggleMode).toHaveBeenCalledWith('KIS');
+});
+
 
 

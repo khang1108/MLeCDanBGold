@@ -980,8 +980,26 @@ const SearchWorkspace = ({
         return;
       }
 
-      // 6. Ctrl + 1..6 -> Focus filter inputs
-      if (event.ctrlKey && !event.altKey && !event.metaKey) {
+      // 6. Ctrl + Shift + 1 / 2 -> Switch search mode (1: KIS, 2: AVS)
+      if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey) {
+        const key = event.key;
+        const code = event.code;
+        if (key === '1' || key === '!' || code === 'Digit1' || code === 'Numpad1') {
+          event.preventDefault();
+          event.stopPropagation();
+          onToggleMode?.('KIS');
+          return;
+        }
+        if (key === '2' || key === '@' || code === 'Digit2' || code === 'Numpad2') {
+          event.preventDefault();
+          event.stopPropagation();
+          onToggleMode?.('AVS');
+          return;
+        }
+      }
+
+      // 7. Ctrl + 1..6 -> Focus filter inputs
+      if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey) {
         const key = event.key;
         const code = event.code;
         if (key === '1' || code === 'Digit1') {
@@ -1039,6 +1057,7 @@ const SearchWorkspace = ({
     handleToggleOptions,
     handleNewSearch,
     focusQueryInput,
+    onToggleMode,
   ]);
 
   const getFrameClassName = useCallback(() => '', []);

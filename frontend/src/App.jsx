@@ -101,6 +101,24 @@ const AppShell = ({
 
   useEffect(() => {
     const handleGlobalKeyDown = (event) => {
+      // Ctrl + Shift + 1 / 2 -> Switch search mode (1: KIS, 2: AVS)
+      if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey) {
+        const key = event.key;
+        const code = event.code;
+        if (key === '1' || key === '!' || code === 'Digit1' || code === 'Numpad1') {
+          event.preventDefault();
+          event.stopPropagation();
+          handleToggleWorkspace('KIS');
+          return;
+        }
+        if (key === '2' || key === '@' || code === 'Digit2' || code === 'Numpad2') {
+          event.preventDefault();
+          event.stopPropagation();
+          handleToggleWorkspace('AVS');
+          return;
+        }
+      }
+
       // Ctrl + I -> Focus User ID input in header
       if (
         event.ctrlKey &&
@@ -120,7 +138,7 @@ const AppShell = ({
 
     window.addEventListener('keydown', handleGlobalKeyDown, true);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
-  }, []);
+  }, [handleToggleWorkspace]);
 
   const workspaceEventTrail = useMemo(() => ({
     ...eventTrail,

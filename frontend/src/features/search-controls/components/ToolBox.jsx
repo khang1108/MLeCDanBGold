@@ -96,6 +96,7 @@ const ToolBox = ({
               className={`toolbox-segment-btn ${workspaceMode === 'KIS' ? 'active' : ''}`}
               onClick={() => onToggleMode?.('KIS')}
               aria-pressed={workspaceMode === 'KIS'}
+              title="Switch to KIS (Ctrl+Shift+1)"
             >
               KIS
             </button>
@@ -104,6 +105,7 @@ const ToolBox = ({
               className={`toolbox-segment-btn ${workspaceMode === 'AVS' ? 'active' : ''}`}
               onClick={() => onToggleMode?.('AVS')}
               aria-pressed={workspaceMode === 'AVS'}
+              title="Switch to AVS (Ctrl+Shift+2)"
             >
               AVS
             </button>
