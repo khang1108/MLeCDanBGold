@@ -119,7 +119,7 @@ const FramesBox = ({
           </ul>
         </div>
       )}
-      <div className="frames-scroll-region">
+      <div className={`frames-scroll-region ${isLoading ? 'whip-cursor-mode' : ''}`}>
         {(results.length > 0 || !error) &&
           (results.length ? (
             <div className={`frames-grid size-${gridSize}`}>

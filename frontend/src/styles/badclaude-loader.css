@@ -138,36 +138,40 @@
   top: 0;
   left: 0;
   font-family: system-ui, -apple-system, sans-serif;
-  font-size: 15px;
   font-weight: 900;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  background: #ffffff;
-  color: #0f172a;
-  border: 2px solid #0284c7;
-  border-radius: 999px;
-  padding: 4px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
   white-space: nowrap;
   pointer-events: none;
-  animation: popFloatUp 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 2px rgba(255, 255, 255, 0.9);
+  animation: popZoomFade 0.45s cubic-bezier(0.15, 0.85, 0.35, 1) forwards;
 }
 
-@keyframes popFloatUp {
+@keyframes popZoomFade {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.5);
+    transform: translate(-50%, -50%) scale(0.6) rotate(var(--quote-rot, 0deg));
   }
   20% {
     opacity: 1;
-    transform: translate(-50%, -85%) scale(1.15);
+    transform: translate(-50%, -60%) scale(1.15) rotate(var(--quote-rot, 0deg));
   }
-  50% {
-    opacity: 1;
-    transform: translate(-50%, -120%) scale(1);
+  60% {
+    opacity: 0.85;
+    transform: translate(-50%, -75%) scale(1.28) rotate(var(--quote-rot, 0deg));
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -160%) scale(0.85);
+    transform: translate(-50%, -95%) scale(1.42) rotate(var(--quote-rot, 0deg));
   }
 }
 
@@ -203,8 +207,8 @@
 .badclaude-searching-spinner {
   width: 16px;
   height: 16px;
-  border: 2.5px solid rgba(14, 165, 233, 0.25);
-  border-top-color: #0284c7;
+  border: 2.5px solid rgba(49, 170, 169, 0.25);
+  border-top-color: #31AAA9;
   border-radius: 50%;
   animation: searchingSpin 0.75s linear infinite;
 }
@@ -240,9 +244,9 @@
   font-family: monospace;
   font-size: 11px;
   font-weight: 700;
-  color: #b45309;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
+  color: #6C1A1A;
+  background: #F8E0A4;
+  border: 1px solid #ebd08d;
   padding: 2px 7px;
   border-radius: 6px;
 }

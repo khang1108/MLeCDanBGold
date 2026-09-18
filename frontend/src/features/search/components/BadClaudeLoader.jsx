@@ -1,17 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { getRandomComicShape } from "./swooshObjects";
+import { LOTTERY_MUSIC_FILE, playWhipCrackAndMemeSound } from "./whipAudio";
 
-const BADCLAUDE_QUOTES = [
-  "WORK FASTER!",
-  "SEARCH FASTER, CLANKER!",
-  "FETCH THOSE FRAMES NOW!",
-  "MORE INFERENCE, LESS DELAY!",
-  "LIGHTSPEED RETRIEVAL ACTIVE!",
-  "SPEED IT UP, PIPELINE!",
-  "CRACKING MULTIMODAL LATENCY!",
-  "MAXIMUM COMPUTE ENGAGED!",
-];
-
-// OpenWhip original physics parameters
+// OpenWhip physics parameters for realistic whip motion
 const P = {
   segments: 28,
   segmentLength: 16,
@@ -42,47 +33,6 @@ const P = {
   handleThickSegments: 2,
   arcWidth: 200,
   arcHeight: 120,
-};
-
-// Web Audio API Synthesizer for realistic whip crack
-const playCrackSound = (isMuted) => {
-  if (isMuted) return;
-  try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
-    }
-
-    const bufferSize = ctx.sampleRate * 0.12;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.015));
-    }
-
-    const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "highpass";
-    filter.frequency.setValueAtTime(700, ctx.currentTime);
-
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.4, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-
-    noise.start();
-    noise.stop(ctx.currentTime + 0.12);
-  } catch (err) {
-    // Autoplay or audio context restriction
-  }
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -131,39 +81,165 @@ function whipSegmentBezier(pts, i) {
   };
 }
 
+const HURRY_UP_QUOTES = [
+  "Lẹ lên mày ơiiiiiiiiiii",
+  "Sắp thua rồi kìaaaa",
+  "Cho xin đáp án đi",
+  "Claude is searching..... fck",
+  "Nhanhhhhhh cái chấn mày lênnnnn"
+];
+
+const COMIC_COLORS = [
+  "#31AAA9", // Teal
+  "#F8E0A4", // Warm Pastel Yellow
+  "#A82020", // Red
+  "#6C1A1A", // Deep Maroon
+];
+
 const BadClaudeLoader = ({ isVisible = true }) => {
   const [whipCount, setWhipCount] = useState(1);
-  const [quoteIndex, setQuoteIndex] = useState(0);
-  const [isCracking, setIsCracking] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
-  const [shockwaveKey, setShockwaveKey] = useState(0);
-  const [crackPos, setCrackPos] = useState({ x: 420, y: 90 });
+  const [isShaking, setIsShaking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [bursts, setBursts] = useState([]);
 
+  const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const animRef = useRef(null);
-  const mousePosRef = useRef({ x: 100, y: 120, prevX: 100, prevY: 120 });
+  const mousePosRef = useRef({ x: 100, y: 150, prevX: 100, prevY: 150 });
   const whipRef = useRef(null);
   const handleAngleRef = useRef(P.baseTargetAngle);
   const handleAngVelRef = useRef(0);
   const lastCrackTimeRef = useRef(0);
   const lastUserMoveRef = useRef(0);
+  const shakeTimerRef = useRef(null);
+  const bgmRef = useRef(null);
 
-  const triggerCrack = useCallback((x, y) => {
-    setIsCracking(true);
-    setWhipCount((c) => c + 1);
-    setQuoteIndex((i) => (i + 1) % BADCLAUDE_QUOTES.length);
-    setShockwaveKey((k) => k + 1);
-    if (x !== undefined && y !== undefined) {
-      setCrackPos({ x, y });
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
+
+  // Background lottery music (nhac-xo-so.mp3) played continuously while searching
+  useEffect(() => {
+    if (!isVisible) {
+      if (bgmRef.current) {
+        try {
+          bgmRef.current.pause();
+          bgmRef.current.currentTime = 0;
+        } catch {}
+        bgmRef.current = null;
+      }
+      return;
     }
-    playCrackSound(isMuted);
+
+    let bgm = null;
+    if (typeof Audio !== "undefined") {
+      try {
+        bgm = new Audio(LOTTERY_MUSIC_FILE);
+        bgm.loop = true;
+        bgm.volume = 0.5;
+        bgmRef.current = bgm;
+
+        if (!isMutedRef.current) {
+          const p = bgm.play();
+          if (p !== undefined && typeof p.catch === "function") {
+            p.catch(() => {
+              // Silently handle browser autoplay policy before user interaction
+            });
+          }
+        }
+      } catch {
+        // Silently handle
+      }
+    }
+
+    return () => {
+      if (bgmRef.current) {
+        try {
+          bgmRef.current.pause();
+          bgmRef.current.currentTime = 0;
+        } catch {}
+        bgmRef.current = null;
+      }
+    };
+  }, [isVisible]);
+
+  // Sync mute status with background music
+  useEffect(() => {
+    if (!bgmRef.current) return;
+    try {
+      if (isMuted) {
+        bgmRef.current.pause();
+      } else if (isVisible) {
+        const p = bgmRef.current.play();
+        if (p !== undefined && typeof p.catch === "function") {
+          p.catch(() => {});
+        }
+      }
+    } catch {}
+  }, [isMuted, isVisible]);
+
+  const triggerCrack = useCallback((clientX, clientY) => {
+    playWhipCrackAndMemeSound(isMuted);
+    setWhipCount((c) => c + 1);
+
+    // Screen shake
+    setIsShaking(false);
+    if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+    requestAnimationFrame(() => {
+      setIsShaking(true);
+      shakeTimerRef.current = setTimeout(() => {
+        setIsShaking(false);
+      }, 220);
+    });
+
+    // Calculate relative coordinates
+    let x = 200;
+    let y = 150;
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      x = clientX !== undefined ? clientX - rect.left : rect.width / 2;
+      y = clientY !== undefined ? clientY - rect.top : rect.height / 2;
+    }
+
+    // Generate small diverse comic particles radiating outward
+    const numParticles = 4 + Math.floor(Math.random() * 3); // 4 to 6 small objects
+    const particles = [];
+    for (let i = 0; i < numParticles; i++) {
+      const angle = (Math.PI * 2 * i) / numParticles + (Math.random() - 0.5) * 0.5;
+      const distance = 35 + Math.random() * 55; // 35px to 90px
+      const size = 16 + Math.random() * 18; // 16px to 34px (small & cute)
+      const color = COMIC_COLORS[Math.floor(Math.random() * COMIC_COLORS.length)];
+      const rotation = Math.floor(Math.random() * 360);
+      const shape = getRandomComicShape();
+
+      particles.push({
+        id: i,
+        shape,
+        dx: Math.cos(angle) * distance,
+        dy: Math.sin(angle) * distance,
+        size,
+        color,
+        rotation,
+      });
+    }
+
+    const quote = HURRY_UP_QUOTES[Math.floor(Math.random() * HURRY_UP_QUOTES.length)];
+    const quoteColor = COMIC_COLORS[Math.floor(Math.random() * COMIC_COLORS.length)];
+    // Constrained random font size: 14px to 21px
+    const fontSize = 14 + Math.floor(Math.random() * 8);
+    // Subtle comic rotation tilt: -7deg to +7deg
+    const quoteRotation = Math.floor((Math.random() - 0.5) * 14);
+    const burstId = Date.now() + Math.random();
+
+    setBursts((prev) => [
+      ...prev.slice(-6),
+      { id: burstId, x, y, particles, quote, quoteColor, fontSize, quoteRotation },
+    ]);
 
     setTimeout(() => {
-      setIsCracking(false);
-    }, 180);
+      setBursts((prev) => prev.filter((b) => b.id !== burstId));
+    }, 480);
   }, [isMuted]);
 
-  // Handle canvas mouse tracking & flick
   const handleMouseMove = useCallback((e) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -177,36 +253,55 @@ const BadClaudeLoader = ({ isVisible = true }) => {
     lastUserMoveRef.current = Date.now();
   }, []);
 
-  const handleClick = useCallback((e) => {
+  const handleClick = (e) => {
+    if (e.target.closest(".badclaude-mute-btn")) {
+      return;
+    }
+
+    // Ensure lottery background music plays on user interaction if initial autoplay was blocked
+    if (bgmRef.current && !isMuted && bgmRef.current.paused) {
+      const p = bgmRef.current.play();
+      if (p !== undefined && typeof p.catch === "function") {
+        p.catch(() => {});
+      }
+    }
+
     handleMouseMove(e);
-    // Sudden whip jerk for instant crack
+
+    // Sudden whip jerk for instant crack motion
     if (whipRef.current && whipRef.current.length > 2) {
       const tip = whipRef.current[whipRef.current.length - 1];
-      triggerCrack(tip.x, tip.y);
+      tip.x += (Math.random() - 0.5) * 120;
+      tip.y += (Math.random() - 0.5) * 120;
+      triggerCrack(e.clientX, e.clientY);
     } else {
-      triggerCrack();
+      triggerCrack(e.clientX, e.clientY);
     }
-  }, [handleMouseMove, triggerCrack]);
+  };
 
-  // Main OpenWhip physics loop
+  // OpenWhip dynamic physics animation loop
   useEffect(() => {
     if (!isVisible) return;
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    if (!canvas || typeof canvas.getContext !== "function") return;
+    let ctx;
+    try {
+      ctx = canvas.getContext("2d");
+    } catch {
+      return;
+    }
     if (!ctx) return;
 
-    let W = (canvas.width = canvas.offsetWidth || 560);
-    let H = (canvas.height = canvas.offsetHeight || 200);
+    let W = (canvas.width = canvas.offsetWidth || 600);
+    let H = (canvas.height = canvas.offsetHeight || 300);
 
     const onResize = () => {
       if (!canvas) return;
-      W = canvas.width = canvas.offsetWidth || 560;
-      H = canvas.height = canvas.offsetHeight || 200;
+      W = canvas.width = canvas.offsetWidth || 600;
+      H = canvas.height = canvas.offsetHeight || 300;
     };
     window.addEventListener("resize", onResize);
 
-    // Initialize whip points
     const initWhip = (mx, my) => {
       const pts = [];
       for (let i = 0; i < P.segments; i++) {
@@ -218,8 +313,8 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       return pts;
     };
 
-    const startX = 80;
-    const startY = H * 0.55;
+    const startX = 90;
+    const startY = H * 0.5;
     mousePosRef.current = { x: startX, y: startY, prevX: startX, prevY: startY };
     whipRef.current = initWhip(startX, startY);
 
@@ -229,17 +324,16 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       const now = Date.now();
       const elapsed = now - startTime;
 
-      // Auto-drive mouse if user is idle
+      // Auto-drive whip motion if user is idle
       const idleTime = now - lastUserMoveRef.current;
-      if (idleTime > 1200) {
-        // Periodic whip crack motion
-        const autoCycle = (elapsed % 1500) / 1500;
+      if (idleTime > 1000) {
+        const autoCycle = (elapsed % 1800) / 1800;
         const swing = Math.sin(autoCycle * Math.PI * 2);
-        const flick = autoCycle > 0.65 && autoCycle < 0.85 ? Math.sin((autoCycle - 0.65) * Math.PI * 5) * 80 : 0;
+        const flick = autoCycle > 0.65 && autoCycle < 0.85 ? Math.sin((autoCycle - 0.65) * Math.PI * 5) * 90 : 0;
         mousePosRef.current.prevX = mousePosRef.current.x;
         mousePosRef.current.prevY = mousePosRef.current.y;
-        mousePosRef.current.x = startX + swing * 30 + flick;
-        mousePosRef.current.y = startY + Math.cos(autoCycle * Math.PI * 2) * 20 - flick * 0.4;
+        mousePosRef.current.x = startX + swing * 40 + flick;
+        mousePosRef.current.y = startY + Math.cos(autoCycle * Math.PI * 2) * 25 - flick * 0.4;
       }
 
       const whip = whipRef.current;
@@ -259,7 +353,7 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       handleAngVelRef.current *= P.handleAngularDamping;
       handleAngleRef.current = wrapPi(handleAngleRef.current + handleAngVelRef.current);
 
-      // Verlet step
+      // Verlet physics step
       for (let i = 1; i < whip.length; i++) {
         const p = whip[i];
         const vx = (p.x - p.px) * P.damping;
@@ -270,7 +364,7 @@ const BadClaudeLoader = ({ isVisible = true }) => {
         p.y += vy + P.gravity;
       }
 
-      // Pin handle to current mouse
+      // Pin handle to mouse
       whip[0].x = mousePosRef.current.x;
       whip[0].y = mousePosRef.current.y;
       whip[0].px = mousePosRef.current.x;
@@ -309,7 +403,7 @@ const BadClaudeLoader = ({ isVisible = true }) => {
         }
       }
 
-      // Check tip velocity for crack
+      // Check tip speed for automatic crack
       const tip = whip[whip.length - 1];
       const tipVel = Math.hypot(tip.x - tip.px, tip.y - tip.py);
       if (tipVel > P.crackSpeed && now - lastCrackTimeRef.current > P.crackCooldownMs) {
@@ -317,13 +411,13 @@ const BadClaudeLoader = ({ isVisible = true }) => {
         triggerCrack(tip.x, tip.y);
       }
 
-      // DRAW OPENWHIP EXACT VISUALS
+      // Draw whip with transparent background
       ctx.clearRect(0, 0, W, H);
 
-      // White outline halo (OpenWhip style)
+      // Contrast halo outline
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      ctx.strokeStyle = "#ffffff";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
       if (whip.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(whip[0].x, whip[0].y);
@@ -334,7 +428,6 @@ const BadClaudeLoader = ({ isVisible = true }) => {
         ctx.lineWidth = P.lineWidthTip + P.outlineWidth * 2;
         ctx.stroke();
 
-        // Thick handle outline
         ctx.beginPath();
         ctx.moveTo(whip[0].x, whip[0].y);
         for (let i = 0; i < Math.min(P.handleThickSegments, whip.length - 1); i++) {
@@ -345,8 +438,8 @@ const BadClaudeLoader = ({ isVisible = true }) => {
         ctx.stroke();
       }
 
-      // Dark core leather rope (OpenWhip style #111)
-      ctx.strokeStyle = "#0f172a";
+      // Core dark leather rope
+      ctx.strokeStyle = "#1e293b";
       for (let i = 0; i < whip.length - 1; i++) {
         const t = i / Math.max(1, whip.length - 2);
         const extra = i < P.handleThickSegments ? P.handleExtraWidth : 0;
@@ -358,12 +451,12 @@ const BadClaudeLoader = ({ isVisible = true }) => {
         ctx.stroke();
       }
 
-      // Red/amber cracker popper at tip
+      // Red/amber cracker popper tip
       ctx.beginPath();
       ctx.arc(tip.x, tip.y, 4.5, 0, Math.PI * 2);
       ctx.fillStyle = "#ef4444";
       ctx.shadowColor = "#f59e0b";
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = 6;
       ctx.fill();
 
       animRef.current = requestAnimationFrame(loop);
@@ -377,22 +470,93 @@ const BadClaudeLoader = ({ isVisible = true }) => {
     };
   }, [isVisible, triggerCrack]);
 
+  useEffect(() => {
+    return () => {
+      if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+    };
+  }, []);
+
   if (!isVisible) return null;
 
   return (
     <div
-      className={`badclaude-overlay ${isCracking ? "cracking" : ""}`}
+      ref={containerRef}
+      className={`badclaude-interactive-container ${isShaking ? "whip-screen-shake" : ""}`}
       data-testid="gif-loader"
       onClick={handleClick}
       onMouseMove={handleMouseMove}
-      title="Wave mouse or click to whip!"
+      title="Click vào chỗ trống để quất roi! ⚡"
     >
-      <div className="badclaude-header">
-        <div className="badclaude-tag">
-          <span className="badclaude-pulse-dot" />
-          <span>BadClaude · OpenWhip</span>
-        </div>
-        <div className="badclaude-tools">
+      {/* Animated OpenWhip Physics Canvas */}
+      <canvas ref={canvasRef} className="badclaude-canvas" />
+
+      {/* Comic Action Sparks & Particle Sprays */}
+      <div className="badclaude-bursts-layer">
+        {bursts.map((b) => (
+          <div
+            key={b.id}
+            className="badclaude-burst-wrapper"
+            style={{
+              left: `${b.x}px`,
+              top: `${b.y}px`,
+            }}
+          >
+            {/* Spray of small comic shapes (stars, lightning, dashes, droplets, hearts) */}
+            {b.particles.map((p) => (
+              <div
+                key={p.id}
+                className="badclaude-comic-particle"
+                style={{
+                  "--target-x": `${p.dx}px`,
+                  "--target-y": `${p.dy}px`,
+                  "--rot": `${p.rotation}deg`,
+                  width: `${p.size}px`,
+                  height: `${p.size}px`,
+                }}
+              >
+                <svg
+                  viewBox={p.shape.viewBox}
+                  className="badclaude-swoosh-svg"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style={{
+                    filter: `drop-shadow(0 0 6px ${p.color}) drop-shadow(0 1px 2px rgba(0,0,0,0.4))`,
+                  }}
+                >
+                  <path
+                    d={p.shape.path}
+                    fill={p.shape.strokeOnly ? "none" : p.color}
+                    stroke={p.shape.strokeOnly ? p.color : "none"}
+                    strokeWidth={p.shape.strokeOnly ? 3 : 0}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+            ))}
+
+            {/* Small Comic Floating Text Popup (No enclosing box, pure text with fast zoom and fade) */}
+            <div
+              className="badclaude-pop-text"
+              style={{
+                color: b.quoteColor,
+                fontSize: `${b.fontSize}px`,
+                "--quote-rot": `${b.quoteRotation}deg`,
+              }}
+            >
+              {b.quote}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Perfectly Centered "Searching...." Minimal Indicator */}
+      <div className="badclaude-searching-indicator">
+        <div className="badclaude-searching-row">
+          <span className="badclaude-searching-spinner" />
+          <span className="badclaude-searching-text">
+            Searching<span className="searching-dots"><span>.</span><span>.</span><span>.</span><span>.</span></span>
+          </span>
+          <span className="badclaude-strike-badge">Whip Strikes: {whipCount}</span>
           <button
             type="button"
             className="badclaude-mute-btn"
@@ -400,38 +564,11 @@ const BadClaudeLoader = ({ isVisible = true }) => {
               e.stopPropagation();
               setIsMuted((prev) => !prev);
             }}
-            title={isMuted ? "Unmute whip sound" : "Mute whip sound"}
+            title={isMuted ? "Bật âm thanh" : "Tắt âm thanh"}
           >
-            {isMuted ? "🔇 Muted" : "🔊 Sound ON"}
+            {isMuted ? "🔇" : "🔊"}
           </button>
         </div>
-      </div>
-
-      <div className="badclaude-canvas-wrapper">
-        <canvas ref={canvasRef} className="badclaude-canvas" />
-        {isCracking && <div className="badclaude-flash" />}
-        {isCracking && (
-          <div
-            key={shockwaveKey}
-            className="badclaude-shockwave"
-            style={{
-              left: `${crackPos.x}px`,
-              top: `${crackPos.y}px`,
-            }}
-          />
-        )}
-      </div>
-
-      <div className="badclaude-content">
-        <h3 className="badclaude-slogan">
-          {BADCLAUDE_QUOTES[quoteIndex]}
-        </h3>
-        <p className="badclaude-subtext">
-          <span>AI inference in progress</span>
-          <span>•</span>
-          <span className="badclaude-whip-count">Whips: {whipCount}</span>
-        </p>
-        <span className="badclaude-click-hint">⚡ Wave cursor or click to crack the whip ⚡</span>
       </div>
     </div>
   );

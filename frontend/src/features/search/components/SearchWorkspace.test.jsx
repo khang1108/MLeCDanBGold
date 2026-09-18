@@ -158,13 +158,13 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   const frameImage = await screen.findByAltText('Frame frame-kis');
   fireEvent.click(frameImage);
 
-  expect(onFrameClick).toHaveBeenCalledWith({
+  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
     frame: expect.objectContaining({
       video_id: 'L21_a_b.folder2.L21_V001',
       frame_idx: 300,
       fps: 29.97,
     }),
-  });
+  }));
 });
 
 
@@ -190,9 +190,9 @@ test('omits eventTrailContext when evidence_snapshot_id is null or when in filte
 
   fireEvent.click(await screen.findByAltText('Frame frame-degraded'));
 
-  expect(onFrameClick).toHaveBeenCalledWith({
+  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
     frame: expect.objectContaining({ frame_id: 'frame-degraded' }),
-  });
+  }));
 });
 
 

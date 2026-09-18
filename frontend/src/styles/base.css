@@ -48,6 +48,21 @@ input::-moz-range-thumb {
   cursor: url("../../public/nino_cursor_24.png") 12 12, url("../../public/nino_cursor_24.png") 12 12, auto !important;
 }
 
+/* Whip Cursor Mode during searching */
+.whip-cursor-mode,
+.whip-cursor-mode *,
+.badclaude-interactive-container,
+.badclaude-interactive-container * {
+  cursor: url("../../public/whip_cursor.svg") 4 28, crosshair !important;
+}
+
+.whip-cursor-mode:active,
+.whip-cursor-mode *:active,
+.badclaude-interactive-container:active,
+.badclaude-interactive-container *:active {
+  cursor: url("../../public/whip_cursor_active.svg") 4 28, crosshair !important;
+}
+
 /* Keep the workspace at the browser's natural scale. */
 html,
 #root {
