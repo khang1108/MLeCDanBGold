@@ -293,4 +293,102 @@ describe('AvsWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review selections' }));
     expect(screen.getByRole('button', { name: 'Remove f1 from selection' })).toBeTruthy();
   });
+
+  const selectOneForSubmission = async () => {
+    searchAvs.mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]));
+    renderWorkspace();
+    await runSearch('seafood');
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit 1 answer' }));
+    await screen.findByRole('dialog', { name: 'Submit AVS answers' });
+  };
+
+  test('RECORDED moves the submitted candidate out of pending state', async () => {
+    submitDresAnswers.mockResolvedValueOnce({
+      state: 'RECORDED', recorded: true, verdict: 'CORRECT', message: 'recorded',
+    });
+    await selectOneForSubmission();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm submit' }));
+
+    await screen.findByText('Submitted');
+    expect(screen.getByRole('checkbox').disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Submit 1 answer' })).toBeNull();
+    expect(submitDresAnswers).toHaveBeenCalledTimes(1);
+  });
+
+  test('NOT_RECORDED leaves the selected candidate pending', async () => {
+    submitDresAnswers.mockResolvedValueOnce({
+      state: 'NOT_RECORDED', recorded: false, reason: 'DRES_REJECTED', message: 'rejected',
+    });
+    await selectOneForSubmission();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm submit' }));
+
+    await screen.findByText('rejected');
+    expect(screen.getByRole('checkbox').checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'Submit 1 answer' })).toBeTruthy();
+    expect(submitDresAnswers).toHaveBeenCalledTimes(1);
+  });
+
+  test('UNKNOWN freezes normal mutation and never retries automatically', async () => {
+    submitDresAnswers.mockResolvedValueOnce({
+      state: 'UNKNOWN', recorded: null, message: 'check DRES',
+    });
+    await selectOneForSubmission();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm submit' }));
+
+    await screen.findByText('check DRES');
+    expect(screen.getByRole('checkbox').disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Retry after verification' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mark recorded after verification' })).toBeTruthy();
+    expect(submitDresAnswers).toHaveBeenCalledTimes(1);
+  });
+
+  test('UNKNOWN retries only after the explicit verification action', async () => {
+    window.confirm = jest.fn().mockReturnValue(true);
+    submitDresAnswers
+      .mockResolvedValueOnce({ state: 'UNKNOWN', recorded: null, message: 'check DRES' })
+      .mockResolvedValueOnce({ state: 'RECORDED', recorded: true, verdict: 'CORRECT', message: 'recorded' });
+    await selectOneForSubmission();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm submit' }));
+    await screen.findByRole('button', { name: 'Retry after verification' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry after verification' }));
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      'I verified DRES state and want to retry this exact batch.',
+    );
+    await waitFor(() => expect(submitDresAnswers).toHaveBeenCalledTimes(2));
+    await screen.findByText('Submitted');
+  });
+
+  test('mark recorded after verification performs no second network request', async () => {
+    submitDresAnswers.mockResolvedValueOnce({
+      state: 'UNKNOWN', recorded: null, message: 'check DRES',
+    });
+    await selectOneForSubmission();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm submit' }));
+    await screen.findByRole('button', { name: 'Mark recorded after verification' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark recorded after verification' }));
+
+    expect(submitDresAnswers).toHaveBeenCalledTimes(1);
+    await screen.findByText('Submitted');
+  });
+
+  test('TASK_SCOPE_MISMATCH preserves pending selection and surfaces conflict', async () => {
+    submitDresAnswers.mockRejectedValueOnce(Object.assign(new Error('scope changed'), {
+      status: 409,
+      code: 'TASK_SCOPE_MISMATCH',
+    }));
+    await selectOneForSubmission();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm submit' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/task scope changed/i);
+    expect(screen.getByRole('checkbox').checked).toBe(true);
+  });
 });

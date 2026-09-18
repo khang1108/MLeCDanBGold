@@ -444,3 +444,132 @@
 .avs-drawer-remove-btn:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--color-danger) 10%, transparent);
 }
+
+/* Submit Confirmation and Outcome Modal */
+.avs-submit-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.avs-submit-dialog-content {
+  width: 460px;
+  max-width: 90vw;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg);
+  box-shadow: var(--shadow-level-2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.avs-submit-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.avs-submit-dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.avs-submit-dialog-close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.avs-submit-dialog-body {
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.avs-submit-dialog-prompt {
+  margin: 0;
+  font-size: 15px;
+  color: var(--color-ink);
+}
+
+.avs-submit-dialog-status.loading {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-primary);
+}
+
+.avs-submit-dialog-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.avs-outcome-badge {
+  display: inline-block;
+  align-self: flex-start;
+  padding: var(--spacing-xxs) var(--spacing-xs);
+  border-radius: var(--rounded-xs);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.avs-submit-dialog-outcome.success .avs-outcome-badge {
+  background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
+  color: var(--color-success);
+}
+
+.avs-submit-dialog-outcome.rejected .avs-outcome-badge {
+  background-color: color-mix(in srgb, var(--color-danger) 15%, transparent);
+  color: var(--color-danger);
+}
+
+.avs-submit-dialog-outcome.unknown .avs-outcome-badge {
+  background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  color: var(--color-warning);
+}
+
+.avs-unknown-help {
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.avs-submit-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border-top: 1px solid var(--color-hairline);
+  background-color: var(--color-canvas-soft);
+}
+
+.avs-retry-btn {
+  background-color: var(--color-warning);
+  color: #fff;
+  border-color: var(--color-warning);
+}
+
+.avs-retry-btn:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-warning) 85%, #000);
+}
+
+.avs-mark-recorded-btn {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-primary);
+}

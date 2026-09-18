@@ -56,15 +56,19 @@ const AvsSelectionBar = ({
           Clear selections
         </button>
 
-        {onSubmit && (
+        {onSubmit && pendingCount > 0 && (
           <button
             type="button"
             className="avs-bar-btn avs-submit-btn"
             onClick={onSubmit}
-            disabled={disabled || pendingCount === 0 || isSubmitting}
-            aria-label="Submit selections"
+            disabled={disabled || isSubmitting}
+            aria-label={pendingCount === 1 ? 'Submit 1 answer' : `Submit ${pendingCount} answers`}
           >
-            {isSubmitting ? 'Submitting...' : `Submit ${pendingCount}`}
+            {isSubmitting
+              ? 'Submitting...'
+              : pendingCount === 1
+              ? 'Submit 1 answer'
+              : `Submit ${pendingCount} answers`}
           </button>
         )}
       </div>

@@ -3,12 +3,15 @@ import { searchAvs } from '../../../api/avs';
 import { getCurrentDresTask } from '../../../api/submissions';
 import {
   avsSelectionReducer,
+  candidateToTemporalAnswer,
   createInitialAvsSelectionState,
 } from '../selectionState';
+import { useAvsSubmission } from '../hooks/useAvsSubmission';
 import AvsQueryControls from './AvsQueryControls';
 import AvsHarvestGrid from './AvsHarvestGrid';
 import AvsSelectionBar from './AvsSelectionBar';
 import AvsSelectionDrawer from './AvsSelectionDrawer';
+import AvsSubmitDialog from './AvsSubmitDialog';
 
 /**
  * Dedicated workspace shell for Ad-Hoc Video Search (AVS).
@@ -40,9 +43,18 @@ const AvsWorkspace = ({
 
   const [scopeConflict, setScopeConflict] = useState(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
+  const [activeBatch, setActiveBatch] = useState(null);
 
   const queryInputRef = useRef(null);
   const pendingTaskSwitchRef = useRef(null);
+
+  const avsSubmission = useAvsSubmission({
+    userId: connectedUserId,
+    selectedTask,
+    taskScopeKey: selectionState.taskScopeKey,
+    onSessionRejected,
+  });
 
   // Live scope resolution via getCurrentDresTask
   useEffect(() => {
@@ -170,6 +182,52 @@ const AvsWorkspace = ({
     }
   };
 
+  const handleOpenSubmit = () => {
+    if (selectionState.pending.size === 0) return;
+    avsSubmission.resetOutcome();
+    setIsSubmitDialogOpen(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    const candidateIds = [...selectionState.pending.keys()];
+    const answers = [...selectionState.pending.values()].map((candidate) =>
+      candidateToTemporalAnswer(candidate)
+    );
+    const batch = { candidateIds, answers };
+    setActiveBatch(batch);
+
+    const result = await avsSubmission.submitBatch(batch);
+    if (result?.error?.code === 'TASK_SCOPE_MISMATCH' || result?.error?.status === 409) {
+      setIsSubmitDialogOpen(false);
+      setScopeConflict('Task scope changed on the server. Selections are locked.');
+      return;
+    }
+
+    if (result?.state === 'RECORDED') {
+      dispatchSelection({ type: 'RECORDED', candidateIds });
+      setIsSubmitDialogOpen(false);
+    } else if (result?.state === 'UNKNOWN') {
+      dispatchSelection({ type: 'UNKNOWN', candidateIds });
+    }
+  };
+
+  const handleRetryUnknown = async () => {
+    const confirmed = window.confirm('I verified DRES state and want to retry this exact batch.');
+    if (confirmed && activeBatch) {
+      const result = await avsSubmission.retryUnknown(activeBatch);
+      if (result?.state === 'RECORDED') {
+        dispatchSelection({ type: 'RECORDED', candidateIds: activeBatch.candidateIds });
+        setIsSubmitDialogOpen(false);
+      }
+    }
+  };
+
+  const handleMarkUnknownRecorded = () => {
+    dispatchSelection({ type: 'MARK_UNKNOWN_RECORDED' });
+    avsSubmission.resetOutcome();
+    setIsSubmitDialogOpen(false);
+  };
+
   const isSelectionDisabled = Boolean(scopeConflict) || Boolean(selectionState.unknownBatch);
 
   return (
@@ -235,6 +293,8 @@ const AvsWorkspace = ({
         pending={selectionState.pending}
         onReview={() => setIsDrawerOpen(true)}
         onClear={handleClearPending}
+        onSubmit={handleOpenSubmit}
+        isSubmitting={avsSubmission.status === 'SUBMITTING'}
         disabled={isSelectionDisabled}
       />
 
@@ -244,6 +304,26 @@ const AvsWorkspace = ({
         pending={selectionState.pending}
         onRemove={handleRemoveCandidate}
         disabled={isSelectionDisabled}
+      />
+
+      <AvsSubmitDialog
+        isOpen={isSubmitDialogOpen}
+        onClose={() => {
+          setIsSubmitDialogOpen(false);
+          avsSubmission.resetOutcome();
+        }}
+        onConfirm={handleConfirmSubmit}
+        candidateCount={activeBatch ? activeBatch.candidateIds.length : selectionState.pending.size}
+        uniqueVideoCount={
+          activeBatch
+            ? new Set(activeBatch.answers.map((a) => a.video_id)).size
+            : new Set([...selectionState.pending.values()].map((c) => c.video_id)).size
+        }
+        isSubmitting={avsSubmission.status === 'SUBMITTING'}
+        status={avsSubmission.status}
+        outcome={avsSubmission.outcome}
+        onRetryUnknown={handleRetryUnknown}
+        onMarkUnknownRecorded={handleMarkUnknownRecorded}
       />
     </div>
   );
