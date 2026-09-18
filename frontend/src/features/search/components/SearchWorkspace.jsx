@@ -564,7 +564,7 @@ const SearchWorkspace = ({
               warnings: [],
               operationMetadata: opMeta,
             });
-            activateHistorySession({
+            const historySession = activateHistorySession({
               queryId: feedbackQueryId,
               ownerUserId: historyIdentity,
               queryText: feedbackQueryText,
@@ -583,7 +583,9 @@ const SearchWorkspace = ({
                 });
                 onHistoryRefresh?.();
               } catch (historyErr) {
-                // Non-fatal history write
+                if (isCurrentHistorySession(historySession)) {
+                  invalidateHistorySession();
+                }
               }
             });
           }
@@ -683,7 +685,7 @@ const SearchWorkspace = ({
             warnings: [],
             operationMetadata: opMeta,
           });
-          activateHistorySession({
+          const historySession = activateHistorySession({
             queryId: undoQueryId,
             ownerUserId: historyIdentity,
             queryText: undoQueryText,
@@ -702,7 +704,9 @@ const SearchWorkspace = ({
               });
               onHistoryRefresh?.();
             } catch (historyErr) {
-              // Non-fatal history write
+              if (isCurrentHistorySession(historySession)) {
+                invalidateHistorySession();
+              }
             }
           });
         }

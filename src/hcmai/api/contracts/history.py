@@ -22,6 +22,9 @@ class QueryOperationMetadata(BaseModel):
     image_added: list[str] = Field(default_factory=list)
     image_removed: list[str] = Field(default_factory=list)
     search_only: bool = False
+    action: str | None = None
+    scope: str | None = None
+    feedback_revision: int | None = Field(default=None, ge=0)
 
 
 class QueryInteractionEventCreate(BaseModel):

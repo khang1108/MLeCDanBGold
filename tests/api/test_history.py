@@ -130,6 +130,35 @@ def test_workspace_store_roundtrip_operation_metadata(tmp_path) -> None:
     assert loaded[0].operation_metadata == op_meta
 
 
+def test_workspace_store_roundtrip_feedback_operation_metadata(tmp_path) -> None:
+    """Test saving and retrieving query history with chat feedback metadata."""
+    store = WorkspaceStore(tmp_path / "store.db")
+    op_meta = QueryOperationMetadata(
+        semantic_revision=1,
+        operation_kind="chat_feedback",
+        affected_event_ids=["E1"],
+        action="refine",
+        scope="all_videos",
+        feedback_revision=1,
+    )
+    req = QueryHistoryCreate(
+        query_id="q-feedback-1",
+        user_id="user-1",
+        query_text="focus on red shirt",
+        result_snapshot=_sample_snapshot(),
+        operation_metadata=op_meta,
+    )
+    record = store.create_history(req)
+    assert record.operation_metadata is not None
+    assert record.operation_metadata.action == "refine"
+    assert record.operation_metadata.scope == "all_videos"
+    assert record.operation_metadata.feedback_revision == 1
+
+    loaded = store.get_recent_history("user-1")
+    assert len(loaded) == 1
+    assert loaded[0].operation_metadata == op_meta
+
+
 def test_workspace_store_interaction_events_monotonically_ordered(tmp_path) -> None:
     """Test append-only interaction events preserve sequence order per query."""
     store = WorkspaceStore(tmp_path / "store.db")

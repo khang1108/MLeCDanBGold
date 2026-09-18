@@ -18,7 +18,6 @@ class RetrievalOverride(BaseModel):
     """Retrieval text overrides for dense and/or lexical retrieval for one event."""
 
     model_config = ConfigDict(extra="forbid")
-
     dense_text: str | None = None
     bm25_text: str | None = None
 
