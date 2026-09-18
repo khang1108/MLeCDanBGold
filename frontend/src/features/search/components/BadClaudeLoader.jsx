@@ -5,11 +5,11 @@ import { LOTTERY_MUSIC_FILE, playWhipCrackAndMemeSound } from "./whipAudio";
 // OpenWhip physics parameters for realistic whip motion
 const P = {
   segments: 28,
-  segmentLength: 16,
+  segmentLength: 18,
   taper: 0.6,
-  gravity: 1.0,
-  damping: 0.95,
-  constraintIters: 18,
+  gravity: 1.1,
+  damping: 0.96,
+  constraintIters: 20,
   maxStretchRatio: 1.2,
   baseTargetAngle: -1.12,
   handleAimByMouseX: 0.4,
@@ -24,15 +24,15 @@ const P = {
   tipMaxBendDeg: 130,
   bendRigidityStart: 0.8,
   bendRigidityEnd: 0.12,
-  crackSpeed: 260,
-  crackCooldownMs: 250,
+  crackSpeed: 280,
+  crackCooldownMs: 220,
   lineWidthHandle: 7,
   lineWidthTip: 4,
   outlineWidth: 2.5,
   handleExtraWidth: 4,
   handleThickSegments: 2,
-  arcWidth: 200,
-  arcHeight: 120,
+  arcWidth: 220,
+  arcHeight: 140,
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -81,6 +81,112 @@ function whipSegmentBezier(pts, i) {
   };
 }
 
+/** OpenWhip: Clamp bend angle per joint (handle stiff, tip floppy and flexible) */
+function applyBendLimits(whip) {
+  if (!whip || whip.length < 3) return;
+  for (let i = 1; i < whip.length - 1; i++) {
+    const a = whip[i - 1];
+    const b = whip[i];
+    const c = whip[i + 1];
+
+    const v1x = a.x - b.x;
+    const v1y = a.y - b.y;
+    const v2x = c.x - b.x;
+    const v2y = c.y - b.y;
+    const l1 = Math.hypot(v1x, v1y) || 0.0001;
+    const l2 = Math.hypot(v2x, v2y) || 0.0001;
+    const n1x = v1x / l1, n1y = v1y / l1;
+    const n2x = v2x / l2, n2y = v2y / l2;
+
+    const dot = clamp(n1x * n2x + n1y * n2y, -1, 1);
+    const angle = Math.acos(dot);
+    const t = i / (whip.length - 2);
+    const maxBend = (lerp(P.handleMaxBendDeg, P.tipMaxBendDeg, t) * Math.PI) / 180;
+    const bend = Math.PI - angle;
+    if (bend <= maxBend) continue;
+
+    const cross = n1x * n2y - n1y * n2x;
+    const sign = cross >= 0 ? 1 : -1;
+    const targetAngle = Math.PI - maxBend;
+    const targetA = Math.atan2(n1y, n1x) + sign * targetAngle;
+    const tx = b.x + Math.cos(targetA) * l2;
+    const ty = b.y + Math.sin(targetA) * l2;
+    const rigidity = lerp(P.bendRigidityStart, P.bendRigidityEnd, t);
+
+    c.x = lerp(c.x, tx, rigidity);
+    c.y = lerp(c.y, ty, rigidity);
+  }
+}
+
+/** OpenWhip: Hard cap for segment stretch ratio to prevent rubber banding */
+function capSegmentStretch(whip) {
+  if (!whip || whip.length < 2) return;
+  for (let i = 0; i < whip.length - 1; i++) {
+    const a = whip[i];
+    const b = whip[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 0.0001;
+    const maxLen = segLen(i) * P.maxStretchRatio;
+    if (dist <= maxLen) continue;
+    const k = maxLen / dist;
+    b.x = a.x + dx * k;
+    b.y = a.y + dy * k;
+  }
+}
+
+/** OpenWhip: Guide early segments outward at handle angle */
+function applyBasePose(whip, handleAngle) {
+  if (!whip) return;
+  const dx = Math.cos(handleAngle);
+  const dy = Math.sin(handleAngle);
+  const guided = Math.min(P.basePoseSegments, whip.length - 1);
+  for (let i = 1; i <= guided; i++) {
+    const t = (i - 1) / Math.max(guided - 1, 1);
+    const stiff = lerp(P.basePoseStiffStart, P.basePoseStiffEnd, t);
+    const prev = whip[i - 1];
+    const p = whip[i];
+    const targetLen = segLen(i - 1);
+    const tx = prev.x + dx * targetLen;
+    const ty = prev.y + dy * targetLen;
+    p.x = lerp(p.x, tx, stiff);
+    p.y = lerp(p.y, ty, stiff);
+  }
+}
+
+/** OpenWhip: Elastic bounce and boundary containment on canvas edges */
+function applyWallCollisions(whip, W, H) {
+  if (!whip) return;
+  for (let i = 1; i < whip.length; i++) {
+    const p = whip[i];
+    let vx = p.x - p.px;
+    let vy = p.y - p.py;
+    let hit = false;
+    if (p.x < 10) {
+      p.x = 10;
+      if (vx < 0) vx = -vx * 0.42;
+      hit = true;
+    } else if (p.x > W - 10) {
+      p.x = W - 10;
+      if (vx > 0) vx = -vx * 0.42;
+      hit = true;
+    }
+    if (p.y < 10) {
+      p.y = 10;
+      if (vy < 0) vy = -vy * 0.42;
+      hit = true;
+    } else if (p.y > H - 10) {
+      p.y = H - 10;
+      if (vy > 0) vy = -vy * 0.42;
+      hit = true;
+    }
+    if (hit) {
+      p.px = p.x - vx;
+      p.py = p.y - vy;
+    }
+  }
+}
+
 const HURRY_UP_QUOTES = [
   "Lẹ lên mày ơiiiiiiiiiii",
   "Sắp thua rồi kìaaaa",
@@ -107,6 +213,7 @@ const BadClaudeLoader = ({ isVisible = true }) => {
   const animRef = useRef(null);
   const mousePosRef = useRef({ x: 100, y: 150, prevX: 100, prevY: 150 });
   const whipRef = useRef(null);
+  const strikeRef = useRef(null);
   const handleAngleRef = useRef(P.baseTargetAngle);
   const handleAngVelRef = useRef(0);
   const lastCrackTimeRef = useRef(0);
@@ -177,7 +284,7 @@ const BadClaudeLoader = ({ isVisible = true }) => {
     } catch {}
   }, [isMuted, isVisible]);
 
-  const triggerCrack = useCallback((clientX, clientY) => {
+  const triggerCrack = useCallback((crackX, crackY, isClientCoords = false) => {
     playWhipCrackAndMemeSound(isMuted);
     setWhipCount((c) => c + 1);
 
@@ -191,13 +298,20 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       }, 220);
     });
 
-    // Calculate relative coordinates
+    // Calculate relative coordinates (located at tail tip of the whip)
     let x = 200;
     let y = 150;
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      x = clientX !== undefined ? clientX - rect.left : rect.width / 2;
-      y = clientY !== undefined ? clientY - rect.top : rect.height / 2;
+      if (crackX !== undefined && crackY !== undefined) {
+        x = isClientCoords ? crackX - rect.left : crackX;
+        y = isClientCoords ? crackY - rect.top : crackY;
+      } else {
+        x = rect.width * 0.7;
+        y = rect.height * 0.5;
+      }
+      x = clamp(x, 40, rect.width - 40);
+      y = clamp(y, 30, rect.height - 30);
     }
 
     // Generate small diverse comic particles radiating outward
@@ -268,15 +382,30 @@ const BadClaudeLoader = ({ isVisible = true }) => {
 
     handleMouseMove(e);
 
-    // Sudden whip jerk for instant crack motion
-    if (whipRef.current && whipRef.current.length > 2) {
-      const tip = whipRef.current[whipRef.current.length - 1];
-      tip.x += (Math.random() - 0.5) * 120;
-      tip.y += (Math.random() - 0.5) * 120;
-      triggerCrack(e.clientX, e.clientY);
+    const now = Date.now();
+    const whip = whipRef.current;
+    let tipX, tipY;
+    let isClient = false;
+
+    if (whip && whip.length > 0) {
+      const tip = whip[whip.length - 1];
+      tipX = tip.x;
+      tipY = tip.y;
     } else {
-      triggerCrack(e.clientX, e.clientY);
+      tipX = e.clientX;
+      tipY = e.clientY;
+      isClient = true;
     }
+
+    // Immediate crack burst at whip tail tip
+    triggerCrack(tipX, tipY, isClient);
+
+    // Launch high-energy whip strike motion where the wave rolls down to whip the tail
+    strikeRef.current = {
+      startTime: now,
+      duration: 360,
+      dirAngle: handleAngleRef.current || P.baseTargetAngle,
+    };
   };
 
   // OpenWhip dynamic physics animation loop
@@ -324,9 +453,9 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       const now = Date.now();
       const elapsed = now - startTime;
 
-      // Auto-drive whip motion if user is idle
+      // Auto-drive whip motion if user is idle and not currently striking
       const idleTime = now - lastUserMoveRef.current;
-      if (idleTime > 1000) {
+      if (idleTime > 1000 && !strikeRef.current) {
         const autoCycle = (elapsed % 1800) / 1800;
         const swing = Math.sin(autoCycle * Math.PI * 2);
         const flick = autoCycle > 0.65 && autoCycle < 0.85 ? Math.sin((autoCycle - 0.65) * Math.PI * 5) * 90 : 0;
@@ -353,7 +482,7 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       handleAngVelRef.current *= P.handleAngularDamping;
       handleAngleRef.current = wrapPi(handleAngleRef.current + handleAngVelRef.current);
 
-      // Verlet physics step
+      // Verlet physics integration step
       for (let i = 1; i < whip.length; i++) {
         const p = whip[i];
         const vx = (p.x - p.px) * P.damping;
@@ -364,27 +493,64 @@ const BadClaudeLoader = ({ isVisible = true }) => {
         p.y += vy + P.gravity;
       }
 
-      // Pin handle to mouse
-      whip[0].x = mousePosRef.current.x;
-      whip[0].y = mousePosRef.current.y;
-      whip[0].px = mousePosRef.current.x;
-      whip[0].py = mousePosRef.current.y;
+      // Handle strike dynamics (impulse wave propagating to the tail)
+      let strikeFlickX = 0;
+      let strikeFlickY = 0;
+      const strike = strikeRef.current;
+      if (strike) {
+        const strikeElapsed = now - strike.startTime;
+        const progress = strikeElapsed / strike.duration;
 
-      // Base pose near handle
-      const dx = Math.cos(handleAngleRef.current);
-      const dy = Math.sin(handleAngleRef.current);
-      const guided = Math.min(P.basePoseSegments, whip.length - 1);
-      for (let i = 1; i <= guided; i++) {
-        const t = (i - 1) / Math.max(guided - 1, 1);
-        const stiff = lerp(P.basePoseStiffStart, P.basePoseStiffEnd, t);
-        const prev = whip[i - 1];
-        const p = whip[i];
-        const targetLen = segLen(i - 1);
-        p.x = lerp(p.x, prev.x + dx * targetLen, stiff);
-        p.y = lerp(p.y, prev.y + dy * targetLen, stiff);
+        if (progress >= 1.0) {
+          strikeRef.current = null;
+        } else {
+          // 1. Handle flick (forward thrust then sharp snap recoil)
+          if (progress < 0.22) {
+            const p1 = progress / 0.22;
+            const f = Math.sin(p1 * Math.PI) * 45;
+            strikeFlickX = Math.cos(strike.dirAngle) * f;
+            strikeFlickY = Math.sin(strike.dirAngle) * f;
+          } else if (progress < 0.5) {
+            const p2 = (progress - 0.22) / 0.28;
+            const r = Math.sin(p2 * Math.PI) * 40;
+            strikeFlickX = -Math.cos(strike.dirAngle) * r;
+            strikeFlickY = -Math.sin(strike.dirAngle) * r;
+          }
+
+          // 2. Transversal wave moving from base to tail
+          const wavePos = ((progress - 0.08) / 0.62) * (whip.length - 1);
+          if (wavePos >= 1 && wavePos <= whip.length + 3) {
+            for (let i = 1; i < whip.length; i++) {
+              const distToWave = i - wavePos;
+              if (Math.abs(distToWave) < 3.5) {
+                const env = Math.cos((distToWave / 3.5) * (Math.PI / 2));
+                const taperAmp = 1.0 + 3.2 * (i / (whip.length - 1));
+                const wavePower = 20 * env * taperAmp;
+                const perp = strike.dirAngle + Math.PI / 2;
+                const loopDisp = Math.sin(distToWave * 1.6) * wavePower;
+
+                whip[i].x += Math.cos(perp) * loopDisp + Math.cos(strike.dirAngle) * (wavePower * 0.7);
+                whip[i].y += Math.sin(perp) * loopDisp + Math.sin(strike.dirAngle) * (wavePower * 0.7);
+              }
+            }
+          }
+        }
       }
 
-      // Distance constraints
+      // Pin handle to mouse position (with strike flick offset)
+      const hx = mousePosRef.current.x + strikeFlickX;
+      const hy = mousePosRef.current.y + strikeFlickY;
+      whip[0].x = hx;
+      whip[0].y = hy;
+      whip[0].px = hx;
+      whip[0].py = hy;
+
+      // Cap stretch and edge boundaries
+      capSegmentStretch(whip);
+      applyWallCollisions(whip, W, H);
+      applyBasePose(whip, handleAngleRef.current);
+
+      // Distance constraints with OpenWhip bend limits & stretch capping
       for (let iter = 0; iter < P.constraintIters; iter++) {
         for (let i = 0; i < whip.length - 1; i++) {
           const a = whip[i], b = whip[i + 1];
@@ -401,14 +567,18 @@ const BadClaudeLoader = ({ isVisible = true }) => {
             b.x -= ox; b.y -= oy;
           }
         }
+        applyBendLimits(whip);
+        applyBasePose(whip, handleAngleRef.current);
+        capSegmentStretch(whip);
+        applyWallCollisions(whip, W, H);
       }
 
-      // Check tip speed for automatic crack
+      // Check tip speed for automatic mouse flick crack detection
       const tip = whip[whip.length - 1];
       const tipVel = Math.hypot(tip.x - tip.px, tip.y - tip.py);
-      if (tipVel > P.crackSpeed && now - lastCrackTimeRef.current > P.crackCooldownMs) {
+      if (!strikeRef.current && tipVel > P.crackSpeed && now - lastCrackTimeRef.current > P.crackCooldownMs) {
         lastCrackTimeRef.current = now;
-        triggerCrack(tip.x, tip.y);
+        triggerCrack(tip.x, tip.y, false);
       }
 
       // Draw whip with transparent background
@@ -452,11 +622,12 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       }
 
       // Red/amber cracker popper tip
+      const isHighSpeed = tipVel > P.crackSpeed * 0.6 || Boolean(strikeRef.current);
       ctx.beginPath();
-      ctx.arc(tip.x, tip.y, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = "#ef4444";
-      ctx.shadowColor = "#f59e0b";
-      ctx.shadowBlur = 6;
+      ctx.arc(tip.x, tip.y, isHighSpeed ? 5.5 : 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = isHighSpeed ? "#fef08a" : "#ef4444";
+      ctx.shadowColor = isHighSpeed ? "#f59e0b" : "#ef4444";
+      ctx.shadowBlur = isHighSpeed ? 14 : 6;
       ctx.fill();
 
       animRef.current = requestAnimationFrame(loop);
