@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import importlib.util
 
-from hcmai.api.history import WorkspaceStore
 from hcmai.app import create_app
 from hcmai.orchestration.pipeline import SearchService
 
 
-def test_app_keeps_query_history_and_only_the_private_direct_dres_routes() -> None:
-    """Keep one stateless answer POST and query history after workspace removal."""
+def test_app_keeps_only_the_private_direct_dres_routes_and_no_database() -> None:
+    """Keep one stateless answer POST after workspace and database removal."""
 
-    app = create_app(search_service=object(), workspace_store=WorkspaceStore(":memory:"))
+    app = create_app(search_service=object())
     # New FastAPI lazily includes APIRouter objects without exposing a .path
     # on each wrapper; OpenAPI materializes the same public route surface.
     paths = set(app.openapi()["paths"])
@@ -27,18 +26,15 @@ def test_app_keeps_query_history_and_only_the_private_direct_dres_routes() -> No
     assert "/api/v1/vbs/session/{user_id}" in paths
     assert "/api/v1/vbs/task/{user_id}" in paths
     assert "/api/v1/vbs/submit" in paths
-    assert "/api/v1/query-history" in paths
+    assert "/api/v1/query-history" not in paths
     assert "/api/v1/query-candidates" not in paths
     assert "/api/v1/database/tables" not in paths
     assert "/api/v1/database/execute" not in paths
     assert getattr(SearchService, "submis" + "sion", None) is None
     assert getattr(SearchService, "generate_query_candidates", None) is None
-    assert getattr(WorkspaceStore, "add_frame_candidate", None) is None
-    assert getattr(WorkspaceStore, "get_answer_workspace", None) is None
-    assert getattr(WorkspaceStore, "reserve_submission", None) is None
-    assert getattr(WorkspaceStore, "list_database_tables", None) is None
-    assert getattr(WorkspaceStore, "list_database_rows", None) is None
-    assert getattr(WorkspaceStore, "execute_query", None) is None
+    assert importlib.util.find_spec("hcmai.api.history") is None
+    assert importlib.util.find_spec("hcmai.api.contracts.history") is None
+    assert importlib.util.find_spec("hcmai.api.routers.history") is None
     assert importlib.util.find_spec("hcmai.api.contracts." + "sub" + "mission") is None
     assert importlib.util.find_spec("hcmai.api.contracts.workspace") is None
     assert importlib.util.find_spec("hcmai.api.routers.workspace") is None

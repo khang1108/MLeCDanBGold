@@ -21,22 +21,8 @@ import {
 import { parseComposerDraft } from '../../kis/parser';
 import { filterFrames } from '../../../api/filter';
 import FilterPagination from '../../filter/components/FilterPagination';
-import {
-  createQueryHistory,
-  markFrameViewed,
-  recordQueryInteraction,
-} from '../../../api/history';
 import FramesBox from '../../frames/components/FramesBox';
 import ToolBox from '../../search-controls/components/ToolBox';
-import ReplayResults from '../../workspace/components/ReplayResults';
-import {
-  buildKisSnapshot,
-  buildOperationMetadata,
-  getSnapshotKind,
-  normalizeFrameActivity,
-  withViewedFrame,
-  activityStateForFrame,
-} from '../../workspace/queryHistory';
 
 export const parseRetrievalDescription = (description) => {
   const query = description.trim();
@@ -69,11 +55,7 @@ const SearchWorkspace = ({
   onOpenSubmission,
   isSubmissionOpening = false,
   userId,
-  historyUserId,
-  onHistoryRefresh,
   onQueryChange,
-  replayRequest,
-  onReplayHandled,
   isActive = true,
   onExplorationInvalidated,
   onEventTrailInvalidated,
@@ -83,9 +65,6 @@ const SearchWorkspace = ({
     onEventTrailInvalidated?.();
     onExplorationInvalidated?.();
   }, [onEventTrailInvalidated, onExplorationInvalidated]);
-  const historyIdentity = typeof historyUserId === 'string'
-    ? historyUserId.trim()
-    : typeof userId === 'string' ? userId.trim() : '';
   const [kisSession, setKisSession] = useState(createInitialKisSessionState);
   const [useDense, setUseDense] = useState(true);
   const [useBm25, setUseBm25] = useState(true);
@@ -96,8 +75,6 @@ const SearchWorkspace = ({
   const [searchLatencyMs, setSearchLatencyMs] = useState(null);
   const [error, setError] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
-  const [activeQuerySession, setActiveQuerySession] = useState(null);
-  const [replaySnapshot, setReplaySnapshot] = useState(null);
   const [filterFolderId, setFilterFolderId] = useState('');
   const [filterVideoId, setFilterVideoId] = useState('');
   const [filterTitle, setFilterTitle] = useState('');
@@ -108,11 +85,6 @@ const SearchWorkspace = ({
   const [filterTotalPages, setFilterTotalPages] = useState(0);
   const [appliedFilterParams, setAppliedFilterParams] = useState(null);
   const requestRef = useRef(null);
-  const viewedPatchRef = useRef(new Set());
-  const historyQueuesRef = useRef(new Map());
-  const activeQuerySessionRef = useRef(null);
-  const historyGenerationRef = useRef(0);
-  const lastReplayTokenRef = useRef(null);
   const liveEventTrailContextRef = useRef(null);
   const prevControlsRef = useRef({ topK, useDense, useBm25 });
   const filterFolderIdRef = useRef(null);
@@ -174,37 +146,6 @@ const SearchWorkspace = ({
     }
   }, []);
 
-  const enqueueHistoryWrite = useCallback((queryId, write) => {
-    const prior = historyQueuesRef.current.get(queryId) || Promise.resolve();
-    const next = prior.then(write);
-    historyQueuesRef.current.set(queryId, next);
-    next.catch(() => undefined);
-    return next;
-  }, []);
-
-  const activateHistorySession = useCallback((session) => {
-    const activeSession = {
-      ...session,
-      generation: historyGenerationRef.current + 1,
-    };
-    historyGenerationRef.current = activeSession.generation;
-    activeQuerySessionRef.current = activeSession;
-    setActiveQuerySession(activeSession);
-    return activeSession;
-  }, []);
-
-  const invalidateHistorySession = useCallback(() => {
-    historyGenerationRef.current += 1;
-    activeQuerySessionRef.current = null;
-    setActiveQuerySession(null);
-  }, []);
-
-  const isCurrentHistorySession = useCallback((session) => {
-    const current = activeQuerySessionRef.current;
-    return current?.queryId === session.queryId
-      && current?.generation === session.generation;
-  }, []);
-
   const setQueryTextareaRef = useCallback((node) => {
     if (queryInputRef) queryInputRef.current = node;
     localQueryInputRef.current = node;
@@ -261,9 +202,6 @@ const SearchWorkspace = ({
     setError(null);
     setWarnings([]);
     setResultType('filter');
-    setReplaySnapshot(null);
-    invalidateHistorySession();
-    lastReplayTokenRef.current = null;
 
     try {
       const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
@@ -304,7 +242,6 @@ const SearchWorkspace = ({
     filterOcr,
     filterTitle,
     filterVideoId,
-    invalidateHistorySession,
     notifyEventTrailInvalidated,
     userId,
   ]);
@@ -321,56 +258,7 @@ const SearchWorkspace = ({
     setAppliedFilterParams(null);
   }, []);
 
-  const recordViewed = useCallback((frame) => {
-    const frameId = frame?.frame_id;
-    const session = activeQuerySession;
-    if (!frameId || !session?.queryId) return;
-    const patchKey = `${session.queryId}:${frameId}`;
-    if (viewedPatchRef.current.has(patchKey)) return;
-    viewedPatchRef.current.add(patchKey);
-    setActiveQuerySession((current) => {
-      if (!current || current.queryId !== session.queryId || current.generation !== session.generation) {
-        return current;
-      }
-      const next = { ...current, frameActivity: withViewedFrame(current.frameActivity, frameId) };
-      activeQuerySessionRef.current = next;
-      return next;
-    });
-
-    enqueueHistoryWrite(session.queryId, async () => {
-      try {
-        await markFrameViewed({ queryId: session.queryId, frameId });
-      } catch (patchError) {
-        viewedPatchRef.current.delete(patchKey);
-        if (isCurrentHistorySession(session)) {
-          setWarnings((current) => Array.from(new Set([
-            ...current,
-            `History view state was not recorded: ${patchError.message || 'request failed'}`,
-          ])));
-        }
-      }
-    });
-  }, [activeQuerySession, enqueueHistoryWrite, isCurrentHistorySession]);
-
   const openCanonicalFrame = useCallback((frame) => {
-    recordViewed(frame);
-    const session = activeQuerySession;
-    if (session?.queryId) {
-      enqueueHistoryWrite(session.queryId, async () => {
-        try {
-          await recordQueryInteraction({
-            queryId: session.queryId,
-            eventType: 'result_open',
-            semanticRevision: kisSession.revision ?? 0,
-            frameId: frame?.frame_id,
-            videoId: frame?.video_id,
-            timestampMs: frame?.timestamp_ms,
-          });
-        } catch {
-          // Best-effort research logging
-        }
-      });
-    }
     const trailContext = (
       resultType === 'retrieval'
       && liveEventTrailContextRef.current
@@ -387,79 +275,13 @@ const SearchWorkspace = ({
       frame,
       ...(trailContext ? { eventTrailContext: trailContext } : {}),
     });
-  }, [activeQuerySession, enqueueHistoryWrite, kisSession.revision, onFrameClick, recordViewed, resultType]);
+  }, [onFrameClick, resultType]);
 
   const openKisFrame = useCallback((frame) => openCanonicalFrame(frame), [openCanonicalFrame]);
 
   const handleOpenSubmission = useCallback((payload) => {
-    const session = activeQuerySession;
-    if (session?.queryId) {
-      enqueueHistoryWrite(session.queryId, async () => {
-        try {
-          await recordQueryInteraction({
-            queryId: session.queryId,
-            eventType: 'submission',
-            semanticRevision: kisSession.revision ?? 0,
-            videoId: payload?.videoId,
-            timestampMs: payload?.startMs ?? payload?.endMs,
-          });
-        } catch {
-          // Best-effort research logging
-        }
-      });
-    }
     onOpenSubmission?.(payload);
-  }, [activeQuerySession, enqueueHistoryWrite, kisSession.revision, onOpenSubmission]);
-
-  useEffect(() => {
-    const item = replayRequest?.item || replayRequest;
-    if (!item || !item.query_id || !item.result_snapshot) return;
-    const token = replayRequest?.token || item.query_id;
-    if (lastReplayTokenRef.current === token) return;
-    lastReplayTokenRef.current = token;
-
-    requestRef.current?.abort();
-    liveEventTrailContextRef.current = null;
-    notifyEventTrailInvalidated();
-    invalidateHistorySession();
-    setIsSearching(false);
-    setError(null);
-    setWarnings([]);
-    setFrames([]);
-    setKisEvents([]);
-    setSearchLatencyMs(null);
-    handleClearFilter();
-    setKisSession(createInitialKisSessionState());
-    onQueryChange?.(item.query_text || '');
-
-    try {
-      const kind = getSnapshotKind(item.result_snapshot);
-      const normalizedActivity = normalizeFrameActivity(item.frame_activity);
-      setReplaySnapshot(item.result_snapshot);
-      setResultType(`replay-${kind}`);
-      viewedPatchRef.current = new Set();
-      activateHistorySession({
-        queryId: item.query_id,
-        ownerUserId: historyIdentity,
-        queryText: item.query_text,
-        resultSnapshot: item.result_snapshot,
-        frameActivity: normalizedActivity,
-        source: 'history-replay',
-      });
-    } catch (replayError) {
-      setReplaySnapshot(null);
-      setResultType(null);
-      setError(replayError.message);
-    }
-  }, [
-    activateHistorySession,
-    handleClearFilter,
-    historyIdentity,
-    invalidateHistorySession,
-    notifyEventTrailInvalidated,
-    onQueryChange,
-    replayRequest,
-  ]);
+  }, [onOpenSubmission]);
 
   const submit = useCallback(async (event) => {
     event?.preventDefault?.();
@@ -499,7 +321,6 @@ const SearchWorkspace = ({
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    const queryId = historyIdentity ? createClientQueryId() : null;
 
     setIsSearching(true);
     setError(null);
@@ -527,102 +348,42 @@ const SearchWorkspace = ({
       const imageRemoved = [];
       if (Array.isArray(requestPayload.operation?.patches)) {
         for (const patch of requestPayload.operation.patches) {
-          if (Array.isArray(patch.images_to_add)) {
-            imageAdded.push(...patch.images_to_add);
+          if (patch.added_images?.length) {
+            imageAdded.push(...patch.added_images);
           }
-          if (Array.isArray(patch.images_to_remove)) {
-            imageRemoved.push(...patch.images_to_remove);
+          if (patch.removed_image_ids?.length) {
+            imageRemoved.push(...patch.removed_image_ids);
           }
         }
       }
-      if (requestPayload.operation?.kind === 'initial_resolve' && Array.isArray(requestPayload.operation.images)) {
-        imageAdded.push(...requestPayload.operation.images);
+      if (
+        requestPayload.operation?.kind === 'initial_resolve'
+        && Array.isArray(requestPayload.operation.events)
+      ) {
+        for (const ev of requestPayload.operation.events) {
+          if (ev.images?.length) {
+            imageAdded.push(...ev.images);
+          }
+        }
       }
 
-      const operationMetadata = buildOperationMetadata({
-        semanticRevision: response.intent?.revision ?? kisSession.revision ?? 0,
-        operationKind: response.operation_summary?.operation_kind || requestPayload.operation?.kind || 'initial_resolve',
-        affectedEventIds: requestPayload.operation?.patches
-          ? requestPayload.operation.patches.map((p) => p.event_id)
-          : response.operation_summary?.affected_event_ids || [],
-        imageAdded,
-        imageRemoved,
-        searchOnly: requestPayload.operation?.kind === 'search_only',
-      });
-
-      const snapshotOptions = {
-        intent: response.intent,
-        latency: response.latency,
-        warnings: response.warnings || [],
-        operationMetadata,
-      };
-      const historySnapshot = buildKisSnapshot(response.results || [], snapshotOptions);
-
-      notifyEventTrailInvalidated();
-      const activeQueryId = (queryId && requestPayload.operation?.kind !== 'search_only')
-        ? queryId
-        : (activeQuerySession?.queryId || null);
-
-      if (response.evidence_snapshot_id) {
+      if (response.search_session_id) {
         liveEventTrailContextRef.current = {
-          snapshotId: response.evidence_snapshot_id,
-          kisRevision: response.intent?.revision ?? 1,
-          events: (response.intent?.events || []).map(({ id, text, images }) => ({
-            id,
-            text,
-            images: images || [],
-          })),
-          searchSessionId: activeQueryId,
+          snapshotId: response.search_session_id,
+          kisRevision: response.revision ?? 0,
+          events: response.intent?.events || [],
+          searchSessionId: response.search_session_id,
         };
       } else {
         liveEventTrailContextRef.current = null;
       }
 
       setResultType('retrieval');
-      setReplaySnapshot(null);
-      lastReplayTokenRef.current = null;
       setFrames(response.results || []);
       setKisEvents(eventTexts);
       setSearchLatencyMs(response.latency);
       setWarnings(response.warnings || []);
       onQueryChange?.(queryText);
-
-      if (queryId && requestPayload.operation?.kind !== 'search_only') {
-        viewedPatchRef.current = new Set();
-        const historySession = activateHistorySession({
-          queryId,
-          ownerUserId: historyIdentity,
-          queryText,
-          resultSnapshot: historySnapshot,
-          frameActivity: normalizeFrameActivity(),
-          source: 'live-search',
-        });
-
-        enqueueHistoryWrite(queryId, async () => {
-          try {
-            await createQueryHistory({
-              queryId,
-              userId: historyIdentity,
-              queryText,
-              resultSnapshot: historySnapshot,
-              operationMetadata,
-              signal: controller.signal,
-            });
-            if (!controller.signal.aborted && isCurrentHistorySession(historySession)) {
-              onHistoryRefresh?.();
-            }
-          } catch (historyError) {
-            if (historyError.name === 'AbortError') throw historyError;
-            if (isCurrentHistorySession(historySession)) {
-              invalidateHistorySession();
-              setWarnings((current) => [...current, `History was not saved: ${historyError.message || 'request failed'}`]);
-            }
-            throw historyError;
-          }
-        });
-      } else {
-        invalidateHistorySession();
-      }
     } catch (requestError) {
       if (requestError.name === 'AbortError') return;
       setKisSession((prev) => commitSearchFailure(prev, requestError));
@@ -634,21 +395,14 @@ const SearchWorkspace = ({
       }
     }
   }, [
-    activateHistorySession,
-    enqueueHistoryWrite,
-    historyIdentity,
-    invalidateHistorySession,
-    isCurrentHistorySession,
     isSearching,
     kisSession,
     notifyEventTrailInvalidated,
-    onHistoryRefresh,
     onQueryChange,
     topK,
     useBm25,
     useDense,
     userId,
-    activeQuerySession?.queryId,
   ]);
 
   // Step 7: Search-only rerun when only retrieval controls change
@@ -667,7 +421,6 @@ const SearchWorkspace = ({
     requestRef.current = null;
     liveEventTrailContextRef.current = null;
     notifyEventTrailInvalidated();
-    invalidateHistorySession();
     setIsSearching(false);
     setKisSession(resetKisSession());
     handleClearFilter();
@@ -677,10 +430,8 @@ const SearchWorkspace = ({
     setResultType(null);
     setError(null);
     setSearchLatencyMs(null);
-    setReplaySnapshot(null);
-    lastReplayTokenRef.current = null;
     onQueryChange?.('');
-  }, [handleClearFilter, invalidateHistorySession, notifyEventTrailInvalidated, onQueryChange]);
+  }, [handleClearFilter, notifyEventTrailInvalidated, onQueryChange]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -822,25 +573,9 @@ const SearchWorkspace = ({
     focusQueryInput,
   ]);
 
-  const getFrameClassName = useCallback(
-    (frameOrId) => {
-      const frameId = typeof frameOrId === 'string' ? frameOrId : frameOrId?.frame_id;
-      if (!frameId) return '';
-      return activityStateForFrame(frameId, activeQuerySession?.frameActivity);
-    },
-    [activeQuerySession?.frameActivity],
-  );
+  const getFrameClassName = useCallback(() => '', []);
 
   const renderResults = () => {
-    if (resultType?.startsWith('replay-')) {
-      return (
-        <ReplayResults
-          resultSnapshot={replaySnapshot}
-          frameActivity={activeQuerySession?.frameActivity}
-          onFrameClick={openKisFrame}
-        />
-      );
-    }
     const getFrameAnnotation = (frame) => {
       const snapshotId = liveEventTrailContextRef.current?.snapshotId;
       if (!frame?.result_id || !snapshotId) return 'unvisited';
@@ -875,8 +610,6 @@ const SearchWorkspace = ({
       </div>
     );
   };
-
-  const isReplay = resultType?.startsWith('replay-');
 
   const hasAnyFilterValue = Boolean(
     filterFolderId.trim()
@@ -1079,6 +812,7 @@ const SearchWorkspace = ({
                 setUseBm25={setUseBm25}
                 gridSize={gridSize}
                 setGridSize={handleSetGridSize}
+                onOpenFrame={onFrameClick}
               />
             </>
           )}
@@ -1129,7 +863,7 @@ const SearchWorkspace = ({
               onReset={handleNewSearch}
               onAttachImage={handleAttachImage}
               onRemoveImage={handleRemoveImage}
-              disabled={isReplay || isSearching}
+              disabled={isSearching}
               renderExtraActions={renderExtraActions}
               onCollapse={() => handleToggleChat(true)}
             />

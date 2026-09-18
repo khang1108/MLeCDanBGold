@@ -18,7 +18,7 @@ jest.mock("./api/eventTrail", () => ({
 }));
 
 jest.mock("./features/search/components/SearchWorkspace", () => (
-  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, replayRequest, userId, historyUserId, onQueryChange, onEventTrailInvalidated }) {
+  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, userId, onQueryChange, onEventTrailInvalidated }) {
     const frame = {
       frame_id: "f1",
       video_id: "V01",
@@ -76,33 +76,7 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
         >
           Submit result to DRES
         </button>
-        <output data-testid="replay-request">
-          {replayRequest?.item?.query_id || ''}
-        </output>
         <output data-testid="query-user-id">{userId || ''}</output>
-        <output data-testid="query-history-user-id">{historyUserId || ''}</output>
-      </div>
-    );
-  }
-));
-
-jest.mock("./features/workspace/components/WorkspacePage", () => (
-  function FakeWorkspacePage({ onReplay, userId, historyRefreshToken }) {
-    return (
-      <div data-testid="workspace-page">
-        Workspace page for {userId}
-        <output data-testid="workspace-refresh-token">{historyRefreshToken}</output>
-        <button
-          type="button"
-          onClick={() => onReplay?.({
-            query_id: 'saved-query-1',
-            query_text: 'saved query',
-            result_snapshot: { results: [] },
-            frame_activity: { viewed_frame_ids: [] },
-          })}
-        >
-          Replay saved query
-        </button>
       </div>
     );
   }
@@ -220,7 +194,6 @@ test('persists and locks the User ID only after the backend handshake', async ()
 
   expect(localStorage.getItem('hcmai_user_id')).toBeNull();
   expect(screen.getByTestId('query-user-id').textContent).toBe('');
-  expect(screen.getByTestId('query-history-user-id').textContent).toBe('team-a');
   fireEvent.keyDown(userId, { key: 'Enter', code: 'Enter' });
 
   await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
@@ -235,14 +208,6 @@ test('persists and locks the User ID only after the backend handshake', async ()
   expect(localStorage.getItem('hcmai_user_id')).toBe('team-a');
   expect(screen.getByTestId('query-user-id').textContent).toBe('team-a');
 
-  fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Query' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
-
-  expect(userId.value).toBe('team-a');
-  expect(screen.getByTestId('workspace-page').textContent).toContain('team-a');
-  expect(screen.getByTestId('workspace-refresh-token').textContent).toBe('0');
-
   fireEvent.click(screen.getByRole('button', { name: 'OK' }));
   await waitFor(() => expect(userId.disabled).toBe(false));
   expect(localStorage.getItem('hcmai_user_id')).toBeNull();
@@ -251,26 +216,12 @@ test('persists and locks the User ID only after the backend handshake', async ()
     expect.objectContaining({ method: 'DELETE' }),
   );
   expect(screen.getByTestId('query-user-id').textContent).toBe('');
-  expect(screen.getByTestId('query-history-user-id').textContent).toBe('team-a');
 });
 
-test('replays a saved history item in Query without generating a new request', () => {
+test('does not display retired tabs (Query, Workspace, Image Search, Database)', () => {
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Replay saved query' }));
-
-  expect(screen.getByTestId('replay-request').textContent).toContain('saved-query-1');
-  expect(screen.getByRole('button', { name: 'Query' }).getAttribute('aria-pressed')).toBe('true');
-});
-
-test('navigates to Workspace page when Workspace tab is clicked', () => {
-  render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
-  expect(screen.getByTestId('workspace-page')).toBeTruthy();
-});
-
-test('does not display retired tabs (Image Search, Database)', () => {
-  render(<App />);
+  expect(screen.queryByRole('button', { name: 'Query' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Workspace' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Image Search' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Database' })).toBeNull();
 });
@@ -316,7 +267,6 @@ test('failed reload reconnection retains history identity but leaves the input u
   expect(userId.value).toBe('team-stale');
   expect(localStorage.getItem('hcmai_user_id')).toBe('team-stale');
   expect(screen.getByTestId('query-user-id').textContent).toBe('');
-  expect(screen.getByTestId('query-history-user-id').textContent).toBe('team-stale');
 });
 
 test('leaves a failed session editable without persisting or using that identity', async () => {
@@ -335,7 +285,6 @@ test('leaves a failed session editable without persisting or using that identity
   expect(userId.disabled).toBe(false);
   expect(localStorage.getItem('hcmai_user_id')).toBeNull();
   expect(screen.getByTestId('query-user-id').textContent).toBe('');
-  expect(screen.getByTestId('query-history-user-id').textContent).toBe('unknown-member');
   expect(screen.queryByLabelText(/password|username|credential/i)).toBeNull();
 });
 
@@ -419,25 +368,7 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
   });
 });
 
-test('keyboard shortcut Windows 1 / Meta+1 and Windows 2 / Meta+2 switch pages', () => {
-  render(<App />);
 
-  const queryBtn = screen.getByRole('button', { name: 'Query' });
-  const workspaceBtn = screen.getByRole('button', { name: 'Workspace' });
-
-  expect(queryBtn.getAttribute('aria-pressed')).toBe('true');
-  expect(workspaceBtn.getAttribute('aria-pressed')).toBe('false');
-
-  // Press Windows 2 / Meta+2 -> switch to Workspace
-  fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
-  expect(queryBtn.getAttribute('aria-pressed')).toBe('false');
-  expect(workspaceBtn.getAttribute('aria-pressed')).toBe('true');
-
-  // Press Windows 1 / Meta+1 -> switch back to Query
-  fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true });
-  expect(queryBtn.getAttribute('aria-pressed')).toBe('true');
-  expect(workspaceBtn.getAttribute('aria-pressed')).toBe('false');
-});
 
 test('keyboard shortcut Ctrl+I focuses User ID input', () => {
   render(<App />);

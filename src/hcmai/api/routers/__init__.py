@@ -2,7 +2,6 @@
 
 from hcmai.api.routers.event_trail import create_event_trail_router
 from hcmai.api.routers.frames import create_frames_router
-from hcmai.api.routers.history import create_history_router
 from hcmai.api.routers.kis import create_kis_router
 from hcmai.api.routers.search import create_search_router
 from hcmai.api.routers.system import create_system_router
@@ -14,12 +13,10 @@ from hcmai.api.routers.vbs import create_vbs_router
 __all__ = [
     "create_event_trail_router",
     "create_frames_router",
-    "create_database_router",
     "create_kis_router",
     "create_search_router",
     "create_system_router",
     "create_trake_router",
     "create_video_router",
-    "create_history_router",
     "create_vbs_router",
 ]

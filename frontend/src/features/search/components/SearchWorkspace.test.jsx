@@ -3,11 +3,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { searchKis, uploadKisImage } from '../../../api/kis';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
 import { filterFrames } from '../../../api/filter';
-import {
-  createQueryHistory,
-  markFrameViewed,
-  recordQueryInteraction,
-} from '../../../api/history';
 
 jest.mock('../../../api/kis', () => ({
   ...jest.requireActual('../../../api/kis'),
@@ -17,20 +12,12 @@ jest.mock('../../../api/kis', () => ({
 jest.mock('../../../api/filter', () => ({
   filterFrames: jest.fn(),
 }));
-jest.mock('../../../api/history', () => ({
-  createQueryHistory: jest.fn(),
-  markFrameViewed: jest.fn(),
-  recordQueryInteraction: jest.fn(),
-}));
 const renderSearch = (props) => render(<SearchWorkspace {...props} />);
 
 beforeEach(() => {
   searchKis.mockReset();
   uploadKisImage.mockReset();
   filterFrames.mockReset();
-  createQueryHistory.mockResolvedValue({});
-  markFrameViewed.mockResolvedValue({});
-  recordQueryInteraction.mockResolvedValue({});
 });
 
 const SEARCH_LATENCY = {
@@ -180,48 +167,7 @@ test('active KIS results preserve backend fps when the user opens a frame', asyn
   });
 });
 
-test('hands off exact live EventTrail context when opening a result', async () => {
-  const onFrameClick = jest.fn();
-  const response = mockKisResponse({
-    inputs: ['woman enters'],
-    queryText: 'woman enters',
-    revision: 3,
-    events: [
-      { id: 'E1', text: 'woman enters', images: [] },
-      { id: 'E2', text: 'woman sits', images: [] },
-    ],
-    results: [{
-      result_id: 'r_1',
-      frame_id: 'frame-explore',
-      video_id: 'V01',
-      frame_idx: 125,
-      timestamp_ms: 10_010,
-      fps: 29.97,
-      caption: 'woman enters',
-      scores: { final: 0.91 },
-    }],
-    evidenceSnapshotId: 'snap_1',
-  });
-  searchKis.mockResolvedValueOnce(response);
-  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick, userId: 'team-a' });
-  submit('woman enters');
 
-  fireEvent.click(await screen.findByAltText('Frame frame-explore'));
-
-  expect(onFrameClick).toHaveBeenCalledWith({
-    frame: expect.objectContaining({ result_id: 'r_1', frame_id: 'frame-explore', video_id: 'V01' }),
-    eventTrailContext: {
-      snapshotId: 'snap_1',
-      resultId: 'r_1',
-      kisRevision: 3,
-      events: [
-        { id: 'E1', text: 'woman enters', images: [] },
-        { id: 'E2', text: 'woman sits', images: [] },
-      ],
-      searchSessionId: expect.anything(),
-    },
-  });
-});
 
 test('omits eventTrailContext when evidence_snapshot_id is null or when in filter mode', async () => {
   const onFrameClick = jest.fn();
@@ -249,20 +195,7 @@ test('omits eventTrailContext when evidence_snapshot_id is null or when in filte
   });
 });
 
-test('calls onEventTrailInvalidated when a new search commits results', async () => {
-  const onEventTrailInvalidated = jest.fn();
-  searchKis.mockResolvedValueOnce(mockKisResponse({
-    inputs: ['query 1'],
-    queryText: 'query 1',
-    results: [{ frame_id: 'f1', video_id: 'V01', frame_idx: 100, timestamp_ms: 1000, score: 0.9 }],
-  }));
 
-  renderSearch({ topK: 20, setTopK: jest.fn(), onEventTrailInvalidated });
-  submit('query 1');
-
-  await screen.findByAltText('Frame f1');
-  expect(onEventTrailInvalidated).toHaveBeenCalledTimes(1);
-});
 
 const frameResult = (id) => ({
   frame_id: id,
@@ -334,209 +267,7 @@ test('preserves committed warnings while the next revision is pending and fails'
   expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
 });
 
-test('opens a KIS result exactly once and records one viewed-frame write', async () => {
-  const onFrameClick = jest.fn();
-  const response = {
-    ...mockKisResponse({
-      queryText: 'red boat',
-      revision: 1,
-      results: [{
-        result_id: 'r_1',
-        frame_id: 'frame-explore',
-        video_id: 'V01',
-        frame_idx: 125,
-        timestamp_ms: 10_010,
-        fps: 29.97,
-        caption: 'A red boat',
-        scores: { final: 0.91 },
-      }],
-    }),
-  };
-  searchKis.mockResolvedValueOnce(response);
-  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick, userId: 'team-a' });
-  submit('red boat');
-  const frame = await screen.findByAltText('Frame frame-explore');
-  fireEvent.click(frame);
 
-  expect(onFrameClick).toHaveBeenCalledTimes(1);
-  expect(onFrameClick).toHaveBeenCalledWith(expect.objectContaining({
-    eventTrailContext: expect.any(Object),
-  }));
-  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(1));
-  expect(markFrameViewed).toHaveBeenCalledWith(expect.objectContaining({
-    frameId: 'frame-explore',
-  }));
-});
-
-test('a frame clicked before createQueryHistory resolves does not call markFrameViewed or recordQueryInteraction until creation resolves', async () => {
-  let resolveHistory;
-  createQueryHistory.mockImplementationOnce(() => new Promise((resolve) => { resolveHistory = resolve; }));
-  searchKis.mockResolvedValueOnce(mockKisResponse({
-    queryText: 'first',
-    revision: 1,
-    results: [frameResult('frame-1')],
-  }));
-
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('first');
-  const frame = await screen.findByAltText('Frame frame-1');
-  fireEvent.click(frame);
-
-  expect(markFrameViewed).not.toHaveBeenCalled();
-  expect(recordQueryInteraction).not.toHaveBeenCalled();
-
-  resolveHistory({});
-  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(recordQueryInteraction).toHaveBeenCalledTimes(1));
-  expect(markFrameViewed).toHaveBeenCalledWith(expect.objectContaining({
-    frameId: 'frame-1',
-  }));
-  expect(recordQueryInteraction).toHaveBeenCalledWith(expect.objectContaining({
-    eventType: 'result_open',
-    frameId: 'frame-1',
-  }));
-});
-
-test('opening submission from an active query enqueues submission interaction event with current revision', async () => {
-  const onOpenSubmission = jest.fn();
-  searchKis.mockResolvedValueOnce(mockKisResponse({
-    queryText: 'first',
-    revision: 2,
-    results: [frameResult('frame-1')],
-  }));
-
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a', onOpenSubmission });
-  submit('first');
-  const submitButton = await screen.findByRole('button', { name: /submit this frame to dres/i });
-  fireEvent.click(submitButton);
-
-  expect(onOpenSubmission).toHaveBeenCalledWith(expect.objectContaining({
-    videoId: 'V01',
-    startMs: 4000,
-  }));
-  await waitFor(() => expect(recordQueryInteraction).toHaveBeenCalledWith(expect.objectContaining({
-    eventType: 'submission',
-    semanticRevision: 2,
-    videoId: 'V01',
-  })));
-});
-
-test('skips a queued viewed-frame write when query history creation fails', async () => {
-  let rejectHistory;
-  createQueryHistory.mockImplementationOnce(() => new Promise((resolve, reject) => {
-    rejectHistory = reject;
-  }));
-  searchKis.mockResolvedValueOnce(mockKisResponse({
-    queryText: 'first',
-    revision: 1,
-    results: [frameResult('frame-1')],
-  }));
-
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('first');
-  const frame = await screen.findByAltText('Frame frame-1');
-  fireEvent.click(frame);
-
-  expect(markFrameViewed).not.toHaveBeenCalled();
-  await act(async () => {
-    rejectHistory(new Error('history unavailable'));
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(markFrameViewed).not.toHaveBeenCalled();
-  expect(await screen.findByText(/history was not saved: history unavailable/i)).toBeTruthy();
-  expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
-});
-
-test('skips a queued viewed-frame write when history creation aborts', async () => {
-  let rejectHistory;
-  createQueryHistory.mockImplementationOnce(() => new Promise((resolve, reject) => {
-    rejectHistory = reject;
-  }));
-  searchKis.mockResolvedValueOnce(mockKisResponse({
-    queryText: 'first',
-    revision: 1,
-    results: [frameResult('frame-1')],
-  }));
-
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('first');
-  const frame = await screen.findByAltText('Frame frame-1');
-  fireEvent.click(frame);
-
-  const abortError = new Error('history request aborted');
-  abortError.name = 'AbortError';
-  await act(async () => {
-    rejectHistory(abortError);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(markFrameViewed).not.toHaveBeenCalled();
-  expect(screen.queryByText(/history was not saved/i)).toBeNull();
-  expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
-});
-
-test('late history completion from search A cannot overwrite active search B', async () => {
-  let resolveHistoryA;
-  createQueryHistory
-    .mockImplementationOnce(() => new Promise((resolve) => { resolveHistoryA = resolve; }))
-    .mockResolvedValueOnce({});
-
-  searchKis
-    .mockResolvedValueOnce(mockKisResponse({ queryText: 'first', revision: 1, results: [frameResult('frame-1')] }))
-    .mockResolvedValueOnce(mockKisResponse({ queryText: 'second', revision: 2, results: [frameResult('frame-2')] }));
-
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('first');
-  await screen.findByAltText('Frame frame-1');
-
-  submit('E2: second');
-  await screen.findByAltText('Frame frame-2');
-
-  const queryIdB = createQueryHistory.mock.calls[1][0].queryId;
-
-  resolveHistoryA({});
-
-  fireEvent.click(screen.getByAltText('Frame frame-2'));
-  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledWith(expect.objectContaining({
-    queryId: queryIdB,
-    frameId: 'frame-2',
-  })));
-});
-
-test('late history failure from search A cannot warn about or clear active search B', async () => {
-  let rejectHistoryA;
-  createQueryHistory
-    .mockImplementationOnce(() => new Promise((resolve, reject) => { rejectHistoryA = reject; }))
-    .mockResolvedValueOnce({});
-
-  searchKis
-    .mockResolvedValueOnce(mockKisResponse({ queryText: 'first', revision: 1, results: [frameResult('frame-1')] }))
-    .mockResolvedValueOnce(mockKisResponse({ queryText: 'second', revision: 2, results: [frameResult('frame-2')] }));
-
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('first');
-  await screen.findByAltText('Frame frame-1');
-  submit('E2: second');
-  await screen.findByAltText('Frame frame-2');
-
-  await act(async () => {
-    rejectHistoryA(new Error('search A history unavailable'));
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(screen.getByAltText('Frame frame-2')).toBeTruthy();
-  expect(screen.queryByText(/search A history unavailable/i)).toBeNull();
-  fireEvent.click(screen.getByAltText('Frame frame-2'));
-  const queryIdB = createQueryHistory.mock.calls[1][0].queryId;
-  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledWith(expect.objectContaining({
-    queryId: queryIdB,
-    frameId: 'frame-2',
-  })));
-});
 
 test('typing a new draft does not invoke onQueryChange; successful search calls onQueryChange with committed queryText', async () => {
   const onQueryChange = jest.fn();
@@ -556,50 +287,7 @@ test('typing a new draft does not invoke onQueryChange; successful search calls 
   await waitFor(() => expect(onQueryChange).toHaveBeenCalledWith('committed query text'));
 });
 
-test('replay is read-only and does not copy historical query into draft input', async () => {
-  renderSearch({
-    topK: 20,
-    setTopK: jest.fn(),
-    userId: 'team-a',
-    replayRequest: {
-      token: 1,
-      item: {
-        query_id: 'q-hist',
-        query_text: 'historical clue text',
-        result_snapshot: { results: [frameResult('frame-1')] },
-        frame_activity: {},
-      },
-    },
-  });
 
-  const input = document.getElementById('event-query');
-  expect(input.value).toBe('');
-  expect(input.disabled).toBe(true);
-  expect(await screen.findByAltText('Frame frame-1')).toBeTruthy();
-
-  fireEvent.click(screen.getByRole('button', { name: 'New Search' }));
-  expect(screen.queryByAltText('Frame frame-1')).toBeNull();
-  expect(input.value).toBe('');
-});
-
-test('keeps a saved legacy paths snapshot on the unsupported-history message', async () => {
-  renderSearch({
-    topK: 20,
-    setTopK: jest.fn(),
-    userId: 'team-a',
-    replayRequest: {
-      token: 3,
-      item: {
-        query_id: 'legacy-query',
-        query_text: 'saved query',
-        result_snapshot: { paths: [] },
-        frame_activity: {},
-      },
-    },
-  });
-
-  expect(await screen.findByText('This history snapshot cannot be replayed.')).toBeTruthy();
-});
 
 test('does not render the retired query-helper control', () => {
   renderSearch({ topK: 20, setTopK: jest.fn() });
@@ -634,192 +322,9 @@ test('opens one direct answer from a result frame using its exact timestamp', as
   expect(onOpenSubmission).toHaveBeenCalledWith({ videoId: 'V01', startMs: 12_345, endMs: 12_345 });
 });
 
-test('keeps local retrieval available while no VBS participant is connected', async () => {
-  const onFocusUserId = jest.fn();
-  searchKis.mockResolvedValueOnce(mockKisResponse({
-    inputs: ['a red vehicle passes'],
-    queryText: 'a red vehicle passes',
-  }));
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: '  ', onFocusUserId });
-  submit('a red vehicle passes');
 
-  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
-    expect.objectContaining({
-      operation: expect.objectContaining({ kind: 'initial_resolve', text: 'a red vehicle passes' }),
-      userId: '',
-    }),
-  ));
-  expect(onFocusUserId).not.toHaveBeenCalled();
-  expect(await screen.findByText('No frames found matching your query')).toBeTruthy();
-  expect(createQueryHistory).not.toHaveBeenCalled();
-});
 
-test('keeps disconnected retrieval in the draft user history without sending the DRES header', async () => {
-  const { searchKis: realSearchKis } = jest.requireActual('../../../api/kis');
-  const frame = {
-    frame_id: 'disconnected-frame',
-    video_id: 'V01',
-    frame_idx: 4,
-    timestamp_ms: 160,
-    frame_ids: ['disconnected-frame'],
-    timestamps_ms: [160],
-    scores: { final: 0.8 },
-    caption: 'A boat crosses the scene',
-  };
-  searchKis.mockImplementation(realSearchKis);
-  const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: jest.fn().mockResolvedValue(mockKisResponse({
-      inputs: ['a boat crosses the scene'],
-      queryText: 'a boat crosses the scene',
-      results: [frame],
-    })),
-  });
-  renderSearch({
-    topK: 20,
-    setTopK: jest.fn(),
-    userId: '',
-    historyUserId: 'team-a',
-  });
-  submit('a boat crosses the scene');
 
-  const resultImage = await screen.findByAltText('Frame disconnected-frame');
-  await waitFor(() => expect(createQueryHistory).toHaveBeenCalledWith(expect.objectContaining({
-    userId: 'team-a',
-    queryText: 'a boat crosses the scene',
-  })));
-  expect(searchKis).toHaveBeenCalledWith(expect.objectContaining({ userId: '' }));
-  const searchCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('/api/v1/kis/search'));
-  expect(searchCall[1].headers['X-VBS-User-ID']).toBeUndefined();
-
-  fireEvent.click(resultImage);
-  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledWith({
-    queryId: createQueryHistory.mock.calls[0][0].queryId,
-    frameId: 'disconnected-frame',
-  }));
-  fetchSpy.mockRestore();
-});
-
-test('persists a successful KIS search as a full replay snapshot', async () => {
-  const kisResponse = mockKisResponse({
-    inputs: ['red boat'],
-    queryText: 'red boat',
-    events: [{ id: 'E1', text: 'red boat' }],
-    results: [{
-      frame_id: 'frame-kis',
-      video_id: 'V01',
-      frame_idx: 125,
-      timestamp_ms: 10_010,
-      fps: 29.97,
-      folder_id: 'L21',
-      frame_ids: ['frame-kis'],
-      timestamps_ms: [10_010],
-      scores: { final: 0.91 },
-      caption: 'A red boat',
-      metadata: {
-        title: 'boat video',
-        caption: 'A red boat',
-        ocr: 'MARINA',
-        objects: ['boat', 'person'],
-        asr: 'A boat is moving',
-      },
-    }],
-  });
-  searchKis.mockResolvedValueOnce(kisResponse);
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('red boat');
-
-  await waitFor(() => expect(createQueryHistory).toHaveBeenCalledWith(expect.objectContaining({
-    userId: 'team-a',
-    queryText: 'red boat',
-    resultSnapshot: expect.objectContaining({
-      intent: kisResponse.intent,
-      latency: SEARCH_LATENCY,
-      warnings: [],
-      results: [{
-        frame_id: 'frame-kis',
-        video_id: 'V01',
-        frame_idx: 125,
-        timestamp_ms: 10_010,
-        fps: 29.97,
-        folder_id: 'L21',
-        scores: { final: 0.91 },
-        score: 0.91,
-        frame_ids: ['frame-kis'],
-        timestamps_ms: [10_010],
-        caption: 'A red boat',
-        metadata: {
-          title: 'boat video',
-          caption: 'A red boat',
-          ocr: 'MARINA',
-          objects: ['boat', 'person'],
-          asr: 'A boat is moving',
-        },
-      }],
-    }),
-    signal: expect.any(AbortSignal),
-  })));
-  expect(createQueryHistory.mock.calls[0][0].queryId).toMatch(/^query-/);
-  expect(createQueryHistory.mock.calls[0][0].resultSnapshot.results[0].metadata).toEqual({
-    title: 'boat video',
-    caption: 'A red boat',
-    ocr: 'MARINA',
-    objects: ['boat', 'person'],
-    asr: 'A boat is moving',
-  });
-});
-
-test('keeps live results visible but creates no active history session when history persistence fails', async () => {
-  createQueryHistory.mockRejectedValueOnce(new Error('history unavailable'));
-  searchKis.mockResolvedValueOnce(mockKisResponse({
-    inputs: ['red boat'],
-    queryText: 'red boat',
-    results: [{
-      frame_id: 'frame-kis',
-      video_id: 'V01',
-      frame_idx: 1,
-      timestamp_ms: 1000,
-      frame_ids: ['frame-kis'],
-      timestamps_ms: [1000],
-      scores: { final: 0.5 },
-    }],
-  }));
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('red boat');
-
-  expect(await screen.findByAltText('Frame frame-kis')).toBeTruthy();
-  expect(await screen.findByText(/history was not saved/i)).toBeTruthy();
-  fireEvent.click(screen.getByAltText('Frame frame-kis'));
-  expect(markFrameViewed).not.toHaveBeenCalled();
-});
-
-test('keeps the viewed color while allowing a failed activity patch to retry', async () => {
-  markFrameViewed.mockRejectedValueOnce(new Error('activity unavailable'));
-  searchKis.mockResolvedValueOnce(mockKisResponse({
-    inputs: ['red boat'],
-    queryText: 'red boat',
-    results: [{
-      frame_id: 'frame-kis',
-      video_id: 'V01',
-      frame_idx: 1,
-      timestamp_ms: 1000,
-      frame_ids: ['frame-kis'],
-      timestamps_ms: [1000],
-      score: 0.5,
-      scores: { final: 0.5 },
-    }],
-  }));
-  renderSearch({ topK: 20, setTopK: jest.fn(), userId: 'team-a' });
-  submit('red boat');
-
-  const frameImage = await screen.findByAltText('Frame frame-kis');
-  fireEvent.click(frameImage);
-  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(1));
-  expect(await screen.findByText(/history view state was not recorded/i)).toBeTruthy();
-  fireEvent.click(frameImage);
-  await waitFor(() => expect(markFrameViewed).toHaveBeenCalledTimes(2));
-});
 
 test('attaches image via composer and executes multimodal KIS search on submit', async () => {
   uploadKisImage.mockResolvedValueOnce({
@@ -1093,93 +598,7 @@ test('shows gif loader in place of welcome empty state while search is in progre
   expect(screen.queryByTestId('gif-loader')).toBeNull();
 });
 
-test('Step 1 & 2 (Task 7): preserves ranked result order and shows Trail annotations without reranking or hiding results', async () => {
-  const response = mockKisResponse({
-    queryText: 'test order preservation',
-    evidenceSnapshotId: 'snap_order',
-    results: [
-      { result_id: 'r_1', frame_id: 'f1', video_id: 'V01', frame_idx: 10, timestamp_ms: 1000, score: 0.95 },
-      { result_id: 'r_2', frame_id: 'f2', video_id: 'V02', frame_idx: 20, timestamp_ms: 2000, score: 0.85 },
-    ],
-  });
-  searchKis.mockResolvedValueOnce(response);
 
-  renderSearch({
-    topK: 20,
-    setTopK: jest.fn(),
-    eventTrailAnnotations: {
-      'snap_order:r_1': 'exhausted',
-      'snap_order:r_2': 'explored',
-    },
-  });
-
-  submit('test order preservation');
-
-  expect(await screen.findByAltText('Frame f1')).toBeTruthy();
-  expect(await screen.findByAltText('Frame f2')).toBeTruthy();
-
-  // Annotations are rendered
-  expect(screen.getByText('Exhausted')).toBeTruthy();
-  expect(screen.getByText('Explored')).toBeTruthy();
-
-  // The order is preserved: f1 is first, f2 is second
-  const images = screen.getAllByRole('img');
-  const frameImages = images.filter((img) => img.alt && img.alt.startsWith('Frame '));
-  expect(frameImages[0].getAttribute('alt')).toBe('Frame f1');
-  expect(frameImages[1].getAttribute('alt')).toBe('Frame f2');
-
-  // searchKis called only once for the search, not again for annotations
-  expect(searchKis).toHaveBeenCalledTimes(1);
-});
-
-test('Step 2 (Task 8): EventTrail context passes searchSessionId only when real history query session exists', async () => {
-  const onFrameClick = jest.fn();
-  const response = mockKisResponse({
-    queryText: 'query correlation test',
-    evidenceSnapshotId: 'snap_corr',
-    results: [{
-      result_id: 'r_1',
-      frame_id: 'f1',
-      video_id: 'V01',
-      frame_idx: 10,
-      timestamp_ms: 1000,
-      score: 0.9,
-    }],
-  });
-  searchKis.mockResolvedValueOnce(response);
-
-  // Without userId -> searchSessionId must be null, not a generated surrogate
-  const { unmount } = renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick, userId: '' });
-  submit('query correlation test');
-
-  fireEvent.click(await screen.findByAltText('Frame f1'));
-  expect(onFrameClick).toHaveBeenCalledWith(
-    expect.objectContaining({
-      eventTrailContext: expect.objectContaining({
-        snapshotId: 'snap_corr',
-        searchSessionId: null,
-      }),
-    }),
-  );
-
-  unmount();
-
-  // With userId -> searchSessionId must be the real query ID string
-  onFrameClick.mockReset();
-  searchKis.mockResolvedValueOnce(response);
-  renderSearch({ topK: 20, setTopK: jest.fn(), onFrameClick, userId: 'team-a' });
-  submit('query correlation test');
-
-  fireEvent.click(await screen.findByAltText('Frame f1'));
-  expect(onFrameClick).toHaveBeenCalledWith(
-    expect.objectContaining({
-      eventTrailContext: expect.objectContaining({
-        snapshotId: 'snap_corr',
-        searchSessionId: expect.stringMatching(/^query-/),
-      }),
-    }),
-  );
-});
 
 test('keyboard shortcut Ctrl+B toggles KIS chat panel collapse state', () => {
   renderSearch({ topK: 20, setTopK: jest.fn() });

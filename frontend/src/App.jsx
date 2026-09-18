@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppHeader } from './features/header';
 import { ImageModal } from './features/frames';
 import { SearchWorkspace } from './features/search';
-import { WorkspacePage } from './features/workspace';
 import { useHealthCheck } from './features/health';
 import { ApiDocsModal } from './features/docs';
 import { useEventTrail } from './features/event-trail';
@@ -18,14 +17,10 @@ const eventTrailSelectionKey = (selection) => {
 const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTask }) => {
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
-  const [activePage, setActivePage] = useState('query');
   const [modalQuery, setModalQuery] = useState('');
   const [topK, setTopK] = useState(20);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
-  const [replayRequest, setReplayRequest] = useState(null);
-  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
   const [eventTrailAnnotations, setEventTrailAnnotations] = useState({});
-  const replayTokenRef = useRef(0);
   const eventTrailKeyRef = useRef(null);
   const userIdInputRef = useRef(null);
   const queryInputRef = useRef(null);
@@ -72,41 +67,8 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
     setModalQuery(activeQuery);
   };
 
-  const handleReplay = (historyItem) => {
-    handleEventTrailInvalidated();
-    replayTokenRef.current += 1;
-    setReplayRequest({ item: historyItem, token: replayTokenRef.current });
-    setActivePage('query');
-  };
-
   useEffect(() => {
     const handleGlobalKeyDown = (event) => {
-      // Windows 1 / Meta + 1 -> Switch to Query tab
-      if (
-        event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        (event.key === '1' || event.code === 'Digit1')
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        setActivePage('query');
-        return;
-      }
-
-      // Windows 2 / Meta + 2 -> Switch to Workspace tab
-      if (
-        event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        (event.key === '2' || event.code === 'Digit2')
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        setActivePage('workspace');
-        return;
-      }
-
       // Ctrl + I -> Focus User ID input in header
       if (
         event.ctrlKey &&
@@ -126,7 +88,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
 
     window.addEventListener('keydown', handleGlobalKeyDown, true);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
-  }, [setActivePage]);
+  }, []);
 
   return (
     <div className="app-wrapper">
@@ -135,8 +97,6 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
         healthData={healthData}
         onOpenDocs={() => setIsDocsOpen(true)}
         userIdInputRef={userIdInputRef}
-        activePage={activePage}
-        onSelectPage={setActivePage}
       />
       {!connectedUserId && (
         <p className="submission-connect-hint" role="status">
@@ -145,30 +105,19 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
       )}
 
       <main className="app-container adhoc-app">
-        <div className="workspace-panel" hidden={activePage !== 'query'}>
+        <div className="workspace-panel">
           <SearchWorkspace
-            isActive={activePage === 'query'}
+            isActive={true}
             onOpenSubmission={connectedUserId ? submission.open : undefined}
             isSubmissionOpening={submission.opening}
             userId={connectedUserId}
-            historyUserId={draftUserId}
             topK={topK}
             setTopK={setTopK}
             onFrameClick={handleQueryFrameClick}
             onQueryChange={setActiveQuery}
             queryInputRef={queryInputRef}
-            onHistoryRefresh={() => setHistoryRefreshToken((token) => token + 1)}
-            replayRequest={replayRequest}
             onEventTrailInvalidated={handleEventTrailInvalidated}
             eventTrailAnnotations={eventTrailAnnotations}
-          />
-        </div>
-        <div className="workspace-panel" hidden={activePage !== 'workspace'}>
-          <WorkspacePage
-            isActive={activePage === 'workspace'}
-            userId={draftUserId}
-            historyRefreshToken={historyRefreshToken}
-            onReplay={handleReplay}
           />
         </div>
       </main>
