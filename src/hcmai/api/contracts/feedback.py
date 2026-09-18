@@ -34,6 +34,7 @@ class FeedbackOpenRequest(BaseModel):
     use_dense: bool = True
     use_bm25: bool = True
     top_k: int = Field(default=20, ge=1)
+    initial_results: list[KISSearchResult] = Field(default_factory=list)
 
 
 class FeedbackTurnRequest(BaseModel):

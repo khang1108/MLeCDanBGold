@@ -534,6 +534,92 @@ class SearchService:
 
         raise InvalidQueryInputError(f"Unsupported operation kind: {request.operation.kind}")
 
+    def create_evidence_snapshot(
+        self,
+        intent: KISIntent,
+        execution: Any,
+        result_ids: Sequence[str],
+    ) -> tuple[str | None, float, list[str]]:
+        """Snapshot temporal search execution artifact into event_trail_snapshots."""
+        if getattr(execution, "temporal_artifact", None) is None:
+            return None, 0.0, []
+
+        artifact = execution.temporal_artifact
+        if len(execution.results) != len(artifact.result.paths):
+            raise ValueError(
+                f"Mismatch between execution results count ({len(execution.results)}) "
+                f"and artifact paths count ({len(artifact.result.paths)})"
+            )
+
+        scoring_revision = artifact.scoring_revision or (
+            getattr(artifact.result, "scoring_revision", None)
+            if artifact.result
+            else None
+        )
+        if not scoring_revision or not scoring_revision.strip():
+            raise SearchServiceGatewayError(
+                "Temporal search artifact missing nonblank scoring revision."
+            )
+
+        warnings: list[str] = []
+        snapshot_started = perf_counter()
+        snapshot_id: str | None = None
+        try:
+            try:
+                score_map = {v.video_id: v for v in artifact.video_scores}
+                returned_video_ids = {r.video_id for r in execution.results}
+                video_evidence = {
+                    vid: freeze_video_scores(score_map[vid])
+                    for vid in returned_video_ids
+                }
+            except MemoryError as exc:
+                raise EventTrailError(
+                    "SNAPSHOT_UNAVAILABLE",
+                    "Insufficient memory to snapshot temporal evidence",
+                ) from exc
+
+            created_at = datetime.now(timezone.utc)
+            expires_at = created_at + timedelta(
+                seconds=self.event_trail_settings.snapshot_ttl_seconds
+            )
+            sid = f"snap_{uuid4().hex}"
+
+            snapshot_results = {
+                rid: SnapshotResult(
+                    result_id=rid,
+                    video_id=result.video_id,
+                    initial_path=tuple(path.frame_ids),
+                    path_score=path.score,
+                )
+                for rid, result, path in zip(
+                    result_ids, execution.results, artifact.result.paths, strict=True
+                )
+            }
+
+            snapshot = EvidenceSnapshot(
+                snapshot_id=sid,
+                kis_revision=intent.revision,
+                scoring_revision=scoring_revision,
+                event_ids=tuple(event.id for event in intent.events),
+                decoder_config=artifact.decoder_config,
+                results=snapshot_results,
+                video_evidence=video_evidence,
+                created_at=created_at,
+                expires_at=expires_at,
+            )
+            self.event_trail_snapshots.put(snapshot)
+            snapshot_id = sid
+        except EventTrailError as exc:
+            if exc.code == "SNAPSHOT_UNAVAILABLE":
+                snapshot_id = None
+                warnings.append("EVENT_TRAIL_UNAVAILABLE")
+            else:
+                raise
+        finally:
+            snapshot_ms = (perf_counter() - snapshot_started) * 1_000.0
+
+        return snapshot_id, snapshot_ms, warnings
+
     def search_kis(self, request: KISSearchRequest) -> KISSearchResponse:
         """Execute a stateless semantic KIS search."""
         intent, summary, intent_ms = self._resolve_operation(request)
@@ -576,81 +662,12 @@ class SearchService:
         ]
 
         warnings: list[str] = []
-        snapshot_id: str | None = None
-        snapshot_ms: float = 0.0
-
-        if execution.temporal_artifact is not None:
-            artifact = execution.temporal_artifact
-            if len(execution.results) != len(artifact.result.paths):
-                raise ValueError(
-                    f"Mismatch between execution results count ({len(execution.results)}) "
-                    f"and artifact paths count ({len(artifact.result.paths)})"
-                )
-
-            scoring_revision = artifact.scoring_revision or (
-                getattr(artifact.result, "scoring_revision", None)
-                if artifact.result
-                else None
-            )
-            if not scoring_revision or not scoring_revision.strip():
-                raise SearchServiceGatewayError(
-                    "Temporal search artifact missing nonblank scoring revision."
-                )
-
-            snapshot_started = perf_counter()
-            try:
-                try:
-                    score_map = {v.video_id: v for v in artifact.video_scores}
-                    returned_video_ids = {r.video_id for r in execution.results}
-                    video_evidence = {
-                        vid: freeze_video_scores(score_map[vid])
-                        for vid in returned_video_ids
-                    }
-                except MemoryError as exc:
-                    raise EventTrailError(
-                        "SNAPSHOT_UNAVAILABLE",
-                        "Insufficient memory to snapshot temporal evidence",
-                    ) from exc
-
-                created_at = datetime.now(timezone.utc)
-                expires_at = created_at + timedelta(
-                    seconds=self.event_trail_settings.snapshot_ttl_seconds
-                )
-                sid = f"snap_{uuid4().hex}"
-
-                snapshot_results = {
-                    rid: SnapshotResult(
-                        result_id=rid,
-                        video_id=result.video_id,
-                        initial_path=tuple(path.frame_ids),
-                        path_score=path.score,
-                    )
-                    for rid, result, path in zip(
-                        result_ids, execution.results, artifact.result.paths, strict=True
-                    )
-                }
-
-                snapshot = EvidenceSnapshot(
-                    snapshot_id=sid,
-                    kis_revision=intent.revision,
-                    scoring_revision=scoring_revision,
-                    event_ids=tuple(event.id for event in intent.events),
-                    decoder_config=artifact.decoder_config,
-                    results=snapshot_results,
-                    video_evidence=video_evidence,
-                    created_at=created_at,
-                    expires_at=expires_at,
-                )
-                self.event_trail_snapshots.put(snapshot)
-                snapshot_id = sid
-            except EventTrailError as exc:
-                if exc.code == "SNAPSHOT_UNAVAILABLE":
-                    snapshot_id = None
-                    warnings.append("EVENT_TRAIL_UNAVAILABLE")
-                else:
-                    raise
-            finally:
-                snapshot_ms = (perf_counter() - snapshot_started) * 1_000.0
+        snapshot_id, snapshot_ms, snap_warnings = self.create_evidence_snapshot(
+            intent=intent,
+            execution=execution,
+            result_ids=result_ids,
+        )
+        warnings.extend(snap_warnings)
 
         latency = execution.latency.model_copy(
             update={

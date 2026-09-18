@@ -497,6 +497,7 @@ const SearchWorkspace = ({
           useDense,
           useBm25,
           topK,
+          initialResults: frames,
         });
         activeSessionId = openResp.session_id;
         activeFeedbackRev = openResp.feedback_revision;
@@ -540,6 +541,7 @@ const SearchWorkspace = ({
       setFeedbackSession((prev) => applyFeedbackSuccess(prev, turnResp, { requestId }));
 
       if (turnResp.status === 'applied') {
+        notifyEventTrailInvalidated();
         if (Array.isArray(turnResp.results)) {
           setFrames([...turnResp.results]);
           if (turnResp.latency) {
@@ -597,9 +599,29 @@ const SearchWorkspace = ({
             : [];
           setKisEvents(eventTexts);
         }
-        if (turnResp.evidence_snapshot_id && liveEventTrailContextRef.current) {
-          liveEventTrailContextRef.current.snapshotId = turnResp.evidence_snapshot_id;
-          liveEventTrailContextRef.current.kisRevision = turnResp.intent?.revision ?? liveEventTrailContextRef.current.kisRevision;
+        if (turnResp.evidence_snapshot_id) {
+          if (!liveEventTrailContextRef.current) {
+            liveEventTrailContextRef.current = {
+              snapshotId: turnResp.evidence_snapshot_id,
+              kisRevision: turnResp.intent?.revision ?? 1,
+              events: (turnResp.intent?.events || []).map(({ id, text, images }) => ({
+                id,
+                text,
+                images: images || [],
+              })),
+              searchSessionId: activeQuerySession?.queryId || null,
+            };
+          } else {
+            liveEventTrailContextRef.current.snapshotId = turnResp.evidence_snapshot_id;
+            liveEventTrailContextRef.current.kisRevision = turnResp.intent?.revision ?? liveEventTrailContextRef.current.kisRevision;
+            if (turnResp.intent?.events) {
+              liveEventTrailContextRef.current.events = turnResp.intent.events.map(({ id, text, images }) => ({
+                id,
+                text,
+                images: images || [],
+              }));
+            }
+          }
         }
         if (turnResp.trail && eventTrail?.syncSession) {
           eventTrail.syncSession(turnResp.trail);
@@ -617,11 +639,14 @@ const SearchWorkspace = ({
     useDense,
     useBm25,
     topK,
+    frames,
     eventTrail,
+    notifyEventTrailInvalidated,
     historyIdentity,
     activateHistorySession,
     enqueueHistoryWrite,
     onHistoryRefresh,
+    activeQuerySession,
   ]);
 
   const handleUndoFeedback = useCallback(async () => {
@@ -637,6 +662,7 @@ const SearchWorkspace = ({
 
       setFeedbackSession((prev) => applyUndoSuccess(prev, undoResp));
 
+      notifyEventTrailInvalidated();
       if (Array.isArray(undoResp.results)) {
         setFrames([...undoResp.results]);
         if (undoResp.latency) {
@@ -692,6 +718,30 @@ const SearchWorkspace = ({
           : [];
         setKisEvents(eventTexts);
       }
+      if (undoResp.evidence_snapshot_id) {
+        if (!liveEventTrailContextRef.current) {
+          liveEventTrailContextRef.current = {
+            snapshotId: undoResp.evidence_snapshot_id,
+            kisRevision: undoResp.intent?.revision ?? 1,
+            events: (undoResp.intent?.events || []).map(({ id, text, images }) => ({
+              id,
+              text,
+              images: images || [],
+            })),
+            searchSessionId: activeQuerySession?.queryId || null,
+          };
+        } else {
+          liveEventTrailContextRef.current.snapshotId = undoResp.evidence_snapshot_id;
+          liveEventTrailContextRef.current.kisRevision = undoResp.intent?.revision ?? liveEventTrailContextRef.current.kisRevision;
+          if (undoResp.intent?.events) {
+            liveEventTrailContextRef.current.events = undoResp.intent.events.map(({ id, text, images }) => ({
+              id,
+              text,
+              images: images || [],
+            }));
+          }
+        }
+      }
       if (undoResp.trail && eventTrail?.syncSession) {
         eventTrail.syncSession(undoResp.trail);
       }
@@ -704,11 +754,13 @@ const SearchWorkspace = ({
     feedbackSession,
     isSearching,
     eventTrail,
+    notifyEventTrailInvalidated,
     historyIdentity,
     activateHistorySession,
     enqueueHistoryWrite,
     onHistoryRefresh,
     kisSession.currentIntent,
+    activeQuerySession,
   ]);
 
   const handleSelectContext = useCallback((eventId) => {

@@ -9,6 +9,7 @@ from hcmai.api.contracts.feedback import (
     FeedbackOpenRequest,
     FeedbackStateResponse,
     FeedbackTurnRequest,
+    FeedbackUndoRequest,
     RetrievalOverride,
 )
 from hcmai.api.contracts.kis import KISSearchResult
@@ -373,3 +374,78 @@ def test_duplicate_turn_submit_idempotency():
     second_res = service.turn(opened.session_id, turn_req)
     assert len(search_service.searches_run) == 1
     assert second_res.feedback_revision == first_res.feedback_revision
+
+
+def test_feedback_execution_snapshots_temporal_evidence_for_event_trail():
+    """Feedback turns delegate snapshot creation to search_service and preserve snapshot ID."""
+    store = FeedbackSessionStore()
+    search_service = Mock(spec=[])
+    snapshot_store = Mock()
+    snapshot_store.get.return_value = Mock(
+        snapshot_id="snap_test",
+        results={"r_init_1": Mock(result_id="r_init_1", video_id="video_001")},
+    )
+    search_service.event_trail_snapshots = snapshot_store
+
+    # Mock real SearchPipeline.create_evidence_snapshot behavior
+    snapshot_calls = []
+
+    def mock_create_evidence_snapshot(intent, execution, result_ids):
+        snapshot_calls.append((intent, execution, result_ids))
+        return "snap_feedback_created_123", 42.5, []
+
+    search_service.create_evidence_snapshot = mock_create_evidence_snapshot
+    resolver = Mock(spec=FeedbackResolver)
+    resolver.resolve.return_value = RefineRetrievalAction(
+        event_ids=["E1"],
+        refinements={"E1": "Refined query for event 1"},
+    )
+    service = FeedbackService(store=store, resolver=resolver, search_service=search_service)
+
+    intent = _create_sample_intent_with_image()
+    initial_res = [
+        _make_search_result("r_init_1", "video_001", 10, 2000, 0.9),
+    ]
+    opened = service.open(
+        FeedbackOpenRequest(
+            intent=intent,
+            original_query="A person enters and turns on a stove.",
+            evidence_snapshot_id="snap_test",
+            initial_results=initial_res,
+        )
+    )
+    assert len(opened.results) == 1
+    assert opened.results[0].result_id == "r_init_1"
+
+    turn_req = FeedbackTurnRequest(
+        request_id="req_snap_1",
+        expected_feedback_revision=opened.feedback_revision,
+        expected_kis_revision=opened.intent.revision,
+        message="Refine with new visual keywords",
+    )
+    mock_kis_workflow = Mock()
+    mock_kis_workflow.execute.return_value = Mock(
+        results=[Mock(model_dump=lambda: {"video_id": "video_001", "frame_idx": 10, "timestamp_ms": 2000, "score": 0.95, "frame_id": "video_001_10", "frame_ids": ["video_001_10"], "timestamps_ms": [2000], "metadata": {}})],
+        temporal_artifact=Mock(),
+        latency=Mock(model_dump=lambda: {"total_ms": 100.0, "snapshot_ms": 0.0}),
+    )
+    search_service.kis = mock_kis_workflow
+
+    turn_res = service.turn(opened.session_id, turn_req)
+    assert turn_res.evidence_snapshot_id == "snap_feedback_created_123"
+    assert len(snapshot_calls) == 1
+    assert turn_res.latency["snapshot_ms"] == 42.5
+    assert turn_res.latency["total_ms"] == 142.5
+
+    # Test Undo restores initial_results
+    undo_res = service.undo(
+        opened.session_id,
+        FeedbackUndoRequest(
+            request_id="req_undo_1",
+            expected_feedback_revision=turn_res.feedback_revision,
+        ),
+    )
+    assert undo_res.evidence_snapshot_id == "snap_test"
+    assert len(undo_res.results) == 1
+    assert undo_res.results[0].result_id == "r_init_1"
+

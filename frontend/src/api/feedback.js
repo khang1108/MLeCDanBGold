@@ -11,6 +11,7 @@ export const openFeedbackSession = async ({
   useDense = true,
   useBm25 = true,
   topK = 20,
+  initialResults = [],
   signal,
 }) => {
   if (!intent || typeof intent !== 'object') {
@@ -30,6 +31,7 @@ export const openFeedbackSession = async ({
     use_dense: useDense,
     use_bm25: useBm25,
     top_k: topK,
+    initial_results: Array.isArray(initialResults) ? initialResults : [],
   };
 
   const data = await requestJson('/api/v1/kis/feedback/open', {

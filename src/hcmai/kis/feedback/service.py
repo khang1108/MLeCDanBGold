@@ -77,7 +77,7 @@ class FeedbackService:
             feedback_revision=1,
             intent=request.intent,
             retrieval_overrides={},
-            results=[],
+            results=list(request.initial_results),
             evidence_snapshot_id=request.evidence_snapshot_id,
             trail=None,
             assistant_message="Feedback session opened.",
@@ -517,17 +517,31 @@ class FeedbackService:
                     filtered.append(r)
             kis_results = filtered
 
+        # Snapshot temporal evidence for EventTrail
+        snap_id = None
+        snapshot_ms = 0.0
+        if hasattr(self._search_service, "create_evidence_snapshot"):
+            snap_id, snapshot_ms, _ = self._search_service.create_evidence_snapshot(
+                intent=intent,
+                execution=execution,
+                result_ids=result_ids,
+            )
+        if not snap_id:
+            snap_id = getattr(execution, "evidence_snapshot_id", None) or f"snap_{uuid4().hex[:12]}"
+
         latency_dict = None
         if hasattr(execution, "latency"):
             lat = execution.latency
             if hasattr(lat, "model_dump"):
                 latency_dict = lat.model_dump()
             elif isinstance(lat, dict):
-                latency_dict = lat
+                latency_dict = dict(lat)
+            if latency_dict and snapshot_ms > 0:
+                latency_dict["snapshot_ms"] = snapshot_ms
+                latency_dict["total_ms"] = latency_dict.get("total_ms", 0.0) + snapshot_ms
         elif hasattr(execution, "results"):
-            latency_dict = {"total_ms": 0.0}
+            latency_dict = {"total_ms": snapshot_ms, "snapshot_ms": snapshot_ms}
 
-        snap_id = f"snap_{uuid4().hex[:12]}"
         return type(
             "SearchExecutionResult",
             (),
