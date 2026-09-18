@@ -529,30 +529,10 @@
 
 .frames-row-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 6px;
   padding: 2px 4px;
-}
-
-.frames-row-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.frames-row-video-tag {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-primary);
-  letter-spacing: 0.02em;
-}
-
-.frames-row-score {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-ink-muted);
-  font-family: monospace;
 }
 
 .frames-row-trail-bar {

@@ -151,14 +151,9 @@ const FramesBox = ({
                     key={`${resultItem.video_id}:${frameIds.join("|")}:${index}`}
                     className={`frames-result-row ${isRowTrailActive ? 'trail-row-active' : ''}`}
                   >
-                    <div className="frames-row-header">
-                      <div className="frames-row-info">
-                        <span className="frames-row-video-tag">{displayVideoId(resultItem.video_id)}</span>
-                        {typeof resultItem.score === 'number' && (
-                          <span className="frames-row-score">Score: {resultItem.score.toFixed(3)}</span>
-                        )}
-                      </div>
-                      <div className="frames-row-trail-bar">
+                    {(isRowTrailActive || canStartTrail) && (
+                      <div className="frames-row-header">
+                        <div className="frames-row-trail-bar">
                         {isRowTrailActive && activeTrailSession ? (
                           <div className="frames-row-trail-active-group">
                             <span className="badge-trail-active">
@@ -199,6 +194,7 @@ const FramesBox = ({
                         ) : null}
                       </div>
                     </div>
+                  )}
 
                     <div className="frames-row-track">
                       {frameIds.map((fId, eventIndex) => {
