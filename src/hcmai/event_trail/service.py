@@ -6,8 +6,11 @@ by delegating state transitions, diffing, and constraints decoding to dedicated 
 
 from __future__ import annotations
 
+from dataclasses import replace
 from time import perf_counter
 from uuid import uuid4
+
+from hcmai.event_trail.config import EventTrailSettings
 
 from hcmai.event_trail.actions.diff import (
     build_trail_view,
@@ -37,6 +40,7 @@ from hcmai.event_trail.models import (
     EventTrailSession,
     RepairEvent,
     SetWindow,
+    TemporalMode,
     TrailAction,
     TrailTransition,
     TrailView,
@@ -57,10 +61,12 @@ class EventTrailService:
         snapshot_store: EvidenceSnapshotStore,
         session_store: EventTrailSessionStore,
         decoder: TemporalConstraintDecoder,
+        settings: EventTrailSettings | None = None,
     ) -> None:
         self.snapshot_store = snapshot_store
         self.session_store = session_store
         self.decoder = decoder
+        self.settings = settings or EventTrailSettings()
 
     def open(
         self,
@@ -177,6 +183,43 @@ class EventTrailService:
         """Fetch the current state projection of an active session."""
         session = self.session_store.get(session_id)
         return build_trail_view(session)
+
+    def alternatives(
+        self,
+        session_id: str,
+        expected_trail_revision: int,
+        event_id: str,
+    ) -> tuple[TemporalMode, ...]:
+        """Return non-mutating complete-path alternatives for a focused event."""
+        with self.session_store.locked(session_id) as slot:
+            session = slot.session
+            if session.trail_revision != expected_trail_revision:
+                raise EventTrailError(
+                    "TRAIL_REVISION_CONFLICT",
+                    f"Expected trail revision {expected_trail_revision} but session is at {session.trail_revision}",
+                )
+            if event_id not in session.event_ids:
+                raise EventTrailError("INVALID_EVENT", f"Unknown event {event_id}")
+            event_idx = session.event_ids.index(event_id)
+
+            if session.focused_event_id == event_id and session.alternatives:
+                return session.alternatives
+
+            modes = self.decoder.alternatives(
+                session.video_evidence,
+                session.constraints,
+                session.decoder_config,
+                event_idx=event_idx,
+                event_id=event_id,
+                settings=self.settings,
+                current_path=session.current_path,
+            )
+            slot.session = replace(
+                session,
+                focused_event_id=event_id,
+                alternatives=modes,
+            )
+            return modes
 
     def act(
         self,

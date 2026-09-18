@@ -180,4 +180,5 @@ def build_trail_view(
         transition=transition,
         focused_event_id=session.focused_event_id,
         alternatives=alternatives,
+        constraints=session.constraints,
     )

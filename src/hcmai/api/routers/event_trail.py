@@ -9,6 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from hcmai.api.contracts.event_trail import (
     EventTrailActionRequest,
+    EventTrailAlternativesResponse,
     EventTrailOpenRequest,
     EventTrailStateResponse,
 )
@@ -22,6 +23,7 @@ _STATUS_BY_CODE: dict[str, int] = {
     "KIS_REVISION_MISMATCH": 409,
     "TRAIL_REVISION_CONFLICT": 409,
     "CONSTRAINT_CONFLICT": 409,
+    "STALE_ALTERNATIVE": 409,
     "SNAPSHOT_EXPIRED": 410,
     "TRAIL_SESSION_EXPIRED": 410,
     "INVALID_EVENT": 422,
@@ -71,6 +73,28 @@ def create_event_trail_router(service_container: dict[str, Any]) -> APIRouter:
         try:
             view = await run_in_threadpool(service.get, session_id)
             return EventTrailStateResponse.from_domain(view)
+        except EventTrailError as exc:
+            status = _STATUS_BY_CODE.get(exc.code, 500)
+            raise HTTPException(
+                status_code=status,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
+
+    @router.get("/{session_id}/alternatives", response_model=EventTrailAlternativesResponse)
+    async def get_alternatives(
+        session_id: str,
+        event_id: str,
+        expected_trail_revision: int,
+    ) -> EventTrailAlternativesResponse:
+        service = _get_event_trail_service(service_container)
+        try:
+            modes = await run_in_threadpool(
+                service.alternatives,
+                session_id,
+                expected_trail_revision,
+                event_id,
+            )
+            return EventTrailAlternativesResponse.from_domain(modes)
         except EventTrailError as exc:
             status = _STATUS_BY_CODE.get(exc.code, 500)
             raise HTTPException(

@@ -164,6 +164,29 @@ class Undo:
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class KeepOccurrence:
+    """Anchor the currently aligned candidate occurrence for an event."""
+
+    event_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class UseAlternative:
+    """Anchor a selected complete-path alternative's representative frame for an event."""
+
+    event_id: str
+    alternative_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class RejectMode:
+    """Exclude the entire bounded temporal mode interval for an event."""
+
+    event_id: str
+    mode_id: str
+
+
 TrailAction = (
     ApproveEvent
     | UseFrame
@@ -173,6 +196,9 @@ TrailAction = (
     | ClearWindow
     | RepairEvent
     | Undo
+    | KeepOccurrence
+    | UseAlternative
+    | RejectMode
 )
 
 
@@ -242,3 +268,4 @@ class TrailView:
     transition: TrailTransition | None
     focused_event_id: str | None = None
     alternatives: tuple[TemporalModeView, ...] = ()
+    constraints: ConstraintSnapshot | None = None

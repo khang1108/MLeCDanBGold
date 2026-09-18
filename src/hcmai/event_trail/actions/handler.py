@@ -11,9 +11,12 @@ from hcmai.event_trail.actions.transitions import (
     apply_clear_anchor,
     apply_clear_window,
     apply_decline,
+    apply_keep_occurrence,
+    apply_reject_mode,
     apply_repair,
     apply_set_window,
     apply_undo,
+    apply_use_alternative,
     apply_use_frame,
 )
 from hcmai.event_trail.decoding.decoder import TemporalConstraintDecoder
@@ -23,11 +26,14 @@ from hcmai.event_trail.models import (
     ClearAnchor,
     ClearWindow,
     DeclineCandidate,
+    KeepOccurrence,
+    RejectMode,
     RepairEvent,
     SetWindow,
     TrailAction,
     TrailView,
     Undo,
+    UseAlternative,
     UseFrame,
 )
 from hcmai.event_trail.storage.session import SessionSlot
@@ -45,14 +51,35 @@ def dispatch_action(
     if isinstance(action, Undo):
         return apply_undo(slot, decoder, started)
 
-    if isinstance(action, (ApproveEvent, UseFrame, DeclineCandidate, ClearAnchor, RepairEvent)):
+    if isinstance(
+        action,
+        (
+            ApproveEvent,
+            UseFrame,
+            DeclineCandidate,
+            ClearAnchor,
+            RepairEvent,
+            KeepOccurrence,
+            UseAlternative,
+            RejectMode,
+        ),
+    ):
         if action.event_id not in session.event_ids:
             raise EventTrailError("INVALID_EVENT", f"Unknown event {action.event_id}")
         event_idx = session.event_ids.index(action.event_id)
     else:
         event_idx = None
 
-    if isinstance(action, ApproveEvent):
+    if isinstance(action, KeepOccurrence):
+        assert event_idx is not None
+        return apply_keep_occurrence(slot, action, event_idx, decoder, started)
+    elif isinstance(action, UseAlternative):
+        assert event_idx is not None
+        return apply_use_alternative(slot, action, event_idx, decoder, started)
+    elif isinstance(action, RejectMode):
+        assert event_idx is not None
+        return apply_reject_mode(slot, action, event_idx, decoder, started)
+    elif isinstance(action, ApproveEvent):
         assert event_idx is not None
         return apply_approve(slot, action, event_idx, decoder, started)
     elif isinstance(action, UseFrame):
