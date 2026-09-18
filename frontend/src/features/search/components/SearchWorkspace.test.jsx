@@ -2,6 +2,12 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { searchKis, uploadKisImage } from '../../../api/kis';
 import { searchAvs } from '../../../api/avs';
+import {
+  openQueryHypothesis,
+  previewQueryHypothesis,
+  commitQueryHypothesis,
+  undoQueryHypothesis,
+} from '../../../api/queryHypothesis';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
 import { filterFrames } from '../../../api/filter';
 
@@ -16,6 +22,12 @@ jest.mock('../../../api/avs', () => ({
 jest.mock('../../../api/filter', () => ({
   filterFrames: jest.fn(),
 }));
+jest.mock('../../../api/queryHypothesis', () => ({
+  openQueryHypothesis: jest.fn(),
+  previewQueryHypothesis: jest.fn(),
+  commitQueryHypothesis: jest.fn(),
+  undoQueryHypothesis: jest.fn(),
+}));
 const renderSearch = (props) => render(<SearchWorkspace {...props} />);
 
 beforeEach(() => {
@@ -23,6 +35,10 @@ beforeEach(() => {
   searchAvs.mockReset();
   uploadKisImage.mockReset();
   filterFrames.mockReset();
+  openQueryHypothesis.mockReset();
+  previewQueryHypothesis.mockReset();
+  commitQueryHypothesis.mockReset();
+  undoQueryHypothesis.mockReset();
 });
 
 const SEARCH_LATENCY = {
@@ -882,6 +898,71 @@ test('opens ImageModal when inspecting a candidate from the AVS review selection
       frame: expect.objectContaining({ candidate_id: 'c_drawer' }),
     }),
   );
+});
+
+test('asserts a stale-results notice appears after a committed query edit and disappears after a new search at that revision', async () => {
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'person walking',
+    revision: 1,
+    results: [frameResult('frame-1')],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('person walking');
+
+  expect(await screen.findByAltText('Frame frame-1')).toBeTruthy();
+  expect(screen.queryByTestId('stale-results-notice')).toBeNull();
+
+  previewQueryHypothesis.mockResolvedValueOnce({
+    base_revision: 1,
+    intent: {
+      revision: 2,
+      query_text: 'person walking slowly',
+      events: [{ id: 'E1', text: 'person walking slowly', origin: 'user_override' }],
+    },
+  });
+
+  commitQueryHypothesis.mockResolvedValueOnce({
+    session_id: 'qh_snap_1',
+    query_revision: 2,
+    intent: {
+      revision: 2,
+      query_text: 'person walking slowly',
+      events: [{ id: 'E1', text: 'person walking slowly', origin: 'user_override' }],
+    },
+    can_undo: true,
+  });
+
+  fireEvent.click(screen.getByTitle('Edit event text'));
+  const editInput = screen.getByDisplayValue('test');
+  fireEvent.change(editInput, { target: { value: 'person walking slowly' } });
+  fireEvent.click(screen.getByRole('button', { name: /preview edit/i }));
+
+  const applyBtn = await screen.findByRole('button', { name: /apply/i });
+  fireEvent.click(applyBtn);
+
+  const staleNotices = await screen.findAllByTestId('stale-results-notice');
+  expect(staleNotices.length).toBeGreaterThanOrEqual(1);
+  expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
+
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'person walking slowly',
+    revision: 2,
+    results: [frameResult('frame-2')],
+  }));
+
+  const updateBtn = screen.getByRole('button', { name: /update results/i });
+  fireEvent.click(updateBtn);
+
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
+    expect.objectContaining({
+      operation: { kind: 'search_only' },
+      expectedRevision: 2,
+    }),
+  ));
+
+  expect(await screen.findByAltText('Frame frame-2')).toBeTruthy();
+  expect(screen.queryAllByTestId('stale-results-notice')).toHaveLength(0);
 });
 
 

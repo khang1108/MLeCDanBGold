@@ -3,6 +3,8 @@ import IntentSummary from './IntentSummary';
 import EventList from './EventList';
 import QueryComposer from './QueryComposer';
 import FeedbackThread from './FeedbackThread';
+import QueryHypothesisEditor from './QueryHypothesisEditor';
+import { isResultsStale } from '../queryHypothesisSession';
 
 /**
  * Present one revisioned KIS session as an always-open, ChatGPT-style continuous copilot
@@ -11,9 +13,16 @@ import FeedbackThread from './FeedbackThread';
 const KisPanel = ({
   sessionState = {},
   feedbackSession = null,
+  queryHypothesisState = null,
+  onPreviewQueryHypothesis = null,
+  onCommitQueryHypothesis = null,
+  onCancelPreviewQueryHypothesis = null,
+  onUndoQueryHypothesis = null,
+  onSearchQueryHypothesis = null,
   onUndoFeedback = null,
   onSelectContext = null,
   onClearContext = null,
+  onEditEvent = null,
   onDraftChange,
   onSubmit,
   onReset,
@@ -53,11 +62,8 @@ const KisPanel = ({
   ]);
 
   const handleEditEvent = (eventId) => {
-    const prefix = `${eventId}: `;
-    onDraftChange?.(prefix);
-    setTimeout(() => {
-      inputRef?.current?.focus();
-    }, 0);
+    onEditEvent?.(eventId);
+    onSelectContext?.(eventId);
   };
 
   const handleAddImageToEvent = (eventId) => {
@@ -304,16 +310,31 @@ const KisPanel = ({
               </div>
 
               <div className="feedback-message-body">
-                <EventList
-                  events={currentIntent.events || []}
-                  stagedImages={stagedImages}
-                  onEdit={handleEditEvent}
-                  onAddImage={handleAddImageToEvent}
-                  onRemoveImage={onRemoveImage}
-                  onSelectContext={onSelectContext}
-                  selectedEventId={feedbackSession?.selectedContext?.eventId}
-                  disabled={isSearching || disabled}
-                />
+                {queryHypothesisState?.intent ? (
+                  <QueryHypothesisEditor
+                    intent={queryHypothesisState.intent}
+                    preview={queryHypothesisState.preview}
+                    canUndo={Boolean(queryHypothesisState.canUndo)}
+                    onPreviewAction={onPreviewQueryHypothesis}
+                    onCommit={onCommitQueryHypothesis}
+                    onCancelPreview={onCancelPreviewQueryHypothesis}
+                    onUndo={onUndoQueryHypothesis}
+                    onSearch={onSearchQueryHypothesis || onSubmit}
+                    isResultsStale={isResultsStale(queryHypothesisState)}
+                    disabled={isSearching || disabled}
+                  />
+                ) : (
+                  <EventList
+                    events={currentIntent.events || []}
+                    stagedImages={stagedImages}
+                    onEdit={handleEditEvent}
+                    onAddImage={handleAddImageToEvent}
+                    onRemoveImage={onRemoveImage}
+                    onSelectContext={onSelectContext}
+                    selectedEventId={feedbackSession?.selectedContext?.eventId}
+                    disabled={isSearching || disabled}
+                  />
+                )}
 
                 {((Array.isArray(currentIntent.entities) && currentIntent.entities.length > 0)
                   || (Array.isArray(currentIntent.temporal_edges) && currentIntent.temporal_edges.length > 0)) && (

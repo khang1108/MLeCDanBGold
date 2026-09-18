@@ -18,7 +18,22 @@ import {
   createInitialAvsSelectionState,
 } from '../../avs';
 import { openFeedbackSession, sendFeedbackTurn, undoFeedback } from '../../../api/feedback';
+import {
+  openQueryHypothesis,
+  previewQueryHypothesis,
+  commitQueryHypothesis,
+  undoQueryHypothesis,
+} from '../../../api/queryHypothesis';
 import KisPanel from '../../kis/components/KisPanel';
+import {
+  createInitialQueryHypothesisState,
+  receiveOpenedHypothesis,
+  receivePreview,
+  clearPreview,
+  receiveCommit,
+  markSearchResults,
+  isResultsStale,
+} from '../../kis/queryHypothesisSession';
 import {
   createInitialKisSessionState,
   setDraft,
@@ -94,6 +109,7 @@ const SearchWorkspace = ({
     onExplorationInvalidated?.();
   }, [onEventTrailInvalidated, onExplorationInvalidated]);
   const [kisSession, setKisSession] = useState(createInitialKisSessionState);
+  const [queryHypothesisState, setQueryHypothesisState] = useState(createInitialQueryHypothesisState);
   const [feedbackSession, setFeedbackSession] = useState(createInitialFeedbackSession);
   const [useDense, setUseDense] = useState(true);
   const [useBm25, setUseBm25] = useState(true);
@@ -666,6 +682,68 @@ const SearchWorkspace = ({
     setFeedbackSession((prev) => clearSelectedContext(prev));
   }, []);
 
+  const handlePreviewQueryHypothesis = useCallback(async (action) => {
+    if (!queryHypothesisState.sessionId) return;
+    try {
+      const previewRes = await previewQueryHypothesis(
+        queryHypothesisState.sessionId,
+        queryHypothesisState.queryRevision,
+        action,
+      );
+      setQueryHypothesisState((prev) => receivePreview(prev, { ...previewRes, pendingAction: action }));
+    } catch (err) {
+      setError(err.message || 'Failed to preview query hypothesis action');
+    }
+  }, [queryHypothesisState.sessionId, queryHypothesisState.queryRevision]);
+
+  const handleCancelPreviewQueryHypothesis = useCallback(() => {
+    setQueryHypothesisState((prev) => clearPreview(prev));
+  }, []);
+
+  const handleCommitQueryHypothesis = useCallback(async (actionOrPreview) => {
+    if (!queryHypothesisState.sessionId) return;
+    const action = actionOrPreview?.pendingAction || actionOrPreview?.action || actionOrPreview;
+    try {
+      setIsSearching(true);
+      const commitRes = await commitQueryHypothesis(
+        queryHypothesisState.sessionId,
+        queryHypothesisState.queryRevision,
+        action,
+      );
+      setQueryHypothesisState((prev) => receiveCommit(prev, commitRes));
+      setKisSession((prev) => ({
+        ...prev,
+        revision: commitRes.query_revision ?? commitRes.intent?.revision ?? prev.revision,
+        currentIntent: commitRes.intent ?? prev.currentIntent,
+      }));
+    } catch (err) {
+      setError(err.message || 'Failed to commit query hypothesis');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [queryHypothesisState.sessionId, queryHypothesisState.queryRevision]);
+
+  const handleUndoQueryHypothesis = useCallback(async () => {
+    if (!queryHypothesisState.sessionId || !queryHypothesisState.canUndo) return;
+    try {
+      setIsSearching(true);
+      const undoRes = await undoQueryHypothesis(
+        queryHypothesisState.sessionId,
+        queryHypothesisState.queryRevision,
+      );
+      setQueryHypothesisState((prev) => receiveCommit(prev, undoRes));
+      setKisSession((prev) => ({
+        ...prev,
+        revision: undoRes.query_revision ?? undoRes.intent?.revision ?? prev.revision,
+        currentIntent: undoRes.intent ?? prev.currentIntent,
+      }));
+    } catch (err) {
+      setError(err.message || 'Failed to undo query hypothesis');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [queryHypothesisState.sessionId, queryHypothesisState.queryRevision, queryHypothesisState.canUndo]);
+
   const submit = useCallback(async (event) => {
     event?.preventDefault?.();
     if (isSearching) return;
@@ -734,7 +812,13 @@ const SearchWorkspace = ({
     }
 
     let prepared;
+    let queryHypothesisSessionId = queryHypothesisState.sessionId || null;
     const hasStagedImages = Object.keys(kisSession.stagedImages || {}).length > 0;
+
+    const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
 
     try {
       if (draftText) {
@@ -752,6 +836,21 @@ const SearchWorkspace = ({
           ? { kind: 'patch_events', affectedEventIds: Object.keys(kisSession.stagedImages), error: null }
           : { kind: 'initial_resolve', affectedEventIds: [], error: null };
         prepared = prepareSemanticRequest(kisSession, preview);
+      } else if (queryHypothesisState.sessionId && isResultsStale(queryHypothesisState)) {
+        queryHypothesisSessionId = queryHypothesisState.sessionId;
+        prepared = {
+          nextState: {
+            ...kisSession,
+            isSearching: true,
+            error: null,
+            pendingOperation: { kind: 'search_only' },
+          },
+          requestPayload: {
+            baseIntent: null,
+            expectedRevision: queryHypothesisState.queryRevision,
+            operation: { kind: 'search_only' },
+          },
+        };
       } else if (kisSession.currentIntent) {
         prepared = prepareSearchOnlyRequest(kisSession);
       } else {
@@ -765,15 +864,11 @@ const SearchWorkspace = ({
     const { nextState, requestPayload } = prepared;
     setKisSession(nextState);
 
-    const capturedUserId = typeof userId === 'string' ? userId.trim() : '';
-    requestRef.current?.abort();
-    const controller = new AbortController();
-    requestRef.current = controller;
-
     setIsSearching(true);
     setError(null);
     try {
       const response = await searchKis({
+        queryHypothesisSessionId,
         baseIntent: requestPayload.baseIntent,
         expectedRevision: requestPayload.expectedRevision,
         operation: requestPayload.operation,
@@ -785,6 +880,18 @@ const SearchWorkspace = ({
       });
       if (controller.signal.aborted) return;
       setKisSession((prev) => commitSearchSuccess(prev, response));
+      setQueryHypothesisState((prev) => {
+        const nextRev = response.intent?.revision ?? requestPayload.expectedRevision ?? 1;
+        return {
+          ...prev,
+          sessionId: response.query_hypothesis_session_id || prev.sessionId || (response.evidence_snapshot_id ? `qh_${response.evidence_snapshot_id}` : 'qh_1'),
+          intent: response.intent || prev.intent,
+          queryRevision: nextRev,
+          resultsQueryRevision: nextRev,
+          preview: null,
+          error: null,
+        };
+      });
 
       const eventTexts = Array.isArray(response.intent?.events)
         ? response.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
@@ -873,6 +980,7 @@ const SearchWorkspace = ({
   }, [
     isSearching,
     kisSession,
+    queryHypothesisState,
     notifyEventTrailInvalidated,
     onQueryChange,
     topK,
@@ -882,6 +990,10 @@ const SearchWorkspace = ({
     handleFeedbackTurn,
     workspaceMode,
   ]);
+
+  const handleSearchQueryHypothesis = useCallback(() => {
+    submit();
+  }, [submit]);
 
   // Step 7: Search-only rerun when only retrieval controls change
   useEffect(() => {
@@ -902,6 +1014,7 @@ const SearchWorkspace = ({
     notifyEventTrailInvalidated();
     setIsSearching(false);
     setKisSession(resetKisSession());
+    setQueryHypothesisState(createInitialQueryHypothesisState());
     setFeedbackSession(resetFeedbackSession());
     handleClearFilter();
     setFrames([]);
@@ -1174,6 +1287,23 @@ const SearchWorkspace = ({
 
     return (
       <div className="frames-results-shell">
+        {isResultsStale(queryHypothesisState) && (
+          <div
+            className="search-stale-banner alert alert-warning"
+            data-testid="stale-results-notice"
+            role="alert"
+          >
+            <span>Query hypothesis has changed since these results were retrieved.</span>
+            <button
+              type="button"
+              className="btn btn-sm btn-warning search-stale-update-btn"
+              onClick={() => submit()}
+              disabled={isSearching}
+            >
+              Update Results
+            </button>
+          </div>
+        )}
         <FramesBox
           results={frames}
           isLoading={isSearching}
@@ -1452,6 +1582,12 @@ const SearchWorkspace = ({
                 isSearching: isSearching || kisSession.isSearching,
                 error: error || kisSession.error,
               }}
+              queryHypothesisState={queryHypothesisState}
+              onPreviewQueryHypothesis={handlePreviewQueryHypothesis}
+              onCommitQueryHypothesis={handleCommitQueryHypothesis}
+              onCancelPreviewQueryHypothesis={handleCancelPreviewQueryHypothesis}
+              onUndoQueryHypothesis={handleUndoQueryHypothesis}
+              onSearchQueryHypothesis={handleSearchQueryHypothesis}
               feedbackSession={feedbackSession}
               onUndoFeedback={handleUndoFeedback}
               onSelectContext={handleSelectContext}

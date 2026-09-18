@@ -34,6 +34,19 @@ const EventCard = ({
     >
       <div className="kis-event-card-header">
         <span className="kis-event-id-badge">{event.id}</span>
+        {event.origin && (
+          <span className={`kis-event-origin-badge kis-origin-${event.origin}`}>
+            {event.origin === 'source' ? 'Source' : event.origin === 'user_override' ? 'Edited' : event.origin === 'user_added' ? 'Added' : event.origin}
+          </span>
+        )}
+        {event.source_provenance && (
+          <span
+            className="kis-event-provenance-info"
+            title={`Characters ${event.source_provenance.start_char}..${event.source_provenance.end_char} in query`}
+          >
+            [{event.source_provenance.start_char}:{event.source_provenance.end_char}]
+          </span>
+        )}
         {event.text && <span className="kis-event-text">{event.text}</span>}
       </div>
 
