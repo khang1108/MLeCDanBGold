@@ -27,6 +27,7 @@ const KisPanel = ({
   submitLabel = 'Search',
   resetLabel = 'New Search',
   onCollapse,
+  mode = 'KIS',
 }) => {
   const {
     draft = '',
@@ -128,8 +129,8 @@ const KisPanel = ({
     >
       <div className="kis-chat-header">
         <div className="kis-chat-header-title">
-          <span className="kis-chat-title-text">KIS Semantic Search</span>
-          {revision > 0 && (
+          <span className="kis-chat-title-text">{mode === 'AVS' ? 'AVS Ad-Hoc Search' : 'KIS Semantic Search'}</span>
+          {revision > 0 && mode !== 'AVS' && (
             <span className="kis-revision-tag" title={`Revision ${revision}`}>
               Rev {revision}
             </span>
@@ -152,7 +153,7 @@ const KisPanel = ({
               type="button"
               className="kis-chat-reset-btn"
               onClick={onReset}
-              title="Start a new KIS search"
+              title={mode === 'AVS' ? 'Clear AVS search' : 'Start a new KIS search'}
             >
               {resetLabel}
             </button>
@@ -162,8 +163,8 @@ const KisPanel = ({
               type="button"
               className="kis-chat-collapse-btn"
               onClick={onCollapse}
-              title="Collapse KIS search panel"
-              aria-label="Collapse KIS search panel"
+              title={mode === 'AVS' ? 'Collapse AVS search panel' : 'Collapse KIS search panel'}
+              aria-label={mode === 'AVS' ? 'Collapse AVS search panel' : 'Collapse KIS search panel'}
             >
               ▸
             </button>
@@ -173,7 +174,7 @@ const KisPanel = ({
 
       <div className="kis-chat-body" ref={chatBodyRef}>
         {/* Empty state when no search has been performed yet */}
-        {!currentIntent && !isSearching && !error && (
+        {!currentIntent && (!feedbackSession?.messages || feedbackSession.messages.length === 0) && !isSearching && !error && (
           <div className="kis-chat-empty-state">
             <div className="kis-watermark-badge" data-testid="kis-watermark-badge">
               <img
@@ -187,35 +188,79 @@ const KisPanel = ({
             <div className="kis-empty-prompt-guide">
               <p className="kis-empty-guide-title">Độ & Ba Gà Claude</p>
               <p className="kis-empty-guide-subtitle">
-                Describe visual events across time, attach reference images, or pick a starter clue:
+                {mode === 'AVS'
+                  ? 'Search candidate keyframes across the video collection with natural language queries:'
+                  : 'Describe visual events across time, attach reference images, or pick a starter clue:'}
               </p>
               <div className="kis-quick-prompts">
-                <button
-                  type="button"
-                  className="kis-quick-prompt-btn"
-                  onClick={() => onDraftChange?.('Find a person wearing yellow jacket walking a dog')}
-                >
-                  <span className="prompt-icon">💬</span>
-                  <span className="prompt-text">Person in yellow jacket walking dog</span>
-                </button>
-                <button
-                  type="button"
-                  className="kis-quick-prompt-btn"
-                  onClick={() => onDraftChange?.('Two cars collide at a crossroads')}
-                >
-                  <span className="prompt-icon">💬</span>
-                  <span className="prompt-text">Two cars collide at a crossroads</span>
-                </button>
-                <button
-                  type="button"
-                  className="kis-quick-prompt-btn"
-                  onClick={() => onDraftChange?.('E1: Chef cuts vegetables\nE2: Chef cooks on pan')}
-                >
-                  <span className="prompt-icon">💬</span>
-                  <span className="prompt-text">Multi-event cooking sequence</span>
-                </button>
+                {mode === 'AVS' ? (
+                  <>
+                    <button
+                      type="button"
+                      className="kis-quick-prompt-btn"
+                      onClick={() => onDraftChange?.('A red sports car driving on a road')}
+                    >
+                      <span className="prompt-icon">💬</span>
+                      <span className="prompt-text">A red sports car driving on a road</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="kis-quick-prompt-btn"
+                      onClick={() => onDraftChange?.('People celebrating on a stage with lights')}
+                    >
+                      <span className="prompt-icon">💬</span>
+                      <span className="prompt-text">People celebrating on a stage</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="kis-quick-prompt-btn"
+                      onClick={() => onDraftChange?.('A dog jumping into a swimming pool')}
+                    >
+                      <span className="prompt-icon">💬</span>
+                      <span className="prompt-text">Dog jumping into a pool</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="kis-quick-prompt-btn"
+                      onClick={() => onDraftChange?.('Find a person wearing yellow jacket walking a dog')}
+                    >
+                      <span className="prompt-icon">💬</span>
+                      <span className="prompt-text">Person in yellow jacket walking dog</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="kis-quick-prompt-btn"
+                      onClick={() => onDraftChange?.('Two cars collide at a crossroads')}
+                    >
+                      <span className="prompt-icon">💬</span>
+                      <span className="prompt-text">Two cars collide at a crossroads</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="kis-quick-prompt-btn"
+                      onClick={() => onDraftChange?.('E1: Chef cuts vegetables\nE2: Chef cooks on pan')}
+                    >
+                      <span className="prompt-icon">💬</span>
+                      <span className="prompt-text">Multi-event cooking sequence</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Fallback conversation stream when there is no currentIntent (e.g. AVS mode) */}
+        {!currentIntent && (feedbackSession?.messages || []).length > 0 && (
+          <div className="kis-conversation-stream">
+            <FeedbackThread
+              messages={feedbackSession.messages}
+              canUndo={false}
+              isPending={false}
+            />
           </div>
         )}
 
@@ -333,6 +378,7 @@ const KisPanel = ({
           onBlur={onBlurQueryInput}
           renderExtraActions={renderExtraActions}
           submitLabel={submitLabel}
+          placeholder={mode === 'AVS' ? 'Enter an ad-hoc search query…' : undefined}
           selectedContext={feedbackSession?.selectedContext}
           onClearContext={onClearContext}
         />

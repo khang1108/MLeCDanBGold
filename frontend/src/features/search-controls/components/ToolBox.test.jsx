@@ -192,6 +192,25 @@ describe('ToolBox component', () => {
     fireEvent.click(compactBtn);
     expect(setGridSize).toHaveBeenCalledWith('compact');
   });
+
+  test('renders Search Mode toggle and triggers onToggleMode on click', () => {
+    const onToggleMode = jest.fn();
+    renderToolBox({
+      topK: 20,
+      setTopK: jest.fn(),
+      workspaceMode: 'KIS',
+      onToggleMode,
+    });
+
+    const kisBtn = screen.getByRole('button', { name: 'KIS' });
+    const avsBtn = screen.getByRole('button', { name: 'AVS' });
+
+    expect(kisBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(avsBtn.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(avsBtn);
+    expect(onToggleMode).toHaveBeenCalledWith('AVS');
+  });
 });
 
 

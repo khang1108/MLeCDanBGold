@@ -3,8 +3,20 @@
  *
  * Retrieval contracts remain owned by the existing API modules.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { searchKis, uploadKisImage } from '../../../api/kis';
+import { searchAvs } from '../../../api/avs';
+import { getCurrentDresTask } from '../../../api/submissions';
+import {
+  AvsHarvestGrid,
+  AvsSelectionBar,
+  AvsSelectionDrawer,
+  AvsSubmitDialog,
+  useAvsSubmission,
+  avsSelectionReducer,
+  candidateToTemporalAnswer,
+  createInitialAvsSelectionState,
+} from '../../avs';
 import { openFeedbackSession, sendFeedbackTurn, undoFeedback } from '../../../api/feedback';
 import KisPanel from '../../kis/components/KisPanel';
 import {
@@ -67,6 +79,12 @@ const SearchWorkspace = ({
   onEventTrailInvalidated,
   eventTrailAnnotations = {},
   eventTrail = null,
+  workspaceMode = 'KIS',
+  onToggleMode,
+  selectedTask = null,
+  setSelectedTask,
+  evaluations = [],
+  onSessionRejected,
 }) => {
   const notifyEventTrailInvalidated = useCallback(() => {
     onEventTrailInvalidated?.();
@@ -102,6 +120,74 @@ const SearchWorkspace = ({
   const filterOcrRef = useRef(null);
   const filterObjectRef = useRef(null);
   const localQueryInputRef = useRef(null);
+
+  // AVS State & Submissions
+  const [avsResults, setAvsResults] = useState([]);
+  const [avsResponse, setAvsResponse] = useState(null);
+  const [selectionState, dispatchSelection] = useReducer(
+    avsSelectionReducer,
+    undefined,
+    createInitialAvsSelectionState,
+  );
+  const [scopeConflict, setScopeConflict] = useState(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
+  const [activeBatch, setActiveBatch] = useState(null);
+  const pendingTaskSwitchRef = useRef(null);
+
+  const avsSubmission = useAvsSubmission({
+    userId,
+    selectedTask,
+    taskScopeKey: selectionState.taskScopeKey,
+    onSessionRejected,
+  });
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const resolveScope = async () => {
+      try {
+        const dresTask = await getCurrentDresTask(userId, {
+          evaluationId: selectedTask?.evaluationId,
+          taskName: selectedTask?.taskName,
+        });
+        if (isCancelled) return;
+
+        const liveScopeKey = dresTask?.task_scope_key || (selectedTask ? `${selectedTask.evaluationId}:${selectedTask.taskName}` : null);
+        if (!liveScopeKey) return;
+
+        if (pendingTaskSwitchRef.current) {
+          pendingTaskSwitchRef.current = null;
+          dispatchSelection({ type: 'RESET_FOR_SCOPE', taskScopeKey: liveScopeKey });
+          setScopeConflict(null);
+        } else if (selectionState.taskScopeKey === null) {
+          dispatchSelection({ type: 'BIND_SCOPE', taskScopeKey: liveScopeKey });
+          setScopeConflict(null);
+        } else if (selectionState.taskScopeKey !== liveScopeKey) {
+          if (selectionState.pending.size > 0) {
+            setScopeConflict(
+              `Task scope changed on the server (${liveScopeKey} != ${selectionState.taskScopeKey}). Selections are locked.`
+            );
+          } else {
+            dispatchSelection({ type: 'RESET_FOR_SCOPE', taskScopeKey: liveScopeKey });
+            setScopeConflict(null);
+          }
+        } else {
+          setScopeConflict(null);
+        }
+      } catch (err) {
+        if (!isCancelled && err?.status === 401) {
+          onSessionRejected?.();
+        }
+      }
+    };
+
+    resolveScope();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [userId, selectedTask, selectionState.taskScopeKey, selectionState.pending.size, onSessionRejected]);
 
   const [gridSize, setGridSize] = useState(() => {
     try {
@@ -292,6 +378,68 @@ const SearchWorkspace = ({
   const handleOpenSubmission = useCallback((payload) => {
     onOpenSubmission?.(payload);
   }, [onOpenSubmission]);
+
+  const handleToggleCandidate = useCallback((candidate) => {
+    dispatchSelection({ type: 'TOGGLE', candidate });
+  }, []);
+
+  const handleInspectCandidate = useCallback((candidate) => {
+    openCanonicalFrame(candidate);
+  }, [openCanonicalFrame]);
+
+  const handleRemoveCandidate = useCallback((candidateId) => {
+    dispatchSelection({ type: 'REMOVE', candidateId });
+  }, []);
+
+  const handleClearPending = useCallback(() => {
+    dispatchSelection({ type: 'CLEAR_PENDING' });
+  }, []);
+
+  const handleOpenAvsSubmit = useCallback(() => {
+    if (selectionState.pending.size === 0) return;
+    setActiveBatch(null);
+    setIsSubmitDialogOpen(true);
+  }, [selectionState.pending.size]);
+
+  const handleConfirmAvsSubmit = useCallback(async () => {
+    const candidates = [...selectionState.pending.values()];
+    const candidateIds = candidates.map((c) => c.frame_id);
+    const answers = candidates.map((c) => candidateToTemporalAnswer(c));
+
+    const result = await avsSubmission.submitBatch(answers, candidateIds);
+
+    if (result?.error?.code === 'TASK_SCOPE_MISMATCH' || result?.error?.status === 409) {
+      setIsSubmitDialogOpen(false);
+      setScopeConflict('Task scope changed on the server. Selections are locked.');
+      return;
+    }
+
+    if (result?.state === 'RECORDED') {
+      dispatchSelection({ type: 'RECORDED', candidateIds });
+      setIsSubmitDialogOpen(false);
+    } else if (result?.state === 'UNKNOWN') {
+      dispatchSelection({ type: 'UNKNOWN', candidateIds });
+    }
+  }, [selectionState.pending, avsSubmission]);
+
+  const handleRetryUnknown = useCallback(async () => {
+    const confirmed = window.confirm('I verified DRES state and want to retry this exact batch.');
+    if (confirmed && activeBatch) {
+      const result = await avsSubmission.retryUnknown(activeBatch);
+      if (result?.state === 'RECORDED') {
+        dispatchSelection({ type: 'RECORDED', candidateIds: activeBatch.candidateIds });
+        setIsSubmitDialogOpen(false);
+      }
+    }
+  }, [activeBatch, avsSubmission]);
+
+  const handleMarkUnknownRecorded = useCallback(() => {
+    dispatchSelection({ type: 'MARK_UNKNOWN_RECORDED' });
+    avsSubmission.resetOutcome();
+    setIsSubmitDialogOpen(false);
+  }, [avsSubmission]);
+
+  const isSelectionDisabled = Boolean(scopeConflict) || Boolean(selectionState.unknownBatch);
 
   const handleFeedbackTurn = useCallback(async (message) => {
     const activeSnapshotId = liveEventTrailContextRef.current?.snapshotId || feedbackSession.evidenceSnapshotId;
@@ -489,7 +637,6 @@ const SearchWorkspace = ({
     isSearching,
     eventTrail,
     notifyEventTrailInvalidated,
-    kisSession.currentIntent,
   ]);
 
   const handleSelectContext = useCallback((eventId) => {
@@ -509,8 +656,70 @@ const SearchWorkspace = ({
     event?.preventDefault?.();
     if (isSearching) return;
 
-    let prepared;
     const draftText = (kisSession.draft || '').trim();
+
+    if (workspaceMode === 'AVS') {
+      if (!draftText) return;
+
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
+
+      setIsSearching(true);
+      setError(null);
+      setWarnings([]);
+      setResultType('avs');
+      onQueryChange?.(draftText);
+
+      const startTime = performance.now();
+      try {
+        const response = await searchAvs({
+          query: draftText,
+          pageSize: topK || 80,
+          userId: typeof userId === 'string' ? userId.trim() : undefined,
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        const elapsed = Math.round(performance.now() - startTime);
+
+        setAvsResults(response.results || []);
+        setAvsResponse(response);
+        setSearchLatencyMs(elapsed);
+        setKisSession((prev) => ({ ...prev, draft: '' }));
+
+        setFeedbackSession({
+          ...createInitialFeedbackSession(),
+          status: 'applied',
+          messages: [
+            {
+              id: `msg_avs_${Date.now()}`,
+              role: 'user',
+              text: draftText,
+            },
+            {
+              id: `msg_avs_resp_${Date.now()}`,
+              role: 'assistant',
+              text: `Found ${response.results?.length || 0} candidate keyframes across ${response.unique_videos || 0} videos. Use checkboxes in the grid to harvest candidates into your basket.`,
+            },
+          ],
+          results: response.results || [],
+          canUndo: false,
+        });
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        setAvsResults([]);
+        setAvsResponse(null);
+        setError(err.message || 'AVS Search failed');
+      } finally {
+        if (requestRef.current === controller) {
+          requestRef.current = null;
+          setIsSearching(false);
+        }
+      }
+      return;
+    }
+
+    let prepared;
     const hasStagedImages = Object.keys(kisSession.stagedImages || {}).length > 0;
 
     try {
@@ -618,23 +827,24 @@ const SearchWorkspace = ({
       if (snapshotId) {
         liveEventTrailContextRef.current = {
           snapshotId,
-          kisRevision: response.intent?.revision ?? response.revision ?? 1,
+          kisRevision: response.intent?.revision ?? 1,
           events: (response.intent?.events || []).map(({ id, text, images }) => ({
             id,
             text,
             images: images || [],
           })),
-          searchSessionId: snapshotId,
+          searchSessionId: response.search_session_id || snapshotId,
         };
       } else {
         liveEventTrailContextRef.current = null;
       }
+      notifyEventTrailInvalidated();
 
-      setResultType('retrieval');
       setFrames(response.results || []);
       setKisEvents(eventTexts);
-      setSearchLatencyMs(response.latency);
       setWarnings(response.warnings || []);
+      setSearchLatencyMs(response.latency?.total_ms ?? null);
+      setResultType('retrieval');
       onQueryChange?.(queryText);
     } catch (requestError) {
       if (requestError.name === 'AbortError') return;
@@ -656,6 +866,7 @@ const SearchWorkspace = ({
     useDense,
     userId,
     handleFeedbackTurn,
+    workspaceMode,
   ]);
 
   // Step 7: Search-only rerun when only retrieval controls change
@@ -664,11 +875,11 @@ const SearchWorkspace = ({
     const controlsChanged = prev.topK !== topK || prev.useDense !== useDense || prev.useBm25 !== useBm25;
     prevControlsRef.current = { topK, useDense, useBm25 };
 
-    if (controlsChanged && kisSession.currentIntent && !kisSession.draft?.trim() && !isSearching) {
+    if (controlsChanged && kisSession.currentIntent && !kisSession.draft?.trim() && !isSearching && workspaceMode === 'KIS') {
       setFeedbackSession(resetFeedbackSession());
       submit();
     }
-  }, [topK, useDense, useBm25, kisSession.currentIntent, kisSession.draft, isSearching, submit]);
+  }, [topK, useDense, useBm25, kisSession.currentIntent, kisSession.draft, isSearching, submit, workspaceMode]);
 
   const handleNewSearch = useCallback(() => {
     requestRef.current?.abort();
@@ -681,6 +892,8 @@ const SearchWorkspace = ({
     handleClearFilter();
     setFrames([]);
     setKisEvents([]);
+    setAvsResults([]);
+    setAvsResponse(null);
     setWarnings([]);
     setResultType(null);
     setError(null);
@@ -831,6 +1044,91 @@ const SearchWorkspace = ({
   const getFrameClassName = useCallback(() => '', []);
 
   const renderResults = () => {
+    if (workspaceMode === 'AVS') {
+      return (
+        <div className="frames-results-shell avs-workspace-results">
+          {scopeConflict && (
+            <div className="avs-status-message error" role="alert">
+              {scopeConflict}
+            </div>
+          )}
+
+          {isSearching && (
+            <div className="avs-status-message loading" role="status">
+              Searching AVS keyframes...
+            </div>
+          )}
+
+          {error && (
+            <div className="avs-status-message error" role="alert">
+              {error}
+            </div>
+          )}
+
+          {!isSearching && !error && avsResults.length === 0 && (
+            <div className="avs-status-message empty">
+              Enter an ad-hoc query in the Search panel to retrieve candidate frames.
+            </div>
+          )}
+
+          {avsResults.length > 0 && (
+            <>
+              <div className="avs-results-summary">
+                Showing {avsResults.length} candidates from{' '}
+                {avsResponse?.unique_videos ?? 0} videos (pool size:{' '}
+                {avsResponse?.candidate_pool_size ?? avsResults.length})
+              </div>
+              <AvsHarvestGrid
+                candidates={avsResults}
+                pending={selectionState.pending}
+                submitted={selectionState.submitted}
+                selectionDisabled={isSelectionDisabled}
+                onToggle={handleToggleCandidate}
+                onInspect={handleInspectCandidate}
+              />
+            </>
+          )}
+
+          <AvsSelectionBar
+            pending={selectionState.pending}
+            onReview={() => setIsDrawerOpen(true)}
+            onClear={handleClearPending}
+            onSubmit={handleOpenAvsSubmit}
+            isSubmitting={avsSubmission.status === 'SUBMITTING'}
+            disabled={isSelectionDisabled}
+          />
+
+          <AvsSelectionDrawer
+            isOpen={isDrawerOpen}
+            onClose={() => setIsDrawerOpen(false)}
+            pending={selectionState.pending}
+            onRemove={handleRemoveCandidate}
+            disabled={isSelectionDisabled}
+          />
+
+          <AvsSubmitDialog
+            isOpen={isSubmitDialogOpen}
+            onClose={() => {
+              setIsSubmitDialogOpen(false);
+              avsSubmission.resetOutcome();
+            }}
+            onConfirm={handleConfirmAvsSubmit}
+            candidateCount={activeBatch ? activeBatch.candidateIds.length : selectionState.pending.size}
+            uniqueVideoCount={
+              activeBatch
+                ? new Set(activeBatch.answers.map((a) => a.video_id)).size
+                : new Set([...selectionState.pending.values()].map((c) => c.video_id)).size
+            }
+            isSubmitting={avsSubmission.status === 'SUBMITTING'}
+            status={avsSubmission.status}
+            outcome={avsSubmission.outcome}
+            onRetryUnknown={handleRetryUnknown}
+            onMarkUnknownRecorded={handleMarkUnknownRecorded}
+          />
+        </div>
+      );
+    }
+
     const getFrameAnnotation = (frame) => {
       const snapshotId = liveEventTrailContextRef.current?.snapshotId;
       if (!frame?.result_id || !snapshotId) return 'unvisited';
@@ -1070,6 +1368,12 @@ const SearchWorkspace = ({
                 gridSize={gridSize}
                 setGridSize={handleSetGridSize}
                 onOpenFrame={onFrameClick}
+                workspaceMode={workspaceMode}
+                onToggleMode={onToggleMode}
+                evaluations={evaluations}
+                selectedTask={selectedTask}
+                setSelectedTask={setSelectedTask}
+                connectedUserId={userId}
               />
             </>
           )}
@@ -1077,14 +1381,14 @@ const SearchWorkspace = ({
         <div className="adhoc-results">
           {renderResults()}
         </div>
-        <aside className={`kis-chat-sidebar ${isChatCollapsed ? 'collapsed' : ''}`} aria-label="KIS search">
+        <aside className={`kis-chat-sidebar ${isChatCollapsed ? 'collapsed' : ''}`} aria-label={workspaceMode === 'AVS' ? 'AVS search' : 'KIS search'}>
           {isChatCollapsed ? (
             <button
               type="button"
               className="kis-chat-expand-btn"
               onClick={() => handleToggleChat(false)}
-              title="Expand KIS search panel"
-              aria-label="Expand KIS search panel"
+              title={workspaceMode === 'AVS' ? 'Expand AVS search panel' : 'Expand KIS search panel'}
+              aria-label={workspaceMode === 'AVS' ? 'Expand AVS search panel' : 'Expand KIS search panel'}
             >
               <span className="sidebar-expand-icon">🔍</span>
               <span className="sidebar-expand-text">Search</span>
@@ -1127,6 +1431,7 @@ const SearchWorkspace = ({
               disabled={isSearching}
               renderExtraActions={renderExtraActions}
               onCollapse={() => handleToggleChat(true)}
+              mode={workspaceMode}
             />
           )}
         </aside>

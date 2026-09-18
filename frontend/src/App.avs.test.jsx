@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import App from './App';
 
 const mockSession = {
@@ -23,12 +23,14 @@ jest.mock('./features/vbs/contexts/VbsSessionContext', () => ({
   useVbsSession: () => mockSession,
 }));
 
-jest.mock('./features/avs', () => ({
-  AvsWorkspace: () => <div>Dedicated AVS workspace</div>,
-}));
-
 jest.mock('./features/search', () => ({
-  SearchWorkspace: () => <div>KIS search workspace</div>,
+  SearchWorkspace: ({ workspaceMode, onToggleMode }) => (
+    <div>
+      <div>Unified search workspace (mode: {workspaceMode})</div>
+      <button type="button" onClick={() => onToggleMode?.('KIS')}>Switch to KIS</button>
+      <button type="button" onClick={() => onToggleMode?.('AVS')}>Switch to AVS</button>
+    </div>
+  ),
 }));
 
 jest.mock('./features/health', () => ({
@@ -49,9 +51,20 @@ jest.mock('./features/submission', () => ({
   useDirectSubmission: () => ({ dialog: null, openError: '', opening: false }),
 }));
 
-test('routes an AVS task to the dedicated workspace', () => {
+test('routes an AVS task to the unified workspace with workspaceMode AVS', () => {
   render(<App />);
 
-  expect(screen.getByText('Dedicated AVS workspace')).toBeTruthy();
-  expect(screen.queryByText('KIS search workspace')).toBeNull();
+  expect(screen.getByText('Unified search workspace (mode: AVS)')).toBeTruthy();
+});
+
+test('allows toggling between KIS and AVS mode in unified workspace', () => {
+  render(<App />);
+
+  expect(screen.getByText('Unified search workspace (mode: AVS)')).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Switch to KIS' }));
+  expect(screen.getByText('Unified search workspace (mode: KIS)')).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Switch to AVS' }));
+  expect(screen.getByText('Unified search workspace (mode: AVS)')).toBeTruthy();
 });

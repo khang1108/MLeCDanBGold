@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppHeader } from './features/header';
 import { ImageModal } from './features/frames';
 import { SearchWorkspace } from './features/search';
-import { AvsWorkspace } from './features/avs';
 import { useHealthCheck } from './features/health';
 import { ApiDocsModal } from './features/docs';
 import { useEventTrail } from './features/event-trail';
@@ -151,31 +150,26 @@ const AppShell = ({
 
       <main className="app-container adhoc-app">
         <div className="workspace-panel">
-          {isAvsTask ? (
-            <AvsWorkspace
-              connectedUserId={connectedUserId}
-              evaluations={evaluations}
-              selectedTask={effectiveSelectedTask}
-              setSelectedTask={handleSetSelectedTask}
-              onFrameClick={handleQueryFrameClick}
-              onSessionRejected={invalidateSession}
-            />
-          ) : (
-            <SearchWorkspace
-              isActive={true}
-              onOpenSubmission={connectedUserId ? submission.open : undefined}
-              isSubmissionOpening={submission.opening}
-              userId={connectedUserId}
-              topK={topK}
-              setTopK={setTopK}
-              onFrameClick={handleQueryFrameClick}
-              onQueryChange={setActiveQuery}
-              queryInputRef={queryInputRef}
-              onEventTrailInvalidated={handleEventTrailInvalidated}
-              eventTrailAnnotations={eventTrailAnnotations}
-              eventTrail={workspaceEventTrail}
-            />
-          )}
+          <SearchWorkspace
+            isActive={true}
+            onOpenSubmission={connectedUserId ? submission.open : undefined}
+            isSubmissionOpening={submission.opening}
+            userId={connectedUserId}
+            topK={topK}
+            setTopK={setTopK}
+            onFrameClick={handleQueryFrameClick}
+            onQueryChange={setActiveQuery}
+            queryInputRef={queryInputRef}
+            onEventTrailInvalidated={handleEventTrailInvalidated}
+            eventTrailAnnotations={eventTrailAnnotations}
+            eventTrail={workspaceEventTrail}
+            workspaceMode={isAvsTask ? 'AVS' : 'KIS'}
+            onToggleMode={handleToggleWorkspace}
+            selectedTask={effectiveSelectedTask}
+            setSelectedTask={handleSetSelectedTask}
+            evaluations={evaluations}
+            onSessionRejected={invalidateSession}
+          />
         </div>
       </main>
 

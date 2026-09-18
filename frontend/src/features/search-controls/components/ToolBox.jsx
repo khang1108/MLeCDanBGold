@@ -36,6 +36,8 @@ const ToolBox = ({
   gridSize = 'normal',
   setGridSize = NOOP,
   onOpenFrame,
+  workspaceMode = 'KIS',
+  onToggleMode = NOOP,
 }) => {
   const vbsSession = useVbsSession();
   const connectedUserId = propConnectedUserId ?? vbsSession.connectedUserId ?? '';
@@ -84,11 +86,35 @@ const ToolBox = ({
   return (
     <div className="toolbox-stack">
       <aside className="toolbox-sidebar">
-      <div className="toolbox-section">
-        <div className="toolbox-label-row toolbox-top-k-row">
-          <label htmlFor={topKInputId} className="toolbox-label">
-            Top-K results
-          </label>
+        <div className="toolbox-section toolbox-mode-section">
+          <div className="toolbox-label-row">
+            <span className="toolbox-label">Search Mode</span>
+          </div>
+          <div className="toolbox-segmented-group" role="group" aria-label="Search mode selection">
+            <button
+              type="button"
+              className={`toolbox-segment-btn ${workspaceMode === 'KIS' ? 'active' : ''}`}
+              onClick={() => onToggleMode?.('KIS')}
+              aria-pressed={workspaceMode === 'KIS'}
+            >
+              KIS
+            </button>
+            <button
+              type="button"
+              className={`toolbox-segment-btn ${workspaceMode === 'AVS' ? 'active' : ''}`}
+              onClick={() => onToggleMode?.('AVS')}
+              aria-pressed={workspaceMode === 'AVS'}
+            >
+              AVS
+            </button>
+          </div>
+        </div>
+
+        <div className="toolbox-section">
+          <div className="toolbox-label-row toolbox-top-k-row">
+            <label htmlFor={topKInputId} className="toolbox-label">
+              Top-K results
+            </label>
           <input
             id={topKInputId}
             type="number"

@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { searchKis, uploadKisImage } from '../../../api/kis';
+import { searchAvs } from '../../../api/avs';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
 import { filterFrames } from '../../../api/filter';
 
@@ -9,6 +10,9 @@ jest.mock('../../../api/kis', () => ({
   searchKis: jest.fn(),
   uploadKisImage: jest.fn(),
 }));
+jest.mock('../../../api/avs', () => ({
+  searchAvs: jest.fn(),
+}));
 jest.mock('../../../api/filter', () => ({
   filterFrames: jest.fn(),
 }));
@@ -16,6 +20,7 @@ const renderSearch = (props) => render(<SearchWorkspace {...props} />);
 
 beforeEach(() => {
   searchKis.mockReset();
+  searchAvs.mockReset();
   uploadKisImage.mockReset();
   filterFrames.mockReset();
 });
@@ -687,6 +692,67 @@ test('keyboard shortcuts Ctrl+1 through Ctrl+6 focus search filter inputs', () =
 
   fireEvent.keyDown(window, { key: '6', code: 'Digit6', ctrlKey: true });
   expect(document.activeElement).toBe(objectInput);
+});
+
+test('submitting a query in AVS mode calls searchAvs and displays AvsHarvestGrid candidates', async () => {
+  const mockAvsResults = [
+    {
+      frame_id: 'avs_f1',
+      video_id: 'V100',
+      frame_idx: 10,
+      timestamp_ms: 1000,
+      thumbnail_url: '/thumbs/avs_f1.jpg',
+      score: 0.98,
+    },
+    {
+      frame_id: 'avs_f2',
+      video_id: 'V101',
+      frame_idx: 20,
+      timestamp_ms: 2000,
+      thumbnail_url: '/thumbs/avs_f2.jpg',
+      score: 0.85,
+    },
+  ];
+
+  searchAvs.mockResolvedValueOnce({
+    task_family: 'AVS',
+    query: 'red sports car',
+    results: mockAvsResults,
+    candidate_pool_size: 2,
+    unique_videos: 2,
+  });
+
+  const onToggleMode = jest.fn();
+  renderSearch({
+    topK: 80,
+    setTopK: jest.fn(),
+    workspaceMode: 'AVS',
+    onToggleMode,
+  });
+
+  // Verify AVS mode indicator in ToolBox
+  const avsToggleBtn = screen.getByRole('button', { name: 'AVS' });
+  expect(avsToggleBtn.getAttribute('aria-pressed')).toBe('true');
+
+  // Submit AVS query via chat panel input
+  const input = document.getElementById('event-query');
+  fireEvent.change(input, { target: { value: 'red sports car' } });
+  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite)$/i }));
+
+  await waitFor(() => {
+    expect(searchAvs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: 'red sports car',
+        pageSize: 80,
+      }),
+    );
+  });
+
+  // Verify results summary and selection bar are visible
+  expect(await screen.findByText(/showing 2 candidates from 2 videos/i)).toBeTruthy();
+  expect(screen.getByLabelText('AVS search candidates')).toBeTruthy();
+  expect(screen.getByLabelText('AVS selection bar')).toBeTruthy();
+  expect(searchKis).not.toHaveBeenCalled();
 });
 
 
