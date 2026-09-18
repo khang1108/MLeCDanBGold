@@ -16,7 +16,7 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.inference.errors import InferenceResponseError, InferenceUnavailableError
 from hcmai.kis.assets import InvalidImageError
 from hcmai.kis.models import KISImageRef
-from hcmai.kis.resolver import KISResolutionError
+from hcmai.kis.resolution import KISResolutionError
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer

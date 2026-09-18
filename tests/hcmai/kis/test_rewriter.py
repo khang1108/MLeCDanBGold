@@ -13,11 +13,11 @@ from hcmai.kis.models import (
     KISIntent,
     KISTemporalEdge,
 )
-from hcmai.kis.resolver import KISResolutionError
-from hcmai.kis.rewriter import (
+from hcmai.kis.resolution import (
     GlobalRewriteEvent,
     GlobalRewriteResolution,
     KISGlobalRewriter,
+    KISResolutionError,
 )
 
 

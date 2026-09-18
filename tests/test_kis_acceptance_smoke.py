@@ -27,7 +27,7 @@ from hcmai.kis.models import (
     KISIntent,
     KISTemporalEdge,
 )
-from hcmai.kis.scoped_resolver import ScopedResolutionBatch, ScopedResolvedEvent
+from hcmai.kis.resolution import ScopedResolutionBatch, ScopedResolvedEvent
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.workflows.kis import KISSearchExecution
 

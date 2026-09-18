@@ -1,5 +1,5 @@
 from hcmai.kis.models import KISInitialResolution, KISInitialResolutionEvent
-from hcmai.kis.resolver import KISIntentResolver
+from hcmai.kis.resolution import KISIntentResolver
 
 
 class CapturingLLM:

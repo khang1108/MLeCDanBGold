@@ -21,8 +21,8 @@ from hcmai.kis.models import (
     NonBlank,
 )
 from hcmai.kis.parser import EventPatchInstruction
-from hcmai.kis.prompts import build_kis_scoped_messages
-from hcmai.kis.resolver import KISResolutionError
+from hcmai.kis.resolution.initial import KISResolutionError
+from hcmai.kis.resolution.prompts import build_kis_scoped_messages
 
 
 class ScopedResolvedEvent(BaseModel):

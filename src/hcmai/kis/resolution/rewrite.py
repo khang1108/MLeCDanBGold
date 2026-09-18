@@ -19,9 +19,9 @@ from hcmai.kis.models import (
     KISTemporalEdge,
     NonBlank,
 )
-from hcmai.kis.prompts import build_kis_global_rewrite_messages
-from hcmai.kis.resolver import KISResolutionError
-from hcmai.kis.scoped_resolver import canonical_query_text
+from hcmai.kis.resolution.initial import KISResolutionError
+from hcmai.kis.resolution.prompts import build_kis_global_rewrite_messages
+from hcmai.kis.resolution.scoped import canonical_query_text
 
 
 class GlobalRewriteEvent(BaseModel):

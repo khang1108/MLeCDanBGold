@@ -11,7 +11,7 @@ from hcmai.kis.models import (
     KISInitialResolution,
     KISInitialResolutionEvent,
 )
-from hcmai.kis.resolver import KISIntentResolver, KISResolutionError
+from hcmai.kis.resolution.initial import KISIntentResolver, KISResolutionError
 
 
 Q1 = "A woman is standing in a kitchen."

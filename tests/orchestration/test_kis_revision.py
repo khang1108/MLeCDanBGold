@@ -22,7 +22,7 @@ from hcmai.kis.models import (
     KISIntent,
     KISTemporalEdge,
 )
-from hcmai.kis.scoped_resolver import ScopedResolutionBatch, ScopedResolvedEvent
+from hcmai.kis.resolution import ScopedResolutionBatch, ScopedResolvedEvent
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchService, SearchServiceUnavailableError
 from hcmai.orchestration.workflows.kis import KISSearchExecution

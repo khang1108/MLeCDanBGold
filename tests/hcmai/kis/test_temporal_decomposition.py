@@ -8,11 +8,11 @@ into a single event object.
 from typing import Any
 
 from hcmai.kis.models import KISInitialResolution, KISInitialResolutionEvent
-from hcmai.kis.prompts import (
+from hcmai.kis.resolution import (
     KIS_INITIAL_RESOLVER_SYSTEM_PROMPT,
+    KISIntentResolver,
     build_kis_initial_messages,
 )
-from hcmai.kis.resolver import KISIntentResolver
 
 
 def test_initial_prompt_states_one_clue_can_produce_multiple_events() -> None:

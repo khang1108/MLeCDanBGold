@@ -17,7 +17,7 @@ from hcmai.kis.models import (
     KISIntent,
     KISTemporalEdge,
 )
-from hcmai.kis.prompts import build_kis_initial_messages
+from hcmai.kis.resolution.prompts import build_kis_initial_messages
 
 
 class KISResolutionError(RuntimeError):

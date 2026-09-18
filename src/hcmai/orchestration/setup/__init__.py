@@ -21,9 +21,11 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.inference import LLMClient, load_llm_endpoint
 from hcmai.kis.assets import KISImageAssetStore
 from hcmai.kis.feedback.resolver import FeedbackResolver
-from hcmai.kis.resolver import KISIntentResolver
-from hcmai.kis.rewriter import KISGlobalRewriter
-from hcmai.kis.scoped_resolver import KISScopedResolver
+from hcmai.kis.resolution import (
+    KISGlobalRewriter,
+    KISIntentResolver,
+    KISScopedResolver,
+)
 from hcmai.orchestration.setup.corpus import load_configured_corpus, load_corpus
 from hcmai.orchestration.setup.retrieval import (
     load_image_encoder,

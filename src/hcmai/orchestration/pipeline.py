@@ -72,7 +72,7 @@ from hcmai.kis.models import (
     KISTemporalEdge,
 )
 from hcmai.kis.parser import EventPatchInstruction
-from hcmai.kis.scoped_resolver import (
+from hcmai.kis.resolution import (
     apply_scoped_resolutions,
     canonical_query_text,
 )
@@ -80,9 +80,11 @@ from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan, build_retr
 
 if TYPE_CHECKING:
     from hcmai.kis.assets import KISImageAssetStore
-    from hcmai.kis.resolver import KISIntentResolver
-    from hcmai.kis.rewriter import KISGlobalRewriter
-    from hcmai.kis.scoped_resolver import KISScopedResolver
+    from hcmai.kis.resolution import (
+        KISGlobalRewriter,
+        KISIntentResolver,
+        KISScopedResolver,
+    )
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
     from hcmai.retrieval.evidence.literal import LiteralTextIndex
     from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter

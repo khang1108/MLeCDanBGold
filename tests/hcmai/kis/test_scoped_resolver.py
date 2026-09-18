@@ -15,11 +15,11 @@ from hcmai.kis.models import (
     KISTemporalEdge,
 )
 from hcmai.kis.parser import EventPatchInstruction
-from hcmai.kis.resolver import KISResolutionError
-from hcmai.kis.scoped_resolver import (
+from hcmai.kis.resolution import (
+    KISResolutionError,
     KISScopedResolver,
-    ScopedResolvedEvent,
     ScopedResolutionBatch,
+    ScopedResolvedEvent,
     apply_scoped_resolutions,
 )
 

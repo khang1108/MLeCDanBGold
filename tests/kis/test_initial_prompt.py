@@ -1,4 +1,4 @@
-from hcmai.kis.prompts import (
+from hcmai.kis.resolution import (
     KIS_INITIAL_RESOLVER_SYSTEM_PROMPT,
     build_kis_initial_messages,
 )

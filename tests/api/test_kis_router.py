@@ -24,7 +24,7 @@ from hcmai.kis.models import (
     KISImageRef,
     KISIntent,
 )
-from hcmai.kis.resolver import KISResolutionError
+from hcmai.kis.resolution import KISResolutionError
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer

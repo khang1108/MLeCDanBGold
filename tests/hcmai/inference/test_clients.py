@@ -250,7 +250,7 @@ def test_http_transport_translates_errors(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_scoped_resolution_without_language_parses_from_raw_transport() -> None:
     """Verify raw model payload without language validates as ScopedResolutionBatch."""
-    from hcmai.kis.scoped_resolver import ScopedResolutionBatch
+    from hcmai.kis.resolution import ScopedResolutionBatch
 
     raw_json = '{"events":[{"event_id":"E1","text":"Con chó được cập nhật","bindings":[]}]}'
     endpoint = ModelEndpointConfig(base_url="https://api.example/v1", model="Qwen/Qwen3-4B")

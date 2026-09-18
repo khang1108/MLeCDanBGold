@@ -10,12 +10,15 @@ from .models import (
     KISIntent,
     KISTemporalEdge,
 )
-from .resolver import KISIntentResolver, KISResolutionError
-from .rewriter import GlobalRewriteEvent, GlobalRewriteResolution, KISGlobalRewriter
-from .scoped_resolver import (
+from hcmai.kis.resolution import (
+    GlobalRewriteEvent,
+    GlobalRewriteResolution,
+    KISGlobalRewriter,
+    KISIntentResolver,
+    KISResolutionError,
     KISScopedResolver,
-    ScopedResolvedEvent,
     ScopedResolutionBatch,
+    ScopedResolvedEvent,
     apply_scoped_resolutions,
 )
 
