@@ -121,3 +121,67 @@ test("renders submit button and triggers onSubmit when provided", () => {
   fireEvent.click(submitBtn);
   expect(onSubmit).toHaveBeenCalledTimes(1);
 });
+
+test("steps backward and forward by frames using step buttons", () => {
+  const videoRef = createVideoRef();
+  videoRef.current.currentTime = 5.0;
+  const onSeek = jest.fn();
+  render(
+    <VideoTimeline
+      videoId="L28_V001"
+      videoRef={videoRef}
+      currentTime={5.0}
+      duration={10}
+      onSeek={onSeek}
+    />,
+  );
+
+  const prevFrameBtn = screen.getByRole("button", { name: "Previous frame" });
+  fireEvent.click(prevFrameBtn);
+  expect(onSeek).toHaveBeenCalledWith(4.96);
+
+  const nextFrameBtn = screen.getByRole("button", { name: "Next frame" });
+  fireEvent.click(nextFrameBtn);
+  expect(onSeek).toHaveBeenLastCalledWith(5);
+});
+
+test("opens playback speed menu and sets video playback rate", () => {
+  const videoRef = createVideoRef();
+  videoRef.current.playbackRate = 1;
+  render(
+    <VideoTimeline
+      videoId="L28_V001"
+      videoRef={videoRef}
+      currentTime={2}
+      duration={10}
+    />,
+  );
+
+  const speedBtn = screen.getByRole("button", { name: /playback speed: 1x/i });
+  fireEvent.click(speedBtn);
+
+  const speed15x = screen.getByText("1.5x");
+  fireEvent.click(speed15x);
+
+  expect(videoRef.current.playbackRate).toBe(1.5);
+});
+
+test("toggles between elapsed and remaining time on click", () => {
+  const videoRef = createVideoRef();
+  render(
+    <VideoTimeline
+      videoId="L28_V001"
+      videoRef={videoRef}
+      currentTime={3}
+      duration={10}
+    />,
+  );
+
+  const timeReadout = screen.getByText("00:03 / 00:10");
+  fireEvent.click(timeReadout);
+  expect(screen.getByText("-00:07 / 00:10")).toBeTruthy();
+
+  fireEvent.click(timeReadout);
+  expect(screen.getByText("00:03 / 00:10")).toBeTruthy();
+});
+

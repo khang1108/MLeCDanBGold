@@ -337,14 +337,57 @@ const ImageModal = ({
     && typeof frame.video_id === 'string'
     && frame.video_id.trim().length > 0;
 
+  const [centerIndicator, setCenterIndicator] = useState(null);
+  const [seekIndicator, setSeekIndicator] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimerRef = useRef(null);
+
+  const handleUserActivity = useCallback(() => {
+    setIsIdle(false);
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    if (isPlaying) {
+      idleTimerRef.current = setTimeout(() => {
+        setIsIdle(true);
+      }, 2500);
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return undefined;
+    const syncPlaying = () => {
+      const playing = !video.paused && !video.ended;
+      setIsPlaying(playing);
+      if (!playing) setIsIdle(false);
+    };
+    video.addEventListener('play', syncPlaying);
+    video.addEventListener('pause', syncPlaying);
+    video.addEventListener('ended', syncPlaying);
+    return () => {
+      video.removeEventListener('play', syncPlaying);
+      video.removeEventListener('pause', syncPlaying);
+      video.removeEventListener('ended', syncPlaying);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, []);
+
   const togglePlayback = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
 
     if (video.paused || video.ended) {
-      video.play?.().catch?.(() => undefined);
+      setCenterIndicator({ type: 'play', key: Date.now() });
+      setIsPlaying(true);
+      const playPromise = video.play?.();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => undefined);
+      }
     } else {
       video.pause?.();
+      setCenterIndicator({ type: 'pause', key: Date.now() });
+      setIsPlaying(false);
+      setIsIdle(false);
     }
   }, []);
 
@@ -356,6 +399,14 @@ const ImageModal = ({
     const nextTime = Math.min(Math.max(video.currentTime + offsetSeconds, 0), maximum);
     video.currentTime = nextTime;
     updatePlaybackTime(nextTime);
+
+    if (Math.abs(offsetSeconds) >= 4) {
+      setSeekIndicator({
+        text: `${Math.abs(Math.round(offsetSeconds))}s`,
+        direction: offsetSeconds > 0 ? 'right' : 'left',
+        key: Date.now(),
+      });
+    }
   }, [updatePlaybackTime]);
 
   const handleModalKeyDown = useCallback((event) => {
@@ -368,27 +419,84 @@ const ImageModal = ({
     const targetTag = event.target?.tagName;
     if (['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(targetTag)) return;
 
-    if (event.key === ' ' || event.key === 'Spacebar' || event.key.toLowerCase() === 'k') {
+    const key = event.key.toLowerCase();
+
+    if (event.key === ' ' || event.key === 'Spacebar' || key === 'k') {
       event.preventDefault();
       togglePlayback();
+    } else if (key === 'j') {
+      event.preventDefault();
+      seekBy(-10);
+    } else if (key === 'l') {
+      event.preventDefault();
+      seekBy(10);
     } else if (event.key === 'ArrowLeft') {
       event.preventDefault();
       seekBy(-5);
     } else if (event.key === 'ArrowRight') {
       event.preventDefault();
       seekBy(5);
-    } else if (event.key.toLowerCase() === 't' || event.key.toLowerCase() === 'e') {
+    } else if (event.key === ',') {
+      event.preventDefault();
+      seekBy(-0.04);
+    } else if (event.key === '.') {
+      event.preventDefault();
+      seekBy(0.04);
+    } else if (!event.ctrlKey && !event.altKey && !event.metaKey && /^[0-9]$/.test(event.key)) {
+      event.preventDefault();
+      const video = videoRef.current;
+      if (video && Number.isFinite(video.duration) && video.duration > 0) {
+        const pct = Number(event.key) / 10;
+        const nextTime = pct * video.duration;
+        video.currentTime = nextTime;
+        updatePlaybackTime(nextTime);
+      }
+    } else if (key === 'm') {
+      event.preventDefault();
+      const video = videoRef.current;
+      if (video) video.muted = !video.muted;
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      const video = videoRef.current;
+      if (video) {
+        video.volume = Math.min(1, Math.round((video.volume + 0.1) * 10) / 10);
+        video.muted = false;
+      }
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      const video = videoRef.current;
+      if (video) {
+        video.volume = Math.max(0, Math.round((video.volume - 0.1) * 10) / 10);
+      }
+    } else if (event.key === '<') {
+      event.preventDefault();
+      const video = videoRef.current;
+      if (video) {
+        const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+        const idx = speeds.indexOf(video.playbackRate);
+        const nextIdx = Math.max(0, (idx === -1 ? 2 : idx) - 1);
+        video.playbackRate = speeds[nextIdx];
+      }
+    } else if (event.key === '>') {
+      event.preventDefault();
+      const video = videoRef.current;
+      if (video) {
+        const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+        const idx = speeds.indexOf(video.playbackRate);
+        const nextIdx = Math.min(speeds.length - 1, (idx === -1 ? 2 : idx) + 1);
+        video.playbackRate = speeds[nextIdx];
+      }
+    } else if (key === 't' || key === 'e') {
       event.preventDefault();
       toggleTheater();
-    } else if (event.key.toLowerCase() === 'f') {
+    } else if (key === 'f') {
       event.preventDefault();
       toggleFullscreen();
-    } else if (event.key.toLowerCase() === 'c') {
+    } else if (key === 'c') {
       event.preventDefault();
       toggleFitMode();
     }
-
-  }, [onClose, seekBy, togglePlayback, toggleTheater, toggleFullscreen, toggleFitMode]);
+  }, [onClose, seekBy, togglePlayback, toggleTheater, toggleFullscreen, toggleFitMode, updatePlaybackTime]);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -412,7 +520,7 @@ const ImageModal = ({
                   </span>
                 </div>
                 <div className="modal-viewer-top-right">
-                  {videoError && (
+                  {isTheaterMode && (
                     <>
                       {canSubmitFrame && !eventTrail?.state && (
                         <button
@@ -464,6 +572,17 @@ const ImageModal = ({
                   >
                     ⛶
                   </button>
+                  {isTheaterMode && (
+                    <button
+                      type="button"
+                      className="modal-viewer-icon-btn modal-viewer-close-btn"
+                      onClick={onClose}
+                      title="Close modal [Esc]"
+                      aria-label="Close modal"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -480,7 +599,11 @@ const ImageModal = ({
               )}
 
               {streamUrl && targetTime !== null && !videoError ? (
-                <div className="modal-video-shell">
+                <div
+                  className={`modal-video-shell ${isIdle && isPlaying ? 'is-idle' : ''}`}
+                  onMouseMove={handleUserActivity}
+                  onMouseEnter={handleUserActivity}
+                >
                   <video
                     ref={videoRef}
                     className={`modal-viewer-video fit-${fitMode}`}
@@ -493,8 +616,33 @@ const ImageModal = ({
                     onLoadedMetadata={handleVideoLoadedMetadata}
                     onTimeUpdate={handleVideoTimeUpdate}
                     onError={() => setVideoError('The MP4 stream could not be loaded or decoded.')}
+                    onClick={togglePlayback}
                     onDoubleClick={toggleTheater}
                   />
+
+                  {/* YouTube Center Play/Pause Ripple Indicator */}
+                  {centerIndicator && (
+                    <div
+                      key={centerIndicator.key}
+                      className="modal-video-center-indicator"
+                      aria-hidden="true"
+                    >
+                      {centerIndicator.type === 'play' ? '▶' : '⏸'}
+                    </div>
+                  )}
+
+                  {/* YouTube Seek Pill Indicator */}
+                  {seekIndicator && (
+                    <div
+                      key={seekIndicator.key}
+                      className={`modal-video-seek-indicator ${seekIndicator.direction}`}
+                      aria-hidden="true"
+                    >
+                      {seekIndicator.direction === 'left' ? '◀◀ ' : ''}
+                      <span>{seekIndicator.text}</span>
+                      {seekIndicator.direction === 'right' ? ' ▶▶' : ''}
+                    </div>
+                  )}
                   <VideoTimeline
                     videoId={frame.video_id}
                     videoRef={videoRef}
@@ -544,15 +692,6 @@ const ImageModal = ({
                   {eventTrail?.state ? 'EventTrail Exploration' : 'Frame Inspector'}
                 </span>
                 <div className="inspector-header-actions">
-                  <button
-                    type="button"
-                    className={`inspector-header-theater-btn ${isTheaterMode ? 'is-expanded' : ''}`}
-                    onClick={toggleTheater}
-                    title={isTheaterMode ? "Restore inspector (T)" : "Expand video player (T)"}
-                    aria-label={isTheaterMode ? "Restore inspector" : "Expand video player"}
-                  >
-                    {isTheaterMode ? '◂ Show' : '⤢ Expand'}
-                  </button>
                   {isAvsMode && onToggleCandidateSelection && (
                     <button
                       type="button"
