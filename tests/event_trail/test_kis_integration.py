@@ -7,7 +7,7 @@ import pytest
 from hcmai.api.contracts.kis import InitialResolveOperation, KISSearchRequest
 from hcmai.api.contracts.search import SearchLatency, SearchResult, SearchResultMetadata
 from hcmai.corpus.models import Frame
-from hcmai.event_trail.decoder import TemporalConstraintDecoder
+from hcmai.event_trail.decoding import TemporalConstraintDecoder
 from hcmai.event_trail.models import (
     ApproveEvent,
     DeclineCandidate,

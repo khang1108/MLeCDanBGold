@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from hcmai.event_trail.config import EventTrailSettings
-from hcmai.event_trail.decoder import TemporalConstraintDecoder
+from hcmai.event_trail.decoding import TemporalConstraintDecoder
 from hcmai.event_trail.errors import EventTrailError
 from hcmai.event_trail.models import (
     ApproveEvent,
@@ -22,7 +22,7 @@ from hcmai.event_trail.models import (
     freeze_video_scores,
 )
 from hcmai.event_trail.service import EventTrailService
-from hcmai.event_trail.store import (
+from hcmai.event_trail.storage import (
     EventTrailSessionStore,
     EvidenceSnapshotStore,
 )

@@ -20,7 +20,7 @@ from hcmai.api.contracts.kis import KISSearchResult
 from hcmai.api.contracts.search import SearchResultMetadata
 from hcmai.app import create_app
 from hcmai.event_trail.models import EvidenceSnapshot, SnapshotResult, freeze_video_scores
-from hcmai.event_trail.store import EvidenceSnapshotStore
+from hcmai.event_trail.storage import EvidenceSnapshotStore
 from hcmai.kis.feedback.models import (
     ClarifyAction,
     EditIntentAction,

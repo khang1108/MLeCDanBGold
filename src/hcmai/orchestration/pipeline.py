@@ -30,11 +30,11 @@ from hcmai.common.config import ApiConfig, SearchConfig
 from hcmai.corpus import Corpus
 from hcmai.corpus.models import Frame
 from hcmai.event_trail.config import EventTrailSettings
-from hcmai.event_trail.decoder import TemporalConstraintDecoder
+from hcmai.event_trail.decoding import TemporalConstraintDecoder
 from hcmai.event_trail.errors import EventTrailError
 from hcmai.event_trail.models import EvidenceSnapshot, SnapshotResult, freeze_video_scores
 from hcmai.event_trail.service import EventTrailService
-from hcmai.event_trail.store import EventTrailSessionStore, EvidenceSnapshotStore
+from hcmai.event_trail.storage import EventTrailSessionStore, EvidenceSnapshotStore
 from hcmai.kis.feedback.service import FeedbackService
 from hcmai.kis.feedback.store import FeedbackSessionStore
 from hcmai.orchestration.utils.errors import (

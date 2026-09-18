@@ -5,7 +5,7 @@ import pytest
 
 from hcmai.common.config import AlignmentConfig
 from hcmai.corpus.models import Frame
-from hcmai.event_trail.decoder import (
+from hcmai.event_trail.decoding import (
     ConstraintSnapshot,
     DecodeOutcome,
     TemporalConstraintDecoder,
