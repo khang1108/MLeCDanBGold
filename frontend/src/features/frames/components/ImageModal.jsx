@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FrameMetadata from "./FrameMetadata";
 import VideoTimeline from "./VideoTimeline";
-import AlignmentAccordion from "../../alignment/components/AlignmentAccordion";
 import EventTrailPanel from "../../event-trail/components/EventTrailPanel";
 import { resolveFrameAtTimestamp } from "../../../api/frames";
 import {
@@ -129,24 +128,6 @@ const ImageModal = ({
     return [];
   }, [eventTrail?.context?.events, events]);
 
-  const frameIds = useMemo(
-    () => frame.frame_ids || frame.aligned_frame_ids || [],
-    [frame.frame_ids, frame.aligned_frame_ids],
-  );
-
-  const timestampsMs = useMemo(
-    () => frame.timestamps_ms || frame.aligned_timestamps_ms || [],
-    [frame.timestamps_ms, frame.aligned_timestamps_ms],
-  );
-
-  const effectiveEvents = useMemo(() => {
-    if (resolvedEvents.length > 0) return resolvedEvents;
-    if (frameIds.length > 1 && timestampsMs.length === frameIds.length) {
-      return frameIds.map((_, idx) => `Event ${idx + 1}`);
-    }
-    return [];
-  }, [resolvedEvents, frameIds, timestampsMs]);
-
   const [selectedEventId, setSelectedEventId] = useState(null);
   const lastActionRef = useRef(null);
   const prevTrailRevRef = useRef(eventTrail?.state?.trail_revision);
@@ -254,12 +235,6 @@ const ImageModal = ({
       });
     }
   }, [eventTrail?.state?.video_id, frame.video_id, onOpenSubmission]);
-  const hasAlignment = useMemo(() => (
-    Array.isArray(effectiveEvents)
-    && effectiveEvents.length > 0
-    && effectiveEvents.length === frameIds?.length
-    && effectiveEvents.length === timestampsMs?.length
-  ), [effectiveEvents, frameIds, timestampsMs]);
 
   const togglePlayback = useCallback(() => {
     const video = videoRef.current;
@@ -458,17 +433,7 @@ const ImageModal = ({
               )}
             </div>
           </div>
-          {hasAlignment && !eventTrail?.state && (
-            <div className="modal-bottom-alignment-section">
-              <AlignmentAccordion
-                events={effectiveEvents}
-                frameIds={frameIds}
-                timestampsMs={timestampsMs}
-                onSeek={handleSeekFromTimestamp}
-                collapsible={false}
-              />
-            </div>
-          )}
+
         </div>
       </div>
     </div>

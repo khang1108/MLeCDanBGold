@@ -96,7 +96,41 @@
 }
 
 .frames-grid.size-compact .frames-row-track .frame-card {
-  width: 190px;
+  width: 215px;
+}
+
+/* Compact mode header optimizations to prevent video_id truncation */
+.frames-grid.size-compact .frame-card-header {
+  padding: 4px 7px;
+  gap: 4px;
+}
+
+.frames-grid.size-compact .frame-header-title {
+  gap: 4px;
+}
+
+.frames-grid.size-compact .frame-index-text {
+  font-size: 11px;
+}
+
+.frames-grid.size-compact .frame-event-badge {
+  font-size: 9px;
+  padding: 0 4px;
+}
+
+.frames-grid.size-compact .frame-header-meta {
+  gap: 4px;
+}
+
+.frames-grid.size-compact .frame-time-badge {
+  font-size: 10px;
+  padding: 1px 4px;
+}
+
+.frames-grid.size-compact .frame-submit-button {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
 }
 
 .frames-grid.size-normal .frames-row-track .frame-card {
