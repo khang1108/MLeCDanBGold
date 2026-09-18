@@ -5,6 +5,7 @@ import { displayVideoId } from "../videoSource";
 // Compact result card; clicking opens the inspector while controls stop propagation.
 const FrameCard = ({
   frame,
+  eventLabel = null,
   events = [],
   detail = null,
   detailStatus = 'idle',
@@ -32,9 +33,14 @@ const FrameCard = ({
   return (
     <div className={`frame-card ${cardClassName}`.trim()} onClick={onClick}>
       <div className="frame-card-header">
-        <span className="frame-index-text" title={displayFrame.video_id}>
-          {displayVideoId(displayFrame.video_id)}
-        </span>
+        <div className="frame-header-title">
+          {eventLabel && (
+            <span className="frame-event-badge">{eventLabel}</span>
+          )}
+          <span className="frame-index-text" title={displayFrame.video_id}>
+            {displayVideoId(displayFrame.video_id)}
+          </span>
+        </div>
         <div className="frame-header-meta">
           {annotation === 'explored' && (
             <span className="frame-trail-badge badge-explored">Explored</span>
