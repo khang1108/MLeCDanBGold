@@ -45,9 +45,6 @@ class LLMService:
     def captioner(self) -> Any:
         return self.adapter.captioner
 
-    @property
-    def reranker(self) -> Any:
-        return self.adapter.reranker
 
     def load(self) -> None:
         method = getattr(self.adapter, "load", None)
@@ -73,7 +70,6 @@ class LLMService:
         if readiness is None:
             return {
                 "embedding": False,
-                "reranking": False,
                 "structured_parsing": False,
             }
         return readiness.capabilities.model_dump()
@@ -111,8 +107,6 @@ class LLMService:
 
         return self.adapter.ocr(images)
 
-    def rerank(self, query: str, images: Any) -> list[float]:
-        return self.adapter.rerank(query, images)
 
     def boundary_scores(self, frames: Any, *, source: str) -> Any:
         return self.adapter.boundary_scores(frames, source=source)

@@ -37,13 +37,6 @@ embedding = [
     "transformers>=5.13, <6.0",
     "torch>=2.8, <3.0",
 ]
-reranking = [
-    "accelerate>=1.12, <2.0",
-    "qwen-vl-utils>=0.0.14, <0.1",
-    "torch>=2.8, <3.0",
-    "torchvision>=0.23, <1.0",
-    "transformers>=5.13, <6.0",
-]
 transcripts = [
     "av>=14, <19",
     "silero-vad>=6.2, <7.0",

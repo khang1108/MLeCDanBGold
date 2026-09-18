@@ -4,7 +4,6 @@ from llm.server.routers.boundaries import router as boundaries_router
 from llm.server.routers.embeddings import router as embeddings_router
 from llm.server.routers.enrichment import router as enrichment_router
 from llm.server.routers.generation import router as generation_router
-from llm.server.routers.reranking import router as reranking_router
 from llm.server.routers.system import router as system_router
 from llm.server.routers.transcripts import router as transcripts_router
 
@@ -14,7 +13,6 @@ ROUTERS = (
     embeddings_router,
     boundaries_router,
     transcripts_router,
-    reranking_router,
     generation_router,
 )
 

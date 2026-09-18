@@ -15,7 +15,6 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse
 from llm.contracts import (
     BoundaryScoreResponse,
-    RerankResponse,
 )
 
 from llm.remote.gateway import InferenceGateway, InferenceGatewayError
@@ -220,21 +219,6 @@ class InferenceClient:
             files=files,
         )
 
-    def rerank(self, query: str, images: Sequence[Image.Image]) -> list[float]:
-        item_ids = [str(index) for index in range(len(images))]
-        files = [
-            ("images", (f"{item_id}.jpg", _jpeg(image), "image/jpeg"))
-            for item_id, image in zip(item_ids, images)
-        ]
-        payload = self._post(
-            "/v1/rerank",
-            data={"query": query, "item_ids": json.dumps(item_ids)},
-            files=files,
-        )
-        response = _validated(RerankResponse, payload)
-        if [item.item_id for item in response.items] != item_ids:
-            raise InferenceClientError("reranker changed item identity or order")
-        return [item.score for item in response.items]
 
     def _post(self, path: str, **kwargs: Any) -> Any:
         return self._request("POST", path, **kwargs)

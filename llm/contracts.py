@@ -35,22 +35,6 @@ class BoundaryScoreResponse(_HTTPContract):
     latency_ms: float = Field(ge=0)
 
 
-class RerankItem(_HTTPContract):
-    """One caller-owned item and its relevance score."""
-
-    item_id: _NonEmptyString
-    score: float
-
-
-class RerankResponse(_HTTPContract):
-    """Ordered relevance scores returned by the private reranker."""
-
-    model: _NonEmptyString
-    revision: str | None = None
-    items: list[RerankItem]
-    latency_ms: float = Field(ge=0)
-
-
 class ChatMessage(_HTTPContract):
     """One conversation message formatted for chat completion."""
 
@@ -109,8 +93,6 @@ class ChatCompletionResponse(_HTTPContract):
 
 __all__ = [
     "BoundaryScoreResponse",
-    "RerankItem",
-    "RerankResponse",
     "ChatMessage",
     "JsonSchemaSpec",
     "ResponseFormat",

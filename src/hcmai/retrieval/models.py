@@ -33,7 +33,6 @@ class RetrievalCandidate:
     source_scores: dict[RetrievalSource, float] = field(default_factory=dict)
     source_ranks: dict[RetrievalSource, int] = field(default_factory=dict)
     fusion_score: float | None = None
-    reranker_score: float | None = None
     final_score: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 

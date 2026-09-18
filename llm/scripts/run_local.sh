@@ -54,7 +54,7 @@ Enabled capabilities:
   visual embedding and caption/text embedding
 
 Disabled capabilities:
-  caption generation, OCR, ASR, diarization, reranking, VQA and text generation
+  caption generation, OCR, ASR, diarization, VQA and text generation
 
 Examples:
   llm/scripts/${SCRIPT_NAME}
@@ -249,7 +249,6 @@ start_api() {
         export HCMAI_ENABLE_ASR="false"
         export HCMAI_ENABLE_DIARIZATION="false"
         export HCMAI_ENABLE_VISUAL_EMBEDDING="true"
-        export HCMAI_ENABLE_RERANKER="false"
         export HCMAI_ENABLE_VQA="false"
         export HCMAI_ENABLE_TEXT_GENERATION="false"
         export PYTHONPATH="${REPO_DIR}:${REPO_DIR}/src"

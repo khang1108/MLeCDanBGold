@@ -26,6 +26,7 @@ class LegacyInferenceRemovalTest(unittest.TestCase):
         self.assertNotIn("/query-preparation/translate", paths)
         self.assertNotIn("/query-preparation/candidates", paths)
         self.assertNotIn("/v1/embeddings/text", paths)
+        self.assertNotIn("/v1/rerank", paths)
         self.assertIn("/v1/embeddings/images", paths)
 
     def test_task_4_and_9_remove_retired_local_model_methods(self) -> None:
@@ -34,6 +35,7 @@ class LegacyInferenceRemovalTest(unittest.TestCase):
         self.assertFalse(hasattr(LocalAdapter, "embed_text"))
         self.assertFalse(hasattr(LocalAdapter, "translate_query_events"))
         self.assertFalse(hasattr(LocalAdapter, "generate_query_candidates"))
+        self.assertFalse(hasattr(LocalAdapter, "rerank"))
 
     def test_readiness_still_works_without_retired_text_encoder(self) -> None:
         """Readiness must not depend on the removed caption text encoder."""
@@ -42,14 +44,12 @@ class LegacyInferenceRemovalTest(unittest.TestCase):
             config=LLMServiceConfig(),
             visual_encoder=None,
             captioner=None,
-            reranker=None,
             ocr_adapter=None,
             asr=None,
             diarization=None,
             transcript_config=None,
             enable_caption=False,
             enable_visual_embedding=True,
-            enable_reranker=False,
             enable_ocr=False,
             enable_asr=False,
             enable_diarization=False,

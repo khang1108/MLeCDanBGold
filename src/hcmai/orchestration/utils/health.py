@@ -126,7 +126,6 @@ def build_health_report(
     # capability methods here can perform network/model work on a health poll.
     remote_capabilities = {
         "embedding": llm is not None,
-        "reranking": llm is not None,
         "structured_parsing": llm is not None,
     }
     search_ready = retrieval_ready

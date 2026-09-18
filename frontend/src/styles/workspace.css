@@ -1507,6 +1507,74 @@
   flex-direction: column;
 }
 
+.kis-composer-staged-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  align-items: center;
+}
+
+.kis-composer-staged-item {
+  position: relative;
+  display: inline-flex;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+}
+
+.kis-composer-staged-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  display: block;
+}
+
+.kis-composer-staged-badge {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #38bdf8;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(2px);
+}
+
+.kis-composer-staged-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  border: none;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.kis-composer-staged-remove:hover {
+  background: #ef4444;
+  transform: scale(1.1);
+}
+
 .kis-composer-controls {
   display: flex;
   justify-content: space-between;

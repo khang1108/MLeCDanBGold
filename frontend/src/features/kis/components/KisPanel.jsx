@@ -78,8 +78,54 @@ const KisPanel = ({
     (m) => m.id !== 'msg_initial_query' && m.id !== 'msg_initial_response' && m.id !== 'msg_session_opened'
   );
 
+  const lastPanelAttachTimeRef = useRef(0);
+
+  const handlePanelPaste = (event) => {
+    if (event.defaultPrevented || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'INPUT') {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastPanelAttachTimeRef.current < 300) {
+      return;
+    }
+    const items = event.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i += 1) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            event.preventDefault();
+            event.stopPropagation();
+            lastPanelAttachTimeRef.current = now;
+            const targetId = feedbackSession?.selectedContext?.eventId || 'E1';
+            onAttachImage?.(file, targetId);
+            return;
+          }
+        }
+      }
+    }
+    const files = event.clipboardData?.files;
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i += 1) {
+        if (files[i].type.startsWith('image/')) {
+          event.preventDefault();
+          event.stopPropagation();
+          lastPanelAttachTimeRef.current = now;
+          const targetId = feedbackSession?.selectedContext?.eventId || 'E1';
+          onAttachImage?.(files[i], targetId);
+          return;
+        }
+      }
+    }
+  };
+
   return (
-    <section className="kis-chat-panel" data-testid="kis-panel" aria-label="KIS search">
+    <section
+      className="kis-chat-panel"
+      data-testid="kis-panel"
+      aria-label="KIS search"
+      onPaste={handlePanelPaste}
+    >
       <div className="kis-chat-header">
         <div className="kis-chat-header-title">
           <span className="kis-chat-title-text">KIS Semantic Search</span>
@@ -139,7 +185,7 @@ const KisPanel = ({
             </div>
 
             <div className="kis-empty-prompt-guide">
-              <p className="kis-empty-guide-title">Multimodal Retrieval Copilot</p>
+              <p className="kis-empty-guide-title">Độ & Ba Gà Claude</p>
               <p className="kis-empty-guide-subtitle">
                 Describe visual events across time, attach reference images, or pick a starter clue:
               </p>
@@ -277,6 +323,7 @@ const KisPanel = ({
           onDraftChange={onDraftChange}
           onSubmit={onSubmit}
           onAttachImage={onAttachImage}
+          onRemoveImage={onRemoveImage}
           baseIntent={currentIntent}
           stagedImages={stagedImages}
           isSearching={isSearching}

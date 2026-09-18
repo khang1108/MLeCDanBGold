@@ -184,9 +184,42 @@ describe('KisPanel unified multimodal component', () => {
     expect(screen.getByText(/MLeCDanBGold · 2026/i)).toBeTruthy();
   });
 
-  test('does not render watermark when active intent is present', () => {
-    render(<KisPanel sessionState={STATE_WITH_E1_E2} />);
-    expect(screen.queryByTestId('kis-watermark-badge')).toBeNull();
+  test('renders staged images strip in composer and allows removing', () => {
+    const onRemoveImage = jest.fn();
+    const stateWithStaged = {
+      draft: '',
+      revision: 0,
+      currentIntent: null,
+      stagedImages: {
+        E1: [{ asset_id: 'ast_staged_1', file_name: 'screenshot.png' }],
+      },
+      isSearching: false,
+      error: null,
+      mode: 'live',
+    };
+    render(<KisPanel sessionState={stateWithStaged} onRemoveImage={onRemoveImage} />);
+    const strip = screen.getByTestId('kis-composer-staged-strip');
+    expect(strip).toBeTruthy();
+    expect(screen.getByAltText('screenshot.png')).toBeTruthy();
+
+    const removeBtn = screen.getByRole('button', { name: /remove image ast_staged_1/i });
+    fireEvent.click(removeBtn);
+    expect(onRemoveImage).toHaveBeenCalledWith('E1', 'ast_staged_1');
+  });
+
+  test('pasting image onto panel container triggers onAttachImage', () => {
+    const file = new File(['png-bytes'], 'panel-pasted.png', { type: 'image/png' });
+    const onAttachImage = jest.fn();
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} onAttachImage={onAttachImage} />);
+
+    const panel = screen.getByTestId('kis-panel');
+    fireEvent.paste(panel, {
+      clipboardData: {
+        items: [{ type: 'image/png', getAsFile: () => file }],
+      },
+    });
+
+    expect(onAttachImage).toHaveBeenCalledWith(file, 'E1');
   });
 });
 

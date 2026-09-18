@@ -1,8 +1,8 @@
-import { requestJson, requestFormData } from './client';
+import { API_BASE_URL, requestJson, requestFormData } from './client';
 import { normalizeSearchLatency } from './search';
 
 export const kisImageAssetUrl = (assetId) => (
-  `/api/v1/kis/assets/images/${encodeURIComponent(assetId)}`
+  `${API_BASE_URL}/api/v1/kis/assets/images/${encodeURIComponent(assetId)}`
 );
 
 export const uploadKisImage = async ({ imageFile, signal }) => {

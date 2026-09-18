@@ -219,10 +219,9 @@ def load_kis_image_assets(
     Returns None only when storage initialisation fails; the store directory
     is created on first write so a missing directory at startup is not an error.
     """
-    storage_dir = resolve_repository_path(settings.api.kis_query_asset_dir)
-    if not storage_dir.is_dir():
-        return None
     try:
+        storage_dir = resolve_repository_path(settings.api.kis_query_asset_dir)
+        storage_dir.mkdir(parents=True, exist_ok=True)
         store = KISImageAssetStore(
             storage_dir,
             max_upload_bytes=settings.api.image_max_upload_bytes,

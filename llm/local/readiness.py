@@ -32,9 +32,6 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
     visual_loaded = (
         adapter.visual_encoder is not None and adapter.visual_encoder.model is not None
     )
-    reranker_loaded = (
-        adapter.reranker is not None and adapter.reranker._base_model is not None
-    )
     ocr_loaded = (
         adapter.ocr_adapter is not None and adapter.ocr_adapter.model is not None
     )
@@ -49,7 +46,6 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
     return InferenceReadiness(
         ready=(not adapter.enable_caption or generator_loaded)
         and (not adapter.enable_visual_embedding or visual_loaded)
-        and (not adapter.enable_reranker or reranker_loaded)
         and (not adapter.enable_ocr or ocr_loaded)
         and (not adapter.enable_asr or asr_loaded)
         and (not adapter.enable_diarization or diarization_loaded)
@@ -70,16 +66,6 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
                 loaded=visual_loaded,
                 checkpoint=adapter.config.visual_embedding.model_name,
                 revision=adapter.config.visual_embedding.revision,
-            ),
-            "reranker": _model_status(
-                enabled=adapter.enable_reranker,
-                loaded=reranker_loaded,
-                checkpoint=adapter.config.reranker.checkpoint,
-                revision=(
-                    adapter.reranker.resolved_revision
-                    if adapter.reranker is not None
-                    else None
-                ),
             ),
             "ocr": _model_status(
                 enabled=adapter.enable_ocr,
@@ -136,7 +122,6 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
         },
         capabilities=_capabilities(
             embedding=visual_loaded,
-            reranking=reranker_loaded,
             structured_parsing=text_generation_loaded,
             image_embedding=visual_loaded,
             caption=generator_loaded,

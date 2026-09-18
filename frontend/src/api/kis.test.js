@@ -1,4 +1,5 @@
 import { searchKis, uploadKisImage, kisImageAssetUrl } from './kis';
+import { API_BASE_URL } from './client';
 
 const mockResponse = (payload, status = 200, headers = {}) => ({
   ok: status >= 200 && status < 300,
@@ -112,7 +113,7 @@ test('validates response contract', async () => {
 });
 
 test('kisImageAssetUrl returns encoded asset URL', () => {
-  expect(kisImageAssetUrl('asset/123')).toBe('/api/v1/kis/assets/images/asset%2F123');
+  expect(kisImageAssetUrl('asset/123')).toBe(`${API_BASE_URL}/api/v1/kis/assets/images/asset%2F123`);
 });
 
 test('uploadKisImage sends FormData to /api/v1/kis/assets/images', async () => {

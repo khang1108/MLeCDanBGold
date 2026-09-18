@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { parseComposerDraft } from '../parser';
+import { kisImageAssetUrl } from '../../../api/kis';
 
 /**
  * Unified multimodal composer: textual instructions, staged images, preview, and dynamic action verbs.
@@ -9,6 +10,7 @@ const QueryComposer = ({
   onDraftChange,
   onSubmit,
   onAttachImage,
+  onRemoveImage,
   baseIntent = null,
   stagedImages = {},
   isSearching = false,
@@ -50,6 +52,10 @@ const QueryComposer = ({
   };
 
   const resolveTargetEventId = (file) => {
+    // If user clicked/selected a specific event context in the thread:
+    if (selectedContext?.eventId) {
+      return selectedContext.eventId;
+    }
     // If draft has an explicit scoped header E#:
     const headerMatch = draft.trim().match(/^E([1-9]\d*):/);
     if (headerMatch) {
@@ -62,8 +68,16 @@ const QueryComposer = ({
     return null;
   };
 
+  const lastAttachTimeRef = useRef(0);
+
   const handleAttach = (file) => {
     if (!file) return;
+    const now = Date.now();
+    if (now - lastAttachTimeRef.current < 300) {
+      return;
+    }
+    lastAttachTimeRef.current = now;
+
     const targetId = resolveTargetEventId(file);
     if (targetId) {
       onAttachImage?.(file, targetId);
@@ -82,14 +96,27 @@ const QueryComposer = ({
 
   const handlePaste = (event) => {
     const items = event.clipboardData?.items;
-    if (!items) return;
-    for (let i = 0; i < items.length; i += 1) {
-      if (items[i].type.startsWith('image/')) {
-        const file = items[i].getAsFile();
-        if (file) {
+    if (items) {
+      for (let i = 0; i < items.length; i += 1) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            event.preventDefault();
+            event.stopPropagation();
+            handleAttach(file);
+            return;
+          }
+        }
+      }
+    }
+    const files = event.clipboardData?.files;
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i += 1) {
+        if (files[i].type.startsWith('image/')) {
           event.preventDefault();
-          handleAttach(file);
-          break;
+          event.stopPropagation();
+          handleAttach(files[i]);
+          return;
         }
       }
     }
@@ -117,7 +144,10 @@ const QueryComposer = ({
   }
 
   return (
-    <div className="kis-query-composer" data-testid="kis-query-composer">
+    <div
+      className="kis-query-composer"
+      data-testid="kis-query-composer"
+    >
       {selectedContext && (
         <div className="kis-composer-context-bar" data-testid="kis-composer-context-bar">
           <span className="feedback-chip chip-context">
@@ -133,6 +163,37 @@ const QueryComposer = ({
               </button>
             )}
           </span>
+        </div>
+      )}
+
+      {hasStagedImages && (
+        <div className="kis-composer-staged-strip" data-testid="kis-composer-staged-strip">
+          {Object.entries(stagedImages || {}).flatMap(([eventId, images]) =>
+            (images || []).map((img, idx) => {
+              const assetId = img.asset_id || img.id;
+              return (
+                <div key={assetId || `${eventId}-${idx}`} className="kis-composer-staged-item">
+                  <img
+                    src={kisImageAssetUrl(assetId)}
+                    alt={img.file_name || assetId || 'Attached reference image'}
+                    className="kis-composer-staged-thumb"
+                  />
+                  <span className="kis-composer-staged-badge">{eventId}</span>
+                  {onRemoveImage && (
+                    <button
+                      type="button"
+                      className="kis-composer-staged-remove"
+                      onClick={() => onRemoveImage(eventId, assetId)}
+                      aria-label={`Remove image ${assetId} from ${eventId}`}
+                      title={`Remove image from ${eventId}`}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 

@@ -24,8 +24,7 @@ Hosted inference URL ── Cloudflare Tunnel ── localhost:8100 on GPU VM
                                   FastAPI API → LLMService
                                                 ├─ SigLIP2/BGE encoders
                                                 ├─ Qwen VL captioner
-                                                ├─ OCR/ASR/diarization services
-                                                └─ Qwen VL reranker
+                                                └─ OCR/ASR/diarization services
 ```
 
 The browser never calls the GPU service directly. This keeps Cloudflare
@@ -71,7 +70,6 @@ exposes image embedding only.
 | `HCMAI_LLM_CONFIG` | GPU service | YAML path; defaults to `llm/config.yaml` |
 | `HCMAI_ENABLE_CAPTION` | GPU service | Load caption generation |
 | `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load visual/query encoder |
-| `HCMAI_ENABLE_RERANKER` | GPU service | Load image-query reranker |
 | `HCMAI_ENABLE_OCR` | GPU service | Load OCR capability |
 | `HCMAI_ENABLE_ASR` | GPU service | Load ASR capability |
 | `HCMAI_ENABLE_DIARIZATION` | GPU service | Load diarization capability |
@@ -98,7 +96,6 @@ must not query an index built in another vector space.
 | `POST /v1/preprocessing/event-window-scores` | Ordered images | Event-window scores |
 | `POST /v1/transcripts/asr` | Audio reference | Timestamped transcript segments |
 | `POST /v1/transcripts/diarization` | Audio reference | Timestamped diarized segments |
-| `POST /v1/rerank` | Query, IDs and images | Score for each supplied ID |
 
 For example:
 
@@ -106,10 +103,6 @@ For example:
 curl -sS http://127.0.0.1:8100/health
 curl -sS http://127.0.0.1:8100/ready
 ```
-
-Reranking accepts the bounded candidate set supplied by local retrieval. It may
-reorder candidates but cannot recover a frame that retrieval did not include;
-canonical frame/video/submission identity remains local.
 
 ## Run locally
 
@@ -191,7 +184,7 @@ and private operator-script paths remain Git ignored.
 | Cloudflare returns `502 Bad Gateway` | Tunnel origin is unavailable or uses the wrong scheme; route it to `http://localhost:8100` and inspect operator-managed service logs. |
 | `/health` succeeds but `/ready` returns `503` | HTTP is alive but an enabled model failed to load; inspect GPU memory and service logs. |
 | Embedding checkpoint/dimension mismatch | Hosted encoder and local index provenance differ; deploy the matching configuration. |
-| Queries return unrelated frames | Verify query/index compatibility before tuning reranking; reranking cannot repair a poor candidate set. |
+| Queries return unrelated frames | Verify query/index compatibility; ensure embedding spaces match. |
 
 Run focused checks without loading real models:
 

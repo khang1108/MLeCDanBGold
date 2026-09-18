@@ -11,8 +11,6 @@ import numpy as np
 from PIL import Image
 from hcmai.common.config import TranscriptJobConfig
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
-from hcmai.retrieval.reranking.config import QwenRerankerConfig
-from hcmai.retrieval.reranking.pipeline import RerankingService
 from llm.config import LLMServiceConfig
 from offline.enrichment.ocr.adapters.florence import FlorenceAdapter
 from offline.enrichment.ocr.config import OCRConfig
@@ -37,13 +35,11 @@ class LocalAdapter:
         config: LLMServiceConfig,
         visual_encoder: Any | None = None,
         captioner: Any | None = None,
-        reranker: Any | None = None,
         ocr_adapter: Any | None = None,
         text_generator: Any | None = None,
         *,
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
-        enable_reranker: bool = True,
         enable_ocr: bool = False,
         enable_asr: bool = False,
         enable_diarization: bool = False,
@@ -54,7 +50,6 @@ class LocalAdapter:
         self.transcript_config = transcript_config
         self.enable_caption = enable_caption
         self.enable_visual_embedding = enable_visual_embedding
-        self.enable_reranker = enable_reranker
         self.enable_ocr = enable_ocr
         self.enable_asr = enable_asr
         self.enable_diarization = enable_diarization
@@ -73,11 +68,6 @@ class LocalAdapter:
                 Any, EnrichmentService.create_caption_adapter(cast(Any, config.caption_generation))
             )
             if enable_caption
-            else None
-        )
-        self.reranker = reranker or (
-            RerankingService.create_qwen_adapter(_reranker_config(config))
-            if enable_reranker
             else None
         )
         self.ocr_adapter: Any = ocr_adapter or (
@@ -109,7 +99,6 @@ class LocalAdapter:
             config,
             enable_caption=_env_bool("HCMAI_ENABLE_CAPTION"),
             enable_visual_embedding=_env_bool("HCMAI_ENABLE_VISUAL_EMBEDDING"),
-            enable_reranker=_env_bool("HCMAI_ENABLE_RERANKER"),
             enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
             enable_asr=_env_bool("HCMAI_ENABLE_ASR", default=False),
             enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", default=False),
@@ -126,8 +115,6 @@ class LocalAdapter:
             self.captioner.resolve_revision()
         if self.visual_encoder is not None:
             self.visual_encoder._load_model()
-        if self.reranker is not None:
-            self.reranker._ensure_loaded()
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
         if self.text_generator is not None:
@@ -193,11 +180,6 @@ class LocalAdapter:
             raise RuntimeError("caption model returned a per-image failure")
         return [str(value).strip() for value in results]
 
-    def rerank(self, query: str, images: Sequence[Image.Image]) -> list[float]:
-        if self.reranker is None:
-            raise RuntimeError("reranker model is disabled")
-        return list(self.reranker.score_batch(query, images))
-
     def readiness(self) -> Any:
         """Report enabled capability readiness and checkpoint provenance."""
 
@@ -233,23 +215,10 @@ def _env_bool(name: str, default: bool = False) -> bool:
     """Read an explicit capability flag, defaulting hosted models to off.
 
     A service must opt into every model it owns. This prevents a narrowly
-    configured ASR or Caption/OCR process from loading unrelated embedding,
-    reranking checkpoints during application startup.
+    configured ASR or Caption/OCR process from loading unrelated embedding checkpoints
+    during application startup.
     """
     value = os.getenv(name, str(default)).strip().lower()
     if value not in {"true", "false"}:
         raise ValueError(f"{name} must be true or false")
     return value == "true"
-
-
-def _reranker_config(config: LLMServiceConfig) -> QwenRerankerConfig:
-    values = config.reranker
-    return QwenRerankerConfig(
-        checkpoint=values.checkpoint,
-        revision=values.revision,
-        device=values.device,
-        dtype=values.dtype,
-        batch_size=values.batch_size,
-        max_length=values.max_length,
-        max_pixels=values.max_pixels,
-    )

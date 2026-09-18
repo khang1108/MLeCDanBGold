@@ -121,9 +121,8 @@ def create_app(
         service = service_container["service"]
         health = service.health(service_container["startup_messages"])
         logger.info(
-            "Backend startup completed search=%s reranker=%s " "remote_inference=%s messages=%d",
+            "Backend startup completed search=%s remote_inference=%s messages=%d",
             health["capabilities"]["search"],
-            getattr(service, "reranking", None) is not None,
             service.llm is not None,
             len(service_container["startup_messages"]),
         )

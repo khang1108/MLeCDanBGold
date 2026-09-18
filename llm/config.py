@@ -30,16 +30,6 @@ class ServiceConfig(BaseModel):
     port: int = Field(default=8100, ge=1, le=65535)
 
 
-class HostedRerankerConfig(BaseModel):
-    checkpoint: str = "Qwen/Qwen3-VL-Reranker-2B"
-    revision: str | None = None
-    device: str = "cuda"
-    dtype: str = "bfloat16"
-    batch_size: int = Field(default=1, ge=1, le=16)
-    max_length: int = Field(default=1024, ge=1)
-    max_pixels: int = Field(default=262144, ge=4096)
-
-
 class HostedTextGenerationConfig(BaseModel):
     checkpoint: str = "Qwen/Qwen3-4B"
     revision: str | None = "1cfa9a7208912126459214e8b04321603b3df60c"
@@ -59,7 +49,6 @@ class LLMServiceConfig(BaseModel):
     visual_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     evidence_embedding: EncoderConfig | None = None
-    reranker: HostedRerankerConfig = Field(default_factory=HostedRerankerConfig)
     text_generation: HostedTextGenerationConfig = Field(
         default_factory=HostedTextGenerationConfig
     )

@@ -108,7 +108,7 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
                 detail=str(error),
             ) from error
 
-    @router.get("/api/v1/kis/assets/images/{asset_id}")
+    @router.api_route("/api/v1/kis/assets/images/{asset_id}", methods=["GET", "HEAD"])
     async def get_kis_image(asset_id: str) -> Response:
         """Return the validated original bytes for a previously uploaded image.
 
