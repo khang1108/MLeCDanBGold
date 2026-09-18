@@ -252,8 +252,7 @@ test('closes the inspector when Escape is pressed', () => {
 
 
 
-test('Step 1: shows Open EventTrail button under inspector when context exists without active state', () => {
-  const onOpen = jest.fn();
+test('Step 1: does not show Open EventTrail button under inspector when clicking a frame', () => {
   const context = {
     snapshotId: 'snap_1',
     resultId: 'r_1',
@@ -268,43 +267,12 @@ test('Step 1: shows Open EventTrail button under inspector when context exists w
         context,
         state: null,
         pending: false,
-        open: onOpen,
-      }}
-    />,
-  );
-
-  const openBtn = screen.getByRole('button', { name: /open eventtrail/i });
-  expect(openBtn).toBeTruthy();
-  expect(openBtn.disabled).toBe(false);
-
-  fireEvent.click(openBtn);
-  expect(onOpen).toHaveBeenCalledWith(context);
-});
-
-test('shows error banner under launcher button when open error exists without active state', () => {
-  const context = {
-    snapshotId: 'snap_1',
-    resultId: 'r_1',
-    kisRevision: 1,
-    events: [{ id: 'E1', text: 'event 1' }],
-  };
-  render(
-    <ImageModal
-      frame={frame}
-      onClose={jest.fn()}
-      eventTrail={{
-        context,
-        state: null,
-        pending: false,
-        error: 'EventTrail snapshot not found (server was restarted or search expired). Please rerun the search.',
         open: jest.fn(),
       }}
     />,
   );
 
-  const errorAlert = screen.getByRole('alert');
-  expect(errorAlert).toBeTruthy();
-  expect(errorAlert.textContent).toContain('EventTrail snapshot not found');
+  expect(screen.queryByRole('button', { name: /open eventtrail/i })).toBeNull();
 });
 
 test('Step 2: renders EventTrailPanel when state exists; selecting E2 + explore seeks player to candidate', async () => {

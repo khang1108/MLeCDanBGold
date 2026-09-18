@@ -387,48 +387,6 @@ const ImageModal = ({
               ) : (
                 <div className="inspector-content">
                   <FrameMetadata frame={frame} playbackTime={playbackTime} />
-                  {eventTrail?.context && (
-                    <div className="event-trail-launch-card">
-                      <button
-                        type="button"
-                        className="btn-primary event-trail-open-btn"
-                        onClick={() => eventTrail.open(eventTrail.context)}
-                        disabled={eventTrail.pending}
-                      >
-                        {eventTrail.pending ? (
-                          <>
-                            <span className="event-trail-btn-spinner" aria-hidden="true" />
-                            <span>Opening EventTrail…</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg
-                              className="event-trail-btn-icon"
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                            >
-                              <circle cx="6" cy="19" r="3" />
-                              <path d="M9 19h8.5a4.5 4.5 0 0 0 0-9H5a3 3 0 0 1 0-6h14" />
-                              <circle cx="18" cy="4" r="3" />
-                            </svg>
-                            <span>Open EventTrail</span>
-                          </>
-                        )}
-                      </button>
-                      {eventTrail.error && (
-                        <div className="event-trail-launch-error" role="alert">
-                          {eventTrail.error}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
             </div>

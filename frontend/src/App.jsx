@@ -1,5 +1,5 @@
 /** Application shell composed from modular feature components. */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppHeader } from './features/header';
 import { ImageModal } from './features/frames';
 import { SearchWorkspace } from './features/search';
@@ -90,6 +90,16 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
   }, []);
 
+  const workspaceEventTrail = useMemo(() => ({
+    ...eventTrail,
+    open: (ctx) => {
+      if (ctx?.snapshotId && ctx?.resultId) {
+        eventTrailKeyRef.current = eventTrailSelectionKey({ eventTrailContext: ctx });
+      }
+      return eventTrail.open(ctx);
+    },
+  }), [eventTrail]);
+
   return (
     <div className="app-wrapper">
       <AppHeader
@@ -118,7 +128,7 @@ const AppShell = ({ connectedUserId, draftUserId, invalidateSession, selectedTas
             queryInputRef={queryInputRef}
             onEventTrailInvalidated={handleEventTrailInvalidated}
             eventTrailAnnotations={eventTrailAnnotations}
-            eventTrail={eventTrail}
+            eventTrail={workspaceEventTrail}
           />
         </div>
       </main>

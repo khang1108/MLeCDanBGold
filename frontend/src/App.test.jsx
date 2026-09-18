@@ -18,7 +18,7 @@ jest.mock("./api/eventTrail", () => ({
 }));
 
 jest.mock("./features/search/components/SearchWorkspace", () => (
-  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, userId, onQueryChange, onEventTrailInvalidated }) {
+  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, userId, onQueryChange, onEventTrailInvalidated, eventTrail }) {
     const frame = {
       frame_id: "f1",
       video_id: "V01",
@@ -45,6 +45,18 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
         </button>
         <button
           type="button"
+          onClick={() => eventTrail?.open({
+            snapshotId: 'snap_1',
+            resultId: 'r_1',
+            kisRevision: 1,
+            events: [{ id: 'E1', text: 'woman enters' }],
+            searchSessionId: 'q1',
+          })}
+        >
+          Open EventTrail
+        </button>
+        <button
+          type="button"
           onClick={() => onFrameClick({
             frame: { ...frame, frame_id: 'f2', result_id: 'r_2' },
             eventTrailContext: {
@@ -57,6 +69,18 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
           })}
         >
           Open inspector result 2
+        </button>
+        <button
+          type="button"
+          onClick={() => eventTrail?.open({
+            snapshotId: 'snap_1',
+            resultId: 'r_2',
+            kisRevision: 1,
+            events: [{ id: 'E1', text: 'woman enters' }],
+            searchSessionId: 'q1',
+          })}
+        >
+          Open EventTrail result 2
         </button>
         <button
           type="button"
@@ -77,6 +101,7 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
           Submit result to DRES
         </button>
         <output data-testid="query-user-id">{userId || ''}</output>
+        <output data-testid="active-trail-id">{eventTrail?.session?.session_id || ''}</output>
       </div>
     );
   }
@@ -308,10 +333,8 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
 
   render(<App />);
 
-  // 1. Open inspector for result 1
-  fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
-  const openTrailBtn = await screen.findByRole('button', { name: /open eventtrail/i });
-  fireEvent.click(openTrailBtn);
+  // 1. Open trail for result 1
+  fireEvent.click(screen.getByRole('button', { name: 'Open EventTrail' }));
 
   await waitFor(() => expect(openEventTrail).toHaveBeenCalledTimes(1));
   expect(openEventTrail).toHaveBeenCalledWith({
@@ -321,6 +344,10 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
     searchSessionId: 'q1',
   }, expect.any(Object));
 
+  expect(await screen.findByText('trail_1')).toBeTruthy();
+
+  // Open inspector for result 1 while trail active
+  fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
   expect(await screen.findByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
 
   // 2. Close modal with Escape -> session preserved, close not called
@@ -333,13 +360,6 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
   expect(await screen.findByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
   expect(openEventTrail).toHaveBeenCalledTimes(1);
 
-  // 4. Select different result -> old session closed before opening new result
-  fireEvent.click(screen.getByRole('button', { name: 'Open inspector result 2' }));
-  await waitFor(() => {
-    expect(closeEventTrail).toHaveBeenCalledWith('trail_1', { expectedTrailRevision: 0 });
-  });
-
-  // 5. Open trail on result 2
   openEventTrail.mockResolvedValueOnce({
     session_id: 'trail_2',
     result_id: 'r_2',
@@ -355,8 +375,15 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
     submission_selection: null,
     transition: null,
   });
-  const openTrailBtn2 = await screen.findByRole('button', { name: /open eventtrail/i });
-  fireEvent.click(openTrailBtn2);
+  fireEvent.click(screen.getByRole('button', { name: 'Open EventTrail result 2' }));
+  await waitFor(() => {
+    expect(closeEventTrail).toHaveBeenCalledWith('trail_1', { expectedTrailRevision: 0 });
+    expect(openEventTrail).toHaveBeenCalledTimes(2);
+  });
+  expect(await screen.findByText('trail_2')).toBeTruthy();
+
+  // 5. Open inspector on result 2
+  fireEvent.click(screen.getByRole('button', { name: 'Open inspector result 2' }));
   await screen.findByRole('region', { name: /eventtrail exploration/i });
 
   // Click 'Exit' -> explicitly closes trail
