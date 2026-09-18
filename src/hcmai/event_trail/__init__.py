@@ -1,6 +1,12 @@
 """EventTrail backend module exports."""
 
+from hcmai.event_trail.actions.diff import materialize_snapshot_path
 from hcmai.event_trail.config import EventTrailSettings
+from hcmai.event_trail.decoding import (
+    ConstraintSnapshot,
+    DecodeOutcome,
+    TemporalConstraintDecoder,
+)
 from hcmai.event_trail.errors import EventTrailError
 from hcmai.event_trail.models import (
     ApproveEvent,
@@ -21,19 +27,11 @@ from hcmai.event_trail.models import (
     UseFrame,
     freeze_video_scores,
 )
-from hcmai.event_trail.decoder import (
-    ConstraintSnapshot,
-    DecodeOutcome,
-    TemporalConstraintDecoder,
-)
-from hcmai.event_trail.store import (
+from hcmai.event_trail.service import EventTrailService
+from hcmai.event_trail.storage import (
     EventTrailSessionStore,
     EvidenceSnapshotStore,
     SessionSlot,
-)
-from hcmai.event_trail.service import (
-    EventTrailService,
-    materialize_snapshot_path,
 )
 
 __all__ = [

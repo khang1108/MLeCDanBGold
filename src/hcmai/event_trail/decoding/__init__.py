@@ -1,7 +1,4 @@
-"""Selected-video temporal constraint decoder (backward compatibility shim).
-
-All decoding classes and utilities are now located in `hcmai.event_trail.decoding`.
-"""
+"""Decoding subpackage for EventTrail temporal constraint DP decoding."""
 
 from hcmai.event_trail.decoding.decoder import (
     ConstraintSnapshot,
