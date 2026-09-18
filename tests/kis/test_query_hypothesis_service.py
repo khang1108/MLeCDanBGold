@@ -276,3 +276,36 @@ def test_search_rejects_non_search_only_operation_with_hypothesis_session(servic
         search_service.search_kis(request)
 
 
+def test_query_commit_log_contains_revisions(caplog, service, opened_session):
+    import logging
+    caplog.set_level(logging.INFO)
+    service.commit(opened_session.session_id, 1, EditEvent(event_id="E1", text="edited"))
+    records = [
+        r
+        for r in caplog.records
+        if "query_hypothesis_event" in r.message
+    ]
+    assert len(records) > 0
+    message = records[0].message
+    assert '"query_revision": 2' in message
+    assert '"action_type": "edit"' in message
+    assert '"committed": true' in message
+
+
+def test_query_preview_log_marks_not_committed(caplog, service, opened_session):
+    import logging
+    caplog.set_level(logging.INFO)
+    service.preview(
+        opened_session.session_id, 1, EditEvent(event_id="E1", text="preview text")
+    )
+    records = [
+        r
+        for r in caplog.records
+        if "query_hypothesis_event" in r.message
+    ]
+    assert len(records) > 0
+    message = records[0].message
+    assert '"committed": false' in message
+    assert '"query_revision": 1' in message
+
+

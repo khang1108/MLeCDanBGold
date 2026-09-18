@@ -202,6 +202,7 @@ class EventTrailService:
                 raise EventTrailError("INVALID_EVENT", f"Unknown event {event_id}")
             event_idx = session.event_ids.index(event_id)
 
+            started = perf_counter()
             if session.focused_event_id == event_id and session.alternatives:
                 return session.alternatives
 
@@ -218,6 +219,23 @@ class EventTrailService:
                 session,
                 focused_event_id=event_id,
                 alternatives=modes,
+            )
+            total_ms = (perf_counter() - started) * 1000.0
+            log_trail_event(
+                event_type="trail_alternatives",
+                kis_revision=session.kis_revision,
+                snapshot_id=session.snapshot_id,
+                result_id=session.result_id,
+                video_id=session.video_id,
+                trail_session_id=session.session_id,
+                trail_revision=session.trail_revision,
+                event_id=event_id,
+                search_session_id=session.search_session_id,
+                payload={
+                    "mode_count": len(modes),
+                    "mode_ids": [m.mode_id for m in modes],
+                    "total_ms": round(total_ms, 3),
+                },
             )
             return modes
 

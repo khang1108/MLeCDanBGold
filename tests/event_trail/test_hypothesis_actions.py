@@ -230,3 +230,33 @@ def test_use_alternative_fails_if_alternative_is_stale(
             UseAlternative(event_id="E2", alternative_id=mode.mode_id),
         )
     assert exc_info.value.code == "STALE_ALTERNATIVE"
+
+
+def test_result_action_logs_mode_and_revision(caplog, service, session_with_modes):
+    import logging
+    caplog.set_level(logging.INFO)
+    state, mode = session_with_modes
+    service.act(
+        state.session_id,
+        state.trail_revision,
+        UseAlternative(event_id="E2", alternative_id=mode.mode_id),
+    )
+    records = [r for r in caplog.records if "trail_use_alternative" in r.message]
+    assert len(records) > 0
+    msg = records[0].message
+    assert '"event_id":"E2"' in msg
+    assert '"trail_revision":1' in msg
+    assert f'"{mode.mode_id}"' in msg
+
+
+def test_alternatives_fetching_is_logged(caplog, service, opened_session):
+    import logging
+    caplog.set_level(logging.INFO)
+    modes = service.alternatives(
+        opened_session.session_id, opened_session.trail_revision, "E2"
+    )
+    records = [r for r in caplog.records if "trail_alternatives" in r.message]
+    assert len(records) > 0
+    msg = records[0].message
+    assert '"event_id":"E2"' in msg
+    assert f'"mode_count":{len(modes)}' in msg

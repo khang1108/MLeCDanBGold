@@ -868,6 +868,7 @@ def apply_keep_occurrence(
         event_id=action.event_id,
         search_session_id=session.search_session_id,
         payload={
+            "anchored_frame_id": current_fid,
             "path_before": list(session.current_path.frame_ids),
             "path_after": list(outcome.path.frame_ids),  # type: ignore[union-attr]
             "direct_changed_event_ids": list(transition.direct_changed_event_ids),

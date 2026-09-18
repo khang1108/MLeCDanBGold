@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import time
+from time import perf_counter
 from typing import Any, Callable
 from uuid import uuid4
 
+from hcmai.kis.hypothesis.logging import (
+    extract_action_metadata,
+    log_query_hypothesis_event,
+)
 from hcmai.kis.hypothesis.models import (
     QueryHypothesisAction,
     QueryHypothesisCheckpoint,
@@ -67,6 +72,7 @@ class QueryHypothesisService:
         self, text: str, image_refs: tuple[KISImageRef, ...] = ()
     ) -> QueryHypothesisView:
         """Open a new Query Hypothesis session from initial natural text and images."""
+        started = perf_counter()
         intent = self._resolver.resolve_initial(text, revision=1)
         if image_refs:
             first = intent.events[0].model_copy(update={"images": list(image_refs)})
@@ -81,6 +87,16 @@ class QueryHypothesisService:
             updated_at=now,
         )
         self._store.put(session)
+        total_ms = (perf_counter() - started) * 1000.0
+        log_query_hypothesis_event(
+            event_type="query_hypothesis_open",
+            session_id=session.session_id,
+            query_revision=1,
+            action_type="open",
+            affected_event_ids=[e.id for e in intent.events],
+            latency_ms=total_ms,
+            committed=True,
+        )
         return QueryHypothesisView.from_session(session)
 
     def get(self, session_id: str) -> QueryHypothesisView:
@@ -94,9 +110,21 @@ class QueryHypothesisService:
         action: QueryHypothesisAction,
     ) -> QueryHypothesisPreview:
         """Preview the result of an action without mutating the canonical session."""
+        started = perf_counter()
+        action_type, affected_ids = extract_action_metadata(action)
         with self._store.locked(session_id) as slot:
             self._require_revision(slot.session, expected_revision)
             proposed = apply_query_action(slot.session.intent, action)
+            total_ms = (perf_counter() - started) * 1000.0
+            log_query_hypothesis_event(
+                event_type="query_hypothesis_preview",
+                session_id=session_id,
+                query_revision=expected_revision,
+                action_type=action_type,
+                affected_event_ids=affected_ids,
+                latency_ms=total_ms,
+                committed=False,
+            )
             return QueryHypothesisPreview(
                 base_revision=expected_revision, intent=proposed
             )
@@ -108,6 +136,8 @@ class QueryHypothesisService:
         action: QueryHypothesisAction,
     ) -> QueryHypothesisView:
         """Apply an action, push checkpoint to history, bump revision, and update session."""
+        started = perf_counter()
+        action_type, affected_ids = extract_action_metadata(action)
         with self._store.locked(session_id) as slot:
             self._require_revision(slot.session, expected_revision)
             previous = slot.session.intent
@@ -118,12 +148,23 @@ class QueryHypothesisService:
             )
             slot.session.intent = committed
             slot.session.updated_at = self._clock()
+            total_ms = (perf_counter() - started) * 1000.0
+            log_query_hypothesis_event(
+                event_type="query_hypothesis_commit",
+                session_id=session_id,
+                query_revision=committed.revision,
+                action_type=action_type,
+                affected_event_ids=affected_ids,
+                latency_ms=total_ms,
+                committed=True,
+            )
             return QueryHypothesisView.from_session(slot.session)
 
     def undo(
         self, session_id: str, expected_revision: int
     ) -> QueryHypothesisView:
         """Pop the last checkpoint, restoring earlier intent with monotonic revision."""
+        started = perf_counter()
         with self._store.locked(session_id) as slot:
             self._require_revision(slot.session, expected_revision)
             if not slot.session.history:
@@ -136,4 +177,14 @@ class QueryHypothesisService:
                 slot.session.intent, checkpoint.intent
             )
             slot.session.updated_at = self._clock()
+            total_ms = (perf_counter() - started) * 1000.0
+            log_query_hypothesis_event(
+                event_type="query_hypothesis_undo",
+                session_id=session_id,
+                query_revision=slot.session.intent.revision,
+                action_type="undo",
+                affected_event_ids=[],
+                latency_ms=total_ms,
+                committed=True,
+            )
             return QueryHypothesisView.from_session(slot.session)
