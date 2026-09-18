@@ -112,9 +112,34 @@ class VbsDirectSubmissionRequest(BaseModel):
 
     user_id: NonBlank
     expected_task_scope_key: NonBlank
-    answers: list[VbsAnswer] = Field(min_length=1)
+    answers: list[VbsAnswer] = Field(default_factory=list)
     evaluation_id: NonBlank | None = None
     task_name: NonBlank | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_answers(cls, data: object) -> object:
+        if isinstance(data, dict):
+            if "answer" in data and "answers" in data:
+                raise ValueError("Cannot provide both 'answer' and 'answers'")
+            if "answer" in data:
+                ans = data.get("answer")
+                data = dict(data)
+                del data["answer"]
+                data["answers"] = [ans] if ans is not None else []
+        return data
+
+    @model_validator(mode="after")
+    def _validate_answers_presence(self) -> "VbsDirectSubmissionRequest":
+        if not self.answers:
+            raise ValueError("Field required: answers must contain at least one item")
+        return self
+
+    @property
+    def answer(self) -> VbsAnswer:
+        """Backward compatibility for single-answer callers."""
+        return self.answers[0]
+
 
 
 class VbsDirectSubmissionRecorded(BaseModel):

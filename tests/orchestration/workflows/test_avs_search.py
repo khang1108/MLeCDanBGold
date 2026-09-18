@@ -74,3 +74,72 @@ def test_avs_search_uses_direct_retrieval_then_coverage():
     assert response.candidate_pool_size == 5
     assert response.deduplicated_candidate_count == 4
     assert response.unique_videos == 3
+
+
+def test_search_service_avs_fast_path_sentinels():
+    from unittest.mock import Mock
+    from hcmai.orchestration.pipeline import SearchService
+    from hcmai.common.config import SearchConfig
+
+    class StrictTextOnlyGateway:
+        def search_text(self, query: str, *, top_k: int) -> RemoteTextSearchResult:
+            return RemoteTextSearchResult(
+                candidates=(RemoteTextCandidate("f1", 1, 0.99),),
+                retrieval_ms=1.0,
+                warnings=(),
+            )
+
+    corpus = FakeCorpus()
+    gateway = StrictTextOnlyGateway()
+    config = SearchConfig()
+    service = SearchService(
+        corpus=corpus,
+        config=config,
+        remote_retrieval=gateway,
+    )
+    # Exploding sentinels: any call to KIS or EventTrail or rewrites raises AssertionError
+    service.intent_resolver = Mock(side_effect=AssertionError("KIS intent resolver called"))
+    service.scoped_resolver = Mock(side_effect=AssertionError("KIS scoped resolver called"))
+    service.global_rewriter = Mock(side_effect=AssertionError("KIS global rewriter called"))
+    service.kis = Mock(execute=Mock(side_effect=AssertionError("KIS temporal pipeline called")))
+    service.event_trail = Mock(side_effect=AssertionError("EventTrail called"))
+
+    response = service.search_avs(AvsSearchRequest(query="test query", page_size=10))
+    assert response is not None
+    assert len(response.results) == 1
+    assert response.results[0].candidate_id == "f1"
+
+
+def test_avs_spec_fixture_video_first_ordering():
+    corpus = FakeCorpus()
+    # Add non-neighbor V1 candidates (timestamps 10s, 20s, 30s)
+    corpus.frames["f2"] = Frame("f2", "V1", 20, 20_000, "/f2.jpg", fps=25.0)
+    corpus.frames["f3"] = Frame("f3", "V1", 30, 30_000, "/f3.jpg", fps=25.0)
+
+    class SpecFixtureGateway:
+        def search_text(self, query: str, *, top_k: int) -> RemoteTextSearchResult:
+            return RemoteTextSearchResult(
+                candidates=(
+                    RemoteTextCandidate("f1", 1, 0.99),
+                    RemoteTextCandidate("f2", 2, 0.98),
+                    RemoteTextCandidate("f3", 3, 0.97),
+                    RemoteTextCandidate("f4", 4, 0.96),
+                    RemoteTextCandidate("f5", 5, 0.95),
+                ),
+                retrieval_ms=2.0,
+                warnings=(),
+            )
+
+    service = AvsSearchService(
+        corpus=corpus,
+        retrieval=SpecFixtureGateway(),
+        config=AvsConfig(
+            candidate_pool_size=500,
+            default_page_size=5,
+            maximum_page_size=100,
+            temporal_dedup_window_ms=0,
+        ),
+    )
+
+    response = service.search(AvsSearchRequest(query="spec fixture", page_size=5))
+    assert [item.video_id for item in response.results] == ["V1", "V2", "V3", "V1", "V1"]

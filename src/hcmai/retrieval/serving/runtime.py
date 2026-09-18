@@ -56,7 +56,6 @@ class RetrievalRuntime:
     """Heavy retrieval composition facade serving requests."""
 
     corpus: Corpus
-    retrieval: RetrievalService
     temporal: TemporalSearchService
     image_scorer: ImageQueryTemporalScorer | None
     image_search: ImageSearchService | None
@@ -66,6 +65,7 @@ class RetrievalRuntime:
     image_max_upload_bytes: int
     image_max_pixels: int
     scoring_revision: str
+    retrieval: RetrievalService | None = None
 
     @classmethod
     def load(cls, messages: list[str]) -> RetrievalRuntime | None:
@@ -176,6 +176,8 @@ class RetrievalRuntime:
         )
 
     def search_text(self, query: str, *, top_k: int) -> RetrievalResult:
+        if self.retrieval is None:
+            raise RuntimeError("text retrieval capability is not loaded")
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero")
         if not query.strip():

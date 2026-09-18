@@ -261,6 +261,12 @@ def test_direct_submission_contract_accepts_exactly_one_discriminated_answer(
         {
             "user_id": "member-1",
             "expected_task_scope_key": "scope",
+            "answers": [],
+        },
+        {
+            "user_id": "member-1",
+            "expected_task_scope_key": "scope",
+            "answer": {"kind": "TEXT", "text": "three"},
             "answers": [{"kind": "TEXT", "text": "three"}],
         },
         {

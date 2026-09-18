@@ -391,4 +391,67 @@ describe('AvsWorkspace', () => {
     expect(alert.textContent).toMatch(/task scope changed/i);
     expect(screen.getByRole('checkbox').checked).toBe(true);
   });
+
+  test('e2e regression: search, cross-query persistence, inspect isolation, and one-request submission', async () => {
+    searchAvs
+      .mockResolvedValueOnce(responseWith([
+        candidate('f1', 'V1', 1000),
+        candidate('f2', 'V2', 2000),
+        candidate('f3', 'V3', 3000),
+      ]))
+      .mockResolvedValueOnce(responseWith([
+        candidate('f1', 'V1', 1000),
+        candidate('f3', 'V3', 3000),
+        candidate('f4', 'V4', 4000),
+      ]))
+      .mockResolvedValueOnce(responseWith([
+        candidate('f1', 'V1', 1000),
+        candidate('f2', 'V2', 2000),
+      ]));
+
+    submitDresAnswers.mockResolvedValueOnce({
+      state: 'RECORDED', recorded: true, verdict: 'CORRECT', message: 'recorded',
+    });
+
+    const onInspect = jest.fn();
+    renderWorkspace({ onInspect });
+
+    await runSearch('query A');
+    expect(submitDresAnswers).not.toHaveBeenCalled();
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    fireEvent.click(checkboxes[0]);
+    fireEvent.click(checkboxes[1]);
+    expect(submitDresAnswers).not.toHaveBeenCalled();
+
+    await runSearch('query B');
+    expect(submitDresAnswers).not.toHaveBeenCalled();
+
+    const bCheckboxes = screen.getAllByRole('checkbox');
+    expect(bCheckboxes[0].checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review selections' }));
+    expect(screen.getByRole('button', { name: 'Remove f1 from selection' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove f2 from selection' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close selected answers drawer' }));
+
+    const inspectF3 = screen.getByRole('button', { name: 'Inspect V3 at 3000 ms' });
+    fireEvent.click(inspectF3);
+    expect(onInspect).toHaveBeenCalledWith(expect.objectContaining({ candidate_id: 'f3' }));
+    expect(submitDresAnswers).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit 2 answers' }));
+    await screen.findByRole('dialog', { name: 'Submit AVS answers' });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm submit' }));
+
+    await waitFor(() => expect(submitDresAnswers).toHaveBeenCalledTimes(1));
+    const callArgs = submitDresAnswers.mock.calls[0][0];
+    expect(callArgs.answers.map((a) => a.video_id)).toEqual(['V1', 'V2']);
+
+    await runSearch('query C');
+    const cCheckboxes = screen.getAllByRole('checkbox');
+    expect(cCheckboxes[0].disabled).toBe(true);
+    expect(cCheckboxes[1].disabled).toBe(true);
+    expect(screen.getAllByText('Submitted').length).toBeGreaterThanOrEqual(2);
+  });
 });

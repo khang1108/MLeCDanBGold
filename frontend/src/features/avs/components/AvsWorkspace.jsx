@@ -102,7 +102,7 @@ const AvsWorkspace = ({
     return () => {
       isCancelled = true;
     };
-  }, [connectedUserId, selectedTask?.evaluationId, selectedTask?.taskName, selectionState.taskScopeKey, selectionState.pending.size, onSessionRejected]);
+  }, [connectedUserId, selectedTask, selectionState.taskScopeKey, selectionState.pending.size, onSessionRejected]);
 
   const handleSearch = async () => {
     const trimmed = query.trim();
