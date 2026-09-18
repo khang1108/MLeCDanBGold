@@ -16,12 +16,20 @@ const FrameCard = ({
   isSubmissionOpening = false,
   onClick,
   onSeek,
+  showTrailActions = false,
+  isApproved = false,
+  rejectedCount = 0,
+  isTrailPending = false,
+  onApprove = null,
+  onDecline = null,
+  onClearAnchor = null,
 }) => {
   const displayFrame = detail ? { ...frame, ...detail } : frame;
   const frameId = displayFrame.frame_id;
   const cardClassName = [
     className,
     annotation && annotation !== 'unvisited' ? `trail-${annotation}` : '',
+    isApproved ? 'frame-card-anchored' : '',
   ].filter(Boolean).join(' ');
   const previewUrl = frameId ? keyframeUrl(frameId) : null;
   const hasTimestamp = Number.isFinite(displayFrame.timestamp_ms);
@@ -42,6 +50,12 @@ const FrameCard = ({
           </span>
         </div>
         <div className="frame-header-meta">
+          {isApproved && (
+            <span className="frame-trail-badge badge-approved" title="Anchored candidate">⚓ Anchor</span>
+          )}
+          {!isApproved && rejectedCount > 0 && (
+            <span className="frame-trail-badge badge-declined" title={`${rejectedCount} declined candidates`}>✕ {rejectedCount}</span>
+          )}
           {annotation === 'explored' && (
             <span className="frame-trail-badge badge-explored">Explored</span>
           )}
@@ -88,6 +102,56 @@ const FrameCard = ({
           </div>
         )}
       </div>
+      {showTrailActions && (
+        <div className="frame-card-trail-actions" onClick={(e) => e.stopPropagation()}>
+          {isApproved ? (
+            <div className="frame-trail-actions-inner">
+              <span className="frame-trail-status-text">⚓ Anchored</span>
+              {onClearAnchor && (
+                <button
+                  type="button"
+                  className="btn-trail-action btn-trail-clear"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClearAnchor();
+                  }}
+                  disabled={isTrailPending}
+                  title="Clear anchor on this event"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="frame-trail-actions-inner">
+              <button
+                type="button"
+                className="btn-trail-action btn-trail-approve"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onApprove?.();
+                }}
+                disabled={isTrailPending}
+                title="Approve this candidate as anchor"
+              >
+                ✓ Approve
+              </button>
+              <button
+                type="button"
+                className="btn-trail-action btn-trail-decline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDecline?.();
+                }}
+                disabled={isTrailPending}
+                title="Decline this candidate to search next"
+              >
+                ✕ Decline
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -292,7 +292,7 @@ const SearchWorkspace = ({
   }, [onOpenSubmission]);
 
   const handleFeedbackTurn = useCallback(async (message) => {
-    const activeSnapshotId = liveEventTrailContextRef.current?.snapshotId;
+    const activeSnapshotId = liveEventTrailContextRef.current?.snapshotId || feedbackSession.evidenceSnapshotId;
     if (!activeSnapshotId) {
       setError('No active search snapshot found. Please search first.');
       return;
@@ -612,12 +612,17 @@ const SearchWorkspace = ({
         }
       }
 
-      if (response.search_session_id) {
+      const snapshotId = response.evidence_snapshot_id || response.search_session_id;
+      if (snapshotId) {
         liveEventTrailContextRef.current = {
-          snapshotId: response.search_session_id,
-          kisRevision: response.revision ?? 0,
-          events: response.intent?.events || [],
-          searchSessionId: response.search_session_id,
+          snapshotId,
+          kisRevision: response.intent?.revision ?? response.revision ?? 1,
+          events: (response.intent?.events || []).map(({ id, text, images }) => ({
+            id,
+            text,
+            images: images || [],
+          })),
+          searchSessionId: snapshotId,
         };
       } else {
         liveEventTrailContextRef.current = null;
@@ -846,6 +851,8 @@ const SearchWorkspace = ({
           getFrameClassName={getFrameClassName}
           getFrameAnnotation={getFrameAnnotation}
           gridSize={gridSize}
+          eventTrail={eventTrail}
+          eventTrailContext={liveEventTrailContextRef.current}
         />
         {resultType === 'filter' && filterTotalPages > 1 && (
           <FilterPagination

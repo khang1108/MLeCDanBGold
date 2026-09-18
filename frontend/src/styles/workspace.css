@@ -1490,6 +1490,11 @@
   color: #1d4ed8;
 }
 
+.kis-preview-feedback {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
 .kis-preview-rewrite {
   background: #fef3c7;
   color: #b45309;

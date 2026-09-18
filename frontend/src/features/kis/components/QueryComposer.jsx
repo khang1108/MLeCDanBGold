@@ -229,6 +229,13 @@ const QueryComposer = ({
               Will update: {preview.affectedEventIds.join(', ')}
             </span>
           )}
+          {preview.kind === 'feedback' && (
+            <span className="kis-preview-badge kis-preview-feedback">
+              {selectedContext?.eventId
+                ? `Will refine ${selectedContext.eventId} via AI Feedback`
+                : 'Will refine events via AI Feedback'}
+            </span>
+          )}
           {preview.kind === 'global_rewrite' && (
             <span className="kis-preview-badge kis-preview-rewrite">
               Global rewrite across all events

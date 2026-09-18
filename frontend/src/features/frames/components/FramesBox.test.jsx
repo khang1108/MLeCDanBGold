@@ -99,3 +99,87 @@ test("renders no-frames empty state when not loading and search returned empty",
   expect(screen.queryByTestId("gif-loader")).toBeNull();
 });
 
+test("renders EventTrail start button when context and result_id exist", () => {
+  const openTrail = jest.fn();
+  const eventTrailContext = {
+    snapshotId: "snap-123",
+    kisRevision: 1,
+    events: [{ id: "E1", text: "event 1" }],
+    searchSessionId: "snap-123",
+  };
+
+  render(
+    <FramesBox
+      results={[
+        {
+          result_id: "res-1",
+          frame_id: "f1",
+          video_id: "V01",
+          frame_idx: 1,
+          frame_ids: ["f1"],
+          timestamp_ms: 1000,
+        },
+      ]}
+      isLoading={false}
+      error={null}
+      latencyMs={50}
+      eventTrailContext={eventTrailContext}
+      eventTrail={{ open: openTrail, session: null, pending: false }}
+    />,
+  );
+
+  const startBtn = screen.getByRole("button", { name: /eventtrail/i });
+  expect(startBtn).toBeTruthy();
+});
+
+test("renders active trail revision, undo and exit buttons when row trail is active", () => {
+  const undo = jest.fn();
+  const close = jest.fn();
+  const eventTrailContext = {
+    snapshotId: "snap-123",
+    kisRevision: 1,
+    events: [{ id: "E1", text: "event 1" }],
+    searchSessionId: "snap-123",
+  };
+  const activeTrailSession = {
+    session_id: "trail-sess-1",
+    result_id: "res-1",
+    trail_revision: 2,
+    status: "active",
+    path: [{ event_id: "E1", frame_id: "f1", frame_idx: 1, timestamp_ms: 1000 }],
+    approved_event_ids: ["E1"],
+    rejected_counts: {},
+  };
+
+  render(
+    <FramesBox
+      results={[
+        {
+          result_id: "res-1",
+          frame_id: "f1",
+          video_id: "V01",
+          frame_idx: 1,
+          frame_ids: ["f1"],
+          timestamp_ms: 1000,
+        },
+      ]}
+      isLoading={false}
+      error={null}
+      latencyMs={50}
+      eventTrailContext={eventTrailContext}
+      eventTrail={{
+        open: jest.fn(),
+        undo,
+        close,
+        session: activeTrailSession,
+        pending: false,
+      }}
+    />,
+  );
+
+  expect(screen.getByText(/Trail Rev 2/i)).toBeTruthy();
+  expect(screen.getByRole("button", { name: /undo/i })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /exit trail/i })).toBeTruthy();
+});
+
+
