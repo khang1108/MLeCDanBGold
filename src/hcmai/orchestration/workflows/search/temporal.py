@@ -21,7 +21,17 @@ from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
 from hcmai.retrieval.plan import KISRetrievalPlan
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.events import normalize_event_texts
-from hcmai.temporal.dp import AlignedPath, DPPath, align_video, rank_paths
+from hcmai.temporal.dp import AlignedPath, DPPath, align_video, align_video_conditioned, rank_paths
+
+
+@dataclass(frozen=True, slots=True)
+class EventConditionedPath:
+    """Decoded temporal path conditioned on one focused event position."""
+
+    path: AlignedPath
+    focus_frame_position: int
+    focus_timestamp_ms: int
+    score: float
 
 @dataclass(frozen=True, slots=True)
 class TemporalSearchResult:
@@ -365,6 +375,38 @@ class TemporalSearchService:
             video,
             allowed=allowed,
             decoder_config=config,
+        )
+
+    def decode_event_alternatives(
+        self,
+        video: VideoEventScores,
+        *,
+        allowed: np.ndarray,
+        focus_event_index: int,
+        max_paths: int,
+        min_separation_ms: int,
+        decoder_config: DecoderConfigSnapshot | None = None,
+    ) -> tuple[EventConditionedPath, ...]:
+        """Decode complete chronological paths conditioned on one focused event."""
+        config = self.snapshot_decoder_config() if decoder_config is None else decoder_config
+        conditioned = align_video_conditioned(
+            video,
+            focus_event_index,
+            allowed=allowed,
+            lambda_gap=config.lambda_gap,
+            event_power=config.event_power,
+            cluster_delta=config.cluster_delta,
+            max_paths=max_paths,
+            min_separation_ms=min_separation_ms,
+        )
+        return tuple(
+            EventConditionedPath(
+                path=self._materialize_aligned_path(item.path, video),
+                focus_frame_position=item.focus_frame_position,
+                focus_timestamp_ms=item.focus_timestamp_ms,
+                score=item.score,
+            )
+            for item in conditioned
         )
 
     def snapshot_decoder_config(self) -> DecoderConfigSnapshot:
