@@ -535,7 +535,41 @@ const SearchWorkspace = ({
 
       setFeedbackSession((prev) => applyFeedbackSuccess(prev, turnResp, { requestId }));
 
-      if (turnResp.status === 'applied') {
+      if (turnResp.status === 'proposal' || turnResp.query_proposal) {
+        const action = turnResp.query_proposal?.action || turnResp.query_proposal;
+        if (action) {
+          if (queryHypothesisState.sessionId) {
+            try {
+              const previewRes = await previewQueryHypothesis(
+                queryHypothesisState.sessionId,
+                queryHypothesisState.queryRevision,
+                action
+              );
+              setQueryHypothesisState((prev) =>
+                receivePreview(prev, { ...previewRes, pendingAction: action })
+              );
+            } catch (prevErr) {
+              if (turnResp.intent) {
+                setQueryHypothesisState((prev) =>
+                  receivePreview(prev, {
+                    base_revision: queryHypothesisState.queryRevision,
+                    intent: turnResp.intent,
+                    pendingAction: action,
+                  })
+                );
+              }
+            }
+          } else if (turnResp.intent) {
+            setQueryHypothesisState((prev) =>
+              receivePreview(prev, {
+                base_revision: queryHypothesisState.queryRevision,
+                intent: turnResp.intent,
+                pendingAction: action,
+              })
+            );
+          }
+        }
+      } else if (turnResp.status === 'applied') {
         notifyEventTrailInvalidated();
         if (Array.isArray(turnResp.results)) {
           setFrames([...turnResp.results]);
@@ -543,23 +577,12 @@ const SearchWorkspace = ({
             setSearchLatencyMs(turnResp.latency);
           }
         }
-        if (turnResp.intent) {
-          setKisSession((prev) => ({
-            ...prev,
-            currentIntent: turnResp.intent,
-            revision: turnResp.intent.revision,
-          }));
-          const eventTexts = Array.isArray(turnResp.intent?.events)
-            ? turnResp.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
-            : [];
-          setKisEvents(eventTexts);
-        }
         if (turnResp.evidence_snapshot_id) {
           if (!liveEventTrailContextRef.current) {
             liveEventTrailContextRef.current = {
               snapshotId: turnResp.evidence_snapshot_id,
-              kisRevision: turnResp.intent?.revision ?? 1,
-              events: (turnResp.intent?.events || []).map(({ id, text, images }) => ({
+              kisRevision: kisSession.currentIntent?.revision ?? 1,
+              events: (kisSession.currentIntent?.events || []).map(({ id, text, images }) => ({
                 id,
                 text,
                 images: images || [],
@@ -568,14 +591,6 @@ const SearchWorkspace = ({
             };
           } else {
             liveEventTrailContextRef.current.snapshotId = turnResp.evidence_snapshot_id;
-            liveEventTrailContextRef.current.kisRevision = turnResp.intent?.revision ?? liveEventTrailContextRef.current.kisRevision;
-            if (turnResp.intent?.events) {
-              liveEventTrailContextRef.current.events = turnResp.intent.events.map(({ id, text, images }) => ({
-                id,
-                text,
-                images: images || [],
-              }));
-            }
           }
         }
         if (turnResp.trail && eventTrail?.syncSession) {
@@ -597,6 +612,8 @@ const SearchWorkspace = ({
     frames,
     eventTrail,
     notifyEventTrailInvalidated,
+    queryHypothesisState.sessionId,
+    queryHypothesisState.queryRevision,
   ]);
 
   const handleUndoFeedback = useCallback(async () => {
@@ -619,55 +636,18 @@ const SearchWorkspace = ({
           setSearchLatencyMs(undoResp.latency);
         }
       }
-      if (undoResp.intent) {
-        setKisSession((prev) => ({
-          ...prev,
-          currentIntent: undoResp.intent,
-          revision: undoResp.intent.revision,
-        }));
-        const eventTexts = Array.isArray(undoResp.intent?.events)
-          ? undoResp.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
-          : [];
-        setKisEvents(eventTexts);
-      }
       if (undoResp.evidence_snapshot_id) {
-        if (!liveEventTrailContextRef.current) {
-          liveEventTrailContextRef.current = {
-            snapshotId: undoResp.evidence_snapshot_id,
-            kisRevision: undoResp.intent?.revision ?? 1,
-            events: (undoResp.intent?.events || []).map(({ id, text, images }) => ({
-              id,
-              text,
-              images: images || [],
-            })),
-            searchSessionId: undoResp.evidence_snapshot_id,
-          };
-        } else {
+        if (liveEventTrailContextRef.current) {
           liveEventTrailContextRef.current.snapshotId = undoResp.evidence_snapshot_id;
-          liveEventTrailContextRef.current.kisRevision = undoResp.intent?.revision ?? liveEventTrailContextRef.current.kisRevision;
-          if (undoResp.intent?.events) {
-            liveEventTrailContextRef.current.events = undoResp.intent.events.map(({ id, text, images }) => ({
-              id,
-              text,
-              images: images || [],
-            }));
-          }
         }
       }
-      if (undoResp.trail && eventTrail?.syncSession) {
-        eventTrail.syncSession(undoResp.trail);
-      }
     } catch (undoErr) {
-      setError(undoErr?.message || 'Undo failed');
+      setFeedbackSession((prev) => applyFeedbackFailure(prev, undoErr, { requestId }));
+      setError(undoErr?.message || 'Feedback undo failed');
     } finally {
       setIsSearching(false);
     }
-  }, [
-    feedbackSession,
-    isSearching,
-    eventTrail,
-    notifyEventTrailInvalidated,
-  ]);
+  }, [feedbackSession.sessionId, feedbackSession.canUndo, feedbackSession.feedbackRevision, isSearching, notifyEventTrailInvalidated]);
 
   const handleSelectContext = useCallback((eventId) => {
     setFeedbackSession((prev) => {

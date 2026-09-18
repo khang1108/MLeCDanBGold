@@ -30,6 +30,7 @@ const EventTrailPanel = ({
   isLoadingAlternatives = false,
   currentModeId = null,
   focusedModeId = null,
+  currentQueryRevision = null,
   onFocusEvent,
   onPreviewAlternative,
   onClearPreview,
@@ -121,6 +122,18 @@ const EventTrailPanel = ({
           )}
         </div>
       </div>
+
+      {Number.isInteger(currentQueryRevision) &&
+        Number.isInteger(state.kis_revision) &&
+        state.kis_revision !== currentQueryRevision && (
+          <div
+            className="event-trail-stale-query-banner"
+            role="status"
+            data-testid="trail-stale-query-notice"
+          >
+            Based on query revision {state.kis_revision}
+          </div>
+        )}
 
       {error && (
         <div className="event-trail-error-banner" role="alert">

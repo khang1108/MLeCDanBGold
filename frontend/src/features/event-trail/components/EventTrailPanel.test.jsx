@@ -177,6 +177,19 @@ describe('EventTrailPanel', () => {
     expect(onUseAlternative).toHaveBeenCalledWith('E2', 'alt_99');
   });
 
+  test('displays stale query banner when currentQueryRevision differs from state.kis_revision', () => {
+    render(
+      <EventTrailPanel
+        events={mockEvents}
+        state={makeState({ kis_revision: 1 })}
+        currentQueryRevision={2}
+        selectedEventId="E1"
+      />
+    );
+
+    expect(screen.getByTestId('trail-stale-query-notice')).toHaveTextContent(/based on query revision 1/i);
+  });
+
   test('Step 3: renders diff transitions and exhaustion messaging', () => {
     const onUndo = jest.fn();
     const onBack = jest.fn();

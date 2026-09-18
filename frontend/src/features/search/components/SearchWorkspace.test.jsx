@@ -8,6 +8,11 @@ import {
   commitQueryHypothesis,
   undoQueryHypothesis,
 } from '../../../api/queryHypothesis';
+import {
+  openFeedbackSession,
+  sendFeedbackTurn,
+  undoFeedback,
+} from '../../../api/feedback';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
 import { filterFrames } from '../../../api/filter';
 
@@ -28,6 +33,11 @@ jest.mock('../../../api/queryHypothesis', () => ({
   commitQueryHypothesis: jest.fn(),
   undoQueryHypothesis: jest.fn(),
 }));
+jest.mock('../../../api/feedback', () => ({
+  openFeedbackSession: jest.fn(),
+  sendFeedbackTurn: jest.fn(),
+  undoFeedback: jest.fn(),
+}));
 const renderSearch = (props) => render(<SearchWorkspace {...props} />);
 
 beforeEach(() => {
@@ -39,6 +49,9 @@ beforeEach(() => {
   previewQueryHypothesis.mockReset();
   commitQueryHypothesis.mockReset();
   undoQueryHypothesis.mockReset();
+  openFeedbackSession.mockReset();
+  sendFeedbackTurn.mockReset();
+  undoFeedback.mockReset();
 });
 
 const SEARCH_LATENCY = {
@@ -964,6 +977,59 @@ test('asserts a stale-results notice appears after a committed query edit and di
   expect(await screen.findByAltText('Frame frame-2')).toBeTruthy();
   expect(screen.queryAllByTestId('stale-results-notice')).toHaveLength(0);
 });
+
+test('chat query proposal opens hypothesis preview without replacing current intent', async () => {
+  const currentEvents = [{ id: 'E1', text: 'woman walks' }, { id: 'E2', text: 'woman sits' }];
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'woman walks then sits',
+    revision: 1,
+    events: currentEvents,
+    results: [frameResult('frame-1')],
+  }));
+
+  openFeedbackSession.mockResolvedValueOnce({
+    session_id: 'fb_session_1',
+    feedback_revision: 1,
+    state: {
+      assistant_message: 'Session opened.',
+      intent: { revision: 1, events: currentEvents },
+      can_undo: false,
+    },
+  });
+
+  sendFeedbackTurn.mockResolvedValueOnce({
+    session_id: 'fb_session_1',
+    feedback_revision: 2,
+    status: 'proposal',
+    intent: { revision: 2, events: currentEvents },
+    query_proposal: { action: { type: 'split', event_id: 'E2', split_at: 12, image_assignments: {} } },
+  });
+
+  previewQueryHypothesis.mockResolvedValueOnce({
+    base_revision: 1,
+    intent: {
+      revision: 2,
+      events: [
+        { id: 'E1', text: 'woman walks' },
+        { id: 'E2', text: 'woman sits' },
+        { id: 'E3', text: 'down' },
+      ],
+    },
+  });
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('woman walks then sits');
+  await screen.findByAltText('Frame frame-1');
+
+  // send natural language feedback message
+  const chatInput = document.getElementById('event-query');
+  fireEvent.change(chatInput, { target: { value: 'split event 2' } });
+  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite|feedback)$/i }));
+
+  expect(await screen.findByText(/proposed query changes/i)).toBeInTheDocument();
+  expect(screen.getByText(/rev 1 → 2/i)).toBeInTheDocument();
+});
+
 
 
 
