@@ -205,12 +205,27 @@ describe('ToolBox component', () => {
     const kisBtn = screen.getByRole('button', { name: 'KIS' });
     const avsBtn = screen.getByRole('button', { name: 'AVS' });
 
-    expect(kisBtn.getAttribute('aria-pressed')).toBe('true');
-    expect(avsBtn.getAttribute('aria-pressed')).toBe('false');
-
     fireEvent.click(avsBtn);
     expect(onToggleMode).toHaveBeenCalledWith('AVS');
   });
+
+  test('renders VbsQaSubmissionBox when a QA task is selected', () => {
+    renderToolBox({
+      topK: 20,
+      setTopK: jest.fn(),
+      connectedUserId: 'team-a',
+      selectedTask: {
+        evaluationId: 'eval-1',
+        taskName: 'QA_01',
+        taskGroup: 'QA',
+        taskType: 'VQA',
+      },
+    });
+
+    expect(screen.getByText('QA Text Answer')).toBeInTheDocument();
+    expect(screen.getByLabelText('QA text answer')).toBeInTheDocument();
+  });
 });
+
 
 

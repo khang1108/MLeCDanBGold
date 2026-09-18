@@ -11,8 +11,18 @@ export const taskFamily = (task) => {
 
   const group = typeof task.taskGroup === 'string' ? task.taskGroup.trim().toUpperCase() : '';
   const type = typeof task.taskType === 'string' ? task.taskType.trim().toUpperCase() : '';
+  const name = typeof task.taskName === 'string' ? task.taskName.trim().toUpperCase() : '';
 
-  if (group.includes('QA') || type.includes('QA') || group.includes('VQA') || type.includes('VQA')) {
+  if (
+    group.includes('QA') ||
+    type.includes('QA') ||
+    group.includes('VQA') ||
+    type.includes('VQA') ||
+    name.includes('VQA') ||
+    name.startsWith('QA') ||
+    name.includes('_QA') ||
+    name.includes('-QA')
+  ) {
     return 'VQA';
   }
 

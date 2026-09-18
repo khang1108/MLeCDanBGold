@@ -1,6 +1,8 @@
 import React, { useEffect, useId, useState } from "react";
 import { useVbsSession } from "../../vbs/contexts/VbsSessionContext";
 import VbsTaskSelector from "../../vbs/components/VbsTaskSelector";
+import VbsQaSubmissionBox from "../../vbs/components/VbsQaSubmissionBox";
+import { taskFamily } from "../../vbs/taskFamily";
 import ManualVideoOpener from "./ManualVideoOpener";
 const TOP_K_MIN = 1;
 const NOOP = () => {};
@@ -43,6 +45,7 @@ const ToolBox = ({
   const connectedUserId = propConnectedUserId ?? vbsSession.connectedUserId ?? '';
   const selectedTask = propSelectedTask ?? vbsSession.selectedTask ?? null;
   const setSelectedTask = propSetSelectedTask ?? vbsSession.setSelectedTask ?? NOOP;
+  const isQaTask = taskFamily(selectedTask) === 'VQA';
 
   const topKInputId = useId();
   const datasetSelectId = useId();
@@ -234,6 +237,13 @@ const ToolBox = ({
           selectedTask={selectedTask}
           onRequestChange={setSelectedTask}
         />
+        {isQaTask && (
+          <VbsQaSubmissionBox
+            selectedTask={selectedTask}
+            connectedUserId={connectedUserId}
+            onSessionRejected={vbsSession.invalidateSession}
+          />
+        )}
       </div>
 
       <ManualVideoOpener onOpenFrame={onOpenFrame} />
