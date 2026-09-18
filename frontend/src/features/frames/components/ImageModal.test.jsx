@@ -181,11 +181,12 @@ test('uses source time for metadata while keeping Frame Inspector in the header'
   expect(screen.getByText('L21_V001')).toBeTruthy();
 });
 
-test('does not expose a submit button even when onOpenSubmission is passed', async () => {
+test('submits current video_id and playback timestamp when submit button is clicked', async () => {
+  const onOpenSubmission = jest.fn();
   render(
     <ImageModal
       frame={{ ...frame, fps: 30 }}
-      onOpenSubmission={jest.fn()}
+      onOpenSubmission={onOpenSubmission}
       onClose={jest.fn()}
     />,
   );
@@ -193,7 +194,16 @@ test('does not expose a submit button even when onOpenSubmission is passed', asy
   const video = await screen.findByLabelText('Video for L21_V001');
   Object.defineProperty(video, 'currentTime', { configurable: true, value: 5.2 });
   fireEvent.timeUpdate(video);
-  expect(screen.queryByRole('button', { name: /submit/i })).toBeNull();
+
+  const submitButtons = screen.getAllByRole('button', { name: /submit/i });
+  expect(submitButtons.length).toBeGreaterThan(0);
+  fireEvent.click(submitButtons[0]);
+
+  expect(onOpenSubmission).toHaveBeenCalledWith({
+    videoId: 'L21_V001',
+    startMs: 5200,
+    endMs: 5200,
+  });
 });
 
 test('does not render redundant video controls shortcuts card', () => {

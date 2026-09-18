@@ -23,6 +23,8 @@ const VideoTimeline = ({
   duration,
   onSeek,
   onTogglePlayback,
+  onSubmit,
+  isSubmitting = false,
 }) => {
   const timelineRef = useRef(null);
   const previewUrlCache = useRef(new Map());
@@ -215,6 +217,18 @@ const VideoTimeline = ({
         <span className="modal-video-time-readout">
           {formatVideoTime(safeCurrentTime)} / {formatVideoTime(safeDuration)}
         </span>
+        {onSubmit && (
+          <button
+            type="button"
+            className="modal-video-submit-button"
+            onClick={onSubmit}
+            disabled={isSubmitting}
+            title={`Submit at ${Math.round(safeCurrentTime * 1000)} ms`}
+            aria-label="Submit current playback time to DRES"
+          >
+            ↗ Submit
+          </button>
+        )}
         <div className="modal-video-volume-group">
           <button
             type="button"

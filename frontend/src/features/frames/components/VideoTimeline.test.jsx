@@ -102,3 +102,22 @@ test("controls mute state and volume on the actual video element", () => {
   fireEvent.click(screen.getByRole("button", { name: "Mute video" }));
   expect(videoRef.current.muted).toBe(true);
 });
+
+test("renders submit button and triggers onSubmit when provided", () => {
+  const videoRef = createVideoRef();
+  const onSubmit = jest.fn();
+  render(
+    <VideoTimeline
+      videoId="L28_V001"
+      videoRef={videoRef}
+      currentTime={3.5}
+      duration={10}
+      onSubmit={onSubmit}
+    />,
+  );
+
+  const submitBtn = screen.getByRole("button", { name: /submit/i });
+  expect(submitBtn).toBeTruthy();
+  fireEvent.click(submitBtn);
+  expect(onSubmit).toHaveBeenCalledTimes(1);
+});

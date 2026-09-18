@@ -270,6 +270,40 @@ const ImageModal = ({
     }
   }, [eventTrail?.state?.video_id, frame.video_id, onOpenSubmission]);
 
+  const currentTimestampMs = useMemo(() => {
+    const video = videoRef.current;
+    const currentTime = Number.isFinite(video?.currentTime)
+      ? video.currentTime
+      : playbackTime;
+    return Number.isFinite(currentTime) && currentTime >= 0
+      ? Math.round(currentTime * 1000)
+      : (Number.isFinite(frame.timestamp_ms) ? frame.timestamp_ms : 0);
+  }, [playbackTime, frame.timestamp_ms]);
+
+  const handleDirectSubmit = useCallback(() => {
+    if (typeof onOpenSubmission !== 'function') return;
+    const video = videoRef.current;
+    const currentTime = Number.isFinite(video?.currentTime)
+      ? video.currentTime
+      : playbackTime;
+    const timestampMs = Number.isFinite(currentTime) && currentTime >= 0
+      ? Math.round(currentTime * 1000)
+      : (Number.isFinite(frame.timestamp_ms) ? frame.timestamp_ms : 0);
+    const videoId = typeof frame.video_id === 'string' ? frame.video_id.trim() : '';
+
+    if (!videoId) return;
+
+    onOpenSubmission({
+      videoId,
+      startMs: timestampMs,
+      endMs: timestampMs,
+    });
+  }, [frame.video_id, frame.timestamp_ms, onOpenSubmission, playbackTime]);
+
+  const canSubmitFrame = typeof onOpenSubmission === 'function'
+    && typeof frame.video_id === 'string'
+    && frame.video_id.trim().length > 0;
+
   const togglePlayback = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -347,6 +381,8 @@ const ImageModal = ({
                     duration={videoDuration}
                     onSeek={handleVideoSeek}
                     onTogglePlayback={togglePlayback}
+                    onSubmit={canSubmitFrame && !eventTrail?.state ? handleDirectSubmit : undefined}
+                    isSubmitting={isSubmissionOpening}
                   />
                 </div>
               ) : videoError && (activeFrameId || frame.frame_id) ? (
@@ -422,9 +458,27 @@ const ImageModal = ({
                   />
                 </div>
               ) : (
-                <div className="inspector-content">
-                  <FrameMetadata frame={frame} playbackTime={playbackTime} />
-                </div>
+                <>
+                  <div className="inspector-content">
+                    <FrameMetadata frame={frame} playbackTime={playbackTime} />
+                  </div>
+                  {canSubmitFrame && (
+                    <div className="inspector-footer">
+                      <button
+                        type="button"
+                        className="btn-primary inspector-submit-btn"
+                        disabled={isSubmissionOpening}
+                        onClick={handleDirectSubmit}
+                        aria-label="Submit this frame to DRES"
+                        title={`Submit ${frame.video_id} at ${currentTimestampMs} ms to DRES`}
+                      >
+                        <span className="inspector-submit-icon" aria-hidden="true">↗</span>
+                        <span>Submit to DRES</span>
+                        <span className="inspector-submit-time">({currentTimestampMs} ms)</span>
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
