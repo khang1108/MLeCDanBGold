@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from hcmai.api.routers import (
+    create_avs_router,
     create_event_trail_router,
     create_feedback_router,
     create_frames_router,
@@ -186,6 +187,7 @@ def create_app(
     app.include_router(create_system_router(service_container))
     app.include_router(create_feedback_router(service_container))
     app.include_router(create_kis_router(service_container))
+    app.include_router(create_avs_router(service_container))
     app.include_router(create_search_router(service_container))
     app.include_router(create_trake_router(service_container))
     app.include_router(create_frames_router(service_container))

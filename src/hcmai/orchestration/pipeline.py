@@ -15,6 +15,7 @@ from hcmai.api.contracts import (
     TRAKERequest,
     TRAKEResponse,
 )
+from hcmai.api.contracts.avs import AvsSearchRequest, AvsSearchResponse
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -51,6 +52,7 @@ from hcmai.orchestration.workflows.temporal_search import (
     TemporalSearchGateway,
     TemporalSearchService,
 )
+from hcmai.orchestration.workflows.avs_search import AvsSearchService
 from hcmai.orchestration.workflows.kis import KISPipeline
 from hcmai.orchestration.workflows.trake import TRAKEPipeline
 from hcmai.retrieval.evidence.image_query import ImageQueryTemporalScorer
@@ -227,6 +229,16 @@ class SearchService:
         else:
             self.feedback_sessions = None
             self.feedback = None
+
+        self.avs = (
+            AvsSearchService(
+                corpus=corpus,
+                retrieval=remote_retrieval,
+                config=self.config.avs,
+            )
+            if corpus is not None and remote_retrieval is not None
+            else None
+        )
 
     @staticmethod
     def load(messages: list[str]) -> SearchService:
@@ -775,6 +787,19 @@ class SearchService:
             raise KeyError(str(error)) from error
         except RetrievalTooLargeError as error:
             raise ImageQueryTooLargeError(str(error)) from error
+        except (RetrievalProtocolError, RetrievalClientError) as error:
+            raise SearchServiceGatewayError(str(error)) from error
+
+    def search_avs(self, request: AvsSearchRequest) -> AvsSearchResponse:
+        """Execute direct AVS text search and deterministic coverage exposure."""
+        if self.avs is None:
+            raise SearchServiceUnavailableError("AVS direct retrieval is unavailable")
+        try:
+            return self.avs.search(request)
+        except RetrievalUnavailableError as error:
+            raise SearchServiceUnavailableError(str(error)) from error
+        except RetrievalInvalidRequestError as error:
+            raise InvalidQueryInputError(str(error)) from error
         except (RetrievalProtocolError, RetrievalClientError) as error:
             raise SearchServiceGatewayError(str(error)) from error
 

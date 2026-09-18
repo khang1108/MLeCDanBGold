@@ -1,6 +1,12 @@
 """Public Pydantic contracts for the HCMAI HTTP and WebSocket APIs."""
 
 
+from .avs import (
+    AvsSearchLatency,
+    AvsSearchRequest,
+    AvsSearchResponse,
+    AvsSearchResult,
+)
 from .frames import CatalogTranscriptSegment, FrameCatalogEntry, FrameInspectionResponse
 from .filter import FilterMetadataFilters, FilterRequest, FilterResponse, FilterResult
 from .kis import (
@@ -54,6 +60,10 @@ from .vbs import (
 
 
 __all__ = [
+    "AvsSearchLatency",
+    "AvsSearchRequest",
+    "AvsSearchResponse",
+    "AvsSearchResult",
     "CatalogTranscriptSegment",
     "FrameCatalogEntry",
     "FrameInspectionResponse",
