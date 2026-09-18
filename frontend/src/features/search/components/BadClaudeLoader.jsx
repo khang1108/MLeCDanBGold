@@ -11,7 +11,7 @@ const P = {
   damping: 0.96,
   constraintIters: 20,
   maxStretchRatio: 1.2,
-  baseTargetAngle: -1.12,
+  baseTargetAngle: -0.35,
   handleAimByMouseX: 0.4,
   handleAimByMouseY: 0.2,
   handleAimClamp: 2.0,
@@ -185,6 +185,89 @@ function applyWallCollisions(whip, W, H) {
       p.py = p.y - vy;
     }
   }
+}
+
+/**
+ * Realistic Bullwhip Rolling Loop Kinematics:
+ * Simulates a real whip crack loop rolling down the lash to the tip:
+ * 1. Ahead of the loop, the tail flies high and forward ("bay tới").
+ * 2. At the loop apex, the tail curves over and plunges downward ("xuống dưới").
+ * 3. As the loop completes inversion, the tail snaps violently backward ("ra sau").
+ * Preserves exact segment lengths to ensure smooth, zero-stretching dynamics.
+ */
+function computeRollingLoopPose(totalSegments, progress, forwardAngle, totalLength) {
+  const poses = [{ x: 0, y: 0 }];
+  const cosA = Math.cos(forwardAngle);
+  const sinA = Math.sin(forwardAngle);
+
+  const raw = [{ x: 0, y: 0 }];
+
+  if (progress < 0.16) {
+    // Phase 1: Pre-cast windup & arch
+    const p = progress / 0.16;
+    const lift = Math.sin(p * Math.PI) * 45;
+    for (let i = 1; i < totalSegments; i++) {
+      const s = i / (totalSegments - 1);
+      const u = s * totalLength * (1 - 0.12 * p);
+      const v = -lift * (1 - s * 0.45) + Math.sin(s * Math.PI) * 20;
+      raw.push({
+        x: u * cosA - v * sinA,
+        y: u * sinA + v * cosA,
+      });
+    }
+  } else {
+    // Phase 2: Traveling loop inversion (rolls from base to tip)
+    const pLoop = clamp((progress - 0.16) / 0.52, 0, 1.15);
+    // Acceleration as whip tapers towards tip
+    const sLoop = Math.pow(pLoop, 1.15) * 1.12;
+    const loopRadius = 48 * (1 - 0.44 * Math.min(1, sLoop));
+    const loopWidth = 0.22;
+
+    for (let i = 1; i < totalSegments; i++) {
+      const s = i / (totalSegments - 1);
+      const diff = s - sLoop;
+      let u, v;
+
+      if (diff > loopWidth) {
+        // Ahead of loop: high upper strand moving forward ("bay tới")
+        const forwardReach = (s - sLoop) * totalLength * 0.96;
+        u = sLoop * totalLength * 0.7 + forwardReach;
+        v = -loopRadius;
+      } else if (diff < -loopWidth) {
+        // Behind loop: bottom strand snapped backward ("ra sau")
+        const backLag = (sLoop - s) * totalLength * 0.65;
+        u = sLoop * totalLength * 0.7 - backLag;
+        v = loopRadius;
+      } else {
+        // Inside circular loop: smooth circular transition ("bay tới -> xuống dưới -> ra sau")
+        const alpha = diff / loopWidth; // +1 (top) to -1 (bottom)
+        const phi = (1 - alpha) * (Math.PI / 2); // 0 -> PI/2 -> PI
+        const apexBulge = Math.sin(phi) * loopRadius * 1.55;
+        u = sLoop * totalLength * 0.7 + apexBulge;
+        v = -Math.cos(phi) * loopRadius;
+      }
+
+      raw.push({
+        x: u * cosA - v * sinA,
+        y: u * sinA + v * cosA,
+      });
+    }
+  }
+
+  // Strictly enforce exact segment lengths so constraints remain relaxed and natural
+  for (let i = 1; i < totalSegments; i++) {
+    const prev = poses[i - 1];
+    const dx = raw[i].x - raw[i - 1].x;
+    const dy = raw[i].y - raw[i - 1].y;
+    const dist = Math.hypot(dx, dy) || 0.0001;
+    const targetDist = segLen(i - 1);
+    poses.push({
+      x: prev.x + (dx / dist) * targetDist,
+      y: prev.y + (dy / dist) * targetDist,
+    });
+  }
+
+  return poses;
 }
 
 const HURRY_UP_QUOTES = [
@@ -403,8 +486,9 @@ const BadClaudeLoader = ({ isVisible = true }) => {
     // Launch high-energy whip strike motion where the wave rolls down to whip the tail
     strikeRef.current = {
       startTime: now,
-      duration: 360,
-      dirAngle: handleAngleRef.current || P.baseTargetAngle,
+      duration: 500,
+      dirAngle: -0.15,
+      hasSnapped: false,
     };
   };
 
@@ -493,46 +577,69 @@ const BadClaudeLoader = ({ isVisible = true }) => {
         p.y += vy + P.gravity;
       }
 
-      // Handle strike dynamics (impulse wave propagating to the tail)
+      // Handle strike dynamics: rolling bullwhip loop inversion (bay tới -> xuống dưới -> ra sau)
       let strikeFlickX = 0;
       let strikeFlickY = 0;
       const strike = strikeRef.current;
+      let strikeProgress = -1;
+
       if (strike) {
         const strikeElapsed = now - strike.startTime;
-        const progress = strikeElapsed / strike.duration;
+        strikeProgress = strikeElapsed / strike.duration;
 
-        if (progress >= 1.0) {
+        if (strikeProgress >= 1.0) {
           strikeRef.current = null;
         } else {
-          // 1. Handle flick (forward thrust then sharp snap recoil)
-          if (progress < 0.22) {
-            const p1 = progress / 0.22;
-            const f = Math.sin(p1 * Math.PI) * 45;
-            strikeFlickX = Math.cos(strike.dirAngle) * f;
-            strikeFlickY = Math.sin(strike.dirAngle) * f;
-          } else if (progress < 0.5) {
-            const p2 = (progress - 0.22) / 0.28;
-            const r = Math.sin(p2 * Math.PI) * 40;
-            strikeFlickX = -Math.cos(strike.dirAngle) * r;
-            strikeFlickY = -Math.sin(strike.dirAngle) * r;
+          // Handle flick trajectory (cast forward, then snap back)
+          if (strikeProgress < 0.16) {
+            const p = strikeProgress / 0.16;
+            strikeFlickX = -Math.cos(strike.dirAngle) * Math.sin(p * Math.PI) * 25;
+            strikeFlickY = -Math.sin(strike.dirAngle) * Math.sin(p * Math.PI) * 20;
+          } else if (strikeProgress < 0.45) {
+            const p = (strikeProgress - 0.16) / 0.29;
+            strikeFlickX = Math.cos(strike.dirAngle) * (Math.sin(p * Math.PI) * 35 - 15 * p);
+            strikeFlickY = Math.sin(strike.dirAngle) * (Math.sin(p * Math.PI) * 25 - 10 * p);
           }
 
-          // 2. Transversal wave moving from base to tail
-          const wavePos = ((progress - 0.08) / 0.62) * (whip.length - 1);
-          if (wavePos >= 1 && wavePos <= whip.length + 3) {
-            for (let i = 1; i < whip.length; i++) {
-              const distToWave = i - wavePos;
-              if (Math.abs(distToWave) < 3.5) {
-                const env = Math.cos((distToWave / 3.5) * (Math.PI / 2));
-                const taperAmp = 1.0 + 3.2 * (i / (whip.length - 1));
-                const wavePower = 20 * env * taperAmp;
-                const perp = strike.dirAngle + Math.PI / 2;
-                const loopDisp = Math.sin(distToWave * 1.6) * wavePower;
+          // Compute exact circular traveling loop pose (bay tới -> xuống dưới -> ra sau)
+          const totalLen = (whip.length - 1) * P.segmentLength;
+          const loopPoses = computeRollingLoopPose(whip.length, strikeProgress, strike.dirAngle, totalLen);
 
-                whip[i].x += Math.cos(perp) * loopDisp + Math.cos(strike.dirAngle) * (wavePower * 0.7);
-                whip[i].y += Math.sin(perp) * loopDisp + Math.sin(strike.dirAngle) * (wavePower * 0.7);
-              }
-            }
+          // Calculate blend weight (high during active loop, smooth release at end)
+          let blend = 0;
+          if (strikeProgress < 0.15) {
+            blend = (strikeProgress / 0.15) * 0.94;
+          } else if (strikeProgress < 0.68) {
+            blend = 0.96;
+          } else {
+            const fade = (strikeProgress - 0.68) / 0.32;
+            blend = 0.96 * Math.pow(1 - fade, 2);
+          }
+
+          const baseHx = mousePosRef.current.x + strikeFlickX;
+          const baseHy = mousePosRef.current.y + strikeFlickY;
+
+          for (let i = 1; i < whip.length; i++) {
+            const targetX = baseHx + loopPoses[i].x;
+            const targetY = baseHy + loopPoses[i].y;
+            const oldX = whip[i].x;
+            const oldY = whip[i].y;
+
+            whip[i].x = lerp(oldX, targetX, blend);
+            whip[i].y = lerp(oldY, targetY, blend);
+
+            // Inherit true rotational loop velocity into Verlet integration
+            const loopVx = (targetX - oldX) * 0.85;
+            const loopVy = (targetY - oldY) * 0.85;
+            whip[i].px = lerp(whip[i].px, whip[i].x - loopVx, blend);
+            whip[i].py = lerp(whip[i].py, whip[i].y - loopVy, blend);
+          }
+
+          // Mid-stroke crack trigger when loop reaches bottom snap inversion
+          if (strikeProgress >= 0.58 && strikeProgress <= 0.70 && !strike.hasSnapped) {
+            strike.hasSnapped = true;
+            const currentTip = whip[whip.length - 1];
+            triggerCrack(currentTip.x, currentTip.y, false);
           }
         }
       }
@@ -545,13 +652,8 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       whip[0].px = hx;
       whip[0].py = hy;
 
-      // Cap stretch and edge boundaries
-      capSegmentStretch(whip);
-      applyWallCollisions(whip, W, H);
-      applyBasePose(whip, handleAngleRef.current);
-
       // Distance constraints with OpenWhip bend limits & stretch capping
-      for (let iter = 0; iter < P.constraintIters; iter++) {
+      for (let iter = 0; iter < (strike ? 12 : P.constraintIters); iter++) {
         for (let i = 0; i < whip.length - 1; i++) {
           const a = whip[i], b = whip[i + 1];
           const cdx = b.x - a.x, cdy = b.y - a.y;
@@ -567,8 +669,10 @@ const BadClaudeLoader = ({ isVisible = true }) => {
             b.x -= ox; b.y -= oy;
           }
         }
-        applyBendLimits(whip);
-        applyBasePose(whip, handleAngleRef.current);
+        if (!strike || strikeProgress > 0.7) {
+          applyBendLimits(whip);
+          applyBasePose(whip, handleAngleRef.current);
+        }
         capSegmentStretch(whip);
         applyWallCollisions(whip, W, H);
       }
@@ -622,12 +726,31 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       }
 
       // Red/amber cracker popper tip
-      const isHighSpeed = tipVel > P.crackSpeed * 0.6 || Boolean(strikeRef.current);
+      const isHighSpeed = tipVel > P.crackSpeed * 0.5 || Boolean(strikeRef.current);
+
+      // Glowing motion trail tracing the circular whip snap
+      if (isHighSpeed && whip.length >= 4) {
+        const tip1 = whip[whip.length - 1];
+        const tip2 = whip[whip.length - 2];
+        const tip3 = whip[whip.length - 3];
+        const tip4 = whip[whip.length - 4];
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(tip4.x, tip4.y);
+        ctx.bezierCurveTo(tip3.x, tip3.y, tip2.x, tip2.y, tip1.x, tip1.y);
+        ctx.strokeStyle = "rgba(254, 240, 138, 0.85)";
+        ctx.lineWidth = 5.5;
+        ctx.shadowColor = "#f59e0b";
+        ctx.shadowBlur = 14;
+        ctx.stroke();
+        ctx.restore();
+      }
+
       ctx.beginPath();
       ctx.arc(tip.x, tip.y, isHighSpeed ? 5.5 : 4.5, 0, Math.PI * 2);
       ctx.fillStyle = isHighSpeed ? "#fef08a" : "#ef4444";
       ctx.shadowColor = isHighSpeed ? "#f59e0b" : "#ef4444";
-      ctx.shadowBlur = isHighSpeed ? 14 : 6;
+      ctx.shadowBlur = isHighSpeed ? 16 : 6;
       ctx.fill();
 
       animRef.current = requestAnimationFrame(loop);
