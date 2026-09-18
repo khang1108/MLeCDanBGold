@@ -419,6 +419,26 @@ class HybridTemporalConfig(BaseModel):
         return self
 
 
+class AvsConfig(BaseModel):
+    """Server-owned parameters for latency-first AVS candidate exposure."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_pool_size: int = Field(default=500, ge=2)
+    default_page_size: int = Field(default=80, ge=1)
+    maximum_page_size: int = Field(default=100, ge=1)
+    temporal_dedup_window_ms: int = Field(default=3000, ge=0)
+    coverage_policy_version: Literal["video-pass-v1"] = "video-pass-v1"
+
+    @model_validator(mode="after")
+    def validate_pool_bounds(self) -> "AvsConfig":
+        if self.default_page_size > self.maximum_page_size:
+            raise ValueError("AVS default_page_size must not exceed maximum_page_size")
+        if self.maximum_page_size >= self.candidate_pool_size:
+            raise ValueError("AVS candidate_pool_size must be greater than maximum_page_size")
+        return self
+
+
 class SearchConfig(BaseModel):
     """Single search configuration selected for the competition pipeline."""
 
@@ -433,6 +453,7 @@ class SearchConfig(BaseModel):
     cache: RetrievalCacheConfig = Field(default_factory=RetrievalCacheConfig)
     alignment: AlignmentConfig = Field(default_factory=AlignmentConfig)
     hybrid_temporal: HybridTemporalConfig = Field(default_factory=HybridTemporalConfig)
+    avs: AvsConfig = Field(default_factory=AvsConfig)
 
 
 
