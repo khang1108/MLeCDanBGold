@@ -648,6 +648,8 @@ const SearchWorkspace = ({
     activateHistorySession,
     enqueueHistoryWrite,
     onHistoryRefresh,
+    invalidateHistorySession,
+    isCurrentHistorySession,
     activeQuerySession,
   ]);
 
@@ -763,6 +765,8 @@ const SearchWorkspace = ({
     activateHistorySession,
     enqueueHistoryWrite,
     onHistoryRefresh,
+    invalidateHistorySession,
+    isCurrentHistorySession,
     kisSession.currentIntent,
     activeQuerySession,
   ]);
