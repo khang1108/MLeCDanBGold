@@ -206,10 +206,6 @@ const KisPanel = ({
               </div>
 
               <div className="feedback-message-body">
-                <p className="kis-assistant-intro">
-                  Identified {currentIntent.events?.length || 0} temporal event{(currentIntent.events?.length === 1) ? '' : 's'}. You can refine specific events or add more clues below:
-                </p>
-
                 <EventList
                   events={currentIntent.events || []}
                   stagedImages={stagedImages}
