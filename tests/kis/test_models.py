@@ -38,14 +38,14 @@ VALID = {
 
 
 class KISIntentModelTest(unittest.TestCase):
-    def test_REQ_001_kis_contracts_do_not_expose_language(self) -> None:
-        self.assertNotIn("language", KISIntent.model_fields)
-        self.assertNotIn("language", KISIntent.model_json_schema()["properties"])
+    def test_REQ_001_kis_resolution_schema_omits_language(self) -> None:
+        self.assertIn("language", KISIntent.model_fields)
+        self.assertIn("language", KISIntent.model_json_schema()["properties"])
         self.assertNotIn("language", KISInitialResolution.model_fields)
 
-    def test_REQ_002_legacy_language_is_input_only(self) -> None:
+    def test_REQ_002_language_is_retained_in_intent(self) -> None:
         intent = KISIntent.model_validate({**VALID, "language": "vi"})
-        self.assertNotIn("language", intent.model_dump())
+        self.assertEqual(intent.language, "vi")
 
     def test_REQ_007_text_and_query_text_presence_match(self) -> None:
         with self.assertRaisesRegex(ValidationError, "query_text"):

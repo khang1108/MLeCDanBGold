@@ -8,21 +8,40 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-KIS_INITIAL_RESOLVER_SYSTEM_PROMPT = """You decompose a video-search description into chronologically ordered, visually retrievable moments.
+KIS_INITIAL_RESOLVER_SYSTEM_PROMPT = """You segment a video-search description into chronologically ordered retrievable moments.
 
 Rules:
 - One event is one distinct retrievable visual moment.
+- Copy every returned event directly from the user's source text; do not translate or paraphrase.
 - Sequential views or actions are separate events, even when one continuous camera shot or pan connects them.
-- Details that are genuinely simultaneous in the same visual moment stay in one event.
-- Write each event as one concise, self-contained English sentence suitable for visual/text retrieval.
-- Preserve uncertainty; do not invent a specific tool, material, person, place, text, or action that the input does not establish.
-- Do not explain reasoning, summarize the whole query, create entity tables, or put multiple stages inside one event text.
+- Create the smallest chronological units that could reasonably occur at different timestamps.
+- Keep attributes that are simultaneous in one visual moment together.
+- A continuous camera movement may contain multiple events when it reveals distinct retrievable moments.
+- Preserve uncertainty and do not invent details.
+- Do not explain reasoning, summarize the whole query, or invent details.
+- Return only source fragments in chronological order.
 
-Example:
+Examples:
 Input: The camera starts on a framed certificate, then pans right to a craftsperson engraving a metal plate with an unusual tool.
 Events:
 1. A framed certificate is visible on a work table.
 2. A craftsperson engraves a metal plate with an unusual tool.
+
+Input: Người đàn ông bước vào phòng, sau đó lấy chiếc cốc, rồi ngồi xuống bàn.
+Events:
+1. Người đàn ông bước vào phòng
+2. sau đó lấy chiếc cốc
+3. rồi ngồi xuống bàn
+
+Input: Cận cảnh một chiếc cốc đỏ trên bàn gỗ.
+Events:
+1. Cận cảnh một chiếc cốc đỏ trên bàn gỗ.
+
+Input: Máy quay cho thấy hải sản, chuyển sang các nguyên liệu nhiều màu sắc, cuối cùng là toàn cảnh tất cả nguyên liệu.
+Events:
+1. Máy quay cho thấy hải sản
+2. chuyển sang các nguyên liệu nhiều màu sắc
+3. cuối cùng là toàn cảnh tất cả nguyên liệu
 """
 
 

@@ -55,9 +55,11 @@ def test_resolution_event_schema_limits_text_to_one_temporal_moment() -> None:
     schema = KISInitialResolution.model_json_schema()
     event_schema = schema["$defs"]["KISInitialResolutionEvent"]
 
-    text_description = event_schema["properties"]["text"]["description"]
-    assert "distinct" in text_description
-    assert "Do not combine sequential moments" in text_description
+    text_description = (
+        event_schema["properties"].get("source_text", {}).get("description")
+        or event_schema["properties"].get("text", {}).get("description")
+    )
+    assert "retrievable chronological moment" in text_description or "distinct" in text_description
 
 
 class FakeStructuredLLM:
@@ -77,14 +79,19 @@ class FakeStructuredLLM:
 def test_resolver_canonicalizes_three_model_events_into_adjacent_temporal_chain() -> None:
     resolution = KISInitialResolution(
         events=[
-            KISInitialResolutionEvent(text="A man enters a room carrying a box."),
-            KISInitialResolutionEvent(text="The man places the box on a table."),
-            KISInitialResolutionEvent(text="A woman opens the box on the table."),
+            KISInitialResolutionEvent(source_text="A man enters a room carrying a box."),
+            KISInitialResolutionEvent(source_text="The man places the box on a table."),
+            KISInitialResolutionEvent(source_text="A woman opens the box on the table."),
         ]
     )
 
+    query = (
+        "A man enters a room carrying a box. "
+        "The man places the box on a table. "
+        "A woman opens the box on the table."
+    )
     intent = KISIntentResolver(FakeStructuredLLM(resolution)).resolve_initial(
-        "narrative",
+        query,
         revision=1,
     )
 

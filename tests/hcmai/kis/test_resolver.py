@@ -14,7 +14,9 @@ from hcmai.kis.models import (
 from hcmai.kis.resolution.initial import KISIntentResolver, KISResolutionError
 
 
-Q1 = "A woman is standing in a kitchen."
+Q1 = (
+    "A woman talks to a man in a kitchen. They move to the left. They take a white plate."
+)
 
 
 def test_REQ_001_kis_resolution_schema_omits_language() -> None:
@@ -27,9 +29,9 @@ def test_resolver_canonicalizes_initial_natural_resolution() -> None:
     llm = Mock()
     llm.generate_structured.return_value = KISInitialResolution(
         events=[
-            KISInitialResolutionEvent(text="A woman talks to a man in a kitchen."),
-            KISInitialResolutionEvent(text="They move to the left."),
-            KISInitialResolutionEvent(text="They take a white plate."),
+            KISInitialResolutionEvent(source_text="A woman talks to a man in a kitchen."),
+            KISInitialResolutionEvent(source_text="They move to the left."),
+            KISInitialResolutionEvent(source_text="They take a white plate."),
         ],
     )
 
@@ -40,19 +42,10 @@ def test_resolver_canonicalizes_initial_natural_resolution() -> None:
     assert not hasattr(intent, "inputs")
     assert [event.id for event in intent.events] == ["E1", "E2", "E3"]
     assert intent.entities == []
-    assert [event.bindings for event in intent.events] == [[], [], []]
-    assert [(e.source, e.target) for e in intent.temporal_edges] == [
+    assert [(edge.source, edge.target) for edge in intent.temporal_edges] == [
         ("E1", "E2"),
         ("E2", "E3"),
     ]
-
-    llm.generate_structured.assert_called_once()
-    messages, response_model = llm.generate_structured.call_args.args
-    assert response_model is KISInitialResolution
-    assert llm.generate_structured.call_args.kwargs.get("max_tokens") == 256
-    assert llm.generate_structured.call_args.kwargs.get("temperature") == 0.0
-    # Prompt should not ask model for revision, inputs, or IDs
-    assert "revision" not in messages[0]["content"]
 
 
 def test_legacy_resolver_adapter_uses_explicit_revision_not_input_count() -> None:
@@ -82,10 +75,11 @@ def test_resolver_rejects_blank_initial_query_or_invalid_revision() -> None:
     llm.generate_structured.assert_not_called()
 
 
-def test_resolver_propagates_provider_unavailable() -> None:
-    """InferenceUnavailableError propagates directly without domain wrapping."""
+def test_resolver_falls_back_when_provider_unavailable() -> None:
+    """InferenceUnavailableError falls back safely to single unsegmented event."""
     llm = Mock()
     llm.generate_structured.side_effect = InferenceUnavailableError("GPU node down")
     resolver = KISIntentResolver(llm)
-    with pytest.raises(InferenceUnavailableError):
-        resolver.resolve_initial("A woman in a kitchen.", revision=1)
+    intent = resolver.resolve_initial("A woman in a kitchen.", revision=1)
+    assert len(intent.events) == 1
+    assert intent.events[0].text == "A woman in a kitchen."

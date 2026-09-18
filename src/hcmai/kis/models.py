@@ -8,7 +8,7 @@ on HTTP transport schemas.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -29,16 +29,43 @@ InitialEventText = Annotated[
 ]
 
 
+class SourceProvenance(BaseModel):
+    """Source grounding span within the canonical original natural-language query."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_text: NonBlank
+    start_char: int = Field(ge=0)
+    end_char: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_span(self) -> Self:
+        if self.end_char <= self.start_char:
+            raise ValueError("source provenance end_char must exceed start_char")
+        return self
+
+
 class KISInitialResolutionEvent(BaseModel):
     """One concise retrievable visual moment returned by the initial resolver."""
 
     model_config = ConfigDict(extra="forbid")
-    text: InitialEventText = Field(
+    source_text: InitialEventText = Field(
         description=(
-            "One concise self-contained English description of exactly one distinct "
-            "retrievable visual moment. Do not combine sequential moments or explain reasoning."
+            "Verbatim source-language fragment for one retrievable chronological moment."
         )
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_text_field(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "text" in data and "source_text" not in data:
+            data = dict(data)
+            data["source_text"] = data.pop("text")
+        return data
+
+    @property
+    def text(self) -> str:
+        return self.source_text
 
 
 class KISInitialResolution(BaseModel):
@@ -88,6 +115,8 @@ class KISEvent(BaseModel):
 
     id: EventId
     text: NonBlank | None = None
+    source_provenance: SourceProvenance | None = None
+    origin: Literal["source", "user_override", "user_added"] = "source"
     images: list[KISImageRef] = Field(default_factory=list)
     bindings: list[KISEntityBinding] = Field(default_factory=list)
 
@@ -116,19 +145,10 @@ class KISIntent(BaseModel):
 
     revision: int = Field(ge=1)
     query_text: NonBlank | None
+    language: Literal["vi", "en", "mixed"] = "en"
     entities: list[KISEntity] = Field(default_factory=list)
     events: list[KISEvent] = Field(min_length=1)
     temporal_edges: list[KISTemporalEdge] = Field(default_factory=list)
-
-    @model_validator(mode="before")
-    @classmethod
-    def discard_legacy_language(cls, value: object) -> object:
-        """Accept legacy language input without retaining it in the contract."""
-        if isinstance(value, dict) and "language" in value:
-            return {
-                key: item for key, item in value.items() if key != "language"
-            }
-        return value
 
     @model_validator(mode="after")
     def validate_graph(self) -> Self:
@@ -192,5 +212,6 @@ __all__ = [
     "KISInitialResolutionEvent",
     "KISIntent",
     "KISTemporalEdge",
+    "SourceProvenance",
 ]
 
