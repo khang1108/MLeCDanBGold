@@ -653,5 +653,48 @@ test('renders Select candidate button in AVS mode and toggles selection on click
   expect(deselectBtns[0].textContent).toContain('Selected');
 });
 
+test('toggles theater / expanded player mode on button click and keyboard shortcut T', () => {
+  render(
+    <ImageModal
+      frame={{ frame_id: 'f_test', video_id: 'L21_V001', timestamp_ms: 1000 }}
+      onClose={jest.fn()}
+    />
+  );
+
+  const modalCard = document.querySelector('.modal-card');
+  expect(modalCard.classList.contains('is-theater-mode')).toBe(false);
+
+  // Click Expand button
+  const expandBtn = screen.getAllByRole('button', { name: /expand player/i })[0];
+  fireEvent.click(expandBtn);
+  expect(modalCard.classList.contains('is-theater-mode')).toBe(true);
+
+  // Re-toggle via 't' key
+  fireEvent.keyDown(modalCard, { key: 't' });
+  expect(modalCard.classList.contains('is-theater-mode')).toBe(false);
+});
+
+test('toggles fit mode between contain and cover (fill) on button click and key C', () => {
+  render(
+    <ImageModal
+      frame={{ frame_id: 'f_test', video_id: 'L21_V001', timestamp_ms: 1000 }}
+      onClose={jest.fn()}
+    />
+  );
+
+  const viewerCol = document.querySelector('.modal-viewer-column');
+  expect(viewerCol.classList.contains('fit-contain')).toBe(true);
+
+  // Click Fill frame button
+  const fillBtn = screen.getAllByRole('button', { name: /fill frame/i })[0];
+  fireEvent.click(fillBtn);
+  expect(viewerCol.classList.contains('fit-cover')).toBe(true);
+
+  // Toggle back with key 'c'
+  const modalCard = document.querySelector('.modal-card');
+  fireEvent.keyDown(modalCard, { key: 'c' });
+  expect(viewerCol.classList.contains('fit-contain')).toBe(true);
+});
+
 
 

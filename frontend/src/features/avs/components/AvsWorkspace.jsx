@@ -306,6 +306,7 @@ const AvsWorkspace = ({
         onClose={() => setIsDrawerOpen(false)}
         pending={selectionState.pending}
         onRemove={handleRemoveCandidate}
+        onInspect={handleInspect}
         disabled={isSelectionDisabled}
       />
 

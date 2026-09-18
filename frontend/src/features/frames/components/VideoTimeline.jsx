@@ -27,6 +27,10 @@ const VideoTimeline = ({
   isSubmitting = false,
   onSelectCandidate,
   isCandidateSelected = false,
+  onToggleTheater,
+  isTheaterMode = false,
+  onToggleFitMode,
+  fitMode = 'contain',
 }) => {
   const timelineRef = useRef(null);
   const previewUrlCache = useRef(new Map());
@@ -263,6 +267,28 @@ const VideoTimeline = ({
             style={{ "--volume-progress": `${(isMuted ? 0 : volume) * 100}%` }}
           />
         </div>
+        {onToggleFitMode && (
+          <button
+            type="button"
+            className={`modal-video-icon-button modal-video-fit-button ${fitMode === "cover" ? "active" : ""}`}
+            onClick={onToggleFitMode}
+            aria-label={fitMode === "contain" ? "Fill frame" : "Fit frame"}
+            title={fitMode === "contain" ? "Fill Frame (No black borders) [C]" : "Fit Video [C]"}
+          >
+            {fitMode === "cover" ? "⤢" : "⇲"}
+          </button>
+        )}
+        {onToggleTheater && (
+          <button
+            type="button"
+            className={`modal-video-icon-button modal-video-theater-button ${isTheaterMode ? "active" : ""}`}
+            onClick={onToggleTheater}
+            aria-label={isTheaterMode ? "Exit theater mode" : "Expand player"}
+            title={isTheaterMode ? "Exit theater mode [T]" : "Expand player [T]"}
+          >
+            {isTheaterMode ? "⤡" : "⤢"}
+          </button>
+        )}
         <button
           type="button"
           className="modal-video-icon-button modal-video-fullscreen-button"

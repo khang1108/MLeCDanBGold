@@ -830,6 +830,61 @@ test('toggling candidate checkbox in AVS mode updates selection and calls onAvsS
   expect(screen.getByText(/0 selected/i)).toBeTruthy();
 });
 
+test('opens ImageModal when inspecting a candidate from the AVS review selections drawer', async () => {
+  const onFrameClick = jest.fn();
+  searchAvs.mockResolvedValueOnce({
+    results: [
+      {
+        candidate_id: 'c_drawer',
+        frame_id: 'c_drawer',
+        video_id: 'L21_V001',
+        frame_idx: 120,
+        timestamp_ms: 4000,
+        fps: 30,
+        retrieval_rank: 1,
+        retrieval_score: 0.95,
+        metadata: { frame_idx: 120, timestamp_ms: 4000 },
+      },
+    ],
+    latency: { total_ms: 100, retrieval_ms: 80, coverage_ms: 10, materialization_ms: 10 },
+    candidate_pool_size: 1,
+    deduplicated_candidate_count: 1,
+    unique_videos: 1,
+    warnings: [],
+  });
+
+  renderSearch({
+    workspaceMode: 'AVS',
+    onFrameClick,
+  });
+
+  const input = document.getElementById('event-query');
+  fireEvent.change(input, { target: { value: 'inspect drawer test' } });
+  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite)$/i }));
+
+  await screen.findByText(/showing 1 candidates from 1 videos/i);
+
+  // Select the candidate
+  fireEvent.click(screen.getByRole('checkbox'));
+  expect(screen.getByText(/1 selected/i)).toBeTruthy();
+
+  // Open Review selections drawer
+  fireEvent.click(screen.getByRole('button', { name: 'Review selections' }));
+  expect(screen.getByRole('dialog', { name: 'Selected AVS answers' })).toBeTruthy();
+
+  // Click candidate inside drawer to inspect
+  const drawerItem = screen.getByRole('button', { name: 'Inspect candidate c_drawer' });
+  fireEvent.click(drawerItem);
+
+  expect(onFrameClick).toHaveBeenCalledTimes(1);
+  expect(onFrameClick).toHaveBeenCalledWith(
+    expect.objectContaining({
+      frame: expect.objectContaining({ candidate_id: 'c_drawer' }),
+    }),
+  );
+});
+
+
 
 
 

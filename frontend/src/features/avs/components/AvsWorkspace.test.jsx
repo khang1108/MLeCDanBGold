@@ -158,6 +158,21 @@ describe('AvsWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Remove f2 from selection' })).toBeTruthy();
   });
 
+  test('clicking candidate in review drawer invokes onInspect to open ImageModal', async () => {
+    const onInspectMock = jest.fn();
+    searchAvs.mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]));
+    renderWorkspace({ onInspect: onInspectMock });
+    await runSearch('seafood');
+    fireEvent.click(await screen.findByRole('checkbox'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review selections' }));
+    const inspectableItem = screen.getByRole('button', { name: 'Inspect candidate f1' });
+    fireEvent.click(inspectableItem);
+
+    expect(onInspectMock).toHaveBeenCalledTimes(1);
+    expect(onInspectMock).toHaveBeenCalledWith(expect.objectContaining({ candidate_id: 'f1' }));
+  });
+
   test('Clear asks for confirmation and preserves pending items when cancelled', async () => {
     window.confirm = jest.fn().mockReturnValue(false);
     searchAvs.mockResolvedValueOnce(responseWith([candidate('f1', 'V1', 1000)]));

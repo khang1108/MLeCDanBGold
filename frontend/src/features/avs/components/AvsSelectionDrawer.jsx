@@ -11,6 +11,7 @@ const AvsSelectionDrawer = ({
   onClose,
   pending = new Map(),
   onRemove,
+  onInspect,
   disabled = false,
 }) => {
   const groupedByVideo = useMemo(() => {
@@ -58,23 +59,49 @@ const AvsSelectionDrawer = ({
                 <h3 className="avs-drawer-video-title">Video: {videoId} ({items.length})</h3>
                 <div className="avs-drawer-items-list">
                   {items.map((candidate) => (
-                    <article key={candidate.candidate_id} className="avs-drawer-item">
-                      <img
-                        src={keyframeUrl(candidate.frame_id)}
-                        alt=""
-                        className="avs-drawer-item-img"
-                        loading="lazy"
-                      />
+                    <article
+                      key={candidate.candidate_id}
+                      className={`avs-drawer-item ${onInspect ? 'is-inspectable' : ''}`}
+                      onClick={() => onInspect?.(candidate)}
+                      role={onInspect ? 'button' : undefined}
+                      tabIndex={onInspect ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (onInspect && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          onInspect(candidate);
+                        }
+                      }}
+                      title={onInspect ? "Click to inspect frame / video" : undefined}
+                      aria-label={onInspect ? `Inspect candidate ${candidate.candidate_id}` : undefined}
+                    >
+                      <div className="avs-drawer-item-preview">
+                        <img
+                          src={keyframeUrl(candidate.frame_id)}
+                          alt=""
+                          className="avs-drawer-item-img"
+                          loading="lazy"
+                        />
+                        {onInspect && (
+                          <span className="avs-drawer-item-zoom-icon" aria-hidden="true">🔍</span>
+                        )}
+                      </div>
                       <div className="avs-drawer-item-info">
                         <span className="avs-drawer-item-id">{candidate.candidate_id}</span>
                         <span className="avs-drawer-item-ts">{formatTimestamp(candidate.timestamp_ms)}</span>
+                        {onInspect && (
+                          <span className="avs-drawer-item-hint">Click to inspect</span>
+                        )}
                       </div>
                       <button
                         type="button"
                         className="avs-drawer-remove-btn"
-                        onClick={() => onRemove?.(candidate.candidate_id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemove?.(candidate.candidate_id);
+                        }}
                         disabled={disabled}
                         aria-label={`Remove ${candidate.candidate_id} from selection`}
+                        title="Remove from selection"
                       >
                         Remove
                       </button>

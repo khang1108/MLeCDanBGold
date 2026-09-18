@@ -1138,6 +1138,7 @@ const SearchWorkspace = ({
             onClose={() => setIsDrawerOpen(false)}
             pending={selectionState.pending}
             onRemove={handleRemoveCandidate}
+            onInspect={handleInspectCandidate}
             disabled={isSelectionDisabled}
           />
 

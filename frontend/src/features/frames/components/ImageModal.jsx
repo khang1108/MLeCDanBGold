@@ -46,7 +46,37 @@ const ImageModal = ({
   );
   const [playbackTime, setPlaybackTime] = useState(targetTime);
   const [activeFrameId, setActiveFrameId] = useState(frame.frame_id);
+  const [isTheaterMode, setIsTheaterMode] = useState(false);
+  const [fitMode, setFitMode] = useState('contain'); // 'contain' | 'cover'
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const viewerColumnRef = useRef(null);
   const videoLabel = displayVideoId(frame.video_id);
+
+  const toggleTheater = useCallback(() => {
+    setIsTheaterMode((prev) => !prev);
+  }, []);
+
+  const toggleFitMode = useCallback(() => {
+    setFitMode((prev) => (prev === 'contain' ? 'cover' : 'contain'));
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = viewerColumnRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    } else {
+      el.requestFullscreen?.().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   useEffect(() => {
     setPlaybackTime(targetTime);
@@ -347,26 +377,113 @@ const ImageModal = ({
     } else if (event.key === 'ArrowRight') {
       event.preventDefault();
       seekBy(5);
+    } else if (event.key.toLowerCase() === 't' || event.key.toLowerCase() === 'e') {
+      event.preventDefault();
+      toggleTheater();
+    } else if (event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      toggleFullscreen();
+    } else if (event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      toggleFitMode();
     }
 
-  }, [onClose, seekBy, togglePlayback]);
+  }, [onClose, seekBy, togglePlayback, toggleTheater, toggleFullscreen, toggleFitMode]);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-frame-stack" onClick={(event) => event.stopPropagation()}>
         <div
           ref={modalCardRef}
-          className="modal-card split-layout"
+          className={`modal-card split-layout ${isTheaterMode ? 'is-theater-mode' : ''}`}
           onKeyDown={handleModalKeyDown}
           tabIndex={-1}
         >
           <div className="modal-main-stage">
-            <div className="modal-viewer-column">
+            <div
+              ref={viewerColumnRef}
+              className={`modal-viewer-column ${isTheaterMode ? 'is-theater' : ''} fit-${fitMode}`}
+            >
+              {/* Floating Top Control Bar */}
+              <div className="modal-viewer-top-bar">
+                <div className="modal-viewer-top-left">
+                  <span className="modal-viewer-badge">
+                    #{activeFrameId || frame.frame_id}
+                  </span>
+                </div>
+                <div className="modal-viewer-top-right">
+                  {videoError && (
+                    <>
+                      {canSubmitFrame && !eventTrail?.state && (
+                        <button
+                          type="button"
+                          className="modal-viewer-action-btn submit-btn"
+                          onClick={handleDirectSubmit}
+                          disabled={isSubmissionOpening}
+                          aria-label="Submit this keyframe"
+                        >
+                          ↗ Submit
+                        </button>
+                      )}
+                      {isAvsMode && onToggleCandidateSelection && (
+                        <button
+                          type="button"
+                          className={`modal-viewer-action-btn select-btn ${isCandidateSelected ? 'is-selected' : ''}`}
+                          onClick={onToggleCandidateSelection}
+                          aria-label={isCandidateSelected ? "Deselect candidate from AVS" : "Select candidate for AVS"}
+                        >
+                          {isCandidateSelected ? "✓ Selected" : "+ Select"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className={`modal-viewer-icon-btn ${fitMode === 'cover' ? 'active' : ''}`}
+                    onClick={toggleFitMode}
+                    title={fitMode === 'contain' ? "Fill frame (eliminate black borders) [C]" : "Fit entire video/frame [C]"}
+                    aria-label={fitMode === 'contain' ? "Fill frame" : "Fit frame"}
+                  >
+                    {fitMode === 'cover' ? '⤢ Fit' : '⇲ Fill'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`modal-viewer-icon-btn ${isTheaterMode ? 'active' : ''}`}
+                    onClick={toggleTheater}
+                    title={isTheaterMode ? "Standard view [T]" : "Expand player / Theater mode [T]"}
+                    aria-label={isTheaterMode ? "Exit theater mode" : "Expand player"}
+                  >
+                    {isTheaterMode ? '⤡ Standard' : '⤢ Expand'}
+                  </button>
+                  <button
+                    type="button"
+                    className="modal-viewer-icon-btn"
+                    onClick={toggleFullscreen}
+                    title={isFullscreen ? "Exit fullscreen [F]" : "Fullscreen [F]"}
+                    aria-label={isFullscreen ? "Exit viewer fullscreen" : "Viewer fullscreen"}
+                  >
+                    ⛶
+                  </button>
+                </div>
+              </div>
+
+              {isTheaterMode && (
+                <button
+                  type="button"
+                  className="modal-restore-inspector-btn"
+                  onClick={toggleTheater}
+                  title="Restore Inspector [T]"
+                  aria-label="Restore inspector"
+                >
+                  ◂ Inspector
+                </button>
+              )}
+
               {streamUrl && targetTime !== null && !videoError ? (
                 <div className="modal-video-shell">
                   <video
                     ref={videoRef}
-                    className="modal-viewer-video"
+                    className={`modal-viewer-video fit-${fitMode}`}
                     src={streamUrl}
                     autoPlay
                     muted
@@ -376,6 +493,7 @@ const ImageModal = ({
                     onLoadedMetadata={handleVideoLoadedMetadata}
                     onTimeUpdate={handleVideoTimeUpdate}
                     onError={() => setVideoError('The MP4 stream could not be loaded or decoded.')}
+                    onDoubleClick={toggleTheater}
                   />
                   <VideoTimeline
                     videoId={frame.video_id}
@@ -388,14 +506,18 @@ const ImageModal = ({
                     isSubmitting={isSubmissionOpening}
                     onSelectCandidate={isAvsMode && onToggleCandidateSelection ? onToggleCandidateSelection : undefined}
                     isCandidateSelected={isCandidateSelected}
+                    onToggleTheater={toggleTheater}
+                    isTheaterMode={isTheaterMode}
+                    onToggleFitMode={toggleFitMode}
+                    fitMode={fitMode}
                   />
                 </div>
               ) : videoError && (activeFrameId || frame.frame_id) ? (
-                <div className="modal-fallback-viewer">
+                <div className="modal-fallback-viewer" onDoubleClick={toggleTheater}>
                   <img
                     src={keyframeUrl(activeFrameId || frame.frame_id)}
                     alt={`Frame ${activeFrameId || frame.frame_id}`}
-                    className="modal-viewer-fallback-image"
+                    className={`modal-viewer-fallback-image fit-${fitMode}`}
                   />
                   <div className="modal-video-fallback-notice">
                     <span>
@@ -422,6 +544,15 @@ const ImageModal = ({
                   {eventTrail?.state ? 'EventTrail Exploration' : 'Frame Inspector'}
                 </span>
                 <div className="inspector-header-actions">
+                  <button
+                    type="button"
+                    className={`inspector-header-theater-btn ${isTheaterMode ? 'is-expanded' : ''}`}
+                    onClick={toggleTheater}
+                    title={isTheaterMode ? "Restore inspector (T)" : "Expand video player (T)"}
+                    aria-label={isTheaterMode ? "Restore inspector" : "Expand video player"}
+                  >
+                    {isTheaterMode ? '◂ Show' : '⤢ Expand'}
+                  </button>
                   {isAvsMode && onToggleCandidateSelection && (
                     <button
                       type="button"
