@@ -19,6 +19,7 @@ from offline.enrichment.ocr.config import OCRConfig
 # Return Any because pydantic validates these rows into ``_ReadinessModel``.
 
 from offline.enrichment.ocr.models.entities import OCRResult
+from offline.enrichment.object_detection import load_vocab, normalized_boxes
 from offline.enrichment.pipeline import EnrichmentService
 from llm.local.audio import download_audio
 from llm.local.readiness import build_readiness
@@ -41,6 +42,7 @@ class LocalAdapter:
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
         enable_ocr: bool = False,
+        enable_objects: bool = False,
         enable_asr: bool = False,
         enable_diarization: bool = False,
         enable_text_generation: bool = False,
@@ -51,11 +53,13 @@ class LocalAdapter:
         self.enable_caption = enable_caption
         self.enable_visual_embedding = enable_visual_embedding
         self.enable_ocr = enable_ocr
+        self.enable_objects = enable_objects
         self.enable_asr = enable_asr
         self.enable_diarization = enable_diarization
         self.enable_text_generation = enable_text_generation
 
         self.asr = None
+        self.object_detector = None
         self.diarization = None
 
         self.visual_encoder = visual_encoder or (
@@ -100,6 +104,7 @@ class LocalAdapter:
             enable_caption=_env_bool("HCMAI_ENABLE_CAPTION"),
             enable_visual_embedding=_env_bool("HCMAI_ENABLE_VISUAL_EMBEDDING"),
             enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
+            enable_objects=_env_bool("HCMAI_ENABLE_OBJECTS", default=False),
             enable_asr=_env_bool("HCMAI_ENABLE_ASR", default=False),
             enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", default=False),
             enable_text_generation=_env_bool("HCMAI_ENABLE_TEXT_GENERATION", default=False),
@@ -119,6 +124,17 @@ class LocalAdapter:
             self.ocr_adapter._load()
         if self.text_generator is not None:
             self.text_generator.load()
+
+        if self.enable_objects:
+            from ultralytics import YOLOE
+
+            object_config = self.config.object_detection
+            self.object_detector = YOLOE(object_config.model)
+            if object_config.vocab_path is not None:
+                names = load_vocab(object_config.vocab_path)
+                self.object_detector.set_classes(
+                    names, self.object_detector.get_text_pe(names)
+                )
 
         if self.enable_asr and self.transcript_config:
             from offline.enrichment.transcripts.adapters.asr import ASRAdapter
@@ -180,6 +196,61 @@ class LocalAdapter:
             raise RuntimeError("caption model returned a per-image failure")
         return [str(value).strip() for value in results]
 
+    def objects(
+        self,
+        images: Sequence[Image.Image],
+        *,
+        min_confidence: float | None = None,
+        top_k: int | None = None,
+    ) -> list[dict[str, list[Any]]]:
+        """Run YOLOE and return the canonical raw parallel-array payload."""
+
+        if self.object_detector is None:
+            raise RuntimeError("object detection model is disabled")
+        config = self.config.object_detection
+        confidence = config.min_confidence if min_confidence is None else float(min_confidence)
+        maximum = config.top_k if top_k is None else int(top_k)
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError("min_confidence must be in [0, 1]")
+        if maximum < 1:
+            raise ValueError("top_k must be positive")
+
+        results = self.object_detector.predict(
+            list(images),
+            conf=confidence,
+            device=config.device,
+            verbose=False,
+        )
+        if len(results) != len(images):
+            raise RuntimeError("YOLOE returned the wrong result count")
+
+        payloads: list[dict[str, list[Any]]] = []
+        for result in results:
+            height, width = result.orig_shape
+            boxes = result.boxes
+            if boxes is None or len(boxes) == 0:
+                payloads.append({
+                    "detection_class_entities": [],
+                    "detection_scores": [],
+                    "detection_boxes": [],
+                })
+                continue
+            order = boxes.conf.argsort(descending=True)[:maximum]
+            payloads.append({
+                "detection_class_entities": [
+                    str(result.names[int(index)])
+                    for index in boxes.cls[order].tolist()
+                ],
+                "detection_scores": [
+                    min(1.0, max(0.0, float(score)))
+                    for score in boxes.conf[order].tolist()
+                ],
+                "detection_boxes": normalized_boxes(
+                    boxes.xyxy[order].tolist(), width, height
+                ),
+            })
+        return payloads
+
     def readiness(self) -> Any:
         """Report enabled capability readiness and checkpoint provenance."""
 
@@ -199,6 +270,13 @@ class LocalAdapter:
             path = Path(directory) / f"{payload.video_id}.flac"
             download_audio(payload, path)
             return self.asr.transcribe(path, payload.video_id)
+
+    def transcribe_file(self, audio_path: str | Path, video_id: str):
+        """Transcribe one already-uploaded local audio file."""
+
+        if self.asr is None:
+            raise RuntimeError("ASR capability is disabled")
+        return self.asr.transcribe(Path(audio_path), video_id)
 
     def diarize_reference(self, payload: Any):
         """Download audio and assign speakers to supplied transcript segments."""

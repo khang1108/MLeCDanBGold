@@ -12,6 +12,8 @@ from offline.enrichment.inference_contracts import (
     OCRItem,
     OCRRegionItem,
     OCRResponse,
+    ObjectItem,
+    ObjectResponse,
 )
 from offline.enrichment.ocr.models.entities import json_safe_ocr_raw
 from llm.server.dependencies import loaded_model_status, runtime_from, unavailable
@@ -95,6 +97,47 @@ async def ocr(
                 ],
             )
             for item_id, value in zip(identifiers, values)
+        ],
+        latency_ms=(perf_counter() - started) * 1_000,
+    )
+
+@router.post("/v1/enrichment/objects", response_model=ObjectResponse)
+async def objects(
+    request: Request,
+    item_ids: str = Form(),
+    min_confidence: float = Form(default=0.20),
+    top_k: int = Form(default=30),
+    images: list[UploadFile] = File(),
+) -> ObjectResponse:
+    """Detect objects in an ordered image batch using the hosted YOLOE model."""
+
+    identifiers, decoded = decode_images(item_ids, images, maximum=64)
+    started = perf_counter()
+    runtime = runtime_from(request)
+    try:
+        values = runtime.objects(
+            decoded, min_confidence=min_confidence, top_k=top_k
+        )
+        if len(values) != len(identifiers):
+            raise ValueError("object detector returned the wrong result count")
+        model_status = loaded_model_status(runtime, "objects")
+    except Exception as error:
+        raise unavailable("Object detection inference failed", error) from error
+    finally:
+        for image in decoded:
+            image.close()
+
+    return ObjectResponse(
+        model=model_status.checkpoint or "objects",
+        revision=model_status.revision,
+        items=[
+            ObjectItem(
+                item_id=item_id,
+                labels=list(value["detection_class_entities"]),
+                scores=list(value["detection_scores"]),
+                boxes=list(value["detection_boxes"]),
+            )
+            for item_id, value in zip(identifiers, values, strict=True)
         ],
         latency_ms=(perf_counter() - started) * 1_000,
     )

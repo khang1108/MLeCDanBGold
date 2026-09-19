@@ -1,0 +1,122 @@
+# Local-first VBS preparation. All durable artifacts stay below data/.
+# HCMAI_INFERENCE_BASE_URL points to the model API when remote inference is used.
+
+enrichment:
+  dataset:
+    version: vbs-local-v1
+    source: vbs_local_video
+    data_root: data
+    frame_store_id: vbs-local-v1
+    frames_path: data/artifacts/frames.parquet
+    frame_store_output: data/artifacts
+
+  caption:
+    output_dir: data/artifacts/captions
+    name: Qwen/Qwen3-VL-8B-Instruct
+    revision: 0c351dd01ed87e9c1b53cbc748cba10e6187ff3b
+    prompt: qwen vl
+    decoding:
+      max_new_tokens: 160
+      do_sample: false
+    device: cuda
+    precision: bf16
+    dtype: bfloat16
+    image_size: 768
+    batch_size: 8
+    enrichment_version: caption-v1
+    write_interval: 128
+
+  ocr:
+    output_dir: data/artifacts/ocr
+    enabled: true
+    backend: florence2
+    checkpoint: florence-community/Florence-2-base-ft
+    revision: 0b03b6f15a4a211370fb204aee4e7dd48887ea37
+    device: cuda
+    dtype: bfloat16
+    batch_size: 8
+    image_size: 768
+    enrichment_version: florence2-ocr-v1
+    min_region_confidence: 0.0
+    min_context_quality: 0.5
+    artifact_version: ocr-v1
+
+  # In VBS mode YOLOE runs on the model API; only its artifacts are stored here.
+  objects:
+    output_dir: data/artifacts/objects
+    model: yoloe-26l-seg-pf.pt
+    vocab_path: null
+    min_confidence: 0.20
+    top_k: 30
+    batch_size: 8
+    device: null
+    artifact_version: object-yoloe-v1
+    summary_min_confidence: 0.25
+    max_summary_labels: 20
+
+  transcript:
+    output_dir: data/artifacts/asr
+    frames_path: data/artifacts/frames.parquet
+    frame_enrichment_path: data/artifacts/asr/frame_enrichment.parquet
+    pipeline_version: transcript-pipeline-v1
+    schema_version: transcript-segment-v1
+    enrichment_version: asr-frame-v1
+    frame_evidence_window_ms: 2000
+    diarization:
+      enabled: false
+
+  context:
+    output_dir: data/artifacts/context
+    context_version: frame-context-v1
+    caption_token_budget: 80
+    ocr_token_budget: 80
+    object_token_budget: 40
+    min_ocr_quality: 0.5
+
+indexing:
+  build:
+    strict_visual_coverage: true
+    resume: true
+    visual_shard_size: 2048
+  indexes:
+    visual: data/indexes/visual
+    context: data/indexes/context
+    asr_segments: data/indexes/asr
+  projection:
+    max_projection_gap_ms: 5000
+
+models:
+  server:
+    host: 127.0.0.1
+    port: 8100
+  caption_generation:
+    model_checkpoint: Qwen/Qwen3-VL-8B-Instruct
+    revision: 0c351dd01ed87e9c1b53cbc748cba10e6187ff3b
+    prompt: qwen vl
+    decoding:
+      max_new_tokens: 160
+      do_sample: false
+    device: cuda
+    dtype: bfloat16
+  visual_embedding:
+    backend: siglip
+    name: google/siglip2-base-patch16-224
+    revision: 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2
+    device: cpu
+    batch_size: 16
+    image_size: 224
+    dtype: float32
+  caption_embedding:
+    backend: bge_m3
+    name: BAAI/bge-m3
+    revision: 5617a9f61b028005a4858fdac845db406aefb181
+    device: cpu
+    batch_size: 16
+    max_length: 1024
+    dtype: float32
+  object_detection:
+    model: yoloe-26l-seg-pf.pt
+    vocab_path: null
+    min_confidence: 0.20
+    top_k: 30
+    device: cuda

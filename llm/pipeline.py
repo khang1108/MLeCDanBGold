@@ -108,11 +108,33 @@ class LLMService:
         return self.adapter.ocr(images)
 
 
+    def objects(
+        self,
+        images: Any,
+        *,
+        min_confidence: float = 0.20,
+        top_k: int = 30,
+        item_ids: list[str] | None = None,
+    ) -> Any:
+        method = getattr(self.adapter, "objects", None)
+        if method is None:
+            raise RuntimeError("object detection is not supported by this provider")
+        kwargs = {"min_confidence": min_confidence, "top_k": top_k}
+        if item_ids is not None:
+            kwargs["item_ids"] = item_ids
+        return method(images, **kwargs)
+
     def boundary_scores(self, frames: Any, *, source: str) -> Any:
         return self.adapter.boundary_scores(frames, source=source)
 
     def transcribe_reference(self, payload: Any) -> Any:
         return self.adapter.transcribe_reference(payload)
+
+    def transcribe_file(self, audio_path: Any, video_id: str) -> Any:
+        method = getattr(self.adapter, "transcribe_file", None)
+        if method is None:
+            raise RuntimeError("ASR file upload is not supported by this provider")
+        return method(audio_path, video_id)
 
     def diarize_reference(self, payload: Any) -> Any:
         return self.adapter.diarize_reference(payload)

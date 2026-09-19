@@ -39,6 +39,16 @@ class HostedTextGenerationConfig(BaseModel):
     max_new_tokens: int = Field(default=2048, ge=64)
 
 
+class HostedObjectDetectionConfig(BaseModel):
+    """YOLOE settings owned by the hosted inference service."""
+
+    model: str = "yoloe-26l-seg-pf.pt"
+    vocab_path: str | None = None
+    min_confidence: float = Field(default=0.20, ge=0.0, le=1.0)
+    top_k: int = Field(default=30, ge=1)
+    device: str | None = None
+
+
 class LLMServiceConfig(BaseModel):
     """Hosted inference settings plus pinned dense encoder configurations."""
 
@@ -49,6 +59,9 @@ class LLMServiceConfig(BaseModel):
     visual_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     evidence_embedding: EncoderConfig | None = None
+    object_detection: HostedObjectDetectionConfig = Field(
+        default_factory=HostedObjectDetectionConfig
+    )
     text_generation: HostedTextGenerationConfig = Field(
         default_factory=HostedTextGenerationConfig
     )

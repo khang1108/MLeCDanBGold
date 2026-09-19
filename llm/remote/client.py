@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
+from pathlib import Path
+import uuid
 from time import perf_counter
 from typing import Any, Sequence
 
@@ -25,6 +28,7 @@ from offline.enrichment.inference_contracts import (
     DiarizationRequest,
     InferenceReadiness,
     OCRResponse,
+    ObjectResponse,
     TranscriptInferenceResponse,
 )
 
@@ -92,6 +96,37 @@ class InferenceClient:
         # Đảm bảo server không tự ý thay đổi số lượng hoặc thứ tự hình ảnh
         if [item.item_id for item in response.items] != item_ids:
             raise InferenceClientError("OCR provider changed item identity or order")
+        return response
+
+    def objects(
+        self,
+        images: Sequence[Image.Image],
+        *,
+        min_confidence: float = 0.20,
+        top_k: int = 30,
+        item_ids: list[str] | None = None,
+    ) -> ObjectResponse:
+        """Run hosted object detection while preserving caller item identity."""
+
+        identifiers = item_ids or [str(index) for index in range(len(images))]
+        if not identifiers or len(identifiers) != len(images):
+            raise ValueError("item_ids and images must be non-empty and aligned")
+        files = [
+            ("images", (f"{item_id}.jpg", _jpeg(image), "image/jpeg"))
+            for item_id, image in zip(identifiers, images, strict=True)
+        ]
+        payload = self._post(
+            "/v1/enrichment/objects",
+            data={
+                "item_ids": json.dumps(identifiers),
+                "min_confidence": str(float(min_confidence)),
+                "top_k": str(int(top_k)),
+            },
+            files=files,
+        )
+        response = _validated(ObjectResponse, payload)
+        if [item.item_id for item in response.items] != identifiers:
+            raise InferenceClientError("object provider changed item identity or order")
         return response
 
     def embed_images(
@@ -180,6 +215,36 @@ class InferenceClient:
             json=payload.model_dump(mode="json"),
         )
         return self._validated_transcript(payload, value)
+
+    def transcribe_audio_file(
+        self,
+        audio_path: str | Path,
+        *,
+        video_id: str,
+        sample_rate: int = 16_000,
+    ) -> TranscriptInferenceResponse:
+        """Upload one locally prepared audio file directly to the ASR API."""
+
+        path = Path(audio_path)
+        data = path.read_bytes()
+        request_id = uuid.uuid4().hex
+        digest = hashlib.sha256(data).hexdigest()
+        value = self._post(
+            "/v1/transcripts/asr-file",
+            data={
+                "request_id": request_id,
+                "video_id": video_id,
+                "sample_rate": str(sample_rate),
+                "audio_sha256": digest,
+            },
+            files=[("audio", (path.name, data, "audio/flac"))],
+        )
+        response = _validated(TranscriptInferenceResponse, value)
+        if response.request_id != request_id:
+            raise InferenceClientError("transcript provider changed request identity")
+        if response.video_id != video_id:
+            raise InferenceClientError("transcript provider changed video identity")
+        return response
 
     def diarize_audio_reference(self, payload: DiarizationRequest) -> TranscriptInferenceResponse:
         """Gửi URL audio kèm transcript để phân tách người nói (Diarization)."""

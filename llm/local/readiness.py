@@ -35,6 +35,7 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
     ocr_loaded = (
         adapter.ocr_adapter is not None and adapter.ocr_adapter.model is not None
     )
+    objects_loaded = getattr(adapter, "object_detector", None) is not None
     asr_loaded = adapter.asr is not None
     diarization_loaded = adapter.diarization is not None
     transcript_config = adapter.transcript_config
@@ -43,10 +44,12 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
         text_generator is not None and getattr(text_generator, "model", None) is not None
     )
     enable_text_gen = getattr(adapter, "enable_text_generation", False)
+    enable_objects = getattr(adapter, "enable_objects", False)
     return InferenceReadiness(
         ready=(not adapter.enable_caption or generator_loaded)
         and (not adapter.enable_visual_embedding or visual_loaded)
         and (not adapter.enable_ocr or ocr_loaded)
+        and (not enable_objects or objects_loaded)
         and (not adapter.enable_asr or asr_loaded)
         and (not adapter.enable_diarization or diarization_loaded)
         and (not enable_text_gen or text_generation_loaded),
@@ -80,6 +83,16 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
                     if adapter.ocr_adapter is not None
                     else None
                 ),
+            ),
+            "objects": _model_status(
+                enabled=enable_objects,
+                loaded=objects_loaded,
+                checkpoint=(
+                    adapter.config.object_detection.model
+                    if hasattr(adapter.config, "object_detection")
+                    else None
+                ),
+                revision=None,
             ),
             "asr": _model_status(
                 enabled=adapter.enable_asr,
@@ -126,6 +139,7 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
             image_embedding=visual_loaded,
             caption=generator_loaded,
             ocr=ocr_loaded,
+            objects=objects_loaded,
             asr=asr_loaded,
             diarization=diarization_loaded,
         ),

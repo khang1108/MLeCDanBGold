@@ -118,6 +118,9 @@ class InferenceClientPool:
     def ocr(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("ocr", *args, **kwargs)
 
+    def objects(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("objects", *args, **kwargs)
+
     def embed_images(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("embed_images", *args, **kwargs)
 
@@ -126,6 +129,9 @@ class InferenceClientPool:
 
     def transcribe_audio_reference(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("transcribe_audio_reference", *args, **kwargs)
+
+    def transcribe_audio_file(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("transcribe_audio_file", *args, **kwargs)
 
     def diarize_audio_reference(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("diarize_audio_reference", *args, **kwargs)

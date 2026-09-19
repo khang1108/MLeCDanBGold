@@ -112,6 +112,41 @@ class OCRResponse(ContractModel):
     latency_ms: float = Field(ge=0)
 
 
+class ObjectItem(ContractModel):
+    """One caller-owned image and normalized object detections."""
+
+    item_id: NonEmptyString
+    labels: list[NonEmptyString] = Field(default_factory=list)
+    scores: list[float] = Field(default_factory=list)
+    boxes: list[list[float]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_detections(self) -> Self:
+        if len({len(self.labels), len(self.scores), len(self.boxes)}) != 1:
+            raise ValueError("object detection arrays must have identical length")
+        for index, score in enumerate(self.scores):
+            if not 0.0 <= score <= 1.0:
+                raise ValueError(f"scores[{index}] must be in [0, 1]")
+        for index, box in enumerate(self.boxes):
+            if len(box) != 4:
+                raise ValueError(f"boxes[{index}] must contain four values")
+            ymin, xmin, ymax, xmax = box
+            if any(value < 0.0 or value > 1.0 for value in box):
+                raise ValueError(f"boxes[{index}] must be normalized to [0, 1]")
+            if ymin > ymax or xmin > xmax:
+                raise ValueError(f"boxes[{index}] minimum exceeds maximum")
+        return self
+
+
+class ObjectResponse(ContractModel):
+    """Ordered object detections returned by the hosted detector."""
+
+    model: NonEmptyString
+    revision: str | None = None
+    items: list[ObjectItem]
+    latency_ms: float = Field(ge=0)
+
+
 class _ReadinessModel(ContractModel):
     """Validated readiness and provenance for one hosted model."""
 
@@ -133,6 +168,7 @@ class _ReadinessCapabilities(ContractModel):
     image_embedding: bool = False
     caption: bool = False
     ocr: bool = False
+    objects: bool = False
     asr: bool = False
     diarization: bool = False
 
@@ -156,5 +192,7 @@ __all__ = [
     "OCRItem",
     "OCRRegionItem",
     "OCRResponse",
+    "ObjectItem",
+    "ObjectResponse",
     "TranscriptInferenceResponse",
 ]

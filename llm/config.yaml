@@ -48,3 +48,10 @@ text_generation:
   dtype: "bfloat16"
   max_input_tokens: 4096
   max_new_tokens: 2048
+
+object_detection:
+  model: "yoloe-26l-seg-pf.pt"
+  vocab_path: null
+  min_confidence: 0.20
+  top_k: 30
+  device: "cuda"
