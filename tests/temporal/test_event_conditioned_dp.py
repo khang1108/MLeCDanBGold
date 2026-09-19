@@ -83,21 +83,139 @@ def test_conditioned_path_score_matches_brute_force_focus_e0_all_sizes():
     assert mismatches == 0, f"{mismatches}/{total} mismatch(es) found"
 
 
-def brute_force(video, focus_event_index, focus_position, allowed, lambda_gap=0.0):
+def brute_force(
+    video,
+    focus_event_index,
+    focus_position,
+    allowed,
+    lambda_gap=0.0,
+    cluster_delta=0.0,
+):
+    """Reference exhaustive evaluator enforcing strict chronology and cluster constraints."""
+    from hcmai.temporal.dp import cluster_starts
+
     best = None
-    n_events, n_frames = video.scores.shape
+    scores = np.asarray(video.scores, dtype=np.float64)
+    n_events, n_frames = scores.shape
+    starts = (
+        cluster_starts(scores, cluster_delta)
+        if cluster_delta > 0.0
+        else np.arange(n_frames)
+    )
+    # If the video does not contain at least n_events distinct clusters, no valid path exists
+    if int(np.count_nonzero(starts == np.arange(n_frames))) < n_events:
+        return None
+
     timestamps = np.asarray(video.timestamps_ms, dtype=np.float64)
     for positions in itertools.combinations(range(n_frames), n_events):
         if positions[focus_event_index] != focus_position:
             continue
         if any(not allowed[e, p] for e, p in enumerate(positions)):
             continue
-        score = sum(float(video.scores[e, p]) for e, p in enumerate(positions))
+        # Cluster constraint: successor must not share the current frame's cluster
+        if any(starts[positions[e + 1]] < positions[e] + 1 for e in range(n_events - 1)):
+            continue
+        score = sum(float(scores[e, p]) for e, p in enumerate(positions))
         if lambda_gap > 0 and n_events > 1:
             score -= lambda_gap * (timestamps[positions[-1]] - timestamps[positions[0]])
         if best is None or score > best[0]:
             best = (score, positions)
     return best
+
+
+def test_conditioned_dp_brute_force_property_across_configurations():
+    """Exhaustive property test: align_video_conditioned matches brute force across seeds, deltas, and gaps."""
+    from hcmai.temporal.dp import align_video, cluster_starts
+
+    rng = np.random.default_rng(2026_09_19)
+    configs = [
+        # (n_events, n_frames, cluster_delta, lambda_gap)
+        (2, 3, 0.0, 0.0),
+        (2, 4, 0.25, 0.0),
+        (2, 5, 0.35, 1e-4),
+        (3, 4, 0.0, 1e-3),
+        (3, 5, 0.20, 0.0),
+        (3, 6, 0.30, 1e-4),
+    ]
+
+    total_tested = 0
+    for n_events, n_frames, cluster_delta, lambda_gap in configs:
+        for _ in range(8):
+            s = rng.random((n_events, n_frames), dtype=np.float32)
+            video = VideoEventScores(
+                video_id="v_prop",
+                frame_ids=np.array([f"f{i}" for i in range(n_frames)]),
+                frame_idx=np.arange(n_frames),
+                timestamps_ms=np.arange(n_frames, dtype=np.int64) * 1000,
+                scores=s,
+            )
+            allowed = np.ones((n_events, n_frames), dtype=bool)
+            starts = (
+                cluster_starts(s, cluster_delta)
+                if cluster_delta > 0.0
+                else np.arange(n_frames)
+            )
+
+            for focus_e in range(n_events):
+                paths = align_video_conditioned(
+                    video,
+                    focus_event_index=focus_e,
+                    allowed=allowed,
+                    lambda_gap=lambda_gap,
+                    cluster_delta=cluster_delta,
+                    max_paths=n_frames,
+                )
+                for p in paths:
+                    total_tested += 1
+                    focus_pos = p.focus_frame_position
+                    expected = brute_force(
+                        video,
+                        focus_e,
+                        focus_pos,
+                        allowed,
+                        lambda_gap=lambda_gap,
+                        cluster_delta=cluster_delta,
+                    )
+                    assert expected is not None, (
+                        f"DP returned path {p.path.frame_idx} for focus {focus_e}@{focus_pos} "
+                        f"but brute force found no valid path under cluster_delta={cluster_delta}"
+                    )
+                    assert abs(p.score - expected[0]) < 1e-5, (
+                        f"Score mismatch for focus {focus_e}@{focus_pos}: "
+                        f"DP={p.score} vs BruteForce={expected[0]}"
+                    )
+                    # Verify strict chronology
+                    pos_list = [int(idx) for idx in p.path.frame_idx]
+                    for a, b in zip(pos_list, pos_list[1:]):
+                        assert a < b, f"Chronology violated in {pos_list}"
+                        if cluster_delta > 0.0:
+                            assert starts[b] >= a + 1, (
+                                f"Cluster constraint violated between frame {a} (starts={starts[a]}) "
+                                f"and {b} (starts={starts[b]})"
+                            )
+
+            # Check that top-1 conditioned path across all focus positions matches unconditioned align_video
+            uncond_paths = align_video(
+                video,
+                allowed=allowed,
+                lambda_gap=lambda_gap,
+                cluster_delta=cluster_delta,
+                paths=1,
+            )
+            cond_e0_paths = align_video_conditioned(
+                video,
+                focus_event_index=0,
+                allowed=allowed,
+                lambda_gap=lambda_gap,
+                cluster_delta=cluster_delta,
+                max_paths=n_frames,
+            )
+            if uncond_paths:
+                assert cond_e0_paths, "Unconditioned found path but conditioned found none"
+                assert abs(uncond_paths[0].score - cond_e0_paths[0].score) < 1e-5
+                assert tuple(uncond_paths[0].frame_idx) == tuple(cond_e0_paths[0].path.frame_idx)
+
+    assert total_tested > 100, f"Expected >100 configurations tested, got {total_tested}"
 
 
 @pytest.fixture
