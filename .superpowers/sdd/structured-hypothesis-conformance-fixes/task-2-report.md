@@ -84,3 +84,35 @@ Observed output: **Compiled successfully.**
 - The full Jest run emits pre-existing jsdom canvas/network console noise in unrelated suites; all 51 suites and 361 tests still pass.
 - If an alternatives payload contains neither `mode_id` nor `alternative_id`, Reject receives `null` and the backend may reject it; the UI cannot invent an opaque identifier.
 - The working tree contains unrelated pre-existing script deletions; they were intentionally left untouched.
+
+## Fix round 1
+
+### Findings addressed
+
+- Reject is disabled unless a server-issued opaque `alternative_id`/current mode ID is available. `alternative_id` is the real API identifier; a missing ID can no longer produce `mode_id: null`.
+- Keep has no `onApprove` fallback in EventTrailPanel or EvidenceInspector and is disabled when its new `onKeep` callback is absent.
+- Every EventTrail mutation aborts and invalidates the active focus request before sending the mutation, preventing late alternatives from repopulating after Keep/Use/Reject.
+- SearchWorkspace publishes the active Query Hypothesis revision through `onQueryRevisionChange`; App stores it and passes it to ImageModal/EventTrailPanel instead of relying only on the source snapshot revision.
+- Selection regression coverage now asserts the focused-alternative loading callback, and alternative fixtures use `alternative_id` without invented `mode_id` fields.
+
+### Fix-round RED
+
+Command:
+
+```text
+CI=true npm test -- --runInBand src/features/event-trail/hooks/useEventTrail.test.js src/features/event-trail/components/EventTrailPanel.test.jsx src/features/frames/components/ImageModal.test.jsx src/features/search/components/SearchWorkspace.test.jsx src/App.test.jsx
+```
+
+Observed output: **4 suites failed, 1 passed; 4 tests failed, 109 passed**. The failures covered Keep fallback, Reject-without-ID, focus-after-mutation invalidation, and missing active-revision propagation/stale banner.
+
+### Fix-round GREEN
+
+Final focused command:
+
+```text
+CI=true npm test -- --runInBand --silent src/features/event-trail/hooks/useEventTrail.test.js src/features/event-trail/components/EventTrailPanel.test.jsx src/features/event-trail/components/HypothesisAlternatives.test.jsx src/features/frames/components/ImageModal.test.jsx src/features/search/components/SearchWorkspace.test.jsx src/App.test.jsx
+```
+
+Observed output: **6 suites passed; 117 tests passed**.
+
+No full 361-test suite or build was rerun in this fix round, per the accelerated verification instruction; the prior commit’s full-suite/build evidence remains above.

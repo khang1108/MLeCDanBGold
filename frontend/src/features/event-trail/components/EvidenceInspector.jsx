@@ -18,7 +18,6 @@ const EvidenceInspector = ({
   currentModeId = null,
   previewAlternative = null,
   onKeep,
-  onApprove,
   onRejectMode,
   onUse,
   onUseAlternative,
@@ -99,7 +98,7 @@ const EvidenceInspector = ({
               onClick={() =>
                 onUseAlternative?.(
                   selectedEventId,
-                  previewAlternative.alternative_id || previewAlternative.mode_id
+                  previewAlternative.alternative_id
                 )
               }
               title="Commit this complete-path alternative"
@@ -121,8 +120,8 @@ const EvidenceInspector = ({
         <button
           type="button"
           className="btn-primary event-trail-action-btn keep-btn approve-btn"
-          disabled={isApproved || isExhausted || pending}
-          onClick={() => (onKeep ? onKeep(selectedEventId) : onApprove?.(selectedEventId))}
+          disabled={isApproved || isExhausted || pending || !onKeep}
+          onClick={() => onKeep?.(selectedEventId)}
           title="Keep this candidate occurrence as an anchor"
         >
           Keep
@@ -131,7 +130,7 @@ const EvidenceInspector = ({
         <button
           type="button"
           className="btn-secondary event-trail-action-btn reject-btn"
-          disabled={isApproved || isExhausted || pending}
+          disabled={isApproved || isExhausted || pending || !currentModeId}
           onClick={() => onRejectMode?.(selectedEventId, currentModeId)}
           title="Reject this candidate occurrence to explore other temporal modes"
         >

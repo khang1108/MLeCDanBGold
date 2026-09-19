@@ -26,6 +26,7 @@ const AppShell = ({
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
   const [modalQuery, setModalQuery] = useState('');
+  const [activeQueryRevision, setActiveQueryRevision] = useState(null);
   const [topK, setTopK] = useState(20);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [eventTrailAnnotations, setEventTrailAnnotations] = useState({});
@@ -182,6 +183,7 @@ const AppShell = ({
             setTopK={setTopK}
             onFrameClick={handleQueryFrameClick}
             onQueryChange={setActiveQuery}
+            onQueryRevisionChange={setActiveQueryRevision}
             queryInputRef={queryInputRef}
             onEventTrailInvalidated={handleEventTrailInvalidated}
             eventTrailAnnotations={eventTrailAnnotations}
@@ -236,7 +238,7 @@ const AppShell = ({
             previewAlternativeState: eventTrail.previewAlternativeState,
             isLoadingAlternatives: eventTrail.isLoadingAlternatives,
             focusedEventId: eventTrail.focusedEventId,
-            currentQueryRevision: selectedFrame.eventTrailContext.kisRevision,
+            currentQueryRevision: activeQueryRevision ?? selectedFrame.eventTrailContext.kisRevision,
             focusEvent: eventTrail.focusEvent,
             previewAlternative: eventTrail.previewAlternative,
             clearPreview: eventTrail.clearPreview,

@@ -42,7 +42,7 @@ const HypothesisPathPreview = ({
             onClick={() =>
               onUseAlternative?.(
                 focusedEventId,
-                previewAlternative.alternative_id || previewAlternative.mode_id
+                previewAlternative.alternative_id
               )
             }
           >

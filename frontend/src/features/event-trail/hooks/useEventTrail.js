@@ -155,6 +155,13 @@ export const useEventTrail = () => {
       const current = sessionRef.current;
       if (!current?.session_id || pendingRef.current) return null;
 
+      focusControllerRef.current?.abort();
+      focusControllerRef.current = null;
+      focusRequestRef.current += 1;
+      setIsLoadingAlternatives(false);
+      setAlternatives([]);
+      setPreviewAlternativeState(null);
+
       const generation = generationRef.current;
       const controller = new AbortController();
       controllerRef.current = controller;
@@ -177,8 +184,6 @@ export const useEventTrail = () => {
 
         setCurrentSession(updated, keyRef.current);
         setError(null);
-        setPreviewAlternativeState(null);
-        setAlternatives([]);
         return updated;
       } catch (actError) {
         if (controller.signal.aborted) return null;

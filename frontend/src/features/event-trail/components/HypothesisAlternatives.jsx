@@ -38,7 +38,7 @@ const HypothesisAlternatives = ({
 
       <div className="hypothesis-alternatives-strip" role="list">
         {alternatives.map((alt) => {
-          const altId = alt.alternative_id || alt.mode_id;
+          const altId = alt.alternative_id;
           const isActive = activeAlternativeId === altId;
           const tsText = formatSeconds(alt.representative_timestamp_ms);
           const previewImg = alt.representative_frame_id

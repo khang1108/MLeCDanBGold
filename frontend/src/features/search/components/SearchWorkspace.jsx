@@ -90,6 +90,7 @@ const SearchWorkspace = ({
   isSubmissionOpening = false,
   userId,
   onQueryChange,
+  onQueryRevisionChange,
   isActive = true,
   onExplorationInvalidated,
   onEventTrailInvalidated,
@@ -690,9 +691,11 @@ const SearchWorkspace = ({
         action,
       );
       setQueryHypothesisState((prev) => receiveCommit(prev, commitRes));
+      const nextRevision = commitRes.query_revision ?? commitRes.intent?.revision ?? queryHypothesisState.queryRevision;
+      onQueryRevisionChange?.(nextRevision);
       setKisSession((prev) => ({
         ...prev,
-        revision: commitRes.query_revision ?? commitRes.intent?.revision ?? prev.revision,
+        revision: nextRevision ?? prev.revision,
         currentIntent: commitRes.intent ?? prev.currentIntent,
       }));
     } catch (err) {
@@ -700,7 +703,7 @@ const SearchWorkspace = ({
     } finally {
       setIsSearching(false);
     }
-  }, [queryHypothesisState.sessionId, queryHypothesisState.queryRevision]);
+  }, [onQueryRevisionChange, queryHypothesisState.sessionId, queryHypothesisState.queryRevision]);
 
   const handleUndoQueryHypothesis = useCallback(async () => {
     if (!queryHypothesisState.sessionId || !queryHypothesisState.canUndo) return;
@@ -711,9 +714,11 @@ const SearchWorkspace = ({
         queryHypothesisState.queryRevision,
       );
       setQueryHypothesisState((prev) => receiveCommit(prev, undoRes));
+      const nextRevision = undoRes.query_revision ?? undoRes.intent?.revision ?? queryHypothesisState.queryRevision;
+      onQueryRevisionChange?.(nextRevision);
       setKisSession((prev) => ({
         ...prev,
-        revision: undoRes.query_revision ?? undoRes.intent?.revision ?? prev.revision,
+        revision: nextRevision ?? prev.revision,
         currentIntent: undoRes.intent ?? prev.currentIntent,
       }));
     } catch (err) {
@@ -721,7 +726,7 @@ const SearchWorkspace = ({
     } finally {
       setIsSearching(false);
     }
-  }, [queryHypothesisState.sessionId, queryHypothesisState.queryRevision, queryHypothesisState.canUndo]);
+  }, [onQueryRevisionChange, queryHypothesisState.sessionId, queryHypothesisState.queryRevision, queryHypothesisState.canUndo]);
 
   const submit = useCallback(async (event) => {
     event?.preventDefault?.();
@@ -892,8 +897,8 @@ const SearchWorkspace = ({
       });
       if (controller.signal.aborted) return;
       setKisSession((prev) => commitSearchSuccess(prev, response));
+      const nextRev = response.intent?.revision ?? requestPayload.expectedRevision ?? 1;
       setQueryHypothesisState((prev) => {
-        const nextRev = response.intent?.revision ?? requestPayload.expectedRevision ?? 1;
         return {
           ...prev,
           sessionId: response.query_hypothesis_session_id || prev.sessionId,
@@ -904,6 +909,7 @@ const SearchWorkspace = ({
           error: null,
         };
       });
+      onQueryRevisionChange?.(nextRev);
 
       const eventTexts = Array.isArray(response.intent?.events)
         ? response.intent.events.map((e) => (typeof e === 'string' ? e : e.text))
@@ -995,6 +1001,7 @@ const SearchWorkspace = ({
     queryHypothesisState,
     notifyEventTrailInvalidated,
     onQueryChange,
+    onQueryRevisionChange,
     topK,
     useBm25,
     useDense,
@@ -1027,6 +1034,7 @@ const SearchWorkspace = ({
     setIsSearching(false);
     setKisSession(resetKisSession());
     setQueryHypothesisState(createInitialQueryHypothesisState());
+    onQueryRevisionChange?.(null);
     setFeedbackSession(resetFeedbackSession());
     handleClearFilter();
     setFrames([]);
@@ -1038,7 +1046,7 @@ const SearchWorkspace = ({
     setError(null);
     setSearchLatencyMs(null);
     onQueryChange?.('');
-  }, [handleClearFilter, notifyEventTrailInvalidated, onQueryChange]);
+  }, [handleClearFilter, notifyEventTrailInvalidated, onQueryChange, onQueryRevisionChange]);
 
   useEffect(() => {
     if (!isActive) return;

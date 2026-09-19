@@ -332,6 +332,19 @@ test('typing a new draft does not invoke onQueryChange; successful search calls 
   await waitFor(() => expect(onQueryChange).toHaveBeenCalledWith('committed query text'));
 });
 
+test('successful search publishes the active query hypothesis revision separately from query text', async () => {
+  const onQueryRevisionChange = jest.fn();
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'revisioned query',
+    revision: 7,
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn(), onQueryRevisionChange });
+  submit('revisioned query');
+
+  await waitFor(() => expect(onQueryRevisionChange).toHaveBeenCalledWith(7));
+});
+
 
 
 test('does not render the retired query-helper control', () => {

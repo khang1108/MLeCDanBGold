@@ -426,7 +426,7 @@ describe('useEventTrail', () => {
       session_id: baseSession.session_id,
       trail_revision: baseSession.trail_revision,
       event_id: 'E2',
-      alternatives: [{ alternative_id: 'alt_1', mode_id: 'm1', path: [] }],
+      alternatives: [{ alternative_id: 'alt_1', path: [] }],
     });
 
     const { result } = renderHook(() => useEventTrail());
@@ -494,6 +494,40 @@ describe('useEventTrail', () => {
     expect(result.current.isLoadingAlternatives).toBe(false);
   });
 
+  test('mutation invalidates an in-flight focus request before it can repopulate alternatives', async () => {
+    const baseSession = makeSession(0);
+    const focusedAlternatives = deferred();
+    const updatedSession = makeSession(1);
+    openEventTrail.mockResolvedValueOnce(baseSession);
+    getEventTrailAlternatives.mockReturnValueOnce(focusedAlternatives.promise);
+    actOnEventTrail.mockResolvedValueOnce(updatedSession);
+
+    const { result } = renderHook(() => useEventTrail());
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
+    });
+
+    let focusPromise;
+    act(() => {
+      focusPromise = result.current.focusEvent('E1');
+    });
+    const focusSignal = getEventTrailAlternatives.mock.calls[0][1].signal;
+
+    await act(async () => {
+      await result.current.keep('E1');
+    });
+    expect(focusSignal.aborted).toBe(true);
+
+    await act(async () => {
+      focusedAlternatives.resolve({ alternatives: [{ alternative_id: 'stale_alt' }] });
+      await focusPromise;
+    });
+
+    expect(result.current.alternatives).toEqual([]);
+    expect(result.current.previewAlternativeState).toBeNull();
+    expect(result.current.isLoadingAlternatives).toBe(false);
+  });
+
   test('previewAlternative updates local state and clearPreview resets it', async () => {
     const baseSession = makeSession(0);
     openEventTrail.mockResolvedValueOnce(baseSession);
@@ -503,7 +537,7 @@ describe('useEventTrail', () => {
       await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
     });
 
-    const alt = { alternative_id: 'alt_1', mode_id: 'm1', path: [] };
+    const alt = { alternative_id: 'alt_1', path: [] };
     act(() => {
       result.current.previewAlternative(alt);
     });

@@ -58,7 +58,7 @@ describe('EventTrailPanel', () => {
   });
 
   test('Step 2: action buttons respect approval and exhaustion state', () => {
-    const onApprove = jest.fn();
+    const onKeep = jest.fn();
     const onRejectMode = jest.fn();
     const onUse = jest.fn();
     const onClearAnchor = jest.fn();
@@ -69,7 +69,7 @@ describe('EventTrailPanel', () => {
         events={mockEvents}
         state={makeState()}
         selectedEventId="E1"
-        onApprove={onApprove}
+        onKeep={onKeep}
         onRejectMode={onRejectMode}
         onUse={onUse}
       />
@@ -80,15 +80,12 @@ describe('EventTrailPanel', () => {
     const useBtn = screen.getByRole('button', { name: /use \(manual frame\)/i });
 
     expect(keepBtn.disabled).toBe(false);
-    expect(rejectBtn.disabled).toBe(false);
+    expect(rejectBtn.disabled).toBe(true);
     expect(useBtn.disabled).toBe(false);
     expect(screen.queryByRole('button', { name: /clear anchor/i })).toBeNull();
 
     fireEvent.click(keepBtn);
-    expect(onApprove).toHaveBeenCalledWith('E1');
-
-    fireEvent.click(rejectBtn);
-    expect(onRejectMode).toHaveBeenCalledWith('E1', null);
+    expect(onKeep).toHaveBeenCalledWith('E1');
 
     fireEvent.click(useBtn);
     expect(onUse).toHaveBeenCalledWith('E1');
@@ -99,7 +96,7 @@ describe('EventTrailPanel', () => {
         events={mockEvents}
         state={makeState({ approved_event_ids: ['E1'] })}
         selectedEventId="E1"
-        onApprove={onApprove}
+        onKeep={onKeep}
         onRejectMode={onRejectMode}
         onUse={onUse}
         onClearAnchor={onClearAnchor}
@@ -119,7 +116,7 @@ describe('EventTrailPanel', () => {
         events={mockEvents}
         state={makeState({ status: 'exhausted', path: null })}
         selectedEventId="E1"
-        onApprove={onApprove}
+        onKeep={onKeep}
         onRejectMode={onRejectMode}
         onUse={onUse}
       />
@@ -131,13 +128,53 @@ describe('EventTrailPanel', () => {
     expect(screen.getByRole('button', { name: /^submit$/i }).disabled).toBe(true);
   });
 
-  test('reject occurrence submits mode id', () => {
+  test('Keep is disabled without onKeep and Reject is disabled without a server-issued mode id', () => {
+    const onApprove = jest.fn();
+    const onRejectMode = jest.fn();
+
+    render(
+      <EventTrailPanel
+        events={mockEvents}
+        state={makeState()}
+        selectedEventId="E1"
+        onApprove={onApprove}
+        onRejectMode={onRejectMode}
+      />
+    );
+
+    const keepButton = screen.getByRole('button', { name: /^keep$/i });
+    const rejectButton = screen.getByRole('button', { name: /reject occurrence/i });
+    expect(keepButton).toBeDisabled();
+    expect(rejectButton).toBeDisabled();
+
+    fireEvent.click(keepButton);
+    fireEvent.click(rejectButton);
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(onRejectMode).not.toHaveBeenCalled();
+  });
+
+  test('selecting an event invokes the focused-alternative loading callback', () => {
+    const onFocusEvent = jest.fn();
+    render(
+      <EventTrailPanel
+        events={mockEvents}
+        state={makeState()}
+        selectedEventId="E1"
+        onFocusEvent={onFocusEvent}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('event-rail-item-E2'));
+    expect(onFocusEvent).toHaveBeenCalledWith('E2');
+  });
+
+  test('reject occurrence submits the opaque alternative_id as mode id', () => {
     const onRejectMode = jest.fn();
     const propsWithFocusedMode = {
       events: mockEvents,
       state: makeState(),
       selectedEventId: 'E2',
-      focusedModeId: 'mode_current',
+      alternatives: [{ alternative_id: 'mode_current', is_current: true }],
       onRejectMode,
     };
     render(<EventTrailPanel {...propsWithFocusedMode} />);
@@ -333,4 +370,3 @@ describe('EventTrailPanel', () => {
     expect(onExitTrail).toHaveBeenCalledTimes(1);
   });
 });
-

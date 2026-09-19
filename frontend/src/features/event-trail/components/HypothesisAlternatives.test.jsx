@@ -6,7 +6,6 @@ import HypothesisAlternatives from './HypothesisAlternatives';
 const mockAlternatives = [
   {
     alternative_id: 'alt_current',
-    mode_id: 'alt_current',
     event_id: 'E1',
     representative_frame_id: 'f_curr',
     representative_frame_idx: 100,
@@ -17,7 +16,6 @@ const mockAlternatives = [
   },
   {
     alternative_id: 'alt_later',
-    mode_id: 'alt_later',
     event_id: 'E1',
     representative_frame_id: 'f_later',
     representative_frame_idx: 700,

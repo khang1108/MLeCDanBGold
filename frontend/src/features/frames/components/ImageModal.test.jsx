@@ -343,7 +343,6 @@ test('Result Hypothesis Explorer wires focus, preview, Keep, Use, and Reject act
   const rejectMode = jest.fn();
   const alternative = {
     alternative_id: 'opaque-alternative-42',
-    mode_id: 'opaque-mode-42',
     event_id: 'E2',
     path: [
       { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
@@ -430,11 +429,11 @@ test('Result Hypothesis Explorer wires focus, preview, Keep, Use, and Reject act
   expect(useAlternative).toHaveBeenCalledWith('E2', 'opaque-alternative-42');
 
   fireEvent.click(screen.getByRole('button', { name: /reject occurrence/i }));
-  expect(rejectMode).toHaveBeenCalledWith('E2', 'opaque-mode-42');
+  expect(rejectMode).toHaveBeenCalledWith('E2', 'opaque-alternative-42');
   expect(clearPreview).not.toHaveBeenCalled();
 });
 
-test('Step 3: Result Hypothesis Explorer Reject does not use legacy decline action', async () => {
+test('Step 3: Result Hypothesis Explorer Reject is disabled without an opaque alternative id', async () => {
   const state = {
     session_id: 'ses_1',
     result_id: 'r_1',
@@ -473,8 +472,9 @@ test('Step 3: Result Hypothesis Explorer Reject does not use legacy decline acti
   fireEvent.click(screen.getByTestId('event-rail-item-E2'));
 
   const rejectBtn = screen.getByRole('button', { name: /reject occurrence/i });
+  expect(rejectBtn).toBeDisabled();
   fireEvent.click(rejectBtn);
-  expect(rejectMode).toHaveBeenCalledWith('E2', null);
+  expect(rejectMode).not.toHaveBeenCalled();
 });
 
 test('Step 4: Use current video timestamp replaces canonical candidate and sets submission_selection', async () => {
