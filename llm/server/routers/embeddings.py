@@ -8,10 +8,44 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 import numpy as np
 
 from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse
+from llm.contracts import TextEmbeddingData, TextEmbeddingRequest, TextEmbeddingResponse
 from llm.server.dependencies import loaded_model_status, runtime_from, unavailable
 from llm.server.parsing import decode_images
 
 router = APIRouter(prefix="/v1/embeddings", tags=["embeddings"])
+
+
+@router.post("", response_model=TextEmbeddingResponse)
+@router.post("/text", response_model=TextEmbeddingResponse)
+async def embed_text(
+    payload: TextEmbeddingRequest,
+    request: Request,
+) -> TextEmbeddingResponse:
+    """Embed an ordered text batch with the configured evidence encoder."""
+
+    runtime = runtime_from(request)
+    started = perf_counter()
+    try:
+        vectors = np.asarray(runtime.embed_text(payload.input))
+        if vectors.ndim != 2 or vectors.shape[0] != len(payload.input):
+            raise ValueError("text encoder returned the wrong result shape")
+        if not np.all(np.isfinite(vectors)):
+            raise ValueError("text encoder returned non-finite vectors")
+        model_status = loaded_model_status(runtime, "caption_embedding")
+        expected = model_status.checkpoint
+        if expected and payload.model != expected:
+            raise ValueError(
+                f"requested text embedding model {payload.model!r} does not match loaded {expected!r}"
+            )
+    except Exception as error:
+        raise unavailable("Text embedding inference failed", error) from error
+    return TextEmbeddingResponse(
+        model=model_status.checkpoint or payload.model,
+        data=[
+            TextEmbeddingData(index=index, embedding=vector.tolist())
+            for index, vector in enumerate(vectors)
+        ],
+    )
 
 
 @router.post("/images", response_model=EmbeddingResponse)

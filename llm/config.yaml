@@ -4,6 +4,17 @@ server:
   port: 8100
 
 
+
+caption_generation:
+  model_checkpoint: "Qwen/Qwen3-VL-2B-Instruct"
+  revision: null
+  prompt: "Describe the image for video retrieval. Mention the main people, objects, actions, scene, location, and visible event. Be concise and factual."
+  decoding:
+    max_new_tokens: 64
+    do_sample: false
+  device: "cuda"
+  dtype: "bfloat16"
+
 # ============================================================
 # EMBEDDING MODELS ONLY
 # ============================================================

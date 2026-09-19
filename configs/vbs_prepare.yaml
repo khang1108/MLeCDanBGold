@@ -1,30 +1,70 @@
-# Local-first VBS preparation. All durable artifacts stay below data/.
-# HCMAI_INFERENCE_BASE_URL points to the model API when remote inference is used.
+# Local-first V3C preparation for VBS.
+# Source MP4 files are read-only on HDD. Durable generated data stays local.
+# Model calls are split by capability:
+#   core -> api.iamphuckhang.dev (embeddings / text API)
+#   gpu  -> gpu.iamphuckhang.dev (single-A6000 heavy inference)
+
+paths:
+  videos_root: /home/phuckhang/hdd/V3C/videos
+  work_root: data
+  frames_root: data/frames
+  artifacts_root: data/artifacts
+  indexes_root: data/indexes
+  state_root: data/state
+
+inference:
+  core:
+    base_url: https://api.iamphuckhang.dev
+    timeout_seconds: 180
+    max_concurrency: 8
+    endpoints:
+      visual_embedding: /v1/embeddings/images
+      text_embedding: /v1/embeddings/text
+      chat_completions: /v1/chat/completions
+      health: /health
+      ready: /ready
+
+  gpu:
+    base_url: https://gpu.iamphuckhang.dev
+    timeout_seconds: 600
+    # One RTX A6000: keep one heavy model task active at a time.
+    max_concurrency: 1
+    endpoints:
+      caption: /v1/captions
+      ocr: /v1/enrichment/ocr
+      objects: /v1/enrichment/objects
+      asr_file: /v1/transcripts/asr-file
+      health: /health
+      ready: /ready
 
 enrichment:
   dataset:
-    version: vbs-local-v1
-    source: vbs_local_video
+    version: v3c-v1
+    source: v3c_local_video
     data_root: data
-    frame_store_id: vbs-local-v1
+    frame_store_id: v3c-v1
     frames_path: data/artifacts/frames.parquet
     frame_store_output: data/artifacts
 
   caption:
     output_dir: data/artifacts/captions
-    name: Qwen/Qwen3-VL-8B-Instruct
-    revision: 0c351dd01ed87e9c1b53cbc748cba10e6187ff3b
-    prompt: qwen vl
+    name: Qwen/Qwen3-VL-2B-Instruct
+    revision: null
+    prompt: >-
+      Describe the image for video retrieval. Mention the main people, objects,
+      actions, scene, location, and visible event. Be concise and factual.
     decoding:
-      max_new_tokens: 160
+      max_new_tokens: 64
       do_sample: false
+    # These fields describe the remote model and are retained for the existing
+    # artifact/provenance schema; the offline preparation client does not load it.
     device: cuda
     precision: bf16
     dtype: bfloat16
-    image_size: 768
-    batch_size: 8
-    enrichment_version: caption-v1
-    write_interval: 128
+    image_size: 512
+    batch_size: 16
+    enrichment_version: qwen3-vl-2b-caption-v1
+    write_interval: 256
 
   ocr:
     output_dir: data/artifacts/ocr
@@ -34,21 +74,20 @@ enrichment:
     revision: 0b03b6f15a4a211370fb204aee4e7dd48887ea37
     device: cuda
     dtype: bfloat16
-    batch_size: 8
+    batch_size: 16
     image_size: 768
     enrichment_version: florence2-ocr-v1
     min_region_confidence: 0.0
     min_context_quality: 0.5
     artifact_version: ocr-v1
 
-  # In VBS mode YOLOE runs on the model API; only its artifacts are stored here.
   objects:
     output_dir: data/artifacts/objects
     model: yoloe-26l-seg-pf.pt
     vocab_path: null
     min_confidence: 0.20
     top_k: 30
-    batch_size: 8
+    batch_size: 16
     device: null
     artifact_version: object-yoloe-v1
     summary_min_confidence: 0.25
@@ -77,43 +116,53 @@ indexing:
   build:
     strict_visual_coverage: true
     resume: true
-    visual_shard_size: 2048
+    visual_shard_size: 4096
+
   indexes:
     visual: data/indexes/visual
     context: data/indexes/context
     asr_segments: data/indexes/asr
+
   projection:
     max_projection_gap_ms: 5000
 
+# Pinned model identities used by index metadata/readiness validation.
+# Offline preparation uses the remote core API when --inference-url is supplied.
 models:
   server:
     host: 127.0.0.1
     port: 8100
+
   caption_generation:
-    model_checkpoint: Qwen/Qwen3-VL-8B-Instruct
-    revision: 0c351dd01ed87e9c1b53cbc748cba10e6187ff3b
-    prompt: qwen vl
+    model_checkpoint: Qwen/Qwen3-VL-2B-Instruct
+    revision: null
+    prompt: >-
+      Describe the image for video retrieval. Mention the main people, objects,
+      actions, scene, location, and visible event. Be concise and factual.
     decoding:
-      max_new_tokens: 160
+      max_new_tokens: 64
       do_sample: false
     device: cuda
     dtype: bfloat16
+
   visual_embedding:
     backend: siglip
     name: google/siglip2-base-patch16-224
     revision: 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2
     device: cpu
-    batch_size: 16
+    batch_size: 32
     image_size: 224
     dtype: float32
+
   caption_embedding:
     backend: bge_m3
     name: BAAI/bge-m3
     revision: 5617a9f61b028005a4858fdac845db406aefb181
     device: cpu
-    batch_size: 16
+    batch_size: 32
     max_length: 1024
     dtype: float32
+
   object_detection:
     model: yoloe-26l-seg-pf.pt
     vocab_path: null

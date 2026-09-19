@@ -10,7 +10,7 @@ from time import perf_counter
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 
-from offline.enrichment.inference_contracts import (
+from llm.contracts import (
     AudioReferenceRequest,
     DiarizationRequest,
     TranscriptInferenceResponse,

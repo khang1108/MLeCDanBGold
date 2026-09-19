@@ -9,6 +9,7 @@ from pathlib import Path
 
 from hcmai.common.config import AppConfig
 from hcmai.common.utils.logging import configure_logging, get_logger
+from offline.clients.endpoints import resolve_gpu_url
 from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
 from offline.enrichment.pipeline import EnrichmentJobConfig, EnrichmentService
 
@@ -54,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     app_path = Path(args.app_config)
     settings = AppConfig.from_yaml(app_path) if app_path.is_file() else AppConfig()
-    base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
+    base_url = resolve_gpu_url(args.config, settings.inference.base_url)
     from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
     from llm.pipeline import LLMService
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from offline.enrichment.inference_contracts import InferenceReadiness
+from llm.contracts import InferenceReadiness
 
 
 def _model_status(**values: object) -> Any:
@@ -32,13 +32,17 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
     visual_loaded = (
         adapter.visual_encoder is not None and adapter.visual_encoder.model is not None
     )
+    text_loaded = (
+        getattr(adapter, "text_encoder", None) is not None
+        and getattr(adapter.text_encoder, "model", None) is not None
+    )
     ocr_loaded = (
         adapter.ocr_adapter is not None and adapter.ocr_adapter.model is not None
     )
     objects_loaded = getattr(adapter, "object_detector", None) is not None
     asr_loaded = adapter.asr is not None
     diarization_loaded = adapter.diarization is not None
-    transcript_config = adapter.transcript_config
+    transcript_config = getattr(adapter, "transcript_config", None)
     text_generator = getattr(adapter, "text_generator", None)
     text_generation_loaded = (
         text_generator is not None and getattr(text_generator, "model", None) is not None
@@ -48,6 +52,7 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
     return InferenceReadiness(
         ready=(not adapter.enable_caption or generator_loaded)
         and (not adapter.enable_visual_embedding or visual_loaded)
+        and (not getattr(adapter, "enable_text_embedding", False) or text_loaded)
         and (not adapter.enable_ocr or ocr_loaded)
         and (not enable_objects or objects_loaded)
         and (not adapter.enable_asr or asr_loaded)
@@ -69,6 +74,12 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
                 loaded=visual_loaded,
                 checkpoint=adapter.config.visual_embedding.model_name,
                 revision=adapter.config.visual_embedding.revision,
+            ),
+            "caption_embedding": _model_status(
+                enabled=getattr(adapter, "enable_text_embedding", False),
+                loaded=text_loaded,
+                checkpoint=adapter.config.caption_embedding.model_name,
+                revision=adapter.config.caption_embedding.revision,
             ),
             "ocr": _model_status(
                 enabled=adapter.enable_ocr,
@@ -134,7 +145,7 @@ def build_readiness(adapter: Any) -> InferenceReadiness:
             ),
         },
         capabilities=_capabilities(
-            embedding=visual_loaded,
+            embedding=text_loaded,
             structured_parsing=text_generation_loaded,
             image_embedding=visual_loaded,
             caption=generator_loaded,

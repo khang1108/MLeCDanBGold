@@ -34,6 +34,7 @@ from offline.enrichment.caption.models.contracts import CaptionAdapter
 from offline.enrichment.caption.report import build_manifest
 from offline.enrichment.caption.resume import guard_resume, resume_rows
 from offline.enrichment.caption.runner import run_batches
+from offline.clients.endpoints import resolve_gpu_url
 from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
 
 
@@ -180,10 +181,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from offline.enrichment.caption.adapters.remote import RemoteCaptionAdapter
 
-    service = LLMService.remote(
-        os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url),
-        settings.inference,
-    )
+    base_url = resolve_gpu_url(args.config, settings.inference.base_url)
+    service = LLMService.remote(base_url, settings.inference)
     try:
         manifest = generate_captions(
             args.frames or job.frames_path,

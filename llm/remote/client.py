@@ -17,13 +17,8 @@ from hcmai.common.config import InferenceConfig
 from hcmai.common.utils.logging import get_logger
 from hcmai.retrieval.embedding.inference_contracts import EmbeddingResponse
 from llm.contracts import (
-    BoundaryScoreResponse,
-)
-
-from llm.remote.gateway import InferenceGateway, InferenceGatewayError
-from llm.remote.resilience import FailureCategory
-from offline.enrichment.inference_contracts import (
     AudioReferenceRequest,
+    BoundaryScoreResponse,
     CaptionResponse,
     DiarizationRequest,
     InferenceReadiness,
@@ -31,6 +26,9 @@ from offline.enrichment.inference_contracts import (
     ObjectResponse,
     TranscriptInferenceResponse,
 )
+
+from llm.remote.gateway import InferenceGateway, InferenceGatewayError
+from llm.remote.resilience import FailureCategory
 
 
 logger = get_logger(__name__)

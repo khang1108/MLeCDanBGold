@@ -23,7 +23,6 @@ from offline.enrichment.object_detection import load_vocab, normalized_boxes
 from offline.enrichment.pipeline import EnrichmentService
 from llm.local.audio import download_audio
 from llm.local.readiness import build_readiness
-from llm.local.text_generation import TextGenerationAdapter
 
 
 class LocalAdapter:
@@ -35,12 +34,14 @@ class LocalAdapter:
         self,
         config: LLMServiceConfig,
         visual_encoder: Any | None = None,
+        text_encoder: Any | None = None,
         captioner: Any | None = None,
         ocr_adapter: Any | None = None,
         text_generator: Any | None = None,
         *,
         enable_caption: bool = True,
         enable_visual_embedding: bool = True,
+        enable_text_embedding: bool = True,
         enable_ocr: bool = False,
         enable_objects: bool = False,
         enable_asr: bool = False,
@@ -52,6 +53,7 @@ class LocalAdapter:
         self.transcript_config = transcript_config
         self.enable_caption = enable_caption
         self.enable_visual_embedding = enable_visual_embedding
+        self.enable_text_embedding = enable_text_embedding
         self.enable_ocr = enable_ocr
         self.enable_objects = enable_objects
         self.enable_asr = enable_asr
@@ -63,8 +65,13 @@ class LocalAdapter:
         self.diarization = None
 
         self.visual_encoder = visual_encoder or (
-            cast(Any, EmbeddingService.create_text_adapter(config.visual_embedding))
+            cast(Any, EmbeddingService.create_visual_adapter(config.visual_embedding))
             if enable_visual_embedding
+            else None
+        )
+        self.text_encoder = text_encoder or (
+            cast(Any, EmbeddingService.create_text_adapter(config.caption_embedding))
+            if enable_text_embedding
             else None
         )
         self.captioner = captioner or (
@@ -83,11 +90,14 @@ class LocalAdapter:
             if enable_ocr
             else None
         )
-        self.text_generator: Any = text_generator or (
-            TextGenerationAdapter(config.text_generation)
-            if enable_text_generation
-            else None
-        )
+        if text_generator is not None:
+            self.text_generator = text_generator
+        elif enable_text_generation:
+            from llm.local.text_generation import TextGenerationAdapter
+
+            self.text_generator = TextGenerationAdapter(config.text_generation)
+        else:
+            self.text_generator = None
 
     @classmethod
     def from_environment(cls) -> LocalAdapter:
@@ -99,15 +109,17 @@ class LocalAdapter:
             TranscriptJobConfig.from_yaml(enrichment_path) if enrichment_path.exists() else None
         )
 
+        flags = _profile_flags()
         return cls(
             config,
-            enable_caption=_env_bool("HCMAI_ENABLE_CAPTION"),
-            enable_visual_embedding=_env_bool("HCMAI_ENABLE_VISUAL_EMBEDDING"),
-            enable_ocr=_env_bool("HCMAI_ENABLE_OCR"),
-            enable_objects=_env_bool("HCMAI_ENABLE_OBJECTS", default=False),
-            enable_asr=_env_bool("HCMAI_ENABLE_ASR", default=False),
-            enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", default=False),
-            enable_text_generation=_env_bool("HCMAI_ENABLE_TEXT_GENERATION", default=False),
+            enable_caption=_env_bool("HCMAI_ENABLE_CAPTION", flags["caption"]),
+            enable_visual_embedding=_env_bool("HCMAI_ENABLE_VISUAL_EMBEDDING", flags["visual_embedding"]),
+            enable_text_embedding=_env_bool("HCMAI_ENABLE_TEXT_EMBEDDING", flags["text_embedding"]),
+            enable_ocr=_env_bool("HCMAI_ENABLE_OCR", flags["ocr"]),
+            enable_objects=_env_bool("HCMAI_ENABLE_OBJECTS", flags["objects"]),
+            enable_asr=_env_bool("HCMAI_ENABLE_ASR", flags["asr"]),
+            enable_diarization=_env_bool("HCMAI_ENABLE_DIARIZATION", flags["diarization"]),
+            enable_text_generation=_env_bool("HCMAI_ENABLE_TEXT_GENERATION", flags["text_generation"]),
             transcript_config=transcript_config,
         )
 
@@ -120,6 +132,8 @@ class LocalAdapter:
             self.captioner.resolve_revision()
         if self.visual_encoder is not None:
             self.visual_encoder._load_model()
+        if self.text_encoder is not None:
+            self.text_encoder._load_model()
         if self.ocr_adapter is not None:
             self.ocr_adapter._load()
         if self.text_generator is not None:
@@ -165,6 +179,12 @@ class LocalAdapter:
             temperature=temperature,
             max_tokens=max_tokens,
         )
+
+    def embed_text(self, texts: Sequence[str]) -> np.ndarray:
+        """Encode text with the hosted evidence embedding model."""
+        if self.text_encoder is None:
+            raise RuntimeError("text embedding model is disabled")
+        return self.text_encoder.encode_text(list(texts))
 
     def embed_images(
         self,
@@ -287,6 +307,36 @@ class LocalAdapter:
             path = Path(directory) / f"{payload.video_id}.flac"
             download_audio(payload, path)
             return self.diarization.assign_speakers(path, payload.segments)
+
+
+def _profile_flags() -> dict[str, bool]:
+    """Resolve safe defaults for the core or single-A6000 GPU deployment."""
+
+    profile = os.getenv("HCMAI_LLM_PROFILE", "manual").strip().lower()
+    base = {
+        "caption": False,
+        "visual_embedding": False,
+        "text_embedding": False,
+        "ocr": False,
+        "objects": False,
+        "asr": False,
+        "diarization": False,
+        "text_generation": False,
+    }
+    if profile == "manual":
+        return base
+    if profile == "core":
+        base.update(visual_embedding=True, text_embedding=True)
+        return base
+    if profile == "gpu":
+        task = os.getenv("HCMAI_GPU_TASK", "caption").strip().lower()
+        aliases = {"caption": "caption", "ocr": "ocr", "objects": "objects", "asr": "asr"}
+        try:
+            base[aliases[task]] = True
+        except KeyError as error:
+            raise ValueError("HCMAI_GPU_TASK must be one of: caption, ocr, objects, asr") from error
+        return base
+    raise ValueError("HCMAI_LLM_PROFILE must be one of: manual, core, gpu")
 
 
 def _env_bool(name: str, default: bool = False) -> bool:

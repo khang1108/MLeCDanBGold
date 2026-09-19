@@ -66,10 +66,13 @@ class RemoteUploadASRAdapter:
         if response.video_id != video_id:
             raise ValueError("remote transcript changed video identity")
         return [
-            segment.model_copy(update={
-                "model_name": response.model,
-                "model_revision": response.revision,
-                "artifact_version": "asr-segment-v1",
-            })
+            TranscriptSegment.model_validate(
+                segment.model_dump(mode="python")
+                | {
+                    "model_name": response.model,
+                    "model_revision": response.revision,
+                    "artifact_version": "asr-segment-v1",
+                }
+            )
             for segment in response.segments
         ]

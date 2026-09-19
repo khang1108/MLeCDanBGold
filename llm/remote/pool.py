@@ -7,7 +7,7 @@ from typing import Any, Callable, Protocol, Sequence
 
 from hcmai.common.config import InferenceConfig
 from llm.remote.client import InferenceClient
-from offline.enrichment.inference_contracts import InferenceReadiness
+from llm.contracts import InferenceReadiness
 
 
 class EndpointPoolConfig(Protocol):

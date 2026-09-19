@@ -1,3 +1,5 @@
+> **Legacy note:** This document describes the first local refactor. For the current two-domain V3C pipeline, use `docs/VBS_LOCAL_PIPELINE_V2.md`.
+
 # VBS local data layout
 
 The VBS preparation path has one local source of truth:

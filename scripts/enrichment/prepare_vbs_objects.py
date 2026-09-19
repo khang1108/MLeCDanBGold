@@ -11,6 +11,8 @@ from PIL import Image
 
 from hcmai.common.utils.logging import configure_logging, get_logger
 from llm.pipeline import LLMService
+from offline.clients.endpoints import resolve_gpu_url
+from offline.config import VBSConfig
 from offline.artifact_readers import FrameAssetError, OfflineFrameAssetResolver
 from offline.enrichment.object_detection import (
     materialize_object_artifacts,
@@ -34,11 +36,8 @@ def _positive_int(value: str) -> int:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--data", type=Path, default=Path("data"))
-    parser.add_argument(
-        "--inference-url",
-        default=os.getenv("HCMAI_INFERENCE_BASE_URL", "http://127.0.0.1:8100"),
-    )
+    parser.add_argument("--data", type=Path)
+    parser.add_argument("--inference-url")
     parser.add_argument("--timeout", type=float, default=180.0)
     parser.add_argument("--limit", type=_positive_int)
     parser.add_argument("--log-level", default="INFO")
@@ -50,15 +49,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging(args.log_level)
     job = EnrichmentJobConfig.from_yaml(args.config)
     config = job.objects
+    vbs = VBSConfig.from_yaml(args.config)
 
-    data_root = args.data.expanduser().resolve()
+    data_root = (args.data or vbs.paths.work_root).expanduser().resolve()
     frames_path = Path(job.frames_path).expanduser().resolve()
     output = Path(job.object_output_dir).expanduser().resolve()
     raw_root = output / "raw"
     resolver = OfflineFrameAssetResolver(data_root)
     pending = pending_frames(frames_path, raw_root, args.limit)
 
-    service = LLMService.remote(args.inference_url, timeout_seconds=args.timeout)
+    inference_url = args.inference_url or resolve_gpu_url(args.config)
+    service = LLMService.remote(inference_url, timeout_seconds=args.timeout)
     completed = skipped = 0
     try:
         readiness = service.readiness()
@@ -121,7 +122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     manifest.update(
         inference_backend="remote_api",
-        inference_url=args.inference_url,
+        inference_url=inference_url,
         inference_completed_frames=completed,
         inference_skipped_frames=skipped,
     )

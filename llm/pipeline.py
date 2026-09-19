@@ -83,6 +83,13 @@ class LLMService:
             }
         return method()
 
+    def embed_text(self, texts: Any) -> Any:
+        """Embed text through the configured local or remote provider."""
+        method = getattr(self.adapter, "embed_text", None)
+        if method is None:
+            raise RuntimeError("text embedding is not supported by this provider")
+        return method(texts)
+
     def embed_images(
         self,
         images: Any,
