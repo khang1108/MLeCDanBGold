@@ -8,6 +8,81 @@ from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.dp import align_video_conditioned
 
 
+def test_conditioned_path_never_reuses_frame_for_focus_e0():
+    """Two events, two frames: no valid path can reuse the same frame.
+
+    Bug: searchsorted(source, frames) returned t as a valid successor of t,
+    producing path (0, 0) with score 1.2 instead of the only valid strict
+    path (0, 1) with score 0.7.
+    """
+    # E0 scores: frame0=0.4, frame1=0.6
+    # E1 scores: frame0=0.8, frame1=0.3
+    # Invalid optimum (same frame): E0@frame0, E1@frame0 → score=1.2
+    # Valid strict optimum:         E0@frame0, E1@frame1 → score=0.7
+    scores = np.array([[0.4, 0.6], [0.8, 0.3]], dtype=np.float32)
+    video = VideoEventScores(
+        video_id="v_strict",
+        frame_ids=np.array(["f0", "f1"]),
+        frame_idx=np.array([0, 1]),
+        timestamps_ms=np.array([0, 1000], dtype=np.int64),
+        scores=scores,
+    )
+    allowed = np.ones_like(scores, dtype=bool)
+    paths = align_video_conditioned(
+        video, focus_event_index=0, allowed=allowed,
+        lambda_gap=0.0, max_paths=4
+    )
+    # Must return at least one path (the valid one)
+    assert len(paths) >= 1
+    for p in paths:
+        # frame_idx values are the organizer-facing indices (0, 10, 20, …)
+        # but for this fixture frame_idx = [0, 1]; positions in score matrix
+        # are the indices of the frame_idx array.
+        positions = [int(np.where(video.frame_idx == idx)[0][0]) for idx in p.path.frame_idx]
+        for a, b in zip(positions, positions[1:]):
+            assert a < b, (
+                f"Path {p.path.frame_idx} violates strict chronology: "
+                f"score matrix positions {positions}"
+            )
+
+
+def test_conditioned_path_score_matches_brute_force_focus_e0_all_sizes():
+    """Exhaustive random correctness: focus on first event across small sizes."""
+    rng = np.random.default_rng(2026)
+    mismatches = 0
+    total = 0
+    for n_events, n_frames in [(2, 2), (2, 3), (3, 3), (3, 4)]:
+        for _ in range(30):
+            s = rng.random((n_events, n_frames))
+            video = VideoEventScores(
+                video_id="v_rand",
+                frame_ids=np.array([f"f{i}" for i in range(n_frames)]),
+                frame_idx=np.arange(n_frames),
+                timestamps_ms=np.arange(n_frames, dtype=np.int64) * 1000,
+                scores=s.astype(np.float32),
+            )
+            allowed = np.ones((n_events, n_frames), dtype=bool)
+            paths = align_video_conditioned(
+                video, focus_event_index=0, allowed=allowed,
+                lambda_gap=0.0, max_paths=n_frames
+            )
+            for p in paths:
+                focus_pos = p.focus_frame_position
+                # Brute-force: all strictly-increasing combinations with E0 at focus_pos
+                best = None
+                for combo in itertools.combinations(range(n_frames), n_events):
+                    if combo[0] != focus_pos:
+                        continue
+                    score = sum(float(s[e, combo[e]]) for e in range(n_events))
+                    if best is None or score > best:
+                        best = score
+                if best is not None:
+                    total += 1
+                    if abs(p.score - best) > 1e-5:
+                        mismatches += 1
+    assert mismatches == 0, f"{mismatches}/{total} mismatch(es) found"
+
+
 def brute_force(video, focus_event_index, focus_position, allowed, lambda_gap=0.0):
     best = None
     n_events, n_frames = video.scores.shape

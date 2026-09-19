@@ -273,15 +273,20 @@ def align_video_conditioned(
             best[t] = cur_best
             best_idx[t] = cur_best_idx
 
-        next_valid = np.searchsorted(source, frames, side="left")
-        valid_succ = (next_valid < n_frames) & np.isfinite(best[next_valid])
+        # For each frame position t, the valid successor for event e+1 must be at
+        # position > t (strictly). The suffix-max array `best` already encodes the
+        # best value starting from each position. We index at t+1 instead of using
+        # searchsorted(source, frames), which could return t itself and allow two
+        # events to share the same frame — violating strict chronological order.
+        next_valid_start = np.arange(1, n_frames + 1, dtype=np.int64)
+        valid_succ = (next_valid_start <= n_frames - 1) & np.isfinite(best[next_valid_start])
 
         suffix[event] = np.where(
             valid_succ & np.isfinite(scores[event]),
-            scores[event] + weighted_time + best[next_valid],
+            scores[event] + weighted_time + best[next_valid_start],
             -np.inf,
         )
-        succ[event] = np.where(valid_succ, best_idx[next_valid], 0)
+        succ[event] = np.where(valid_succ, best_idx[next_valid_start], 0)
 
     # 3. Conditioned score at focus_event_index
     valid_conditioned = (
