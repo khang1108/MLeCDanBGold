@@ -483,7 +483,7 @@ const ImageModal = ({
             <div className={`modal-inspector-column ${eventTrail?.state ? 'trail-active' : 'kis-mode'}`}>
               <div className="inspector-header">
                 <span className="inspector-title">
-                  {eventTrail?.state ? 'EventTrail Exploration' : 'Frame Inspector'}
+                  {eventTrail?.state ? 'Hypothesis Explorer' : 'Frame Inspector'}
                 </span>
                 <div className="inspector-header-actions">
                   <button

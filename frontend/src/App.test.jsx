@@ -355,16 +355,16 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
 
   // Open inspector for result 1 while trail active
   fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
-  expect(await screen.findByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+  expect(await screen.findByRole('region', { name: /hypothesis explorer/i })).toBeTruthy();
 
   // 2. Close modal with Escape -> session preserved, close not called
   fireEvent.keyDown(window, { key: 'Escape' });
-  await waitFor(() => expect(screen.queryByRole('region', { name: /eventtrail exploration/i })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('region', { name: /hypothesis explorer/i })).toBeNull());
   expect(closeEventTrail).not.toHaveBeenCalled();
 
   // 3. Reopen same result -> active session reused, openEventTrail NOT called again
   fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
-  expect(await screen.findByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+  expect(await screen.findByRole('region', { name: /hypothesis explorer/i })).toBeTruthy();
   expect(openEventTrail).toHaveBeenCalledTimes(1);
 
   openEventTrail.mockResolvedValueOnce({
@@ -391,14 +391,14 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
 
   // 5. Open inspector on result 2
   fireEvent.click(screen.getByRole('button', { name: 'Open inspector result 2' }));
-  await screen.findByRole('region', { name: /eventtrail exploration/i });
+  await screen.findByRole('region', { name: /hypothesis explorer/i });
 
   // Click 'Exit' -> explicitly closes trail
   const exitBtn = screen.getByRole('button', { name: /^exit$/i });
   fireEvent.click(exitBtn);
   await waitFor(() => {
     expect(closeEventTrail).toHaveBeenCalledWith('trail_2', { expectedTrailRevision: 0 });
-    expect(screen.queryByRole('region', { name: /eventtrail exploration/i })).toBeNull();
+    expect(screen.queryByRole('region', { name: /hypothesis explorer/i })).toBeNull();
   });
 });
 
@@ -449,4 +449,3 @@ test('keyboard shortcut Ctrl+I focuses User ID input', () => {
   fireEvent.keyDown(window, { key: 'i', code: 'KeyI', ctrlKey: true });
   expect(document.activeElement).toBe(userIdInput);
 });
-

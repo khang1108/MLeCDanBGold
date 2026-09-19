@@ -593,7 +593,7 @@ test('Step 5: Trail Submit uses submission_selection and hides header submit but
   // Trail submit is disabled without submission_selection and displays hint
   const submitBtn = screen.getByRole('button', { name: /^submit$/i });
   expect(submitBtn.disabled).toBe(true);
-  expect(screen.getByText('Use a frame before submitting from EventTrail.')).toBeTruthy();
+  expect(screen.getByText('Use a frame before submitting from Hypothesis Explorer.')).toBeTruthy();
 
   // Rerender with submission_selection
   rerender(
