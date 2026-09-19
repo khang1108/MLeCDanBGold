@@ -16,8 +16,8 @@ export HCMAI_ENRICHMENT_CONFIG="${HCMAI_ENRICHMENT_CONFIG:-configs/vbs_prepare.y
 export PYTHONPATH="${PYTHONPATH:-.}:src"
 
 case "$HCMAI_GPU_TASK" in
-  caption|ocr|objects|asr) ;;
-  *) echo "HCMAI_GPU_TASK must be caption, ocr, objects, or asr" >&2; exit 2 ;;
+  caption|ocr|objects|asr|all|enrichment) ;;
+  *) echo "HCMAI_GPU_TASK must be caption, ocr, objects, asr, or all" >&2; exit 2 ;;
 esac
 
 exec "$PYTHON_BIN" -m uvicorn llm.server.api:app \

@@ -330,11 +330,14 @@ def _profile_flags() -> dict[str, bool]:
         return base
     if profile == "gpu":
         task = os.getenv("HCMAI_GPU_TASK", "caption").strip().lower()
+        if task in {"all", "enrichment"}:
+            base.update(caption=True, ocr=True, objects=True)
+            return base
         aliases = {"caption": "caption", "ocr": "ocr", "objects": "objects", "asr": "asr"}
         try:
             base[aliases[task]] = True
         except KeyError as error:
-            raise ValueError("HCMAI_GPU_TASK must be one of: caption, ocr, objects, asr") from error
+            raise ValueError("HCMAI_GPU_TASK must be one of: caption, ocr, objects, asr, all") from error
         return base
     raise ValueError("HCMAI_LLM_PROFILE must be one of: manual, core, gpu")
 
