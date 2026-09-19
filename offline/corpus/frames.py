@@ -26,6 +26,7 @@ import tempfile
 from typing import Any, Iterable
 
 import pandas as pd
+from tqdm.auto import tqdm
 
 from offline.corpus.models import FrameArtifact
 from .paths import VBSDataPaths
@@ -335,7 +336,7 @@ def build_frames(
     records: list[FrameArtifact] = []
     reused = 0
     per_video: dict[str, int] = {}
-    for video in videos:
+    for video in tqdm(videos, desc="Extracting frames"):
         probe = probe_video(video)
         state = _load_state(paths, probe, cfg)
         if state is not None:
