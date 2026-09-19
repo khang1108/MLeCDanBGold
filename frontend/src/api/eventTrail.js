@@ -25,8 +25,8 @@ export const openEventTrail = async ({
   resultId,
   expectedKisRevision,
   searchSessionId,
-  signal,
-}) => {
+  signal: inputSignal,
+}, { signal = inputSignal } = {}) => {
   const body = {
     snapshot_id: snapshotId,
     result_id: resultId,
@@ -103,4 +103,3 @@ export const closeEventTrail = async (
     signal,
   });
 };
-

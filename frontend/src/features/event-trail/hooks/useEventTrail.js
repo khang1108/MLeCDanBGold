@@ -37,6 +37,8 @@ export const useEventTrail = () => {
   const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false);
 
   const generationRef = useRef(0);
+  const focusRequestRef = useRef(0);
+  const focusControllerRef = useRef(null);
   const sessionRef = useRef(null);
   const keyRef = useRef(null);
   const pendingRef = useRef(false);
@@ -52,7 +54,10 @@ export const useEventTrail = () => {
   const invalidate = useCallback(() => {
     generationRef.current += 1;
     controllerRef.current?.abort();
+    focusControllerRef.current?.abort();
     controllerRef.current = null;
+    focusControllerRef.current = null;
+    focusRequestRef.current += 1;
     pendingRef.current = false;
     setPending(false);
     setUnsynced(false);
@@ -107,7 +112,7 @@ export const useEventTrail = () => {
             expectedKisRevision: context.kisRevision,
             searchSessionId: context.searchSessionId,
           },
-          { signal: controller.signal }
+          { signal: controller.signal },
         );
 
         if (generation !== generationRef.current || controller.signal.aborted) {
@@ -234,11 +239,23 @@ export const useEventTrail = () => {
     const current = sessionRef.current;
     if (!current?.session_id || !Number.isInteger(current?.trail_revision)) return null;
 
-    setFocusedEventId(eventId);
-    setIsLoadingAlternatives(true);
-
+    focusControllerRef.current?.abort();
+    const requestId = focusRequestRef.current + 1;
+    focusRequestRef.current = requestId;
     const generation = generationRef.current;
     const controller = new AbortController();
+    focusControllerRef.current = controller;
+
+    setFocusedEventId(eventId);
+    setAlternatives([]);
+    setPreviewAlternativeState(null);
+    setIsLoadingAlternatives(true);
+
+    const isCurrentRequest = () => (
+      generation === generationRef.current
+      && requestId === focusRequestRef.current
+      && !controller.signal.aborted
+    );
 
     try {
       const res = await getEventTrailAlternatives(
@@ -246,23 +263,22 @@ export const useEventTrail = () => {
         {
           eventId,
           expectedTrailRevision: current.trail_revision,
+          signal: controller.signal,
         },
-        { signal: controller.signal }
       );
 
-      if (generation !== generationRef.current || controller.signal.aborted) {
-        return null;
-      }
+      if (!isCurrentRequest()) return null;
 
       setAlternatives(res?.alternatives || []);
       return res;
     } catch (err) {
-      if (controller.signal.aborted || generation !== generationRef.current) return null;
+      if (!isCurrentRequest()) return null;
       setError(err?.message || 'Failed to fetch alternatives');
       setAlternatives([]);
       return null;
     } finally {
-      if (generation === generationRef.current) {
+      if (focusControllerRef.current === controller) focusControllerRef.current = null;
+      if (isCurrentRequest()) {
         setIsLoadingAlternatives(false);
       }
     }

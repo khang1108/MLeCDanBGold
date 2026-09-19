@@ -232,6 +232,17 @@ const AppShell = ({
             state: eventTrail.session,
             pending: eventTrail.pending,
             error: eventTrail.error,
+            alternatives: eventTrail.alternatives,
+            previewAlternativeState: eventTrail.previewAlternativeState,
+            isLoadingAlternatives: eventTrail.isLoadingAlternatives,
+            focusedEventId: eventTrail.focusedEventId,
+            currentQueryRevision: selectedFrame.eventTrailContext.kisRevision,
+            focusEvent: eventTrail.focusEvent,
+            previewAlternative: eventTrail.previewAlternative,
+            clearPreview: eventTrail.clearPreview,
+            keep: eventTrail.keep,
+            useAlternative: eventTrail.useAlternative,
+            rejectMode: eventTrail.rejectMode,
             open: (ctx) => {
               eventTrailKeyRef.current = eventTrailSelectionKey(selectedFrame);
               return eventTrail.open(ctx || selectedFrame.eventTrailContext);

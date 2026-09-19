@@ -57,12 +57,12 @@ const EventTrailPanel = ({
   const resolvedModeId =
     currentModeId ||
     focusedModeId ||
-    previewAlternative?.alternative_id ||
     previewAlternative?.mode_id ||
-    effectiveAlternatives.find((a) => a.is_current)?.alternative_id ||
     effectiveAlternatives.find((a) => a.is_current)?.mode_id ||
-    effectiveAlternatives[0]?.alternative_id ||
     effectiveAlternatives[0]?.mode_id ||
+    previewAlternative?.alternative_id ||
+    effectiveAlternatives.find((a) => a.is_current)?.alternative_id ||
+    effectiveAlternatives[0]?.alternative_id ||
     null;
 
   const handleSelectEvent = (eventId) => {

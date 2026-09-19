@@ -52,6 +52,7 @@ const HypothesisAlternatives = ({
               className={`hypothesis-alt-card ${isActive ? 'active' : ''} ${alt.is_current ? 'current' : ''}`}
               disabled={disabled}
               onClick={() => onPreview?.(alt)}
+              aria-label={`Preview alternative ${altId} at ${tsText}`}
               title={`Preview alternative at ${tsText}`}
             >
               <div className="hypothesis-alt-thumb">

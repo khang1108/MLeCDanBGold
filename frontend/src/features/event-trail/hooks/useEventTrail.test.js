@@ -85,7 +85,7 @@ describe('useEventTrail', () => {
         expectedKisRevision: 2,
         searchSessionId: 'q_1',
       },
-      expect.any(Object)
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(res).toEqual(mockState);
     expect(result.current.session).toEqual(mockState);
@@ -442,12 +442,56 @@ describe('useEventTrail', () => {
       expect.objectContaining({
         eventId: 'E2',
         expectedTrailRevision: baseSession.trail_revision,
+        signal: expect.any(AbortSignal),
       }),
-      expect.any(Object)
     );
     expect(result.current.session.trail_revision).toBe(baseSession.trail_revision);
     expect(result.current.alternatives).toHaveLength(1);
     expect(result.current.focusedEventId).toBe('E2');
+  });
+
+  test('focus requests abort and ignore a slower response from an older event', async () => {
+    const baseSession = makeSession(0);
+    const firstFocus = deferred();
+    const secondFocus = deferred();
+    openEventTrail.mockResolvedValueOnce(baseSession);
+    getEventTrailAlternatives
+      .mockReturnValueOnce(firstFocus.promise)
+      .mockReturnValueOnce(secondFocus.promise);
+
+    const { result } = renderHook(() => useEventTrail());
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
+    });
+
+    act(() => {
+      result.current.focusEvent('E1');
+      result.current.focusEvent('E2');
+    });
+
+    expect(getEventTrailAlternatives.mock.calls[0][1]).toEqual(expect.objectContaining({
+      eventId: 'E1',
+      expectedTrailRevision: baseSession.trail_revision,
+      signal: expect.any(AbortSignal),
+    }));
+    expect(getEventTrailAlternatives.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(getEventTrailAlternatives.mock.calls[1][1]).toEqual(expect.objectContaining({
+      eventId: 'E2',
+      signal: expect.any(AbortSignal),
+    }));
+
+    await act(async () => {
+      secondFocus.resolve({ alternatives: [{ alternative_id: 'alt_e2' }] });
+      await secondFocus.promise;
+    });
+    await act(async () => {
+      firstFocus.resolve({ alternatives: [{ alternative_id: 'alt_e1' }] });
+      await firstFocus.promise;
+    });
+
+    expect(result.current.focusedEventId).toBe('E2');
+    expect(result.current.alternatives).toEqual([{ alternative_id: 'alt_e2' }]);
+    expect(result.current.isLoadingAlternatives).toBe(false);
   });
 
   test('previewAlternative updates local state and clearPreview resets it', async () => {
