@@ -420,6 +420,52 @@ test('attaches image via composer and executes multimodal KIS search on submit',
   expect(await screen.findByAltText('Frame img-result-1')).toBeTruthy();
 });
 
+test('opens the real hypothesis with text and staged images before searching', async () => {
+  const opened = {
+    session_id: 'qh_text_image_session',
+    query_revision: 4,
+    intent: {
+      revision: 4,
+      query_text: 'person beside car',
+      entities: [],
+      events: [{ id: 'E1', text: 'person beside car', images: [{ asset_id: 'ast_text_image' }] }],
+      temporal_edges: [],
+    },
+    can_undo: false,
+  };
+  uploadKisImage.mockResolvedValueOnce({
+    asset_id: 'ast_text_image',
+    file_name: 'query_photo.jpg',
+  });
+  openQueryHypothesis.mockResolvedValueOnce(opened);
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 4,
+    queryText: 'person beside car',
+    events: opened.intent.events,
+    results: [],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  const testFile = new File(['dummy content'], 'query_photo.jpg', { type: 'image/jpeg' });
+  fireEvent.change(screen.getByLabelText(/attach image/i), { target: { files: [testFile] } });
+  await waitFor(() => expect(uploadKisImage).toHaveBeenCalled());
+  fireEvent.change(document.getElementById('event-query'), {
+    target: { value: 'person beside car' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+  await waitFor(() => expect(openQueryHypothesis).toHaveBeenCalledWith(expect.objectContaining({
+    text: 'person beside car',
+    imageRefs: [{ asset_id: 'ast_text_image', file_name: 'query_photo.jpg' }],
+  })));
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(expect.objectContaining({
+    queryHypothesisSessionId: 'qh_text_image_session',
+    baseIntent: null,
+    expectedRevision: 4,
+    operation: { kind: 'search_only' },
+  })));
+});
+
 test('Search-only rerun when only retrieval controls change with active intent', async () => {
   const initialResponse = mockKisResponse({
     queryText: 'red boat',
@@ -1101,4 +1147,3 @@ test('does not fabricate a query hypothesis session from the evidence snapshot',
     queryHypothesisSessionId: 'qh_real_session',
   }));
 });
-
