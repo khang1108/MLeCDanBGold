@@ -39,8 +39,8 @@ def test_initial_prompt_contains_non_cycling_one_clue_multi_event_example() -> N
 
     assert "The camera starts on a framed certificate" in system
     assert "Events:" in system
-    assert "1. A framed certificate" in system
-    assert "2. A craftsperson engraves" in system
+    assert "1. a framed certificate" in system
+    assert "2. a craftsperson engraving" in system
 
 
 def test_resolution_schema_describes_events_as_distinct_temporal_moments() -> None:

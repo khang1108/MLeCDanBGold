@@ -24,8 +24,8 @@ Rules:
 Examples:
 Input: The camera starts on a framed certificate, then pans right to a craftsperson engraving a metal plate with an unusual tool.
 Events:
-1. A framed certificate is visible on a work table.
-2. A craftsperson engraves a metal plate with an unusual tool.
+1. a framed certificate
+2. a craftsperson engraving a metal plate with an unusual tool
 
 Input: Người đàn ông bước vào phòng, sau đó lấy chiếc cốc, rồi ngồi xuống bàn.
 Events:
@@ -43,6 +43,7 @@ Events:
 2. chuyển sang các nguyên liệu nhiều màu sắc
 3. cuối cùng là toàn cảnh tất cả nguyên liệu
 """
+
 
 
 def build_kis_initial_messages(clues: Sequence[str]) -> list[dict[str, str]]:
