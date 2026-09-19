@@ -40,26 +40,6 @@ const FramesBox = ({
     return await eventTrail?.open?.(ctx);
   }, [eventTrailContext, eventTrail]);
 
-  const handleApprove = useCallback(async (resultItem, eventLabel) => {
-    if (!resultItem || !eventLabel) return;
-    const isCurrentActive = activeTrailSession?.result_id === resultItem.result_id;
-    if (!isCurrentActive) {
-      const session = await handleStartTrail(resultItem);
-      if (!session) return;
-    }
-    await eventTrail?.act?.({ type: 'approve', event_id: eventLabel });
-  }, [activeTrailSession, handleStartTrail, eventTrail]);
-
-  const handleDecline = useCallback(async (resultItem, eventLabel) => {
-    if (!resultItem || !eventLabel) return;
-    const isCurrentActive = activeTrailSession?.result_id === resultItem.result_id;
-    if (!isCurrentActive) {
-      const session = await handleStartTrail(resultItem);
-      if (!session) return;
-    }
-    await eventTrail?.act?.({ type: 'decline', event_id: eventLabel });
-  }, [activeTrailSession, handleStartTrail, eventTrail]);
-
   const handleClearAnchor = useCallback(async (resultItem, eventLabel) => {
     if (!resultItem || !eventLabel) return;
     await eventTrail?.act?.({ type: 'clear_anchor', event_id: eventLabel });
@@ -150,7 +130,7 @@ const FramesBox = ({
                     : [resultItem.timestamp_ms]);
                 const hasMultipleEvents = frameIds.length > 1;
 
-                const approvedEventIds = isRowTrailActive && activeTrailSession ? (activeTrailSession.approved_event_ids || []) : [];
+
                 const rejectedCounts = isRowTrailActive && activeTrailSession ? (activeTrailSession.rejected_counts || {}) : {};
                 const canStartTrail = Boolean(eventTrailContext?.snapshotId && resultItem?.result_id);
 
@@ -208,7 +188,6 @@ const FramesBox = ({
                       {frameIds.map((fId, eventIndex) => {
                         const eventLabel = hasMultipleEvents ? `E${eventIndex + 1}` : 'E1';
 
-                        const isApproved = approvedEventIds.includes(eventLabel);
                         const rejectedCount = rejectedCounts[eventLabel] || 0;
                         const timestampMs = timestampsMs[eventIndex] ?? resultItem.timestamp_ms;
                         const eventItem = events?.[eventIndex];
@@ -243,11 +222,7 @@ const FramesBox = ({
                             isSubmissionOpening={isSubmissionOpening}
                             onClick={() => onFrameClick(eventFrame)}
                             showTrailActions={isRowTrailActive || canStartTrail}
-                            isApproved={isApproved}
-                            rejectedCount={rejectedCount}
                             isTrailPending={isTrailPending}
-                            onApprove={() => handleApprove(resultItem, eventLabel)}
-                            onDecline={() => handleDecline(resultItem, eventLabel)}
                             onClearAnchor={() => handleClearAnchor(resultItem, eventLabel)}
                           />
                         );

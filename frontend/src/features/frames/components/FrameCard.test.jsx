@@ -139,47 +139,33 @@ test('renders eventLabel badge when provided', () => {
   expect(screen.getByText('V01')).toBeTruthy();
 });
 
-test('renders inline EventTrail actions when showTrailActions is true', () => {
+test('does not render Approve or Decline buttons even when showTrailActions is true', () => {
+  // Approve/Decline interaction paradigm has been removed; trail interaction is
+  // now exclusively through the Hypothesis Explorer opened via ImageModal.
   const frame = { frame_id: 'f-trail', video_id: 'V01', timestamp_ms: 2000 };
-  const onApprove = jest.fn();
-  const onDecline = jest.fn();
-
   render(
     <FrameCard
       frame={frame}
       showTrailActions={true}
-      onApprove={onApprove}
-      onDecline={onDecline}
     />,
   );
-
-  const approveBtn = screen.getByRole('button', { name: /approve/i });
-  const declineBtn = screen.getByRole('button', { name: /decline/i });
-  expect(approveBtn).toBeTruthy();
-  expect(declineBtn).toBeTruthy();
-
-  fireEvent.click(approveBtn);
-  expect(onApprove).toHaveBeenCalledTimes(1);
-
-  fireEvent.click(declineBtn);
-  expect(onDecline).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText(/approve/i)).toBeNull();
+  expect(screen.queryByText(/decline/i)).toBeNull();
 });
 
-test('renders anchored state with clear button when isApproved is true', () => {
-  const frame = { frame_id: 'f-anchored', video_id: 'V01', timestamp_ms: 2000 };
+test('renders clear anchor button when showTrailActions and onClearAnchor are provided', () => {
+  const frame = { frame_id: 'f-clear', video_id: 'V01', timestamp_ms: 2000 };
   const onClearAnchor = jest.fn();
 
   render(
     <FrameCard
       frame={frame}
       showTrailActions={true}
-      isApproved={true}
       onClearAnchor={onClearAnchor}
     />,
   );
 
-  expect(screen.getByText('⚓ Anchored')).toBeTruthy();
-  const clearBtn = screen.getByRole('button', { name: /clear/i });
+  const clearBtn = screen.getByRole('button', { name: /clear anchor/i });
   expect(clearBtn).toBeTruthy();
 
   fireEvent.click(clearBtn);
