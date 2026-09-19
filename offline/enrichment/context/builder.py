@@ -479,8 +479,8 @@ def _serializer_identity(config: FrameContextConfig) -> dict[str, int | float]:
 def _build_context_rows(
     frames: list[FrameArtifact],
     caption_rows: _EvidenceStore,
-    ocr_rows: _EvidenceStore,
-    object_rows: _EvidenceStore,
+    ocr_rows: _EvidenceStore | None,
+    object_rows: _EvidenceStore | None,
     config: FrameContextConfig,
     *,
     caption_version: str,
@@ -496,16 +496,16 @@ def _build_context_rows(
 
     frame_ids = [frame.frame_id for frame in frames]
     captions = caption_rows.get_many(frame_ids)
-    ocr_values = ocr_rows.get_many(frame_ids)
-    object_values = object_rows.get_many(frame_ids)
+    ocr_values = ocr_rows.get_many(frame_ids) if ocr_rows is not None else {}
+    object_values = object_rows.get_many(frame_ids) if object_rows is not None else {}
     contexts: list[FrameContext] = []
     for frame in frames:
         caption_row = captions.get(frame.frame_id)
         ocr_row = ocr_values.get(frame.frame_id)
         object_row = object_values.get(frame.frame_id)
         caption = _usable_caption(caption_row)
-        ocr = _usable_ocr(ocr_row, config.min_ocr_quality)
-        objects = _usable_objects(object_row)
+        ocr = _usable_ocr(ocr_row, config.min_ocr_quality) if ocr_row is not None else None
+        objects = _usable_objects(object_row) if object_row is not None else None
         contexts.append(
             FrameContext(
                 frame_id=frame.frame_id,
@@ -542,8 +542,8 @@ def _build_context_rows(
 def _context_batches(
     frames: list[FrameArtifact],
     caption_rows: _EvidenceStore,
-    ocr_rows: _EvidenceStore,
-    object_rows: _EvidenceStore,
+    ocr_rows: _EvidenceStore | None,
+    object_rows: _EvidenceStore | None,
     config: FrameContextConfig,
     *,
     caption_version: str,
@@ -693,8 +693,8 @@ def _write_bundle(
 def build_frame_context(
     frames_path: str | Path,
     caption_path: str | Path,
-    ocr_frames_path: str | Path,
-    object_frames_path: str | Path,
+    ocr_frames_path: str | Path | None,
+    object_frames_path: str | Path | None,
     output_dir: str | Path,
     config: FrameContextConfig,
     *,
@@ -702,16 +702,17 @@ def build_frame_context(
 ) -> Path:
     """Join specialist artifacts and publish one context row per canonical frame."""
 
-    paths = tuple(
-        Path(path)
-        for path in (frames_path, caption_path, ocr_frames_path, object_frames_path)
-    )
-    frames_file, caption_file, ocr_file, object_file = paths
+    frames_file = Path(frames_path)
+    caption_file = Path(caption_path)
+    ocr_file = Path(ocr_frames_path) if ocr_frames_path else None
+    if ocr_file is not None and not ocr_file.is_file():
+        ocr_file = None
+
+    object_file = Path(object_frames_path) if object_frames_path else None
+    if object_file is not None and not object_file.is_file():
+        object_file = None
 
     # Validate every prerequisite before creating or replacing context output.
-    # The canonical reader uses bounded Arrow batches and keeps only the small
-    # identity list needed for specialist joins; validated nested evidence is
-    # held in temporary SQLite indexes rather than Python object maps.
     frames = _read_canonical_frames(frames_file)
     if not frames:
         raise ValueError("canonical frame store must contain at least one frame")
@@ -724,16 +725,30 @@ def build_frame_context(
         raise ValueError("canonical frame store contains duplicate frame_id values")
 
     caption_manifest = _required_manifest(caption_file.parent / "manifest.json")
-    ocr_manifest = _required_manifest(ocr_file.parent / "manifest.json")
-    object_manifest = _required_manifest(object_file.parent / "manifest.json")
+    caption_version = cast(str, caption_manifest["artifact_version"])
+
+    manifests = [caption_manifest]
+    if ocr_file is not None:
+        ocr_manifest = _required_manifest(ocr_file.parent / "manifest.json")
+        ocr_version = cast(str, ocr_manifest["artifact_version"])
+        manifests.append(ocr_manifest)
+    else:
+        ocr_manifest = None
+        ocr_version = "none"
+
+    if object_file is not None:
+        object_manifest = _required_manifest(object_file.parent / "manifest.json")
+        object_version = cast(str, object_manifest["artifact_version"])
+        manifests.append(object_manifest)
+    else:
+        object_manifest = None
+        object_version = "none"
+
     lineage = _resolve_lineage(
         frame_store_id,
         _canonical_lineage(frames_file),
-        (caption_manifest, ocr_manifest, object_manifest),
+        tuple(manifests),
     )
-    caption_version = cast(str, caption_manifest["artifact_version"])
-    ocr_version = cast(str, ocr_manifest["artifact_version"])
-    object_version = cast(str, object_manifest["artifact_version"])
 
     stores: list[_EvidenceStore] = []
     try:
@@ -750,32 +765,40 @@ def build_frame_context(
             lineage,
         )
         stores.append(caption_rows)
-        ocr_rows = _validated_rows(
-            _iter_parquet_rows(
-                ocr_file,
+
+        if ocr_file is not None:
+            ocr_rows = _validated_rows(
+                _iter_parquet_rows(
+                    ocr_file,
+                    "OCR",
+                    progress_desc="Validate OCR evidence",
+                ),
                 "OCR",
-                progress_desc="Validate OCR evidence",
-            ),
-            "OCR",
-            OCREvidence,
-            ocr_version,
-            canonical,
-            lineage,
-        )
-        stores.append(ocr_rows)
-        object_rows = _validated_rows(
-            _iter_parquet_rows(
-                object_file,
+                OCREvidence,
+                ocr_version,
+                canonical,
+                lineage,
+            )
+            stores.append(ocr_rows)
+        else:
+            ocr_rows = None
+
+        if object_file is not None:
+            object_rows = _validated_rows(
+                _iter_parquet_rows(
+                    object_file,
+                    "object",
+                    progress_desc="Validate object evidence",
+                ),
                 "object",
-                progress_desc="Validate object evidence",
-            ),
-            "object",
-            ObjectEvidence,
-            object_version,
-            canonical,
-            lineage,
-        )
-        stores.append(object_rows)
+                ObjectEvidence,
+                object_version,
+                canonical,
+                lineage,
+            )
+            stores.append(object_rows)
+        else:
+            object_rows = None
 
         identity: dict[str, Any] = {
             "context_version": config.context_version,

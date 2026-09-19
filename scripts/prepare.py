@@ -9,7 +9,7 @@ import argparse
 from pathlib import Path
 from offline.pipeline import STAGES, run_sequence, run_stage
 
-PAPER_FAST = ("frames", "visual-index", "caption")
+PAPER_FAST = ("frames", "visual-index", "caption", "context", "context-index")
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)

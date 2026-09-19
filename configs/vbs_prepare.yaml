@@ -20,6 +20,8 @@ inference:
     endpoints:
       visual_embedding: /v1/embeddings/images
       text_embedding: /v1/embeddings/text
+      # Note: Route is registered on core server, but text_generation is disabled
+      # under HCMAI_LLM_PROFILE=core (requires HCMAI_ENABLE_TEXT_GENERATION=true).
       chat_completions: /v1/chat/completions
       health: /health
       ready: /ready
@@ -126,7 +128,8 @@ indexing:
   projection:
     max_projection_gap_ms: 5000
 
-# Pinned model identities used by index metadata/readiness validation.
+# Pinned model identities and client-side batching for offline preparation.
+# (Server-side checkpoints, device placement, and server batching live in llm/config.yaml).
 # Offline preparation uses the remote core API when --inference-url is supplied.
 models:
   server:

@@ -157,6 +157,41 @@ class InferenceClient:
             raise InferenceClientError("image embedding provider changed item identity or order")
         return response
 
+    def embed_text(
+        self,
+        texts: Sequence[str],
+        *,
+        model: str | None = None,
+    ) -> Any:
+        """Embed an ordered text batch using the remote /v1/embeddings/text API."""
+        from hcmai.inference.clients.embeddings import TextEmbeddingBatch
+        from llm.contracts.embeddings import TextEmbeddingResponse
+
+        if not texts:
+            return TextEmbeddingBatch(model=model or "", vectors=())
+
+        target_model = model or getattr(self, "_cached_text_model", None)
+        if not target_model:
+            try:
+                status = self.readiness().models.get("caption_embedding")
+                target_model = status.checkpoint if status and status.checkpoint else "BAAI/bge-m3"
+            except Exception:
+                target_model = "BAAI/bge-m3"
+            self._cached_text_model = target_model
+
+        payload = {
+            "model": target_model,
+            "input": list(texts),
+        }
+        data = self._post("/v1/embeddings/text", json=payload)
+        response = _validated(TextEmbeddingResponse, data)
+        sorted_items = sorted(response.data, key=lambda item: item.index)
+        vectors = tuple(tuple(float(x) for x in item.embedding) for item in sorted_items)
+        return TextEmbeddingBatch(
+            model=response.model,
+            vectors=vectors,
+        )
+
     def boundary_scores(
         self,
         frames: np.ndarray,

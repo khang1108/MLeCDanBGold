@@ -56,11 +56,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             if value is not None
         },
     )
+    ocr_path = args.ocr_frames or (job.ocr_output_dir / "frames.parquet")
+    if not ocr_path.is_file():
+        ocr_path = None
+    object_path = args.object_frames or (job.object_output_dir / "frames.parquet")
+    if not object_path.is_file():
+        object_path = None
+
     EnrichmentService.build_frame_context(
         args.frames or job.frames_path,
         args.captions or job.caption_output_dir / "captions.parquet",
-        args.ocr_frames or job.ocr_output_dir / "frames.parquet",
-        args.object_frames or job.object_output_dir / "frames.parquet",
+        ocr_path,
+        object_path,
         args.output or job.context_output_dir,
         config,
         frame_store_id=args.frame_store_id or job.frame_store_id,

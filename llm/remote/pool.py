@@ -124,6 +124,9 @@ class InferenceClientPool:
     def embed_images(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("embed_images", *args, **kwargs)
 
+    def embed_text(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("embed_text", *args, **kwargs)
+
     def boundary_scores(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("boundary_scores", *args, **kwargs)
 
