@@ -86,7 +86,7 @@ const EventTrailPanel = ({
   };
 
   return (
-    <section className="event-trail-panel" aria-label="Hypothesis Explorer (EventTrail Exploration)">
+    <section className="event-trail-panel" aria-label="Hypothesis Explorer">
       <div className="event-trail-header">
         <div className="event-trail-title-group">
           <h2 className="event-trail-heading">Hypothesis Explorer</h2>
@@ -103,7 +103,7 @@ const EventTrailPanel = ({
               type="button"
               className="btn-danger btn-sm event-trail-exit-btn"
               onClick={() => (onExitTrail ? onExitTrail() : onBack?.())}
-              title="Exit EventTrail and return to Frame Inspector"
+              title="Exit Hypothesis Explorer and return to Frame Inspector"
             >
               Exit
             </button>
@@ -216,7 +216,7 @@ const EventTrailPanel = ({
       <div className="event-trail-footer">
         {!state.submission_selection && !isExhausted && (
           <p className="event-trail-submit-hint">
-            Use a frame before submitting from EventTrail.
+            Use a frame before submitting from Hypothesis Explorer.
           </p>
         )}
         <div className="event-trail-footer-actions">
