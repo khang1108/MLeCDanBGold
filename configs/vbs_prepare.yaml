@@ -64,9 +64,8 @@ enrichment:
     precision: bf16
     dtype: bfloat16
     image_size: 512
-    # A6000 pilot: 128 used only ~24/49 GiB. 256 is the caption API ceiling;
-    # re-measure throughput and peak VRAM before raising the server limit.
-    batch_size: 256
+    # Aggressive single-model A6000 batch; monitor peak VRAM and throughput.
+    batch_size: 512
     enrichment_version: qwen3-vl-2b-caption-v1
     write_interval: 256
 
