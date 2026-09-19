@@ -120,6 +120,25 @@ class KISEvent(BaseModel):
     images: list[KISImageRef] = Field(default_factory=list)
     bindings: list[KISEntityBinding] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def infer_legacy_text_origin(cls, data: Any) -> Any:
+        """Mark ungrounded legacy text as overridden instead of source-grounded.
+
+        Initial source-grounded resolution supplies both provenance and an explicit
+        source origin. Older callers that provide only text cannot truthfully claim
+        source grounding, so keep them valid while making that distinction explicit.
+        """
+        if (
+            isinstance(data, dict)
+            and "origin" not in data
+            and data.get("text") is not None
+            and data.get("source_provenance") is None
+        ):
+            data = dict(data)
+            data["origin"] = "user_override"
+        return data
+
     @model_validator(mode="after")
     def validate_evidence(self) -> Self:
         """Require every event to retain at least one source of semantic evidence."""
@@ -134,7 +153,6 @@ class KISEvent(BaseModel):
             self.origin == "source"
             and self.text is not None
             and self.source_provenance is None
-            and "origin" in self.model_fields_set
         ):
             raise ValueError("source-grounded text requires source provenance")
         if (
@@ -142,7 +160,6 @@ class KISEvent(BaseModel):
             and self.text is not None
             and self.source_provenance is not None
             and self.text != self.source_provenance.source_text
-            and "origin" in self.model_fields_set
         ):
             raise ValueError("source text must match source provenance")
         return self

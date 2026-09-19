@@ -137,6 +137,11 @@ class KISIntentModelTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "source provenance"):
             KISEvent(id="E1", text="source text", origin="source")
 
+    def test_marks_implicit_ungrounded_text_as_user_override(self) -> None:
+        event = KISEvent(id="E1", text="legacy free-form text")
+
+        self.assertEqual(event.origin, "user_override")
+
     def test_rejects_user_added_event_with_provenance(self) -> None:
         with self.assertRaisesRegex(ValueError, "user-added"):
             KISEvent(
