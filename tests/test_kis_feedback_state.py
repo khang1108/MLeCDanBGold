@@ -10,13 +10,11 @@ from hcmai.api.contracts.feedback import (
     RetrievalOverride,
 )
 from hcmai.kis.feedback.models import (
-    EditIntentAction,
     FeedbackCheckpoint,
     FeedbackResolution,
     FeedbackResolveContext,
     FeedbackSession,
     RefineRetrievalAction,
-    RestructureAction,
 )
 from hcmai.kis.feedback.store import (
     FeedbackError,

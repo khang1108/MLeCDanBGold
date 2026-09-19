@@ -6,16 +6,12 @@ import pytest
 
 from hcmai.api.contracts.feedback import RetrievalOverride
 from hcmai.kis.feedback.models import (
-    AnchorAction,
     ClarifyAction,
-    EditIntentAction,
     FeedbackResolution,
     FeedbackResolveContext,
     QueryEditProposalAction,
     RefineRetrievalAction,
-    RejectCandidateAction,
     RepairEventAction,
-    RestructureAction,
 )
 from hcmai.kis.feedback.resolver import (
     FeedbackResolver,
@@ -125,9 +121,9 @@ def test_deictic_without_selection_returns_clarify():
 def test_no_invented_event_ids():
     """Model returning non-existent event IDs must be rejected by validate_action_references."""
     context = _create_context()
-    invalid_action = EditIntentAction(
-        event_ids=["E99"],
-        replacement_texts={"E99": "Ghost event."},
+    invalid_action = QueryEditProposalAction(
+        action={"type": "edit", "event_id": "E99", "text": "Ghost event."},
+        explanation="Invalid proposal",
     )
     with pytest.raises(FeedbackResolverError):
         validate_action_references(invalid_action, context)

@@ -41,25 +41,11 @@ def validate_action_references(
                         f"Unknown event ID '{eid}' in query_edit_proposal action"
                     )
 
-    elif action.type == "edit_intent":
-        for eid in action.event_ids:
-            if eid not in valid_event_ids:
-                raise FeedbackResolverError(
-                    f"Unknown event ID '{eid}' in edit_intent action"
-                )
-
     elif action.type == "refine_retrieval":
         for eid in action.event_ids:
             if eid not in valid_event_ids:
                 raise FeedbackResolverError(
                     f"Unknown event ID '{eid}' in refine_retrieval action"
-                )
-
-    elif action.type == "restructure":
-        for eid in action.replaced_event_ids:
-            if eid not in valid_event_ids:
-                raise FeedbackResolverError(
-                    f"Unknown event ID '{eid}' in restructure action"
                 )
 
     elif getattr(action, "event_id", None) is not None:
