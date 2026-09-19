@@ -64,7 +64,7 @@ enrichment:
     precision: bf16
     dtype: bfloat16
     image_size: 512
-    batch_size: 16
+    batch_size: 128
     enrichment_version: qwen3-vl-2b-caption-v1
     write_interval: 256
 

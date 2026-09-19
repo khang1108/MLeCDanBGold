@@ -10,7 +10,7 @@ router = APIRouter(tags=["captions"])
 
 @router.post("/v1/captions", response_model=CaptionResponse)
 async def caption(request: Request, item_ids: str = Form(), images: list[UploadFile] = File()) -> CaptionResponse:
-    identifiers, decoded = decode_images(item_ids, images, maximum=64)
+    identifiers, decoded = decode_images(item_ids, images, maximum=256)
     started = perf_counter()
     runtime = runtime_from(request)
     try:
