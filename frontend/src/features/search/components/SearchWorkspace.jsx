@@ -272,22 +272,6 @@ const SearchWorkspace = ({
     }
   }, [queryInputRef]);
 
-  const handleAttachImage = useCallback(async (file, targetEventId) => {
-    if (!file) return;
-    try {
-      const assetRef = await uploadKisImage({ imageFile: file });
-      const eventId = targetEventId || 'E1';
-      setKisSession((prev) => stageImage(prev, eventId, assetRef));
-      setError(null);
-    } catch (err) {
-      setError(err?.message || 'Failed to upload image asset');
-    }
-  }, []);
-
-  const handleRemoveImage = useCallback((eventId, assetId) => {
-    setKisSession((prev) => unstageImage(prev, eventId, assetId));
-  }, []);
-
   const submitFilter = useCallback(async ({ pageId = 1, overrideParams = null } = {}) => {
     const paramsToUse = overrideParams || {
       folderId: filterFolderId.trim(),
@@ -728,6 +712,38 @@ const SearchWorkspace = ({
     }
   }, [onQueryRevisionChange, queryHypothesisState.sessionId, queryHypothesisState.queryRevision, queryHypothesisState.canUndo]);
 
+  const handleAttachImage = useCallback(async (file, targetEventId) => {
+    if (!file) return;
+    try {
+      const assetRef = await uploadKisImage({ imageFile: file });
+      const eventId = targetEventId || 'E1';
+      if (queryHypothesisState.sessionId) {
+        await handleCommitQueryHypothesis({
+          type: 'attach_image',
+          event_id: eventId,
+          image: assetRef,
+        });
+      } else {
+        setKisSession((prev) => stageImage(prev, eventId, assetRef));
+      }
+      setError(null);
+    } catch (err) {
+      setError(err?.message || 'Failed to upload image asset');
+    }
+  }, [queryHypothesisState.sessionId, handleCommitQueryHypothesis]);
+
+  const handleRemoveImage = useCallback(async (eventId, assetId) => {
+    if (queryHypothesisState.sessionId) {
+      await handleCommitQueryHypothesis({
+        type: 'detach_image',
+        event_id: eventId,
+        asset_id: assetId,
+      });
+    } else {
+      setKisSession((prev) => unstageImage(prev, eventId, assetId));
+    }
+  }, [queryHypothesisState.sessionId, handleCommitQueryHypothesis]);
+
   const submit = useCallback(async (event) => {
     event?.preventDefault?.();
     if (isSearching) return;
@@ -838,6 +854,33 @@ const SearchWorkspace = ({
             operation: { kind: 'search_only' },
           },
         };
+      } else if (queryHypothesisState.sessionId) {
+        // When QH session is active, server-owned query hypotheses execute search_only
+        // (or conversational feedback turn). Dead patch_events and global_rewrite paths are deleted.
+        if (draftText) {
+          const preview = parseComposerDraft(draftText, kisSession.currentIntent);
+          if (preview.error) {
+            setError(preview.error);
+            return;
+          }
+          if (preview.kind === 'feedback' && kisSession.currentIntent) {
+            return handleFeedbackTurn(draftText);
+          }
+        }
+        queryHypothesisSessionId = queryHypothesisState.sessionId;
+        prepared = {
+          nextState: {
+            ...kisSession,
+            isSearching: true,
+            error: null,
+            pendingOperation: { kind: 'search_only' },
+          },
+          requestPayload: {
+            baseIntent: null,
+            expectedRevision: queryHypothesisState.queryRevision,
+            operation: { kind: 'search_only' },
+          },
+        };
       } else if (draftText) {
         const preview = parseComposerDraft(draftText, kisSession.currentIntent);
         if (preview.error) {
@@ -853,21 +896,6 @@ const SearchWorkspace = ({
           ? { kind: 'patch_events', affectedEventIds: Object.keys(kisSession.stagedImages), error: null }
           : { kind: 'initial_resolve', affectedEventIds: [], error: null };
         prepared = prepareSemanticRequest(kisSession, preview);
-      } else if (queryHypothesisState.sessionId && isResultsStale(queryHypothesisState)) {
-        queryHypothesisSessionId = queryHypothesisState.sessionId;
-        prepared = {
-          nextState: {
-            ...kisSession,
-            isSearching: true,
-            error: null,
-            pendingOperation: { kind: 'search_only' },
-          },
-          requestPayload: {
-            baseIntent: null,
-            expectedRevision: queryHypothesisState.queryRevision,
-            operation: { kind: 'search_only' },
-          },
-        };
       } else if (kisSession.currentIntent) {
         prepared = prepareSearchOnlyRequest(kisSession);
       } else {

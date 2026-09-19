@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import QueryHypothesisEditor from './QueryHypothesisEditor';
+import QueryHypothesisEditor, { computeTextBoundaries } from './QueryHypothesisEditor';
 
 describe('QueryHypothesisEditor component', () => {
   const baseIntent = {
@@ -168,4 +168,79 @@ describe('QueryHypothesisEditor component', () => {
       },
     }));
   });
+
+  test('computeTextBoundaries extracts correct word and character boundaries', () => {
+    const wordResult = computeTextBoundaries('two cars collide');
+    expect(wordResult.type).toBe('words');
+    expect(wordResult.words).toHaveLength(3);
+    expect(wordResult.boundaries).toHaveLength(2);
+    expect(wordResult.boundaries[0]).toEqual(expect.objectContaining({
+      index: 4,
+      prevWord: 'two',
+      nextWord: 'cars',
+    }));
+
+    const charResult = computeTextBoundaries('run');
+    expect(charResult.type).toBe('chars');
+    expect(charResult.boundaries).toHaveLength(2);
+    expect(charResult.boundaries[0].index).toBe(1);
+
+    expect(computeTextBoundaries('')).toEqual(expect.objectContaining({ type: 'none' }));
+    expect(computeTextBoundaries('a')).toEqual(expect.objectContaining({ type: 'none' }));
+  });
+
+  test('allows clicking interactive text boundaries to set split point', () => {
+    const onPreviewAction = jest.fn();
+    render(<QueryHypothesisEditor intent={baseIntent} onPreviewAction={onPreviewAction} />);
+
+    // Open split mode on E1: "người đàn ông đi vào"
+    fireEvent.click(within(screen.getByTestId('hypothesis-event-E1')).getByTitle('Split this event into two sequential events'));
+
+    // Find cut buttons
+    const cutBetweenNguoiAndDan = screen.getByRole('button', {
+      name: /split between "người" and "đàn"/i,
+    });
+    expect(cutBetweenNguoiAndDan).toBeInTheDocument();
+
+    // Click to split between "người" and "đàn" (offset 6)
+    fireEvent.click(cutBetweenNguoiAndDan);
+
+    // Verify preview updates
+    const previewContainer = document.querySelector('.split-text-preview');
+    expect(within(previewContainer).getByText('người')).toBeInTheDocument();
+    expect(within(previewContainer).getByText('đàn ông đi vào')).toBeInTheDocument();
+
+    // Click Preview Split
+    fireEvent.click(screen.getByRole('button', { name: /preview split/i }));
+
+    expect(onPreviewAction).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'split',
+      event_id: 'E1',
+      split_at: 6,
+    }));
+  });
+
+  test('renders attached event images with remove button and triggers onRemoveImage', () => {
+    const onRemoveImage = jest.fn();
+    const intentWithImages = {
+      ...baseIntent,
+      events: [
+        {
+          ...baseIntent.events[0],
+          images: [{ asset_id: 'ast_test_img', filename: 'photo.jpg' }],
+        },
+      ],
+    };
+
+    render(<QueryHypothesisEditor intent={intentWithImages} onRemoveImage={onRemoveImage} />);
+
+    expect(screen.getByTestId('event-image-ast_test_img')).toBeInTheDocument();
+    expect(screen.getByText('photo.jpg')).toBeInTheDocument();
+
+    const removeBtn = screen.getByRole('button', { name: /remove image photo\.jpg/i });
+    fireEvent.click(removeBtn);
+
+    expect(onRemoveImage).toHaveBeenCalledWith('E1', 'ast_test_img');
+  });
 });
+

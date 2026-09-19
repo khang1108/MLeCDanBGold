@@ -322,6 +322,8 @@ const KisPanel = ({
                     onSearch={onSearchQueryHypothesis || onSubmit}
                     isResultsStale={isResultsStale(queryHypothesisState)}
                     disabled={isSearching || disabled}
+                    onAttachImage={onAttachImage}
+                    onRemoveImage={onRemoveImage}
                   />
                 ) : (
                   <EventList

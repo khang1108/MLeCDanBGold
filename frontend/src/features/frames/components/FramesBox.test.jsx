@@ -128,7 +128,7 @@ test("renders EventTrail start button when context and result_id exist", () => {
     />,
   );
 
-  const startBtn = screen.getByRole("button", { name: /eventtrail/i });
+  const startBtn = screen.getByRole("button", { name: /hypothesis explorer|eventtrail/i });
   expect(startBtn).toBeTruthy();
 });
 
@@ -177,9 +177,9 @@ test("renders active trail revision, undo and exit buttons when row trail is act
     />,
   );
 
-  expect(screen.getByText(/Trail Rev 2/i)).toBeTruthy();
+  expect(screen.getByText(/(explorer|trail) rev 2/i)).toBeTruthy();
   expect(screen.getByRole("button", { name: /undo/i })).toBeTruthy();
-  expect(screen.getByRole("button", { name: /exit trail/i })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /exit (explorer|trail)/i })).toBeTruthy();
 });
 
 test("renders updated candidate frames from activeTrailSession.path when row trail is active", () => {

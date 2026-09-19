@@ -1160,3 +1160,76 @@ test('does not fabricate a query hypothesis session from the evidence snapshot',
     queryHypothesisSessionId: 'qh_real_session',
   }));
 });
+
+test('migrates image attachment to Query Hypothesis mutation when session is active and avoids dead patch_events', async () => {
+  openQueryHypothesis.mockResolvedValueOnce({
+    session_id: 'qh_active_1',
+    query_revision: 1,
+    intent: { revision: 1, query_text: 'dog running', events: [{ id: 'E1', text: 'dog running', images: [] }] },
+    can_undo: false,
+  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 1,
+    query_hypothesis_session_id: 'qh_active_1',
+    events: [{ id: 'E1', text: 'dog running' }],
+    results: [frameResult('frame-1')],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('dog running');
+
+  expect(await screen.findByAltText('Frame frame-1')).toBeTruthy();
+  expect(screen.getByTestId('query-hypothesis-editor')).toBeInTheDocument();
+
+  uploadKisImage.mockResolvedValueOnce({
+    asset_id: 'ast_qh_img',
+    file_name: 'dog.jpg',
+  });
+  commitQueryHypothesis.mockResolvedValueOnce({
+    session_id: 'qh_active_1',
+    query_revision: 2,
+    intent: {
+      revision: 2,
+      query_text: 'dog running',
+      events: [{ id: 'E1', text: 'dog running', images: [{ asset_id: 'ast_qh_img' }] }],
+    },
+    can_undo: true,
+  });
+
+  const testFile = new File(['dog image content'], 'dog.jpg', { type: 'image/jpeg' });
+  const fileInput = screen.getByLabelText(/^attach image$/i);
+  fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+  await waitFor(() => expect(uploadKisImage).toHaveBeenCalledWith(
+    expect.objectContaining({ imageFile: testFile }),
+  ));
+  await waitFor(() => expect(commitQueryHypothesis).toHaveBeenCalledWith(
+    'qh_active_1',
+    1,
+    expect.objectContaining({
+      type: 'attach_image',
+      event_id: 'E1',
+      image: expect.objectContaining({ asset_id: 'ast_qh_img' }),
+    }),
+  ));
+
+  // Verify results become stale and next search sends search_only, never patch_events
+  const staleNotices = await screen.findAllByTestId('stale-results-notice');
+  expect(staleNotices.length).toBeGreaterThanOrEqual(1);
+
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 2,
+    query_hypothesis_session_id: 'qh_active_1',
+    events: [{ id: 'E1', text: 'dog running' }],
+    results: [frameResult('frame-2')],
+  }));
+
+  const updateBtn = screen.getByRole('button', { name: /update results/i });
+  fireEvent.click(updateBtn);
+
+  await waitFor(() => expect(searchKis).toHaveBeenLastCalledWith(expect.objectContaining({
+    queryHypothesisSessionId: 'qh_active_1',
+    expectedRevision: 2,
+    operation: { kind: 'search_only' },
+  })));
+});

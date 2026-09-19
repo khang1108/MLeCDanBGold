@@ -145,7 +145,7 @@ const FramesBox = ({
                         {isRowTrailActive && activeTrailSession ? (
                           <div className="frames-row-trail-active-group">
                             <span className="badge-trail-active">
-                              ⚡ Trail Rev {activeTrailSession.trail_revision}
+                              ⚡ Explorer Rev {activeTrailSession.trail_revision}
                             </span>
                             {activeTrailSession.status === 'exhausted' && (
                               <span className="badge-trail-exhausted">Exhausted</span>
@@ -155,7 +155,7 @@ const FramesBox = ({
                               className="btn-trail-row-action btn-trail-undo"
                               onClick={() => eventTrail.undo()}
                               disabled={isTrailPending}
-                              title="Undo last EventTrail action"
+                              title="Undo last Hypothesis Explorer action"
                             >
                               ↺ Undo
                             </button>
@@ -164,9 +164,9 @@ const FramesBox = ({
                               className="btn-trail-row-action btn-trail-exit"
                               onClick={() => eventTrail.close()}
                               disabled={isTrailPending}
-                              title="Exit EventTrail"
+                              title="Exit Hypothesis Explorer"
                             >
-                              Exit Trail
+                              Exit Explorer
                             </button>
                           </div>
                         ) : canStartTrail ? (
@@ -175,9 +175,9 @@ const FramesBox = ({
                             className="btn-trail-row-start"
                             onClick={() => handleStartTrail(resultItem)}
                             disabled={isTrailPending}
-                            title="Explore timeline alignment with EventTrail"
+                            title="Explore timeline alignment with Hypothesis Explorer"
                           >
-                            ⚡ EventTrail
+                            ⚡ Hypothesis Explorer
                           </button>
                         ) : null}
                       </div>

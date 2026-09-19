@@ -1,5 +1,62 @@
 import React, { useState } from 'react';
 import QueryHypothesisPreview from './QueryHypothesisPreview';
+import { kisImageAssetUrl } from '../../../api/kis';
+
+/**
+ * Compute valid interactive split boundaries in text (word boundaries or character boundaries).
+ */
+export const computeTextBoundaries = (text) => {
+  if (!text || text.length <= 1) return { type: 'none', words: [], chars: [], boundaries: [] };
+
+  const wordsWithOffsets = [];
+  const regex = /\S+/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    wordsWithOffsets.push({
+      word: match[0],
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  if (wordsWithOffsets.length > 1) {
+    const boundaries = [];
+    for (let i = 0; i < wordsWithOffsets.length - 1; i += 1) {
+      const currentWord = wordsWithOffsets[i];
+      const nextWord = wordsWithOffsets[i + 1];
+      boundaries.push({
+        index: nextWord.start,
+        prevWord: currentWord.word,
+        nextWord: nextWord.word,
+        label: `${currentWord.word} | ${nextWord.word}`,
+      });
+    }
+    return {
+      type: 'words',
+      words: wordsWithOffsets,
+      chars: [],
+      boundaries,
+    };
+  }
+
+  // Single word: character boundaries
+  const chars = text.split('');
+  const boundaries = [];
+  for (let i = 1; i < chars.length; i += 1) {
+    boundaries.push({
+      index: i,
+      prevWord: chars.slice(0, i).join(''),
+      nextWord: chars.slice(i).join(''),
+      label: `${chars[i - 1]} | ${chars[i]}`,
+    });
+  }
+  return {
+    type: 'chars',
+    words: [],
+    chars,
+    boundaries,
+  };
+};
 
 /**
  * Structured editor for KIS Query Hypotheses.
@@ -19,6 +76,8 @@ const QueryHypothesisEditor = ({
   onSearch,
   isResultsStale = false,
   disabled = false,
+  onAttachImage,
+  onRemoveImage,
 }) => {
   const [editingEventId, setEditingEventId] = useState(null);
   const [editText, setEditText] = useState('');
@@ -54,8 +113,16 @@ const QueryHypothesisEditor = ({
 
   const handleStartSplit = (event) => {
     setSplittingEventId(event.id);
-    const mid = Math.floor((event.text?.length || 0) / 2);
-    setSplitIndex(String(mid > 0 ? mid : 1));
+    const text = event.text || '';
+    const boundaryInfo = computeTextBoundaries(text);
+    let initialIndex = 1;
+    if (boundaryInfo.boundaries.length > 0) {
+      const midBoundary = boundaryInfo.boundaries[Math.floor(boundaryInfo.boundaries.length / 2)];
+      initialIndex = midBoundary.index;
+    } else {
+      initialIndex = Math.max(1, Math.floor(text.length / 2));
+    }
+    setSplitIndex(String(initialIndex));
     setSplitImageAssignments({});
     setEditingEventId(null);
     setAddingAtPosition(null);
@@ -303,27 +370,112 @@ const QueryHypothesisEditor = ({
                   </div>
                 ) : isSplitting ? (
                   <div className="query-event-inline-form split-form">
-                    <div className="split-text-preview">
-                      <span className="left-half">
-                        {event.text.slice(0, parseInt(splitIndex, 10) || 0)}
-                      </span>
-                      <span className="split-divider"> | </span>
-                      <span className="right-half">
-                        {event.text.slice(parseInt(splitIndex, 10) || 0)}
-                      </span>
+                    <div className="split-text-preview" aria-live="polite">
+                      <div className="split-preview-header">
+                        <span className="split-preview-title">Split Preview</span>
+                      </div>
+                      <div className="split-preview-halves">
+                        <div className="split-preview-child left-child">
+                          <span className="split-child-badge">Event 1</span>
+                          <span className="split-child-text">
+                            {event.text.slice(0, parseInt(splitIndex, 10) || 0).trim() || '...'}
+                          </span>
+                        </div>
+                        <div className="split-divider-symbol" aria-hidden="true">
+                          ✂
+                        </div>
+                        <div className="split-preview-child right-child">
+                          <span className="split-child-badge">Event 2</span>
+                          <span className="split-child-text">
+                            {event.text.slice(parseInt(splitIndex, 10) || 0).trim() || '...'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <label className="split-input-label">
-                      Split character index:
-                      <input
-                        type="number"
-                        min="1"
-                        max={Math.max(1, (event.text?.length || 1) - 1)}
-                        className="form-control split-index-input"
-                        value={splitIndex}
-                        onChange={(e) => setSplitIndex(e.target.value)}
-                        disabled={disabled}
-                      />
-                    </label>
+
+                    <div className="split-boundary-selector">
+                      <div className="split-selector-header">
+                        <span className="split-boundary-instruction">
+                          Click any boundary or word to set split point:
+                        </span>
+                      </div>
+                      <div className="split-tokens-flow">
+                        {(() => {
+                          const boundaryInfo = computeTextBoundaries(event.text);
+                          const currentSplit = parseInt(splitIndex, 10) || 0;
+
+                          if (boundaryInfo.type === 'words') {
+                            return boundaryInfo.words.map((w, wIdx) => {
+                              const boundary = wIdx > 0 ? boundaryInfo.boundaries[wIdx - 1] : null;
+                              const isBoundarySelected = boundary && boundary.index === currentSplit;
+                              const isLeft = w.end <= currentSplit;
+
+                              return (
+                                <React.Fragment key={`word-${w.start}-${w.end}`}>
+                                  {boundary && (
+                                    <button
+                                      type="button"
+                                      className={`split-boundary-btn ${isBoundarySelected ? 'is-selected' : ''}`}
+                                      onClick={() => setSplitIndex(String(boundary.index))}
+                                      aria-label={`Split between "${boundary.prevWord}" and "${boundary.nextWord}"`}
+                                      title={`Split between "${boundary.prevWord}" and "${boundary.nextWord}"`}
+                                      disabled={disabled}
+                                    >
+                                      <span className="split-cut-icon">{isBoundarySelected ? '✂' : '|'}</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className={`split-word-token ${isLeft ? 'token-left' : 'token-right'}`}
+                                    onClick={() => {
+                                      const targetBoundary = boundaryInfo.boundaries.find((b) => b.index >= w.end)
+                                        || boundaryInfo.boundaries[boundaryInfo.boundaries.length - 1];
+                                      if (targetBoundary) {
+                                        setSplitIndex(String(targetBoundary.index));
+                                      }
+                                    }}
+                                    title={`Click to split after "${w.word}"`}
+                                    disabled={disabled}
+                                  >
+                                    {w.word}
+                                  </button>
+                                </React.Fragment>
+                              );
+                            });
+                          }
+
+                          if (boundaryInfo.type === 'chars') {
+                            return boundaryInfo.chars.map((char, cIdx) => {
+                              const boundary = cIdx > 0 ? boundaryInfo.boundaries[cIdx - 1] : null;
+                              const isBoundarySelected = boundary && boundary.index === currentSplit;
+                              const isLeft = cIdx < currentSplit;
+
+                              return (
+                                <React.Fragment key={`char-${cIdx}`}>
+                                  {boundary && (
+                                    <button
+                                      type="button"
+                                      className={`split-boundary-btn char-boundary ${isBoundarySelected ? 'is-selected' : ''}`}
+                                      onClick={() => setSplitIndex(String(boundary.index))}
+                                      aria-label={`Split between '${boundary.prevWord.slice(-1)}' and '${boundary.nextWord[0]}'`}
+                                      title="Split here"
+                                      disabled={disabled}
+                                    >
+                                      <span className="split-cut-icon">{isBoundarySelected ? '✂' : '|'}</span>
+                                    </button>
+                                  )}
+                                  <span className={`split-char-token ${isLeft ? 'token-left' : 'token-right'}`}>
+                                    {char}
+                                  </span>
+                                </React.Fragment>
+                              );
+                            });
+                          }
+
+                          return null;
+                        })()}
+                      </div>
+                    </div>
                     {(event.images || []).length > 0 && (
                       <fieldset className="split-image-assignments">
                         <legend>Assign each image to split children</legend>
@@ -385,7 +537,39 @@ const QueryHypothesisEditor = ({
                     </div>
                   </div>
                 ) : (
-                  <p className="event-item-text">{event.text}</p>
+                  <>
+                    <p className="event-item-text">{event.text}</p>
+                    {Array.isArray(event.images) && event.images.length > 0 && (
+                      <div className="query-event-images" data-testid={`event-images-${event.id}`}>
+                        {event.images.map((image, imgIdx) => {
+                          const assetId = typeof image === 'string' ? image : (image.asset_id || image.id);
+                          const fileName = typeof image === 'object' ? (image.filename || image.file_name || assetId) : assetId;
+                          return (
+                            <div key={assetId || imgIdx} className="query-event-image-chip" data-testid={`event-image-${assetId}`}>
+                              {assetId && (
+                                <img
+                                  src={kisImageAssetUrl(assetId)}
+                                  alt={fileName}
+                                  className="query-event-image-thumb"
+                                />
+                              )}
+                              <span className="query-event-image-name">{fileName}</span>
+                              <button
+                                type="button"
+                                className="query-event-remove-image-btn"
+                                aria-label={`Remove image ${fileName}`}
+                                title={`Remove image ${fileName}`}
+                                onClick={() => onRemoveImage?.(event.id, assetId)}
+                                disabled={disabled}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -401,6 +585,29 @@ const QueryHypothesisEditor = ({
                     >
                       <span className="btn-icon">✎</span>
                       <span>Edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary event-ctrl-btn btn-attach-img"
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'image/*';
+                        input.onchange = (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            onAttachImage?.(file, event.id);
+                          }
+                        };
+                        input.click();
+                      }}
+                      disabled={disabled}
+                      title="Attach image to this event"
+                      aria-label={`Attach image to ${event.id}`}
+                    >
+                      <span className="btn-icon">📷</span>
+                      <span>Image</span>
                     </button>
 
                     <button
