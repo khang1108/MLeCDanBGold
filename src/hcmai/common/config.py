@@ -474,10 +474,10 @@ class InferenceConfig(BaseModel):
     # field for older consumers, but omission must never silently disable it.
     enabled: bool = True
     base_url: str = "https://api.iamphuckhang.dev"
-    timeout_seconds: float = Field(default=10, gt=0, le=120)
+    timeout_seconds: float = Field(default=10, gt=0, le=1200)
     connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
-    read_timeout_seconds: float = Field(default=120, gt=0, le=600)
-    write_timeout_seconds: float = Field(default=30, gt=0, le=600)
+    read_timeout_seconds: float = Field(default=120, gt=0, le=1200)
+    write_timeout_seconds: float = Field(default=30, gt=0, le=1200)
     pool_timeout_seconds: float = Field(default=5, gt=0, le=120)
     max_attempts: int = Field(default=3, ge=1, le=10)
     backoff_initial_seconds: float = Field(default=0.1, ge=0, le=10)

@@ -405,12 +405,13 @@ def _jpeg(image: Image.Image) -> bytes:
 
 
 def _legacy_config(timeout_seconds: float) -> InferenceConfig:
+    timeout = max(0.1, min(float(timeout_seconds), 1200.0))
     return InferenceConfig(
-        timeout_seconds=timeout_seconds,
-        connect_timeout_seconds=timeout_seconds,
-        read_timeout_seconds=timeout_seconds,
-        write_timeout_seconds=timeout_seconds,
-        pool_timeout_seconds=timeout_seconds,
+        timeout_seconds=timeout,
+        connect_timeout_seconds=min(timeout, 30.0),
+        read_timeout_seconds=timeout,
+        write_timeout_seconds=timeout,
+        pool_timeout_seconds=min(timeout, 30.0),
     )
 
 
