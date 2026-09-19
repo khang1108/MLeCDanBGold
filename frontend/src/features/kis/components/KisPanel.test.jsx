@@ -32,16 +32,14 @@ const STATE_WITH_E1_E2 = {
 };
 
 describe('KisPanel unified multimodal component', () => {
-  test('renders committed multimodal events and prefills the next event', () => {
-    const onDraftChange = jest.fn();
-    render(<KisPanel sessionState={STATE_WITH_E1_E2} onDraftChange={onDraftChange} />);
+  test('renders committed multimodal events without an Add Event button', () => {
+    // Add Event was removed; structural mutations are owned by Query Hypothesis Editor.
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} onDraftChange={jest.fn()} />);
     expect(screen.getByText('E1')).toBeTruthy();
     expect(screen.getByText('E2')).toBeTruthy();
     expect(screen.getByText('woman enters')).toBeTruthy();
     expect(screen.getByText('chef appears')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /add event/i }));
-    expect(onDraftChange).toHaveBeenCalledWith('E3: ');
+    expect(screen.queryByRole('button', { name: /add event/i })).toBeNull();
   });
 
   test('asks for an event target when an image is attached without E# scope', async () => {
@@ -133,22 +131,27 @@ describe('KisPanel unified multimodal component', () => {
     expect(onRemoveImage).toHaveBeenCalledWith('E1', 'ast_e1_img');
   });
 
-  test('displays dynamic submit label Rewrite for /llm-rewrite', () => {
-    const rewriteState = {
-      ...STATE_WITH_E1_E2,
-      draft: '/llm-rewrite\nrewrite everything for restaurant setting',
-    };
-    render(<KisPanel sessionState={rewriteState} />);
-    expect(screen.getByRole('button', { name: 'Rewrite' })).toBeTruthy();
+  test('displays submit label Feedback when baseIntent is present and submitLabel is Search', () => {
+    // /llm-rewrite and patch_events labels have been removed from the composer.
+    // The only remaining dynamic label is Feedback when a base intent exists.
+    render(<KisPanel sessionState={STATE_WITH_E1_E2} />);
+    expect(screen.getByRole('button', { name: 'Feedback' })).toBeTruthy();
   });
 
-  test('displays dynamic submit label Update for patch_events', () => {
+  test('displays submit label Search (not Update) for E#: prefixed draft without base intent', () => {
+    // patch_events Update label has been removed; E#: syntax is no longer interpreted.
     const patchState = {
-      ...STATE_WITH_E1_E2,
       draft: 'E2: chef stirs soup',
+      revision: 0,
+      currentIntent: null,
+      stagedImages: {},
+      isSearching: false,
+      error: null,
+      mode: 'live',
     };
     render(<KisPanel sessionState={patchState} />);
-    expect(screen.getByRole('button', { name: 'Update' })).toBeTruthy();
+    // Without a base intent, the label remains 'Search'
+    expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy();
   });
 
   test('calls onReset when reset button is clicked', () => {
