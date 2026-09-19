@@ -11,7 +11,7 @@ router = APIRouter(tags=["ocr"])
 
 @router.post("/v1/enrichment/ocr", response_model=OCRResponse)
 async def ocr(request: Request, item_ids: str = Form(), images: list[UploadFile] = File()) -> OCRResponse:
-    identifiers, decoded = decode_images(item_ids, images, maximum=64)
+    identifiers, decoded = decode_images(item_ids, images, maximum=128)
     started = perf_counter()
     runtime = runtime_from(request)
     try:

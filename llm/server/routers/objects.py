@@ -16,7 +16,7 @@ async def objects(
     top_k: int = Form(default=30),
     images: list[UploadFile] = File(),
 ) -> ObjectResponse:
-    identifiers, decoded = decode_images(item_ids, images, maximum=64)
+    identifiers, decoded = decode_images(item_ids, images, maximum=128)
     started = perf_counter()
     runtime = runtime_from(request)
     try:

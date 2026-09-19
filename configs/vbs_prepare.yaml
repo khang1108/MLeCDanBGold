@@ -89,7 +89,7 @@ enrichment:
     vocab_path: null
     min_confidence: 0.20
     top_k: 30
-    batch_size: 16
+    batch_size: 64
     device: null
     artifact_version: object-yoloe-v1
     summary_min_confidence: 0.25
