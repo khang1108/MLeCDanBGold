@@ -124,26 +124,39 @@ const FramesBox = ({
           (results.length ? (
             <div className={`frames-grid size-${gridSize}`}>
               {results.map((resultItem, index) => {
-                const frameIds = Array.isArray(resultItem.frame_ids) && resultItem.frame_ids.length > 0
-                  ? resultItem.frame_ids
-                  : [resultItem.frame_id];
-                const timestampsMs = Array.isArray(resultItem.timestamps_ms) && resultItem.timestamps_ms.length > 0
-                  ? resultItem.timestamps_ms
-                  : [resultItem.timestamp_ms];
-                const hasMultipleEvents = frameIds.length > 1;
-
                 const isRowTrailActive = Boolean(
                   resultItem?.result_id
                   && activeTrailSession?.result_id
                   && activeTrailSession.result_id === resultItem.result_id,
                 );
+
+                const activePath = isRowTrailActive
+                  ? (Array.isArray(activeTrailSession?.path) && activeTrailSession.path.length > 0
+                      ? activeTrailSession.path
+                      : (Array.isArray(activeTrailSession?.last_valid_path) && activeTrailSession.last_valid_path.length > 0
+                          ? activeTrailSession.last_valid_path
+                          : null))
+                  : null;
+
+                const frameIds = activePath && activePath.length > 0
+                  ? activePath.map((c) => c.frame_id)
+                  : (Array.isArray(resultItem.frame_ids) && resultItem.frame_ids.length > 0
+                    ? resultItem.frame_ids
+                    : [resultItem.frame_id]);
+                const timestampsMs = activePath && activePath.length > 0
+                  ? activePath.map((c) => c.timestamp_ms)
+                  : (Array.isArray(resultItem.timestamps_ms) && resultItem.timestamps_ms.length > 0
+                    ? resultItem.timestamps_ms
+                    : [resultItem.timestamp_ms]);
+                const hasMultipleEvents = frameIds.length > 1;
+
                 const approvedEventIds = isRowTrailActive && activeTrailSession ? (activeTrailSession.approved_event_ids || []) : [];
                 const rejectedCounts = isRowTrailActive && activeTrailSession ? (activeTrailSession.rejected_counts || {}) : {};
                 const canStartTrail = Boolean(eventTrailContext?.snapshotId && resultItem?.result_id);
 
                 return (
                   <div
-                    key={`${resultItem.video_id}:${frameIds.join("|")}:${index}`}
+                    key={`${resultItem.video_id}:${resultItem.result_id || frameIds.join("|")}:${index}`}
                     className={`frames-result-row ${isRowTrailActive ? 'trail-row-active' : ''}`}
                   >
                     {(isRowTrailActive || canStartTrail) && (
@@ -203,10 +216,14 @@ const FramesBox = ({
                           ? eventItem
                           : (eventItem?.text || eventItem?.canonical_text || null);
                           
+                        const trailCandidate = activePath?.[eventIndex];
                         const eventFrame = {
                           ...resultItem,
                           frame_id: fId,
+                          frame_ids: frameIds,
+                          timestamps_ms: timestampsMs,
                           timestamp_ms: timestampMs,
+                          frame_idx: trailCandidate?.frame_idx ?? resultItem.frame_idx,
                           event_index: eventIndex,
                           eventIndex,
                           event_label: eventLabel,
@@ -216,7 +233,7 @@ const FramesBox = ({
                         };
                         return (
                           <FrameCard
-                            key={`${fId}-${eventIndex}`}
+                            key={`${fId}-${eventIndex}-${activeTrailSession?.trail_revision || 0}`}
                             frame={eventFrame}
                             eventLabel={hasMultipleEvents ? eventLabel : null}
                             events={events}
