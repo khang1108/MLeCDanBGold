@@ -661,10 +661,17 @@ class SearchService:
         text_events = [event for event in intent.events if event.text is not None]
         if not text_events or intent.language == "en" or self.event_translator is None:
             return None
-        translated = self.event_translator.translate(
-            [event.text for event in text_events], intent.language
-        )
-        return {event.id: text for event, text in zip(text_events, translated, strict=True)}
+        try:
+            translated = self.event_translator.translate(
+                [event.text for event in text_events], intent.language
+            )
+            return {event.id: text for event, text in zip(text_events, translated, strict=True)}
+        except Exception as error:
+            logger.warning(
+                "Event translation failed (%s); falling back to canonical text for dense retrieval",
+                error,
+            )
+            return None
 
     def search_kis(self, request: KISSearchRequest) -> KISSearchResponse:
         """Execute a stateless semantic KIS search."""
