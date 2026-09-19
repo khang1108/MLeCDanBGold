@@ -104,7 +104,7 @@ const submit = (eventDescription) => {
   fireEvent.change(document.getElementById('event-query'), {
     target: { value: eventDescription },
   });
-  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite)$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite|feedback)$/i }));
 };
 
 test.each([
