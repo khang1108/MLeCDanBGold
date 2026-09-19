@@ -14,6 +14,7 @@ class HostedCaptionConfig(BaseModel):
 
     model_checkpoint: str = "Qwen/Qwen3-VL-2B-Instruct"
     revision: str | None = None
+    max_batch_size: int = Field(default=256, ge=1)
     prompt: str = "qwen vl"
     decoding: dict = Field(
         default_factory=lambda: {

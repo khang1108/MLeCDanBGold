@@ -8,6 +8,8 @@ server:
 caption_generation:
   model_checkpoint: "Qwen/Qwen3-VL-2B-Instruct"
   revision: null
+  # Match the measured A6000 caption batch used by the offline client.
+  max_batch_size: 256
   prompt: "Describe the image for video retrieval. Mention the main people, objects, actions, scene, location, and visible event. Be concise and factual."
   decoding:
     max_new_tokens: 64

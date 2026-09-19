@@ -56,7 +56,7 @@ def command_for(stage: str, config_path: Path, config: VBSConfig) -> list[str]:
             sys.executable, "-m", "scripts.enrichment.generate_enrichment",
             "--config", str(config_path),
             "--execution-backend", "remote",
-            "--image-workers", "8",
+            "--image-workers", "16",
         ]
     if stage == "ocr":
         return [sys.executable, "-m", "scripts.enrichment.generate_ocr_enrichment", "--config", str(config_path)]
