@@ -58,7 +58,31 @@ class AddEvent:
     images: tuple[KISImageRef, ...] = ()
 
 
-QueryHypothesisAction = SplitEvent | MergeEvents | ReorderEvents | EditEvent | AddEvent
+@dataclass(frozen=True, slots=True)
+class AttachImage:
+    """Attach an image reference to an existing event."""
+
+    event_id: str
+    image: KISImageRef
+
+
+@dataclass(frozen=True, slots=True)
+class DetachImage:
+    """Detach an image reference from an existing event."""
+
+    event_id: str
+    asset_id: str
+
+
+QueryHypothesisAction = (
+    SplitEvent
+    | MergeEvents
+    | ReorderEvents
+    | EditEvent
+    | AddEvent
+    | AttachImage
+    | DetachImage
+)
 
 
 @dataclass(frozen=True, slots=True)

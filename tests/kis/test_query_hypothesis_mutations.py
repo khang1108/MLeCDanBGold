@@ -4,6 +4,8 @@ import pytest
 
 from hcmai.kis.hypothesis.models import (
     AddEvent,
+    AttachImage,
+    DetachImage,
     EditEvent,
     MergeEvents,
     ReorderEvents,
@@ -203,3 +205,26 @@ def test_undo_restore_is_monotonic(base_intent: KISIntent) -> None:
     restored = restore_query_state(edited, base_intent)
     assert restored.revision == edited.revision + 1
     assert restored.events[0].text == base_intent.events[0].text
+
+
+def test_attach_image_adds_image_and_bumps_revision(base_intent: KISIntent) -> None:
+    image = KISImageRef(asset_id="ast_cup_1", content_type="image/jpeg")
+    out = apply_query_action(base_intent, AttachImage(event_id="E1", image=image))
+    assert out.revision == base_intent.revision + 1
+    assert len(out.events[0].images) == 1
+    assert out.events[0].images[0].asset_id == "ast_cup_1"
+    # Idempotent re-attach increments revision
+    out2 = apply_query_action(out, AttachImage(event_id="E1", image=image))
+    assert out2.revision == out.revision + 1
+    assert len(out2.events[0].images) == 1
+
+
+def test_detach_image_removes_image_and_bumps_revision(base_intent: KISIntent) -> None:
+    image = KISImageRef(asset_id="ast_cup_1", content_type="image/jpeg")
+    attached = apply_query_action(base_intent, AttachImage(event_id="E1", image=image))
+    detached = apply_query_action(attached, DetachImage(event_id="E1", asset_id="ast_cup_1"))
+    assert detached.revision == attached.revision + 1
+    assert len(detached.events[0].images) == 0
+
+    with pytest.raises(ValueError, match="not found"):
+        apply_query_action(detached, DetachImage(event_id="E1", asset_id="ast_cup_1"))

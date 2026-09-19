@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from hcmai.kis.hypothesis.models import (
     AddEvent,
+    AttachImage,
+    DetachImage,
     EditEvent,
     MergeEvents,
     QueryHypothesisAction,
@@ -56,8 +58,26 @@ class AddAction(BaseModel):
     images: list[KISImageRef] = Field(default_factory=list)
 
 
+class AttachImageAction(BaseModel):
+    type: Literal["attach_image"] = "attach_image"
+    event_id: EventId
+    image: KISImageRef
+
+
+class DetachImageAction(BaseModel):
+    type: Literal["detach_image"] = "detach_image"
+    event_id: EventId
+    asset_id: str
+
+
 QueryHypothesisActionRequest = Annotated[
-    EditAction | SplitAction | MergeAction | ReorderAction | AddAction,
+    EditAction
+    | SplitAction
+    | MergeAction
+    | ReorderAction
+    | AddAction
+    | AttachImageAction
+    | DetachImageAction,
     Field(discriminator="type"),
 ]
 
@@ -83,11 +103,17 @@ def to_domain_action(action: QueryHypothesisActionRequest) -> QueryHypothesisAct
         )
     if isinstance(action, ReorderAction):
         return ReorderEvents(event_ids=tuple(action.event_ids))
-    return AddEvent(
-        position=action.position,
-        text=action.text,
-        images=tuple(action.images),
-    )
+    if isinstance(action, AddAction):
+        return AddEvent(
+            position=action.position,
+            text=action.text,
+            images=tuple(action.images),
+        )
+    if isinstance(action, AttachImageAction):
+        return AttachImage(event_id=action.event_id, image=action.image)
+    if isinstance(action, DetachImageAction):
+        return DetachImage(event_id=action.event_id, asset_id=action.asset_id)
+    raise TypeError(f"Unsupported action request: {type(action).__name__}")
 
 
 class QueryHypothesisMutateRequest(BaseModel):

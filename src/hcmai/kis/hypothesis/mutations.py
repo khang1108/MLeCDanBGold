@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from hcmai.kis.hypothesis.models import (
     AddEvent,
+    AttachImage,
+    DetachImage,
     EditEvent,
     MergeEvents,
     QueryHypothesisAction,
@@ -284,6 +286,57 @@ def _apply_add(intent: KISIntent, action: AddEvent) -> KISIntent:
     return _canonicalize(intent, new_events)
 
 
+def _apply_attach_image(intent: KISIntent, action: AttachImage) -> KISIntent:
+    event_idx = next(
+        (i for i, e in enumerate(intent.events) if e.id == action.event_id), None
+    )
+    if event_idx is None:
+        raise ValueError(f"Event {action.event_id} not found in intent")
+
+    current = intent.events[event_idx]
+    existing_assets = {img.asset_id for img in current.images}
+    if action.image.asset_id in existing_assets:
+        return intent.model_copy(update={"revision": intent.revision + 1})
+
+    updated = current.model_copy(
+        update={"images": [*current.images, action.image]}
+    )
+    new_events = [
+        *intent.events[:event_idx],
+        updated,
+        *intent.events[event_idx + 1 :],
+    ]
+    return intent.model_copy(
+        update={"revision": intent.revision + 1, "events": new_events}
+    )
+
+
+def _apply_detach_image(intent: KISIntent, action: DetachImage) -> KISIntent:
+    event_idx = next(
+        (i for i, e in enumerate(intent.events) if e.id == action.event_id), None
+    )
+    if event_idx is None:
+        raise ValueError(f"Event {action.event_id} not found in intent")
+
+    current = intent.events[event_idx]
+    remaining_images = [img for img in current.images if img.asset_id != action.asset_id]
+    if len(remaining_images) == len(current.images):
+        raise ValueError(f"Asset {action.asset_id} not found on event {action.event_id}")
+
+    if current.text is None and not remaining_images:
+        raise ValueError(f"Cannot detach last image from textless event {action.event_id}")
+
+    updated = current.model_copy(update={"images": remaining_images})
+    new_events = [
+        *intent.events[:event_idx],
+        updated,
+        *intent.events[event_idx + 1 :],
+    ]
+    return intent.model_copy(
+        update={"revision": intent.revision + 1, "events": new_events}
+    )
+
+
 def apply_query_action(
     intent: KISIntent, action: QueryHypothesisAction
 ) -> KISIntent:
@@ -291,7 +344,7 @@ def apply_query_action(
 
     Args:
         intent: Current canonical KISIntent.
-        action: One of SplitEvent, MergeEvents, ReorderEvents, EditEvent, AddEvent.
+        action: One of SplitEvent, MergeEvents, ReorderEvents, EditEvent, AddEvent, AttachImage, DetachImage.
 
     Returns:
         New KISIntent with monotonic revision and canonicalized IDs/edges.
@@ -306,6 +359,10 @@ def apply_query_action(
         return _apply_edit(intent, action)
     if isinstance(action, AddEvent):
         return _apply_add(intent, action)
+    if isinstance(action, AttachImage):
+        return _apply_attach_image(intent, action)
+    if isinstance(action, DetachImage):
+        return _apply_detach_image(intent, action)
     raise TypeError(f"Unsupported query hypothesis action: {type(action).__name__}")
 
 

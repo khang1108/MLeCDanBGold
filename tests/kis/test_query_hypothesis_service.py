@@ -290,6 +290,7 @@ def test_query_commit_log_contains_revisions(caplog, service, opened_session):
     assert '"query_revision": 2' in message
     assert '"action_type": "edit"' in message
     assert '"committed": true' in message
+    assert '"action_payload": {"text": "edited"}' in message
 
 
 def test_query_preview_log_marks_not_committed(caplog, service, opened_session):
@@ -307,5 +308,31 @@ def test_query_preview_log_marks_not_committed(caplog, service, opened_session):
     message = records[0].message
     assert '"committed": false' in message
     assert '"query_revision": 1' in message
+    assert '"action_payload": {"text": "preview text"}' in message
+
+
+def test_query_attach_image_preview_and_commit_logging(caplog, service, opened_session):
+    import logging
+    from hcmai.kis.hypothesis.models import AttachImage
+    from hcmai.kis.models import KISImageRef
+
+    caplog.set_level(logging.INFO)
+    image = KISImageRef(asset_id="ast_cup_1", content_type="image/jpeg")
+
+    preview = service.preview(
+        opened_session.session_id, 1, AttachImage(event_id="E1", image=image)
+    )
+    assert len(preview.intent.events[0].images) == 1
+    preview_log = [r for r in caplog.records if "query_hypothesis_preview" in r.message][-1]
+    assert '"action_payload": {"asset_id": "ast_cup_1"}' in preview_log.message
+    assert '"committed": false' in preview_log.message
+
+    view = service.commit(
+        opened_session.session_id, 1, AttachImage(event_id="E1", image=image)
+    )
+    assert len(view.intent.events[0].images) == 1
+    commit_log = [r for r in caplog.records if "query_hypothesis_commit" in r.message][-1]
+    assert '"action_payload": {"asset_id": "ast_cup_1"}' in commit_log.message
+    assert '"committed": true' in commit_log.message
 
 

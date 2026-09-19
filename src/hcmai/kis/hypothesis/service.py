@@ -111,7 +111,7 @@ class QueryHypothesisService:
     ) -> QueryHypothesisPreview:
         """Preview the result of an action without mutating the canonical session."""
         started = perf_counter()
-        action_type, affected_ids = extract_action_metadata(action)
+        action_type, affected_ids, action_payload = extract_action_metadata(action)
         with self._store.locked(session_id) as slot:
             self._require_revision(slot.session, expected_revision)
             proposed = apply_query_action(slot.session.intent, action)
@@ -124,6 +124,7 @@ class QueryHypothesisService:
                 affected_event_ids=affected_ids,
                 latency_ms=total_ms,
                 committed=False,
+                action_payload=action_payload,
             )
             return QueryHypothesisPreview(
                 base_revision=expected_revision, intent=proposed
@@ -137,7 +138,7 @@ class QueryHypothesisService:
     ) -> QueryHypothesisView:
         """Apply an action, push checkpoint to history, bump revision, and update session."""
         started = perf_counter()
-        action_type, affected_ids = extract_action_metadata(action)
+        action_type, affected_ids, action_payload = extract_action_metadata(action)
         with self._store.locked(session_id) as slot:
             self._require_revision(slot.session, expected_revision)
             previous = slot.session.intent
@@ -157,6 +158,7 @@ class QueryHypothesisService:
                 affected_event_ids=affected_ids,
                 latency_ms=total_ms,
                 committed=True,
+                action_payload=action_payload,
             )
             return QueryHypothesisView.from_session(slot.session)
 

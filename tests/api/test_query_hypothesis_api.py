@@ -180,3 +180,60 @@ def test_search_kis_with_query_hypothesis_session_id(
     call_req = mock_search_service.search_kis.call_args[0][0]
     assert call_req.query_hypothesis_session_id == session_id
 
+
+def test_preview_and_commit_attach_and_detach_image(
+    client: TestClient, seeded_query_hypothesis: dict
+) -> None:
+    session_id = seeded_query_hypothesis["session_id"]
+
+    # Preview attach
+    preview_resp = client.post(
+        f"/api/v1/kis/hypotheses/{session_id}/preview",
+        json={
+            "expected_query_revision": 1,
+            "action": {
+                "type": "attach_image",
+                "event_id": "E1",
+                "image": {"asset_id": "ast_cup_1", "content_type": "image/jpeg"},
+            },
+        },
+    )
+    assert preview_resp.status_code == 200
+    preview_data = preview_resp.json()
+    assert preview_data["base_revision"] == 1
+    assert preview_data["intent"]["events"][0]["images"][0]["asset_id"] == "ast_cup_1"
+
+    # Commit attach
+    commit_resp = client.post(
+        f"/api/v1/kis/hypotheses/{session_id}/commit",
+        json={
+            "expected_query_revision": 1,
+            "action": {
+                "type": "attach_image",
+                "event_id": "E1",
+                "image": {"asset_id": "ast_cup_1", "content_type": "image/jpeg"},
+            },
+        },
+    )
+    assert commit_resp.status_code == 200
+    commit_data = commit_resp.json()
+    assert commit_data["query_revision"] == 2
+    assert commit_data["intent"]["events"][0]["images"][0]["asset_id"] == "ast_cup_1"
+
+    # Commit detach
+    detach_resp = client.post(
+        f"/api/v1/kis/hypotheses/{session_id}/commit",
+        json={
+            "expected_query_revision": 2,
+            "action": {
+                "type": "detach_image",
+                "event_id": "E1",
+                "asset_id": "ast_cup_1",
+            },
+        },
+    )
+    assert detach_resp.status_code == 200
+    detach_data = detach_resp.json()
+    assert detach_data["query_revision"] == 3
+    assert len(detach_data["intent"]["events"][0]["images"]) == 0
+
