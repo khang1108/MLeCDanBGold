@@ -46,6 +46,18 @@ beforeEach(() => {
   uploadKisImage.mockReset();
   filterFrames.mockReset();
   openQueryHypothesis.mockReset();
+  openQueryHypothesis.mockImplementation(({ text }) => Promise.resolve({
+    session_id: 'qh_test_session',
+    query_revision: 1,
+    intent: {
+      revision: 1,
+      query_text: text,
+      entities: [],
+      events: [{ id: 'E1', text }],
+      temporal_edges: [],
+    },
+    can_undo: false,
+  }));
   previewQueryHypothesis.mockReset();
   commitQueryHypothesis.mockReset();
   undoQueryHypothesis.mockReset();
@@ -96,8 +108,8 @@ const submit = (eventDescription) => {
 };
 
 test.each([
-  ['a red vehicle passes', { kind: 'initial_resolve', text: 'a red vehicle passes' }],
-  ['E1: a person enters the room', { kind: 'initial_resolve', patches: [expect.objectContaining({ event_id: 'E1', instruction: 'a person enters the room' })] }],
+  ['a red vehicle passes', { kind: 'search_only' }],
+  ['E1: a person enters the room', { kind: 'search_only' }],
 ])('routes %s through frame search', async (
   description,
   expectedOp,
@@ -128,8 +140,7 @@ test('Enter submits E1-prefixed text while Shift+Enter stays in the textarea', a
   await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
     expect.objectContaining({
       operation: expect.objectContaining({
-        kind: 'initial_resolve',
-        patches: [expect.objectContaining({ event_id: 'E1', instruction: 'a person enters the room' })],
+        kind: 'search_only',
       }),
       topK: 20,
     }),
@@ -148,7 +159,7 @@ test('sends the selected Dense and BM25 modes with KIS search', async () => {
 
   await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
     expect.objectContaining({
-      operation: expect.objectContaining({ kind: 'initial_resolve', text: 'a lexical-only query' }),
+      operation: expect.objectContaining({ kind: 'search_only' }),
       topK: 20,
       useDense: false,
       useBm25: true,
@@ -1030,8 +1041,64 @@ test('chat query proposal opens hypothesis preview without replacing current int
   expect(screen.getByText(/rev 1 → 2/i)).toBeInTheDocument();
 });
 
+test('opens a real query hypothesis before the initial KIS search and uses its exact revision', async () => {
+  const opened = {
+    session_id: 'qh_real_session',
+    query_revision: 7,
+    intent: {
+      revision: 7,
+      query_text: 'a red vehicle passes',
+      entities: [],
+      events: [{ id: 'E1', text: 'a red vehicle passes' }],
+      temporal_edges: [],
+    },
+    can_undo: false,
+  };
+  openQueryHypothesis.mockResolvedValueOnce(opened);
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 7,
+    queryText: 'a red vehicle passes',
+    events: opened.intent.events,
+    results: [],
+  }));
 
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('a red vehicle passes');
 
+  await waitFor(() => expect(openQueryHypothesis).toHaveBeenCalledWith(expect.objectContaining({
+    text: 'a red vehicle passes',
+  })));
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(expect.objectContaining({
+    queryHypothesisSessionId: 'qh_real_session',
+    baseIntent: null,
+    expectedRevision: 7,
+    operation: { kind: 'search_only' },
+  })));
+  expect(openQueryHypothesis.mock.invocationCallOrder[0])
+    .toBeLessThan(searchKis.mock.invocationCallOrder[0]);
+});
 
+test('does not fabricate a query hypothesis session from the evidence snapshot', async () => {
+  openQueryHypothesis.mockResolvedValueOnce({
+    session_id: 'qh_real_session',
+    query_revision: 1,
+    intent: { revision: 1, query_text: 'query', events: [{ id: 'E1', text: 'query' }] },
+  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 1,
+    evidenceSnapshotId: 'snapshot-only',
+    queryText: 'query',
+    events: [{ id: 'E1', text: 'query' }],
+  }));
 
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('query');
+  await screen.findByText('No frames found matching your query');
+
+  expect(screen.queryByTestId('query-hypothesis-editor')).toBeInTheDocument();
+  expect(openQueryHypothesis).toHaveBeenCalledTimes(1);
+  expect(searchKis).toHaveBeenCalledWith(expect.objectContaining({
+    queryHypothesisSessionId: 'qh_real_session',
+  }));
+});
 

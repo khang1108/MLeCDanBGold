@@ -19,6 +19,7 @@ import {
 } from '../../avs';
 import { openFeedbackSession, sendFeedbackTurn, undoFeedback } from '../../../api/feedback';
 import {
+  openQueryHypothesis,
   previewQueryHypothesis,
   commitQueryHypothesis,
   undoQueryHypothesis,
@@ -28,6 +29,7 @@ import {
   createInitialQueryHypothesisState,
   receivePreview,
   clearPreview,
+  receiveOpenedHypothesis,
   receiveCommit,
   isResultsStale,
 } from '../../kis/queryHypothesisSession';
@@ -798,7 +800,40 @@ const SearchWorkspace = ({
     requestRef.current = controller;
 
     try {
-      if (draftText) {
+      if (draftText && !queryHypothesisState.sessionId && !kisSession.currentIntent) {
+        const preview = parseComposerDraft(draftText, null);
+        if (preview.error) {
+          setError(preview.error);
+          return;
+        }
+
+        const imageRefs = Object.values(kisSession.stagedImages || {}).flat();
+        const opened = await openQueryHypothesis({
+          text: draftText,
+          imageRefs,
+          signal: controller.signal,
+        });
+        const openedRevision = opened?.query_revision ?? opened?.intent?.revision;
+        if (!opened?.session_id || !Number.isInteger(openedRevision)) {
+          throw new Error('Query Hypothesis open returned an invalid session');
+        }
+
+        setQueryHypothesisState((prev) => receiveOpenedHypothesis(prev, opened));
+        queryHypothesisSessionId = opened.session_id;
+        prepared = {
+          nextState: {
+            ...kisSession,
+            isSearching: true,
+            error: null,
+            pendingOperation: { kind: 'search_only' },
+          },
+          requestPayload: {
+            baseIntent: null,
+            expectedRevision: openedRevision,
+            operation: { kind: 'search_only' },
+          },
+        };
+      } else if (draftText) {
         const preview = parseComposerDraft(draftText, kisSession.currentIntent);
         if (preview.error) {
           setError(preview.error);
@@ -861,7 +896,7 @@ const SearchWorkspace = ({
         const nextRev = response.intent?.revision ?? requestPayload.expectedRevision ?? 1;
         return {
           ...prev,
-          sessionId: response.query_hypothesis_session_id || prev.sessionId || (response.evidence_snapshot_id ? `qh_${response.evidence_snapshot_id}` : 'qh_1'),
+          sessionId: response.query_hypothesis_session_id || prev.sessionId,
           intent: response.intent || prev.intent,
           queryRevision: nextRev,
           resultsQueryRevision: nextRev,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import QueryHypothesisEditor from './QueryHypothesisEditor';
 
 describe('QueryHypothesisEditor component', () => {
@@ -101,5 +101,71 @@ describe('QueryHypothesisEditor component', () => {
     const searchBtn = screen.getByRole('button', { name: /^search$/i });
     fireEvent.click(searchBtn);
     expect(onSearch).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ['edit', () => {
+      fireEvent.click(within(screen.getByTestId('hypothesis-event-E1')).getByTitle('Edit event text'));
+      const input = screen.getByDisplayValue('người đàn ông đi vào');
+      fireEvent.change(input, { target: { value: 'người đàn ông bước vào' } });
+      fireEvent.click(screen.getByRole('button', { name: /preview edit/i }));
+    }, { type: 'edit', event_id: 'E1', text: 'người đàn ông bước vào' }],
+    ['split', () => {
+      fireEvent.click(within(screen.getByTestId('hypothesis-event-E1')).getByTitle('Split this event into two sequential events'));
+      fireEvent.click(screen.getByRole('button', { name: /preview split/i }));
+    }, expect.objectContaining({ type: 'split', event_id: 'E1', image_assignments: {} })],
+    ['merge', () => {
+      fireEvent.click(within(screen.getByTestId('hypothesis-event-E1')).getByTitle('Merge with E2'));
+    }, { type: 'merge', left_event_id: 'E1', right_event_id: 'E2' }],
+    ['reorder', () => {
+      fireEvent.click(within(screen.getByTestId('hypothesis-event-E1')).getByRole('button', { name: 'Move event later' }));
+    }, { type: 'reorder', event_ids: ['E2', 'E1'] }],
+    ['add', () => {
+      fireEvent.click(screen.getByRole('button', { name: /add event at start/i }));
+      fireEvent.change(screen.getByPlaceholderText('New event description...'), {
+        target: { value: 'a new clue' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
+    }, { type: 'add', position: 0, text: 'a new clue', images: [] }],
+  ])('emits the backend %s discriminator for direct editor actions', (_name, perform, expected) => {
+    const onPreviewAction = jest.fn();
+    render(<QueryHypothesisEditor intent={baseIntent} onPreviewAction={onPreviewAction} />);
+
+    perform();
+
+    expect(onPreviewAction).toHaveBeenCalledWith(expected);
+  });
+
+  test('requires explicit left/right assignment for every split image and sends it', () => {
+    const onPreviewAction = jest.fn();
+    const intent = {
+      ...baseIntent,
+      events: [{
+        ...baseIntent.events[0],
+        text: 'person enters room',
+        images: [
+          { asset_id: 'asset-left' },
+          { asset_id: 'asset-right' },
+        ],
+      }],
+    };
+
+    render(<QueryHypothesisEditor intent={intent} onPreviewAction={onPreviewAction} />);
+    fireEvent.click(within(screen.getByTestId('hypothesis-event-E1')).getByTitle('Split this event into two sequential events'));
+
+    const previewSplit = screen.getByRole('button', { name: /preview split/i });
+    expect(previewSplit).toBeDisabled();
+    fireEvent.click(screen.getByLabelText('Assign asset-left to left child'));
+    fireEvent.click(screen.getByLabelText('Assign asset-right to right child'));
+    expect(previewSplit).not.toBeDisabled();
+    fireEvent.click(previewSplit);
+
+    expect(onPreviewAction).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'split',
+      image_assignments: {
+        'asset-left': ['left'],
+        'asset-right': ['right'],
+      },
+    }));
   });
 });

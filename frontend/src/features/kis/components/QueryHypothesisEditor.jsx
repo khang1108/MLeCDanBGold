@@ -25,6 +25,7 @@ const QueryHypothesisEditor = ({
 
   const [splittingEventId, setSplittingEventId] = useState(null);
   const [splitIndex, setSplitIndex] = useState('');
+  const [splitImageAssignments, setSplitImageAssignments] = useState({});
 
   const [addingAtPosition, setAddingAtPosition] = useState(null);
   const [addText, setAddText] = useState('');
@@ -43,7 +44,7 @@ const QueryHypothesisEditor = ({
   const handleSaveEdit = (eventId) => {
     if (!editText.trim()) return;
     const action = {
-      type: 'edit_event',
+      type: 'edit',
       event_id: eventId,
       text: editText.trim(),
     };
@@ -55,6 +56,7 @@ const QueryHypothesisEditor = ({
     setSplittingEventId(event.id);
     const mid = Math.floor((event.text?.length || 0) / 2);
     setSplitIndex(String(mid > 0 ? mid : 1));
+    setSplitImageAssignments({});
     setEditingEventId(null);
     setAddingAtPosition(null);
   };
@@ -62,19 +64,28 @@ const QueryHypothesisEditor = ({
   const handleConfirmSplit = (eventId) => {
     const idx = parseInt(splitIndex, 10);
     if (isNaN(idx) || idx <= 0) return;
+    const event = events.find((candidate) => candidate.id === eventId);
+    const imageAssignments = {};
+    for (const image of event?.images || []) {
+      const assetId = typeof image === 'string' ? image : (image.asset_id || image.id);
+      if (assetId && splitImageAssignments[assetId]?.length) {
+        imageAssignments[assetId] = splitImageAssignments[assetId];
+      }
+    }
     const action = {
-      type: 'split_event',
+      type: 'split',
       event_id: eventId,
       split_at: idx,
-      image_assignments: {},
+      image_assignments: imageAssignments,
     };
     onPreviewAction?.(action);
     setSplittingEventId(null);
+    setSplitImageAssignments({});
   };
 
   const handleMerge = (leftEventId, rightEventId) => {
     const action = {
-      type: 'merge_events',
+      type: 'merge',
       left_event_id: leftEventId,
       right_event_id: rightEventId,
     };
@@ -88,7 +99,7 @@ const QueryHypothesisEditor = ({
     const [moved] = reordered.splice(currentIndex, 1);
     reordered.splice(targetIndex, 0, moved);
     const action = {
-      type: 'reorder_events',
+      type: 'reorder',
       event_ids: reordered.map((e) => e.id),
     };
     onPreviewAction?.(action);
@@ -97,7 +108,7 @@ const QueryHypothesisEditor = ({
   const handleAdd = (position) => {
     if (!addText.trim()) return;
     const action = {
-      type: 'add_event',
+      type: 'add',
       position,
       text: addText.trim(),
       images: [],
@@ -313,6 +324,38 @@ const QueryHypothesisEditor = ({
                         disabled={disabled}
                       />
                     </label>
+                    {(event.images || []).length > 0 && (
+                      <fieldset className="split-image-assignments">
+                        <legend>Assign each image to split children</legend>
+                        {(event.images || []).map((image) => {
+                          const assetId = typeof image === 'string' ? image : (image.asset_id || image.id);
+                          const assigned = splitImageAssignments[assetId] || [];
+                          return (
+                            <div key={assetId} className="split-image-assignment-row">
+                              <span>{assetId}</span>
+                              {['left', 'right'].map((side) => (
+                                <label key={side}>
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Assign ${assetId} to ${side} child`}
+                                    checked={assigned.includes(side)}
+                                    onChange={() => setSplitImageAssignments((previous) => {
+                                      const current = previous[assetId] || [];
+                                      const next = current.includes(side)
+                                        ? current.filter((value) => value !== side)
+                                        : [...current, side];
+                                      return { ...previous, [assetId]: next };
+                                    })}
+                                    disabled={disabled}
+                                  />
+                                  {side}
+                                </label>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </fieldset>
+                    )}
                     <div className="form-buttons">
                       <button
                         type="button"
@@ -322,7 +365,11 @@ const QueryHypothesisEditor = ({
                           disabled ||
                           !splitIndex ||
                           parseInt(splitIndex, 10) <= 0 ||
-                          parseInt(splitIndex, 10) >= event.text.length
+                          parseInt(splitIndex, 10) >= event.text.length ||
+                          (event.images || []).some((image) => {
+                            const assetId = typeof image === 'string' ? image : (image.asset_id || image.id);
+                            return !assetId || !(splitImageAssignments[assetId] || []).length;
+                          })
                         }
                       >
                         Preview Split
