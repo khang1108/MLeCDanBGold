@@ -60,9 +60,18 @@ def create_kis_router(service_container: dict[str, Any]) -> APIRouter:
                 detail=str(error),
             ) from error
         except QueryHypothesisError as error:
-            if error.code in {"QUERY_SESSION_NOT_FOUND", "QUERY_SESSION_EXPIRED"}:
+            if error.code in {
+                "QUERY_SESSION_NOT_FOUND",
+                "QUERY_SESSION_EXPIRED",
+                "QUERY_HYPOTHESIS_NOT_FOUND",
+            }:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
+                    detail=error.message,
+                ) from error
+            if error.code in {"QUERY_HYPOTHESIS_EXPIRED"}:
+                raise HTTPException(
+                    status_code=status.HTTP_410_GONE,
                     detail=error.message,
                 ) from error
             if error.code == "QUERY_REVISION_CONFLICT":

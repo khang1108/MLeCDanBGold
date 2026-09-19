@@ -89,11 +89,37 @@ def derive_mode_intervals(
     max_radius_ms: int,
     domain: Interval | None = None,
 ) -> list[Interval]:
-    """Derive bounded temporal intervals for a sequence of peak timestamps."""
-    intervals = []
-    for i, t in enumerate(peaks):
-        competing = [other_t for j, other_t in enumerate(peaks) if j != i]
-        intervals.append(derive_mode_interval(t, competing, max_radius_ms, domain=domain))
+    """Derive bounded, non-overlapping closed intervals around peak timestamps.
+
+    Neighboring intervals split at the integer midpoint. Since masks use
+    inclusive endpoints, the later interval starts one millisecond after that
+    midpoint. Results retain the input order while boundaries are derived in
+    chronological order.
+    """
+    indexed_peaks = sorted(enumerate(peaks), key=lambda item: (item[1], item[0]))
+    intervals: list[Interval] = [(0, 0)] * len(peaks)
+    for position, (original_index, timestamp) in enumerate(indexed_peaks):
+        competing = [
+            int(other_timestamp)
+            for other_index, other_timestamp in indexed_peaks
+            if other_index != original_index
+        ]
+        radius = min(
+            max_radius_ms,
+            min((abs(int(timestamp) - other) // 2 for other in competing), default=max_radius_ms),
+        )
+        left = int(timestamp) - radius
+        right = int(timestamp) + radius
+        if position:
+            previous = int(indexed_peaks[position - 1][1])
+            left = max(left, (previous + int(timestamp)) // 2 + 1)
+        if position + 1 < len(indexed_peaks):
+            following = int(indexed_peaks[position + 1][1])
+            right = min(right, (int(timestamp) + following) // 2)
+        if domain is not None:
+            left = max(domain[0], left)
+            right = min(domain[1], right)
+        intervals[original_index] = (int(left), int(right))
     return intervals
 
 

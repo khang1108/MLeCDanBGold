@@ -13,6 +13,7 @@ from hcmai.kis.models import (
     KISInitialResolution,
     KISIntent,
     KISTemporalEdge,
+    SourceProvenance,
 )
 
 
@@ -131,6 +132,32 @@ class KISIntentModelTest(unittest.TestCase):
 
         self.assertEqual(event.text, "A woman holds a plate")
         self.assertEqual(event.images[0].content_type, "image/webp")
+
+    def test_rejects_explicit_source_text_without_provenance(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source provenance"):
+            KISEvent(id="E1", text="source text", origin="source")
+
+    def test_rejects_user_added_event_with_provenance(self) -> None:
+        with self.assertRaisesRegex(ValueError, "user-added"):
+            KISEvent(
+                id="E1",
+                text="added text",
+                origin="user_added",
+                source_provenance=SourceProvenance(
+                    source_text="added text", start_char=0, end_char=10
+                ),
+            )
+
+    def test_user_override_may_retain_provenance(self) -> None:
+        event = KISEvent(
+            id="E1",
+            text="edited text",
+            origin="user_override",
+            source_provenance=SourceProvenance(
+                source_text="original text", start_char=0, end_char=13
+            ),
+        )
+        self.assertEqual(event.origin, "user_override")
 
     def test_accepts_image_only_intent_without_language_or_query_text(self) -> None:
         intent = KISIntent(

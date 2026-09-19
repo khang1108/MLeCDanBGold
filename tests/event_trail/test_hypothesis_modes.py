@@ -211,7 +211,16 @@ def test_close_peaks_scale_radius_to_half_distance(mode_builder):
     )
     # Distance is 6_000. Half-distance is 3_000 < 8_000.
     assert modes[0].interval == (17_000, 23_000)
-    assert modes[1].interval == (23_000, 29_000)
+    assert modes[1].interval == (23_001, 29_000)
+
+
+def test_close_peak_intervals_do_not_overlap_under_inclusive_masks(mode_builder):
+    modes = mode_builder(
+        peaks=[(20_000, 1.0), (26_000, 0.9)],
+        max_radius_ms=8_000,
+    )
+
+    assert modes[0].interval[1] < modes[1].interval[0]
 
 
 def test_active_occurrence_is_marked_as_current(decoder_fixture):

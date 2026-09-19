@@ -95,11 +95,22 @@ def _apply_split(intent: KISIntent, action: SplitEvent) -> KISIntent:
                     end_char=rs + len(right_text),
                 )
 
+    left_origin = (
+        event.origin
+        if event.origin != "source" or left_prov is not None
+        else "user_override"
+    )
+    right_origin = (
+        event.origin
+        if event.origin != "source" or right_prov is not None
+        else "user_override"
+    )
+
     left_event = KISEvent(
         id=event.id,
         text=left_text,
         source_provenance=left_prov,
-        origin=event.origin,
+        origin=left_origin,
         images=left_images,
         bindings=[],
     )
@@ -107,7 +118,7 @@ def _apply_split(intent: KISIntent, action: SplitEvent) -> KISIntent:
         id=event.id,
         text=right_text,
         source_provenance=right_prov,
-        origin=event.origin,
+        origin=right_origin,
         images=right_images,
         bindings=[],
     )
@@ -158,14 +169,28 @@ def _apply_merge(intent: KISIntent, action: MergeEvents) -> KISIntent:
     if (
         left.source_provenance is not None
         and right.source_provenance is not None
+        and intent.query_text is not None
         and left.source_provenance.end_char <= right.source_provenance.start_char
-        and merged_text is not None
+        and left.source_provenance.source_text
+        == intent.query_text[
+            left.source_provenance.start_char : left.source_provenance.end_char
+        ]
+        and right.source_provenance.source_text
+        == intent.query_text[
+            right.source_provenance.start_char : right.source_provenance.end_char
+        ]
     ):
+        start_char = left.source_provenance.start_char
+        end_char = right.source_provenance.end_char
+        source_text = intent.query_text[start_char:end_char]
         merged_prov = SourceProvenance(
-            source_text=merged_text,
-            start_char=left.source_provenance.start_char,
-            end_char=right.source_provenance.end_char,
+            source_text=source_text,
+            start_char=start_char,
+            end_char=end_char,
         )
+        # Source-grounded merged text must preserve the exact query spelling,
+        # including punctuation and whitespace between the child spans.
+        merged_text = source_text
 
     origin = (
         "source"

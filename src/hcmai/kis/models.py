@@ -125,6 +125,26 @@ class KISEvent(BaseModel):
         """Require every event to retain at least one source of semantic evidence."""
         if self.text is None and not self.images:
             raise ValueError("KIS event requires text or image evidence")
+        if self.origin == "user_added" and self.source_provenance is not None:
+            raise ValueError("user-added events cannot retain source provenance")
+        # Keep compatibility with older image/text fixtures that omitted an
+        # explicit origin, while rejecting explicitly source-grounded text that
+        # cannot be traced to a source span.
+        if (
+            self.origin == "source"
+            and self.text is not None
+            and self.source_provenance is None
+            and "origin" in self.model_fields_set
+        ):
+            raise ValueError("source-grounded text requires source provenance")
+        if (
+            self.origin == "source"
+            and self.text is not None
+            and self.source_provenance is not None
+            and self.text != self.source_provenance.source_text
+            and "origin" in self.model_fields_set
+        ):
+            raise ValueError("source text must match source provenance")
         return self
 
 
@@ -214,4 +234,3 @@ __all__ = [
     "KISTemporalEdge",
     "SourceProvenance",
 ]
-

@@ -90,6 +90,83 @@ def test_merge_adjacent_combines_events_and_recanonicalizes(base_intent: KISInte
     assert out.temporal_edges == []
 
 
+def test_merge_source_events_preserves_exact_query_slice_provenance() -> None:
+    query = "walk in,   then sit!"
+    intent = KISIntent(
+        revision=1,
+        query_text=query,
+        language="en",
+        events=[
+            KISEvent(
+                id="E1",
+                text="walk in,",
+                origin="source",
+                source_provenance=SourceProvenance(
+                    source_text="walk in,", start_char=0, end_char=8
+                ),
+                bindings=[],
+            ),
+            KISEvent(
+                id="E2",
+                text="then sit!",
+                origin="source",
+                source_provenance=SourceProvenance(
+                    source_text="then sit!", start_char=11, end_char=len(query)
+                ),
+                bindings=[],
+            ),
+        ],
+        temporal_edges=[KISTemporalEdge(source="E1", target="E2")],
+    )
+
+    merged = apply_query_action(
+        intent, MergeEvents(left_event_id="E1", right_event_id="E2")
+    ).events[0]
+
+    assert merged.origin == "source"
+    assert merged.text == query
+    assert merged.source_provenance is not None
+    assert merged.source_provenance.source_text == query
+    assert merged.source_provenance.start_char == 0
+    assert merged.source_provenance.end_char == len(query)
+
+
+def test_merge_does_not_claim_source_when_query_span_cannot_be_verified() -> None:
+    intent = KISIntent(
+        revision=1,
+        query_text="wrong then second",
+        language="en",
+        events=[
+            KISEvent(
+                id="E1",
+                text="first",
+                origin="source",
+                source_provenance=SourceProvenance(
+                    source_text="first", start_char=0, end_char=5
+                ),
+                bindings=[],
+            ),
+            KISEvent(
+                id="E2",
+                text="second",
+                origin="source",
+                source_provenance=SourceProvenance(
+                    source_text="second", start_char=12, end_char=18
+                ),
+                bindings=[],
+            ),
+        ],
+        temporal_edges=[KISTemporalEdge(source="E1", target="E2")],
+    )
+
+    merged = apply_query_action(
+        intent, MergeEvents(left_event_id="E1", right_event_id="E2")
+    ).events[0]
+
+    assert merged.origin == "user_override"
+    assert merged.source_provenance is None
+
+
 def test_reorder_recanonicalizes_events(base_intent: KISIntent) -> None:
     out = apply_query_action(
         base_intent, ReorderEvents(event_ids=("E2", "E1"))
