@@ -123,11 +123,13 @@ const QueryHypothesisEditor = ({
     >
       <div className="query-hypothesis-header">
         <div className="query-hypothesis-title-row">
-          <h3>Query Hypothesis</h3>
-          <span className="query-revision-badge">Rev {intent.revision}</span>
-          {intent.language && (
-            <span className="query-language-badge">{intent.language.toUpperCase()}</span>
-          )}
+          <div className="title-with-badges">
+            <h3>Query Hypothesis</h3>
+            <span className="query-revision-badge">Rev {intent.revision}</span>
+            {intent.language && (
+              <span className="query-language-badge">{intent.language.toUpperCase()}</span>
+            )}
+          </div>
         </div>
 
         {intent.query_text && (
@@ -144,7 +146,8 @@ const QueryHypothesisEditor = ({
             disabled={disabled || !canUndo}
             title="Revert last query hypothesis modification"
           >
-            ↺ Undo
+            <span className="btn-icon">↺</span>
+            <span>Undo</span>
           </button>
 
           <button
@@ -153,7 +156,8 @@ const QueryHypothesisEditor = ({
             onClick={() => setAddingAtPosition(0)}
             disabled={disabled}
           >
-            + Add Event at Start
+            <span className="btn-icon">+</span>
+            <span>Add Event at Start</span>
           </button>
         </div>
       </div>
@@ -340,54 +344,61 @@ const QueryHypothesisEditor = ({
 
               {!isEditing && !isSplitting && (
                 <div className="event-item-controls">
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => handleStartEdit(event)}
-                    disabled={disabled}
-                    title="Edit event text"
-                  >
-                    Edit
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => handleStartSplit(event)}
-                    disabled={disabled || (event.text?.length || 0) <= 1}
-                    title="Split this event into two sequential events"
-                  >
-                    Split
-                  </button>
-
-                  {index < events.length - 1 && (
+                  <div className="event-action-group">
                     <button
                       type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      onClick={() => handleMerge(event.id, events[index + 1].id)}
+                      className="btn btn-sm btn-outline-secondary event-ctrl-btn btn-edit"
+                      onClick={() => handleStartEdit(event)}
                       disabled={disabled}
-                      title={`Merge with ${events[index + 1].id}`}
+                      title="Edit event text"
                     >
-                      Merge with Next
+                      <span className="btn-icon">✎</span>
+                      <span>Edit</span>
                     </button>
-                  )}
+
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary event-ctrl-btn btn-split"
+                      onClick={() => handleStartSplit(event)}
+                      disabled={disabled || (event.text?.length || 0) <= 1}
+                      title="Split this event into two sequential events"
+                    >
+                      <span className="btn-icon">✂</span>
+                      <span>Split</span>
+                    </button>
+
+                    {index < events.length - 1 && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary event-ctrl-btn btn-merge"
+                        onClick={() => handleMerge(event.id, events[index + 1].id)}
+                        disabled={disabled}
+                        title={`Merge with ${events[index + 1].id}`}
+                      >
+                        <span className="btn-icon">⧉</span>
+                        <span>Merge with Next</span>
+                      </button>
+                    )}
+                  </div>
 
                   <div className="reorder-buttons">
                     <button
                       type="button"
-                      className="btn btn-sm btn-outline-secondary"
+                      className="btn btn-sm btn-outline-secondary reorder-btn"
                       onClick={() => handleMove(index, -1)}
                       disabled={disabled || index === 0}
                       title="Move event earlier"
+                      aria-label="Move event earlier"
                     >
                       ▲
                     </button>
                     <button
                       type="button"
-                      className="btn btn-sm btn-outline-secondary"
+                      className="btn btn-sm btn-outline-secondary reorder-btn"
                       onClick={() => handleMove(index, 1)}
                       disabled={disabled || index === events.length - 1}
                       title="Move event later"
+                      aria-label="Move event later"
                     >
                       ▼
                     </button>
