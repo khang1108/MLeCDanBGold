@@ -79,3 +79,27 @@ def test_prompt_english_example_events_pass_align_source_fragments():
         assert span.source_text in _EN_INPUT
 
 
+# --- Task 5: Language detection for Vietnamese without diacritics ---
+
+
+def test_infer_query_language_plain_english_is_en():
+    assert infer_query_language(
+        "The camera pans to a craftsperson engraving a metal plate."
+    ) == "en"
+
+
+def test_infer_query_language_vietnamese_without_diacritics_is_vi():
+    """ASCII-only Vietnamese must classify as 'vi', not 'en'.
+
+    Without this, _dense_projection() skips EN->VI translation and retrieval
+    misses the corpus — a dangerous confound before any benchmark.
+    """
+    query = "nguoi dan ong buoc vao phong sau do lay chiec coc roi ngoi xuong ban"
+    result = infer_query_language(query)
+    assert result == "vi", f"Expected 'vi' for unaccented Vietnamese, got {result!r}"
+
+
+def test_infer_query_language_mixed_diacritics_and_ascii_english():
+    """Text with both Vietnamese diacritics and ASCII English words is 'mixed'."""
+    assert infer_query_language("Person walks into phòng") == "mixed"
+
