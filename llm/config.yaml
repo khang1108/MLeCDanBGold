@@ -8,8 +8,8 @@ server:
 caption_generation:
   model_checkpoint: "Qwen/Qwen3-VL-2B-Instruct"
   revision: null
-  # Aggressive single-model A6000 caption batch; monitor peak VRAM for OOM.
-  max_batch_size: 512
+  # Intermediate A6000 caption batch after the 512-image OOM test.
+  max_batch_size: 320
   prompt: "Describe the image for video retrieval. Mention the main people, objects, actions, scene, location, and visible event. Be concise and factual."
   decoding:
     max_new_tokens: 64

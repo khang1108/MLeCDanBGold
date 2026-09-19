@@ -16,13 +16,13 @@ from offline.pipeline.runner import command_for
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_REQ_001_caption_batch_limit_is_aligned_at_512() -> None:
+def test_REQ_001_caption_batch_limit_is_aligned_at_320() -> None:
     """Keep the local request batch within the configured server ceiling."""
 
     server = LLMServiceConfig.from_yaml(PROJECT_ROOT / "llm/config.yaml")
     local = CaptionJobConfig.from_yaml(PROJECT_ROOT / "configs/vbs_prepare.yaml")
 
-    assert server.caption_generation.max_batch_size == 512
+    assert server.caption_generation.max_batch_size == 320
     assert local.caption.batch_size == server.caption_generation.max_batch_size
 
 

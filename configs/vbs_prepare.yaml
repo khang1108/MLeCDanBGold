@@ -64,8 +64,8 @@ enrichment:
     precision: bf16
     dtype: bfloat16
     image_size: 512
-    # Aggressive single-model A6000 batch; monitor peak VRAM and throughput.
-    batch_size: 512
+    # 512 images exceeded A6000 VRAM; 320 is the intermediate pilot batch.
+    batch_size: 320
     enrichment_version: qwen3-vl-2b-caption-v1
     write_interval: 256
 
