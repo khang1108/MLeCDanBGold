@@ -20,7 +20,6 @@ caption_generation:
 # ============================================================
 # EMBEDDING MODELS ONLY
 # ============================================================
-
 visual_embedding:
   backend: "siglip"
   name: "google/siglip2-base-patch16-224"
