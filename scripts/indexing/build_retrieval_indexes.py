@@ -1173,13 +1173,16 @@ def build_context(
 ) -> Any:
     """Build FrameContext directly from its typed store and shared BGE encoder."""
 
-    from hcmai.corpus.stores import FrameContextStore, FrameStore
+    from hcmai.corpus.stores import FrameContextStore
+    from offline.artifact_readers import FrameArtifactReader
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
     from hcmai.retrieval.retriever.dense.index import DenseIndex
     from offline.indexes.text import build_context_index
 
     selected = encoder or create_text_encoder(models)
-    frames = FrameStore(projected_frames)
+    # Context joins need canonical identity and source-manifest lineage, not
+    # the visual projection's relocated image paths or a runtime-only store.
+    frames = FrameArtifactReader(config.dataset.frames_path)
     contexts = FrameContextStore(config.dataset.context_path)
     index = build_context_index(
         cast(Any, frames),

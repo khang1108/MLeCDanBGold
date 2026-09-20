@@ -154,8 +154,8 @@ models:
     name: google/siglip2-base-patch16-224
     revision: 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2
     device: cpu
-    # Match the core API image-request limit in llm/config.yaml.
-    batch_size: 128
+    # Keep requests within the deployed core API image-request limit.
+    batch_size: 512
     image_size: 224
     dtype: float32
 
@@ -164,7 +164,7 @@ models:
     name: BAAI/bge-m3
     revision: 5617a9f61b028005a4858fdac845db406aefb181
     device: cpu
-    batch_size: 32
+    batch_size: 512
     max_length: 1024
     dtype: float32
 
