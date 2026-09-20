@@ -27,8 +27,8 @@ visual_embedding:
 
   device: "cpu"
 
-  # Latitude 5500: bắt đầu nhỏ trước
-  batch_size: 8
+  # Also sets the maximum images accepted per visual embedding request.
+  batch_size: 128
 
   image_size: 224
 
