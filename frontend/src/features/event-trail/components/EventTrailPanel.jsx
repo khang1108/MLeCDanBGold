@@ -40,6 +40,14 @@ const EventTrailPanel = ({
     return events.length > 0 ? events[0].id : null;
   }, [selectedEventId, events]);
 
+  const activeFocusedId = focusedEventId || focusedModeId || null;
+
+  useEffect(() => {
+    if (state && activeEventId && onFocusEvent && activeFocusedId !== activeEventId) {
+      onFocusEvent(activeEventId);
+    }
+  }, [state, activeEventId, onFocusEvent, activeFocusedId]);
+
   if (!state) return null;
 
   const isExhausted = state.status === 'exhausted';
@@ -52,14 +60,6 @@ const EventTrailPanel = ({
 
   const indirectCount = state.transition?.indirect_changed_event_ids?.length || 0;
   const canSubmit = !isExhausted && Boolean(state.submission_selection) && !pending;
-
-  const activeFocusedId = focusedEventId || focusedModeId || null;
-
-  useEffect(() => {
-    if (activeEventId && onFocusEvent && activeFocusedId !== activeEventId) {
-      onFocusEvent(activeEventId);
-    }
-  }, [activeEventId, onFocusEvent, activeFocusedId]);
 
   const effectiveAlternatives = alternatives?.length > 0 ? alternatives : (state.alternatives || []);
   const currentAlternative = effectiveAlternatives.find((a) => a.is_current) || null;
