@@ -914,6 +914,251 @@
   }
 }
 
+/* ─── Hypothesis Alternatives Strip & Cards ─── */
+.hypothesis-alternatives {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin: 4px 0;
+  box-sizing: border-box;
+}
+
+.hypothesis-alternatives.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.hypothesis-alternatives-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.hypothesis-alternatives-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hypothesis-alternatives-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px;
+  align-items: stretch;
+  scrollbar-width: thin;
+}
+
+.hypothesis-alt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 92px;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.hypothesis-alt-card:hover:not(:disabled) {
+  border-color: #0284c7;
+  background: #f0f9ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.hypothesis-alt-card.active {
+  border-color: #0284c7;
+  background: #f0f9ff;
+  box-shadow: 0 0 0 1.5px #0284c7;
+}
+
+.hypothesis-alt-card.current {
+  border-color: #94a3b8;
+}
+
+.hypothesis-alt-thumb {
+  position: relative;
+  width: 82px;
+  height: 48px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0f172a;
+  flex-shrink: 0;
+}
+
+.hypothesis-alt-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hypothesis-alt-no-thumb {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.alt-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+
+.alt-badge.badge-current {
+  background: rgba(15, 23, 42, 0.75);
+  color: #93c5fd;
+  border: 1px solid rgba(147, 197, 253, 0.4);
+}
+
+.alt-badge.badge-preview {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.hypothesis-alt-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+.hypothesis-alt-time {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.hypothesis-alt-score {
+  font-size: 9.5px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+/* ─── Hypothesis Path Preview ─── */
+.hypothesis-path-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  margin: 4px 0;
+  box-sizing: border-box;
+}
+
+.hypothesis-path-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.preview-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.preview-header-actions .btn-sm {
+  padding: 2px 8px;
+  font-size: 11px;
+  height: 24px;
+}
+
+.hypothesis-path-preview-events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.hypothesis-path-preview-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.hypothesis-path-preview-item.focused {
+  border-color: #0284c7;
+  background: #f0f9ff;
+}
+
+.hypothesis-path-preview-item.adjusted {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.preview-item-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-item-left .event-id {
+  font-weight: 700;
+  color: #0284c7;
+  font-size: 11px;
+}
+
+.preview-item-coords {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  color: #475569;
+}
+
 /* ─── Hypothesis Alternatives Empty State & Alternative Actions ─── */
 .hypothesis-alternatives.empty {
   padding: 10px 12px;
@@ -957,4 +1202,5 @@
   border-color: #f87171;
   color: #991b1b;
 }
+
 

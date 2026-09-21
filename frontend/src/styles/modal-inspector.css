@@ -727,6 +727,10 @@
   max-width: 480px;
 }
 
+.modal-inspector-column img {
+  max-width: 100%;
+}
+
 /* Floating Top Control Bar in Viewer Column */
 .modal-viewer-top-bar {
   position: absolute;
