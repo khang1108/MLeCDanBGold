@@ -78,6 +78,11 @@ const parseObjectInput = (raw) => {
   }).filter(Boolean);
 };
 
+const DEFAULT_CHAT_WIDTH = 340;
+const MIN_CHAT_WIDTH = 260;
+const MAX_CHAT_WIDTH = 850;
+const CHAT_COLLAPSE_THRESHOLD = 160;
+
 const SearchWorkspace = ({
   topK = 20,
   setTopK,
@@ -258,6 +263,114 @@ const SearchWorkspace = ({
       // ignore
     }
   }, []);
+
+  const [chatWidth, setChatWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hcmai_chat_width');
+      const parsed = saved ? parseInt(saved, 10) : DEFAULT_CHAT_WIDTH;
+      return Number.isFinite(parsed) && parsed >= MIN_CHAT_WIDTH && parsed <= MAX_CHAT_WIDTH
+        ? parsed
+        : DEFAULT_CHAT_WIDTH;
+    } catch {
+      return DEFAULT_CHAT_WIDTH;
+    }
+  });
+
+  const [isResizingChat, setIsResizingChat] = useState(false);
+  const chatSidebarRef = useRef(null);
+  const resizeCleanUpRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (resizeCleanUpRef.current) {
+        resizeCleanUpRef.current();
+      }
+    };
+  }, []);
+
+  const handleResetChatWidth = useCallback(() => {
+    setChatWidth(DEFAULT_CHAT_WIDTH);
+    try {
+      localStorage.setItem('hcmai_chat_width', String(DEFAULT_CHAT_WIDTH));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleStartChatResize = useCallback((e) => {
+    e.preventDefault();
+    setIsResizingChat(true);
+    document.body.classList.add('is-resizing-chat');
+
+    const startX = e.clientX;
+    const rectWidth = chatSidebarRef.current ? chatSidebarRef.current.getBoundingClientRect().width : 0;
+    const startWidth = rectWidth > 0 ? rectWidth : chatWidth;
+
+    const onMouseMove = (moveEvent) => {
+      const deltaX = startX - moveEvent.clientX;
+      const proposedWidth = startWidth + deltaX;
+
+      if (proposedWidth < CHAT_COLLAPSE_THRESHOLD) {
+        handleToggleChat(true);
+        return;
+      }
+
+      const maxAllowedWidth = Math.min(window.innerWidth * 0.8, MAX_CHAT_WIDTH);
+      const clamped = Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(maxAllowedWidth, proposedWidth)));
+      setChatWidth(clamped);
+    };
+
+    const onMouseUp = (upEvent) => {
+      setIsResizingChat(false);
+      document.body.classList.remove('is-resizing-chat');
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      resizeCleanUpRef.current = null;
+
+      const finalDeltaX = startX - upEvent.clientX;
+      const finalWidth = startWidth + finalDeltaX;
+      if (finalWidth >= CHAT_COLLAPSE_THRESHOLD) {
+        const maxAllowedWidth = Math.min(window.innerWidth * 0.8, MAX_CHAT_WIDTH);
+        const clamped = Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(maxAllowedWidth, finalWidth)));
+        try {
+          localStorage.setItem('hcmai_chat_width', String(clamped));
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    resizeCleanUpRef.current = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      document.body.classList.remove('is-resizing-chat');
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [chatWidth, handleToggleChat]);
+
+  const handleResizerKeyDown = useCallback((e) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setChatWidth((prev) => {
+        const maxAllowed = Math.min(window.innerWidth * 0.8, MAX_CHAT_WIDTH);
+        const next = Math.round(Math.min(maxAllowed, prev + 24));
+        try { localStorage.setItem('hcmai_chat_width', String(next)); } catch {}
+        return next;
+      });
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      setChatWidth((prev) => {
+        const next = Math.round(Math.max(MIN_CHAT_WIDTH, prev - 24));
+        try { localStorage.setItem('hcmai_chat_width', String(next)); } catch {}
+        return next;
+      });
+    } else if (e.key === 'Enter' || e.key === 'Home') {
+      e.preventDefault();
+      handleResetChatWidth();
+    }
+  }, [handleResetChatWidth]);
 
   const setQueryTextareaRef = useCallback((node) => {
     if (queryInputRef) queryInputRef.current = node;
@@ -1595,7 +1708,25 @@ const SearchWorkspace = ({
         <div className="adhoc-results">
           {renderResults()}
         </div>
-        <aside className={`kis-chat-sidebar ${isChatCollapsed ? 'collapsed' : ''}`} aria-label={workspaceMode === 'AVS' ? 'AVS search' : 'KIS search'}>
+        {!isChatCollapsed && (
+          <div
+            className={`kis-chat-resizer ${isResizingChat ? 'is-active' : ''}`}
+            onMouseDown={handleStartChatResize}
+            onDoubleClick={handleResetChatWidth}
+            onKeyDown={handleResizerKeyDown}
+            role="separator"
+            aria-orientation="vertical"
+            tabIndex={0}
+            aria-label="Resize chat panel"
+            title="Kéo để thay đổi kích thước, nhấp đúp để đặt lại mặc định"
+          />
+        )}
+        <aside
+          ref={chatSidebarRef}
+          className={`kis-chat-sidebar ${isChatCollapsed ? 'collapsed' : ''} ${isResizingChat ? 'is-resizing' : ''}`}
+          style={!isChatCollapsed ? { width: `${chatWidth}px`, flexBasis: `${chatWidth}px` } : undefined}
+          aria-label={workspaceMode === 'AVS' ? 'AVS search' : 'KIS search'}
+        >
           {isChatCollapsed ? (
             <button
               type="button"

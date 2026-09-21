@@ -855,12 +855,43 @@
 .inspector-add-answer-button:disabled { opacity: .45; cursor: not-allowed; }
 
 /* KIS semantic-search sidebar */
+.kis-chat-resizer {
+  width: 8px;
+  flex: 0 0 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.kis-chat-resizer::after {
+  content: "";
+  width: 2px;
+  height: calc(100% - 16px);
+  background: transparent;
+  border-radius: 2px;
+  transition: background-color 0.15s ease;
+}
+
+.kis-chat-resizer:hover::after,
+.kis-chat-resizer.is-active::after,
+.kis-chat-resizer:focus-visible::after {
+  background: var(--color-primary, #2563eb);
+}
+
 .kis-chat-sidebar {
   align-self: stretch;
   flex: 0 0 340px;
   width: 340px;
-  max-width: 380px;
-  min-width: 280px;
+  max-width: min(850px, 80vw);
+  min-width: 260px;
   box-sizing: border-box;
   height: 100%;
   max-height: 100%;
@@ -874,13 +905,28 @@
   transition: width 0.2s ease, flex-basis 0.2s ease, min-width 0.2s ease, max-width 0.2s ease, padding 0.2s ease;
 }
 
+.kis-chat-sidebar.is-resizing {
+  transition: none !important;
+  user-select: none !important;
+}
+
+body.is-resizing-chat {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.is-resizing-chat * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .kis-chat-sidebar.collapsed {
   align-self: flex-start;
   height: auto;
-  flex: 0 0 36px;
-  width: 36px;
-  min-width: 36px;
-  max-width: 36px;
+  flex: 0 0 36px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
   padding: 8px 2px;
   overflow: hidden;
   display: flex;

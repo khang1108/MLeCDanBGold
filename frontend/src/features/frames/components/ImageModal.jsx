@@ -634,6 +634,18 @@ const ImageModal = ({
                   {eventTrail?.state ? 'Hypothesis Explorer' : 'Frame Inspector'}
                 </span>
                 <div className="inspector-header-actions">
+                  {eventTrail?.context && !eventTrail?.state && typeof eventTrail?.open === 'function' && (
+                    <button
+                      type="button"
+                      className="btn-trail-row-start"
+                      onClick={() => eventTrail.open(eventTrail.context)}
+                      disabled={eventTrail.pending}
+                      title="Explore timeline alignment with Hypothesis Explorer"
+                      aria-label="Explorer"
+                    >
+                      Explorer
+                    </button>
+                  )}
                   {isAvsMode && onToggleCandidateSelection && (
                     <button
                       type="button"
