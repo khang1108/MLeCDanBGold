@@ -630,59 +630,10 @@ const ImageModal = ({
             </div>
             <div className={`modal-inspector-column ${eventTrail?.state ? 'trail-active' : 'kis-mode'}`}>
               <div className="inspector-header">
-                <span className="inspector-title">
-                  {eventTrail?.state ? 'Hypothesis Explorer' : 'Frame Inspector'}
-                </span>
-                <div className="inspector-header-actions">
-                  {eventTrail?.context && !eventTrail?.state && typeof eventTrail?.open === 'function' && (
-                    <button
-                      type="button"
-                      className="btn-trail-row-start"
-                      onClick={() => eventTrail.open(eventTrail.context)}
-                      disabled={eventTrail.pending}
-                      title="Explore timeline alignment with Hypothesis Explorer"
-                      aria-label="Explorer"
-                    >
-                      Explorer
-                    </button>
-                  )}
-                  {isAvsMode && onToggleCandidateSelection && (
-                    <button
-                      type="button"
-                      className={`inspector-header-select-btn ${isCandidateSelected ? 'is-selected' : ''}`}
-                      onClick={onToggleCandidateSelection}
-                      aria-label={isCandidateSelected ? "Deselect candidate from AVS" : "Select candidate for AVS"}
-                      title={isCandidateSelected ? "Deselect candidate from AVS basket" : "Select candidate for AVS batch"}
-                    >
-                      <span className="select-btn-check" aria-hidden="true">{isCandidateSelected ? '✓' : '+'}</span>
-                      <span>{isCandidateSelected ? 'Selected' : 'Select'}</span>
-                    </button>
-                  )}
-                  {!isAvsMode && !eventTrail?.state && eventTrail?.open && eventTrail?.context && (
-                    <button
-                      type="button"
-                      className="inspector-header-trail-btn"
-                      onClick={() => eventTrail.open()}
-                      disabled={eventTrail?.pending}
-                      title="Open Hypothesis Explorer for this result"
-                      aria-label="Open Hypothesis Explorer"
-                    >
-                      <span>Hypothesis Explorer</span>
-                    </button>
-                  )}
-                  {canSubmitFrame && !eventTrail?.state && (
-                    <button
-                      type="button"
-                      className="frame-submit-button inspector-header-submit-btn"
-                      disabled={isSubmissionOpening}
-                      onClick={handleDirectSubmit}
-                      aria-label="Submit this frame to DRES"
-                      title={`Submit ${frame.video_id} at ${currentTimestampMs} ms to DRES`}
-                    >
-                      <span className="submit-arrow-icon" aria-hidden="true">↗</span>
-                      <span>Submit</span>
-                    </button>
-                  )}
+                <div className="inspector-header-top">
+                  <span className="inspector-title">
+                    {eventTrail?.state ? 'Hypothesis Explorer' : 'Frame Inspector'}
+                  </span>
                   <button
                     type="button"
                     className="inspector-close-btn"
@@ -692,9 +643,54 @@ const ImageModal = ({
                     ×
                   </button>
                 </div>
+                {!eventTrail?.state && (
+                  (eventTrail?.context && typeof eventTrail?.open === 'function') ||
+                  (isAvsMode && onToggleCandidateSelection) ||
+                  canSubmitFrame
+                ) && (
+                  <div className="inspector-header-actions">
+                    {eventTrail?.context && !eventTrail?.state && typeof eventTrail?.open === 'function' && (
+                      <button
+                        type="button"
+                        className="btn-trail-row-start inspector-action-btn"
+                        onClick={() => eventTrail.open(eventTrail.context)}
+                        disabled={eventTrail.pending}
+                        title="Explore timeline alignment with Hypothesis Explorer"
+                        aria-label="Explore"
+                      >
+                        Explore
+                      </button>
+                    )}
+                    {isAvsMode && onToggleCandidateSelection && (
+                      <button
+                        type="button"
+                        className={`inspector-header-select-btn inspector-action-btn ${isCandidateSelected ? 'is-selected' : ''}`}
+                        onClick={onToggleCandidateSelection}
+                        aria-label={isCandidateSelected ? "Deselect candidate from AVS" : "Select candidate for AVS"}
+                        title={isCandidateSelected ? "Deselect candidate from AVS basket" : "Select candidate for AVS batch"}
+                      >
+                        <span className="select-btn-check" aria-hidden="true">{isCandidateSelected ? '✓' : '+'}</span>
+                        <span>{isCandidateSelected ? 'Selected' : 'Select'}</span>
+                      </button>
+                    )}
+                    {canSubmitFrame && !eventTrail?.state && (
+                      <button
+                        type="button"
+                        className="frame-submit-button inspector-header-submit-btn inspector-action-btn"
+                        disabled={isSubmissionOpening}
+                        onClick={handleDirectSubmit}
+                        aria-label="Submit this frame to DRES"
+                        title={`Submit ${frame.video_id} at ${currentTimestampMs} ms to DRES`}
+                      >
+                        <span className="submit-arrow-icon" aria-hidden="true">↗</span>
+                        <span>Submit</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               {displayQuery?.trim() && (
-                <div className="modal-query-context" role="status" aria-label="Current query">
+                <div className="modal-query-context" role="status" aria-label="Current query" title={displayQuery.trim()}>
                   {eventLabel && (
                     <span className="frame-event-badge">{eventLabel}</span>
                   )}

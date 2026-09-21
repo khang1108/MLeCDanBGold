@@ -747,7 +747,36 @@ test('toggles fit mode between contain and cover (fill) on button click and key 
   expect(viewerCol.classList.contains('fit-contain')).toBe(true);
 });
 
-test('renders Hypothesis Explorer button in header when eventTrail context is present and state is inactive, and clicking it calls open', () => {
+test('renders title on top row and 2 action buttons (Explore and Submit) on second row', () => {
+  render(
+    <ImageModal
+      frame={{ frame_id: 'f_test', video_id: 'L21_V001', timestamp_ms: 1000 }}
+      onClose={jest.fn()}
+      onOpenSubmission={jest.fn()}
+      eventTrail={{
+        context: { events: ['E1'] },
+        open: jest.fn(),
+      }}
+    />
+  );
+
+  const topRow = document.querySelector('.inspector-header-top');
+  expect(topRow).toBeInTheDocument();
+  expect(topRow.querySelector('.inspector-title')).toHaveTextContent('Frame Inspector');
+  expect(topRow.querySelector('.inspector-close-btn')).toBeInTheDocument();
+
+  const actionsRow = document.querySelector('.inspector-header-actions');
+  expect(actionsRow).toBeInTheDocument();
+  const exploreBtn = actionsRow.querySelector('.btn-trail-row-start');
+  expect(exploreBtn).toBeInTheDocument();
+  expect(exploreBtn).toHaveTextContent('Explore');
+
+  const submitBtn = actionsRow.querySelector('.inspector-header-submit-btn');
+  expect(submitBtn).toBeInTheDocument();
+  expect(submitBtn).toHaveTextContent('Submit');
+});
+
+test('renders Explore button in header when eventTrail context is present and state is inactive, and clicking it calls open', () => {
   const openTrail = jest.fn();
   const eventTrailProp = {
     context: {
@@ -768,7 +797,7 @@ test('renders Hypothesis Explorer button in header when eventTrail context is pr
     />
   );
 
-  const explorerBtn = screen.getByRole('button', { name: /hypothesis explorer/i });
+  const explorerBtn = screen.getByRole('button', { name: /explore/i });
   expect(explorerBtn).toBeTruthy();
 
   fireEvent.click(explorerBtn);
@@ -799,3 +828,4 @@ test('renders trail error banner in Frame Inspector mode when eventTrail.error i
   expect(screen.getByRole('alert')).toBeTruthy();
   expect(screen.getByText('Snapshot expired. Please rerun search.')).toBeTruthy();
 });
+

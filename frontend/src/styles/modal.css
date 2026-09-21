@@ -68,8 +68,9 @@
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .modal-close-btn {
