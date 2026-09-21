@@ -83,7 +83,7 @@ class LLMClient:
                 },
             },
         }
-        if self._endpoint.enable_thinking is not None:
+        if self._endpoint.enable_thinking is not None and "groq.com" not in self._endpoint.base_url.lower():
             payload["chat_template_kwargs"] = {"enable_thinking": self._endpoint.enable_thinking}
 
         data = self._transport.post_json(

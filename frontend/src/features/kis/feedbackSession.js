@@ -108,7 +108,7 @@ export const applyFeedbackSuccess = (state, response, { requestId } = {}) => {
     ...state,
     status: response.status || 'applied',
     feedbackRevision: response.feedback_revision ?? state.feedbackRevision + 1,
-    currentIntent: response.intent || state.currentIntent,
+    currentIntent: response.status === 'proposal' ? state.currentIntent : (response.intent || state.currentIntent),
     retrievalOverrides: response.retrieval_overrides !== undefined ? response.retrieval_overrides : state.retrievalOverrides,
     results: response.results !== undefined ? response.results : state.results,
     evidenceSnapshotId: response.evidence_snapshot_id || state.evidenceSnapshotId,

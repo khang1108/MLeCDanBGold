@@ -40,6 +40,7 @@ from hcmai.retrieval.serving.remote import (
     RemoteImageSearchService,
     RemoteTemporalSearchService,
 )
+from hcmai.retrieval.translation import EventTranslator
 # pyrefly: ignore [missing-import]
 from llm.config import LLMServiceConfig
 # pyrefly: ignore [missing-import]
@@ -71,6 +72,7 @@ def load_search_service(messages: list[str]) -> SearchService:
     scoped_resolver = _load_scoped_resolver(messages, llm=llm_client)
     global_rewriter = _load_global_rewriter(messages, llm=llm_client)
     feedback_resolver = _load_feedback_resolver(messages, llm=llm_client)
+    event_translator = _load_event_translator(settings, llm_client)
     kis_image_assets = load_kis_image_assets(settings, messages)
 
     literal_text = LiteralTextIndex(corpus) if corpus is not None else None
@@ -114,6 +116,7 @@ def load_search_service(messages: list[str]) -> SearchService:
         global_rewriter=global_rewriter,
         feedback_resolver=feedback_resolver,
         kis_image_assets=kis_image_assets,
+        event_translator=event_translator,
     )
 
 
@@ -214,6 +217,14 @@ def _load_feedback_resolver(
         messages.append("KIS feedback resolver unavailable: LLM client not configured")
         return None
     return FeedbackResolver(llm)
+
+
+def _load_event_translator(
+    settings: AppConfig,
+    llm: LLMClient | None = None,
+) -> EventTranslator | None:
+    """Construct EventTranslator using the shared LLM client."""
+    return EventTranslator(llm, settings.event_translation) if llm is not None else None
 
 
 def load_kis_image_assets(

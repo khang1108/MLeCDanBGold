@@ -26,12 +26,20 @@ def validate_action_references(
     """Validate that action only targets existing events and does not invent external identity."""
     valid_event_ids = {event.id for event in context.intent.events}
 
-    if action.type == "edit_intent":
-        for eid in action.event_ids:
-            if eid not in valid_event_ids:
+    if action.type == "query_edit_proposal":
+        act_dict = action.action if isinstance(action.action, dict) else {}
+        for key in ("event_id", "left_event_id", "right_event_id"):
+            eid = act_dict.get(key)
+            if eid and eid not in valid_event_ids:
                 raise FeedbackResolverError(
-                    f"Unknown event ID '{eid}' in edit_intent action"
+                    f"Unknown event ID '{eid}' in query_edit_proposal action"
                 )
+        if "event_ids" in act_dict and isinstance(act_dict["event_ids"], (list, tuple)):
+            for eid in act_dict["event_ids"]:
+                if eid not in valid_event_ids:
+                    raise FeedbackResolverError(
+                        f"Unknown event ID '{eid}' in query_edit_proposal action"
+                    )
 
     elif action.type == "refine_retrieval":
         for eid in action.event_ids:
@@ -40,14 +48,7 @@ def validate_action_references(
                     f"Unknown event ID '{eid}' in refine_retrieval action"
                 )
 
-    elif action.type == "restructure":
-        for eid in action.replaced_event_ids:
-            if eid not in valid_event_ids:
-                raise FeedbackResolverError(
-                    f"Unknown event ID '{eid}' in restructure action"
-                )
-
-    elif action.type in ("anchor", "reject_candidate", "repair_event"):
+    elif getattr(action, "event_id", None) is not None:
         if action.event_id not in valid_event_ids:
             raise FeedbackResolverError(
                 f"Unknown event ID '{action.event_id}' in {action.type} action"

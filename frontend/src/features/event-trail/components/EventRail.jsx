@@ -56,7 +56,7 @@ const EventRail = ({
                     </span>
                   )}
                   {!isApproved && rejectedCount > 0 && (
-                    <span className="event-trail-badge badge-declined" title={`${rejectedCount} declined candidates`}>
+                    <span className="event-trail-badge badge-declined" title={`${rejectedCount} rejected occurrences`}>
                       ✕ {rejectedCount}
                     </span>
                   )}

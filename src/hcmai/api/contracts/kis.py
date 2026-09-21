@@ -100,6 +100,7 @@ class KISSearchRequest(BaseModel):
     """Stateless search request with explicit base intent and semantic operation."""
 
     model_config = ConfigDict(extra="forbid")
+    query_hypothesis_session_id: str | None = None
     base_intent: KISIntent | None = None
     expected_revision: int = Field(ge=0)
     operation: KISOperation
@@ -121,7 +122,8 @@ class KISSearchRequest(BaseModel):
     def validate_sources(self) -> Self:
         """Require at least one retrieval evidence source or image evidence."""
         if not self.use_dense and not self.use_bm25 and not self._request_may_have_image_evidence():
-            raise ValueError("at least one retrieval source or image evidence must be available")
+            if not self.query_hypothesis_session_id:
+                raise ValueError("at least one retrieval source or image evidence must be available")
         return self
 
 
@@ -143,6 +145,7 @@ class KISSearchResponse(BaseModel):
     results: list[KISSearchResult] = Field(default_factory=list)
     latency: SearchLatency
     evidence_snapshot_id: str | None = None
+    query_hypothesis_session_id: str | None = None
     warnings: list[str] = Field(default_factory=list)
 
     @field_validator("results", mode="before")

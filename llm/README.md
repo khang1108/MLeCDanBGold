@@ -61,20 +61,23 @@ The checked-in configuration pins the visual encoder, caption model and
 image-query reranker. Environment variables control which shared capabilities
 load:
 
-Text query embeddings are requested by the application through the
-`HCMAI_EMBEDDING_*` endpoint settings; this private service intentionally
-exposes image embedding only.
+The service supports two deployment profiles. `core` exposes visual + text
+embeddings, while `gpu` enables one A6000-heavy task at a time.
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `HCMAI_LLM_CONFIG` | GPU service | YAML path; defaults to `llm/config.yaml` |
 | `HCMAI_ENABLE_CAPTION` | GPU service | Load caption generation |
-| `HCMAI_ENABLE_VISUAL_EMBEDDING` | GPU service | Load visual/query encoder |
+| `HCMAI_ENABLE_VISUAL_EMBEDDING` | Core service | Load visual encoder |
+| `HCMAI_ENABLE_TEXT_EMBEDDING` | Core service | Load BGE text encoder |
 | `HCMAI_ENABLE_OCR` | GPU service | Load OCR capability |
 | `HCMAI_ENABLE_ASR` | GPU service | Load ASR capability |
 | `HCMAI_ENABLE_DIARIZATION` | GPU service | Load diarization capability |
 | `HCMAI_ENABLE_TEXT_GENERATION` | GPU service | Load generic causal LM text generation |
-| `HCMAI_INFERENCE_BASE_URL` | Local backend | Hosted inference API base URL |
+| `HCMAI_LLM_PROFILE` | Server | `core`, `gpu`, or `manual` |
+| `HCMAI_GPU_TASK` | GPU profile | `caption`, `ocr`, `objects`, or `asr` |
+| `VBS_CORE_API_URL` | Offline client | Core API override |
+| `VBS_GPU_API_URL` | Offline client | GPU API override |
 
 Every remote encoder checkpoint, vector dimension, normalization and dtype must
 remain compatible with its local FAISS artifact. A different embedding contract
@@ -89,12 +92,15 @@ must not query an index built in another vector space.
 | `POST /v1/chat/completions` | OpenAI chat messages + JSON Schema | Assistant message with structured JSON |
 | `POST /v1/captions` | Multipart IDs and images | Caption for each input ID |
 | `POST /v1/enrichment/ocr` | Multipart IDs and images | OCR evidence for each input ID |
+| `POST /v1/enrichment/objects` | Multipart IDs and images | Object detections |
 | `POST /v1/embeddings/images` | Multipart IDs and images | Visual vectors |
+| `POST /v1/embeddings/text` | JSON model + ordered input strings | Text vectors |
 | `POST /v1/embeddings/dino` | Multipart IDs and images | DINO visual vectors |
 | `POST /v1/preprocessing/shot-scores` | Ordered images | Shot-boundary scores |
 | `POST /v1/preprocessing/event-scores` | Ordered images | Event-boundary scores |
 | `POST /v1/preprocessing/event-window-scores` | Ordered images | Event-window scores |
-| `POST /v1/transcripts/asr` | Audio reference | Timestamped transcript segments |
+| `POST /v1/transcripts/asr` | Legacy HTTPS audio reference | Timestamped transcript segments |
+| `POST /v1/transcripts/asr-file` | Multipart local FLAC | Timestamped transcript segments |
 | `POST /v1/transcripts/diarization` | Audio reference | Timestamped diarized segments |
 
 For example:

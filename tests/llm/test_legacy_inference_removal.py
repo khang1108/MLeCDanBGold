@@ -15,7 +15,7 @@ class LegacyInferenceRemovalTest(unittest.TestCase):
     """Verify that the private service owns only unreplaced capabilities."""
 
     def test_task_4_and_9_do_not_register_retired_text_routes(self) -> None:
-        """Keep query preparation and text embedding on the shared clients."""
+        """Keep query preparation and reranking retired."""
 
         paths = {
             route.path
@@ -25,14 +25,14 @@ class LegacyInferenceRemovalTest(unittest.TestCase):
 
         self.assertNotIn("/query-preparation/translate", paths)
         self.assertNotIn("/query-preparation/candidates", paths)
-        self.assertNotIn("/v1/embeddings/text", paths)
         self.assertNotIn("/v1/rerank", paths)
         self.assertIn("/v1/embeddings/images", paths)
+        self.assertIn("/v1/embeddings/text", paths)
 
     def test_task_4_and_9_remove_retired_local_model_methods(self) -> None:
-        """Prevent local Qwen/text APIs from becoming a second code path."""
+        """Prevent query preparation and reranking from becoming second code paths."""
 
-        self.assertFalse(hasattr(LocalAdapter, "embed_text"))
+        self.assertTrue(hasattr(LocalAdapter, "embed_text"))
         self.assertFalse(hasattr(LocalAdapter, "translate_query_events"))
         self.assertFalse(hasattr(LocalAdapter, "generate_query_candidates"))
         self.assertFalse(hasattr(LocalAdapter, "rerank"))

@@ -1,0 +1,65 @@
+\section{Related Work}
+\label{sec:related-work}
+
+\subsection{Interactive Video Retrieval at VBS}
+
+Interactive systems at VBS combine retrieval models with mechanisms for
+iteratively reformulating queries, inspecting candidates, and refining result
+sets. VISIONE supports textual, visual-similarity, object, color, and temporal
+search, with subsequent versions updating its retrieval models and result
+presentation~\cite{amato2022visione,amato2023visione,amato2024visione}.
+Vibro emphasizes efficient browsing together with rich-text and temporal
+search~\cite{hezel2022vibro}, while PraK combines text-query reformulation,
+example-image search, filtering, and relevance
+feedback~\cite{lokoc2024prak}. Other systems emphasize complementary forms of
+interaction: diveXplore provides browsing and exploration views over clustered
+results~\cite{schoeffmann2024divexplore}, vitrivr offers a modular retrieval
+engine for composing query-processing mechanisms~\cite{gasser2024vitrivr},
+and Exquisitor combines conversational query refinement with user relevance
+feedback~\cite{khan2024exquisitor,sharma2025exquisitor}.
+
+Evidence from VBS evaluations further shows that effective video search depends
+not only on the initial retrieval model, but also on subsequent query
+reformulation, browsing, and result inspection~\cite{schall2024interactive,jackl2026interaction}. In a post-evaluation of VBS 2022, VISIONE achieved the
+best text-to-image retrieval performance among the three evaluated systems,
+whereas Vibro obtained the highest overall result; browsing and image-based
+retrieval were identified as important factors in its
+performance~\cite{schall2024interactive}. More recently, an interaction-log
+analysis of two systems at VBS 2026 found iterative text-query reformulation
+followed by result-set inspection to be the dominant strategy across most task
+categories~\cite{jackl2026interaction}. Together, these observations motivate
+interactive retrieval workflows in which intermediate search states can be
+revised rather than treating the initial ranked list as the final system
+output~\cite{schall2024interactive,jackl2026interaction}. SHI follows this
+perspective while exposing two additional interaction states: the event-level
+interpretation of the query and the temporal alignment within a retrieved
+video.
+
+\subsection{Query Reformulation and Temporal Interaction}
+
+Interactive query reformulation has primarily operated on the query itself or
+on retrieved candidates. Loko{\v{c}} et al.\ derive class suggestions from
+intermediate CLIP results to assist users in revising textual
+queries~\cite{lokoc2023queryreformulation}. Exquisitor instead combines
+natural-language refinement with relevance feedback, with its later version
+integrating both mechanisms into a unified search
+interface~\cite{khan2024exquisitor,sharma2025exquisitor}. vitrivr has also
+explored explainability mechanisms intended to support result inspection and
+relevance feedback, alongside interaction with temporally contextualized
+queries~\cite{heller2021explainable}. In contrast, Query Hypothesis makes the
+system's interpretation of a multi-event request an explicit interaction
+object: users can inspect the ordered event decomposition and revise its
+structure before retrieval.
+
+Temporal structure has likewise been incorporated into interactive video
+retrieval. Heller et al.\ support temporal-context queries composed from
+multiple retrieval modalities~\cite{heller2022temporalqueries}, while
+Exquisitor 2026 introduces sequence-chain retrieval with reciprocal-rank fusion
+for multi-event temporal queries~\cite{khan2026temporalqueries}. Beyond VBS,
+interactive video-corpus moment retrieval has used user feedback to guide
+subsequent navigation and recommendation rounds~\cite{ma2022ivcmr}. These
+approaches use interaction to refine queries, rankings, or navigation through
+candidate moments. EventTrail instead makes the current multi-event temporal
+alignment within a retrieved video directly inspectable and revisable, allowing
+local user corrections to update the hypothesis for the complete ordered event
+sequence.

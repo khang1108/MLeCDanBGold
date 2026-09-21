@@ -2,7 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 import { getCurrentDresTask, submitDresAnswer } from "./api/submissions";
-import { openEventTrail, closeEventTrail } from "./api/eventTrail";
+import { openEventTrail, getEventTrailAlternatives, closeEventTrail } from "./api/eventTrail";
 
 const jsonResponse = (payload, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -13,12 +13,13 @@ const jsonResponse = (payload, status = 200) => ({
 jest.mock("./api/eventTrail", () => ({
   openEventTrail: jest.fn(),
   getEventTrail: jest.fn(),
+  getEventTrailAlternatives: jest.fn(),
   actOnEventTrail: jest.fn(),
   closeEventTrail: jest.fn(),
 }));
 
 jest.mock("./features/search/components/SearchWorkspace", () => (
-  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, userId, onQueryChange, onEventTrailInvalidated, eventTrail }) {
+  function FakeUnifiedWorkspace({ onFrameClick, onOpenSubmission, userId, onQueryChange, onQueryRevisionChange, onEventTrailInvalidated, eventTrail }) {
     const frame = {
       frame_id: "f1",
       video_id: "V01",
@@ -93,6 +94,12 @@ jest.mock("./features/search/components/SearchWorkspace", () => (
           onClick={() => onQueryChange?.('committed search clue')}
         >
           Set committed query
+        </button>
+        <button
+          type="button"
+          onClick={() => onQueryRevisionChange?.(7)}
+        >
+          Set active query revision
         </button>
         <button
           type="button"
@@ -348,16 +355,16 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
 
   // Open inspector for result 1 while trail active
   fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
-  expect(await screen.findByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+  expect(await screen.findByRole('region', { name: /hypothesis explorer/i })).toBeTruthy();
 
   // 2. Close modal with Escape -> session preserved, close not called
   fireEvent.keyDown(window, { key: 'Escape' });
-  await waitFor(() => expect(screen.queryByRole('region', { name: /eventtrail exploration/i })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('region', { name: /hypothesis explorer/i })).toBeNull());
   expect(closeEventTrail).not.toHaveBeenCalled();
 
   // 3. Reopen same result -> active session reused, openEventTrail NOT called again
   fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
-  expect(await screen.findByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+  expect(await screen.findByRole('region', { name: /hypothesis explorer/i })).toBeTruthy();
   expect(openEventTrail).toHaveBeenCalledTimes(1);
 
   openEventTrail.mockResolvedValueOnce({
@@ -384,15 +391,51 @@ test('manages EventTrail session lifecycle across inspector, modal close, result
 
   // 5. Open inspector on result 2
   fireEvent.click(screen.getByRole('button', { name: 'Open inspector result 2' }));
-  await screen.findByRole('region', { name: /eventtrail exploration/i });
+  await screen.findByRole('region', { name: /hypothesis explorer/i });
 
   // Click 'Exit' -> explicitly closes trail
   const exitBtn = screen.getByRole('button', { name: /^exit$/i });
   fireEvent.click(exitBtn);
   await waitFor(() => {
     expect(closeEventTrail).toHaveBeenCalledWith('trail_2', { expectedTrailRevision: 0 });
-    expect(screen.queryByRole('region', { name: /eventtrail exploration/i })).toBeNull();
+    expect(screen.queryByRole('region', { name: /hypothesis explorer/i })).toBeNull();
   });
+});
+
+test('forwards active query revision and explorer focus callback through App to the inspector', async () => {
+  openEventTrail.mockReset().mockResolvedValue({
+    session_id: 'trail_1',
+    result_id: 'r_1',
+    video_id: 'V01',
+    kis_revision: 1,
+    trail_revision: 0,
+    status: 'active',
+    path: [{ event_id: 'E1', frame_id: 'f1', frame_idx: 125, timestamp_ms: 5000 }],
+    last_valid_path: null,
+    approved_event_ids: [],
+    rejected_counts: {},
+    window: null,
+    submission_selection: null,
+    transition: null,
+  });
+  getEventTrailAlternatives.mockReset().mockResolvedValue({
+    alternatives: [{ alternative_id: 'opaque_alt', event_id: 'E1', path: [] }],
+  });
+
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: 'Set active query revision' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Open EventTrail' }));
+  await screen.findByText('trail_1');
+  fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
+
+  expect(await screen.findByTestId('trail-stale-query-notice')).toHaveTextContent(
+    /based on query revision 1/i,
+  );
+  fireEvent.click(screen.getByTestId('event-rail-item-E1'));
+  await waitFor(() => expect(getEventTrailAlternatives).toHaveBeenCalledWith(
+    'trail_1',
+    expect.objectContaining({ eventId: 'E1', expectedTrailRevision: 0, signal: expect.any(AbortSignal) }),
+  ));
 });
 
 
@@ -406,5 +449,3 @@ test('keyboard shortcut Ctrl+I focuses User ID input', () => {
   fireEvent.keyDown(window, { key: 'i', code: 'KeyI', ctrlKey: true });
   expect(document.activeElement).toBe(userIdInput);
 });
-
-

@@ -2,7 +2,6 @@ import React, { useCallback } from "react";
 import FrameCard from "./FrameCard";
 import GifLoaderOverlay from "../../search/components/GifLoaderOverlay";
 import HcmusWatermarkBadge from "./HcmusWatermarkBadge";
-import { displayVideoId } from "../videoSource";
 
 export const formatLatencySeconds = (val) => {
   if (typeof val !== 'number' || !Number.isFinite(val)) return '';
@@ -40,26 +39,6 @@ const FramesBox = ({
     };
     return await eventTrail?.open?.(ctx);
   }, [eventTrailContext, eventTrail]);
-
-  const handleApprove = useCallback(async (resultItem, eventLabel) => {
-    if (!resultItem || !eventLabel) return;
-    const isCurrentActive = activeTrailSession?.result_id === resultItem.result_id;
-    if (!isCurrentActive) {
-      const session = await handleStartTrail(resultItem);
-      if (!session) return;
-    }
-    await eventTrail?.act?.({ type: 'approve', event_id: eventLabel });
-  }, [activeTrailSession, handleStartTrail, eventTrail]);
-
-  const handleDecline = useCallback(async (resultItem, eventLabel) => {
-    if (!resultItem || !eventLabel) return;
-    const isCurrentActive = activeTrailSession?.result_id === resultItem.result_id;
-    if (!isCurrentActive) {
-      const session = await handleStartTrail(resultItem);
-      if (!session) return;
-    }
-    await eventTrail?.act?.({ type: 'decline', event_id: eventLabel });
-  }, [activeTrailSession, handleStartTrail, eventTrail]);
 
   const handleClearAnchor = useCallback(async (resultItem, eventLabel) => {
     if (!resultItem || !eventLabel) return;
@@ -125,31 +104,39 @@ const FramesBox = ({
           (results.length ? (
             <div className={`frames-grid size-${gridSize}`}>
               {results.map((resultItem, index) => {
-                const frameIds = Array.isArray(resultItem.frame_ids) && resultItem.frame_ids.length > 0
-                  ? resultItem.frame_ids
-                  : [resultItem.frame_id];
-                const timestampsMs = Array.isArray(resultItem.timestamps_ms) && resultItem.timestamps_ms.length > 0
-                  ? resultItem.timestamps_ms
-                  : [resultItem.timestamp_ms];
-                const hasMultipleEvents = frameIds.length > 1;
-
                 const isRowTrailActive = Boolean(
                   resultItem?.result_id
                   && activeTrailSession?.result_id
                   && activeTrailSession.result_id === resultItem.result_id,
                 );
-                const trailCandidates = isRowTrailActive && activeTrailSession
-                  ? (activeTrailSession.status === 'exhausted'
-                    ? (activeTrailSession.last_valid_path || [])
-                    : (activeTrailSession.path || []))
+
+                const activePath = isRowTrailActive
+                  ? (Array.isArray(activeTrailSession?.path) && activeTrailSession.path.length > 0
+                      ? activeTrailSession.path
+                      : (Array.isArray(activeTrailSession?.last_valid_path) && activeTrailSession.last_valid_path.length > 0
+                          ? activeTrailSession.last_valid_path
+                          : null))
                   : null;
-                const approvedEventIds = isRowTrailActive && activeTrailSession ? (activeTrailSession.approved_event_ids || []) : [];
+
+                const frameIds = activePath && activePath.length > 0
+                  ? activePath.map((c) => c.frame_id)
+                  : (Array.isArray(resultItem.frame_ids) && resultItem.frame_ids.length > 0
+                    ? resultItem.frame_ids
+                    : [resultItem.frame_id]);
+                const timestampsMs = activePath && activePath.length > 0
+                  ? activePath.map((c) => c.timestamp_ms)
+                  : (Array.isArray(resultItem.timestamps_ms) && resultItem.timestamps_ms.length > 0
+                    ? resultItem.timestamps_ms
+                    : [resultItem.timestamp_ms]);
+                const hasMultipleEvents = frameIds.length > 1;
+
+
                 const rejectedCounts = isRowTrailActive && activeTrailSession ? (activeTrailSession.rejected_counts || {}) : {};
                 const canStartTrail = Boolean(eventTrailContext?.snapshotId && resultItem?.result_id);
 
                 return (
                   <div
-                    key={`${resultItem.video_id}:${frameIds.join("|")}:${index}`}
+                    key={`${resultItem.video_id}:${resultItem.result_id || frameIds.join("|")}:${index}`}
                     className={`frames-result-row ${isRowTrailActive ? 'trail-row-active' : ''}`}
                   >
                     {(isRowTrailActive || canStartTrail) && (
@@ -158,7 +145,7 @@ const FramesBox = ({
                         {isRowTrailActive && activeTrailSession ? (
                           <div className="frames-row-trail-active-group">
                             <span className="badge-trail-active">
-                              ⚡ Trail Rev {activeTrailSession.trail_revision}
+                              ⚡ Explorer Rev {activeTrailSession.trail_revision}
                             </span>
                             {activeTrailSession.status === 'exhausted' && (
                               <span className="badge-trail-exhausted">Exhausted</span>
@@ -168,7 +155,7 @@ const FramesBox = ({
                               className="btn-trail-row-action btn-trail-undo"
                               onClick={() => eventTrail.undo()}
                               disabled={isTrailPending}
-                              title="Undo last EventTrail action"
+                              title="Undo last Hypothesis Explorer action"
                             >
                               ↺ Undo
                             </button>
@@ -177,9 +164,9 @@ const FramesBox = ({
                               className="btn-trail-row-action btn-trail-exit"
                               onClick={() => eventTrail.close()}
                               disabled={isTrailPending}
-                              title="Exit EventTrail"
+                              title="Exit Hypothesis Explorer"
                             >
-                              Exit Trail
+                              Exit Explorer
                             </button>
                           </div>
                         ) : canStartTrail ? (
@@ -188,9 +175,9 @@ const FramesBox = ({
                             className="btn-trail-row-start"
                             onClick={() => handleStartTrail(resultItem)}
                             disabled={isTrailPending}
-                            title="Explore timeline alignment with EventTrail"
+                            title="Explore timeline alignment with Hypothesis Explorer"
                           >
-                            ⚡ EventTrail
+                            ⚡ Hypothesis Explorer
                           </button>
                         ) : null}
                       </div>
@@ -201,7 +188,6 @@ const FramesBox = ({
                       {frameIds.map((fId, eventIndex) => {
                         const eventLabel = hasMultipleEvents ? `E${eventIndex + 1}` : 'E1';
 
-                        const isApproved = approvedEventIds.includes(eventLabel);
                         const rejectedCount = rejectedCounts[eventLabel] || 0;
                         const timestampMs = timestampsMs[eventIndex] ?? resultItem.timestamp_ms;
                         const eventItem = events?.[eventIndex];
@@ -209,10 +195,14 @@ const FramesBox = ({
                           ? eventItem
                           : (eventItem?.text || eventItem?.canonical_text || null);
                           
+                        const trailCandidate = activePath?.[eventIndex];
                         const eventFrame = {
                           ...resultItem,
                           frame_id: fId,
+                          frame_ids: frameIds,
+                          timestamps_ms: timestampsMs,
                           timestamp_ms: timestampMs,
+                          frame_idx: trailCandidate?.frame_idx ?? resultItem.frame_idx,
                           event_index: eventIndex,
                           eventIndex,
                           event_label: eventLabel,
@@ -222,7 +212,7 @@ const FramesBox = ({
                         };
                         return (
                           <FrameCard
-                            key={`${fId}-${eventIndex}`}
+                            key={`${fId}-${eventIndex}-${activeTrailSession?.trail_revision || 0}`}
                             frame={eventFrame}
                             eventLabel={hasMultipleEvents ? eventLabel : null}
                             events={events}
@@ -232,11 +222,7 @@ const FramesBox = ({
                             isSubmissionOpening={isSubmissionOpening}
                             onClick={() => onFrameClick(eventFrame)}
                             showTrailActions={isRowTrailActive || canStartTrail}
-                            isApproved={isApproved}
-                            rejectedCount={rejectedCount}
                             isTrailPending={isTrailPending}
-                            onApprove={() => handleApprove(resultItem, eventLabel)}
-                            onDecline={() => handleDecline(resultItem, eventLabel)}
                             onClearAnchor={() => handleClearAnchor(resultItem, eventLabel)}
                           />
                         );

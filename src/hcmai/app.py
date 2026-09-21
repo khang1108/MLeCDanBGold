@@ -23,6 +23,7 @@ from hcmai.api.routers import (
     create_feedback_router,
     create_frames_router,
     create_kis_router,
+    create_query_hypothesis_router,
     create_search_router,
     create_system_router,
     create_trake_router,
@@ -187,6 +188,7 @@ def create_app(
     app.include_router(create_system_router(service_container))
     app.include_router(create_feedback_router(service_container))
     app.include_router(create_kis_router(service_container))
+    app.include_router(create_query_hypothesis_router(service_container))
     app.include_router(create_avs_router(service_container))
     app.include_router(create_search_router(service_container))
     app.include_router(create_trake_router(service_container))

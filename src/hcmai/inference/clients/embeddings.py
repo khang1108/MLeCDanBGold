@@ -56,7 +56,13 @@ class EmbeddingClient:
         if not texts:
             return TextEmbeddingBatch(model=self._endpoint.model, vectors=())
 
-        url = f"{self._endpoint.base_url}/embeddings"
+        base = self._endpoint.base_url.rstrip("/")
+        if base.endswith("/v1"):
+            url = f"{base}/embeddings"
+        elif "/v1/embeddings" in base:
+            url = base
+        else:
+            url = f"{base}/v1/embeddings/text"
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._endpoint.api_key:
             headers["Authorization"] = f"Bearer {self._endpoint.api_key}"

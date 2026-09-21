@@ -37,6 +37,8 @@ from hcmai.event_trail.service import EventTrailService
 from hcmai.event_trail.storage import EventTrailSessionStore, EvidenceSnapshotStore
 from hcmai.kis.feedback.service import FeedbackService
 from hcmai.kis.feedback.store import FeedbackSessionStore
+from hcmai.kis.hypothesis.service import QueryHypothesisService
+from hcmai.kis.hypothesis.store import QueryHypothesisStore
 from hcmai.orchestration.utils.errors import (
     InvalidQueryInputError,
     RevisionConflictError,
@@ -77,6 +79,7 @@ from hcmai.kis.resolution import (
     canonical_query_text,
 )
 from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan, build_retrieval_plan
+from hcmai.retrieval.translation import EventTranslator
 
 if TYPE_CHECKING:
     from hcmai.kis.assets import KISImageAssetStore
@@ -120,6 +123,8 @@ class SearchService:
         feedback_resolver: Any | None = None,
         kis_image_assets: KISImageAssetStore | None = None,
         event_trail_settings: EventTrailSettings | None = None,
+        event_translator: EventTranslator | None = None,
+        query_hypotheses: QueryHypothesisService | None = None,
         *,
         retrieval: RetrievalService | None = None,
         temporal_evidence: TemporalEvidenceScorer | None = None,
@@ -141,11 +146,29 @@ class SearchService:
         self.global_rewriter = global_rewriter
         self.feedback_resolver = feedback_resolver
         self.kis_image_assets = kis_image_assets
+        self.event_translator = event_translator
         self.remote_retrieval = remote_retrieval
         self.event_trail_settings = event_trail_settings or EventTrailSettings.from_env()
         self.event_trail_snapshots = EvidenceSnapshotStore(
             ttl_seconds=self.event_trail_settings.snapshot_ttl_seconds,
             max_entries=self.event_trail_settings.max_snapshots,
+        )
+        self.query_hypothesis_store = QueryHypothesisStore(
+            ttl_seconds=self.event_trail_settings.session_ttl_seconds,
+            max_entries=self.event_trail_settings.max_sessions,
+        )
+        self.query_hypotheses = (
+            query_hypotheses
+            if query_hypotheses is not None
+            else (
+                QueryHypothesisService(
+                    self.query_hypothesis_store,
+                    self.intent_resolver,
+                    self._canonical_image_refs,
+                )
+                if self.intent_resolver is not None
+                else None
+            )
         )
 
         if image_search is not None:
@@ -634,15 +657,46 @@ class SearchService:
 
         return snapshot_id, snapshot_ms, warnings
 
+    def _dense_projection(self, intent: KISIntent) -> dict[str, str] | None:
+        text_events = [event for event in intent.events if event.text is not None]
+        if not text_events or intent.language == "en" or self.event_translator is None:
+            return None
+        try:
+            translated = self.event_translator.translate(
+                [event.text for event in text_events], intent.language
+            )
+            return {event.id: text for event, text in zip(text_events, translated, strict=True)}
+        except Exception as error:
+            logger.warning(
+                "Event translation failed (%s); falling back to canonical text for dense retrieval",
+                error,
+            )
+            return None
+
     def search_kis(self, request: KISSearchRequest) -> KISSearchResponse:
         """Execute a stateless semantic KIS search."""
-        intent, summary, intent_ms = self._resolve_operation(request)
+        if request.query_hypothesis_session_id:
+            if self.query_hypotheses is None:
+                raise SearchServiceUnavailableError("Query Hypothesis service is unavailable")
+            view = self.query_hypotheses.get(request.query_hypothesis_session_id)
+            if view.intent.revision != request.expected_revision:
+                raise RevisionConflictError(
+                    f"Expected revision {request.expected_revision} does not match query hypothesis {view.intent.revision}"
+                )
+            if request.operation.kind != "search_only":
+                raise InvalidQueryInputError("server-owned query hypotheses may only execute search_only through KIS search")
+            intent = view.intent
+            summary = KISOperationSummary(kind="search_only", affected_event_ids=[])
+            intent_ms = 0.0
+        else:
+            intent, summary, intent_ms = self._resolve_operation(request)
 
         self._ensure_search_ready()
 
         plan = build_retrieval_plan(
             intent,
             overrides=None,
+            dense_text_by_event=self._dense_projection(intent),
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
         )
@@ -698,6 +752,7 @@ class SearchService:
             results=kis_results,
             latency=latency,
             evidence_snapshot_id=snapshot_id,
+            query_hypothesis_session_id=request.query_hypothesis_session_id,
             warnings=warnings,
         )
 

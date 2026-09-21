@@ -4,10 +4,22 @@ server:
   port: 8100
 
 
+
+caption_generation:
+  model_checkpoint: "Qwen/Qwen3-VL-2B-Instruct"
+  revision: null
+  # Intermediate A6000 caption batch after the 512-image OOM test.
+  max_batch_size: 320
+  prompt: "Describe the image for video retrieval. Mention the main people, objects, actions, scene, location, and visible event. Be concise and factual."
+  decoding:
+    max_new_tokens: 64
+    do_sample: false
+  device: "cuda"
+  dtype: "bfloat16"
+
 # ============================================================
 # EMBEDDING MODELS ONLY
 # ============================================================
-
 visual_embedding:
   backend: "siglip"
   name: "google/siglip2-base-patch16-224"
@@ -15,8 +27,8 @@ visual_embedding:
 
   device: "cpu"
 
-  # Latitude 5500: bắt đầu nhỏ trước
-  batch_size: 8
+  # Also sets the maximum images accepted per visual embedding request.
+  batch_size: 128
 
   image_size: 224
 
@@ -48,3 +60,10 @@ text_generation:
   dtype: "bfloat16"
   max_input_tokens: 4096
   max_new_tokens: 2048
+
+object_detection:
+  model: "yoloe-26l-seg-pf.pt"
+  vocab_path: null
+  min_confidence: 0.20
+  top_k: 30
+  device: "cuda"

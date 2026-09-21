@@ -1,6 +1,7 @@
 """Tests for /api/v1/kis/search route and error mapping."""
 
 import unittest
+import importlib
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -24,10 +25,13 @@ from hcmai.kis.models import (
     KISImageRef,
     KISIntent,
 )
+from hcmai.kis.hypothesis.models import QueryHypothesisError
 from hcmai.kis.resolution import KISResolutionError
 from hcmai.orchestration.utils.errors import InvalidQueryInputError, RevisionConflictError
 from hcmai.orchestration.pipeline import SearchServiceUnavailableError
 from hcmai.vbs.models import ApiClientAnswer, QueryEvent, QueryResultLog, RankedAnswer
+
+kis_router_module = importlib.import_module("hcmai.api.routers.kis")
 
 
 def _make_intent(query_text: str | None = "A woman cooks in kitchen.") -> KISIntent:
@@ -258,6 +262,42 @@ async def test_search_kis_error_mapping() -> None:
         resp = await client.post("/api/v1/kis/search", json=valid_payload)
         assert resp.status_code == 502
 
+
+@pytest.mark.anyio
+async def test_search_kis_maps_query_hypothesis_not_found_and_expired(monkeypatch) -> None:
+    """Search uses the same 404/410 hypothesis status contract as its router."""
+    service = Mock()
+    app = FastAPI()
+    app.include_router(create_kis_router({"service": service}))
+
+    async def direct_run_in_threadpool(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    # The repository test environment's anyio worker-thread boundary hangs on
+    # even a minimal Mock call; isolate this router-status regression from that
+    # unrelated infrastructure issue.
+    monkeypatch.setattr(
+        kis_router_module, "run_in_threadpool", direct_run_in_threadpool
+    )
+    valid_payload = {
+        "base_intent": None,
+        "expected_revision": 0,
+        "operation": {"kind": "initial_resolve", "text": "Clue"},
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        service.search_kis.side_effect = QueryHypothesisError(
+            "QUERY_HYPOTHESIS_NOT_FOUND", "hypothesis not found"
+        )
+        not_found = await client.post("/api/v1/kis/search", json=valid_payload)
+
+        service.search_kis.side_effect = QueryHypothesisError(
+            "QUERY_HYPOTHESIS_EXPIRED", "hypothesis expired"
+        )
+        expired = await client.post("/api/v1/kis/search", json=valid_payload)
+
+    assert not_found.status_code == 404
+    assert expired.status_code == 410
 
 @pytest.mark.anyio
 async def test_search_kis_request_validation_is_422() -> None:

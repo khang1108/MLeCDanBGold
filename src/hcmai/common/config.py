@@ -57,14 +57,14 @@ def resolve_dataset_root(value: str | Path) -> Path:
 class EnrichmentArtifactsConfig(BaseModel):
     """Paths to source-specific frame-enrichment artifacts."""
 
-    caption_path: Path | None = Path("artifacts/corpus/caption.parquet")
-    ocr_path: Path | None = Path("artifacts/corpus/ocr_frames.parquet")
-    object_path: Path | None = Path("artifacts/corpus/object_frames.parquet")
-    asr_path: Path | None = Path("artifacts/enrichment/asr/frame_enrichment.parquet")
+    caption_path: Path | None = Path("data/artifacts/captions/captions.parquet")
+    ocr_path: Path | None = Path("data/artifacts/ocr/frames.parquet")
+    object_path: Path | None = Path("data/artifacts/objects/frames.parquet")
+    asr_path: Path | None = Path("data/artifacts/asr/frame_enrichment.parquet")
     context_path: Path | None = Path(
         "artifacts/enrichment/context_vi/frame_context_v1.parquet"
     )
-    transcripts_path: Path | None = Path("artifacts/enrichment/transcripts")
+    transcripts_path: Path | None = Path("data/artifacts/asr")
 
 
 class DatasetConfig(BaseModel):
@@ -72,8 +72,8 @@ class DatasetConfig(BaseModel):
 
     version: str = "hcmai2026_v1"
     root: Path = Path("data")
-    frames_path: Path = Path("artifacts/frame_store/frames.parquet")
-    media_info_path: Path | None = Path("data/media-info")
+    frames_path: Path = Path("data/artifacts/frames.parquet")
+    media_info_path: Path | None = None
     enrichment: EnrichmentArtifactsConfig = Field(default_factory=EnrichmentArtifactsConfig)
 
 
@@ -162,9 +162,9 @@ class TranscriptJobConfig(BaseModel):
     schema_version: str = Field(default="transcript-segment-v1", min_length=1)
     enrichment_version: str = Field(default="asr-frame-v1", min_length=1)
     frame_evidence_window_ms: int = Field(default=2_000, ge=0)
-    output_dir: Path = Path("artifacts/enrichment/transcripts")
-    frames_path: Path = Path("artifacts/frame_store/frames.parquet")
-    frame_enrichment_path: Path = Path("artifacts/enrichment/asr/frame_enrichment.parquet")
+    output_dir: Path = Path("data/artifacts/asr")
+    frames_path: Path = Path("data/artifacts/frames.parquet")
+    frame_enrichment_path: Path = Path("data/artifacts/asr/frame_enrichment.parquet")
     frame_store_id: str | None = None
 
     @classmethod
@@ -221,12 +221,12 @@ class IndexConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: str = "flat_ip"
-    path: Path = Path("artifacts/indexes/visual")
-    context_path: Path = Path("artifacts/indexes/context_vi")
-    asr_segment_path: Path = Path("artifacts/indexes/asr_segments")
-    caption_path: Path = Path("artifacts/indexes/caption")
-    ocr_path: Path = Path("artifacts/indexes/ocr")
-    bm25_path: Path = Path("artifacts/indexes/bm25")
+    path: Path = Path("data/indexes/visual")
+    context_path: Path = Path("data/indexes/context")
+    asr_segment_path: Path = Path("data/indexes/asr")
+    caption_path: Path = Path("data/indexes/caption")
+    ocr_path: Path = Path("data/indexes/ocr")
+    bm25_path: Path = Path("data/indexes/bm25")
     context_embedding_filename: str = "context_embeddings.npy"
     asr_segment_embedding_filename: str = "asr_embeddings.npy"
     asr_projection_max_gap_ms: int = Field(default=5_000, ge=0)
@@ -474,10 +474,10 @@ class InferenceConfig(BaseModel):
     # field for older consumers, but omission must never silently disable it.
     enabled: bool = True
     base_url: str = "https://api.iamphuckhang.dev"
-    timeout_seconds: float = Field(default=10, gt=0, le=120)
+    timeout_seconds: float = Field(default=10, gt=0, le=1200)
     connect_timeout_seconds: float = Field(default=5, gt=0, le=120)
-    read_timeout_seconds: float = Field(default=120, gt=0, le=600)
-    write_timeout_seconds: float = Field(default=30, gt=0, le=600)
+    read_timeout_seconds: float = Field(default=120, gt=0, le=1200)
+    write_timeout_seconds: float = Field(default=30, gt=0, le=1200)
     pool_timeout_seconds: float = Field(default=5, gt=0, le=120)
     max_attempts: int = Field(default=3, ge=1, le=10)
     backoff_initial_seconds: float = Field(default=0.1, ge=0, le=10)

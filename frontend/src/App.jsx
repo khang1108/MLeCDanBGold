@@ -26,6 +26,7 @@ const AppShell = ({
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [activeQuery, setActiveQuery] = useState('');
   const [modalQuery, setModalQuery] = useState('');
+  const [activeQueryRevision, setActiveQueryRevision] = useState(null);
   const [topK, setTopK] = useState(20);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [eventTrailAnnotations, setEventTrailAnnotations] = useState({});
@@ -182,6 +183,7 @@ const AppShell = ({
             setTopK={setTopK}
             onFrameClick={handleQueryFrameClick}
             onQueryChange={setActiveQuery}
+            onQueryRevisionChange={setActiveQueryRevision}
             queryInputRef={queryInputRef}
             onEventTrailInvalidated={handleEventTrailInvalidated}
             eventTrailAnnotations={eventTrailAnnotations}
@@ -232,6 +234,17 @@ const AppShell = ({
             state: eventTrail.session,
             pending: eventTrail.pending,
             error: eventTrail.error,
+            alternatives: eventTrail.alternatives,
+            previewAlternativeState: eventTrail.previewAlternativeState,
+            isLoadingAlternatives: eventTrail.isLoadingAlternatives,
+            focusedEventId: eventTrail.focusedEventId,
+            currentQueryRevision: activeQueryRevision ?? selectedFrame.eventTrailContext.kisRevision,
+            focusEvent: eventTrail.focusEvent,
+            previewAlternative: eventTrail.previewAlternative,
+            clearPreview: eventTrail.clearPreview,
+            keep: eventTrail.keep,
+            useAlternative: eventTrail.useAlternative,
+            rejectMode: eventTrail.rejectMode,
             open: (ctx) => {
               eventTrailKeyRef.current = eventTrailSelectionKey(selectedFrame);
               return eventTrail.open(ctx || selectedFrame.eventTrailContext);

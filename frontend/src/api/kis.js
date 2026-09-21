@@ -18,6 +18,7 @@ const hasSearchLatency = (latency) => (
 );
 
 export const searchKis = async ({
+  queryHypothesisSessionId = null,
   baseIntent = null,
   expectedRevision = 0,
   operation,
@@ -37,6 +38,7 @@ export const searchKis = async ({
   const payload = await requestJson('/api/v1/kis/search', {
     method: 'POST',
     body: {
+      query_hypothesis_session_id: queryHypothesisSessionId ?? null,
       base_intent: baseIntent ?? null,
       expected_revision: expectedRevision,
       operation,

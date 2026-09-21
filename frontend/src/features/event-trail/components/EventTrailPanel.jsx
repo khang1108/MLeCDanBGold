@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import EventRail from './EventRail';
 import EvidenceInspector from './EvidenceInspector';
 import TrailWindowControls from './TrailWindowControls';
+import HypothesisAlternatives from './HypothesisAlternatives';
+import HypothesisPathPreview from './HypothesisPathPreview';
 
 const EventTrailPanel = ({
   events = [],
@@ -11,8 +13,8 @@ const EventTrailPanel = ({
   selectedEventId = null,
   onSelectEvent,
   onUse,
-  onApprove,
-  onDecline,
+  onKeep,
+  onRejectMode,
   onClearAnchor,
   onUndo,
   onSetWindow,
@@ -20,6 +22,17 @@ const EventTrailPanel = ({
   onBack,
   onExitTrail,
   onSubmit,
+  // Result-Hypothesis extensions:
+  alternatives = [],
+  previewAlternative = null,
+  isLoadingAlternatives = false,
+  currentModeId = null,
+  focusedModeId = null,
+  currentQueryRevision = null,
+  onFocusEvent,
+  onPreviewAlternative,
+  onClearPreview,
+  onUseAlternative,
 }) => {
   const activeEventId = useMemo(() => {
     if (selectedEventId) return selectedEventId;
@@ -39,20 +52,44 @@ const EventTrailPanel = ({
   const indirectCount = state.transition?.indirect_changed_event_ids?.length || 0;
   const canSubmit = !isExhausted && Boolean(state.submission_selection) && !pending;
 
+  const effectiveAlternatives = alternatives?.length > 0 ? alternatives : (state.alternatives || []);
+  const resolvedModeId =
+    currentModeId ||
+    focusedModeId ||
+    previewAlternative?.alternative_id ||
+    effectiveAlternatives.find((a) => a.is_current)?.alternative_id ||
+    effectiveAlternatives[0]?.alternative_id ||
+    null;
+
+  const handleSelectEvent = (eventId) => {
+    onSelectEvent?.(eventId);
+    onFocusEvent?.(eventId);
+  };
+
+  const handleKeep = (eventId) => {
+    onKeep?.(eventId);
+  };
+
+  const handleReject = (eventId, modeId) => {
+    const targetMode = modeId || resolvedModeId;
+    if (!targetMode) return;
+    onRejectMode?.(eventId, targetMode);
+  };
+
   const handleCycleIndirectEvents = () => {
     const indirectIds = state.transition?.indirect_changed_event_ids;
     if (!Array.isArray(indirectIds) || indirectIds.length === 0) return;
     const currentIndex = indirectIds.indexOf(activeEventId);
     const nextIndex = (currentIndex + 1) % indirectIds.length;
     const nextEventId = indirectIds[nextIndex];
-    onSelectEvent?.(nextEventId);
+    handleSelectEvent(nextEventId);
   };
 
   return (
-    <section className="event-trail-panel" aria-label="EventTrail Exploration">
+    <section className="event-trail-panel" aria-label="Hypothesis Explorer">
       <div className="event-trail-header">
         <div className="event-trail-title-group">
-          <h2 className="event-trail-heading">EventTrail</h2>
+          <h2 className="event-trail-heading">Hypothesis Explorer</h2>
           <span className="event-trail-badge badge-rev">Rev {state.trail_revision}</span>
           {isExhausted ? (
             <span className="event-trail-badge badge-status-exhausted">Exhausted</span>
@@ -66,13 +103,25 @@ const EventTrailPanel = ({
               type="button"
               className="btn-danger btn-sm event-trail-exit-btn"
               onClick={() => (onExitTrail ? onExitTrail() : onBack?.())}
-              title="Exit EventTrail and return to Frame Inspector"
+              title="Exit Hypothesis Explorer and return to Frame Inspector"
             >
               Exit
             </button>
           )}
         </div>
       </div>
+
+      {Number.isInteger(currentQueryRevision) &&
+        Number.isInteger(state.kis_revision) &&
+        state.kis_revision !== currentQueryRevision && (
+          <div
+            className="event-trail-stale-query-banner"
+            role="status"
+            data-testid="trail-stale-query-notice"
+          >
+            Based on query revision {state.kis_revision}
+          </div>
+        )}
 
       {error && (
         <div className="event-trail-error-banner" role="alert">
@@ -116,8 +165,27 @@ const EventTrailPanel = ({
         rejectedCounts={state.rejected_counts}
         selectedEventId={activeEventId}
         transition={state.transition}
-        onSelectEvent={onSelectEvent}
+        onSelectEvent={handleSelectEvent}
       />
+
+      <HypothesisAlternatives
+        alternatives={effectiveAlternatives}
+        activeAlternativeId={previewAlternative?.alternative_id || null}
+        isLoading={isLoadingAlternatives}
+        disabled={isExhausted || pending}
+        onPreview={onPreviewAlternative}
+        onUse={onUseAlternative}
+      />
+
+      {previewAlternative && (
+        <HypothesisPathPreview
+          activePath={candidates}
+          previewAlternative={previewAlternative}
+          pending={pending}
+          onUseAlternative={onUseAlternative}
+          onClearPreview={onClearPreview}
+        />
+      )}
 
       <EvidenceInspector
         selectedEventId={activeEventId}
@@ -128,10 +196,14 @@ const EventTrailPanel = ({
         pending={pending}
         rejectedCount={rejectedCount}
         diff={currentDiff}
-        onApprove={onApprove}
-        onDecline={onDecline}
+        currentModeId={resolvedModeId}
+        previewAlternative={previewAlternative}
+        onKeep={onKeep ? handleKeep : undefined}
+        onRejectMode={handleReject}
         onUse={onUse}
+        onUseAlternative={onUseAlternative}
         onClearAnchor={onClearAnchor}
+        onClearPreview={onClearPreview}
       />
 
       <TrailWindowControls
@@ -144,7 +216,7 @@ const EventTrailPanel = ({
       <div className="event-trail-footer">
         {!state.submission_selection && !isExhausted && (
           <p className="event-trail-submit-hint">
-            Use a frame before submitting from EventTrail.
+            Use a frame before submitting from Hypothesis Explorer.
           </p>
         )}
         <div className="event-trail-footer-actions">

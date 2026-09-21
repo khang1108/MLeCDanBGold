@@ -41,16 +41,6 @@ const QueryComposer = ({
     }
   };
 
-  const handleAddEvent = () => {
-    const nextEventNum = events.length + 1;
-    const prefix = `E${nextEventNum}: `;
-    const updatedDraft = draft.trim() ? `${draft.trim()}\n${prefix}` : prefix;
-    onDraftChange?.(updatedDraft);
-    setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 0);
-  };
-
   const resolveTargetEventId = (file) => {
     // If user clicked/selected a specific event context in the thread:
     if (selectedContext?.eventId) {
@@ -129,16 +119,12 @@ const QueryComposer = ({
     }
   };
 
-  // Determine dynamic submit button label
+  // Determine dynamic submit button label.
+  // Legacy /llm-rewrite, patch_events, and global_rewrite paths are removed;
+  // the composer only supports NL Ask/Feedback and image attachment.
   let effectiveSubmitLabel = submitLabel;
   if (isSearching) {
     effectiveSubmitLabel = 'Searching…';
-  } else if (draft.trim().startsWith('/llm-rewrite')) {
-    effectiveSubmitLabel = 'Rewrite';
-  } else if (preview?.kind === 'patch_events') {
-    effectiveSubmitLabel = 'Update';
-  } else if (preview?.kind === 'global_rewrite') {
-    effectiveSubmitLabel = 'Rewrite';
   } else if (baseIntent && submitLabel === 'Search') {
     effectiveSubmitLabel = 'Feedback';
   }
@@ -224,21 +210,11 @@ const QueryComposer = ({
 
       {preview && (
         <div className="kis-composer-preview-bar">
-          {preview.kind === 'patch_events' && (
-            <span className="kis-preview-badge kis-preview-patch">
-              Will update: {preview.affectedEventIds.join(', ')}
-            </span>
-          )}
           {preview.kind === 'feedback' && (
             <span className="kis-preview-badge kis-preview-feedback">
               {selectedContext?.eventId
                 ? `Will refine ${selectedContext.eventId} via AI Feedback`
                 : 'Will refine events via AI Feedback'}
-            </span>
-          )}
-          {preview.kind === 'global_rewrite' && (
-            <span className="kis-preview-badge kis-preview-rewrite">
-              Global rewrite across all events
             </span>
           )}
           {preview.error && (
@@ -268,30 +244,6 @@ const QueryComposer = ({
 
       <div className="kis-composer-controls">
         <div className="kis-composer-left-actions">
-          <button
-            type="button"
-            className="btn-secondary btn-sm kis-add-event-btn"
-            onClick={handleAddEvent}
-            disabled={isSearching || disabled}
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="kis-btn-icon"
-              aria-hidden="true"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>Add Event</span>
-          </button>
-
           <label className="btn-secondary btn-sm kis-attach-label" htmlFor="kis-attach-file">
             <svg
               width="12"

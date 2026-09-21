@@ -101,13 +101,21 @@ def apply_scoped_resolutions(
                 events.append(event)
                 continue
             bindings = _validated_bindings(patch.bindings, base)
-            events.append(event.model_copy(update={"text": patch.text, "bindings": bindings}))
+            update: dict[str, Any] = {"text": patch.text, "bindings": bindings}
+            if (
+                event.source_provenance is None
+                or patch.text != event.source_provenance.source_text
+            ):
+                update["origin"] = "user_override"
+                update["source_provenance"] = None
+            events.append(event.model_copy(update=update))
         for number in new_numbers:
             patch = resolved_by_id[f"E{number}"]
             events.append(
                 KISEvent(
                     id=f"E{number}",
                     text=patch.text,
+                    origin="user_added",
                     bindings=_validated_bindings(patch.bindings, base),
                 )
             )

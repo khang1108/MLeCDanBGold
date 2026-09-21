@@ -7,7 +7,7 @@ from typing import Any, Callable, Protocol, Sequence
 
 from hcmai.common.config import InferenceConfig
 from llm.remote.client import InferenceClient
-from offline.enrichment.inference_contracts import InferenceReadiness
+from llm.contracts import InferenceReadiness
 
 
 class EndpointPoolConfig(Protocol):
@@ -118,14 +118,23 @@ class InferenceClientPool:
     def ocr(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("ocr", *args, **kwargs)
 
+    def objects(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("objects", *args, **kwargs)
+
     def embed_images(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("embed_images", *args, **kwargs)
+
+    def embed_text(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("embed_text", *args, **kwargs)
 
     def boundary_scores(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("boundary_scores", *args, **kwargs)
 
     def transcribe_audio_reference(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("transcribe_audio_reference", *args, **kwargs)
+
+    def transcribe_audio_file(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("transcribe_audio_file", *args, **kwargs)
 
     def diarize_audio_reference(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("diarize_audio_reference", *args, **kwargs)

@@ -10,6 +10,7 @@ import {
   getEventTrail,
   actOnEventTrail,
   closeEventTrail,
+  getEventTrailAlternatives,
 } from '../../../api/eventTrail';
 
 export const computeSessionKey = (context) => {
@@ -30,8 +31,14 @@ export const useEventTrail = () => {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(null);
   const [unsynced, setUnsynced] = useState(false);
+  const [focusedEventId, setFocusedEventId] = useState(null);
+  const [alternatives, setAlternatives] = useState([]);
+  const [previewAlternativeState, setPreviewAlternativeState] = useState(null);
+  const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false);
 
   const generationRef = useRef(0);
+  const focusRequestRef = useRef(0);
+  const focusControllerRef = useRef(null);
   const sessionRef = useRef(null);
   const keyRef = useRef(null);
   const pendingRef = useRef(false);
@@ -47,11 +54,18 @@ export const useEventTrail = () => {
   const invalidate = useCallback(() => {
     generationRef.current += 1;
     controllerRef.current?.abort();
+    focusControllerRef.current?.abort();
     controllerRef.current = null;
+    focusControllerRef.current = null;
+    focusRequestRef.current += 1;
     pendingRef.current = false;
     setPending(false);
     setUnsynced(false);
     setError(null);
+    setFocusedEventId(null);
+    setAlternatives([]);
+    setPreviewAlternativeState(null);
+    setIsLoadingAlternatives(false);
   }, []);
 
   const cleanupLateSession = useCallback((lateSession) => {
@@ -98,7 +112,7 @@ export const useEventTrail = () => {
             expectedKisRevision: context.kisRevision,
             searchSessionId: context.searchSessionId,
           },
-          { signal: controller.signal }
+          { signal: controller.signal },
         );
 
         if (generation !== generationRef.current || controller.signal.aborted) {
@@ -141,6 +155,13 @@ export const useEventTrail = () => {
       const current = sessionRef.current;
       if (!current?.session_id || pendingRef.current) return null;
 
+      focusControllerRef.current?.abort();
+      focusControllerRef.current = null;
+      focusRequestRef.current += 1;
+      setIsLoadingAlternatives(false);
+      setAlternatives([]);
+      setPreviewAlternativeState(null);
+
       const generation = generationRef.current;
       const controller = new AbortController();
       controllerRef.current = controller;
@@ -179,6 +200,8 @@ export const useEventTrail = () => {
             if (generation === generationRef.current) {
               setCurrentSession(refreshed, keyRef.current);
               setError(`Conflict detected: ${actError.message || 'revision updated'}`);
+              setPreviewAlternativeState(null);
+              setAlternatives([]);
             }
           } catch (refreshErr) {
             if (
@@ -215,6 +238,88 @@ export const useEventTrail = () => {
       }
     },
     [setCurrentSession]
+  );
+
+  const focusEvent = useCallback(async (eventId) => {
+    const current = sessionRef.current;
+    if (!current?.session_id || !Number.isInteger(current?.trail_revision)) return null;
+
+    focusControllerRef.current?.abort();
+    const requestId = focusRequestRef.current + 1;
+    focusRequestRef.current = requestId;
+    const generation = generationRef.current;
+    const controller = new AbortController();
+    focusControllerRef.current = controller;
+
+    setFocusedEventId(eventId);
+    setAlternatives([]);
+    setPreviewAlternativeState(null);
+    setIsLoadingAlternatives(true);
+
+    const isCurrentRequest = () => (
+      generation === generationRef.current
+      && requestId === focusRequestRef.current
+      && !controller.signal.aborted
+    );
+
+    try {
+      const res = await getEventTrailAlternatives(
+        current.session_id,
+        {
+          eventId,
+          expectedTrailRevision: current.trail_revision,
+          signal: controller.signal,
+        },
+      );
+
+      if (!isCurrentRequest()) return null;
+
+      setAlternatives(res?.alternatives || []);
+      return res;
+    } catch (err) {
+      if (!isCurrentRequest()) return null;
+      setError(err?.message || 'Failed to fetch alternatives');
+      setAlternatives([]);
+      return null;
+    } finally {
+      if (focusControllerRef.current === controller) focusControllerRef.current = null;
+      if (isCurrentRequest()) {
+        setIsLoadingAlternatives(false);
+      }
+    }
+  }, []);
+
+  const previewAlternative = useCallback((alt) => {
+    setPreviewAlternativeState(alt);
+  }, []);
+
+  const clearPreview = useCallback(() => {
+    setPreviewAlternativeState(null);
+  }, []);
+
+  const keep = useCallback(
+    (eventId) => act({ type: 'keep', event_id: eventId }),
+    [act]
+  );
+
+  const useAlternative = useCallback(
+    (eventId, alternativeId) =>
+      act({
+        type: 'use_alternative',
+        event_id: eventId,
+        alternative_id: alternativeId,
+      }),
+    [act]
+  );
+
+  const rejectMode = useCallback(
+    (eventId, modeId) =>
+      act({
+        type: 'reject_mode',
+        event_id: eventId,
+        mode_id: modeId,
+      }),
+    [act]
   );
 
   const undo = useCallback(() => act({ type: 'undo' }), [act]);
@@ -310,6 +415,10 @@ export const useEventTrail = () => {
     pending,
     error,
     unsynced,
+    focusedEventId,
+    alternatives,
+    previewAlternativeState,
+    isLoadingAlternatives,
     open,
     act,
     undo,
@@ -317,5 +426,11 @@ export const useEventTrail = () => {
     close,
     clearLocal,
     syncSession,
+    focusEvent,
+    previewAlternative,
+    clearPreview,
+    keep,
+    useAlternative,
+    rejectMode,
   };
 };

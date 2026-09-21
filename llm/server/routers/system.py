@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from offline.enrichment.inference_contracts import InferenceReadiness
+from llm.contracts import InferenceReadiness
 from llm.server.dependencies import runtime_from
 
 router = APIRouter(tags=["system"])

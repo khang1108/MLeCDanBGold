@@ -23,7 +23,6 @@ from hcmai.event_trail.models import EvidenceSnapshot, SnapshotResult, freeze_vi
 from hcmai.event_trail.storage import EvidenceSnapshotStore
 from hcmai.kis.feedback.models import (
     ClarifyAction,
-    EditIntentAction,
     FeedbackAction,
     FeedbackResolveContext,
     RefineRetrievalAction,

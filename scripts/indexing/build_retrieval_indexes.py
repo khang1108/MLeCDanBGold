@@ -979,6 +979,56 @@ def run_preflight(config: OfflineIndexConfig) -> Path:
     return path
 
 
+def run_visual_preflight(config: OfflineIndexConfig) -> Path:
+    """Validate only canonical frames and image paths for an early visual index.
+
+    This intentionally does not require FrameContext or ASR.  It lets a VBS
+    paper/demo run publish the SigLIP visual index while slower enrichment is
+    still being produced.
+    """
+
+    from hcmai.common.utils.io import atomic_write, read_json, write_parquet
+    from offline.ingestion.keyframe_map import load_btc_keyframe_map
+
+    dataset = config.dataset
+    frames_path = _require_file(dataset.frames_path, "Canonical frames")
+    manifest_path = _require_file(dataset.frame_manifest, "Canonical frame manifest")
+    manifest = read_json(manifest_path)
+    if not isinstance(manifest, dict):
+        raise ValueError("Canonical frame manifest must contain an object")
+    if manifest.get("frame_store_id") != dataset.frame_store_id:
+        raise ValueError("Canonical frame manifest frame_store_id mismatch")
+
+    frames = cast(pd.DataFrame, pd.read_parquet(frames_path))
+    required = {"frame_id", "video_id", "frame_idx", "timestamp_ms", "fps", "image_path"}
+    if dataset.uses_btc_mapping:
+        required.add("keyframe_order")
+    missing = sorted(required.difference(frames.columns))
+    if missing:
+        raise ValueError("Canonical frames are missing columns: " + ", ".join(missing))
+    if len(frames) != dataset.expected_frame_count:
+        raise ValueError(f"Canonical frame count {len(frames)} != {dataset.expected_frame_count}")
+    if int(cast(Any, frames["video_id"]).nunique()) != dataset.expected_video_count:
+        raise ValueError("Canonical video count does not match expected_video_count")
+    ids = cast(pd.Series, frames["frame_id"])
+    if bool(ids.isna().any()) or bool(ids.duplicated().any()):
+        raise ValueError("Canonical frame_id values must be present and unique")
+
+    if dataset.uses_btc_mapping:
+        keyframes_root = _require_directory(cast(Path, dataset.keyframes_root), "BTC keyframes")
+        mapping_root = _require_directory(cast(Path, dataset.map_keyframes_root), "BTC map_keyframes")
+        mapping = load_btc_keyframe_map(mapping_root)
+        mapped = _apply_btc_mapping_authority(frames, mapping)
+        projected = project_staged_keyframes(mapped, keyframes_root)
+    else:
+        projected = project_canonical_images(frames, dataset.data_root)
+
+    path = config.projected_frames_path
+    atomic_write(path, lambda staged: write_parquet(projected, staged, index=False))
+    LOGGER.info("Visual preflight passed rows=%d", len(projected))
+    return path
+
+
 def _require_projected_frames(config: OfflineIndexConfig) -> Path:
     """Require the indexing-only frame projection produced by preflight."""
 
@@ -1123,13 +1173,16 @@ def build_context(
 ) -> Any:
     """Build FrameContext directly from its typed store and shared BGE encoder."""
 
-    from hcmai.corpus.stores import FrameContextStore, FrameStore
+    from hcmai.corpus.stores import FrameContextStore
+    from offline.artifact_readers import FrameArtifactReader
     from hcmai.retrieval.retriever.artifacts import fingerprint_files
     from hcmai.retrieval.retriever.dense.index import DenseIndex
     from offline.indexes.text import build_context_index
 
     selected = encoder or create_text_encoder(models)
-    frames = FrameStore(projected_frames)
+    # Context joins need canonical identity and source-manifest lineage, not
+    # the visual projection's relocated image paths or a runtime-only store.
+    frames = FrameArtifactReader(config.dataset.frames_path)
     contexts = FrameContextStore(config.dataset.context_path)
     index = build_context_index(
         cast(Any, frames),
@@ -1468,14 +1521,22 @@ def run(args: argparse.Namespace) -> None:
         if args.stage == "preflight":
             run_preflight(config)
         elif args.stage == "visual":
-            projected_frames = _require_projected_frames(config)
+            projected_frames = (
+                config.projected_frames_path
+                if config.projected_frames_path.is_file()
+                else run_visual_preflight(config)
+            )
             if remote is None:
                 build_visual(config, models, projected_frames)
             else:
                 assert remote.visual is not None
                 build_visual(config, models, projected_frames, encoder=remote.visual)
         elif args.stage == "context":
-            projected_frames = _require_projected_frames(config)
+            projected_frames = (
+                config.projected_frames_path
+                if config.projected_frames_path.is_file()
+                else run_visual_preflight(config)
+            )
             if remote is None:
                 build_context(config, models, projected_frames)
             else:

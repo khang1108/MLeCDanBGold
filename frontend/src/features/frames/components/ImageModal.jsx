@@ -130,23 +130,6 @@ const ImageModal = ({
     updatePlaybackTime(nextTime);
   }, [updatePlaybackTime]);
 
-  const handleSeekFromTimestamp = useCallback((timestampMs, candidateFrameId) => {
-    if (!Number.isFinite(timestampMs) || timestampMs < 0) return;
-    const timeSec = timestampMs / 1000;
-    handleVideoSeek(timeSec);
-    updatePlaybackTime(timeSec);
-    if (candidateFrameId) {
-      setActiveFrameId(candidateFrameId);
-    }
-  }, [handleVideoSeek, updatePlaybackTime]);
-
-  const resolvedEvents = useMemo(() => {
-    if (Array.isArray(events) && events.length > 0) return events;
-    if (Array.isArray(frame.events) && frame.events.length > 0) return frame.events;
-    if (Array.isArray(frame.aligned_events) && frame.aligned_events.length > 0) return frame.aligned_events;
-    return [];
-  }, [events, frame.events, frame.aligned_events]);
-
   const effectiveTrailEvents = useMemo(() => {
     if (Array.isArray(eventTrail?.context?.events) && eventTrail.context.events.length > 0) {
       return eventTrail.context.events;
@@ -162,8 +145,6 @@ const ImageModal = ({
   }, [eventTrail?.context?.events, events]);
 
   const [selectedEventId, setSelectedEventId] = useState(null);
-  const lastActionRef = useRef(null);
-  const prevTrailRevRef = useRef(eventTrail?.state?.trail_revision);
 
   const eventLabel = useMemo(() => {
     if (selectedEventId) return selectedEventId;
@@ -199,28 +180,6 @@ const ImageModal = ({
     query,
   ]);
 
-  useEffect(() => {
-    const currentState = eventTrail?.state;
-    if (!currentState) {
-      prevTrailRevRef.current = undefined;
-      return;
-    }
-    const prevRev = prevTrailRevRef.current;
-    prevTrailRevRef.current = currentState.trail_revision;
-
-    if (prevRev !== undefined && currentState.trail_revision !== prevRev) {
-      const lastAction = lastActionRef.current;
-      if (lastAction?.type === 'decline' && currentState.status === 'active') {
-        const actedEventId = currentState.transition?.action_event_id || lastAction.eventId;
-        const candidate = currentState.path?.find((c) => c.event_id === actedEventId);
-        if (candidate && Number.isFinite(candidate.timestamp_ms)) {
-          handleSeekFromTimestamp(candidate.timestamp_ms, candidate.frame_id);
-        }
-      }
-      lastActionRef.current = null;
-    }
-  }, [eventTrail?.state, handleSeekFromTimestamp]);
-
   const handleUse = useCallback(async (eventId) => {
     if (!eventId || !eventTrail?.act) return;
     const video = videoRef.current;
@@ -230,7 +189,6 @@ const ImageModal = ({
     try {
       const resolved = await resolveFrameAtTimestamp({ videoId, timestampMs });
       if (resolved?.frame_id && resolved?.video_id === videoId) {
-        lastActionRef.current = { type: 'use_frame', eventId };
         await eventTrail.act({
           type: 'use_frame',
           event_id: eventId,
@@ -242,39 +200,23 @@ const ImageModal = ({
     }
   }, [eventTrail, frame.video_id, playbackTime]);
 
-  const handleApprove = useCallback(async (eventId) => {
-    if (!eventId || !eventTrail?.act) return;
-    lastActionRef.current = { type: 'approve', eventId };
-    await eventTrail.act({ type: 'approve', event_id: eventId });
-  }, [eventTrail]);
-
-  const handleDecline = useCallback(async (eventId) => {
-    if (!eventId || !eventTrail?.act) return;
-    lastActionRef.current = { type: 'decline', eventId };
-    await eventTrail.act({ type: 'decline', event_id: eventId });
-  }, [eventTrail]);
-
   const handleClearAnchor = useCallback(async (eventId) => {
     if (!eventId || !eventTrail?.act) return;
-    lastActionRef.current = { type: 'clear_anchor', eventId };
     await eventTrail.act({ type: 'clear_anchor', event_id: eventId });
   }, [eventTrail]);
 
   const handleUndo = useCallback(async () => {
     if (!eventTrail?.undo) return;
-    lastActionRef.current = { type: 'undo' };
     await eventTrail.undo();
   }, [eventTrail]);
 
   const handleSetWindow = useCallback(async (action) => {
     if (!eventTrail?.act) return;
-    lastActionRef.current = { type: 'set_window' };
     await eventTrail.act(action);
   }, [eventTrail]);
 
   const handleClearWindow = useCallback(async () => {
     if (!eventTrail?.act) return;
-    lastActionRef.current = { type: 'clear_window' };
     await eventTrail.act({ type: 'clear_window' });
   }, [eventTrail]);
 
@@ -689,7 +631,7 @@ const ImageModal = ({
             <div className={`modal-inspector-column ${eventTrail?.state ? 'trail-active' : 'kis-mode'}`}>
               <div className="inspector-header">
                 <span className="inspector-title">
-                  {eventTrail?.state ? 'EventTrail Exploration' : 'Frame Inspector'}
+                  {eventTrail?.state ? 'Hypothesis Explorer' : 'Frame Inspector'}
                 </span>
                 <div className="inspector-header-actions">
                   {isAvsMode && onToggleCandidateSelection && (
@@ -743,11 +685,20 @@ const ImageModal = ({
                     state={eventTrail.state}
                     pending={eventTrail.pending}
                     error={eventTrail.error}
+                    alternatives={eventTrail.alternatives}
+                    previewAlternative={eventTrail.previewAlternativeState}
+                    isLoadingAlternatives={eventTrail.isLoadingAlternatives}
+                    focusedModeId={eventTrail.focusedModeId}
+                    currentQueryRevision={eventTrail.currentQueryRevision ?? eventTrail.context?.kisRevision}
                     selectedEventId={selectedEventId}
                     onSelectEvent={setSelectedEventId}
+                    onFocusEvent={eventTrail.focusEvent}
+                    onPreviewAlternative={eventTrail.previewAlternative}
+                    onClearPreview={eventTrail.clearPreview}
                     onUse={handleUse}
-                    onApprove={handleApprove}
-                    onDecline={handleDecline}
+                    onKeep={eventTrail.keep}
+                    onRejectMode={eventTrail.rejectMode}
+                    onUseAlternative={eventTrail.useAlternative}
                     onClearAnchor={handleClearAnchor}
                     onUndo={handleUndo}
                     onSetWindow={handleSetWindow}

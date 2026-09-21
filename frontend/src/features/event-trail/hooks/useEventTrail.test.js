@@ -4,6 +4,7 @@ import {
   getEventTrail,
   actOnEventTrail,
   closeEventTrail,
+  getEventTrailAlternatives,
 } from '../../../api/eventTrail';
 import { useEventTrail, computeSessionKey } from './useEventTrail';
 
@@ -12,6 +13,7 @@ jest.mock('../../../api/eventTrail', () => ({
   getEventTrail: jest.fn(),
   actOnEventTrail: jest.fn(),
   closeEventTrail: jest.fn(),
+  getEventTrailAlternatives: jest.fn(),
 }));
 
 const makeSession = (revision = 0, status = 'active', overrides = {}) => ({
@@ -83,7 +85,7 @@ describe('useEventTrail', () => {
         expectedKisRevision: 2,
         searchSessionId: 'q_1',
       },
-      expect.any(Object)
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(res).toEqual(mockState);
     expect(result.current.session).toEqual(mockState);
@@ -415,5 +417,217 @@ describe('useEventTrail', () => {
     expect(closeEventTrail).not.toHaveBeenCalled();
     expect(result.current.session).toBeNull();
     expect(result.current.sessionKey).toBeNull();
+  });
+
+  test('focus event loads alternatives without changing canonical session revision', async () => {
+    const baseSession = makeSession(0);
+    openEventTrail.mockResolvedValueOnce(baseSession);
+    getEventTrailAlternatives.mockResolvedValueOnce({
+      session_id: baseSession.session_id,
+      trail_revision: baseSession.trail_revision,
+      event_id: 'E2',
+      alternatives: [{ alternative_id: 'alt_1', path: [] }],
+    });
+
+    const { result } = renderHook(() => useEventTrail());
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
+    });
+    await act(async () => {
+      await result.current.focusEvent('E2');
+    });
+
+    expect(getEventTrailAlternatives).toHaveBeenCalledWith(
+      baseSession.session_id,
+      expect.objectContaining({
+        eventId: 'E2',
+        expectedTrailRevision: baseSession.trail_revision,
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect(result.current.session.trail_revision).toBe(baseSession.trail_revision);
+    expect(result.current.alternatives).toHaveLength(1);
+    expect(result.current.focusedEventId).toBe('E2');
+  });
+
+  test('focus requests abort and ignore a slower response from an older event', async () => {
+    const baseSession = makeSession(0);
+    const firstFocus = deferred();
+    const secondFocus = deferred();
+    openEventTrail.mockResolvedValueOnce(baseSession);
+    getEventTrailAlternatives
+      .mockReturnValueOnce(firstFocus.promise)
+      .mockReturnValueOnce(secondFocus.promise);
+
+    const { result } = renderHook(() => useEventTrail());
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
+    });
+
+    act(() => {
+      result.current.focusEvent('E1');
+      result.current.focusEvent('E2');
+    });
+
+    expect(getEventTrailAlternatives.mock.calls[0][1]).toEqual(expect.objectContaining({
+      eventId: 'E1',
+      expectedTrailRevision: baseSession.trail_revision,
+      signal: expect.any(AbortSignal),
+    }));
+    expect(getEventTrailAlternatives.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(getEventTrailAlternatives.mock.calls[1][1]).toEqual(expect.objectContaining({
+      eventId: 'E2',
+      signal: expect.any(AbortSignal),
+    }));
+
+    await act(async () => {
+      secondFocus.resolve({ alternatives: [{ alternative_id: 'alt_e2' }] });
+      await secondFocus.promise;
+    });
+    await act(async () => {
+      firstFocus.resolve({ alternatives: [{ alternative_id: 'alt_e1' }] });
+      await firstFocus.promise;
+    });
+
+    expect(result.current.focusedEventId).toBe('E2');
+    expect(result.current.alternatives).toEqual([{ alternative_id: 'alt_e2' }]);
+    expect(result.current.isLoadingAlternatives).toBe(false);
+  });
+
+  test('mutation invalidates an in-flight focus request before it can repopulate alternatives', async () => {
+    const baseSession = makeSession(0);
+    const focusedAlternatives = deferred();
+    const updatedSession = makeSession(1);
+    openEventTrail.mockResolvedValueOnce(baseSession);
+    getEventTrailAlternatives.mockReturnValueOnce(focusedAlternatives.promise);
+    actOnEventTrail.mockResolvedValueOnce(updatedSession);
+
+    const { result } = renderHook(() => useEventTrail());
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
+    });
+
+    let focusPromise;
+    act(() => {
+      focusPromise = result.current.focusEvent('E1');
+    });
+    const focusSignal = getEventTrailAlternatives.mock.calls[0][1].signal;
+
+    await act(async () => {
+      await result.current.keep('E1');
+    });
+    expect(focusSignal.aborted).toBe(true);
+
+    await act(async () => {
+      focusedAlternatives.resolve({ alternatives: [{ alternative_id: 'stale_alt' }] });
+      await focusPromise;
+    });
+
+    expect(result.current.alternatives).toEqual([]);
+    expect(result.current.previewAlternativeState).toBeNull();
+    expect(result.current.isLoadingAlternatives).toBe(false);
+  });
+
+  test('previewAlternative updates local state and clearPreview resets it', async () => {
+    const baseSession = makeSession(0);
+    openEventTrail.mockResolvedValueOnce(baseSession);
+
+    const { result } = renderHook(() => useEventTrail());
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
+    });
+
+    const alt = { alternative_id: 'alt_1', path: [] };
+    act(() => {
+      result.current.previewAlternative(alt);
+    });
+    expect(result.current.previewAlternativeState).toEqual(alt);
+
+    act(() => {
+      result.current.clearPreview();
+    });
+    expect(result.current.previewAlternativeState).toBeNull();
+  });
+
+  test('keep, useAlternative, and rejectMode dispatch structured actions and clear preview', async () => {
+    const session0 = makeSession(0);
+    const session1 = makeSession(1);
+    openEventTrail.mockResolvedValueOnce(session0);
+    actOnEventTrail.mockResolvedValue(session1);
+
+    const { result } = renderHook(() => useEventTrail());
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
+    });
+
+    // keep
+    await act(async () => {
+      await result.current.keep('E1');
+    });
+    expect(actOnEventTrail).toHaveBeenCalledWith(
+      'trail_1',
+      {
+        expectedTrailRevision: 0,
+        action: { type: 'keep', event_id: 'E1' },
+      },
+      expect.any(Object)
+    );
+
+    // useAlternative
+    await act(async () => {
+      await result.current.useAlternative('E2', 'alt_xyz');
+    });
+    expect(actOnEventTrail).toHaveBeenCalledWith(
+      'trail_1',
+      {
+        expectedTrailRevision: 1,
+        action: { type: 'use_alternative', event_id: 'E2', alternative_id: 'alt_xyz' },
+      },
+      expect.any(Object)
+    );
+
+    // rejectMode
+    await act(async () => {
+      await result.current.rejectMode('E2', 'mode_123');
+    });
+    expect(actOnEventTrail).toHaveBeenCalledWith(
+      'trail_1',
+      {
+        expectedTrailRevision: 1,
+        action: { type: 'reject_mode', event_id: 'E2', mode_id: 'mode_123' },
+      },
+      expect.any(Object)
+    );
+  });
+
+  test('STALE_ALTERNATIVE error refreshes session and clears preview and alternatives', async () => {
+    const session0 = makeSession(0);
+    const refreshed = makeSession(2);
+    openEventTrail.mockResolvedValueOnce(session0);
+
+    const staleError = new Error('Alternative is stale');
+    staleError.code = 'STALE_ALTERNATIVE';
+    staleError.status = 409;
+    actOnEventTrail.mockRejectedValueOnce(staleError);
+    getEventTrail.mockResolvedValueOnce(refreshed);
+
+    const { result } = renderHook(() => useEventTrail());
+    await act(async () => {
+      await result.current.open({ snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 2 });
+    });
+
+    act(() => {
+      result.current.previewAlternative({ alternative_id: 'alt_old' });
+    });
+
+    await act(async () => {
+      await result.current.useAlternative('E2', 'alt_old');
+    });
+
+    expect(getEventTrail).toHaveBeenCalledWith('trail_1', expect.any(Object));
+    expect(result.current.session).toEqual(refreshed);
+    expect(result.current.previewAlternativeState).toBeNull();
+    expect(result.current.alternatives).toEqual([]);
+    expect(result.current.error).toContain('Conflict detected');
   });
 });

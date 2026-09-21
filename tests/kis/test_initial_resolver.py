@@ -54,7 +54,11 @@ def test_initial_resolver_canonicalizes_two_events_without_entities() -> None:
         )
     )
 
-    intent = KISIntentResolver(llm).resolve_initial("ignored by fake", revision=4)
+    query = (
+        "A photograph shows a person shaking hands with Ho Chi Minh. "
+        "An artisan draws that person's portrait with an unusual pen."
+    )
+    intent = KISIntentResolver(llm).resolve_initial(query, revision=4)
 
     assert intent.revision == 4
     assert intent.entities == []

@@ -2,6 +2,17 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { searchKis, uploadKisImage } from '../../../api/kis';
 import { searchAvs } from '../../../api/avs';
+import {
+  openQueryHypothesis,
+  previewQueryHypothesis,
+  commitQueryHypothesis,
+  undoQueryHypothesis,
+} from '../../../api/queryHypothesis';
+import {
+  openFeedbackSession,
+  sendFeedbackTurn,
+  undoFeedback,
+} from '../../../api/feedback';
 import SearchWorkspace, { parseRetrievalDescription } from './SearchWorkspace';
 import { filterFrames } from '../../../api/filter';
 
@@ -16,6 +27,17 @@ jest.mock('../../../api/avs', () => ({
 jest.mock('../../../api/filter', () => ({
   filterFrames: jest.fn(),
 }));
+jest.mock('../../../api/queryHypothesis', () => ({
+  openQueryHypothesis: jest.fn(),
+  previewQueryHypothesis: jest.fn(),
+  commitQueryHypothesis: jest.fn(),
+  undoQueryHypothesis: jest.fn(),
+}));
+jest.mock('../../../api/feedback', () => ({
+  openFeedbackSession: jest.fn(),
+  sendFeedbackTurn: jest.fn(),
+  undoFeedback: jest.fn(),
+}));
 const renderSearch = (props) => render(<SearchWorkspace {...props} />);
 
 beforeEach(() => {
@@ -23,6 +45,25 @@ beforeEach(() => {
   searchAvs.mockReset();
   uploadKisImage.mockReset();
   filterFrames.mockReset();
+  openQueryHypothesis.mockReset();
+  openQueryHypothesis.mockImplementation(({ text }) => Promise.resolve({
+    session_id: 'qh_test_session',
+    query_revision: 1,
+    intent: {
+      revision: 1,
+      query_text: text,
+      entities: [],
+      events: [{ id: 'E1', text }],
+      temporal_edges: [],
+    },
+    can_undo: false,
+  }));
+  previewQueryHypothesis.mockReset();
+  commitQueryHypothesis.mockReset();
+  undoQueryHypothesis.mockReset();
+  openFeedbackSession.mockReset();
+  sendFeedbackTurn.mockReset();
+  undoFeedback.mockReset();
 });
 
 const SEARCH_LATENCY = {
@@ -63,12 +104,12 @@ const submit = (eventDescription) => {
   fireEvent.change(document.getElementById('event-query'), {
     target: { value: eventDescription },
   });
-  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite)$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite|feedback)$/i }));
 };
 
 test.each([
-  ['a red vehicle passes', { kind: 'initial_resolve', text: 'a red vehicle passes' }],
-  ['E1: a person enters the room', { kind: 'initial_resolve', patches: [expect.objectContaining({ event_id: 'E1', instruction: 'a person enters the room' })] }],
+  ['a red vehicle passes', { kind: 'search_only' }],
+  ['E1: a person enters the room', { kind: 'search_only' }],
 ])('routes %s through frame search', async (
   description,
   expectedOp,
@@ -99,8 +140,7 @@ test('Enter submits E1-prefixed text while Shift+Enter stays in the textarea', a
   await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
     expect.objectContaining({
       operation: expect.objectContaining({
-        kind: 'initial_resolve',
-        patches: [expect.objectContaining({ event_id: 'E1', instruction: 'a person enters the room' })],
+        kind: 'search_only',
       }),
       topK: 20,
     }),
@@ -119,7 +159,7 @@ test('sends the selected Dense and BM25 modes with KIS search', async () => {
 
   await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
     expect.objectContaining({
-      operation: expect.objectContaining({ kind: 'initial_resolve', text: 'a lexical-only query' }),
+      operation: expect.objectContaining({ kind: 'search_only' }),
       topK: 20,
       useDense: false,
       useBm25: true,
@@ -292,6 +332,19 @@ test('typing a new draft does not invoke onQueryChange; successful search calls 
   await waitFor(() => expect(onQueryChange).toHaveBeenCalledWith('committed query text'));
 });
 
+test('successful search publishes the active query hypothesis revision separately from query text', async () => {
+  const onQueryRevisionChange = jest.fn();
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'revisioned query',
+    revision: 7,
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn(), onQueryRevisionChange });
+  submit('revisioned query');
+
+  await waitFor(() => expect(onQueryRevisionChange).toHaveBeenCalledWith(7));
+});
+
 
 
 test('does not render the retired query-helper control', () => {
@@ -378,6 +431,52 @@ test('attaches image via composer and executes multimodal KIS search on submit',
   ));
 
   expect(await screen.findByAltText('Frame img-result-1')).toBeTruthy();
+});
+
+test('opens the real hypothesis with text and staged images before searching', async () => {
+  const opened = {
+    session_id: 'qh_text_image_session',
+    query_revision: 4,
+    intent: {
+      revision: 4,
+      query_text: 'person beside car',
+      entities: [],
+      events: [{ id: 'E1', text: 'person beside car', images: [{ asset_id: 'ast_text_image' }] }],
+      temporal_edges: [],
+    },
+    can_undo: false,
+  };
+  uploadKisImage.mockResolvedValueOnce({
+    asset_id: 'ast_text_image',
+    file_name: 'query_photo.jpg',
+  });
+  openQueryHypothesis.mockResolvedValueOnce(opened);
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 4,
+    queryText: 'person beside car',
+    events: opened.intent.events,
+    results: [],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  const testFile = new File(['dummy content'], 'query_photo.jpg', { type: 'image/jpeg' });
+  fireEvent.change(screen.getByLabelText(/attach image/i), { target: { files: [testFile] } });
+  await waitFor(() => expect(uploadKisImage).toHaveBeenCalled());
+  fireEvent.change(document.getElementById('event-query'), {
+    target: { value: 'person beside car' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+  await waitFor(() => expect(openQueryHypothesis).toHaveBeenCalledWith(expect.objectContaining({
+    text: 'person beside car',
+    imageRefs: [{ asset_id: 'ast_text_image', file_name: 'query_photo.jpg' }],
+  })));
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(expect.objectContaining({
+    queryHypothesisSessionId: 'qh_text_image_session',
+    baseIntent: null,
+    expectedRevision: 4,
+    operation: { kind: 'search_only' },
+  })));
 });
 
 test('Search-only rerun when only retrieval controls change with active intent', async () => {
@@ -884,7 +983,253 @@ test('opens ImageModal when inspecting a candidate from the AVS review selection
   );
 });
 
+test('asserts a stale-results notice appears after a committed query edit and disappears after a new search at that revision', async () => {
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'person walking',
+    revision: 1,
+    results: [frameResult('frame-1')],
+  }));
 
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('person walking');
 
+  expect(await screen.findByAltText('Frame frame-1')).toBeTruthy();
+  expect(screen.queryByTestId('stale-results-notice')).toBeNull();
 
+  previewQueryHypothesis.mockResolvedValueOnce({
+    base_revision: 1,
+    intent: {
+      revision: 2,
+      query_text: 'person walking slowly',
+      events: [{ id: 'E1', text: 'person walking slowly', origin: 'user_override' }],
+    },
+  });
 
+  commitQueryHypothesis.mockResolvedValueOnce({
+    session_id: 'qh_snap_1',
+    query_revision: 2,
+    intent: {
+      revision: 2,
+      query_text: 'person walking slowly',
+      events: [{ id: 'E1', text: 'person walking slowly', origin: 'user_override' }],
+    },
+    can_undo: true,
+  });
+
+  fireEvent.click(screen.getByTitle('Edit event text'));
+  const editInput = screen.getByDisplayValue('test');
+  fireEvent.change(editInput, { target: { value: 'person walking slowly' } });
+  fireEvent.click(screen.getByRole('button', { name: /preview edit/i }));
+
+  const applyBtn = await screen.findByRole('button', { name: /apply/i });
+  fireEvent.click(applyBtn);
+
+  const staleNotices = await screen.findAllByTestId('stale-results-notice');
+  expect(staleNotices.length).toBeGreaterThanOrEqual(1);
+  expect(screen.getByAltText('Frame frame-1')).toBeTruthy();
+
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'person walking slowly',
+    revision: 2,
+    results: [frameResult('frame-2')],
+  }));
+
+  const updateBtn = screen.getByRole('button', { name: /update results/i });
+  fireEvent.click(updateBtn);
+
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(
+    expect.objectContaining({
+      operation: { kind: 'search_only' },
+      expectedRevision: 2,
+    }),
+  ));
+
+  expect(await screen.findByAltText('Frame frame-2')).toBeTruthy();
+  expect(screen.queryAllByTestId('stale-results-notice')).toHaveLength(0);
+});
+
+test('chat query proposal opens hypothesis preview without replacing current intent', async () => {
+  const currentEvents = [{ id: 'E1', text: 'woman walks' }, { id: 'E2', text: 'woman sits' }];
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    queryText: 'woman walks then sits',
+    revision: 1,
+    events: currentEvents,
+    results: [frameResult('frame-1')],
+  }));
+
+  openFeedbackSession.mockResolvedValueOnce({
+    session_id: 'fb_session_1',
+    feedback_revision: 1,
+    state: {
+      assistant_message: 'Session opened.',
+      intent: { revision: 1, events: currentEvents },
+      can_undo: false,
+    },
+  });
+
+  sendFeedbackTurn.mockResolvedValueOnce({
+    session_id: 'fb_session_1',
+    feedback_revision: 2,
+    status: 'proposal',
+    intent: { revision: 2, events: currentEvents },
+    query_proposal: { action: { type: 'split', event_id: 'E2', split_at: 12, image_assignments: {} } },
+  });
+
+  previewQueryHypothesis.mockResolvedValueOnce({
+    base_revision: 1,
+    intent: {
+      revision: 2,
+      events: [
+        { id: 'E1', text: 'woman walks' },
+        { id: 'E2', text: 'woman sits' },
+        { id: 'E3', text: 'down' },
+      ],
+    },
+  });
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('woman walks then sits');
+  await screen.findByAltText('Frame frame-1');
+
+  // send natural language feedback message
+  const chatInput = document.getElementById('event-query');
+  fireEvent.change(chatInput, { target: { value: 'split event 2' } });
+  fireEvent.click(screen.getByRole('button', { name: /^(search|update|rewrite|feedback)$/i }));
+
+  expect(await screen.findByText(/proposed query changes/i)).toBeInTheDocument();
+  expect(screen.getByText(/rev 1 → 2/i)).toBeInTheDocument();
+});
+
+test('opens a real query hypothesis before the initial KIS search and uses its exact revision', async () => {
+  const opened = {
+    session_id: 'qh_real_session',
+    query_revision: 7,
+    intent: {
+      revision: 7,
+      query_text: 'a red vehicle passes',
+      entities: [],
+      events: [{ id: 'E1', text: 'a red vehicle passes' }],
+      temporal_edges: [],
+    },
+    can_undo: false,
+  };
+  openQueryHypothesis.mockResolvedValueOnce(opened);
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 7,
+    queryText: 'a red vehicle passes',
+    events: opened.intent.events,
+    results: [],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('a red vehicle passes');
+
+  await waitFor(() => expect(openQueryHypothesis).toHaveBeenCalledWith(expect.objectContaining({
+    text: 'a red vehicle passes',
+  })));
+  await waitFor(() => expect(searchKis).toHaveBeenCalledWith(expect.objectContaining({
+    queryHypothesisSessionId: 'qh_real_session',
+    baseIntent: null,
+    expectedRevision: 7,
+    operation: { kind: 'search_only' },
+  })));
+  expect(openQueryHypothesis.mock.invocationCallOrder[0])
+    .toBeLessThan(searchKis.mock.invocationCallOrder[0]);
+});
+
+test('does not fabricate a query hypothesis session from the evidence snapshot', async () => {
+  openQueryHypothesis.mockResolvedValueOnce({
+    session_id: 'qh_real_session',
+    query_revision: 1,
+    intent: { revision: 1, query_text: 'query', events: [{ id: 'E1', text: 'query' }] },
+  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 1,
+    evidenceSnapshotId: 'snapshot-only',
+    queryText: 'query',
+    events: [{ id: 'E1', text: 'query' }],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('query');
+  await screen.findByText('No frames found matching your query');
+
+  expect(screen.queryByTestId('query-hypothesis-editor')).toBeInTheDocument();
+  expect(openQueryHypothesis).toHaveBeenCalledTimes(1);
+  expect(searchKis).toHaveBeenCalledWith(expect.objectContaining({
+    queryHypothesisSessionId: 'qh_real_session',
+  }));
+});
+
+test('migrates image attachment to Query Hypothesis mutation when session is active and avoids dead patch_events', async () => {
+  openQueryHypothesis.mockResolvedValueOnce({
+    session_id: 'qh_active_1',
+    query_revision: 1,
+    intent: { revision: 1, query_text: 'dog running', events: [{ id: 'E1', text: 'dog running', images: [] }] },
+    can_undo: false,
+  });
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 1,
+    query_hypothesis_session_id: 'qh_active_1',
+    events: [{ id: 'E1', text: 'dog running' }],
+    results: [frameResult('frame-1')],
+  }));
+
+  renderSearch({ topK: 20, setTopK: jest.fn() });
+  submit('dog running');
+
+  expect(await screen.findByAltText('Frame frame-1')).toBeTruthy();
+  expect(screen.getByTestId('query-hypothesis-editor')).toBeInTheDocument();
+
+  uploadKisImage.mockResolvedValueOnce({
+    asset_id: 'ast_qh_img',
+    file_name: 'dog.jpg',
+  });
+  commitQueryHypothesis.mockResolvedValueOnce({
+    session_id: 'qh_active_1',
+    query_revision: 2,
+    intent: {
+      revision: 2,
+      query_text: 'dog running',
+      events: [{ id: 'E1', text: 'dog running', images: [{ asset_id: 'ast_qh_img' }] }],
+    },
+    can_undo: true,
+  });
+
+  const testFile = new File(['dog image content'], 'dog.jpg', { type: 'image/jpeg' });
+  const fileInput = screen.getByLabelText(/^attach image$/i);
+  fireEvent.change(fileInput, { target: { files: [testFile] } });
+
+  await waitFor(() => expect(uploadKisImage).toHaveBeenCalledWith(
+    expect.objectContaining({ imageFile: testFile }),
+  ));
+  await waitFor(() => expect(commitQueryHypothesis).toHaveBeenCalledWith(
+    'qh_active_1',
+    1,
+    expect.objectContaining({
+      type: 'attach_image',
+      event_id: 'E1',
+      image: expect.objectContaining({ asset_id: 'ast_qh_img' }),
+    }),
+  ));
+
+  // Verify results become stale and next search sends search_only, never patch_events
+  const staleNotices = await screen.findAllByTestId('stale-results-notice');
+  expect(staleNotices.length).toBeGreaterThanOrEqual(1);
+
+  searchKis.mockResolvedValueOnce(mockKisResponse({
+    revision: 2,
+    query_hypothesis_session_id: 'qh_active_1',
+    events: [{ id: 'E1', text: 'dog running' }],
+    results: [frameResult('frame-2')],
+  }));
+
+  const updateBtn = screen.getByRole('button', { name: /update results/i });
+  fireEvent.click(updateBtn);
+
+  await waitFor(() => expect(searchKis).toHaveBeenLastCalledWith(expect.objectContaining({
+    queryHypothesisSessionId: 'qh_active_1',
+    expectedRevision: 2,
+    operation: { kind: 'search_only' },
+  })));
+});

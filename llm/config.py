@@ -12,12 +12,13 @@ from hcmai.common.utils.io import read_yaml, read_yaml_section
 class HostedCaptionConfig(BaseModel):
     """Caption model settings owned by the hosted inference service."""
 
-    model_checkpoint: str = "Qwen/Qwen3-VL-8B-Instruct"
-    revision: str | None = "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b"
+    model_checkpoint: str = "Qwen/Qwen3-VL-2B-Instruct"
+    revision: str | None = None
+    max_batch_size: int = Field(default=320, ge=1)
     prompt: str = "qwen vl"
     decoding: dict = Field(
         default_factory=lambda: {
-            "max_new_tokens": 160,
+            "max_new_tokens": 64,
             "do_sample": False,
         }
     )
@@ -39,6 +40,16 @@ class HostedTextGenerationConfig(BaseModel):
     max_new_tokens: int = Field(default=2048, ge=64)
 
 
+class HostedObjectDetectionConfig(BaseModel):
+    """YOLOE settings owned by the hosted inference service."""
+
+    model: str = "yoloe-26l-seg-pf.pt"
+    vocab_path: str | None = None
+    min_confidence: float = Field(default=0.20, ge=0.0, le=1.0)
+    top_k: int = Field(default=30, ge=1)
+    device: str | None = None
+
+
 class LLMServiceConfig(BaseModel):
     """Hosted inference settings plus pinned dense encoder configurations."""
 
@@ -49,6 +60,9 @@ class LLMServiceConfig(BaseModel):
     visual_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     caption_embedding: EncoderConfig = Field(default_factory=EncoderConfig)
     evidence_embedding: EncoderConfig | None = None
+    object_detection: HostedObjectDetectionConfig = Field(
+        default_factory=HostedObjectDetectionConfig
+    )
     text_generation: HostedTextGenerationConfig = Field(
         default_factory=HostedTextGenerationConfig
     )

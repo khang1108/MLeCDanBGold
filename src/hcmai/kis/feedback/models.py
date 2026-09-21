@@ -13,35 +13,6 @@ from hcmai.api.contracts.kis import KISSearchResult
 from hcmai.kis.models import EventId, KISIntent
 
 
-class EditIntentAction(BaseModel):
-    """Replace semantic description for specified events; bumps intent semantic revision."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["edit_intent"] = "edit_intent"
-    event_ids: list[str] = Field(min_length=1)
-    replacement_texts: dict[str, str] = Field(
-        description="Mapping from event_id to replacement semantic text"
-    )
-
-
-class RestructureAction(BaseModel):
-    """Replace a contiguous block of events with new events and mapping."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["restructure"] = "restructure"
-    replaced_event_ids: list[str] = Field(min_length=1)
-    new_events: list[str] = Field(
-        min_length=1,
-        description="Sequential list of new event descriptions replacing the block",
-    )
-    mapping: dict[str, list[str]] = Field(
-        default_factory=dict,
-        description="Mapping from old event_id to corresponding new indices or IDs",
-    )
-
-
 class RefineRetrievalAction(BaseModel):
     """Update retrieval query text without modifying canonical semantic intent."""
 
@@ -52,26 +23,6 @@ class RefineRetrievalAction(BaseModel):
     refinements: dict[str, str] = Field(
         description="Mapping from event_id to retrieval search description"
     )
-
-
-class AnchorAction(BaseModel):
-    """Confirm a frame selection as an explicit anchor for an event."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["anchor"] = "anchor"
-    event_id: str
-    frame_id: str | None = None
-
-
-class RejectCandidateAction(BaseModel):
-    """Exclude a candidate frame or occurrence for an event without dropping the video."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: Literal["reject_candidate"] = "reject_candidate"
-    event_id: str
-    candidate_frame_id: str | None = None
 
 
 class RepairEventAction(BaseModel):
@@ -92,12 +43,19 @@ class ClarifyAction(BaseModel):
     question: str
 
 
+class QueryEditProposalAction(BaseModel):
+    """Propose an action on the query hypothesis without committing directly."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["query_edit_proposal"] = "query_edit_proposal"
+    action: dict[str, Any]
+    explanation: str
+
+
 FeedbackAction = Annotated[
-    EditIntentAction
-    | RestructureAction
+    QueryEditProposalAction
     | RefineRetrievalAction
-    | AnchorAction
-    | RejectCandidateAction
     | RepairEventAction
     | ClarifyAction,
     Field(discriminator="type"),
@@ -117,18 +75,12 @@ class FeedbackResolution(BaseModel):
         if isinstance(data, dict):
             act = data.get("action")
             if isinstance(act, dict) and "type" not in act:
-                if "refinements" in act:
+                if "explanation" in act and "action" in act:
+                    act["type"] = "query_edit_proposal"
+                elif "refinements" in act:
                     act["type"] = "refine_retrieval"
-                elif "replacement_texts" in act:
-                    act["type"] = "edit_intent"
-                elif "new_events" in act:
-                    act["type"] = "restructure"
-                elif "candidate_frame_id" in act:
-                    act["type"] = "reject_candidate"
                 elif "question" in act:
                     act["type"] = "clarify"
-                elif "frame_id" in act:
-                    act["type"] = "anchor"
                 elif "event_id" in act:
                     act["type"] = "repair_event"
         return data
@@ -207,17 +159,14 @@ class FeedbackSession(BaseModel):
 
 
 __all__ = [
-    "AnchorAction",
     "ClarifyAction",
-    "EditIntentAction",
     "FeedbackAction",
     "FeedbackChatTurn",
     "FeedbackCheckpoint",
     "FeedbackResolution",
     "FeedbackResolveContext",
     "FeedbackSession",
+    "QueryEditProposalAction",
     "RefineRetrievalAction",
-    "RejectCandidateAction",
     "RepairEventAction",
-    "RestructureAction",
 ]

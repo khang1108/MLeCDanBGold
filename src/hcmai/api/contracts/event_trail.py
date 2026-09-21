@@ -74,6 +74,26 @@ class UndoAction(BaseModel):
     type: Literal["undo"] = "undo"
 
 
+class KeepAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["keep"] = "keep"
+    event_id: str
+
+
+class UseAlternativeAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["use_alternative"] = "use_alternative"
+    event_id: str
+    alternative_id: str
+
+
+class RejectModeAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["reject_mode"] = "reject_mode"
+    event_id: str
+    mode_id: str
+
+
 EventTrailActionContract = Annotated[
     ApproveAction
     | UseFrameAction
@@ -81,7 +101,10 @@ EventTrailActionContract = Annotated[
     | ClearAnchorAction
     | SetWindowAction
     | ClearWindowAction
-    | UndoAction,
+    | UndoAction
+    | KeepAction
+    | UseAlternativeAction
+    | RejectModeAction,
     Field(discriminator="type"),
 ]
 
@@ -101,13 +124,22 @@ class EventTrailActionRequest(BaseModel):
             ClearAnchor,
             ClearWindow,
             DeclineCandidate,
+            KeepOccurrence,
+            RejectMode,
             SetWindow,
             Undo,
+            UseAlternative,
             UseFrame,
         )
 
         action = self.action
-        if isinstance(action, ApproveAction):
+        if isinstance(action, KeepAction):
+            return KeepOccurrence(event_id=action.event_id)
+        elif isinstance(action, UseAlternativeAction):
+            return UseAlternative(event_id=action.event_id, alternative_id=action.alternative_id)
+        elif isinstance(action, RejectModeAction):
+            return RejectMode(event_id=action.event_id, mode_id=action.mode_id)
+        elif isinstance(action, ApproveAction):
             return ApproveEvent(event_id=action.event_id)
         elif isinstance(action, UseFrameAction):
             return UseFrame(event_id=action.event_id, frame_id=action.frame_id)
@@ -170,6 +202,22 @@ class EventTrailSubmissionSelection(BaseModel):
     timestamp_ms: int
 
 
+class EventTrailAlternative(BaseModel):
+    """Exposed complete-path alternative conditioned on a temporal mode."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    alternative_id: str
+    event_id: str
+    representative_frame_id: str
+    representative_frame_idx: int
+    representative_timestamp_ms: int
+    interval: tuple[int, int]
+    score: float
+    is_current: bool = False
+    path: list[EventTrailEventCandidate]
+
+
 class EventTrailStateResponse(BaseModel):
     """Full UI-ready state presentation of an EventTrail session."""
 
@@ -188,6 +236,8 @@ class EventTrailStateResponse(BaseModel):
     window: tuple[int, int] | None = None
     submission_selection: EventTrailSubmissionSelection | None = None
     transition: EventTrailTransition | None = None
+    focused_event_id: str | None = None
+    alternatives: list[EventTrailAlternative] = Field(default_factory=list)
 
     @classmethod
     def from_domain(cls, view: TrailView) -> EventTrailStateResponse:
@@ -244,6 +294,29 @@ class EventTrailStateResponse(BaseModel):
                 latency_ms=view.transition.latency_ms,
             )
 
+        alternatives_list = [
+            EventTrailAlternative(
+                alternative_id=a.mode_id,
+                event_id=a.event_id,
+                representative_frame_id=a.representative_frame_id,
+                representative_frame_idx=a.representative_frame_idx,
+                representative_timestamp_ms=a.representative_timestamp_ms,
+                interval=a.interval,
+                score=a.score,
+                is_current=a.is_current,
+                path=[
+                    EventTrailEventCandidate(
+                        event_id=c.event_id,
+                        frame_id=c.frame_id,
+                        frame_idx=c.frame_idx,
+                        timestamp_ms=c.timestamp_ms,
+                    )
+                    for c in a.path
+                ],
+            )
+            for a in view.alternatives
+        ]
+
         return cls(
             session_id=view.session_id,
             result_id=view.result_id,
@@ -258,4 +331,47 @@ class EventTrailStateResponse(BaseModel):
             window=view.window,
             submission_selection=selection,
             transition=transition,
+            focused_event_id=view.focused_event_id,
+            alternatives=alternatives_list,
+        )
+
+class EventTrailAlternativesResponse(BaseModel):
+    """Response payload returning complete-path alternatives for a focused event."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    alternatives: list[EventTrailAlternative]
+
+    @classmethod
+    def from_domain(cls, modes: list | tuple) -> EventTrailAlternativesResponse:
+        return cls(
+            alternatives=[
+                EventTrailAlternative(
+                    alternative_id=m.mode_id,
+                    event_id=m.event_id,
+                    representative_frame_id=m.representative_frame_id,
+                    representative_frame_idx=m.representative_frame_idx,
+                    representative_timestamp_ms=m.representative_timestamp_ms,
+                    interval=m.interval,
+                    score=m.score,
+                    is_current=m.is_current,
+                    path=[
+                        EventTrailEventCandidate(
+                            event_id=f"E{i + 1}",
+                            frame_id=fid,
+                            frame_idx=fidx,
+                            timestamp_ms=ts,
+                        )
+                        for i, (fid, fidx, ts) in enumerate(
+                            zip(
+                                m.path.frame_ids,
+                                m.path.frame_idxs,
+                                m.path.timestamps_ms,
+                                strict=True,
+                            )
+                        )
+                    ],
+                )
+                for m in modes
+            ]
         )

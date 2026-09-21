@@ -3,6 +3,7 @@ import {
   getEventTrail,
   actOnEventTrail,
   closeEventTrail,
+  getEventTrailAlternatives,
 } from './eventTrail';
 
 describe('eventTrail API transport', () => {
@@ -127,6 +128,27 @@ describe('eventTrail API transport', () => {
     expect(res.trail_revision).toBe(1);
   });
 
+  test('getEventTrailAlternatives forwards the options signal to fetch', async () => {
+    const signal = new AbortController().signal;
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ alternatives: [] }),
+    });
+
+    await getEventTrailAlternatives('trail_1', {
+      eventId: 'E2',
+      expectedTrailRevision: 4,
+      signal,
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/v1\/event-trail\/trail_1\/alternatives\?event_id=E2&expected_trail_revision=4$/),
+      expect.objectContaining({ method: 'GET', signal }),
+    );
+  });
+
   test('closeEventTrail calls DELETE with expected_trail_revision query parameter', async () => {
     global.fetch.mockResolvedValueOnce({
       ok: true,
@@ -159,4 +181,3 @@ describe('eventTrail API transport', () => {
     );
   });
 });
-

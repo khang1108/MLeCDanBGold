@@ -15,13 +15,10 @@ from hcmai.api.contracts.feedback import (
 from hcmai.api.contracts.kis import KISSearchResult
 from hcmai.api.contracts.search import SearchResult
 from hcmai.kis.feedback.models import (
-    EditIntentAction,
     FeedbackCheckpoint,
     FeedbackResolveContext,
     FeedbackSession,
     RefineRetrievalAction,
-    RejectCandidateAction,
-    RestructureAction,
 )
 from hcmai.kis.feedback.resolver import FeedbackResolver
 from hcmai.kis.feedback.service import FeedbackService
@@ -201,105 +198,6 @@ def test_single_event_query_searches_full_corpus_and_can_change_top_video():
     assert state.results[0].video_id == "video_002"
 
 
-def test_rejection_removes_only_rejected_occurrence_not_entire_video():
-    """Rejecting a candidate removes only that occurrence without dropping other occurrences of the video."""
-    store = FeedbackSessionStore()
-
-    def multi_occurrence_results(plan):
-        return [
-            _make_search_result("r1", "video_001", 10, 1500, 0.95),
-            _make_search_result("r2", "video_001", 20, 6500, 0.85),
-        ]
-
-    search_service = StubSearchService(results_fn=multi_occurrence_results)
-    resolver = Mock(spec=FeedbackResolver)
-    resolver.resolve.return_value = RejectCandidateAction(
-        event_id="E1",
-        candidate_frame_id="10",
-    )
-    service = FeedbackService(store=store, resolver=resolver, search_service=search_service)
-
-    single_intent = KISIntent(
-        revision=1,
-        query_text="A car driving fast",
-        events=[KISEvent(id="E1", text="A car driving fast")],
-        temporal_edges=[],
-    )
-    opened = service.open(
-        FeedbackOpenRequest(
-            intent=single_intent,
-            original_query="A car driving fast",
-            evidence_snapshot_id="snap_test",
-        )
-    )
-
-    state = service.turn(
-        opened.session_id,
-        FeedbackTurnRequest(
-            request_id="req_rej",
-            expected_feedback_revision=opened.feedback_revision,
-            expected_kis_revision=opened.intent.revision,
-            message="Frame này không phải",
-            selected_result_id="r1",
-            selected_event_id="E1",
-            selected_frame_id="10",
-        ),
-    )
-
-    # Frame 10 rejected, but video_001 frame 20 survives!
-    assert len(state.results) == 1
-    assert state.results[0].video_id == "video_001"
-    assert state.results[0].frame_idx == 20
-
-
-def test_restructure_split_creates_canonical_edges_and_preserves_images():
-    """Restructure replaces contiguous block, rebuilds E1..En edges, and preserves unchanged images."""
-    store = FeedbackSessionStore()
-    search_service = StubSearchService()
-    resolver = Mock(spec=FeedbackResolver)
-    # Split E2 into 2 steps, preserving E1 (which has an image)
-    resolver.resolve.return_value = RestructureAction(
-        replaced_event_ids=["E2"],
-        new_events=["Pours oil into pan.", "Lights the stove."],
-        mapping={"E2": ["1", "2"]},
-    )
-    service = FeedbackService(store=store, resolver=resolver, search_service=search_service)
-
-    intent = _create_sample_intent_with_image()
-    opened = service.open(
-        FeedbackOpenRequest(
-            intent=intent,
-            original_query="A person enters and turns on a stove.",
-            evidence_snapshot_id="snap_test",
-        )
-    )
-
-    state = service.turn(
-        opened.session_id,
-        FeedbackTurnRequest(
-            request_id="req_split",
-            expected_feedback_revision=opened.feedback_revision,
-            expected_kis_revision=opened.intent.revision,
-            message="Tách bước 2 thành: đổ dầu rồi bật bếp",
-        ),
-    )
-
-    # Must have 3 events E1, E2, E3
-    assert len(state.intent.events) == 3
-    assert [ev.id for ev in state.intent.events] == ["E1", "E2", "E3"]
-    # E1 image preserved
-    assert len(state.intent.events[0].images) == 1
-    assert state.intent.events[0].images[0].asset_id == "asset_123"
-    # Canonical sequential temporal edges
-    assert len(state.intent.temporal_edges) == 2
-    assert state.intent.temporal_edges[0].source == "E1"
-    assert state.intent.temporal_edges[0].target == "E2"
-    assert state.intent.temporal_edges[1].source == "E2"
-    assert state.intent.temporal_edges[1].target == "E3"
-    # Revision bumped
-    assert state.intent.revision == 2
-
-
 def test_retrieval_error_rollback_preserves_active_state():
     """An error during retrieval execution must not mutate the active session state."""
     store = FeedbackSessionStore()
@@ -448,4 +346,3 @@ def test_feedback_execution_snapshots_temporal_evidence_for_event_trail():
     assert undo_res.evidence_snapshot_id == "snap_test"
     assert len(undo_res.results) == 1
     assert undo_res.results[0].result_id == "r_init_1"
-

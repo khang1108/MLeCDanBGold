@@ -229,8 +229,8 @@ class EnrichmentService:
     def build_frame_context(
         frames_path: str | Path,
         caption_path: str | Path,
-        ocr_frames_path: str | Path,
-        object_frames_path: str | Path,
+        ocr_frames_path: str | Path | None,
+        object_frames_path: str | Path | None,
         output_dir: str | Path,
         config: FrameContextConfig,
         *,
@@ -256,11 +256,13 @@ class EnrichmentService:
     def build_frame_context_from_job(job: EnrichmentJobConfig) -> Path:
         """Build context from existing job artifacts without generating sources."""
 
+        ocr_path = job.ocr_output_dir / "frames.parquet"
+        object_path = job.object_output_dir / "frames.parquet"
         return EnrichmentService.build_frame_context(
             job.frames_path,
             job.caption_output_dir / "captions.parquet",
-            job.ocr_output_dir / "frames.parquet",
-            job.object_output_dir / "frames.parquet",
+            ocr_path if ocr_path.is_file() else None,
+            object_path if object_path.is_file() else None,
             job.context_output_dir,
             job.context,
             frame_store_id=job.frame_store_id,

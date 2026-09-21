@@ -200,11 +200,14 @@ def _stamp_asr_lineage(
             raise ValueError(
                 "remote segment artifact_version conflicts with ASR contract"
             )
-        stamped.append(segment.model_copy(update={
-            "model_name": model_name,
-            "model_revision": model_revision,
-            "artifact_version": ASR_SEGMENT_ARTIFACT_VERSION,
-        }))
+        stamped.append(TranscriptSegment.model_validate(
+            segment.model_dump(mode="python")
+            | {
+                "model_name": model_name,
+                "model_revision": model_revision,
+                "artifact_version": ASR_SEGMENT_ARTIFACT_VERSION,
+            }
+        ))
     return stamped
 
 

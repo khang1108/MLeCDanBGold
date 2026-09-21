@@ -328,112 +328,27 @@ test('Step 2: renders EventTrailPanel when state exists; selecting E2 + explore 
   });
   fireEvent.loadedMetadata(video);
 
-  expect(screen.getByRole('region', { name: /eventtrail exploration/i })).toBeTruthy();
+  expect(screen.getByRole('region', { name: /hypothesis explorer|eventtrail exploration/i })).toBeTruthy();
   // Select E2
   fireEvent.click(screen.getByTestId('event-rail-item-E2'));
   expect(screen.getAllByText('e2').length).toBeGreaterThanOrEqual(1);
 });
 
-test('Step 3: auto-seeks only on successful Decline replacement of selected event, not Approve or exhausted', async () => {
-  let currentState = {
-    session_id: 'ses_1',
-    result_id: 'r_1',
-    video_id: 'L21_V001',
-    kis_revision: 1,
-    trail_revision: 1,
-    status: 'active',
+test('Result Hypothesis Explorer wires focus, preview, Keep, Use, and Reject actions end-to-end', async () => {
+  const focusEvent = jest.fn();
+  const previewAlternative = jest.fn();
+  const clearPreview = jest.fn();
+  const keep = jest.fn();
+  const useAlternative = jest.fn();
+  const rejectMode = jest.fn();
+  const alternative = {
+    alternative_id: 'opaque-alternative-42',
+    event_id: 'E2',
     path: [
       { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
-      { event_id: 'E2', frame_id: 'f2', frame_idx: 20, timestamp_ms: 7000 },
+      { event_id: 'E2', frame_id: 'f2b', frame_idx: 21, timestamp_ms: 7200 },
     ],
-    last_valid_path: null,
-    approved_event_ids: [],
-    rejected_counts: {},
-    window: null,
-    submission_selection: null,
-    transition: null,
   };
-
-  const actMock = jest.fn();
-
-  const { rerender } = render(
-    <ImageModal
-      frame={frame}
-      onClose={jest.fn()}
-      eventTrail={{
-        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
-        state: currentState,
-        pending: false,
-        act: actMock,
-      }}
-    />,
-  );
-
-  const video = await screen.findByLabelText('Video for L21_V001');
-  let currentTime = 2;
-  Object.defineProperty(video, 'duration', { configurable: true, value: 30 });
-  Object.defineProperty(video, 'currentTime', {
-    configurable: true,
-    get: () => currentTime,
-    set: (value) => { currentTime = value; },
-  });
-  fireEvent.loadedMetadata(video);
-
-  // Select E2
-  fireEvent.click(screen.getByTestId('event-rail-item-E2'));
-
-  // Decline E2
-  actMock.mockImplementation(async () => {
-    currentState = {
-      ...currentState,
-      trail_revision: 2,
-      path: [
-        { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
-        { event_id: 'E2', frame_id: 'f2_new', frame_idx: 25, timestamp_ms: 9500 },
-      ],
-      transition: {
-        action_event_id: 'E2',
-        direct_changed_event_ids: ['E2'],
-        indirect_changed_event_ids: [],
-        candidate_diffs: [
-          { event_id: 'E2', before_frame_id: 'f2', after_frame_id: 'f2_new', before_timestamp_ms: 7000, after_timestamp_ms: 9500 },
-        ],
-      },
-    };
-  });
-
-  const declineBtn = screen.getByRole('button', { name: /^decline$/i });
-  fireEvent.click(declineBtn);
-  expect(actMock).toHaveBeenCalledWith({ type: 'decline', event_id: 'E2' });
-
-  // Rerender with updated state
-  rerender(
-    <ImageModal
-      frame={frame}
-      onClose={jest.fn()}
-      eventTrail={{
-        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
-        state: currentState,
-        pending: false,
-        act: actMock,
-      }}
-    />
-  );
-
-  expect(currentTime).toBe(9.5);
-});
-
-test('Step 4: Use resolves canonical frame at player time and acts on EventTrail', async () => {
-  resolveFrameAtTimestamp.mockResolvedValueOnce({
-    frame_id: 'f12',
-    video_id: 'L21_V001',
-    requested_timestamp_ms: 12345,
-    frame_idx: 300,
-    timestamp_ms: 12000,
-    metadata: {},
-  });
-
-  const actMock = jest.fn();
   const state = {
     session_id: 'ses_1',
     result_id: 'r_1',
@@ -453,6 +368,93 @@ test('Step 4: Use resolves canonical frame at player time and acts on EventTrail
     transition: null,
   };
 
+  const { rerender } = render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state,
+        pending: false,
+        alternatives: [alternative],
+        isLoadingAlternatives: false,
+        focusedEventId: 'E2',
+        currentQueryRevision: 1,
+        focusEvent,
+        previewAlternative,
+        clearPreview,
+        keep,
+        useAlternative,
+        rejectMode,
+      }}
+    />,
+  );
+
+  fireEvent.click(screen.getByTestId('event-rail-item-E2'));
+  expect(focusEvent).toHaveBeenCalledWith('E2');
+
+  fireEvent.click(screen.getByRole('button', { name: /preview alternative/i }));
+  expect(previewAlternative).toHaveBeenCalledWith(alternative);
+  expect(keep).not.toHaveBeenCalled();
+  expect(useAlternative).not.toHaveBeenCalled();
+  expect(rejectMode).not.toHaveBeenCalled();
+
+  rerender(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state,
+        pending: false,
+        alternatives: [alternative],
+        previewAlternativeState: alternative,
+        isLoadingAlternatives: false,
+        focusedEventId: 'E2',
+        currentQueryRevision: 1,
+        focusEvent,
+        previewAlternative,
+        clearPreview,
+        keep,
+        useAlternative,
+        rejectMode,
+      }}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: /^keep$/i }));
+  expect(keep).toHaveBeenCalledWith('E2');
+
+  fireEvent.click(screen.getAllByRole('button', { name: /use this occurrence/i })[0]);
+  expect(useAlternative).toHaveBeenCalledWith('E2', 'opaque-alternative-42');
+
+  fireEvent.click(screen.getByRole('button', { name: /reject occurrence/i }));
+  expect(rejectMode).toHaveBeenCalledWith('E2', 'opaque-alternative-42');
+  expect(clearPreview).not.toHaveBeenCalled();
+});
+
+test('Step 3: Result Hypothesis Explorer Reject is disabled without an opaque alternative id', async () => {
+  const state = {
+    session_id: 'ses_1',
+    result_id: 'r_1',
+    video_id: 'L21_V001',
+    kis_revision: 1,
+    trail_revision: 1,
+    status: 'active',
+    path: [
+      { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
+      { event_id: 'E2', frame_id: 'f2', frame_idx: 20, timestamp_ms: 7000 },
+    ],
+    last_valid_path: null,
+    approved_event_ids: [],
+    rejected_counts: {},
+    window: null,
+    submission_selection: null,
+    transition: null,
+  };
+
+  const rejectMode = jest.fn();
+
   render(
     <ImageModal
       frame={frame}
@@ -461,9 +463,57 @@ test('Step 4: Use resolves canonical frame at player time and acts on EventTrail
         context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
         state,
         pending: false,
-        act: actMock,
+        focusedEventId: 'E2',
+        rejectMode,
       }}
     />,
+  );
+
+  fireEvent.click(screen.getByTestId('event-rail-item-E2'));
+
+  const rejectBtn = screen.getByRole('button', { name: /reject occurrence/i });
+  expect(rejectBtn).toBeDisabled();
+  fireEvent.click(rejectBtn);
+  expect(rejectMode).not.toHaveBeenCalled();
+});
+
+test('Step 4: Use current video timestamp replaces canonical candidate and sets submission_selection', async () => {
+  const actMock = jest.fn();
+  resolveFrameAtTimestamp.mockResolvedValueOnce({
+    video_id: 'L21_V001',
+    frame_id: 'f12',
+    frame_idx: 120,
+    timestamp_ms: 12345,
+  });
+
+  render(
+    <ImageModal
+      frame={frame}
+      onClose={jest.fn()}
+      eventTrail={{
+        context: { snapshotId: 'snap_1', resultId: 'r_1', kisRevision: 1, events: [{ id: 'E1', text: 'e1' }, { id: 'E2', text: 'e2' }] },
+        state: {
+          session_id: 'ses_1',
+          result_id: 'r_1',
+          video_id: 'L21_V001',
+          kis_revision: 1,
+          trail_revision: 0,
+          status: 'active',
+          path: [
+            { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
+            { event_id: 'E2', frame_id: 'f2', frame_idx: 20, timestamp_ms: 7000 },
+          ],
+          last_valid_path: null,
+          approved_event_ids: [],
+          rejected_counts: {},
+          window: null,
+          submission_selection: null,
+          transition: null,
+        },
+        pending: false,
+        act: actMock,
+      }}
+    />
   );
 
   const video = await screen.findByLabelText('Video for L21_V001');
@@ -481,7 +531,7 @@ test('Step 4: Use resolves canonical frame at player time and acts on EventTrail
   fireEvent.click(screen.getByTestId('event-rail-item-E2'));
 
   // Click Use
-  const useBtn = screen.getByRole('button', { name: /^use$/i });
+  const useBtn = screen.getByRole('button', { name: /use \(manual frame\)|^use$/i });
   fireEvent.click(useBtn);
 
   await waitFor(() => {
@@ -543,7 +593,7 @@ test('Step 5: Trail Submit uses submission_selection and hides header submit but
   // Trail submit is disabled without submission_selection and displays hint
   const submitBtn = screen.getByRole('button', { name: /^submit$/i });
   expect(submitBtn.disabled).toBe(true);
-  expect(screen.getByText('Use a frame before submitting from EventTrail.')).toBeTruthy();
+  expect(screen.getByText('Use a frame before submitting from Hypothesis Explorer.')).toBeTruthy();
 
   // Rerender with submission_selection
   rerender(
@@ -695,6 +745,3 @@ test('toggles fit mode between contain and cover (fill) on button click and key 
   fireEvent.keyDown(modalCard, { key: 'c' });
   expect(viewerCol.classList.contains('fit-contain')).toBe(true);
 });
-
-
-

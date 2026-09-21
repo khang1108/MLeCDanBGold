@@ -6,15 +6,12 @@ import pytest
 
 from hcmai.api.contracts.feedback import RetrievalOverride
 from hcmai.kis.feedback.models import (
-    AnchorAction,
     ClarifyAction,
-    EditIntentAction,
     FeedbackResolution,
     FeedbackResolveContext,
+    QueryEditProposalAction,
     RefineRetrievalAction,
-    RejectCandidateAction,
     RepairEventAction,
-    RestructureAction,
 )
 from hcmai.kis.feedback.resolver import (
     FeedbackResolver,
@@ -38,15 +35,14 @@ def _create_context(
         KISTemporalEdge(source=f"E{i}", target=f"E{i+1}")
         for i in range(1, len(kis_events))
     ]
-    intent = KISIntent(
-        revision=1,
-        query_text=" ".join(ev_texts),
-        events=kis_events,
-        temporal_edges=edges,
-    )
     return FeedbackResolveContext(
-        original_query="original test query",
-        intent=intent,
+        original_query=" ".join(ev_texts),
+        intent=KISIntent(
+            revision=1,
+            query_text=" ".join(ev_texts),
+            events=kis_events,
+            temporal_edges=edges,
+        ),
         retrieval_overrides={},
         selected_result_id=selected_result_id,
         selected_event_id=selected_event_id,
@@ -58,12 +54,12 @@ def _create_context(
 
 
 def test_resolve_edit_intent():
-    """Edit extra detail targeting a specific event."""
+    """Edit extra detail targeting a specific event produces QueryEditProposalAction."""
     context = _create_context()
     llm = Mock()
-    expected_action = EditIntentAction(
-        event_ids=["E1"],
-        replacement_texts={"E1": "A man in a yellow shirt talks to a woman."},
+    expected_action = QueryEditProposalAction(
+        action={"type": "edit", "event_id": "E1", "text": "A man in a yellow shirt talks to a woman."},
+        explanation="Cập nhật mô tả E1",
     )
     llm.generate_structured.return_value = FeedbackResolution(action=expected_action)
 
@@ -75,13 +71,12 @@ def test_resolve_edit_intent():
 
 
 def test_resolve_restructure_split():
-    """Split sequential cooking steps into new events."""
+    """Split sequential cooking steps produces QueryEditProposalAction."""
     context = _create_context(events=["Cooking soup."])
     llm = Mock()
-    expected_action = RestructureAction(
-        replaced_event_ids=["E1"],
-        new_events=["Chopping vegetables.", "Putting vegetables into boiling pot."],
-        mapping={"E1": ["1", "2"]},
+    expected_action = QueryEditProposalAction(
+        action={"type": "split", "event_id": "E1", "split_at": 10, "image_assignments": {}},
+        explanation="Tách bước nấu súp",
     )
     llm.generate_structured.return_value = FeedbackResolution(action=expected_action)
 
@@ -126,9 +121,9 @@ def test_deictic_without_selection_returns_clarify():
 def test_no_invented_event_ids():
     """Model returning non-existent event IDs must be rejected by validate_action_references."""
     context = _create_context()
-    invalid_action = EditIntentAction(
-        event_ids=["E99"],
-        replacement_texts={"E99": "Ghost event."},
+    invalid_action = QueryEditProposalAction(
+        action={"type": "edit", "event_id": "E99", "text": "Ghost event."},
+        explanation="Invalid proposal",
     )
     with pytest.raises(FeedbackResolverError):
         validate_action_references(invalid_action, context)

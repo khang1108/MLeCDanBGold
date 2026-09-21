@@ -179,7 +179,7 @@ def _segment_encoder(
     if selected is None and settings.inference.enabled:
         from llm.pipeline import LLMService
 
-        base_url = os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url)
+        base_url = os.getenv("VBS_CORE_API_URL", os.getenv("HCMAI_INFERENCE_BASE_URL", settings.inference.base_url))
         service = LLMService.remote(base_url, settings.inference)
         selected = EmbeddingService.create_remote_adapter(
             service, encoder_config, embedding_dim=1024, source="text"

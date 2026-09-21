@@ -26,13 +26,17 @@ from hcmai.event_trail.models import (
     ApproveEvent,
     CandidateDiff,
     ClearAnchor,
+    ClearWindow,
     DeclineCandidate,
+    KeepOccurrence,
+    RejectMode,
     RepairEvent,
     SetWindow,
     SubmissionSelection,
     TrailCheckpoint,
     TrailTransition,
     TrailView,
+    UseAlternative,
     UseFrame,
 )
 from hcmai.event_trail.storage.session import SessionSlot
@@ -87,6 +91,8 @@ def apply_undo(
         history=new_history,
         submission_selection=prev_checkpoint.submission_selection,
         status=new_status,
+        focused_event_id=None,
+        alternatives=(),
     )
     slot.session = updated
     total_ms = (perf_counter() - started) * 1000.0
@@ -791,4 +797,275 @@ def apply_clear_window(
                 "total_ms": round(total_ms, 3),
             },
         )
+    return build_trail_view(updated, transition)
+
+
+def apply_keep_occurrence(
+    slot: SessionSlot,
+    action: KeepOccurrence,
+    event_idx: int,
+    decoder: TemporalConstraintDecoder,
+    started: float,
+) -> TrailView:
+    """Keep currently aligned candidate occurrence for an event by anchoring it."""
+    session = slot.session
+    if session.current_path is None:
+        raise EventTrailError("CONSTRAINT_CONFLICT", "Cannot keep occurrence when path is exhausted")
+    if session.constraints.anchors[event_idx] is not None:
+        raise EventTrailError("CONSTRAINT_CONFLICT", f"Event {action.event_id} is already anchored")
+
+    current_fid = session.current_path.frame_ids[event_idx]
+    new_anchors = list(session.constraints.anchors)
+    new_anchors[event_idx] = current_fid
+    new_constraints = replace(session.constraints, anchors=tuple(new_anchors))
+
+    outcome = decoder.decode(session.video_evidence, new_constraints, session.decoder_config)
+    if outcome.status != "ok":
+        raise EventTrailError(
+            "CONSTRAINT_CONFLICT", f"Keep occurrence contradicts constraints: {outcome.status}"
+        )
+
+    diffs, indirect_changed, diff_ms = compute_candidate_diffs(
+        session.event_ids,
+        session.current_path,
+        outcome.path,
+        action_event_id=action.event_id,
+    )
+
+    transition = TrailTransition(
+        action_event_id=action.event_id,
+        direct_changed_event_ids=(action.event_id,),
+        indirect_changed_event_ids=indirect_changed,
+        candidate_diffs=diffs,
+        latency_ms=outcome.constraint_ms + outcome.dp_ms,
+    )
+    checkpoint = TrailCheckpoint(
+        constraints=session.constraints,
+        submission_selection=session.submission_selection,
+    )
+    updated = replace(
+        session,
+        trail_revision=session.trail_revision + 1,
+        constraints=new_constraints,
+        current_path=outcome.path,
+        last_valid_path=outcome.path,
+        history=session.history + (checkpoint,),
+        status="active",
+        focused_event_id=None,
+        alternatives=(),
+    )
+    slot.session = updated
+    total_ms = (perf_counter() - started) * 1000.0
+
+    log_trail_event(
+        event_type="trail_keep",
+        kis_revision=session.kis_revision,
+        snapshot_id=session.snapshot_id,
+        result_id=session.result_id,
+        video_id=session.video_id,
+        trail_session_id=session.session_id,
+        trail_revision=updated.trail_revision,
+        event_id=action.event_id,
+        search_session_id=session.search_session_id,
+        payload={
+            "anchored_frame_id": current_fid,
+            "path_before": list(session.current_path.frame_ids),
+            "path_after": list(outcome.path.frame_ids),  # type: ignore[union-attr]
+            "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+            "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+            "outcome": "active",
+            "constraint_ms": round(outcome.constraint_ms, 3),
+            "dp_ms": round(outcome.dp_ms, 3),
+            "diff_ms": round(diff_ms, 3),
+            "total_ms": round(total_ms, 3),
+        },
+    )
+    return build_trail_view(updated, transition)
+
+
+def apply_use_alternative(
+    slot: SessionSlot,
+    action: UseAlternative,
+    event_idx: int,
+    decoder: TemporalConstraintDecoder,
+    started: float,
+) -> TrailView:
+    """Anchor a selected complete-path alternative's representative frame for an event."""
+    session = slot.session
+    if session.focused_event_id != action.event_id:
+        raise EventTrailError(
+            "STALE_ALTERNATIVE",
+            f"Event {action.event_id} is not currently focused (focused: {session.focused_event_id})",
+        )
+    mode = next((m for m in session.alternatives if m.mode_id == action.alternative_id), None)
+    if mode is None:
+        raise EventTrailError(
+            "STALE_ALTERNATIVE",
+            f"Alternative {action.alternative_id} not found in current alternatives",
+        )
+
+    new_anchors = list(session.constraints.anchors)
+    new_anchors[event_idx] = mode.representative_frame_id
+    new_constraints = replace(session.constraints, anchors=tuple(new_anchors))
+
+    outcome = decoder.decode(session.video_evidence, new_constraints, session.decoder_config)
+    if outcome.status == "ok":
+        new_path = outcome.path
+        new_status = "active"
+        new_last_valid = outcome.path
+    else:
+        new_path = None
+        new_status = "exhausted"
+        new_last_valid = session.last_valid_path
+
+    diffs, indirect_changed, diff_ms = compute_candidate_diffs(
+        session.event_ids,
+        session.current_path,
+        new_path,
+        action_event_id=action.event_id,
+    )
+
+    transition = TrailTransition(
+        action_event_id=action.event_id,
+        direct_changed_event_ids=(action.event_id,),
+        indirect_changed_event_ids=indirect_changed,
+        candidate_diffs=diffs,
+        latency_ms=outcome.constraint_ms + outcome.dp_ms,
+    )
+    checkpoint = TrailCheckpoint(
+        constraints=session.constraints,
+        submission_selection=session.submission_selection,
+    )
+    updated = replace(
+        session,
+        trail_revision=session.trail_revision + 1,
+        constraints=new_constraints,
+        current_path=new_path,
+        last_valid_path=new_last_valid,
+        history=session.history + (checkpoint,),
+        status=new_status,
+        focused_event_id=None,
+        alternatives=(),
+    )
+    slot.session = updated
+    total_ms = (perf_counter() - started) * 1000.0
+
+    log_trail_event(
+        event_type="trail_use_alternative",
+        kis_revision=session.kis_revision,
+        snapshot_id=session.snapshot_id,
+        result_id=session.result_id,
+        video_id=session.video_id,
+        trail_session_id=session.session_id,
+        trail_revision=updated.trail_revision,
+        event_id=action.event_id,
+        search_session_id=session.search_session_id,
+        payload={
+            "alternative_id": action.alternative_id,
+            "representative_frame_id": mode.representative_frame_id,
+            "path_before": list(session.current_path.frame_ids) if session.current_path else [],
+            "path_after": list(new_path.frame_ids) if new_path else [],
+            "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+            "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+            "outcome": new_status,
+            "constraint_ms": round(outcome.constraint_ms, 3),
+            "dp_ms": round(outcome.dp_ms, 3),
+            "diff_ms": round(diff_ms, 3),
+            "total_ms": round(total_ms, 3),
+        },
+    )
+    return build_trail_view(updated, transition)
+
+
+def apply_reject_mode(
+    slot: SessionSlot,
+    action: RejectMode,
+    event_idx: int,
+    decoder: TemporalConstraintDecoder,
+    started: float,
+) -> TrailView:
+    """Exclude the entire bounded temporal mode interval for an event."""
+    session = slot.session
+    if session.focused_event_id != action.event_id:
+        raise EventTrailError(
+            "STALE_ALTERNATIVE",
+            f"Event {action.event_id} is not currently focused (focused: {session.focused_event_id})",
+        )
+    mode = next((m for m in session.alternatives if m.mode_id == action.mode_id), None)
+    if mode is None:
+        raise EventTrailError(
+            "STALE_ALTERNATIVE",
+            f"Mode {action.mode_id} not found in current alternatives",
+        )
+
+    new_rejected = list(session.constraints.rejected_cells)
+    new_rejected[event_idx] = session.constraints.rejected_cells[event_idx] + (mode.interval,)
+    new_constraints = replace(session.constraints, rejected_cells=tuple(new_rejected))
+
+    outcome = decoder.decode(session.video_evidence, new_constraints, session.decoder_config)
+    if outcome.status == "ok":
+        new_path = outcome.path
+        new_status = "active"
+        new_last_valid = outcome.path
+    else:
+        new_path = None
+        new_status = "exhausted"
+        new_last_valid = session.last_valid_path
+
+    diffs, indirect_changed, diff_ms = compute_candidate_diffs(
+        session.event_ids,
+        session.current_path,
+        new_path,
+        action_event_id=action.event_id,
+    )
+
+    transition = TrailTransition(
+        action_event_id=action.event_id,
+        direct_changed_event_ids=(action.event_id,),
+        indirect_changed_event_ids=indirect_changed,
+        candidate_diffs=diffs,
+        latency_ms=outcome.constraint_ms + outcome.dp_ms,
+    )
+    checkpoint = TrailCheckpoint(
+        constraints=session.constraints,
+        submission_selection=session.submission_selection,
+    )
+    updated = replace(
+        session,
+        trail_revision=session.trail_revision + 1,
+        constraints=new_constraints,
+        current_path=new_path,
+        last_valid_path=new_last_valid,
+        history=session.history + (checkpoint,),
+        status=new_status,
+        focused_event_id=None,
+        alternatives=(),
+    )
+    slot.session = updated
+    total_ms = (perf_counter() - started) * 1000.0
+
+    log_trail_event(
+        event_type="trail_reject_mode",
+        kis_revision=session.kis_revision,
+        snapshot_id=session.snapshot_id,
+        result_id=session.result_id,
+        video_id=session.video_id,
+        trail_session_id=session.session_id,
+        trail_revision=updated.trail_revision,
+        event_id=action.event_id,
+        search_session_id=session.search_session_id,
+        payload={
+            "mode_id": action.mode_id,
+            "interval": list(mode.interval),
+            "path_before": list(session.current_path.frame_ids) if session.current_path else [],
+            "path_after": list(new_path.frame_ids) if new_path else [],
+            "direct_changed_event_ids": list(transition.direct_changed_event_ids),
+            "indirect_changed_event_ids": list(transition.indirect_changed_event_ids),
+            "outcome": new_status,
+            "constraint_ms": round(outcome.constraint_ms, 3),
+            "dp_ms": round(outcome.dp_ms, 3),
+            "diff_ms": round(diff_ms, 3),
+            "total_ms": round(total_ms, 3),
+        },
+    )
     return build_trail_view(updated, transition)

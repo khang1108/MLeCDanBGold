@@ -87,6 +87,23 @@ class EventTrailSession:
     submission_selection: SubmissionSelection | None
     status: Literal["active", "exhausted"]
     search_session_id: str | None = None
+    focused_event_id: str | None = None
+    alternatives: tuple[TemporalMode, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class TemporalMode:
+    """Bounded temporal mode representing one alternative occurrence family."""
+
+    mode_id: str
+    event_id: str
+    representative_frame_id: str
+    representative_frame_idx: int
+    representative_timestamp_ms: int
+    interval: Interval
+    score: float
+    path: AlignedPath
+    is_current: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +164,29 @@ class Undo:
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class KeepOccurrence:
+    """Anchor the currently aligned candidate occurrence for an event."""
+
+    event_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class UseAlternative:
+    """Anchor a selected complete-path alternative's representative frame for an event."""
+
+    event_id: str
+    alternative_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class RejectMode:
+    """Exclude the entire bounded temporal mode interval for an event."""
+
+    event_id: str
+    mode_id: str
+
+
 TrailAction = (
     ApproveEvent
     | UseFrame
@@ -156,6 +196,9 @@ TrailAction = (
     | ClearWindow
     | RepairEvent
     | Undo
+    | KeepOccurrence
+    | UseAlternative
+    | RejectMode
 )
 
 
@@ -192,6 +235,21 @@ class TrailTransition:
 
 
 @dataclass(frozen=True, slots=True)
+class TemporalModeView:
+    """Projected candidate mode for client-facing TrailView."""
+
+    mode_id: str
+    event_id: str
+    representative_frame_id: str
+    representative_frame_idx: int
+    representative_timestamp_ms: int
+    interval: Interval
+    score: float
+    path: tuple[EventCandidate, ...]
+    is_current: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class TrailView:
     """UI-ready presentation projection of an EventTrail session."""
 
@@ -208,3 +266,6 @@ class TrailView:
     window: Interval | None
     submission_selection: SubmissionSelection | None
     transition: TrailTransition | None
+    focused_event_id: str | None = None
+    alternatives: tuple[TemporalModeView, ...] = ()
+    constraints: ConstraintSnapshot | None = None
