@@ -909,14 +909,15 @@ def apply_use_alternative(
     new_constraints = replace(session.constraints, anchors=tuple(new_anchors))
 
     outcome = decoder.decode(session.video_evidence, new_constraints, session.decoder_config)
-    if outcome.status == "ok":
-        new_path = outcome.path
-        new_status = "active"
-        new_last_valid = outcome.path
-    else:
-        new_path = None
-        new_status = "exhausted"
-        new_last_valid = session.last_valid_path
+    if outcome.status != "ok":
+        raise EventTrailError(
+            "CONSTRAINT_CONFLICT",
+            f"Use alternative contradicts constraints: {outcome.status}",
+        )
+
+    new_path = outcome.path
+    new_status = "active"
+    new_last_valid = outcome.path
 
     diffs, indirect_changed, diff_ms = compute_candidate_diffs(
         session.event_ids,

@@ -67,8 +67,17 @@ describe('HypothesisAlternatives', () => {
     expect(screen.getByText('#700')).toBeInTheDocument();
   });
 
-  test('returns null when alternatives is empty', () => {
-    const { container } = render(<HypothesisAlternatives alternatives={[]} />);
+  test('displays clear message when alternatives is empty and not exhausted', () => {
+    render(<HypothesisAlternatives eventId="E2" alternatives={[]} />);
+    expect(
+      screen.getByText('No distinct alternative occurrences found for E2 under the current constraints.')
+    ).toBeInTheDocument();
+  });
+
+  test('returns null when exhausted', () => {
+    const { container } = render(
+      <HypothesisAlternatives eventId="E2" alternatives={[]} isExhausted={true} />
+    );
     expect(container.firstChild).toBeNull();
   });
 });

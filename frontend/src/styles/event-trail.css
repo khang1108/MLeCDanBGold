@@ -914,3 +914,47 @@
   }
 }
 
+/* ─── Hypothesis Alternatives Empty State & Alternative Actions ─── */
+.hypothesis-alternatives.empty {
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  text-align: center;
+  margin: 4px 0;
+  box-sizing: border-box;
+}
+
+.hypothesis-no-alternatives {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.hypothesis-reject-alt-btn {
+  border-color: #fca5a5 !important;
+  color: #b91c1c !important;
+  background: #fff5f5 !important;
+  transition: all 0.15s ease;
+}
+
+.hypothesis-reject-alt-btn:hover:not(:disabled) {
+  background: #fee2e2 !important;
+  border-color: #f87171 !important;
+  color: #991b1b !important;
+}
+
+.event-trail-action-btn.reject-alt-btn {
+  border-color: #fca5a5;
+  color: #b91c1c;
+  background: #fff5f5;
+  transition: all 0.15s ease;
+}
+
+.event-trail-action-btn.reject-alt-btn:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #991b1b;
+}
+

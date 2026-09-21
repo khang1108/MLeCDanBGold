@@ -260,3 +260,40 @@ def test_alternatives_fetching_is_logged(caplog, service, opened_session):
     msg = records[0].message
     assert '"event_id":"E2"' in msg
     assert f'"mode_count":{len(modes)}' in msg
+
+
+def test_use_alternative_fails_transactionally_on_decode_failure(
+    monkeypatch, service, session_with_modes
+):
+    from hcmai.event_trail.decoding import DecodeOutcome
+    from hcmai.event_trail.errors import EventTrailError
+
+    state, mode = session_with_modes
+    before = service.get(state.session_id)
+
+    # Simulate decoder returning no_valid_path / contradiction on decode
+    def mock_decode(*args, **kwargs):
+        return DecodeOutcome(
+            status="no_valid_path",
+            path=None,
+            constraint_ms=1.0,
+            dp_ms=1.0,
+        )
+
+    monkeypatch.setattr(service.decoder, "decode", mock_decode)
+
+    with pytest.raises(EventTrailError) as exc_info:
+        service.act(
+            state.session_id,
+            state.trail_revision,
+            UseAlternative(event_id="E2", alternative_id=mode.mode_id),
+        )
+
+    assert exc_info.value.code == "CONSTRAINT_CONFLICT"
+
+    # Transactional integrity: session must NOT be mutated or exhausted
+    after = service.get(state.session_id)
+    assert after.trail_revision == before.trail_revision
+    assert after.status == before.status == "active"
+    assert after.constraints == before.constraints
+    assert after.path == before.path

@@ -10,6 +10,7 @@ const HypothesisPathPreview = ({
   previewAlternative = null,
   pending = false,
   onUseAlternative,
+  onRejectAlternative,
   onClearPreview,
 }) => {
   if (!previewAlternative || !previewAlternative.path) {
@@ -47,6 +48,20 @@ const HypothesisPathPreview = ({
             }
           >
             Use this occurrence
+          </button>
+          <button
+            type="button"
+            className="btn-secondary btn-sm hypothesis-reject-alt-btn"
+            disabled={pending}
+            onClick={() =>
+              onRejectAlternative?.(
+                focusedEventId,
+                previewAlternative.alternative_id
+              )
+            }
+            title="Reject this alternative occurrence"
+          >
+            Reject this alternative
           </button>
           <button
             type="button"

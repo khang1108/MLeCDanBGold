@@ -19,6 +19,7 @@ const EvidenceInspector = ({
   previewAlternative = null,
   onKeep,
   onRejectMode,
+  onRejectAlternative,
   onUse,
   onUseAlternative,
   onClearAnchor,
@@ -107,6 +108,20 @@ const EvidenceInspector = ({
             </button>
             <button
               type="button"
+              className="btn-secondary event-trail-action-btn reject-alt-btn"
+              disabled={isExhausted || pending}
+              onClick={() =>
+                onRejectAlternative?.(
+                  selectedEventId,
+                  previewAlternative.alternative_id
+                )
+              }
+              title="Reject this alternative occurrence"
+            >
+              Reject this alternative
+            </button>
+            <button
+              type="button"
               className="btn-secondary event-trail-action-btn clear-preview-btn"
               disabled={pending}
               onClick={() => onClearPreview?.()}
@@ -132,7 +147,11 @@ const EvidenceInspector = ({
           className="btn-secondary event-trail-action-btn reject-btn"
           disabled={isApproved || isExhausted || pending || !currentModeId}
           onClick={() => onRejectMode?.(selectedEventId, currentModeId)}
-          title="Reject this candidate occurrence to explore other temporal modes"
+          title={
+            currentModeId
+              ? "Reject this candidate occurrence to explore other temporal modes"
+              : "Current occurrence temporal mode is not available to reject"
+          }
         >
           Reject occurrence
         </button>

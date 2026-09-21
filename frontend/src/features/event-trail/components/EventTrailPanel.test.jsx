@@ -183,6 +183,39 @@ describe('EventTrailPanel', () => {
     expect(onRejectMode).toHaveBeenCalledWith('E2', 'mode_current');
   });
 
+  test('reject occurrence is disabled when alternatives do not contain is_current=true (no silent fallback)', () => {
+    const onRejectMode = jest.fn();
+    const propsWithoutCurrent = {
+      events: mockEvents,
+      state: makeState(),
+      selectedEventId: 'E2',
+      alternatives: [
+        { alternative_id: 'mode_other_1', is_current: false },
+        { alternative_id: 'mode_other_2', is_current: false },
+      ],
+      onRejectMode,
+    };
+    render(<EventTrailPanel {...propsWithoutCurrent} />);
+    const rejectBtn = screen.getByRole('button', { name: /reject occurrence/i });
+    expect(rejectBtn).toBeDisabled();
+    fireEvent.click(rejectBtn);
+    expect(onRejectMode).not.toHaveBeenCalled();
+  });
+
+  test('auto-focuses active event on mount when not yet focused', () => {
+    const onFocusEvent = jest.fn();
+    render(
+      <EventTrailPanel
+        events={mockEvents}
+        state={makeState()}
+        selectedEventId="E1"
+        focusedEventId={null}
+        onFocusEvent={onFocusEvent}
+      />
+    );
+    expect(onFocusEvent).toHaveBeenCalledWith('E1');
+  });
+
   test('renders HypothesisPathPreview and commits alternative with onUseAlternative', () => {
     const onUseAlternative = jest.fn();
     const onClearPreview = jest.fn();
@@ -212,6 +245,35 @@ describe('EventTrailPanel', () => {
     const useAltBtns = screen.getAllByRole('button', { name: /use this occurrence/i });
     fireEvent.click(useAltBtns[0]);
     expect(onUseAlternative).toHaveBeenCalledWith('E2', 'alt_99');
+  });
+
+  test('renders HypothesisPathPreview and rejects alternative with onRejectMode and clears preview', () => {
+    const onRejectMode = jest.fn();
+    const onClearPreview = jest.fn();
+    const previewAlt = {
+      alternative_id: 'alt_99',
+      event_id: 'E2',
+      path: [
+        { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 1000 },
+        { event_id: 'E2', frame_id: 'f2_new', frame_idx: 25, timestamp_ms: 2500 },
+        { event_id: 'E3', frame_id: 'f3_new', frame_idx: 35, timestamp_ms: 3500 },
+      ],
+    };
+    render(
+      <EventTrailPanel
+        events={mockEvents}
+        state={makeState()}
+        selectedEventId="E2"
+        previewAlternative={previewAlt}
+        onRejectMode={onRejectMode}
+        onClearPreview={onClearPreview}
+      />
+    );
+
+    const rejectAltBtns = screen.getAllByRole('button', { name: /reject this alternative/i });
+    fireEvent.click(rejectAltBtns[0]);
+    expect(onRejectMode).toHaveBeenCalledWith('E2', 'alt_99');
+    expect(onClearPreview).toHaveBeenCalled();
   });
 
   test('displays stale query banner when currentQueryRevision differs from state.kis_revision', () => {

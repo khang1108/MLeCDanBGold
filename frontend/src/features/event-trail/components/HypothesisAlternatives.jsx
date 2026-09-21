@@ -7,13 +7,19 @@ const formatSeconds = (timestampMs) => {
 };
 
 const HypothesisAlternatives = ({
+  eventId = null,
   alternatives = [],
   activeAlternativeId = null,
   isLoading = false,
   disabled = false,
+  isExhausted = false,
   onPreview,
   onUse, // Included to verify it's not called on preview click
 }) => {
+  if (isExhausted) {
+    return null;
+  }
+
   if (isLoading) {
     return (
       <div className="hypothesis-alternatives loading" role="status">
@@ -24,7 +30,14 @@ const HypothesisAlternatives = ({
   }
 
   if (!alternatives || alternatives.length === 0) {
-    return null;
+    const targetLabel = eventId || 'selected event';
+    return (
+      <div className="hypothesis-alternatives empty" role="status">
+        <p className="body-sm text-muted hypothesis-no-alternatives">
+          No distinct alternative occurrences found for {targetLabel} under the current constraints.
+        </p>
+      </div>
+    );
   }
 
   return (

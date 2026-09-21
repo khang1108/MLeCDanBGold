@@ -344,6 +344,7 @@ test('Result Hypothesis Explorer wires focus, preview, Keep, Use, and Reject act
   const alternative = {
     alternative_id: 'opaque-alternative-42',
     event_id: 'E2',
+    is_current: true,
     path: [
       { event_id: 'E1', frame_id: 'f1', frame_idx: 10, timestamp_ms: 2000 },
       { event_id: 'E2', frame_id: 'f2b', frame_idx: 21, timestamp_ms: 7200 },

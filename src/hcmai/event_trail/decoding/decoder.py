@@ -212,6 +212,18 @@ class TemporalConstraintDecoder:
                 dp_ms=0.0,
             )
 
+        for i, frame_id in enumerate(constraints.anchors):
+            if frame_id is not None:
+                mask[i] &= (video.frame_ids == frame_id)
+
+        if any(mask[i].sum() == 0 for i in range(len(mask))):
+            return DecodeOutcome(
+                status="no_valid_path",
+                path=None,
+                constraint_ms=constraint_ms,
+                dp_ms=0.0,
+            )
+
         dp_start = perf_counter()
         paths = self.temporal.decode_video(
             video,
@@ -279,6 +291,13 @@ class TemporalConstraintDecoder:
             return ()
 
         if domain_status in ("contradictory_conditions", "no_indexed_frames"):
+            return ()
+
+        for i, frame_id in enumerate(constraints.anchors):
+            if frame_id is not None:
+                mask[i] &= (video.frame_ids == frame_id)
+
+        if any(mask[i].sum() == 0 for i in range(len(mask))):
             return ()
 
         conditioned_paths = self.temporal.decode_event_alternatives(

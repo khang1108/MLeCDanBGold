@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import EventRail from './EventRail';
 import EvidenceInspector from './EvidenceInspector';
 import TrailWindowControls from './TrailWindowControls';
@@ -28,6 +28,7 @@ const EventTrailPanel = ({
   isLoadingAlternatives = false,
   currentModeId = null,
   focusedModeId = null,
+  focusedEventId = null,
   currentQueryRevision = null,
   onFocusEvent,
   onPreviewAlternative,
@@ -52,14 +53,17 @@ const EventTrailPanel = ({
   const indirectCount = state.transition?.indirect_changed_event_ids?.length || 0;
   const canSubmit = !isExhausted && Boolean(state.submission_selection) && !pending;
 
+  const activeFocusedId = focusedEventId || focusedModeId || null;
+
+  useEffect(() => {
+    if (activeEventId && onFocusEvent && activeFocusedId !== activeEventId) {
+      onFocusEvent(activeEventId);
+    }
+  }, [activeEventId, onFocusEvent, activeFocusedId]);
+
   const effectiveAlternatives = alternatives?.length > 0 ? alternatives : (state.alternatives || []);
-  const resolvedModeId =
-    currentModeId ||
-    focusedModeId ||
-    previewAlternative?.alternative_id ||
-    effectiveAlternatives.find((a) => a.is_current)?.alternative_id ||
-    effectiveAlternatives[0]?.alternative_id ||
-    null;
+  const currentAlternative = effectiveAlternatives.find((a) => a.is_current) || null;
+  const currentOccurrenceModeId = currentModeId || currentAlternative?.alternative_id || null;
 
   const handleSelectEvent = (eventId) => {
     onSelectEvent?.(eventId);
@@ -71,7 +75,7 @@ const EventTrailPanel = ({
   };
 
   const handleReject = (eventId, modeId) => {
-    const targetMode = modeId || resolvedModeId;
+    const targetMode = modeId || currentOccurrenceModeId;
     if (!targetMode) return;
     onRejectMode?.(eventId, targetMode);
   };
@@ -168,10 +172,12 @@ const EventTrailPanel = ({
       />
 
       <HypothesisAlternatives
+        eventId={activeEventId}
         alternatives={effectiveAlternatives}
         activeAlternativeId={previewAlternative?.alternative_id || null}
         isLoading={isLoadingAlternatives}
         disabled={isExhausted || pending}
+        isExhausted={isExhausted}
         onPreview={onPreviewAlternative}
         onUse={onUseAlternative}
       />
@@ -182,6 +188,10 @@ const EventTrailPanel = ({
           previewAlternative={previewAlternative}
           pending={pending}
           onUseAlternative={onUseAlternative}
+          onRejectAlternative={(eventId, modeId) => {
+            onRejectMode?.(eventId, modeId);
+            onClearPreview?.();
+          }}
           onClearPreview={onClearPreview}
         />
       )}
@@ -195,10 +205,14 @@ const EventTrailPanel = ({
         pending={pending}
         rejectedCount={rejectedCount}
         diff={currentDiff}
-        currentModeId={resolvedModeId}
+        currentModeId={currentOccurrenceModeId}
         previewAlternative={previewAlternative}
         onKeep={onKeep ? handleKeep : undefined}
         onRejectMode={handleReject}
+        onRejectAlternative={(eventId, modeId) => {
+          onRejectMode?.(eventId, modeId);
+          onClearPreview?.();
+        }}
         onUse={onUse}
         onUseAlternative={onUseAlternative}
         onClearAnchor={onClearAnchor}
