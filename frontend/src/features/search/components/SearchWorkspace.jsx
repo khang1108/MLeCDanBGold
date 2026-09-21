@@ -1450,14 +1450,32 @@ const SearchWorkspace = ({
       <div className="frames-results-shell">
         {isResultsStale(queryHypothesisState) && (
           <div
-            className="search-stale-banner alert alert-warning"
+            className="search-stale-banner"
             data-testid="stale-results-notice"
             role="alert"
           >
-            <span>Query hypothesis has changed since these results were retrieved.</span>
+            <div className="search-stale-content">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="search-stale-icon"
+                aria-hidden="true"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <span>Query hypothesis has changed since these results were retrieved.</span>
+            </div>
             <button
               type="button"
-              className="btn btn-sm btn-warning search-stale-update-btn"
+              className="search-stale-update-btn"
               onClick={() => submit()}
               disabled={isSearching}
             >

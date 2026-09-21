@@ -745,3 +745,33 @@ test('toggles fit mode between contain and cover (fill) on button click and key 
   fireEvent.keyDown(modalCard, { key: 'c' });
   expect(viewerCol.classList.contains('fit-contain')).toBe(true);
 });
+
+test('renders title on top row and 2 action buttons (Explore and Submit) on second row', () => {
+  render(
+    <ImageModal
+      frame={{ frame_id: 'f_test', video_id: 'L21_V001', timestamp_ms: 1000 }}
+      onClose={jest.fn()}
+      onOpenSubmission={jest.fn()}
+      eventTrail={{
+        context: { events: ['E1'] },
+        open: jest.fn(),
+      }}
+    />
+  );
+
+  const topRow = document.querySelector('.inspector-header-top');
+  expect(topRow).toBeInTheDocument();
+  expect(topRow.querySelector('.inspector-title')).toHaveTextContent('Frame Inspector');
+  expect(topRow.querySelector('.inspector-close-btn')).toBeInTheDocument();
+
+  const actionsRow = document.querySelector('.inspector-header-actions');
+  expect(actionsRow).toBeInTheDocument();
+  const exploreBtn = actionsRow.querySelector('.btn-trail-row-start');
+  expect(exploreBtn).toBeInTheDocument();
+  expect(exploreBtn).toHaveTextContent('Explore');
+
+  const submitBtn = actionsRow.querySelector('.inspector-header-submit-btn');
+  expect(submitBtn).toBeInTheDocument();
+  expect(submitBtn).toHaveTextContent('Submit');
+});
+
