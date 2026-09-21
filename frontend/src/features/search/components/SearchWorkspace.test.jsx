@@ -1233,3 +1233,42 @@ test('migrates image attachment to Query Hypothesis mutation when session is act
     operation: { kind: 'search_only' },
   })));
 });
+
+test('allows resizing chat sidebar with drag, keyboard, and double click to reset', async () => {
+  const { container } = renderSearch();
+
+  const resizer = screen.getByRole('separator', { name: /resize chat panel/i });
+  expect(resizer).toBeInTheDocument();
+
+  const sidebar = container.querySelector('.kis-chat-sidebar');
+  expect(sidebar).toHaveStyle({ width: '340px' });
+
+  // Mouse drag: start at x=1000, move to x=900 (dragging left increases width by 100px)
+  fireEvent.mouseDown(resizer, { clientX: 1000 });
+  expect(document.body.classList.contains('is-resizing-chat')).toBe(true);
+
+  fireEvent.mouseMove(window, { clientX: 900 });
+  expect(sidebar).toHaveStyle({ width: '440px' });
+
+  fireEvent.mouseUp(window, { clientX: 900 });
+  expect(document.body.classList.contains('is-resizing-chat')).toBe(false);
+  expect(localStorage.getItem('hcmai_chat_width')).toBe('440');
+
+  // Double click resets to default 340px
+  fireEvent.doubleClick(resizer);
+  expect(sidebar).toHaveStyle({ width: '340px' });
+  expect(localStorage.getItem('hcmai_chat_width')).toBe('340');
+
+  // Keyboard navigation: ArrowLeft increases width
+  fireEvent.keyDown(resizer, { key: 'ArrowLeft' });
+  expect(sidebar).toHaveStyle({ width: '364px' });
+
+  // ArrowRight decreases width
+  fireEvent.keyDown(resizer, { key: 'ArrowRight' });
+  expect(sidebar).toHaveStyle({ width: '340px' });
+
+  // Enter resets to default
+  fireEvent.keyDown(resizer, { key: 'Enter' });
+  expect(sidebar).toHaveStyle({ width: '340px' });
+});
+
