@@ -507,6 +507,18 @@ const ImageModal = ({
                       <span>{isCandidateSelected ? 'Selected' : 'Select'}</span>
                     </button>
                   )}
+                  {!isAvsMode && !eventTrail?.state && eventTrail?.open && eventTrail?.context && (
+                    <button
+                      type="button"
+                      className="inspector-header-trail-btn"
+                      onClick={() => eventTrail.open()}
+                      disabled={eventTrail?.pending}
+                      title="Open Hypothesis Explorer for this result"
+                      aria-label="Open Hypothesis Explorer"
+                    >
+                      <span>Hypothesis Explorer</span>
+                    </button>
+                  )}
                   {canSubmitFrame && !eventTrail?.state && (
                     <button
                       type="button"
@@ -571,6 +583,11 @@ const ImageModal = ({
                 </div>
               ) : (
                 <div className="inspector-content">
+                  {eventTrail?.error && (
+                    <div className="modal-trail-error-banner" role="alert">
+                      <span>{eventTrail.error}</span>
+                    </div>
+                  )}
                   <FrameMetadata frame={frame} playbackTime={playbackTime} />
                 </div>
               )}

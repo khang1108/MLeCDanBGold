@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import FramesBox from "./FramesBox";
 
 jest.mock("./FrameCard", () => ({ frame }) => (
@@ -226,6 +226,85 @@ test("renders updated candidate frames from activeTrailSession.path when row tra
   );
 
   expect(screen.getByTestId("frame-card").textContent).toBe("f2_new");
+});
+
+test("clicking start button opens trail session and invokes onFrameClick to open inspector", async () => {
+  const openTrail = jest.fn().mockResolvedValue({
+    session_id: "trail-sess-1",
+    result_id: "res-1",
+    trail_revision: 0,
+    status: "active",
+    path: [{ event_id: "E1", frame_id: "f1", frame_idx: 1, timestamp_ms: 1000 }],
+  });
+  const onFrameClick = jest.fn();
+  const eventTrailContext = {
+    snapshotId: "snap-123",
+    kisRevision: 1,
+    events: [{ id: "E1", text: "woman running" }],
+    searchSessionId: "snap-123",
+  };
+
+  render(
+    <FramesBox
+      results={[
+        {
+          result_id: "res-1",
+          frame_id: "f1",
+          video_id: "V01",
+          frame_idx: 1,
+          frame_ids: ["f1"],
+          timestamp_ms: 1000,
+        },
+      ]}
+      isLoading={false}
+      error={null}
+      latencyMs={50}
+      events={["woman running"]}
+      onFrameClick={onFrameClick}
+      eventTrailContext={eventTrailContext}
+      eventTrail={{ open: openTrail, session: null, pending: false }}
+    />,
+  );
+
+  const startBtn = screen.getByRole("button", { name: /hypothesis explorer|eventtrail/i });
+  fireEvent.click(startBtn);
+
+  await waitFor(() => expect(openTrail).toHaveBeenCalledTimes(1));
+  expect(openTrail).toHaveBeenCalledWith({
+    snapshotId: "snap-123",
+    resultId: "res-1",
+    kisRevision: 1,
+    events: [{ id: "E1", text: "woman running" }],
+    searchSessionId: "snap-123",
+  });
+  expect(onFrameClick).toHaveBeenCalledWith(
+    expect.objectContaining({
+      frame_id: "f1",
+      video_id: "V01",
+      eventLabel: "E1",
+      eventText: "woman running",
+    }),
+  );
+});
+
+test("renders trail error notice when eventTrail.error is set", () => {
+  render(
+    <FramesBox
+      results={[]}
+      isLoading={false}
+      error={null}
+      latencyMs={50}
+      eventTrail={{
+        open: jest.fn(),
+        session: null,
+        pending: false,
+        error: "Snapshot expired. Rerun search.",
+      }}
+    />,
+  );
+
+  expect(screen.getByText("Hypothesis Explorer Notice")).toBeTruthy();
+  expect(screen.getByText("Snapshot expired. Rerun search.")).toBeTruthy();
 });
 
 

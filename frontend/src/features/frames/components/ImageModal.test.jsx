@@ -745,3 +745,56 @@ test('toggles fit mode between contain and cover (fill) on button click and key 
   fireEvent.keyDown(modalCard, { key: 'c' });
   expect(viewerCol.classList.contains('fit-contain')).toBe(true);
 });
+
+test('renders Hypothesis Explorer button in header when eventTrail context is present and state is inactive, and clicking it calls open', () => {
+  const openTrail = jest.fn();
+  const eventTrailProp = {
+    context: {
+      snapshotId: 'snap_1',
+      resultId: 'r_1',
+      kisRevision: 1,
+    },
+    state: null,
+    pending: false,
+    open: openTrail,
+  };
+
+  render(
+    <ImageModal
+      frame={{ frame_id: 'f_test', video_id: 'L21_V001', timestamp_ms: 1000 }}
+      eventTrail={eventTrailProp}
+      onClose={jest.fn()}
+    />
+  );
+
+  const explorerBtn = screen.getByRole('button', { name: /hypothesis explorer/i });
+  expect(explorerBtn).toBeTruthy();
+
+  fireEvent.click(explorerBtn);
+  expect(openTrail).toHaveBeenCalledTimes(1);
+});
+
+test('renders trail error banner in Frame Inspector mode when eventTrail.error is set', () => {
+  const eventTrailProp = {
+    context: {
+      snapshotId: 'snap_1',
+      resultId: 'r_1',
+      kisRevision: 1,
+    },
+    state: null,
+    pending: false,
+    error: 'Snapshot expired. Please rerun search.',
+    open: jest.fn(),
+  };
+
+  render(
+    <ImageModal
+      frame={{ frame_id: 'f_test', video_id: 'L21_V001', timestamp_ms: 1000 }}
+      eventTrail={eventTrailProp}
+      onClose={jest.fn()}
+    />
+  );
+
+  expect(screen.getByRole('alert')).toBeTruthy();
+  expect(screen.getByText('Snapshot expired. Please rerun search.')).toBeTruthy();
+});

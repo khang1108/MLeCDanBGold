@@ -37,8 +37,38 @@ const FramesBox = ({
       events: eventTrailContext.events,
       searchSessionId: eventTrailContext.searchSessionId,
     };
-    return await eventTrail?.open?.(ctx);
-  }, [eventTrailContext, eventTrail]);
+    const session = await eventTrail?.open?.(ctx);
+    if (session && onFrameClick) {
+      const activePath = Array.isArray(session.path) && session.path.length > 0
+        ? session.path
+        : (Array.isArray(session.last_valid_path) && session.last_valid_path.length > 0
+            ? session.last_valid_path
+            : null);
+      const firstCandidate = activePath?.[0];
+      const targetFrameId = firstCandidate?.frame_id || (Array.isArray(resultItem.frame_ids) && resultItem.frame_ids[0]) || resultItem.frame_id;
+      const targetTimestamp = firstCandidate?.timestamp_ms ?? (Array.isArray(resultItem.timestamps_ms) && resultItem.timestamps_ms[0]) ?? resultItem.timestamp_ms;
+      const targetFrameIdx = firstCandidate?.frame_idx ?? resultItem.frame_idx;
+      const eventItem = events?.[0];
+      const eventText = typeof eventItem === 'string'
+        ? eventItem
+        : (eventItem?.text || eventItem?.canonical_text || null);
+
+      const frameToOpen = {
+        ...resultItem,
+        frame_id: targetFrameId,
+        timestamp_ms: targetTimestamp,
+        frame_idx: targetFrameIdx,
+        event_index: 0,
+        eventIndex: 0,
+        event_label: 'E1',
+        eventLabel: 'E1',
+        event_text: eventText,
+        eventText: eventText,
+      };
+      onFrameClick(frameToOpen);
+    }
+    return session;
+  }, [eventTrailContext, eventTrail, onFrameClick, events]);
 
   const handleClearAnchor = useCallback(async (resultItem, eventLabel) => {
     if (!resultItem || !eventLabel) return;
@@ -58,6 +88,14 @@ const FramesBox = ({
           <div className="error-details">
             <h4 className="error-title">Search Connection Error</h4>
             <p className="error-message">{error}</p>
+          </div>
+        </div>
+      )}
+      {eventTrail?.error && (
+        <div className="error-alert trail-error-alert" role="alert">
+          <div className="error-details">
+            <h4 className="error-title">Hypothesis Explorer Notice</h4>
+            <p className="error-message">{eventTrail.error}</p>
           </div>
         </div>
       )}
@@ -145,7 +183,7 @@ const FramesBox = ({
                         {isRowTrailActive && activeTrailSession ? (
                           <div className="frames-row-trail-active-group">
                             <span className="badge-trail-active">
-                              ⚡ Explorer Rev {activeTrailSession.trail_revision}
+                              Explorer Rev {activeTrailSession.trail_revision}
                             </span>
                             {activeTrailSession.status === 'exhausted' && (
                               <span className="badge-trail-exhausted">Exhausted</span>
@@ -177,7 +215,7 @@ const FramesBox = ({
                             disabled={isTrailPending}
                             title="Explore timeline alignment with Hypothesis Explorer"
                           >
-                            ⚡ Hypothesis Explorer
+                            Hypothesis Explorer
                           </button>
                         ) : null}
                       </div>
