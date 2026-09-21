@@ -1,6 +1,33 @@
-% !TeX root = ../main.tex
 \section{System Overview}
 \label{sec:system}
 
-Draft placeholder. Describe the implemented architecture, offline preparation,
-online services, and evidence flow. Add an architecture figure when available.
+Figure~\ref{fig:architecture} summarizes the SHI workflow. A natural-language
+request is first represented as an ordered \emph{Query Hypothesis}, whose
+events remain separate retrieval units throughout the search pipeline. Each
+event is scored against the video collection using multimodal evidence,
+producing an event--frame score matrix for each candidate video.
+
+\begin{figure}[t]
+    \centering
+    \fbox{\parbox[c][3.0cm][c]{0.96\linewidth}{\centering
+    Architecture figure placeholder}}
+    \caption{Overview of SHI. The Query Hypothesis drives event-level
+    multimodal retrieval, after which temporal decoding produces complete
+    chronological paths. The resulting evidence and paths are preserved for
+    subsequent inspection and correction in EventTrail.}
+    \label{fig:architecture}
+\end{figure}
+
+A temporal decoder searches each score matrix for complete paths that assign
+one frame occurrence to every event while preserving their chronological
+order. The resulting path scores are used to rank candidate videos. Together
+with the returned paths, SHI stores the corresponding event-level evidence and
+decoder configuration in an \emph{Evidence Snapshot} associated with the
+search state.
+
+The two interactive components operate on opposite sides of this pipeline.
+Before retrieval, the Query Hypothesis allows the user to inspect and revise
+the event decomposition. After retrieval, \emph{EventTrail} exposes the
+temporal hypothesis of a selected result. Corrections in EventTrail modify the
+temporal constraints and re-decode the path from the stored evidence, without
+rerunning multimodal retrieval.
