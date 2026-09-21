@@ -137,7 +137,6 @@ const EventTrailPanel = ({
 
       {state.transition && !isExhausted && (
         <div className="event-trail-transition-banner" role="status">
-          <span className="transition-icon">⚡</span>
           <span>
             {state.transition.action_event_id
               ? `Action applied to ${state.transition.action_event_id}`

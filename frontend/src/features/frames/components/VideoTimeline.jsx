@@ -40,6 +40,32 @@ const VideoTimeline = ({
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false);
+  const [showRemainingTime, setShowRemainingTime] = useState(false);
+  const speedMenuRef = useRef(null);
+
+  const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+  const handleSelectSpeed = useCallback((rate) => {
+    const video = videoRef?.current;
+    if (video) {
+      video.playbackRate = rate;
+    }
+    setPlaybackRate(rate);
+    setIsSpeedMenuOpen(false);
+  }, [videoRef]);
+
+  useEffect(() => {
+    if (!isSpeedMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (speedMenuRef.current && !speedMenuRef.current.contains(e.target)) {
+        setIsSpeedMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isSpeedMenuOpen]);
 
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
   const safeCurrentTime = clamp(
@@ -50,6 +76,17 @@ const VideoTimeline = ({
   const progressPercent = safeDuration > 0
     ? (safeCurrentTime / safeDuration) * 100
     : 0;
+
+  const handleStepFrame = useCallback((direction) => {
+    const video = videoRef?.current;
+    if (!video) return;
+    video.pause?.();
+    const step = 0.04 * direction; // ~1 frame at 25fps
+    const currentTimeVal = Number.isFinite(video.currentTime) ? video.currentTime : safeCurrentTime;
+    const nextTime = Math.round(clamp(currentTimeVal + step, 0, safeDuration) * 1000) / 1000;
+    video.currentTime = nextTime;
+    onSeek?.(nextTime);
+  }, [videoRef, safeCurrentTime, safeDuration, onSeek]);
 
   useEffect(() => {
     const video = videoRef?.current;
@@ -212,91 +249,159 @@ const VideoTimeline = ({
         />
       </div>
       <div className="modal-video-control-row">
-        <button
-          type="button"
-          className="modal-video-play-button"
-          onClick={togglePlayback}
-          aria-label={isPlaying ? "Pause video" : "Play video"}
-        >
-          {isPlaying ? "Ⅱ" : "▶"}
-        </button>
-        <span className="modal-video-time-readout">
-          {formatVideoTime(safeCurrentTime)} / {formatVideoTime(safeDuration)}
-        </span>
-        {onSelectCandidate && (
+        <div className="modal-video-left-controls">
           <button
             type="button"
-            className={`modal-video-select-button ${isCandidateSelected ? 'is-selected' : ''}`}
-            onClick={onSelectCandidate}
-            title={isCandidateSelected ? "Deselect candidate" : "Select candidate"}
-            aria-label={isCandidateSelected ? "Deselect candidate" : "Select candidate"}
+            className="modal-video-play-button"
+            onClick={togglePlayback}
+            aria-label={isPlaying ? "Pause video" : "Play video"}
+            title={isPlaying ? "Pause (k / Space)" : "Play (k / Space)"}
           >
-            {isCandidateSelected ? "✓ Selected" : "+ Select"}
+            {isPlaying ? "Ⅱ" : "▶"}
           </button>
-        )}
-        {onSubmit && (
           <button
             type="button"
-            className="modal-video-submit-button"
-            onClick={onSubmit}
-            disabled={isSubmitting}
-            title={`Submit at ${Math.round(safeCurrentTime * 1000)} ms`}
-            aria-label="Submit current playback time to DRES"
+            className="modal-video-icon-button modal-video-step-button"
+            onClick={() => handleStepFrame(-1)}
+            title="Previous frame ( , )"
+            aria-label="Previous frame"
           >
-            ↗ Submit
+            ⏮
           </button>
-        )}
-        <div className="modal-video-volume-group">
           <button
             type="button"
-            className="modal-video-icon-button"
-            onClick={toggleMute}
-            aria-label={isMuted ? "Unmute video" : "Mute video"}
+            className="modal-video-icon-button modal-video-step-button"
+            onClick={() => handleStepFrame(1)}
+            title="Next frame ( . )"
+            aria-label="Next frame"
           >
-            {isMuted || volume === 0 ? "🔇" : "🔊"}
+            ⏭
           </button>
-          <input
-            className="modal-video-volume-input"
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={isMuted ? 0 : volume}
-            aria-label="Video volume"
-            onChange={handleVolumeChange}
-            style={{ "--volume-progress": `${(isMuted ? 0 : volume) * 100}%` }}
-          />
+          <div className="modal-video-volume-group">
+            <button
+              type="button"
+              className="modal-video-icon-button"
+              onClick={toggleMute}
+              aria-label={isMuted ? "Unmute video" : "Mute video"}
+              title={isMuted ? "Unmute (m)" : "Mute (m)"}
+            >
+              {isMuted || volume === 0
+                ? "🔇"
+                : volume < 0.35
+                  ? "🔈"
+                  : volume < 0.75
+                    ? "🔉"
+                    : "🔊"}
+            </button>
+            <div className="modal-video-volume-slider-wrap">
+              <input
+                className="modal-video-volume-input"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={isMuted ? 0 : volume}
+                aria-label="Video volume"
+                onChange={handleVolumeChange}
+                style={{ "--volume-progress": `${(isMuted ? 0 : volume) * 100}%` }}
+              />
+            </div>
+          </div>
+          <span
+            className="modal-video-time-readout"
+            onClick={() => setShowRemainingTime((prev) => !prev)}
+            title="Click to toggle remaining time"
+            style={{ cursor: "pointer", userSelect: "none" }}
+          >
+            {showRemainingTime
+              ? `-${formatVideoTime(Math.max(0, safeDuration - safeCurrentTime))} / ${formatVideoTime(safeDuration)}`
+              : `${formatVideoTime(safeCurrentTime)} / ${formatVideoTime(safeDuration)}`}
+          </span>
         </div>
-        {onToggleFitMode && (
+
+        <div className="modal-video-right-controls">
+          {onSelectCandidate && (
+            <button
+              type="button"
+              className={`modal-video-select-button ${isCandidateSelected ? 'is-selected' : ''}`}
+              onClick={onSelectCandidate}
+              title={isCandidateSelected ? "Deselect candidate" : "Select candidate"}
+              aria-label={isCandidateSelected ? "Deselect candidate" : "Select candidate"}
+            >
+              {isCandidateSelected ? "✓ Selected" : "+ Select"}
+            </button>
+          )}
+          {onSubmit && (
+            <button
+              type="button"
+              className="modal-video-submit-button"
+              onClick={onSubmit}
+              disabled={isSubmitting}
+              title={`Submit at ${Math.round(safeCurrentTime * 1000)} ms`}
+              aria-label="Submit current playback time to DRES"
+            >
+              ↗ Submit
+            </button>
+          )}
+          <div className="modal-video-speed-group" ref={speedMenuRef}>
+            <button
+              type="button"
+              className={`modal-video-icon-button modal-video-speed-button ${playbackRate !== 1 ? 'is-active' : ''}`}
+              onClick={() => setIsSpeedMenuOpen((prev) => !prev)}
+              title="Playback speed ( < / > )"
+              aria-label={`Playback speed: ${playbackRate}x`}
+            >
+              {playbackRate === 1 ? '1x' : `${playbackRate}x`}
+            </button>
+            {isSpeedMenuOpen && (
+              <div className="modal-video-speed-menu" role="menu">
+                <div className="modal-video-speed-menu-title">Playback speed</div>
+                {PLAYBACK_RATES.map((rate) => (
+                  <button
+                    key={rate}
+                    type="button"
+                    className={`modal-video-speed-menu-item ${playbackRate === rate ? 'active' : ''}`}
+                    onClick={() => handleSelectSpeed(rate)}
+                  >
+                    <span className="speed-check">{playbackRate === rate ? '✓' : ''}</span>
+                    <span>{rate === 1 ? 'Normal' : `${rate}x`}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {onToggleFitMode && (
+            <button
+              type="button"
+              className={`modal-video-icon-button modal-video-fit-button ${fitMode === "cover" ? "active" : ""}`}
+              onClick={onToggleFitMode}
+              aria-label={fitMode === "contain" ? "Fill frame" : "Fit frame"}
+              title={fitMode === "contain" ? "Fill Frame (No black borders) [C]" : "Fit Video [C]"}
+            >
+              {fitMode === "cover" ? "⤢" : "⇲"}
+            </button>
+          )}
+          {onToggleTheater && (
+            <button
+              type="button"
+              className={`modal-video-icon-button modal-video-theater-button ${isTheaterMode ? "active" : ""}`}
+              onClick={onToggleTheater}
+              aria-label={isTheaterMode ? "Exit theater mode" : "Expand player"}
+              title={isTheaterMode ? "Exit theater mode [T]" : "Expand player [T]"}
+            >
+              {isTheaterMode ? "⤡" : "⤢"}
+            </button>
+          )}
           <button
             type="button"
-            className={`modal-video-icon-button modal-video-fit-button ${fitMode === "cover" ? "active" : ""}`}
-            onClick={onToggleFitMode}
-            aria-label={fitMode === "contain" ? "Fill frame" : "Fit frame"}
-            title={fitMode === "contain" ? "Fill Frame (No black borders) [C]" : "Fit Video [C]"}
+            className="modal-video-icon-button modal-video-fullscreen-button"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            title="Fullscreen [F]"
           >
-            {fitMode === "cover" ? "⤢" : "⇲"}
+            ⛶
           </button>
-        )}
-        {onToggleTheater && (
-          <button
-            type="button"
-            className={`modal-video-icon-button modal-video-theater-button ${isTheaterMode ? "active" : ""}`}
-            onClick={onToggleTheater}
-            aria-label={isTheaterMode ? "Exit theater mode" : "Expand player"}
-            title={isTheaterMode ? "Exit theater mode [T]" : "Expand player [T]"}
-          >
-            {isTheaterMode ? "⤡" : "⤢"}
-          </button>
-        )}
-        <button
-          type="button"
-          className="modal-video-icon-button modal-video-fullscreen-button"
-          onClick={toggleFullscreen}
-          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-        >
-          ⛶
-        </button>
+        </div>
       </div>
     </div>
   );

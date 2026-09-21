@@ -779,7 +779,7 @@ const BadClaudeLoader = ({ isVisible = true }) => {
       data-testid="gif-loader"
       onClick={handleClick}
       onMouseMove={handleMouseMove}
-      title="Click vào chỗ trống để quất roi! ⚡"
+      title="Click vào chỗ trống để quất roi!"
     >
       {/* Animated OpenWhip Physics Canvas */}
       <canvas ref={canvasRef} className="badclaude-canvas" />
