@@ -34,6 +34,7 @@ const EventTrailPanel = ({
   onPreviewAlternative,
   onClearPreview,
   onUseAlternative,
+  hideRail = false,
 }) => {
   const activeEventId = useMemo(() => {
     if (selectedEventId) return selectedEventId;
@@ -159,17 +160,19 @@ const EventTrailPanel = ({
         </div>
       )}
 
-      <EventRail
-        events={events}
-        path={state.path}
-        lastValidPath={state.last_valid_path}
-        isExhausted={isExhausted}
-        approvedEventIds={state.approved_event_ids}
-        rejectedCounts={state.rejected_counts}
-        selectedEventId={activeEventId}
-        transition={state.transition}
-        onSelectEvent={handleSelectEvent}
-      />
+      {!hideRail && (
+        <EventRail
+          events={events}
+          path={state.path}
+          lastValidPath={state.last_valid_path}
+          isExhausted={isExhausted}
+          approvedEventIds={state.approved_event_ids}
+          rejectedCounts={state.rejected_counts}
+          selectedEventId={activeEventId}
+          transition={state.transition}
+          onSelectEvent={handleSelectEvent}
+        />
+      )}
 
       <HypothesisAlternatives
         eventId={activeEventId}

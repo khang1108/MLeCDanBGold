@@ -16,19 +16,20 @@ const EventRail = ({
   selectedEventId = null,
   transition = null,
   onSelectEvent,
+  horizontal = false,
 }) => {
   const candidates = isExhausted ? (lastValidPath || []) : (path || []);
 
   return (
-    <div className={`event-trail-rail ${isExhausted ? 'event-trail-rail-dimmed' : ''}`}>
+    <div className={`event-trail-rail ${horizontal ? 'horizontal' : ''} ${isExhausted ? 'event-trail-rail-dimmed' : ''}`}>
       <div className="event-trail-rail-header">
         <span className="event-trail-section-label">Temporal Event Sequence</span>
         {isExhausted && (
           <span className="event-trail-badge badge-exhausted">Last Valid Path</span>
         )}
       </div>
-      <div className="event-trail-rail-list">
-        {events.map((event) => {
+      <div className={`event-trail-rail-list ${horizontal ? 'horizontal' : ''}`}>
+        {events.map((event, index) => {
           const candidate = candidates.find((c) => c.event_id === event.id);
           const isApproved = approvedEventIds.includes(event.id);
           const isSelected = selectedEventId === event.id;
@@ -38,59 +39,115 @@ const EventRail = ({
           const previewUrl = candidate?.frame_id ? keyframeUrl(candidate.frame_id) : null;
 
           return (
-            <div
-              key={event.id}
-              data-testid={`event-rail-item-${event.id}`}
-              className={`event-trail-rail-item ${isSelected ? 'selected' : ''} ${isApproved ? 'approved' : ''}`}
-              onClick={() => onSelectEvent?.(event.id)}
-            >
-              <div className="event-trail-item-top">
-                <span className="event-trail-event-tag">{event.id}</span>
-                <span className="event-trail-event-text" title={event.text}>
-                  {event.text}
-                </span>
-                <div className="event-trail-item-badges">
-                  {isApproved && (
-                    <span className="event-trail-badge badge-approved" title="Anchored frame">
-                      ⚓ Anchor
-                    </span>
-                  )}
-                  {!isApproved && rejectedCount > 0 && (
-                    <span className="event-trail-badge badge-declined" title={`${rejectedCount} rejected occurrences`}>
-                      ✕ {rejectedCount}
-                    </span>
-                  )}
-                  {isDirect && (
-                    <span className="event-trail-badge badge-direct">Direct</span>
-                  )}
-                  {!isDirect && isIndirect && (
-                    <span className="event-trail-badge badge-indirect">Updated</span>
-                  )}
-                </div>
-              </div>
+            <React.Fragment key={event.id}>
+              <div
+                data-testid={`event-rail-item-${event.id}`}
+                className={`event-trail-rail-item ${horizontal ? 'horizontal' : ''} ${isSelected ? 'selected' : ''} ${isApproved ? 'approved' : ''}`}
+                onClick={() => onSelectEvent?.(event.id)}
+              >
+                {horizontal ? (
+                  <>
+                    <div className="event-trail-thumb-wrapper">
+                      {previewUrl ? (
+                        <img
+                          src={previewUrl}
+                          alt={`Frame ${candidate?.frame_id || ''}`}
+                          className="event-trail-thumb"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="event-trail-thumb-placeholder">—</div>
+                      )}
+                    </div>
+                    <div className="event-trail-horizontal-info">
+                      <div className="event-trail-item-top">
+                        <span className="event-trail-event-tag">{event.id}</span>
+                        <span className="event-trail-event-text" title={event.text}>
+                          {event.text}
+                        </span>
+                        <div className="event-trail-item-badges">
+                          {isApproved && (
+                            <span className="event-trail-badge badge-approved" title="Anchored frame">
+                              ⚓
+                            </span>
+                          )}
+                          {!isApproved && rejectedCount > 0 && (
+                            <span className="event-trail-badge badge-declined" title={`${rejectedCount} rejected occurrences`}>
+                              ✕{rejectedCount}
+                            </span>
+                          )}
+                          {isDirect && (
+                            <span className="event-trail-badge badge-direct">Direct</span>
+                          )}
+                          {!isDirect && isIndirect && (
+                            <span className="event-trail-badge badge-indirect">Updated</span>
+                          )}
+                        </div>
+                      </div>
+                      {candidate && (
+                        <div className="event-trail-candidate-meta">
+                          <span className="event-trail-coord">
+                            #{candidate.frame_idx} · {formatSeconds(candidate.timestamp_ms)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="event-trail-item-top">
+                      <span className="event-trail-event-tag">{event.id}</span>
+                      <span className="event-trail-event-text" title={event.text}>
+                        {event.text}
+                      </span>
+                      <div className="event-trail-item-badges">
+                        {isApproved && (
+                          <span className="event-trail-badge badge-approved" title="Anchored frame">
+                            ⚓ Anchor
+                          </span>
+                        )}
+                        {!isApproved && rejectedCount > 0 && (
+                          <span className="event-trail-badge badge-declined" title={`${rejectedCount} rejected occurrences`}>
+                            ✕ {rejectedCount}
+                          </span>
+                        )}
+                        {isDirect && (
+                          <span className="event-trail-badge badge-direct">Direct</span>
+                        )}
+                        {!isDirect && isIndirect && (
+                          <span className="event-trail-badge badge-indirect">Updated</span>
+                        )}
+                      </div>
+                    </div>
 
-              {candidate && (
-                <div className="event-trail-candidate-card">
-                  <div className="event-trail-thumb-wrapper">
-                    {previewUrl ? (
-                      <img
-                        src={previewUrl}
-                        alt={`Frame ${candidate.frame_id}`}
-                        className="event-trail-thumb"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="event-trail-thumb-placeholder">—</div>
+                    {candidate && (
+                      <div className="event-trail-candidate-card">
+                        <div className="event-trail-thumb-wrapper">
+                          {previewUrl ? (
+                            <img
+                              src={previewUrl}
+                              alt={`Frame ${candidate.frame_id}`}
+                              className="event-trail-thumb"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="event-trail-thumb-placeholder">—</div>
+                          )}
+                        </div>
+                        <div className="event-trail-candidate-meta">
+                          <span className="event-trail-coord">
+                            #{candidate.frame_idx} · {formatSeconds(candidate.timestamp_ms)}
+                          </span>
+                        </div>
+                      </div>
                     )}
-                  </div>
-                  <div className="event-trail-candidate-meta">
-                    <span className="event-trail-coord">
-                      #{candidate.frame_idx} · {formatSeconds(candidate.timestamp_ms)}
-                    </span>
-                  </div>
-                </div>
+                  </>
+                )}
+              </div>
+              {horizontal && index < events.length - 1 && (
+                <div className="event-trail-step-arrow" aria-hidden="true">→</div>
               )}
-            </div>
+            </React.Fragment>
           );
         })}
       </div>

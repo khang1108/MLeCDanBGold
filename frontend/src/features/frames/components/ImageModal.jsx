@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import FrameMetadata from "./FrameMetadata";
 import VideoTimeline from "./VideoTimeline";
 import EventTrailPanel from "../../event-trail/components/EventTrailPanel";
+import EventRail from "../../event-trail/components/EventRail";
 import { resolveFrameAtTimestamp } from "../../../api/frames";
 import {
   displayVideoId,
@@ -727,6 +728,7 @@ const ImageModal = ({
                     onBack={handleBack}
                     onExitTrail={handleExitTrail}
                     onSubmit={handleSubmitFromTrail}
+                    hideRail={true}
                   />
                 </div>
               ) : (
@@ -741,6 +743,25 @@ const ImageModal = ({
               )}
             </div>
           </div>
+          {eventTrail?.state && (
+            <div className="modal-bottom-trail-rail" data-testid="modal-bottom-trail-rail">
+              <EventRail
+                events={effectiveTrailEvents}
+                path={eventTrail.state.path}
+                lastValidPath={eventTrail.state.last_valid_path}
+                isExhausted={eventTrail.state.status === 'exhausted'}
+                approvedEventIds={eventTrail.state.approved_event_ids}
+                rejectedCounts={eventTrail.state.rejected_counts}
+                selectedEventId={selectedEventId || eventTrail.focusedEventId || effectiveTrailEvents[0]?.id}
+                transition={eventTrail.state.transition}
+                onSelectEvent={(id) => {
+                  setSelectedEventId(id);
+                  eventTrail.focusEvent?.(id);
+                }}
+                horizontal
+              />
+            </div>
+          )}
 
         </div>
       </div>
