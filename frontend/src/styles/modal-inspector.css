@@ -19,10 +19,10 @@
 .modal-card.split-layout {
   display: flex;
   flex-direction: column;
-  width: min(96vw, 1560px);
-  max-width: 1560px;
+  width: min(96vw, 1620px);
+  max-width: 1620px;
   height: auto;
-  max-height: min(95vh, 960px);
+  max-height: min(96vh, 1020px);
   border-radius: var(--rounded-lg);
   overflow-y: auto; /* Entire pop up scrolls vertically when exceeding max-height */
   overflow-x: hidden;
@@ -36,7 +36,7 @@
 .modal-card.split-layout.is-theater-mode {
   width: min(98vw, 1760px);
   max-width: 1760px;
-  max-height: min(97vh, 980px);
+  max-height: min(97vh, 1020px);
 }
 
 .modal-card.split-layout::-webkit-scrollbar {
@@ -65,15 +65,15 @@
   display: flex;
   flex-direction: row;
   flex: 1 1 auto;
-  height: min(82vh, 760px);
-  min-height: 460px;
+  height: min(88vh, 880px);
+  min-height: 560px;
   width: 100%;
   overflow: hidden;
   transition: height 0.25s ease;
 }
 
 .modal-card.is-theater-mode .modal-main-stage {
-  height: min(91vh, 920px);
+  height: min(94vh, 980px);
 }
 
 .modal-bottom-alignment-section {
@@ -722,9 +722,9 @@
 }
 
 .modal-inspector-column.trail-active {
-  width: 440px;
-  min-width: 400px;
-  max-width: 480px;
+  width: 520px;
+  min-width: 480px;
+  max-width: 580px;
 }
 
 .modal-inspector-column img {

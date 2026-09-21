@@ -239,7 +239,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 220px;
+  max-height: 290px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
@@ -956,10 +956,9 @@
 .hypothesis-alternatives-strip {
   display: flex;
   gap: 8px;
-  overflow-x: auto;
-  padding: 4px 2px;
+  flex-wrap: wrap;
+  padding: 4px 0;
   align-items: stretch;
-  scrollbar-width: thin;
 }
 
 .hypothesis-alt-card {
@@ -967,13 +966,14 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 4px;
+  padding: 5px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   cursor: pointer;
-  flex-shrink: 0;
-  width: 92px;
+  flex: 1 1 96px;
+  min-width: 88px;
+  max-width: 116px;
   box-sizing: border-box;
   transition: all 0.15s ease;
   text-align: left;
@@ -998,8 +998,11 @@
 
 .hypothesis-alt-thumb {
   position: relative;
-  width: 82px;
-  height: 48px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  min-height: 48px;
+  max-height: 60px;
   border-radius: 4px;
   overflow: hidden;
   background: #0f172a;
