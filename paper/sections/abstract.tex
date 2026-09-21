@@ -1,0 +1,27 @@
+% !TeX root = ../main.tex
+\begin{abstract}
+
+At the Video Browser Showdown, users frequently reformulate textual queries and
+inspect returned result sets. For multi-event requests, however, these
+interactions do not directly expose two intermediate decisions: (1) how the
+description is divided into events and (2) how those events are aligned within
+a candidate video. We present SHI, an interactive video retrieval system that
+makes both decisions inspectable and editable. Before retrieval, its
+\emph{Query Hypothesis} represents the request as an ordered, source-grounded
+sequence of events and supports previewed structural edits. After retrieval,
+\emph{EventTrail} lets users inspect temporally distinct occurrences of any
+event. Each occurrence is shown within a complete ordered alignment for all
+events, allowing the user to preview how a local correction would affect the
+rest of the sequence. Keeping the current occurrence, selecting an alternative,
+or rejecting a temporal region adds an explicit constraint, after which SHI
+recomputes a temporally valid path. We describe the interface, system
+architecture, and interactive workflow developed for the Video Browser
+Showdown 2027.
+\keywords{
+Interactive video retrieval
+\and Video Browser Showdown
+\and Temporal search
+\and Human-in-the-loop retrieval
+\and Structured hypotheses
+}
+\end{abstract}

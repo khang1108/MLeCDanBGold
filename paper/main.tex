@@ -1,0 +1,41 @@
+% Compile from paper/: latexmk main.tex
+\documentclass[runningheads]{llncs}
+
+\usepackage[T1]{fontenc}
+% Follow the fonts in Springer's September 2026 proceedings template.
+\usepackage{newtxtext}
+\usepackage[varvw]{newtxmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+\urlstyle{rm}
+\graphicspath{{figures/}}
+
+\begin{document}
+
+% Working metadata only. Confirm authorship and review policy before submission.
+\title{SHI: Inspecting and Correcting Structured Hypotheses in Interactive Video Retrieval}
+\titlerunning{SHI: Structured Hypotheses in Interactive Video Retrieval}
+\author{Khang Phuc Nguyen\inst{1} \and
+Huy Huu Nguyen Le\inst{1} \and
+Phuc Quang Vo\inst{1} \and
+Phuong Danh Nguyen\inst{1} \and
+Huy Dinh Nhat Truong\inst{1}}
+\authorrunning{K. P. Nguyen et al.}
+% Explicit shared label requested by the authors; LNCS omits it for one institute.
+\institute{\textsuperscript{1}\enspace University of Science, Vietnam National University Ho Chi Minh City,\\
+Ho Chi Minh City, Vietnam\\
+\email{\{24120068, 24120060, 24120414, 24120504, 24120064\}@student.hcmus.edu.vn}}
+% Append the remaining email account names in author order when supplied.
+% Add \orcidID{...} after each author only when their real ORCID is supplied.
+\maketitle
+
+\input{sections/abstract}
+\input{sections/introduction}
+\input{sections/system_overview}
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}

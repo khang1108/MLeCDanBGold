@@ -1,0 +1,71 @@
+% !TeX root = ../main.tex
+\section{Introduction}
+\label{sec:introduction}
+
+The Video Browser Showdown (VBS) evaluates interactive video search systems
+through live tasks over large collections~\cite{vbs2027cfp}. In Known-Item
+Search (KIS), a participant translates a description of a previously observed
+scene into search operations, inspects the returned evidence, and identifies a
+valid frame or video segment~\cite{vbs2027cfp}. This process becomes more
+difficult when the description contains several ordered events, because the
+system must determine both what visual moments the description refers to and
+where those moments occur in a candidate video.
+
+VBS 2027 includes KIS, Ad-Hoc Video Search (AVS), and Visual Question Answering
+(VQA), with most tasks using the complete Vimeo Creative Commons Collection
+(V3C) together with specialized marine and surgical datasets
+~\cite{vbs2027cfp}. Across its three shards, V3C contains 28,450 videos,
+approximately 3,800 hours of content, and more than 4.1 million predefined
+segments~\cite{vbs2027cfp,rossetto2019v3c}. The challenge also includes the
+Marine Video Kit and the GynSurg collection, covering underwater footage and
+laparoscopic gynecology procedures, respectively
+~\cite{truong2023marine,nasirihaghighi2025gynsurg}.
+
+Prior work on interactive CLIP search considers situations in which users
+cannot formulate an effective textual description and uses intermediate
+results to support query reformulation~\cite{lokoc2023queryreformulation}.
+Interaction studies at VBS likewise show that query revision and result
+inspection remain central to search. An analysis of two systems at VBS 2026
+found iterative, high-frequency text-query reformulation followed by
+result-set inspection to be the dominant strategy across most task categories
+~\cite{jackl2026interaction}. A post-evaluation of VBS 2022 also showed that
+the strongest initial text-to-image retrieval did not produce the highest
+overall result; browsing and image-based search contributed to task
+performance~\cite{schall2024interactive}. SHI builds on these observations by
+making two intermediate decisions explicit for multi-event KIS: how the
+request is divided into ordered events and which occurrence of each event is
+selected within a candidate video.
+
+We present SHI, an interactive video retrieval system that represents query
+interpretation and selected-video alignment as two explicit hypotheses. A
+\emph{Query Hypothesis} is a source-grounded ordered sequence of retrievable
+events derived from the participant's original description. Before retrieval,
+the participant can inspect and revise this structure through splitting,
+merging, reordering, editing, or adding events. Applying an edit creates a new
+revision, so retrieval remains bound to a visible query state rather than to
+an implicit model-generated rewrite.
+
+After retrieval, SHI represents a multi-event result as a complete ordered
+path through one candidate video. In \emph{EventTrail}, the participant can
+focus on an event and inspect temporally distinct alternative occurrences,
+each shown within a complete path for all events rather than as an isolated
+frame. The participant can keep the current occurrence, use an alternative, or
+reject its temporal region. EventTrail converts these actions into anchor or
+exclusion constraints and re-decodes the path under the updated constraints;
+inspection alone does not modify the active hypothesis.
+
+The main contributions of the submitted system are:
+\begin{itemize}
+    \item an inspectable, source-grounded Query Hypothesis for explicit
+    correction of multi-event query structure;
+    \item EventTrail, which exposes event-conditioned complete-path
+    alternatives and converts user corrections into constraints for temporal
+    re-decoding; and
+    \item an integrated VBS workflow connecting multimodal retrieval,
+    temporal alignment, hypothesis inspection, and competition-compatible
+    frame submission.
+\end{itemize}
+
+The remainder of this paper describes related work, the architecture and
+retrieval pipeline of SHI, the Query Hypothesis and EventTrail interactions,
+and the system's evaluation and VBS workflow.
