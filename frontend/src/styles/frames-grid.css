@@ -5,9 +5,9 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: 6px;
   min-height: 0;
-  padding-left: var(--spacing-lg);
+  padding-left: var(--spacing-md);
   overflow: hidden;
 }
 
@@ -48,17 +48,17 @@
 .frames-grid {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: 6px;
   width: 100%;
 }
 
 .frames-result-row {
   display: flex;
   flex-direction: column;
-  padding: 8px 10px;
+  padding: 5px 8px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-hairline);
-  border-radius: var(--rounded-lg);
+  border-radius: var(--rounded-md);
   box-shadow: var(--shadow-level-0);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
@@ -292,15 +292,15 @@
 }
 
 .frame-card-header {
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--color-hairline);
-  border-top-left-radius: calc(var(--rounded-lg) - 1px);
-  border-top-right-radius: calc(var(--rounded-lg) - 1px);
+  border-top-left-radius: calc(var(--rounded-md) - 1px);
+  border-top-right-radius: calc(var(--rounded-md) - 1px);
   background-color: var(--color-surface);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .frame-header-title {
@@ -386,8 +386,8 @@
 .frame-image-container {
   position: relative;
   width: 100%;
-  padding-top: 66.67%;
-  /* 3:2 Aspect Ratio */
+  padding-top: 56.25%;
+  /* 16:9 Aspect Ratio (video standard) */
   background-color: var(--color-canvas-soft);
   overflow: hidden;
 }
@@ -531,14 +531,15 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin-bottom: 6px;
-  padding: 2px 4px;
+  margin-bottom: 3px;
+  padding: 0;
+  min-height: 20px;
 }
 
 .frames-row-trail-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .frames-row-trail-active-group {
@@ -550,12 +551,12 @@
 .badge-trail-active {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #1d4ed8;
   background-color: #eff6ff;
   border: 1px solid #bfdbfe;
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
   letter-spacing: 0.02em;
 }
@@ -563,28 +564,30 @@
 .badge-trail-exhausted {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #b91c1c;
   background-color: #fef2f2;
   border: 1px solid #fecaca;
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
 }
 
 .btn-trail-row-start {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
+  gap: 3px;
+  font-size: 10.5px;
   font-weight: 600;
   color: #15803d;
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
-  padding: 3px 9px;
+  padding: 1px 7px;
+  height: 20px;
   border-radius: var(--rounded-sm);
   cursor: pointer;
   transition: all 0.15s ease;
+  line-height: 1;
 }
 
 .btn-trail-row-start:hover:not(:disabled) {

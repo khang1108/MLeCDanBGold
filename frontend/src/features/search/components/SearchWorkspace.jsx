@@ -1242,7 +1242,7 @@ const SearchWorkspace = ({
       const hasSearchedAvs = Boolean(avsResponse || avsResults.length > 0);
 
       return (
-        <div className={`frames-results-shell avs-workspace-results ${isSearching ? 'whip-cursor-mode' : ''}`}>
+        <div className="frames-results-shell avs-workspace-results">
           {scopeConflict && (
             <div className="avs-status-message error" role="alert">
               {scopeConflict}

@@ -228,7 +228,7 @@ const AvsWorkspace = ({
   const isSelectionDisabled = Boolean(scopeConflict) || Boolean(selectionState.unknownBatch);
 
   return (
-    <div className={`avs-workspace ${searchState.status === 'loading' ? 'whip-cursor-mode' : ''}`}>
+    <div className="avs-workspace">
       <AvsQueryControls
         query={query}
         onQueryChange={setQuery}
