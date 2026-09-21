@@ -49,3 +49,50 @@ not an approved experiment plan or measured results.
 
 The ten-paper editorial comparison is stored in
 `paper/notes/introduction-style-benchmark.md`. The manuscript remains unchanged.
+
+## Related-work positioning for Query Hypothesis and EventTrail
+
+**Date:** 2026-09-21
+**Problem:** Position SHI against interactive VBS systems, query reformulation,
+result explanation, and temporal-query mechanisms without claiming that those
+capabilities are new.
+
+### Sources
+
+- VISIONE system papers from VBS 2022--2024.
+- Vibro at VBS 2022; PraK, diveXplore, vitrivr, and Exquisitor at VBS 2024.
+- Exquisitor at VBS 2025 and 2026.
+- Heller et al. (2021), explainable interactive retrieval with vitrivr.
+- Heller et al. (2022), multimodal temporal queries with vitrivr.
+- Loko{\v{c}} et al. (2023), interactive CLIP query reformulation.
+- Schall et al. (2024) and J{\"a}ckl et al. (2026), VBS interaction analyses.
+
+### Findings
+
+**PAPER:** VBS systems already support multimodal retrieval, browsing, query
+reformulation, relevance feedback, result explanation, and temporal queries.
+
+**PAPER:** Exquisitor 2026 retrieves multi-event temporal sequences with a
+sequence-chain representation and reciprocal-rank fusion. Temporal sequence
+retrieval itself must therefore not be presented as new in SHI.
+
+**PAPER:** vitrivr has exposed feature contributions and temporal context for
+result explanation. Explainability in general must not be presented as new.
+
+### Relevance to HCMAI
+
+**PROPOSED:** Position Query Hypothesis as a source-grounded, revisioned event
+structure that supports previewed structural edits before retrieval.
+
+**PROPOSED:** Position EventTrail as interaction with a selected video's
+complete event-to-occurrence path through event-conditioned alternatives and
+anchor/exclusion constraints. Do not position it as a new temporal-query syntax
+or a new decoding objective.
+
+### Decision or Experiment
+
+Every external or empirical claim in the manuscript must carry an adjacent
+citation that supports that exact clause. SHI implementation descriptions and
+explicitly labeled project hypotheses do not require external citations.
+Effectiveness still requires controlled comparisons of text-only reformulation,
+inspection without editing, and inspection with editing.
