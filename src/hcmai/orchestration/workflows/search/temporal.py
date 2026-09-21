@@ -116,6 +116,17 @@ class TemporalSearchGateway(Protocol):
         decoder_config: DecoderConfigSnapshot | None = None,
     ) -> tuple[AlignedPath, ...]: ...
 
+    def decode_event_alternatives(
+        self,
+        video: VideoEventScores,
+        *,
+        allowed: np.ndarray,
+        focus_event_index: int,
+        max_paths: int,
+        min_separation_ms: int,
+        decoder_config: DecoderConfigSnapshot | None = None,
+    ) -> tuple[EventConditionedPath, ...]: ...
+
 
 
 class TemporalSearchService:
@@ -389,24 +400,14 @@ class TemporalSearchService:
     ) -> tuple[EventConditionedPath, ...]:
         """Decode complete chronological paths conditioned on one focused event."""
         config = self.snapshot_decoder_config() if decoder_config is None else decoder_config
-        conditioned = align_video_conditioned(
+        return decode_event_alternatives_scores(
+            self.corpus,
             video,
-            focus_event_index,
             allowed=allowed,
-            lambda_gap=config.lambda_gap,
-            event_power=config.event_power,
-            cluster_delta=config.cluster_delta,
+            focus_event_index=focus_event_index,
             max_paths=max_paths,
             min_separation_ms=min_separation_ms,
-        )
-        return tuple(
-            EventConditionedPath(
-                path=self._materialize_aligned_path(item.path, video),
-                focus_frame_position=item.focus_frame_position,
-                focus_timestamp_ms=item.focus_timestamp_ms,
-                score=item.score,
-            )
-            for item in conditioned
+            decoder_config=config,
         )
 
     def snapshot_decoder_config(self) -> DecoderConfigSnapshot:
@@ -472,6 +473,39 @@ def decode_video_scores(
     )
     materializer = SearchMaterializer(corpus)
     return tuple(_materialize_aligned_path(materializer, row, video) for row in rows)
+
+
+def decode_event_alternatives_scores(
+    corpus: Corpus,
+    video: VideoEventScores,
+    *,
+    allowed: np.ndarray,
+    focus_event_index: int,
+    max_paths: int,
+    min_separation_ms: int,
+    decoder_config: DecoderConfigSnapshot,
+) -> tuple[EventConditionedPath, ...]:
+    """Decode conditioned alternative paths for one focused event under a mask and config snapshot."""
+    conditioned = align_video_conditioned(
+        video,
+        focus_event_index,
+        allowed=allowed,
+        lambda_gap=decoder_config.lambda_gap,
+        event_power=decoder_config.event_power,
+        cluster_delta=decoder_config.cluster_delta,
+        max_paths=max_paths,
+        min_separation_ms=min_separation_ms,
+    )
+    materializer = SearchMaterializer(corpus)
+    return tuple(
+        EventConditionedPath(
+            path=_materialize_aligned_path(materializer, item.path, video),
+            focus_frame_position=item.focus_frame_position,
+            focus_timestamp_ms=item.focus_timestamp_ms,
+            score=item.score,
+        )
+        for item in conditioned
+    )
 
 
 def _materialize_aligned_path(

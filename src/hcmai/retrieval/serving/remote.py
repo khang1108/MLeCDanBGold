@@ -22,9 +22,11 @@ from hcmai.orchestration.workflows.search.image import (
 )
 from hcmai.orchestration.workflows.search.temporal import (
     DecoderConfigSnapshot,
+    EventConditionedPath,
     SelectedVideoScoreResult,
     TemporalSearchArtifact,
     TemporalSearchResult,
+    decode_event_alternatives_scores,
     decode_video_scores,
 )
 from hcmai.retrieval.evidence.components import TemporalScoreComponent
@@ -158,6 +160,35 @@ class RemoteTemporalSearchService:
             self.corpus,
             video,
             allowed=allowed,
+            decoder_config=decoder_config,
+        )
+
+    def decode_event_alternatives(
+        self,
+        video: VideoEventScores,
+        *,
+        allowed: np.ndarray,
+        focus_event_index: int,
+        max_paths: int,
+        min_separation_ms: int,
+        decoder_config: DecoderConfigSnapshot | None = None,
+    ) -> tuple[EventConditionedPath, ...]:
+        """Decode complete chronological paths conditioned on one focused event locally."""
+        if decoder_config is None:
+            default_config = AlignmentConfig()
+            decoder_config = DecoderConfigSnapshot(
+                lambda_gap=default_config.lambda_gap,
+                event_power=default_config.event_power,
+                cluster_delta=default_config.cluster_delta,
+                path_min_separation_ms=default_config.path_min_separation_ms,
+            )
+        return decode_event_alternatives_scores(
+            self.corpus,
+            video,
+            allowed=allowed,
+            focus_event_index=focus_event_index,
+            max_paths=max_paths,
+            min_separation_ms=min_separation_ms,
             decoder_config=decoder_config,
         )
 

@@ -148,6 +148,25 @@ def test_remote_temporal_service_decode_video(corpus) -> None:
     assert client.method_calls == []
 
 
+def test_remote_temporal_service_decode_event_alternatives(corpus) -> None:
+    from unittest.mock import Mock
+
+    client = Mock()
+    remote_temporal = RemoteTemporalSearchService(corpus, client)
+    v1_scores = make_fake_video_scores("video-1", ["v1_f1", "v1_f2"])
+    allowed = np.array([[True, True]], dtype=bool)
+    conditioned = remote_temporal.decode_event_alternatives(
+        v1_scores,
+        allowed=allowed,
+        focus_event_index=0,
+        max_paths=2,
+        min_separation_ms=0,
+    )
+    assert len(conditioned) > 0
+    assert conditioned[0].path.video_id == "video-1"
+    assert client.method_calls == []
+
+
 def test_remote_image_service_search_delegates_and_materializes(corpus) -> None:
     from unittest.mock import Mock
 
