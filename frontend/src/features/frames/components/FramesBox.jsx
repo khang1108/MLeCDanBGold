@@ -145,7 +145,7 @@ const FramesBox = ({
                         {isRowTrailActive && activeTrailSession ? (
                           <div className="frames-row-trail-active-group">
                             <span className="badge-trail-active">
-                              ⚡ Explorer Rev {activeTrailSession.trail_revision}
+                              Explorer Rev {activeTrailSession.trail_revision}
                             </span>
                             {activeTrailSession.status === 'exhausted' && (
                               <span className="badge-trail-exhausted">Exhausted</span>
@@ -177,7 +177,7 @@ const FramesBox = ({
                             disabled={isTrailPending}
                             title="Explore timeline alignment with Hypothesis Explorer"
                           >
-                            ⚡ Hypothesis Explorer
+                            Hypothesis Explorer
                           </button>
                         ) : null}
                       </div>

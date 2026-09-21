@@ -213,7 +213,6 @@ const KisPanel = ({
                       className="kis-quick-prompt-btn"
                       onClick={() => onDraftChange?.('A red sports car driving on a road')}
                     >
-                      <span className="prompt-icon">💬</span>
                       <span className="prompt-text">A red sports car driving on a road</span>
                     </button>
                     <button
@@ -221,7 +220,6 @@ const KisPanel = ({
                       className="kis-quick-prompt-btn"
                       onClick={() => onDraftChange?.('People celebrating on a stage with lights')}
                     >
-                      <span className="prompt-icon">💬</span>
                       <span className="prompt-text">People celebrating on a stage</span>
                     </button>
                     <button
@@ -229,7 +227,6 @@ const KisPanel = ({
                       className="kis-quick-prompt-btn"
                       onClick={() => onDraftChange?.('A dog jumping into a swimming pool')}
                     >
-                      <span className="prompt-icon">💬</span>
                       <span className="prompt-text">Dog jumping into a pool</span>
                     </button>
                   </>
@@ -240,7 +237,6 @@ const KisPanel = ({
                       className="kis-quick-prompt-btn"
                       onClick={() => onDraftChange?.('Find a person wearing yellow jacket walking a dog')}
                     >
-                      <span className="prompt-icon">💬</span>
                       <span className="prompt-text">Person in yellow jacket walking dog</span>
                     </button>
                     <button
@@ -248,7 +244,6 @@ const KisPanel = ({
                       className="kis-quick-prompt-btn"
                       onClick={() => onDraftChange?.('Two cars collide at a crossroads')}
                     >
-                      <span className="prompt-icon">💬</span>
                       <span className="prompt-text">Two cars collide at a crossroads</span>
                     </button>
                     <button
@@ -256,7 +251,6 @@ const KisPanel = ({
                       className="kis-quick-prompt-btn"
                       onClick={() => onDraftChange?.('E1: Chef cuts vegetables\nE2: Chef cooks on pan')}
                     >
-                      <span className="prompt-icon">💬</span>
                       <span className="prompt-text">Multi-event cooking sequence</span>
                     </button>
                   </>
