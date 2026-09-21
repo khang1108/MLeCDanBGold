@@ -1,269 +1,58 @@
 /* ─────────────────────────────────────────────────────────── */
-/* BADCLAUDE INTERACTIVE WHIP SEARCH LOADER STYLES            */
+/* CLEAN SEARCH LOADER STYLES                                 */
 /* ─────────────────────────────────────────────────────────── */
 
-.badclaude-interactive-container {
-  position: relative;
+.search-loader-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 440px;
+  min-height: 320px;
   height: 100%;
   flex: 1;
-  padding: 24px 16px;
+  padding: 32px 16px;
   box-sizing: border-box;
-  overflow: hidden;
-  user-select: none;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  cursor: url("../../public/whip_cursor.svg") 4 28, auto !important;
-  animation: badclaudeFadeIn 0.2s ease-out;
+  animation: searchLoaderFadeIn 0.2s ease-out;
 }
 
-.badclaude-interactive-container:active {
-  cursor: url("../../public/whip_cursor_active.svg") 4 28, auto !important;
-}
-
-.badclaude-interactive-container,
-.badclaude-interactive-container *,
-.whip-cursor-mode,
-.whip-cursor-mode * {
-  cursor: url("../../public/whip_cursor.svg") 4 28, auto !important;
-}
-
-.badclaude-interactive-container:active,
-.badclaude-interactive-container *:active,
-.whip-cursor-mode:active,
-.whip-cursor-mode *:active {
-  cursor: url("../../public/whip_cursor_active.svg") 4 28, auto !important;
-}
-
-@keyframes badclaudeFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* ─────────────────────────────────────────────────────────── */
-/* OPENWHIP PHYSICS CANVAS                                     */
-/* ─────────────────────────────────────────────────────────── */
-
-.badclaude-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  pointer-events: none;
-  z-index: 5;
-}
-
-/* ─────────────────────────────────────────────────────────── */
-/* SCREEN SHAKE EFFECT ON WHIP CRACK                          */
-/* ─────────────────────────────────────────────────────────── */
-.badclaude-interactive-container.whip-screen-shake,
-.whip-screen-shake {
-  animation: whipScreenShake 0.22s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-}
-
-@keyframes whipScreenShake {
-  0% { transform: translate(0, 0) rotate(0deg); }
-  15% { transform: translate(-8px, 4px) rotate(-1.2deg); }
-  30% { transform: translate(7px, -6px) rotate(1.2deg); }
-  45% { transform: translate(-6px, 3px) rotate(-0.8deg); }
-  60% { transform: translate(5px, -3px) rotate(0.6deg); }
-  75% { transform: translate(-3px, 2px) rotate(-0.3deg); }
-  90% { transform: translate(2px, -1px) rotate(0.1deg); }
-  100% { transform: translate(0, 0) rotate(0deg); }
-}
-
-/* ─────────────────────────────────────────────────────────── */
-/* COMIC ACTION BURSTS & SMALL DIVERSE PARTICLES              */
-/* ─────────────────────────────────────────────────────────── */
-
-.badclaude-bursts-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 20;
-}
-
-.badclaude-burst-wrapper {
-  position: absolute;
-  pointer-events: none;
-}
-
-.badclaude-comic-particle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: particleFlyOut 0.65s cubic-bezier(0.12, 0.8, 0.32, 1) forwards;
-}
-
-@keyframes particleFlyOut {
-  0% {
+@keyframes searchLoaderFadeIn {
+  from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.3) rotate(0deg);
+    transform: translateY(4px);
   }
-  15% {
+  to {
     opacity: 1;
-    transform: translate(calc(-50% + var(--target-x) * 0.4), calc(-50% + var(--target-y) * 0.4)) scale(1.2) rotate(calc(var(--rot) * 0.4));
-  }
-  60% {
-    opacity: 1;
-    transform: translate(calc(-50% + var(--target-x)), calc(-50% + var(--target-y))) scale(1) rotate(var(--rot));
-  }
-  100% {
-    opacity: 0;
-    transform: translate(calc(-50% + var(--target-x) * 1.15), calc(-50% + var(--target-y) * 1.15)) scale(0.4) rotate(calc(var(--rot) + 20deg));
+    transform: translateY(0);
   }
 }
 
-.badclaude-swoosh-svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-  overflow: visible;
-}
-
-.badclaude-pop-text {
-  position: absolute;
-  top: 0;
-  left: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
-  margin: 0;
-  white-space: nowrap;
-  pointer-events: none;
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.45),
-    0 0 8px rgba(255, 255, 255, 0.95),
-    0 0 2px rgba(255, 255, 255, 0.9);
-  animation: popZoomFade 0.45s cubic-bezier(0.15, 0.85, 0.35, 1) forwards;
-}
-
-@keyframes popZoomFade {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.6) rotate(var(--quote-rot, 0deg));
-  }
-  20% {
-    opacity: 1;
-    transform: translate(-50%, -60%) scale(1.15) rotate(var(--quote-rot, 0deg));
-  }
-  60% {
-    opacity: 0.85;
-    transform: translate(-50%, -75%) scale(1.28) rotate(var(--quote-rot, 0deg));
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -95%) scale(1.42) rotate(var(--quote-rot, 0deg));
-  }
-}
-
-/* ─────────────────────────────────────────────────────────── */
-/* PERFECTLY CENTERED "Searching...." INDICATOR               */
-/* ─────────────────────────────────────────────────────────── */
-
-.badclaude-searching-indicator {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-  margin: 0;
-}
-
-.badclaude-searching-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(203, 213, 225, 0.85);
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
-  padding: 8px 18px;
-  border-radius: 999px;
-  backdrop-filter: blur(8px);
-}
-
-.badclaude-searching-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2.5px solid rgba(49, 170, 169, 0.25);
-  border-top-color: #31AAA9;
+.search-loader-spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid color-mix(in srgb, var(--color-primary, #2563eb) 18%, transparent);
+  border-top-color: var(--color-primary, #2563eb);
   border-radius: 50%;
-  animation: searchingSpin 0.75s linear infinite;
+  animation: searchLoaderSpin 0.75s linear infinite;
+  margin-bottom: 14px;
 }
 
-@keyframes searchingSpin {
-  to { transform: rotate(360deg); }
+@keyframes searchLoaderSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.badclaude-searching-text {
-  font-size: 15px;
-  font-weight: 700;
-  color: #1e293b;
-  letter-spacing: 0.02em;
-  font-family: system-ui, -apple-system, sans-serif;
+.search-loader-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink, #1e293b);
+  letter-spacing: 0.01em;
+  margin: 0 0 6px 0;
 }
 
-.searching-dots span {
-  display: inline-block;
-  animation: dotPulse 1.2s infinite ease-in-out both;
-}
-
-.searching-dots span:nth-child(1) { animation-delay: 0s; }
-.searching-dots span:nth-child(2) { animation-delay: 0.2s; }
-.searching-dots span:nth-child(3) { animation-delay: 0.4s; }
-.searching-dots span:nth-child(4) { animation-delay: 0.6s; }
-
-@keyframes dotPulse {
-  0%, 100% { opacity: 0.2; transform: translateY(0); }
-  50% { opacity: 1; transform: translateY(-2px); }
-}
-
-.badclaude-strike-badge {
-  font-family: monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: #6C1A1A;
-  background: #F8E0A4;
-  border: 1px solid #ebd08d;
-  padding: 2px 7px;
-  border-radius: 6px;
-}
-
-.badclaude-mute-btn {
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
-  color: #475569;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  line-height: 1;
-}
-
-.badclaude-mute-btn:hover {
-  background: #e2e8f0;
-  color: #0f172a;
+.search-loader-subtext {
+  font-size: 12px;
+  color: var(--color-ink-muted, #64748b);
+  margin: 0;
 }

@@ -137,7 +137,7 @@ const FramesBox = ({
           </ul>
         </div>
       )}
-      <div className={`frames-scroll-region ${isLoading ? 'whip-cursor-mode' : ''}`}>
+      <div className="frames-scroll-region">
         {(results.length > 0 || !error) &&
           (results.length ? (
             <div className={`frames-grid size-${gridSize}`}>
@@ -214,8 +214,9 @@ const FramesBox = ({
                             onClick={() => handleStartTrail(resultItem)}
                             disabled={isTrailPending}
                             title="Explore timeline alignment with Hypothesis Explorer"
+                            aria-label="Hypothesis Explorer"
                           >
-                            Hypothesis Explorer
+                            Explorer
                           </button>
                         ) : null}
                       </div>
@@ -259,7 +260,7 @@ const FramesBox = ({
                             onOpenSubmission={onOpenSubmission}
                             isSubmissionOpening={isSubmissionOpening}
                             onClick={() => onFrameClick(eventFrame)}
-                            showTrailActions={isRowTrailActive || canStartTrail}
+                            showTrailActions={isRowTrailActive}
                             isTrailPending={isTrailPending}
                             onClearAnchor={() => handleClearAnchor(resultItem, eventLabel)}
                           />
