@@ -1,27 +1,26 @@
 % !TeX root = ../main.tex
 \begin{abstract}
-
-At the Video Browser Showdown, users frequently reformulate textual queries and
-inspect returned result sets. For multi-event requests, however, these
-interactions do not directly expose two intermediate decisions: (1) how the
-description is divided into events and (2) how those events are aligned within
-a candidate video. We present SHI, an interactive video retrieval system that
-makes both decisions inspectable and editable. Before retrieval, its
-\emph{Query Hypothesis} represents the request as an ordered, source-grounded
-sequence of events and supports previewed structural edits. After retrieval,
-\emph{EventTrail} lets users inspect temporally distinct occurrences of any
-event. Each occurrence is shown within a complete ordered alignment for all
-events, allowing the user to preview how a local correction would affect the
-rest of the sequence. Keeping the current occurrence, selecting an alternative,
-or rejecting a temporal region adds an explicit constraint, after which SHI
-recomputes a temporally valid path. We describe the interface, system
-architecture, and interactive workflow developed for the Video Browser
-Showdown 2027.
+Multi-event video retrieval under live competition constraints requires interpreting
+a textual narrative as an ordered sequence of retrievable events and aligning those
+events with occurrences within candidate videos. If users rely solely on query
+reformulation and result inspection, they cannot directly inspect how the system
+decomposes the narrative or selects an occurrence for each event. We present SHI,
+a human-in-the-loop video retrieval system that integrates two mechanisms for
+inspecting and correcting these decisions: (1) \emph{Query Hypothesis}, which
+lets users inspect and revise an ordered event decomposition grounded in the
+original description; and (2) \emph{EventTrail}, which exposes the temporal
+alignment of the complete event sequence within a candidate video. EventTrail
+presents alternative occurrences in the context of complete ordered paths,
+allowing users to retain the current match, select an alternative, or reject a
+temporal region. User selections are treated as temporal feedback: retaining or
+selecting an occurrence creates an anchor constraint, while rejecting a temporal
+region creates an exclusion constraint. SHI then re-decodes the complete
+alignment under these constraints.
 \keywords{
 Interactive video retrieval
 \and Video Browser Showdown
-\and Temporal search
-\and Human-in-the-loop retrieval
-\and Structured hypotheses
+\and Temporal alignment
+\and Human-in-the-loop
+\and Multi-event search
 }
 \end{abstract}
