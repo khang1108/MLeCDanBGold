@@ -1,96 +1,84 @@
-\section{Interactive Hypothesis Correction}
+\section{Interactive Hypothesis Inspection and Trajectory Correction}
 \label{sec:interactive-hypothesis-correction}
 
-SHI exposes two intermediate decisions in multi-event retrieval as explicit
-interaction objects. Before retrieval, the \emph{Query Hypothesis} represents
-how the input narrative has been interpreted as an ordered event sequence.
-After retrieval, \emph{EventTrail} exposes how those events have been aligned
-to occurrences within a selected video. Both representations can be inspected
-before the user commits a correction.
+SHI exposes two intermediate representations for direct interaction during
+multi-event search. In the \emph{pre-retrieval} stage, the Query Hypothesis
+represents the current interpretation of a narrative as an ordered sequence of
+events that can be inspected and edited before search. In the
+\emph{post-retrieval} stage, EventTrail represents the temporal alignment of an
+individual candidate video as an ordered path over event occurrences. As
+illustrated in Fig.~\ref{fig:layer3}, edits to the Query Hypothesis determine
+the event specifications used by retrieval, whereas EventTrail actions are
+translated into temporal constraints and re-decoded over retained retrieval
+evidence. The two stages therefore expose semantic decomposition and temporal
+alignment as separate but connected interaction points in the retrieval
+workflow.
 
-\begin{figure*}[t]
-    \centering
-    % \includegraphics[width=\textwidth]{002_hypothesis_interaction.png}
-    \fbox{\parbox[c][3.0cm][c]{0.96\linewidth}{\centering
-    Hypothesis Interaction figure placeholder}}
-    \caption{The two hypothesis-level interactions in SHI.
-    \textbf{(a)} Query Hypothesis exposes the inferred event decomposition
-    before retrieval and supports direct structural correction.
-    \textbf{(b)} EventTrail exposes the decoded temporal hypothesis of a
-    retrieved video and previews complete-path alternatives before a correction
-    is committed.}
-    \label{fig:hypothesis-interaction}
-\end{figure*}
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=0.82\textwidth]{layer3.pdf}
+  \caption{The two hypothesis-level interaction mechanisms in SHI.
+  \textbf{(a)} Query Hypothesis exposes the initial LLM-derived event
+  decomposition before retrieval and supports structural editing,
+  reference-image binding, and non-destructive preview before a revision is
+  committed. \textbf{(b)} EventTrail exposes the decoded temporal path of a
+  candidate video and presents temporally distinct alternatives as complete
+  ordered paths. Keep, Use, and Reject actions introduce anchor or exclusion
+  constraints, after which the path is re-decoded from the retained evidence
+  snapshot.}
+  \label{fig:layer3}
+\end{figure}
 
-\subsection{Query Hypothesis}
+\subsection{Pre-retrieval Query Hypothesis}
 \label{sec:query-hypothesis}
 
-Interactive video retrieval systems commonly support query reformulation,
-including suggestions derived from intermediate search results and
-conversational refinement with relevance feedback
-~\cite{lokoc2023queryreformulation,khan2024exquisitor,sharma2025exquisitor}.
-Structured interfaces have also been used to express complex and temporal
-queries~\cite{wu2021sql,heller2022temporalqueries}. SHI differs in the object
-being edited: the system-generated interpretation of the original narrative is
-itself exposed as a persistent \emph{Query Hypothesis} before retrieval.
+The Query Hypothesis represents the current semantic interpretation of a
+multi-event request before retrieval is executed. Given a narrative query, the
+LLM proposes an ordered sequence of events $(E_1,\dots,E_N)$. For the initial
+decomposition, each proposed event must correspond to a verbatim fragment of
+the original query; the server verifies these fragments against the source text
+and falls back to a single-event representation if the decomposition cannot be
+grounded. The resulting event sequence is shown explicitly to the operator
+together with its temporal order and any event-specific reference images.
+Rather than treating the decomposition as a fixed parser output, SHI keeps it
+as the active search hypothesis from which the downstream retrieval plan is
+constructed.
 
-For a multi-event request, SHI constructs an ordered sequence
-\[
-H_q=(E_1,E_2,\ldots,E_N),
-\]
-where each automatically generated event is grounded to a verbatim span of the
-original query. The original request and its inferred event sequence are shown
-together, allowing the user to inspect whether the decomposition preserves the
-intended semantic and temporal structure.
+The editor supports event-level structural operations including splitting and
+merging events, changing their order, editing or adding event descriptions, and
+attaching or removing reference images. Each proposed operation can first be
+previewed without modifying the active hypothesis, allowing the operator to
+compare the current and proposed event sequences before committing the change.
+A committed operation creates a new monotonically revisioned hypothesis and
+stores the previous state in a bounded session history, from which the latest
+change can be undone. Subsequent retrieval uses the committed revision, so
+structural edits directly change the event specifications supplied to the
+multimodal scoring and temporal-alignment pipeline.
 
-Figure~\ref{fig:hypothesis-interaction}(a) shows the Query Hypothesis editor.
-Users can edit an event, split it, merge adjacent events, change event order,
-or add a new event. Image examples can additionally be associated with
-individual events. In contrast to reformulating a single text query and
-observing the resulting ranking, these operations directly modify the event
-structure that will be used by the downstream retrieval and temporal-alignment
-stages.
-
-Edits are previewed before they affect the active hypothesis. The interface
-shows the current and proposed event sequences side by side, after which the
-user may cancel or apply the modification. Applying a change creates a new
-query revision and marks results from the previous revision as outdated; a new
-search is started explicitly by the user. Previous revisions can also be
-restored through undo. This separates inspection and correction of the query
-interpretation from search execution.
-
-\subsection{EventTrail}
+\subsection{Post-retrieval EventTrail}
 \label{sec:event-trail}
 
-Prior systems support temporal query formulation and retrieval over sequences
-or temporally related search conditions
-~\cite{heller2021explainable,heller2022temporalqueries,khan2026temporalqueries}.
-EventTrail instead exposes the \emph{decoded temporal hypothesis} of an
-individual retrieved video: the current assignment of each query event to a
-specific occurrence in that video.
+EventTrail operates on the decoded temporal path of an individual candidate
+video after the initial retrieval. For a query with $N$ events, the trail
+contains one selected frame occurrence for each event in temporal order,
+together with the corresponding retained event--frame evidence. An operator can
+focus on any event whose current occurrence appears inconsistent with the
+video content. EventTrail then identifies temporally distinct alternative
+occurrences for that event and decodes a complete path for each alternative.
+The interface therefore presents the effect of an alternative on the entire
+event sequence rather than showing the alternative frame in isolation. These
+previews do not modify the active trail until the operator explicitly commits
+an action.
 
-Figure~\ref{fig:hypothesis-interaction}(b) presents this hypothesis as an
-ordered event path, with each event associated with its selected frame and
-timestamp. The user can focus on any event and inspect temporally distinct
-alternative occurrences under the current constraints.
-
-A central distinction of EventTrail is that an alternative is not presented as
-an isolated frame. For each candidate occurrence of the focused event, SHI
-decodes a complete chronologically valid path for the entire event sequence.
-The user can therefore preview the consequence of selecting an alternative
-before changing the active hypothesis. If other event assignments must move to
-preserve chronological consistency, those changes are shown together with the
-previewed path.
-
-Previewing is non-mutating. The user can \emph{Keep} the current occurrence,
-\emph{Use} a previewed alternative, or \emph{Reject} an incorrect temporal
-mode. Keeping or using an occurrence introduces an anchor for that event,
-whereas rejection excludes the corresponding temporal region. The complete
-path is then re-decoded under the updated constraints using the multimodal
-evidence retained from the original search.
-
-Because temporal alignment is solved jointly for the complete event sequence,
-a local correction may alter assignments of other events. EventTrail makes
-these induced changes visible rather than treating each event match
-independently. The interaction can be repeated across events, and previous
-corrections can be undone when necessary.
+Three actions are provided for occurrence-level correction. \emph{Keep}
+anchors the occurrence currently assigned to an event, \emph{Use} anchors the
+representative occurrence of a selected alternative path, and \emph{Reject}
+excludes the temporal interval associated with a selected occurrence mode.
+These actions update the session's temporal constraints while leaving the
+underlying Evidence Snapshot unchanged. The dynamic-programming decoder then
+re-computes the highest-scoring feasible path for the selected video under the
+updated anchors and exclusion intervals. Because the event--frame evidence is
+retained in the snapshot, this correction step does not repeat query embedding
+or corpus-level retrieval. EventTrail also maintains a bounded history of
+constraint states, allowing the most recent action to be undone before further
+inspection or submission.

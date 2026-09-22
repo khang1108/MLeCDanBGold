@@ -1,0 +1,16 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented \textbf{SHI}, an interactive multimodal video retrieval system for
+multi-event Known-Item Search at VBS 2027. SHI exposes two intermediate
+retrieval hypotheses for direct user interaction. The pre-retrieval
+\emph{Query Hypothesis} represents the LLM-generated event decomposition as an
+editable ordered sequence, allowing operators to inspect and revise the search
+structure before retrieval. The post-retrieval \emph{EventTrail} exposes the
+decoded temporal alignment of an individual candidate video and supports
+occurrence-level correction through anchor and exclusion constraints. By
+retaining event--frame evidence in session-scoped Evidence Snapshots, SHI can
+re-decode a constrained candidate path without repeating corpus-level
+retrieval. Together, these mechanisms make semantic decomposition before
+retrieval and temporal alignment after retrieval explicit interaction points
+in the multi-event search workflow.

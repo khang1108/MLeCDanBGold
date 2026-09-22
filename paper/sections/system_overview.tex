@@ -1,33 +1,63 @@
 \section{System Overview}
 \label{sec:system}
+SHI separates offline corpus preparation from the online retrieval workflow.
+During offline preparation, each target video collection is processed into
+canonical frame metadata and precomputed retrieval artifacts, including dense
+indexes for visual, contextual, and speech evidence and a lexical BM25 index.
+At runtime, as illustrated in Fig.~\ref{fig:layer2}, these artifacts are loaded
+as read-only retrieval structures and queried for each event in the active
+Query Hypothesis. Corpus-side feature extraction and index construction
+therefore remain outside the interactive request path, while online processing
+is limited to query encoding, retrieval, score fusion, and temporal alignment.
 
-Figure~\ref{fig:architecture} summarizes the SHI workflow. A natural-language
-request is first represented as an ordered \emph{Query Hypothesis}, whose
-events remain separate retrieval units throughout the search pipeline. Each
-event is scored against the video collection using multimodal evidence,
-producing an event--frame score matrix for each candidate video.
-
-\begin{figure}[t]
-    \centering
-    \fbox{\parbox[c][3.0cm][c]{0.96\linewidth}{\centering
-    Architecture figure placeholder}}
-    \caption{Overview of SHI. The Query Hypothesis drives event-level
-    multimodal retrieval, after which temporal decoding produces complete
-    chronological paths. The resulting evidence and paths are preserved for
-    subsequent inspection and correction in EventTrail.}
-    \label{fig:architecture}
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=0.82\textwidth]{layer2.pdf}
+  \caption{Multi-event KIS retrieval pipeline in SHI. The Query Hypothesis
+  provides an ordered sequence of events. Text events query visual,
+  FrameContext, ASR, and lexical indexes, while optional reference images
+  contribute visual similarity scores. Component scores are calibrated and
+  fused into an event--frame score matrix $S[v,e,f]$ for each candidate video
+  $v$. A dynamic-programming decoder then extracts chronologically ordered
+  event paths, which are used to rank candidate videos and construct the
+  evidence snapshot.}
+  \label{fig:layer2}
 \end{figure}
 
-A temporal decoder searches each score matrix for complete paths that assign
-one frame occurrence to every event while preserving their chronological
-order. The resulting path scores are used to rank candidate videos. Together
-with the returned paths, SHI stores the corresponding event-level evidence and
-decoder configuration in an \emph{Evidence Snapshot} associated with the
-search state.
+\subsection{Multi-event KIS Retrieval Pipeline}
+\label{sec:kis-retrieval}
 
-The two interactive components operate on opposite sides of this pipeline.
-Before retrieval, the Query Hypothesis allows the user to inspect and revise
-the event decomposition. After retrieval, \emph{EventTrail} exposes the
-temporal hypothesis of a selected result. Corrections in EventTrail modify the
-temporal constraints and re-decode the path from the stored evidence, without
-rerunning multimodal retrieval.
+Multi-event KIS is formulated as multimodal event scoring followed by joint
+temporal alignment. Given an ordered sequence of events from the Query
+Hypothesis, each textual event is evaluated against several retrieval sources:
+SigLIP2 provides visual text--frame similarity, BGE-M3 provides dense
+FrameContext and ASR evidence, and BM25 provides lexical matching over
+frame-associated text. Optional reference images contribute additional
+SigLIP2 image--frame similarity scores. The resulting components are calibrated
+and combined by event-adaptive weighted fusion into an event--frame score
+matrix $S[v,e,f]$ for each candidate video $v$. A dynamic-programming decoder
+then selects one canonical frame occurrence for each event subject to strict
+temporal ordering. Its objective combines the fused event--frame scores with a
+temporal gap penalty that discourages large separations between consecutive
+event occurrences. Candidate videos are ranked by the scores of their decoded
+paths, so the ranking accounts jointly for event-level evidence and temporal
+ordering rather than aggregating independently selected frame matches.
+
+\subsection{Evidence Snapshots and Competition Integration}
+\label{sec:evidence-snapshots}
+
+To support post-retrieval interaction without repeating corpus-level search,
+SHI captures an in-memory \emph{Evidence Snapshot} after the initial KIS
+execution. For the returned candidates, the snapshot retains immutable
+event--frame evidence together with the event identifiers, initial decoded
+paths, and the decoder configuration used for that search. When an operator
+applies an EventTrail action, such as anchoring an accepted occurrence or
+rejecting a temporal region, the corresponding constraints are maintained
+separately from the frozen evidence and supplied to the temporal decoder. The
+decoder then re-computes the feasible path for the selected video using the
+retained evidence, without repeating query embedding or corpus index search.
+Once the operator selects a frame for submission, SHI's integrated competition
+client converts the selection to the required submission format and sends it
+to the Distributed Retrieval Evaluation Server
+(DRES)~\cite{rossetto2021dres}, reducing the need for manual transfer of frame
+coordinates during live search.

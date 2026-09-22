@@ -469,102 +469,59 @@ flowchart TB
 
 ---
 
-## 3. Interactive Execution Sequence (E2E Protocol)
+## 3. Interactive Execution Sequence (Paper-Ready Protocol)
 
-The sequence diagram below shows the complete lifecycle of a retrieval and hypothesis refinement session:
+The sequence diagram below summarizes the end-to-end interactive retrieval lifecycle in SHI, highlighting the dual hypothesis-correction loops (Pre-retrieval Query Hypothesis and Post-retrieval EventTrail over Evidence Snapshots):
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Operator as Operator (Searcher)
-    participant UI as React Search Workspace
-    participant API as FastAPI Gateway (:8000)
-    participant QH as Query Hypothesis Service
-    participant SEARCH as Search Orchestrator
-    participant RET as Vector Retrieval & RRF
-    participant DP as DP Temporal Aligner
-    participant SNAP as Evidence Snapshot Store
-    participant TRAIL as EventTrail Service
-    participant DRES as DRES Evaluation Server
+    actor User as User / Operator
+    participant QH as Query Hypothesis
+    participant Search as Search Pipeline (RRF + DP)
+    participant Snap as Evidence Snapshot
+    participant Trail as EventTrail
+    participant DRES as Evaluation (DRES)
 
     %% PHASE 1: QUERY HYPOTHESIS
     rect rgb(245, 238, 248)
-    Note over Operator,QH: Phase 1: Pre-Retrieval Query Hypothesis Formulation
-    Operator->>UI: Enter natural-language query narrative
-    UI->>API: POST /api/v1/hypothesis/decompose
-    API->>QH: Parse narrative into grounded events
-    QH-->>API: Ordered events (E₁, E₂, ..., Eₙ) & query_revision: 1
-    API-->>UI: Display Query Hypothesis
-    
-    opt Operator edits the query hypothesis
-        Operator->>UI: Edit event / Split / Merge / Attach reference image
-        UI->>API: POST /api/v1/hypothesis/preview
-        API->>QH: Validate and preview modification
-        QH-->>UI: Side-by-side preview
-        Operator->>UI: Confirm modification
-        UI->>API: POST /api/v1/hypothesis/commit
-        API->>QH: Apply mutation -> query_revision: 2
-        QH-->>UI: Updated Hypothesis confirmed
+    Note over User,QH: Phase 1: Pre-Retrieval Query Hypothesis
+    User->>QH: Input narrative query
+    QH-->>User: Inferred ordered event sequence H_q = (E₁, E₂, ..., Eₙ)
+    opt Structural Correction
+        User->>QH: Edit / Split / Merge / Reorder / Attach image
+        QH-->>User: Preview modifications & commit updated revision
     end
     end
 
-    %% PHASE 2: SEARCH EXECUTION
+    %% PHASE 2: SEARCH & SNAPSHOT
     rect rgb(255, 248, 230)
-    Note over Operator,SNAP: Phase 2: Multimodal Search & Snapshot Materialization
-    Operator->>UI: Trigger Search
-    UI->>API: POST /api/v1/search (query_revision: 2)
-    API->>SEARCH: Dispatch multi-event retrieval plan
-    par Modality Retrieval
-        SEARCH->>RET: BGE-M3 on FrameContext VectorDB
-        SEARCH->>RET: BGE-M3 on ASR VectorDB
-        SEARCH->>RET: SigLIP2 on Visual VectorDB
-    end
-    RET->>RET: Compute Reciprocal Rank Fusion (RRF)
-    RET-->>SEARCH: Multimodal Candidate Matrices
-    SEARCH->>DP: Dynamic Programming Sequence Alignment
-    DP-->>SEARCH: Top ranked video paths (chronological frames)
-    SEARCH->>SNAP: Create immutable Evidence Snapshot (snapshot_id: S_402)
-    SEARCH-->>API: Ranked video candidates & aligned paths
-    API-->>UI: Render ranked search results
+    Note over User,Snap: Phase 2: Multimodal Search & Snapshotting
+    User->>Search: Execute search with active H_q
+    Search->>Search: Multi-event retrieval, RRF fusion & DP alignment
+    Search->>Snap: Cache score matrices & candidate paths (Evidence Snapshot)
+    Search-->>User: Initial ranked video candidates & aligned event paths
     end
 
-    %% PHASE 3: EVENTTRAIL TEMPORAL CORRECTION
+    %% PHASE 3: EVENTTRAIL CORRECTION
     rect rgb(235, 247, 238)
-    Note over Operator,TRAIL: Phase 3: Post-Retrieval EventTrail Correction
-    Operator->>UI: Select candidate video to inspect
-    UI->>API: GET /api/v1/event_trail (video_id, snapshot_id: S_402)
-    API->>TRAIL: Fetch decoded path from Snapshot
-    TRAIL-->>UI: Display ordered path (E₁→f*₁, E₂→f*₂, E₃→f*₃)
-
-    Operator->>UI: Focus on Event E₂ (ambiguous occurrence)
-    UI->>API: GET /api/v1/event_trail/alternatives (event_idx: 2)
-    API->>TRAIL: Decode alternative complete chronological paths
-    TRAIL-->>UI: Preview alternative path options
-
-    alt Operator selects an alternative
-        Operator->>UI: Click USE Alternative
-        UI->>API: POST /api/v1/event_trail/action (action: USE, anchor: f'₂)
-        API->>TRAIL: Update temporal constraints (trail_revision: 2)
-        TRAIL->>TRAIL: Re-decode optimal path using Snapshot matrix in ~5ms
-        TRAIL-->>UI: Render updated chronological path
-    else Operator rejects an incorrect region
-        Operator->>UI: Click REJECT Temporal Mode
-        UI->>API: POST /api/v1/event_trail/action (action: REJECT, window: [t₁, t₂])
-        API->>TRAIL: Exclude temporal region from DP search space
-        TRAIL->>TRAIL: Fast re-decode path from Snapshot matrix
-        TRAIL-->>UI: Render updated path without false positive
+    Note over User,Trail: Phase 3: Post-Retrieval EventTrail Correction
+    User->>Trail: Select candidate video & focus on event (e.g., E₂)
+    Trail->>Snap: Read immutable evidence snapshot
+    Trail-->>User: Preview complete-path alternatives
+    alt Apply Temporal Constraint
+        User->>Trail: Action (KEEP / USE anchor / REJECT temporal region)
+        Trail->>Trail: Fast local DP re-decoding (<10 ms, zero index re-query)
+        Trail-->>User: Updated chronological path & refreshed candidate score
     end
     end
 
     %% PHASE 4: VERIFICATION & SUBMISSION
     rect rgb(255, 253, 231)
-    Note over Operator,DRES: Phase 4: Verification & Competition Submission
-    Operator->>UI: Inspect synchronized video playback at target timestamp
-    Operator->>UI: Confirm correct keyframe
-    UI->>API: POST /api/v1/submit (video_id, frame_idx, timestamp_ms)
-    API->>DRES: Forward submission point/range
-    DRES-->>API: Authoritative outcome (CORRECT / WRONG)
-    API-->>UI: Display submission banner to Operator
+    Note over User,DRES: Phase 4: Verification & Competition Submission
+    Note over User,QH: Verify synchronized keyframe & video playback
+    User->>DRES: Submit canonical coordinate (video_id, frame_idx, timestamp_ms)
+    DRES-->>User: Authoritative evaluation outcome
     end
 ```
 

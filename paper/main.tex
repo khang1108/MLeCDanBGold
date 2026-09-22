@@ -6,10 +6,6 @@
 \usepackage{newtxtext}
 \usepackage[varvw]{newtxmath}
 \usepackage{graphicx}
-\usepackage{booktabs}
-\usepackage{hyperref}
-\hypersetup{hidelinks}
-\urlstyle{rm}
 \graphicspath{{figures/}}
 
 \begin{document}
@@ -23,10 +19,9 @@ Phuc Quang Vo\inst{1} \and
 Danh-Phuong Nguyen\inst{1} \and
 Huy Dinh Nhat Truong\inst{1}}
 \authorrunning{K. P. Nguyen et al.}
-% Explicit shared label requested by the authors; LNCS omits it for one institute.
-\institute{\textsuperscript{1}\enspace University of Science, Vietnam National University Ho Chi Minh City,\\
+\institute{University of Science, Vietnam National University Ho Chi Minh City,\\
 Ho Chi Minh City, Vietnam\\
-\email{\{24120068, 24120060, 24120414, 24120504, 24120064\}@student.hcmus.edu.vn}}
+\email{\{24120068,24120060,24120414,24120504,24120064\}@student.hcmus.edu.vn}}
 % Append the remaining email account names in author order when supplied.
 % Add \orcidID{...} after each author only when their real ORCID is supplied.
 \maketitle
@@ -36,6 +31,30 @@ Ho Chi Minh City, Vietnam\\
 \input{sections/related_work}
 \input{sections/system_overview}
 \input{sections/interactive_hypothesis}
+\input{sections/conclusion}
+\input{sections/acknowledgements}
+
+\makeatletter
+\renewenvironment{thebibliography}[1]
+     {\section*{\refname}
+      \def\@biblabel##1{##1.}
+      \small
+      \list{\@biblabel{\@arabic\c@enumiv}}%
+           {\settowidth\labelwidth{\@biblabel{#1}}%
+            \leftmargin\labelwidth
+            \advance\leftmargin\labelsep
+            \setlength{\itemsep}{0pt}%
+            \setlength{\parsep}{0pt}%
+            \usecounter{enumiv}%
+            \let\p@enumiv\@empty
+            \renewcommand\theenumiv{\@arabic\c@enumiv}}%
+      \renewcommand\newblock{\hskip .11em \@plus.33em \@minus.07em}%
+      \sloppy\clubpenalty4000\widowpenalty4000%
+      \sfcode`\.=\@m}
+     {\def\@noitemerr
+       {\@latex@warning{Empty `thebibliography' environment}}%
+      \endlist}
+\makeatother
 
 \bibliographystyle{splncs04}
 \bibliography{references}

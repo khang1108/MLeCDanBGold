@@ -1,21 +1,24 @@
 % !TeX root = ../main.tex
 \begin{abstract}
-Multi-event video retrieval under live competition constraints requires interpreting
-a textual narrative as an ordered sequence of retrievable events and aligning those
-events with occurrences within candidate videos. If users rely solely on query
-reformulation and result inspection, they cannot directly inspect how the system
-decomposes the narrative or selects an occurrence for each event. We present SHI,
-a human-in-the-loop video retrieval system that integrates two mechanisms for
-inspecting and correcting these decisions: (1) \emph{Query Hypothesis}, which
-lets users inspect and revise an ordered event decomposition grounded in the
-original description; and (2) \emph{EventTrail}, which exposes the temporal
-alignment of the complete event sequence within a candidate video. EventTrail
-presents alternative occurrences in the context of complete ordered paths,
-allowing users to retain the current match, select an alternative, or reject a
-temporal region. User selections are treated as temporal feedback: retaining or
-selecting an occurrence creates an anchor constraint, while rejecting a temporal
-region creates an exclusion constraint. SHI then re-decodes the complete
-alignment under these constraints.
+Large language models can decompose complex video-search narratives into
+ordered events, but errors in event boundaries or temporal relations may
+affect downstream retrieval. In multi-event search, such errors are difficult
+to diagnose when both query interpretation and temporal alignment remain
+internal to the retrieval pipeline. We present \textbf{SHI}, an interactive
+video retrieval system with two interaction stages: \emph{pre-retrieval} and
+\emph{post-retrieval}. In the pre-retrieval stage, the \emph{Query Hypothesis}
+exposes the LLM-generated decomposition as an editable ordered sequence of
+events, allowing users to inspect and revise the search structure before
+retrieval. In the post-retrieval stage, \emph{EventTrail} exposes the decoded
+temporal alignment of a candidate video and presents alternative event
+occurrences as complete ordered paths rather than isolated frames. Users can
+anchor accepted occurrences or exclude incorrect temporal regions, after which
+the alignment is re-decoded under the resulting constraints. Because
+re-decoding operates on retained retrieval evidence, these corrections can be
+applied without repeating corpus-level multimodal retrieval. Together, the two
+stages make both semantic decomposition and temporal alignment explicit
+interaction objects in multi-event video search.
+
 \keywords{
 Interactive video retrieval
 \and Video Browser Showdown
