@@ -45,17 +45,17 @@ but also with the temporal hypothesis produced for an individual candidate.
 \begin{figure}[!t]
   \centering
   \includegraphics[width=\textwidth]{001_system_ui.png}
-  \caption{Overview of the SHI user interface during a multi-event KIS task. The interface integrates candidate video trajectories with decoded event occurrences and DRES submission (left), the interactive Query Hypothesis editor with dynamic event segmentation and structural actions (right), and the metadata filter bar (top).}
+  \caption{Overview of the SHI user interface during a multi-event KIS task. The interface integrates candidate video paths with decoded event occurrences and DRES submission (left), the interactive Query Hypothesis editor with dynamic event segmentation and structural actions (right), and the metadata filter bar (top).}
   \label{fig:system-ui}
 \end{figure}
 
-To address these two interaction points, we present \textbf{SHI} (Fig.~\ref{fig:system-ui}), an interactive
+To address these two interaction points, we present SHI (Fig.~\ref{fig:system-ui}), an interactive
 multimodal video retrieval system for multi-event KIS with complementary
-\emph{pre-retrieval} and \emph{post-retrieval} mechanisms.
-\textbf{Pre-retrieval Query Hypothesis} exposes the LLM-generated event
+pre-retrieval and post-retrieval mechanisms.
+Pre-retrieval Query Hypothesis exposes the LLM-generated event
 decomposition as an editable structured plan, allowing operators to inspect
 event boundaries, revise event descriptions, reorder events, and attach visual
-reference examples before search. \textbf{Post-retrieval EventTrail} exposes the
+reference examples before search. Post-retrieval EventTrail exposes the
 decoded temporal alignment of a candidate video as an ordered event path,
 allowing operators to inspect alternative occurrences, anchor accepted matches,
 and exclude incorrect temporal regions. The resulting constraints are applied

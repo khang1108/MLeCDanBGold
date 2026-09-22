@@ -1,11 +1,11 @@
-\section{Interactive Hypothesis Inspection and Trajectory Correction}
+\section{Interactive Hypothesis Inspection and Path Alignment}
 \label{sec:interactive-hypothesis-correction}
 
 SHI exposes two intermediate representations for direct interaction during
-multi-event search. In the \emph{pre-retrieval} stage, the Query Hypothesis
+multi-event search. In the pre-retrieval stage, the Query Hypothesis
 represents the current interpretation of a narrative as an ordered sequence of
 events that can be inspected and edited before search. In the
-\emph{post-retrieval} stage, EventTrail represents the temporal alignment of an
+post-retrieval stage, EventTrail represents the temporal alignment of an
 individual candidate video as an ordered path over event occurrences. As
 illustrated in Fig.~\ref{fig:layer3}, edits to the Query Hypothesis determine
 the event specifications used by retrieval, whereas EventTrail actions are
@@ -18,10 +18,10 @@ workflow.
   \centering
   \includegraphics[width=0.82\textwidth]{layer3.pdf}
   \caption{The two hypothesis-level interaction mechanisms in SHI.
-  \textbf{(a)} Query Hypothesis exposes the initial LLM-derived event
+  (a) Query Hypothesis exposes the initial LLM-derived event
   decomposition before retrieval and supports structural editing,
   reference-image binding, and non-destructive preview before a revision is
-  committed. \textbf{(b)} EventTrail exposes the decoded temporal path of a
+  committed. (b) EventTrail exposes the decoded temporal path of a
   candidate video and presents temporally distinct alternatives as complete
   ordered paths. Keep, Use, and Reject actions introduce anchor or exclusion
   constraints, after which the path is re-decoded from the retained evidence
@@ -34,7 +34,7 @@ workflow.
 
 The Query Hypothesis represents the current semantic interpretation of a
 multi-event request before retrieval is executed. Given a narrative query, a
-large language model (Qwen3.8-27B~\cite{qwen2026qwen38}) proposes an ordered sequence
+large language model (Qwen3~\cite{qwen2025qwen3}) proposes an ordered sequence
 of events $(E_1,\dots,E_N)$. For the initial decomposition, each proposed event
 must correspond to a verbatim fragment of the original query; the server
 verifies these fragments against the source text and falls back to a single-event
@@ -47,7 +47,7 @@ the downstream retrieval plan is constructed.
 The editor supports event-level structural operations including splitting and
 merging events, changing their order, editing or adding event descriptions, and
 attaching or removing reference images. Operators can also provide conversational
-feedback to prompt Qwen3.8-27B for targeted hypothesis revisions. Each proposed
+feedback to prompt Qwen3 for targeted hypothesis revisions. Each proposed
 operation can first be previewed without modifying the active hypothesis, allowing the operator to
 compare the current and proposed event sequences before committing the change.
 A committed operation creates a new monotonically revisioned hypothesis and
@@ -105,20 +105,26 @@ r_{\max},
 \label{eq:alternative-interval}
 \end{equation}
 
-where $r_{\max}=8$ seconds in the current implementation. Neighboring
-intervals are split at their temporal midpoint so that they do not overlap,
-and the resulting interval is clipped to the active video window. The interval
+where $r_{\max}=8$ seconds in the current implementation. If no competing
+representative exists, the implementation defines the empty minimum as
+$+\infty$, so that $r_j=r_{\max}$. Representatives are processed in
+chronological order (with their original order used as a stable tie-breaker);
+neighboring intervals are then split at their temporal midpoint so that they do
+not overlap, and the resulting interval is clipped to the active video
+boundaries. Alternative representatives are separated by
+$\Delta_{\mathrm{alt}}=5$ seconds during candidate generation, so equal
+timestamps are not normally returned as distinct alternatives. The interval
 therefore represents the temporal neighborhood associated with an alternative
 occurrence and defines the region affected by rejection.
 
-The operator can apply three occurrence-level actions. \emph{Keep} anchors the
-frame currently assigned to the focused event. \emph{Use} anchors the
+The operator can apply three occurrence-level actions. Keep anchors the
+frame currently assigned to the focused event. Use anchors the
 representative frame of a selected alternative and re-decodes the complete
-path under that anchor. \emph{Reject} adds the corresponding interval $I_j$
+path under that anchor. Reject adds the corresponding interval $I_j$
 to the exclusion set of the focused event only. Occurrences of the remaining
 events are not directly excluded, although their selected frames may change
 when the complete path is re-decoded under the updated temporal constraints.
-All actions leave the underlying \emph{Evidence Snapshot} unchanged, so
+All actions leave the underlying Evidence Snapshot unchanged, so
 re-decoding reuses the retained event--frame evidence without repeating query
 embedding or corpus-level retrieval. EventTrail also maintains a bounded
 history of constraint states, allowing the most recent committed action to be

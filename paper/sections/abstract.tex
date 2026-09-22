@@ -4,12 +4,12 @@ Large language models can decompose complex video-search narratives into
 ordered events, but errors in event boundaries or temporal relations may
 affect downstream retrieval. In multi-event search, such errors are difficult
 to diagnose when both query interpretation and temporal alignment remain
-internal to the retrieval pipeline. We present \textbf{SHI}, an interactive
-video retrieval system with two interaction stages: \emph{pre-retrieval} and
-\emph{post-retrieval}. In the pre-retrieval stage, the \emph{Query Hypothesis}
+internal to the retrieval pipeline. We present SHI, an interactive
+video retrieval system with two interaction stages: pre-retrieval and
+post-retrieval. In the pre-retrieval stage, the Query Hypothesis
 exposes the LLM-generated decomposition as an editable ordered sequence of
 events, allowing users to inspect and revise the search structure before
-retrieval. In the post-retrieval stage, \emph{EventTrail} exposes the decoded
+retrieval. In the post-retrieval stage, EventTrail exposes the decoded
 temporal alignment of a candidate video and presents alternative event
 occurrences as complete ordered paths rather than isolated frames. Users can
 anchor accepted occurrences or exclude incorrect temporal regions, after which
