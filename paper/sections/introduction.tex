@@ -12,7 +12,7 @@ satisfy the intended temporal order. Errors in either stage can affect candidate
 ranking and complicate subsequent inspection. However, these intermediate
 decisions are often handled internally by the retrieval pipeline, leaving
 operators to infer how a narrative was interpreted or why particular temporal
-occurrences were selected from the returned results\cite{amato2024visione,lokoc2024prak,sharma2025exquisitor,heller2022temporalqueries,khan2026temporalqueries}.
+occurrences were selected from the returned results~\cite{amato2024visione,lokoc2024prak,sharma2025exquisitor,heller2022temporalqueries,khan2026temporalqueries}.
 
 LLMs provide a convenient way to convert unstructured narratives into structured
 event sequences. Prior work on complex task understanding shows that LLMs can
@@ -42,7 +42,14 @@ reformulate the query or continue browsing despite already having useful
 retrieval evidence. This motivates interaction not only with the input query,
 but also with the temporal hypothesis produced for an individual candidate.
 
-To address these two interaction points, we present \textbf{SHI}, an interactive
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=\textwidth]{001_system_ui.png}
+  \caption{Overview of the SHI user interface during a multi-event KIS task. The interface integrates candidate video trajectories with decoded event occurrences and DRES submission (left), the interactive Query Hypothesis editor with dynamic event segmentation and structural actions (right), and the metadata filter bar (top).}
+  \label{fig:system-ui}
+\end{figure}
+
+To address these two interaction points, we present \textbf{SHI} (Fig.~\ref{fig:system-ui}), an interactive
 multimodal video retrieval system for multi-event KIS with complementary
 \emph{pre-retrieval} and \emph{post-retrieval} mechanisms.
 \textbf{Pre-retrieval Query Hypothesis} exposes the LLM-generated event

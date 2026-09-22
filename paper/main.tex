@@ -32,18 +32,18 @@ Ho Chi Minh City, Vietnam\\
 \input{sections/system_overview}
 \input{sections/interactive_hypothesis}
 \input{sections/conclusion}
-\input{sections/acknowledgements}
+% \input{sections/acknowledgements}
 
 \makeatletter
 \renewenvironment{thebibliography}[1]
      {\section*{\refname}
       \def\@biblabel##1{##1.}
-      \small
+      \fontsize{8.5pt}{10.2pt}\selectfont
       \list{\@biblabel{\@arabic\c@enumiv}}%
            {\settowidth\labelwidth{\@biblabel{#1}}%
             \leftmargin\labelwidth
             \advance\leftmargin\labelsep
-            \setlength{\itemsep}{0pt}%
+            \setlength{\itemsep}{-1.5pt}%
             \setlength{\parsep}{0pt}%
             \usecounter{enumiv}%
             \let\p@enumiv\@empty
