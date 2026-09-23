@@ -3,12 +3,10 @@
 
 Interactive video retrieval systems developed for the Video Browser Showdown
 (VBS) combine multimodal retrieval with mechanisms for query formulation,
-iterative refinement, and result exploration. VISIONE supports textual,
-visual-example, and sketch-based queries~\cite{amato2024visione}, while PraK
-provides interactive search and filtering over video data
-services~\cite{lokoc2024prak}. Exquisitor further combines conversational
-search with user relevance feedback in a unified retrieval
-interface~\cite{sharma2025exquisitor}. Evaluations of VBS systems have
+iterative refinement, and result exploration: textual, visual-example, and
+sketch-based queries~\cite{amato2024visione}, search and filtering over video
+data services~\cite{lokoc2024prak}, and conversational search with user
+relevance feedback~\cite{sharma2025exquisitor}. Evaluations of VBS systems have
 repeatedly highlighted the importance of iterative query reformulation and
 result inspection in addition to the quality of the initial
 ranking~\cite{lokoc2023queryreformulation,schall2024interactive,jackl2026interaction}. 
@@ -21,14 +19,11 @@ decomposition explicitly and allows operators to modify its structure before
 retrieval.
 
 Temporal structure has also been incorporated into interactive video retrieval
-in several forms. Vireo-VSS extends its SQL-like interface with templates for
-specifying temporal query evolution~\cite{wu2021sql}, while vitrivr supports
-multimodal queries with temporal context~\cite{heller2022temporalqueries}.
-More recently, Exquisitor introduced sequence-chain retrieval for temporal
-queries~\cite{khan2026temporalqueries}. Interactive video corpus moment
-retrieval has also used user feedback to refine the retrieval of temporal
-intervals~\cite{ma2022ivcmr}. These approaches incorporate temporal structure
-through query specification, retrieval, or feedback over candidate intervals.
+through query specification, retrieval, and feedback over candidate intervals:
+SQL-like templates for temporal query evolution~\cite{wu2021sql}, multimodal
+queries with temporal context~\cite{heller2022temporalqueries}, sequence-chain
+retrieval for temporal queries~\cite{khan2026temporalqueries}, and user
+feedback over retrieved temporal intervals~\cite{ma2022ivcmr}.
 SHI focuses on a complementary interaction point: the decoded multi-event
 alignment of an individual candidate video. Its EventTrail exposes this
 alignment as an ordered path, allows operators to anchor or reject individual

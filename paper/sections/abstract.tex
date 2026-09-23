@@ -8,10 +8,10 @@ internal to the retrieval pipeline. We present SHI, an interactive
 video retrieval system with two interaction stages: pre-retrieval and
 post-retrieval. In the pre-retrieval stage, the Query Hypothesis
 exposes the LLM-generated decomposition as an editable ordered sequence of
-events, allowing users to inspect and revise the search structure before
+events, allowing operators to inspect and revise the search structure before
 retrieval. In the post-retrieval stage, EventTrail exposes the decoded
 temporal alignment of a candidate video and presents alternative event
-occurrences as complete ordered paths rather than isolated frames. Users can
+occurrences as complete ordered paths rather than isolated frames. Operators can
 anchor accepted occurrences or exclude incorrect temporal regions, after which
 the alignment is re-decoded under the resulting constraints. Because
 re-decoding operates on retained retrieval evidence, these corrections can be

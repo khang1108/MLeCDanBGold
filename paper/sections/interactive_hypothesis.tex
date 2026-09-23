@@ -1,31 +1,16 @@
 \section{Interactive Hypothesis Inspection and Path Alignment}
 \label{sec:interactive-hypothesis-correction}
 
-SHI exposes two intermediate representations for direct interaction during
-multi-event search. In the pre-retrieval stage, the Query Hypothesis
-represents the current interpretation of a narrative as an ordered sequence of
-events that can be inspected and edited before search. In the
-post-retrieval stage, EventTrail represents the temporal alignment of an
-individual candidate video as an ordered path over event occurrences. As
-illustrated in Fig.~\ref{fig:layer3}, edits to the Query Hypothesis determine
-the event specifications used by retrieval, whereas EventTrail actions are
-translated into temporal constraints and re-decoded over retained retrieval
-evidence. The two stages therefore expose semantic decomposition and temporal
-alignment as separate but connected interaction points in the retrieval
-workflow.
+SHI exposes two intermediate representations for direct interaction
+(Fig.~\ref{fig:layer3}): Query Hypothesis edits determine the events used by
+retrieval, whereas EventTrail actions become temporal decoding constraints.
 
 \begin{figure}[!t]
   \centering
-  \includegraphics[width=0.82\textwidth]{layer3.pdf}
-  \caption{The two hypothesis-level interaction mechanisms in SHI.
-  (a) Query Hypothesis exposes the initial LLM-derived event
-  decomposition before retrieval and supports structural editing,
-  reference-image binding, and non-destructive preview before a revision is
-  committed. (b) EventTrail exposes the decoded temporal path of a
-  candidate video and presents temporally distinct alternatives as complete
-  ordered paths. Keep, Use, and Reject actions introduce anchor or exclusion
-  constraints, after which the path is re-decoded from the retained evidence
-  snapshot.}
+  \includegraphics[width=\textwidth]{layer3.pdf}
+  \caption{The two interaction mechanisms in SHI: (a) pre-retrieval
+  hypothesis editing; (b) post-retrieval alignment correction and constrained
+  re-decoding.}
   \label{fig:layer3}
 \end{figure}
 
@@ -34,15 +19,14 @@ workflow.
 
 The Query Hypothesis represents the current semantic interpretation of a
 multi-event request before retrieval is executed. Given a narrative query, a
+% TODO: replace with the exact model checkpoint actually deployed, e.g. Qwen3.8-27B.
 large language model (Qwen3~\cite{qwen2025qwen3}) proposes an ordered sequence
 of events $(E_1,\dots,E_N)$. For the initial decomposition, each proposed event
 must correspond to a verbatim fragment of the original query; the server
 verifies these fragments against the source text and falls back to a single-event
 representation if the decomposition cannot be grounded. The resulting event
 sequence is shown explicitly to the operator together with its temporal order
-and any event-specific reference images. Rather than treating the decomposition
-as a fixed parser output, SHI keeps it as the active search hypothesis from which
-the downstream retrieval plan is constructed.
+and any event-specific reference images.
 
 The editor supports event-level structural operations including splitting and
 merging events, changing their order, editing or adding event descriptions, and
@@ -50,11 +34,8 @@ attaching or removing reference images. Operators can also provide conversationa
 feedback to prompt Qwen3 for targeted hypothesis revisions. Each proposed
 operation can first be previewed without modifying the active hypothesis, allowing the operator to
 compare the current and proposed event sequences before committing the change.
-A committed operation creates a new monotonically revisioned hypothesis and
-stores the previous state in a bounded session history, from which the latest
-change can be undone. Subsequent retrieval uses the committed revision, so
-structural edits directly change the event specifications supplied to the
-multimodal scoring and temporal-alignment pipeline.
+Committing an edit creates a new hypothesis revision, which subsequent
+retrieval uses; the previous revision can be restored through undo.
 
 \subsection{Post-retrieval EventTrail}
 \label{sec:event-trail}
@@ -78,10 +59,9 @@ C_e(f) = P_e(f) + Q_e(f) - S[v,e,f].
 \label{eq:conditioned-path-score}
 \end{equation}
 
-The subtraction removes the event--frame score $S[v,e,f]$, which is included
-in both the forward and backward terms. Thus, $C_e(f)$ evaluates an occurrence
-according to the best complete chronological path that contains it, rather
-than according to the frame score in isolation. Candidate frames are considered
+The subtraction removes $S[v,e,f]$, which is counted in both terms, so
+$C_e(f)$ evaluates an occurrence by the best complete chronological path that
+contains it rather than by its frame score in isolation. Candidate frames are considered
 in descending order of $C_e(f)$. To avoid presenting several alternatives from
 the same temporal neighborhood, SHI retains a candidate only if its timestamp
 is at least $\Delta_{\mathrm{alt}}$ away from every previously retained
@@ -92,30 +72,12 @@ representative is presented together with its complete decoded path, allowing
 the operator to inspect how choosing that occurrence affects the remaining
 events before committing a change.
 
-For each retained representative at timestamp $t_j$, EventTrail constructs a
-bounded occurrence interval $I_j$ around that representative. Ignoring
-clipping at the active video boundaries, its radius is
-
-\begin{equation}
-r_j =
-\min\left(
-r_{\max},
-\frac{1}{2}\min_{k \neq j}|t_j-t_k|
-\right),
-\label{eq:alternative-interval}
-\end{equation}
-
-where $r_{\max}=8$ seconds in the current implementation. If no competing
-representative exists, the implementation defines the empty minimum as
-$+\infty$, so that $r_j=r_{\max}$. Representatives are processed in
-chronological order (with their original order used as a stable tie-breaker);
-neighboring intervals are then split at their temporal midpoint so that they do
-not overlap, and the resulting interval is clipped to the active video
-boundaries. Alternative representatives are separated by
-$\Delta_{\mathrm{alt}}=5$ seconds during candidate generation, so equal
-timestamps are not normally returned as distinct alternatives. The interval
-therefore represents the temporal neighborhood associated with an alternative
-occurrence and defines the region affected by rejection.
+Each retained representative at timestamp $t_j$ is assigned a bounded
+occurrence interval $I_j$ with radius
+$r_j=\min(r_{\max},\tfrac{1}{2}\min_{k\neq j}|t_j-t_k|)$, where $r_{\max}=8$
+seconds and $r_j=r_{\max}$ when no other representative exists; intervals are
+clipped to the video boundaries, so $I_j$ defines the temporal neighborhood
+affected by rejection.
 
 The operator can apply three occurrence-level actions. Keep anchors the
 frame currently assigned to the focused event. Use anchors the
@@ -124,8 +86,11 @@ path under that anchor. Reject adds the corresponding interval $I_j$
 to the exclusion set of the focused event only. Occurrences of the remaining
 events are not directly excluded, although their selected frames may change
 when the complete path is re-decoded under the updated temporal constraints.
-All actions leave the underlying Evidence Snapshot unchanged, so
-re-decoding reuses the retained event--frame evidence without repeating query
-embedding or corpus-level retrieval. EventTrail also maintains a bounded
-history of constraint states, allowing the most recent committed action to be
-undone before further inspection or submission.
+A Keep or Use that admits no chronologically feasible path, such as an anchor
+that contradicts the order of an existing one, is refused and leaves the
+constraints unchanged. If rejections remove every feasible path, the trail is
+marked exhausted and the last valid path is retained; the most recent action
+can be undone. Submissions from EventTrail use the frame selected with Use.
+EventTrail can only correct alignments within videos in the snapshot; if the
+target video was not retrieved, the operator revises the Query Hypothesis
+instead.

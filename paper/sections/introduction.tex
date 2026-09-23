@@ -2,64 +2,59 @@
 \label{sec:introduction}
 
 The Video Browser Showdown (VBS) evaluates interactive video retrieval systems
-through live search tasks over large-scale video collections~\cite{vbs2027cfp}.
-Among these tasks, multi-event Known-Item Search (KIS) requires an operator to
-locate a video described by a sequence of temporally ordered events~\cite{vbs2027cfp}. Compared
-with single-event retrieval, this setting introduces two additional sources of
-uncertainty: the narrative must first be decomposed into suitable retrieval
-events, and the retrieved evidence must then be aligned to occurrences that
-satisfy the intended temporal order. Errors in either stage can affect candidate
-ranking and complicate subsequent inspection. However, these intermediate
-decisions are often handled internally by the retrieval pipeline, leaving
-operators to infer how a narrative was interpreted or why particular temporal
-occurrences were selected from the returned results~\cite{amato2024visione,lokoc2024prak,sharma2025exquisitor,heller2022temporalqueries,khan2026temporalqueries}.
+through live search tasks, among which multi-event Known-Item Search (KIS)
+requires an operator to locate a video described by a sequence of temporally
+ordered events~\cite{vbs2027cfp}. Compared with single-event retrieval, this
+setting introduces two additional sources of uncertainty: the narrative must
+first be decomposed into suitable retrieval events, and the retrieved evidence
+must then be aligned to occurrences that satisfy the intended temporal order.
+Errors in either stage can affect candidate ranking and complicate subsequent
+inspection.
 
 LLMs provide a convenient way to convert unstructured narratives into structured
 event sequences. Prior work on complex task understanding shows that LLMs can
-identify individual task steps effectively, while still exhibiting difficulty
-in predicting temporal dependencies between those steps~\cite{yuan2024tasklama}.
-This distinction is particularly relevant to multi-event video search, where an
-apparently plausible decomposition may still contain event boundaries or ordering
-assumptions that do not match the operator's intended search strategy. If such a
-decomposition is executed directly, its errors may propagate to multimodal
-scoring and temporal alignment. We therefore treat the LLM output as a search
-hypothesis rather than a fixed interpretation and expose it for inspection and
-editing before retrieval.
+identify individual task steps effectively, while still exhibiting difficulty in
+predicting temporal dependencies between those steps~\cite{yuan2024tasklama}. A
+plausible-looking decomposition may therefore still contain event boundaries or
+ordering assumptions that do not match the operator's intended search strategy,
+and executing it directly propagates these errors to multimodal scoring and
+temporal alignment. We therefore treat the LLM output as a search hypothesis
+rather than a fixed interpretation, and expose it for inspection and editing
+before retrieval.
 
 Interaction has repeatedly been identified as an important component of VBS
-search performance. A post-evaluation of VBS 2022 found that strong CLIP-based
-text retrieval benefits KIS, but needs to be complemented by effective browsing
-and additional query modalities for consistent
-performance~\cite{schall2024interactive}. More recent interaction logs from VBS
-2026 show a strong reliance on iterative, high-frequency text-query reformulation
-coupled with result-set inspection~\cite{jackl2026interaction}. Existing
-interactive video retrieval systems provide rich mechanisms for query
-formulation, browsing, and relevance feedback~\cite{amato2024visione,lokoc2024prak}; however, for multi-event search, the decoded temporal alignment
-of a candidate is typically not exposed as an object that the operator can
-directly inspect and modify. Consequently, when several events are matched
-correctly but one occurrence is temporally misaligned, the operator may need to
-reformulate the query or continue browsing despite already having useful
-retrieval evidence. This motivates interaction not only with the input query,
-but also with the temporal hypothesis produced for an individual candidate.
+search performance: a post-evaluation of VBS 2022 found that strong CLIP-based
+text retrieval must be complemented by browsing and additional query
+modalities~\cite{schall2024interactive}, and interaction logs from VBS 2026 show
+heavy reliance on iterative text-query reformulation coupled with result-set
+inspection~\cite{jackl2026interaction}. Existing systems provide rich mechanisms
+for query formulation, browsing, and relevance
+feedback~\cite{amato2024visione,lokoc2024prak}; for multi-event search, however,
+the decoded temporal alignment of a candidate is typically not exposed as an
+object that the operator can directly inspect and
+modify~\cite{amato2024visione,lokoc2024prak,sharma2025exquisitor,heller2022temporalqueries,khan2026temporalqueries}.
+When several events are matched correctly but one occurrence is temporally
+misaligned, the operator may therefore need to reformulate the query or continue
+browsing despite already having useful retrieval evidence.
 
 \begin{figure}[!t]
   \centering
-  \includegraphics[width=\textwidth]{001_system_ui.png}
-  \caption{Overview of the SHI user interface during a multi-event KIS task. The interface integrates candidate video paths with decoded event occurrences and DRES submission (left), the interactive Query Hypothesis editor with dynamic event segmentation and structural actions (right), and the metadata filter bar (top).}
+  \includegraphics[height=0.395\textwidth]{001a_query_hypothesis.png}\hfill
+  \includegraphics[height=0.395\textwidth]{001b_event_trail.png}
+  \caption{SHI during a multi-event KIS task. (a, left) Query Hypothesis editor
+  with grounded events and structural actions. (b, right) EventTrail (shown as
+  Hypothesis Explorer in the interface) with alternative occurrences,
+  Keep/Reject/Use actions, and the decoded event path.}
   \label{fig:system-ui}
 \end{figure}
 
-To address these two interaction points, we present SHI (Fig.~\ref{fig:system-ui}), an interactive
-multimodal video retrieval system for multi-event KIS with complementary
-pre-retrieval and post-retrieval mechanisms.
-Pre-retrieval Query Hypothesis exposes the LLM-generated event
-decomposition as an editable structured plan, allowing operators to inspect
-event boundaries, revise event descriptions, reorder events, and attach visual
-reference examples before search. Post-retrieval EventTrail exposes the
-decoded temporal alignment of a candidate video as an ordered event path,
-allowing operators to inspect alternative occurrences, anchor accepted matches,
-and exclude incorrect temporal regions. The resulting constraints are applied
-by re-decoding the alignment from retained retrieval evidence without repeating
-corpus-level retrieval. Together, these mechanisms make semantic decomposition
-before retrieval and temporal alignment after retrieval explicit parts of the
-interactive search process.
+To address these two interaction points, we present SHI
+(Fig.~\ref{fig:system-ui}), an interactive multimodal video retrieval system for
+multi-event KIS. SHI exposes the LLM-generated event decomposition as an editable
+structured plan before retrieval, and the decoded temporal alignment of a
+candidate video as an ordered event path after retrieval. Constraints derived
+from operator actions are applied by re-decoding the alignment from retained
+retrieval evidence, without repeating corpus-level retrieval.
+Section~\ref{sec:system} describes the retrieval pipeline, and
+Section~\ref{sec:interactive-hypothesis-correction} the two interaction
+mechanisms.
