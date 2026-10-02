@@ -1,2 +1,11 @@
 /build/
 /main.pdf
+*.synctex.gz
+*.bbl
+*.blg
+*.aux
+*.fls
+*.fdb_latexmk
+*.log
+*.out
+SHI_paper.pdf
