@@ -29,33 +29,18 @@ class QueryHypothesisService:
 
     def __init__(
         self,
-        store_or_resolver: Any = None,
-        resolver_or_store: Any = None,
+        store: QueryHypothesisStore,
+        resolver: Any,
         image_canonicalizer: Any = None,
         clock: Callable[[], float] = time.time,
-        *,
-        resolver: Any = None,
-        store: QueryHypothesisStore | None = None,
     ) -> None:
-        if resolver is not None:
-            self._resolver = resolver
-        elif isinstance(store_or_resolver, QueryHypothesisStore):
-            self._resolver = resolver_or_store
-        else:
-            self._resolver = store_or_resolver
-
-        if store is not None:
-            self._store = store
-        elif isinstance(store_or_resolver, QueryHypothesisStore):
-            self._store = store_or_resolver
-        else:
-            self._store = resolver_or_store
-
-        if self._store is None:
+        if store is None:
             raise ValueError("QueryHypothesisStore is required")
-        if self._resolver is None:
+        if resolver is None:
             raise ValueError("Intent resolver is required")
 
+        self._store = store
+        self._resolver = resolver
         self._image_canonicalizer = image_canonicalizer
         self._clock = clock
 

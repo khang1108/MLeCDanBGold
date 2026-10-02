@@ -8,6 +8,7 @@ on HTTP transport schemas.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
@@ -175,6 +176,14 @@ class KISTemporalEdge(BaseModel):
     target: EventId
 
 
+@dataclass(frozen=True, slots=True)
+class QueryTransition:
+    """Pairwise transition between two adjacent chronological query events."""
+
+    source: str
+    target: str
+
+
 class KISIntent(BaseModel):
     """Semantic graph representing a resolved KIS multi-clue search intent."""
 
@@ -238,6 +247,14 @@ class KISIntent(BaseModel):
 
         return self
 
+    @property
+    def transitions(self) -> tuple[QueryTransition, ...]:
+        """Return the adjacent sequential transitions (E1->E2, E2->E3, ...)."""
+        return tuple(
+            QueryTransition(source=f"E{i}", target=f"E{i+1}")
+            for i in range(1, len(self.events))
+        )
+
 
 __all__ = [
     "InitialEventText",
@@ -249,5 +266,8 @@ __all__ = [
     "KISInitialResolutionEvent",
     "KISIntent",
     "KISTemporalEdge",
+    "QueryTransition",
     "SourceProvenance",
 ]
+
+

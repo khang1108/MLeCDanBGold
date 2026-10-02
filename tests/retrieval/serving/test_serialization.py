@@ -60,6 +60,12 @@ def test_plan_serialization_roundtrip() -> None:
     assert len(restored.events[0].image_refs) == 1
     assert restored.events[0].image_refs[0].asset_id == "asset-1"
     assert restored.events[1].dense_text == "turn left"
+    assert plan.transition_count == 1
+    assert plan.transitions[0].source_id == "E1"
+    assert plan.transitions[0].target_id == "E2"
+    assert restored.transition_count == 1
+    assert restored.transitions[0].source_id == "E1"
+    assert restored.transitions[0].target_id == "E2"
 
 
 def test_video_scores_serialization_roundtrip() -> None:

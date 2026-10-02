@@ -4,10 +4,11 @@ Canonical, dense, literal text, and image exemplars retain the same server-owned
 event IDs.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from hcmai.kis.models import KISImageRef
+from hcmai.kis.models import KISImageRef, KISIntent
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,10 +35,21 @@ class KISRetrievalEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class RetrievalTransition:
+    """Pairwise transition between two adjacent planned retrieval events."""
+
+    source_id: str
+    target_id: str
+    previous_event: KISRetrievalEvent
+    next_event: KISRetrievalEvent
+
+
+@dataclass(frozen=True, slots=True)
 class KISRetrievalPlan:
-    """Preserve one immutable row per event in exactly E1..En order."""
+    """Preserve one immutable row per event in exactly E1..En order and adjacent transitions."""
 
     events: tuple[KISRetrievalEvent, ...]
+    transitions: tuple[RetrievalTransition, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject empty, mutable, or misaligned event collections."""
@@ -48,10 +60,27 @@ class KISRetrievalPlan:
         if self.event_ids != tuple(f"E{i}" for i in range(1, len(self.events) + 1)):
             raise ValueError("event IDs must be sequential E1..En")
 
+        if not self.transitions and len(self.events) > 1:
+            derived = tuple(
+                RetrievalTransition(
+                    source_id=self.events[i].event_id,
+                    target_id=self.events[i + 1].event_id,
+                    previous_event=self.events[i],
+                    next_event=self.events[i + 1],
+                )
+                for i in range(len(self.events) - 1)
+            )
+            object.__setattr__(self, "transitions", derived)
+
     @property
     def event_count(self) -> int:
         """Return the number of planned events."""
         return len(self.events)
+
+    @property
+    def transition_count(self) -> int:
+        """Return the number of planned transitions."""
+        return len(self.transitions)
 
     @property
     def event_ids(self) -> tuple[str, ...]:
@@ -110,10 +139,10 @@ class KISRetrievalPlan:
 
 
 def build_retrieval_plan(
-    intent: Any,
-    overrides: dict[str, Any] | None = None,
+    intent: KISIntent,
+    overrides: Mapping[str, Any] | None = None,
     *,
-    dense_text_by_event: dict[str, str] | None = None,
+    dense_text_by_event: Mapping[str, str] | None = None,
     use_dense: bool = True,
     use_bm25: bool = True,
 ) -> KISRetrievalPlan:
@@ -121,21 +150,21 @@ def build_retrieval_plan(
 
     Canonical text always originates from the intent event. Dense and BM25 views
     incorporate overrides when provided, and dense_text_by_event supplies translation
-    projection when no event-level dense override is present.
+    projection when no event-level dense override is present. Transitions between
+    adjacent events are automatically preserved.
     """
     rows: list[KISRetrievalEvent] = []
     for event in intent.events:
-        override = (overrides or {}).get(event.id)
-        override_dense = (
-            getattr(override, "dense_text", None)
-            if override is not None and not isinstance(override, dict)
-            else (override or {}).get("dense_text") if isinstance(override, dict) else None
-        )
-        override_bm25 = (
-            getattr(override, "bm25_text", None)
-            if override is not None and not isinstance(override, dict)
-            else (override or {}).get("bm25_text") if isinstance(override, dict) else None
-        )
+        override = overrides.get(event.id) if overrides is not None else None
+        override_dense: str | None = None
+        override_bm25: str | None = None
+        if override is not None:
+            if isinstance(override, dict):
+                override_dense = override.get("dense_text")
+                override_bm25 = override.get("bm25_text")
+            else:
+                override_dense = getattr(override, "dense_text", None)
+                override_bm25 = getattr(override, "bm25_text", None)
 
         dense_text: str | None = None
         if use_dense:
@@ -160,3 +189,4 @@ def build_retrieval_plan(
             )
         )
     return KISRetrievalPlan(events=tuple(rows))
+
