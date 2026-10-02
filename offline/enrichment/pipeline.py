@@ -13,8 +13,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from hcmai.common.utils.io import read_yaml_section
+from offline.enrichment.caption.adapters.vllm import VLLMCaptionAdapter
 from offline.enrichment.caption.config import CaptionConfig, PROJECT_ROOT
-from offline.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
 from offline.enrichment.caption.generator import generate_captions
 from offline.enrichment.caption.models.contracts import CaptionAdapter
 from offline.enrichment.context.config import FrameContextConfig
@@ -278,9 +278,9 @@ class EnrichmentService:
 
     @staticmethod
     def create_caption_adapter(config: CaptionConfig) -> CaptionAdapter:
-        """Create the configured local caption adapter."""
+        """Create the configured caption adapter (vLLM serving)."""
 
-        return QwenVLCaptionAdapter(config)
+        return VLLMCaptionAdapter(config)
 
     @staticmethod
     def create_ocr_adapter(config: OCRConfig) -> OCRAdapter:

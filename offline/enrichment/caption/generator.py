@@ -19,8 +19,8 @@ from typing import Any, Sequence
 
 from hcmai.common.config import AppConfig
 from hcmai.common.utils.io import read_json
-from llm.pipeline import LLMService
 from offline.artifact_readers import FrameArtifactReader
+from offline.enrichment.caption.adapters.vllm import VLLMCaptionAdapter
 from offline.enrichment.caption.adapters.qwen_vl import QwenVLCaptionAdapter
 from offline.enrichment.caption.artifacts import write_caption_artifacts
 from offline.enrichment.caption.config import (
@@ -59,7 +59,7 @@ def generate_captions(
         raise ValueError("input frames contain duplicate frame_id values")
 
     output = Path(output_dir)
-    captioner = captioner or QwenVLCaptionAdapter(config)
+    captioner = captioner or VLLMCaptionAdapter(config)
     output.mkdir(parents=True, exist_ok=True)
 
     manifest_path = output / "manifest.json"
@@ -136,9 +136,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output")
     parser.add_argument(
         "--execution-backend",
-        choices=("local", "remote"),
-        default="remote",
-        help="Run captioning in-process ('local') or via the inference gateway ('remote').",
+        choices=("vllm", "local", "remote"),
+        default="vllm",
+        help="Run captioning via standalone vLLM serving ('vllm', default), in-process ('local'), or legacy gateway ('remote').",
+    )
+    parser.add_argument(
+        "--vllm-url",
+        default=None,
+        help="Custom base URL for vLLM VLM serving (defaults to HCMAI_VLM_CAPTION_URL or http://localhost:8001/v1).",
     )
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--image-workers", type=int, default=1)
@@ -160,9 +165,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         else job.caption
     )
 
+    if args.execution_backend == "vllm":
+        captioner: CaptionAdapter = VLLMCaptionAdapter(caption_config, base_url=args.vllm_url)
+        manifest = generate_captions(
+            args.frames or job.frames_path,
+            args.output or job.output_dir,
+            caption_config,
+            captioner,
+            dataset_root=args.data_root or job.dataset_root,
+            frame_store_id=job.frame_store_id,
+            image_workers=args.image_workers,
+        )
+        keys = "completed_count", "failed_count", "skipped_count", "retried_count"
+        print({key: manifest[key] for key in keys})
+        return 0
+
     if args.execution_backend == "local":
         # Local runs never start a remote gateway process or connection.
-        captioner: CaptionAdapter = QwenVLCaptionAdapter(caption_config)
+        captioner = QwenVLCaptionAdapter(caption_config)
         manifest = generate_captions(
             args.frames or job.frames_path,
             args.output or job.output_dir,
@@ -179,6 +199,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     app_path = Path(args.app_config)
     settings = AppConfig.from_yaml(app_path) if app_path.is_file() else AppConfig()
 
+    from llm.pipeline import LLMService
     from offline.enrichment.caption.adapters.remote import RemoteCaptionAdapter
 
     base_url = resolve_gpu_url(args.config, settings.inference.base_url)
