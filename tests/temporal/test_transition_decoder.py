@@ -152,3 +152,108 @@ def test_transition_edge_matrix_dataclass_support():
     assert decoded[0].frame_idx == (0, 1, 2)
     # Score: (0.8 + 0.8 + 0.8) + (0.5 + 0.5) = 3.4
     assert np.isclose(decoded[0].score, 3.4)
+
+
+def test_transition_matrix_validation_rejects_nan_and_inf():
+    """Verify that non-finite values (NaN, Inf) in transition matrices are rejected."""
+    scores = np.array([
+        [0.8, 0.2],
+        [0.2, 0.8],
+    ], dtype=np.float64)
+    video = make_sample_video_scores(scores)
+
+    nan_mat = np.array([[0.0, np.nan], [0.0, 0.0]])
+    with pytest.raises(ValueError, match="non-finite"):
+        decode_transition_graph(video, transitions=[nan_mat])
+
+    inf_mat = np.array([[0.0, np.inf], [0.0, 0.0]])
+    with pytest.raises(ValueError, match="non-finite"):
+        decode_transition_graph(video, transitions=[inf_mat])
+
+
+def test_transition_matrix_validation_rejects_shape_mismatch():
+    """Verify that mismatched transition matrix dimensions are rejected."""
+    scores = np.array([
+        [0.8, 0.2, 0.1],
+        [0.2, 0.8, 0.1],
+    ], dtype=np.float64)
+    video = make_sample_video_scores(scores)
+
+    # Video has 3 frames, but matrix is 2x2
+    wrong_shape = np.ones((2, 2))
+    with pytest.raises(ValueError, match="shape"):
+        decode_transition_graph(video, transitions=[wrong_shape])
+
+
+def test_candidate_lattice_decoding():
+    """Verify candidate lattice decoding with candidate_k parameter."""
+    from hcmai.temporal.transition_decoder import decode_candidate_lattice
+
+    # 3 events, 8 frames
+    np.random.seed(123)
+    scores = np.random.uniform(0.1, 0.5, size=(3, 8))
+    # Plant a clear ground truth path at (1, 4, 7)
+    scores[0, 1] = 0.95
+    scores[1, 4] = 0.95
+    scores[2, 7] = 0.95
+
+    video = make_sample_video_scores(scores)
+
+    # Full decode vs candidate lattice decode with K=4
+    edge1 = np.zeros((8, 8))
+    edge1[1, 4] = 0.5
+    edge2 = np.zeros((8, 8))
+    edge2[4, 7] = 0.5
+
+    full_paths = decode_transition_graph(
+        video,
+        transitions=[edge1, edge2],
+        lambda_gap=0.0,
+        paths=1,
+    )
+    lattice_paths = decode_candidate_lattice(
+        video,
+        candidate_k=4,
+        transitions=[edge1, edge2],
+        lambda_gap=0.0,
+        paths=1,
+    )
+
+    assert len(full_paths) == 1
+    assert len(lattice_paths) == 1
+    assert full_paths[0].frame_idx == (1, 4, 7)
+    assert lattice_paths[0].frame_idx == (1, 4, 7)
+    assert np.isclose(lattice_paths[0].score, full_paths[0].score)
+
+
+def test_motion_cosine_transition_scorer():
+    """Verify MotionCosineTransitionScorer computation and horizon attenuation."""
+    from hcmai.temporal.transition_decoder import MotionCosineTransitionScorer
+
+    scorer = MotionCosineTransitionScorer(temporal_horizon_ms=10000.0)
+
+    # 2 source frames, 2 target frames
+    # Frame 0 and 1 have identical features -> cos sim = 1.0
+    f0 = np.array([1.0, 0.0])
+    f1 = np.array([1.0, 0.0])
+    f2 = np.array([0.0, 1.0])  # orthogonal -> cos sim = 0.0
+
+    sources = np.stack([f0, f2])  # 2 frames
+    targets = np.stack([f1, f2])  # 2 frames
+    src_times = np.array([1000, 2000])
+    tgt_times = np.array([3000, 15000])  # tgt 1 (15000) exceeds horizon 10000 from src 0 (1000)
+
+    psi = scorer.compute_transition_matrix(
+        source_features=sources,
+        target_features=targets,
+        source_timestamps_ms=src_times,
+        target_timestamps_ms=tgt_times,
+    )
+
+    assert psi.shape == (2, 2)
+    assert np.all(np.isfinite(psi))
+    # (src 0, tgt 0): f0 . f1 = 1.0, dt = 2000 <= 10000 -> positive affinity
+    assert psi[0, 0] > 0.9
+    # (src 0, tgt 1): dt = 14000 > 10000 horizon -> 0.0 or penalized
+    assert psi[0, 1] == 0.0
+

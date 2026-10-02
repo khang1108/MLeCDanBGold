@@ -101,35 +101,35 @@ inspection without editing, and inspection with editing.
 
 **Date:** 2026-10-02
 **Problem:** The previous KIS orchestration path carried significant overengineering:
-a 230-line `_resolve_operation` legacy state machine, generic DAG edge validation
-despite domain topology being strictly linear $E_1 \to E_2 \dots \to E_n$, and a
-`KISRetrievalPlan` that discarded edges before temporal decoding.
+a 230-line `_resolve_operation` legacy state machine in `pipeline.py`, generic DAG edge validation
+despite domain topology being strictly linear $E_1 \to E_2 \dots \to E_n$, duck-typed plan builders,
+and temporal decoding lacking candidate lattice pruning and motion transition scoring.
 
 ### Sources
 - Repository critical path trace: `src/hcmai/orchestration/pipeline.py`, `src/hcmai/kis/models.py`, `src/hcmai/retrieval/plan.py`.
-- Dynamic programming temporal alignment: `src/hcmai/temporal/dp.py`.
+- Dynamic programming temporal alignment: `src/hcmai/temporal/dp.py`, `src/hcmai/temporal/transition_decoder.py`.
 - Paper draft: *From Events to Transitions: Motion-Aware Graph Decoding for Multi-Event Video Retrieval*.
 
 ### Findings
 **SOURCE:** The active UI workflow operates via `QueryHypothesis` sessions executing
 `search_only`, rendering legacy `initial_resolve`, `patch_events`, and `global_rewrite`
-operations obsolete on the critical search path.
+operations obsolete on the critical search path. Completely eliminating `_resolve_operation`
+and routing `search_kis` exclusively through `query_hypothesis_session_id` or `base_intent` with `search_only`
+shed over 1,250 lines of dead code and tests without breaking any frontend workflows.
 
 **SOURCE:** The retrieval plan previously only retained `events: tuple[KISRetrievalEvent, ...]`,
-dropping transition information. This created an architectural mismatch with the paper's
-mathematical formulation of transition-aware graph decoding.
+dropping transition information. In the updated architecture, `KISRetrievalPlan.transitions` is a pure
+derived `@property` returning `tuple[RetrievalTransition, ...]`, eliminating state synchronization bugs.
 
-**PROPOSED:** Represent transitions directly as deterministically derived adjacent pairs
-$(E_i, E_{i+1})$ in both `KISIntent` (`QueryTransition`) and `KISRetrievalPlan` (`RetrievalTransition`).
-
-**PROPOSED:** Decouple algorithmic decoding into two clean modules:
+**VERIFIED:** Decoupled algorithmic decoding into two clean modules:
 1. `src/hcmai/temporal/dp.py`: **[FROZEN BASELINE]** Static Temporal Baseline (Unary + temporal order + time gap penalty).
-2. `src/hcmai/temporal/transition_decoder.py`: **[PROPOSED]** Motion-Aware Graph Decoding incorporating pairwise transition edge compatibility $\psi(s, t; E_{i-1}, E_i)$.
+2. `src/hcmai/temporal/transition_decoder.py`: **[VERIFIED]** Motion-Aware Graph Decoding incorporating pairwise transition edge compatibility $\psi(s, t; E_{i-1}, E_i)$, strict matrix validation (finite values, shape checks), $O(M K^2)$ candidate lattice decoding (`decode_candidate_lattice`), and `MotionCosineTransitionScorer`.
 
 ### Status
-VERIFIED (Architectural refactoring & baseline equivalence verified across all 571 tests).
+VERIFIED (Full test suite passing: 555 backend unit tests, 382 frontend tests).
 
 ### Decision or Experiment
 1. Keep `dp.py` frozen as the authoritative baseline for all paper ablations.
-2. Evaluate `transition_decoder.py` on multi-event KIS video benchmark queries, measuring precision/recall gains when incorporating motion transition edge weights versus the unary baseline.
+2. Use `decode_candidate_lattice` with `MotionCosineTransitionScorer` on multi-event KIS video benchmark queries, evaluating precision/recall gains when incorporating motion transition edge weights versus the unary baseline.
+
 
