@@ -4,4 +4,6 @@ The local caption backend is Qwen VL; OCR remains owned by the separate
 Florence adapter under the OCR package.
 """
 
-__all__: list[str] = []
+from offline.enrichment.caption.adapters.vllm import VLLMCaptionAdapter
+
+__all__ = ["VLLMCaptionAdapter"]
