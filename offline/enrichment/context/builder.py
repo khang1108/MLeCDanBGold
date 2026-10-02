@@ -29,7 +29,7 @@ from offline.enrichment.context.models import FrameContext
 from offline.enrichment.models import ProcessingStatus
 from offline.enrichment.objects.models import ObjectDetection, ObjectEvidence
 from offline.enrichment.ocr.models import OCREvidence
-from offline.ingestion.models import FrameArtifact
+from offline.corpus.models import FrameArtifact
 
 from .config import FrameContextConfig
 from .serializer import serialize_frame_context

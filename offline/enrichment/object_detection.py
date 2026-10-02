@@ -23,7 +23,7 @@ from tqdm.auto import tqdm
 from offline.artifact_readers import FrameAssetError, OfflineFrameAssetResolver
 from offline.enrichment.models import ProcessingStatus
 from offline.enrichment.objects.models import ObjectDetection, ObjectEvidence
-from offline.ingestion.models import FrameArtifact
+from offline.corpus.models import FrameArtifact
 
 logger = logging.getLogger(__name__)
 

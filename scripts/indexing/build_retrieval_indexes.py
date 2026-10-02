@@ -435,11 +435,7 @@ def load_model_config(path: str | Path) -> Any:
 
 def _load_s3_transport(config_path: str | Path) -> tuple[Any, str]:
     """Create an S3 client from the preparation config's storage section."""
-
-    from offline.ingestion.s3 import create_s3_client, load_s3_config
-
-    storage = load_s3_config(config_path)
-    return create_s3_client(storage), storage.bucket
+    raise NotImplementedError("S3 cloud synchronization is deprecated. Datasets are loaded locally.")
 
 
 def _download_s3_inputs(
@@ -448,62 +444,8 @@ def _download_s3_inputs(
     config: OfflineIndexConfig,
     args: argparse.Namespace,
 ) -> None:
-    """Stage only the inputs required by the fast-track index builder.
-
-    Raw videos and unrelated enrichment/index directories are intentionally
-    excluded.  Each prefix is resumable and writes atomically, which permits a
-    stopped ThunderCompute job to be restarted without deleting its cache.
-    """
-
-    from offline.ingestion.s3 import download_prefix
-
-    inputs = (
-        (
-            "BTC keyframes",
-            args.s3_keyframes_prefix,
-            config.dataset.keyframes_root,
-        ),
-        (
-            "BTC map_keyframes",
-            args.s3_map_keyframes_prefix,
-            config.dataset.map_keyframes_root,
-        ),
-        (
-            "canonical FrameStore",
-            args.s3_frame_store_prefix,
-            config.dataset.frame_store_output,
-        ),
-        (
-            "FrameContext",
-            args.s3_context_prefix,
-            config.dataset.context_path.parent,
-        ),
-        (
-            "timestamped transcripts",
-            args.s3_transcripts_prefix,
-            config.dataset.transcripts_path,
-        ),
-    )
-    for label, prefix, destination in inputs:
-        if destination is None or prefix is None:
-            continue
-        stats = download_prefix(
-            client,
-            bucket,
-            prefix,
-            destination,
-            workers=args.s3_sync_workers,
-            dry_run=args.s3_dry_run,
-        )
-        LOGGER.info(
-            "S3 input ready label=%s prefix=%s destination=%s files=%d downloaded=%d skipped=%d",
-            label,
-            stats.prefix,
-            Path(destination).expanduser().resolve(),
-            stats.files,
-            stats.downloaded,
-            stats.skipped,
-        )
+    """Stage only the inputs required by the fast-track index builder."""
+    raise NotImplementedError("S3 cloud synchronization is deprecated. Datasets are loaded locally.")
 
 
 def _publish_s3_bundle(
@@ -513,23 +455,7 @@ def _publish_s3_bundle(
     args: argparse.Namespace,
 ) -> None:
     """Publish a passed local bundle and advance its S3 latest pointer."""
-
-    from offline.ingestion.s3 import publish_retrieval_bundle
-
-    publication = publish_retrieval_bundle(
-        client,
-        bucket,
-        config.output_root,
-        args.s3_output_prefix,
-        workers=args.s3_upload_workers,
-    )
-    LOGGER.info(
-        "S3 retrieval bundle ready: s3://%s/%s (latest=s3://%s/%s)",
-        publication.bucket,
-        publication.version_prefix,
-        publication.bucket,
-        publication.latest_key,
-    )
+    raise NotImplementedError("S3 cloud synchronization is deprecated. Datasets are loaded locally.")
 
 
 def _close_s3_transport(client: Any | None) -> None:
@@ -705,7 +631,7 @@ def project_staged_keyframes(
     configured root such as ``data/keyframes`` from being prepended twice.
     """
 
-    from offline.ingestion.keyframe_map import project_keyframe_paths
+    from offline.corpus.keyframe_map import project_keyframe_paths
 
     root = Path(keyframes_root).expanduser().resolve()
     projected = project_keyframe_paths(frames, root)
@@ -781,7 +707,7 @@ def _apply_btc_mapping_authority(
     downloaded source artifact remains untouched and the mismatch is logged.
     """
 
-    from offline.ingestion.keyframe_map import join_btc_mapping
+    from offline.corpus.keyframe_map import join_btc_mapping
 
     mapped = join_btc_mapping(frames, mapping)
     comparison = frames[
@@ -818,7 +744,7 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     """Validate canonical identity, mapping, Context lineage, and transcripts."""
 
     from hcmai.common.utils.io import read_json
-    from offline.ingestion.keyframe_map import (
+    from offline.corpus.keyframe_map import (
         load_btc_keyframe_map,
     )
     from hcmai.corpus.stores import FrameContextStore
@@ -988,7 +914,7 @@ def run_visual_preflight(config: OfflineIndexConfig) -> Path:
     """
 
     from hcmai.common.utils.io import atomic_write, read_json, write_parquet
-    from offline.ingestion.keyframe_map import load_btc_keyframe_map
+    from offline.corpus.keyframe_map import load_btc_keyframe_map
 
     dataset = config.dataset
     frames_path = _require_file(dataset.frames_path, "Canonical frames")

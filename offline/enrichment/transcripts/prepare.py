@@ -37,7 +37,7 @@ from offline.enrichment.transcripts.publication import publish_staged, staging_p
 from offline.enrichment.transcripts.artifacts import (
     load_transcript_artifact_records,
 )
-from offline.ingestion.s3 import VIDEO_EXTENSIONS
+VIDEO_EXTENSIONS = frozenset({".mp4", ".mkv", ".webm", ".avi", ".mov"})
 from tqdm import tqdm
 
 TRANSCRIPT_DTYPES = {
