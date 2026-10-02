@@ -1,9 +1,20 @@
 """Pure monotonic dynamic programming for ordered event-to-frame alignment.
 
+[FROZEN BASELINE] This module serves as the authoritative, frozen Static Temporal Baseline
+for experimental ablation in the paper:
+'From Events to Transitions: Motion-Aware Graph Decoding for Multi-Event Video Retrieval'.
+
+It evaluates:
+    DP_i(t) = U_i(t) + max_{s < t} [ DP_{i-1}(s) - lambda * (t - s) ]
+
+For the proposed Motion-Aware Graph Decoding incorporating pairwise transition
+edge compatibility psi(s, t; E_{i-1}, E_i), see `hcmai.temporal.transition_decoder`.
+
 This module owns only numerical path decoding and per-video path ranking. It
 does not retrieve score matrices, resolve canonical frames, or format KIS and
 TRAKE responses; those responsibilities remain at higher boundaries.
 """
+
 
 from __future__ import annotations
 
