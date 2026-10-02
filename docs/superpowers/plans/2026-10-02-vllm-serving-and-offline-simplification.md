@@ -33,7 +33,7 @@
   - `resolve_revision() -> str`
   - `caption_batch(images: Sequence[Any]) -> list[str]`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/offline/test_vllm_caption_adapter.py`:
 
@@ -121,12 +121,12 @@ def test_REQ_003_caption_batch_openai_request() -> None:
         assert any(item.get("type") == "image_url" for item in content_items)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `aic/bin/pytest tests/offline/test_vllm_caption_adapter.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'offline.enrichment.caption.adapters.vllm'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `offline/enrichment/caption/adapters/vllm.py`:
 
@@ -264,12 +264,12 @@ class VLLMCaptionAdapter:
             return list(executor.map(self._caption_single_image, images))
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `aic/bin/pytest tests/offline/test_vllm_caption_adapter.py -v`
 Expected: PASS (all 3 tests pass)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add offline/enrichment/caption/adapters/vllm.py tests/offline/test_vllm_caption_adapter.py
@@ -289,7 +289,7 @@ git commit -m "feat(offline): add VLLMCaptionAdapter for standalone vLLM serving
 - Consumes: `VLLMCaptionAdapter` from Task 1.
 - Produces: `generate_captions` supporting default vLLM execution backend while preserving exact artifact outputs.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/offline/test_vllm_caption_generator.py`:
 
@@ -359,24 +359,24 @@ def test_REQ_004_generate_captions_with_vllm_adapter(tmp_path: Path) -> None:
     assert table.column("frame_idx")[0].as_py() == 1
 ```
 
-- [ ] **Step 2: Run test to verify it passes/fails**
+- [x] **Step 2: Run test to verify it passes/fails**
 
 Run: `aic/bin/pytest tests/offline/test_vllm_caption_generator.py -v`
 (Verify behavior and make sure dependencies import cleanly)
 
-- [ ] **Step 3: Update `offline/enrichment/caption/generator.py`**
+- [x] **Step 3: Update `offline/enrichment/caption/generator.py`**
 
 In `offline/enrichment/caption/generator.py`:
 - Import `VLLMCaptionAdapter` lazily or alongside `QwenVLCaptionAdapter`.
 - Set default fallback captioner to `VLLMCaptionAdapter(config)` if `captioner is None` and `execution_backend == "vllm"`.
 - Support `--execution-backend vllm` in CLI parser and set default or recommended option.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `aic/bin/pytest tests/offline/test_vllm_caption_generator.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add offline/enrichment/caption/generator.py tests/offline/test_vllm_caption_generator.py
@@ -394,21 +394,21 @@ git commit -m "feat(offline): integrate VLLMCaptionAdapter into caption generato
 - Consumes: Nothing; competition keyframes are canonically provided by BTC.
 - Produces: Cleaned `offline/keyframes/` with only python modules.
 
-- [ ] **Step 1: Check git status and verify no imports depend on keyframes_extraction**
+- [x] **Step 1: Check git status and verify no imports depend on keyframes_extraction**
 
 Run: `git grep "keyframes_extraction"`
 Expected: No active Python imports outside the deleted folder.
 
-- [ ] **Step 2: Remove directory tree**
+- [x] **Step 2: Remove directory tree**
 
 Run: `rm -rf offline/keyframes/keyframes_extraction`
 
-- [ ] **Step 3: Run existing offline tests to verify zero regressions**
+- [x] **Step 3: Run existing offline tests to verify zero regressions**
 
 Run: `aic/bin/pytest tests/offline/ -q`
 Expected: All tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -u offline/keyframes/
@@ -428,21 +428,21 @@ git commit -m "chore(offline): remove obsolete C++ keyframes_extraction cmake pr
 - Consumes: Standardized `hcmai.inference.LLMClient` via HTTP.
 - Produces: Pruned `llm/local/` without dead HuggingFace text generation loading code.
 
-- [ ] **Step 1: Write test verifying text generation is not loaded locally**
+- [x] **Step 1: Write test verifying text generation is not loaded locally**
 
 Update `tests/llm/test_legacy_inference_removal.py` to assert that `LocalAdapter` no longer contains or loads `text_generator`.
 
-- [ ] **Step 2: Remove `llm/local/text_generation.py` and references in `llm/local/adapter.py`**
+- [x] **Step 2: Remove `llm/local/text_generation.py` and references in `llm/local/adapter.py`**
 
 Delete `llm/local/text_generation.py`.
 In `llm/local/adapter.py`, remove the `enable_text_generation` branch that imports `TextGenerationAdapter`.
 
-- [ ] **Step 3: Run LLM tests**
+- [x] **Step 3: Run LLM tests**
 
 Run: `aic/bin/pytest tests/llm/ -q`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git rm llm/local/text_generation.py
@@ -459,21 +459,21 @@ git commit -m "chore(llm): prune in-process HuggingFace text generation loader"
 - Run: Full test suite (`aic/bin/pytest tests/ -q`)
 - Run: Frontend test suite (`npm test --prefix frontend`)
 
-- [ ] **Step 1: Run full backend test suite**
+- [x] **Step 1: Run full backend test suite**
 
 Run: `aic/bin/pytest tests/ -q`
 Expected: 100% PASS (~560 passed).
 
-- [ ] **Step 2: Run frontend test suite**
+- [x] **Step 2: Run frontend test suite**
 
 Run: `npm test --prefix frontend`
 Expected: 100% PASS.
 
-- [ ] **Step 3: Update `KNOWLEDGE.md`**
+- [x] **Step 3: Update `KNOWLEDGE.md`**
 
 Add an entry documenting the standalone vLLM serving architecture, dual ports (:8000 for Text LLM, :8001 for VLM), continuous batching benefits, and offline directory cleanup.
 
-- [ ] **Step 4: Commit and tag/status update**
+- [x] **Step 4: Commit and tag/status update**
 
 ```bash
 git add KNOWLEDGE.md

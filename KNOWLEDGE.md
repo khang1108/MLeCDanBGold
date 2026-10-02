@@ -132,4 +132,33 @@ VERIFIED (Full test suite passing: 555 backend unit tests, 382 frontend tests).
 1. Keep `dp.py` frozen as the authoritative baseline for all paper ablations.
 2. Use `decode_candidate_lattice` with `MotionCosineTransitionScorer` on multi-event KIS video benchmark queries, evaluating precision/recall gains when incorporating motion transition edge weights versus the unary baseline.
 
+---
+
+## Standalone vLLM Serving & Offline Simplification
+
+**Date:** 2026-10-02
+**Problem:** In-process HuggingFace model loading (`transformers.AutoProcessor`, `Qwen3VLForConditionalGeneration`, and local `text_generation.py`) was slow, memory-intensive, and prone to GPU CUDA OOM during large enrichment batches. Furthermore, the `offline/` directory contained an obsolete 18-file C++ CMake keyframe extraction project that was never used in competition mode (where BTC provides canonical keyframes).
+
+### Sources
+- Standalone vLLM Serving: OpenAI-compatible `/v1/chat/completions` protocol with PagedAttention and continuous batching.
+- Spec: `docs/superpowers/specs/2026-10-02-vllm-serving-and-offline-simplification-design.md`.
+- Plan: `docs/superpowers/plans/2026-10-02-vllm-serving-and-offline-simplification.md`.
+- Implementation: `offline/enrichment/caption/adapters/vllm.py`, `offline/enrichment/caption/generator.py`.
+
+### Findings
+**SOURCE:** The online query hypothesis and intent resolution engine (`src/hcmai/inference/clients/llm.py`) already speaks the OpenAI-compatible `/v1/chat/completions` protocol with structured outputs (`json_schema`). Pointing `HCMAI_LLM_BASE_URL` to a standalone vLLM server instance (e.g., `Qwen/Qwen2.5-7B-Instruct` on port 8000) achieves continuous batching with zero changes to caller code.
+
+**VERIFIED:** Implemented `VLLMCaptionAdapter` (`offline/enrichment/caption/adapters/vllm.py`) conforming to `CaptionAdapter`. It converts video keyframes to base64 JPEG buffers and concurrently queries the standalone vLLM vision server (e.g., `Qwen/Qwen2.5-VL-7B-Instruct` on port 8001). This eliminates 15GB+ in-process PyTorch model allocations, leverages vLLM's continuous batching, and preserves 100% downstream artifact compatibility (`captions.parquet` and `manifest.json` with canonical identity `video_id`, `frame_idx`, and timestamp metadata).
+
+**SOURCE:** Pruned 34 obsolete C++ CMake files (over 9,500 lines) from `offline/keyframes/keyframes_extraction/`. Pruned dead in-process HuggingFace causal LM loader `llm/local/text_generation.py`.
+
+### Status
+VERIFIED (Full test suite passing: 564 backend unit tests, 382 frontend tests).
+
+### Decision or Experiment
+1. Standardize on dual standalone vLLM server instances:
+   - Text LLM (Port 8000): Intent decomposition, scoped query patching, hypothesis ranking.
+   - VLM Captioner (Port 8001): Continuous batch keyframe caption enrichment.
+2. Default `--execution-backend` in `offline/enrichment/caption/generator.py` set to `vllm`.
+
 
