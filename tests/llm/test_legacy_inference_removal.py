@@ -60,3 +60,9 @@ class LegacyInferenceRemovalTest(unittest.TestCase):
         self.assertFalse(readiness.ready)
         self.assertFalse(readiness.capabilities.embedding)
         self.assertNotIn("query_preparation", readiness.capabilities.model_dump())
+
+    def test_local_text_generation_module_is_removed(self) -> None:
+        """Prevent local in-process HuggingFace text generation loader from returning."""
+        import importlib.util
+        spec = importlib.util.find_spec("llm.local.text_generation")
+        self.assertIsNone(spec)

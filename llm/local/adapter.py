@@ -90,14 +90,7 @@ class LocalAdapter:
             if enable_ocr
             else None
         )
-        if text_generator is not None:
-            self.text_generator = text_generator
-        elif enable_text_generation:
-            from llm.local.text_generation import TextGenerationAdapter
-
-            self.text_generator = TextGenerationAdapter(config.text_generation)
-        else:
-            self.text_generator = None
+        self.text_generator = text_generator
 
     @classmethod
     def from_environment(cls) -> LocalAdapter:
