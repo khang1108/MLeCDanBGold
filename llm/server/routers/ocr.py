@@ -3,7 +3,7 @@ from __future__ import annotations
 from time import perf_counter
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from llm.contracts import OCRItem, OCRRegionItem, OCRResponse
-from offline.enrichment.ocr.models.entities import json_safe_ocr_raw
+from offline.enrichment.ocr.models import json_safe_ocr_raw
 from llm.server.dependencies import loaded_model_status, runtime_from, unavailable
 from llm.server.parsing import decode_images
 

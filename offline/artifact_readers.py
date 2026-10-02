@@ -19,18 +19,20 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
 from hcmai.common.utils.io import read_json
-from offline.enrichment.caption.models.evidence import (
+from offline.enrichment.caption.models import (
     CaptionEvidence,
     usable_completed_text as usable_caption_text,
 )
 from offline.enrichment.context.models import FrameContext
 from offline.enrichment.models import FrameEnrichment, ProcessingStatus
-from offline.enrichment.ocr.models.evidence import (
+from offline.enrichment.ocr.models import (
     OCREvidence,
     usable_completed_text as usable_ocr_text,
 )
-from offline.enrichment.transcripts.artifacts import load_transcript_artifact_records
-from offline.enrichment.transcripts.models import TranscriptSegment
+from offline.enrichment.transcripts.models import (
+    TranscriptSegment,
+    load_transcript_artifact_records,
+)
 
 
 @dataclass(frozen=True, slots=True)

@@ -20,9 +20,12 @@ from typing import Any
 
 from tqdm.auto import tqdm
 
-from offline.artifact_readers import FrameAssetError, OfflineFrameAssetResolver
 from offline.enrichment.models import ProcessingStatus
-from offline.enrichment.objects.models import ObjectDetection, ObjectEvidence
+from offline.enrichment.objects.models import (
+    ObjectDetection,
+    ObjectDetectionConfig,
+    ObjectEvidence,
+)
 from offline.corpus.models import FrameArtifact
 
 logger = logging.getLogger(__name__)
@@ -39,80 +42,6 @@ def _normalize_lineage(value: str | None, name: str) -> str | None:
     if not normalized:
         raise ValueError(f"{name} must not be empty")
     return normalized
-
-
-@dataclass(frozen=True)
-class ObjectDetectionConfig:
-    """Reproducibility and summary policy for one YOLOE enrichment run."""
-
-    model: str = "yoloe-26l-seg-pf.pt"
-    vocab_path: str | None = None
-    min_confidence: float = 0.20
-    top_k: int = 30
-    batch_size: int = 32
-    device: str | None = None
-    artifact_version: str = "object-yoloe-v1"
-    summary_min_confidence: float = 0.25
-    max_summary_labels: int = 20
-
-    def __post_init__(self) -> None:
-        """Validate detector limits and the deterministic summary policy."""
-
-        if not isinstance(self.model, str) or not self.model.strip():
-            raise ValueError("model must not be empty")
-        if self.device is not None and (
-            not isinstance(self.device, str) or not self.device.strip()
-        ):
-            raise ValueError("device must be a non-empty string or null")
-        if self.vocab_path is not None and (
-            not isinstance(self.vocab_path, str) or not self.vocab_path.strip()
-        ):
-            raise ValueError("vocab_path must be a non-empty string or null")
-        if not isinstance(self.artifact_version, str) or not self.artifact_version.strip():
-            raise ValueError("artifact_version must not be empty")
-        for name, value in (
-            ("top_k", self.top_k),
-            ("batch_size", self.batch_size),
-            ("max_summary_labels", self.max_summary_labels),
-        ):
-            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-                raise ValueError(f"{name} must be a positive integer")
-        for name, value in (
-            ("min_confidence", self.min_confidence),
-            ("summary_min_confidence", self.summary_min_confidence),
-        ):
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise ValueError(f"{name} must be numeric")
-            if not math.isfinite(float(value)) or not 0.0 <= float(value) <= 1.0:
-                raise ValueError(f"{name} must be finite and in [0, 1]")
-
-        object.__setattr__(self, "model", self.model.strip())
-        object.__setattr__(
-            self,
-            "vocab_path",
-            self.vocab_path.strip() if self.vocab_path is not None else None,
-        )
-        object.__setattr__(self, "min_confidence", float(self.min_confidence))
-        object.__setattr__(
-            self,
-            "device",
-            self.device.strip() if self.device is not None else None,
-        )
-        object.__setattr__(
-            self,
-            "artifact_version",
-            unicodedata.normalize("NFC", self.artifact_version.strip()),
-        )
-        object.__setattr__(
-            self,
-            "summary_min_confidence",
-            float(self.summary_min_confidence),
-        )
-
-    def as_dict(self) -> dict[str, Any]:
-        """Return stable configuration fields for stage identity and manifests."""
-
-        return asdict(self)
 
 
 def _normalized_label(value: object) -> str:
@@ -309,7 +238,7 @@ def materialize_object_artifacts(
 ) -> dict[str, Any]:
     """Build canonical object artifacts from raw YOLOE JSON outputs."""
 
-    from offline.enrichment.object_artifacts import write_object_artifacts_streaming
+    from .artifacts import write_object_artifacts_streaming
 
     source = Path(frames_path)
     if not source.is_file():
@@ -440,9 +369,10 @@ def run_yoloe(
     frame_store_id: str | None = None,
     limit: int | None = None,
     model: Any | None = None,
-    resolver: OfflineFrameAssetResolver | None = None,
+    resolver: Any | None = None,
 ) -> dict[str, Any]:
     """Detect pending frames, then commit one complete canonical artifact bundle."""
+    from offline.artifact_readers import FrameAssetError, OfflineFrameAssetResolver
 
     source = Path(frames_path)
     if not source.is_file():

@@ -11,9 +11,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from offline.enrichment.caption.adapters.vllm import VLLMCaptionAdapter
-from offline.enrichment.caption.config import CaptionConfig
-from offline.enrichment.caption.generator import generate_captions
+from offline.enrichment.caption import (
+    CaptionConfig,
+    VLLMCaptionAdapter,
+    generate_captions,
+)
 
 
 def test_REQ_004_generate_captions_with_vllm_adapter(tmp_path: Path) -> None:

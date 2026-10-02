@@ -13,14 +13,16 @@ from collections.abc import Mapping
 from typing import Any
 
 from hcmai.common.utils.io import read_yaml_section
-from offline.enrichment.caption.adapters.vllm import VLLMCaptionAdapter
-from offline.enrichment.caption.config import CaptionConfig, PROJECT_ROOT
-from offline.enrichment.caption.generator import generate_captions
-from offline.enrichment.caption.models.contracts import CaptionAdapter
+from offline.enrichment.caption import (
+    CaptionAdapter,
+    CaptionConfig,
+    VLLMCaptionAdapter,
+    generate_captions,
+)
+from offline.enrichment.caption.models import PROJECT_ROOT
 from offline.enrichment.context.config import FrameContextConfig
-from offline.enrichment.ocr.config import OCRConfig
+from offline.enrichment.ocr.models import OCRAdapter, OCRConfig
 from offline.enrichment.ocr.generator import generate_ocr
-from offline.enrichment.ocr.models.contracts import OCRAdapter
 from offline.enrichment.dataset_cli import merge_dataset_values
 
 
@@ -105,7 +107,7 @@ class EnrichmentJobConfig:
 
         object_values = sections["objects"]
         object_output = _required_output(object_values, "objects")
-        from offline.enrichment.object_detection import ObjectDetectionConfig
+        from offline.enrichment.objects import ObjectDetectionConfig
 
         object_config = ObjectDetectionConfig(**object_values)
 
@@ -213,7 +215,7 @@ class EnrichmentService:
     ) -> dict[str, Any]:
         """Run YOLOE and publish canonical object enrichment artifacts."""
 
-        from offline.enrichment.object_detection import run_yoloe
+        from offline.enrichment.objects import run_yoloe
 
         return run_yoloe(
             frames_path,
@@ -288,5 +290,5 @@ class EnrichmentService:
 
         if config.backend == "remote":
             raise NotImplementedError("Remote OCR adapter is not implemented.")
-        from offline.enrichment.ocr.adapters.florence import FlorenceAdapter
+        from offline.enrichment.ocr.adapter import FlorenceAdapter
         return FlorenceAdapter(config)

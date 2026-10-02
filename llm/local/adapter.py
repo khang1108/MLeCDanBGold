@@ -12,14 +12,9 @@ from PIL import Image
 from hcmai.common.config import TranscriptJobConfig
 from hcmai.retrieval.embedding.pipeline import EmbeddingService
 from llm.config import LLMServiceConfig
-from offline.enrichment.ocr.adapters.florence import FlorenceAdapter
-from offline.enrichment.ocr.config import OCRConfig
-
-
-# Return Any because pydantic validates these rows into ``_ReadinessModel``.
-
-from offline.enrichment.ocr.models.entities import OCRResult
-from offline.enrichment.object_detection import load_vocab, normalized_boxes
+from offline.enrichment.ocr.adapter import FlorenceAdapter
+from offline.enrichment.ocr.models import OCRConfig, OCRResult
+from offline.enrichment.objects import load_vocab, normalized_boxes
 from offline.enrichment.pipeline import EnrichmentService
 from llm.local.audio import download_audio
 from llm.local.readiness import build_readiness

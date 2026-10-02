@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Protocol
 
 from hcmai.common.config import ASRConfig, DiarizationConfig
-from offline.enrichment.inference_contracts import (
+from llm.contracts import (
     AudioReferenceRequest,
     DiarizationRequest,
     InferenceReadiness,

@@ -11,7 +11,7 @@ from typing import Sequence
 from hcmai.common.config import resolve_dataset_root, resolve_repository_path
 from hcmai.common.utils.logging import configure_logging, get_logger
 from offline.enrichment.dataset_cli import add_dataset_arguments, dataset_overrides
-from offline.enrichment.object_detection import run_yoloe
+from offline.enrichment.objects import run_yoloe
 from offline.enrichment.pipeline import EnrichmentJobConfig
 
 logger = get_logger(__name__)

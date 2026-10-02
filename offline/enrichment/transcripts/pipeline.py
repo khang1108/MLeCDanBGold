@@ -26,7 +26,6 @@ from offline.enrichment.transcripts.prepare import (
     prepare_transcript_video,
     prepare_transcripts,
 )
-from offline.artifact_readers import OfflineTranscriptStore
 
 
 class TranscriptService:
@@ -106,5 +105,6 @@ class TranscriptService:
     @staticmethod
     def load_store(metadata_path: str | Path) -> OfflineTranscriptStore:
         """Open transcript artifacts for offline timeline inspection."""
+        from offline.artifact_readers import OfflineTranscriptStore
 
         return OfflineTranscriptStore(metadata_path)

@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     app_path = Path(args.app_config)
     settings = AppConfig.from_yaml(app_path) if app_path.is_file() else AppConfig()
     base_url = resolve_gpu_url(args.config, settings.inference.base_url)
-    from offline.enrichment.ocr.adapters.remote import RemoteOCRAdapter
+    from offline.enrichment.ocr.adapter import RemoteOCRAdapter
     from llm.pipeline import LLMService
 
     service = LLMService.remote(base_url, settings.inference)

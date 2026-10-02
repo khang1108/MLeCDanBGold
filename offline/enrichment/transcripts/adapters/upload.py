@@ -8,7 +8,7 @@ import tempfile
 from typing import Protocol
 
 from hcmai.common.config import ASRConfig
-from offline.enrichment.inference_contracts import InferenceReadiness, TranscriptInferenceResponse
+from llm.contracts import InferenceReadiness, TranscriptInferenceResponse
 from offline.enrichment.transcripts.models import TranscriptSegment
 
 

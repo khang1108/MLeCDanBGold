@@ -1,10 +1,28 @@
-"""Module làm giàu dữ liệu: OCR (Optical Character Recognition).
+"""Offline OCR enrichment package."""
 
-Trích xuất và lưu trữ văn bản xuất hiện bên trong khung hình (như biển hiệu, phụ đề cứng, ...).
+from .adapter import FlorenceAdapter, RemoteOCRAdapter
+from .generator import generate_ocr
+from .models import (
+    OCRAdapter,
+    OCRConfig,
+    OCREvidence,
+    OCRRegion,
+    OCRRegionResult,
+    OCRResult,
+    json_safe_ocr_raw,
+    usable_completed_text,
+)
 
-Các tính năng chính:
-1. Cung cấp API `generator`: Gọi chuỗi xử lý OCR trên thư mục ảnh đầu vào.
-2. Tích hợp mô hình: Hỗ trợ cắm (plug) nhiều loại mô hình OCR khác nhau (như Florence-2, PaddleOCR).
-3. Chuẩn hoá dữ liệu: Trả về cấu trúc OCR thống nhất (Text, Box) cho hệ thống tìm kiếm (Search)."""
-
-__all__: list[str] = []
+__all__ = [
+    "FlorenceAdapter",
+    "OCRAdapter",
+    "OCRConfig",
+    "OCREvidence",
+    "OCRRegion",
+    "OCRRegionResult",
+    "OCRResult",
+    "RemoteOCRAdapter",
+    "generate_ocr",
+    "json_safe_ocr_raw",
+    "usable_completed_text",
+]

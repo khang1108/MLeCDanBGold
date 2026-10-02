@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from PIL import Image
 import pytest
 
-from offline.enrichment.caption.adapters.vllm import (
+from offline.enrichment.caption.adapter import (
     VLLMCaptionAdapter,
     _encode_image_to_base64,
 )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Self
 
 from pydantic import Field, model_validator
@@ -42,4 +43,24 @@ class TranscriptSegment(ContractModel):
         return self
 
 
-__all__ = ["TranscriptSegment"]
+def load_transcript_artifact_records(
+    metadata_path: str | Path,
+) -> tuple[TranscriptSegment, ...]:
+    """Load complete validated transcript artifact rows in stable file order."""
+    import pandas as pd
+
+    path = Path(metadata_path)
+    paths = sorted(path.rglob("*.parquet")) if path.is_dir() else [path]
+    records: list[TranscriptSegment] = []
+    for artifact_path in paths:
+        table = pd.read_parquet(artifact_path).astype(object)
+        rows = table.where(table.notna(), None).to_dict(orient="records")
+        records.extend(TranscriptSegment.model_validate(row) for row in rows)
+
+    identifiers = [record.segment_id for record in records]
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError(f"Duplicate segment_id values in {path}")
+    return tuple(records)
+
+
+__all__ = ["TranscriptSegment", "load_transcript_artifact_records"]

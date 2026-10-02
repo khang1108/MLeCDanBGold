@@ -1,7 +1,25 @@
-"""Qwen VL frame-caption enrichment.
+"""Frame-caption enrichment package."""
 
-This package owns frame-aligned caption generation and artifact publication.
-OCR and other specialist evidence remain separate enrichment packages.
-"""
+from .models import (
+    CaptionAdapter,
+    CaptionConfig,
+    CaptionEvidence,
+    CaptionJobConfig,
+    DEFAULT_ENRICHMENT_CONFIG,
+    ENRICHMENT_VERSION,
+    usable_completed_text,
+)
+from .adapter import VLLMCaptionAdapter
+from .generator import generate_captions
 
-__all__: list[str] = []
+__all__ = [
+    "CaptionAdapter",
+    "CaptionConfig",
+    "CaptionEvidence",
+    "CaptionJobConfig",
+    "DEFAULT_ENRICHMENT_CONFIG",
+    "ENRICHMENT_VERSION",
+    "VLLMCaptionAdapter",
+    "generate_captions",
+    "usable_completed_text",
+]

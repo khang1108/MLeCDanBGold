@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from llm.config import LLMServiceConfig
 from llm.server.routers import captions
 from offline.config import VBSConfig
-from offline.enrichment.caption.config import CaptionJobConfig
+from offline.enrichment.caption.models import CaptionJobConfig
 from offline.pipeline.runner import command_for
 
 

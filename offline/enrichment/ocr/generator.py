@@ -6,10 +6,12 @@ completed, lineage-matching, region-consistent rows are reused.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import datetime, timezone
+import math
 from numbers import Integral
 from pathlib import Path
 from time import perf_counter
@@ -19,22 +21,35 @@ import pandas as pd
 from PIL import Image
 from tqdm import tqdm
 
-from offline.enrichment.ocr.models import OCREvidence, OCRRegion
 from hcmai.common.utils.image import load_image
-from hcmai.common.utils.io import read_json
-from offline.artifact_readers import FrameArtifactReader
+from hcmai.common.utils.io import (
+    atomic_write,
+    read_json,
+    write_json,
+    write_parquet,
+)
+from offline.enrichment.bundle import publish_staged_bundle
+from offline.enrichment.models import FrameEnrichment, ProcessingStatus
 
-from .adapters.florence import FlorenceAdapter
-from .artifacts import failure_row, parsed_row, valid_ocr, write_ocr_artifacts
-from .config import OCRConfig
-from .models.contracts import OCRAdapter
-from .models.entities import Evidence, FailureDetail, FrameRow
-from .report import build_ocr_report
+from .adapter import FlorenceAdapter
+from .models import (
+    Evidence,
+    FailureDetail,
+    FrameRow,
+    NormalizedRegions,
+    OCRAdapter,
+    OCRConfig,
+    OCREvidence,
+    OCRRegion,
+    OCRRegionResult,
+    OCRResult,
+    json_safe_ocr_raw,
+    normalize_regions,
+)
 
 
 def _read_rows(path: Path, *, required: bool = False) -> list[FrameRow]:
     """Read Parquet records, optionally requiring the canonical source."""
-
     if not path.exists():
         if required:
             raise FileNotFoundError(f"required canonical frames not found: {path}")
@@ -46,7 +61,6 @@ def _consistent_regions(
     row: OCREvidence, candidates: list[FrameRow]
 ) -> list[OCRRegion] | None:
     """Validate the exact region identity/order promised by one frame row."""
-
     if len(candidates) != row.region_count:
         return None
     parsed: list[OCRRegion] = []
@@ -88,6 +102,411 @@ def _consistent_regions(
     ) else None
 
 
+def valid_ocr(
+    data: FrameRow,
+    config: OCRConfig,
+    *,
+    frame_store_id: str | None,
+    model_revision: str | None,
+) -> OCREvidence | None:
+    """Return a completed frame row only when all reusable lineage matches."""
+    try:
+        if (
+            not isinstance(data.get("frame_id"), str)
+            or not data["frame_id"]
+            or data["frame_id"].strip() != data["frame_id"]
+            or not isinstance(data.get("video_id"), str)
+            or not data["video_id"]
+            or data["video_id"].strip() != data["video_id"]
+            or isinstance(data.get("frame_idx"), bool)
+            or not isinstance(data.get("frame_idx"), Integral)
+            or isinstance(data.get("timestamp_ms"), bool)
+            or not isinstance(data.get("timestamp_ms"), Integral)
+        ):
+            return None
+        values = {
+            key: None if isinstance(value, float) and math.isnan(value) else value
+            for key, value in dict(data).items()
+        }
+        row = OCREvidence.model_validate(values)
+    except Exception:
+        return None
+
+    valid = (
+        row.status == ProcessingStatus.COMPLETED
+        and row.error_code is None
+        and row.error_message is None
+        and row.artifact_version == config.artifact_version
+        and row.model_name == config.model_name
+        and row.model_revision == model_revision
+        and row.frame_store_id == frame_store_id
+    )
+    return row if valid else None
+
+
+def failure_row(
+    frame: FrameRow,
+    config: OCRConfig,
+    stage: str,
+    error: Exception,
+    *,
+    frame_store_id: str | None,
+    model_revision: str | None,
+) -> tuple[OCREvidence, FailureDetail]:
+    """Build one bounded failed OCR row and machine-readable diagnostic."""
+    message = " ".join(str(error).split())[:300] or type(error).__name__
+    code = type(error).__name__
+    frame_id = str(frame["frame_id"])
+    row = OCREvidence(
+        frame_id=frame_id,
+        video_id=str(frame["video_id"]),
+        frame_idx=int(frame["frame_idx"]),
+        timestamp_ms=int(frame["timestamp_ms"]),
+        frame_store_id=frame_store_id,
+        artifact_version=config.artifact_version,
+        model_name=config.model_name,
+        model_revision=model_revision,
+        status=ProcessingStatus.FAILED,
+        error_code=code,
+        error_message=message,
+    )
+    return row, {
+        "frame_id": frame_id,
+        "artifact_version": config.artifact_version,
+        "processing_stage": stage,
+        "exception_category": code,
+        "error_message": message,
+    }
+
+
+def parsed_row(
+    frame: FrameRow,
+    result: object,
+    config: OCRConfig,
+    *,
+    frame_store_id: str | None,
+    model_revision: str | None,
+) -> tuple[OCREvidence, list[OCRRegion], Evidence]:
+    """Validate a structured backend result and preserve every raw region."""
+    if not isinstance(result, OCRResult) or not isinstance(result.text, str):
+        raise TypeError("OCR backend returned a malformed result")
+    if not isinstance(result.regions, tuple) or any(
+        not isinstance(region, OCRRegionResult) for region in result.regions
+    ):
+        raise TypeError("OCR backend returned malformed regions")
+
+    frame_id = str(frame["frame_id"])
+    video_id = str(frame["video_id"])
+    frame_idx = int(frame["frame_idx"])
+    timestamp_ms = int(frame["timestamp_ms"])
+    normalized = normalize_regions(
+        result.regions, min_confidence=config.min_region_confidence
+    )
+    region_rows = [
+        OCRRegion(
+            frame_id=frame_id,
+            video_id=video_id,
+            frame_idx=frame_idx,
+            timestamp_ms=timestamp_ms,
+            region_id=f"{frame_id}:{order}",
+            region_order=order,
+            text=region.text,
+            confidence=region.confidence,
+            x_min=region.x_min,
+            y_min=region.y_min,
+            x_max=region.x_max,
+            y_max=region.y_max,
+        )
+        for order, region in enumerate(result.regions)
+    ]
+    raw_text = "\n".join(
+        region.text for region in result.regions if region.text != ""
+    ) or None
+    row = OCREvidence(
+        frame_id=frame_id,
+        video_id=str(frame["video_id"]),
+        frame_idx=frame_idx,
+        timestamp_ms=timestamp_ms,
+        raw_text=raw_text,
+        normalized_text=normalized.text,
+        quality_score=normalized.quality_score,
+        region_count=len(region_rows),
+        frame_store_id=frame_store_id,
+        artifact_version=config.artifact_version,
+        model_name=config.model_name,
+        model_revision=model_revision,
+    )
+    evidence: Evidence = {
+        "frame_id": frame_id,
+        "raw_output": json_safe_ocr_raw(result.raw_output),
+        "usable_region_count": normalized.usable_region_count,
+    }
+    return row, region_rows, evidence
+
+
+def _legacy_projection(row: OCREvidence, config: OCRConfig) -> FrameEnrichment:
+    """Build the temporary flat OCR view required by existing consumers."""
+    return FrameEnrichment(
+        frame_id=row.frame_id,
+        frame_store_id=row.frame_store_id,
+        ocr_text=row.normalized_text,
+        enrichment_version=config.enrichment_version,
+        model_name=row.model_name,
+        status=row.status,
+        error_message=row.error_message,
+    )
+
+
+def write_ocr_artifacts(
+    output: Path,
+    order: list[str],
+    rows: dict[str, OCREvidence],
+    regions: dict[str, list[OCRRegion]],
+    failures: dict[str, FailureDetail],
+    config: OCRConfig,
+    report: dict[str, object],
+    manifest: dict[str, object],
+) -> None:
+    """Stage, validate, and publish the complete structured OCR bundle."""
+    frame_table = pd.DataFrame(
+        [rows[key].model_dump(mode="json") for key in order if key in rows],
+        columns=list(OCREvidence.model_fields),
+    )
+    region_table = pd.DataFrame(
+        [
+            region.model_dump(mode="json")
+            for frame_id in order
+            for region in regions.get(frame_id, [])
+        ],
+        columns=list(OCRRegion.model_fields),
+    )
+    projection = pd.DataFrame(
+        [
+            _legacy_projection(rows[key], config).model_dump(mode="json")
+            for key in order
+            if key in rows
+        ],
+        columns=list(FrameEnrichment.model_fields),
+    )
+
+    failure_rows = [failures[key] for key in order if key in failures]
+    output.mkdir(parents=True, exist_ok=True)
+    published = (
+        output / "frames.parquet",
+        output / "regions.parquet",
+        output / "failures.json",
+        output / "frame_enrichment.parquet",
+        output / "ocr_report.json",
+        output / "manifest.json",
+    )
+    staged = tuple(
+        path.with_name(f".{path.name}.staged") for path in published
+    )
+    try:
+        atomic_write(
+            staged[0],
+            lambda path: write_parquet(frame_table, path, index=False),
+        )
+        atomic_write(
+            staged[1],
+            lambda path: write_parquet(region_table, path, index=False),
+        )
+        atomic_write(staged[2], lambda path: write_json(failure_rows, path))
+        atomic_write(
+            staged[3],
+            lambda path: write_parquet(projection, path, index=False),
+        )
+        atomic_write(staged[4], lambda path: write_json(report, path))
+        atomic_write(staged[5], lambda path: write_json(manifest, path))
+
+        staged_frames = pd.read_parquet(staged[0])
+        staged_regions = pd.read_parquet(staged[1])
+        staged_projection = pd.read_parquet(staged[3])
+        if staged_frames.columns.tolist() != list(OCREvidence.model_fields):
+            raise ValueError("staged OCR frames have an invalid schema")
+        if staged_regions.columns.tolist() != list(OCRRegion.model_fields):
+            raise ValueError("staged OCR regions have an invalid schema")
+        if staged_projection.columns.tolist() != list(FrameEnrichment.model_fields):
+            raise ValueError("staged OCR projection has an invalid schema")
+
+        expected_order = [frame_id for frame_id in order if frame_id in rows]
+        if staged_frames["frame_id"].tolist() != expected_order:
+            raise ValueError("staged OCR frames changed canonical order")
+        if staged_projection["frame_id"].tolist() != expected_order:
+            raise ValueError("staged OCR projection changed canonical order")
+
+        parsed_frames: dict[str, OCREvidence] = {}
+        for data in staged_frames.astype(object).where(
+            staged_frames.notna(), None
+        ).to_dict(orient="records"):
+            row = OCREvidence.model_validate(data)
+            parsed_frames[row.frame_id] = row
+        parsed_regions: dict[str, list[OCRRegion]] = {}
+        for data in staged_regions.astype(object).where(
+            staged_regions.notna(), None
+        ).to_dict(orient="records"):
+            region = OCRRegion.model_validate(data)
+            parsed_regions.setdefault(region.frame_id, []).append(region)
+        for frame_id, row in parsed_frames.items():
+            frame_regions = parsed_regions.get(frame_id, [])
+            if len(frame_regions) != row.region_count:
+                raise ValueError(
+                    f"staged OCR region_count mismatch for {frame_id}"
+                )
+            for region_order, region in enumerate(frame_regions):
+                if (
+                    region.region_order != region_order
+                    or region.region_id != f"{frame_id}:{region_order}"
+                    or region.video_id != row.video_id
+                    or region.frame_idx != row.frame_idx
+                    or region.timestamp_ms != row.timestamp_ms
+                ):
+                    raise ValueError(
+                        f"staged OCR region identity mismatch for {frame_id}"
+                    )
+        if set(parsed_regions).difference(parsed_frames):
+            raise ValueError("staged OCR regions reference an unknown frame")
+
+        for data in staged_projection.astype(object).where(
+            staged_projection.notna(), None
+        ).to_dict(orient="records"):
+            objects = data.get("objects")
+            to_list = getattr(objects, "tolist", None)
+            if callable(to_list):
+                data["objects"] = to_list()
+            FrameEnrichment.model_validate(data)
+        if read_json(staged[2]) != failure_rows:
+            raise ValueError("staged OCR failures failed validation")
+        if read_json(staged[4]) != report:
+            raise ValueError("staged OCR report failed validation")
+        if read_json(staged[5]) != manifest:
+            raise ValueError("staged OCR manifest failed validation")
+
+        versions = {row.artifact_version for row in rows.values()}
+        lineages = {row.frame_store_id for row in rows.values()}
+        if len(versions) > 1 or len(lineages) > 1:
+            raise ValueError("OCR bundle has mixed version or lineage")
+        if versions and manifest.get("artifact_version") not in versions:
+            raise ValueError("OCR manifest artifact_version mismatch")
+        if lineages and manifest.get("frame_store_id") not in lineages:
+            raise ValueError("OCR manifest frame_store_id mismatch")
+
+        publish_staged_bundle(staged, published)
+    finally:
+        for path in staged:
+            path.unlink(missing_ok=True)
+
+
+def build_ocr_report(
+    config: OCRConfig,
+    path: Path,
+    root: Path,
+    rows: dict[str, OCREvidence],
+    regions: dict[str, list[OCRRegion]],
+    evidence: dict[str, Evidence],
+    failures: dict[str, FailureDetail],
+    old: dict[str, Any],
+    started: datetime,
+    elapsed: float,
+    input_count: int,
+    processed: int,
+    skipped: int,
+    retried: int,
+    revision: str | None,
+    disabled: int,
+    *,
+    frame_store_id: str | None,
+) -> dict[str, Any]:
+    """Summarize raw, normalized, and region OCR evidence independently."""
+    complete = sum(row.status == ProcessingStatus.COMPLETED for row in rows.values())
+    raw_text_count = sum(row.raw_text is not None for row in rows.values())
+    normalized_text_count = sum(row.normalized_text is not None for row in rows.values())
+    frames_with_regions = sum(row.region_count > 0 for row in rows.values())
+    raw_region_count = sum(row.region_count for row in rows.values())
+    usable_region_count = sum(
+        normalize_regions(
+            tuple(
+                OCRRegionResult(
+                    text=region.text,
+                    confidence=region.confidence,
+                    x_min=region.x_min,
+                    y_min=region.y_min,
+                    x_max=region.x_max,
+                    y_max=region.y_max,
+                )
+                for region in regions.get(frame_id, [])
+            ),
+            min_confidence=config.min_region_confidence,
+        ).usable_region_count
+        for frame_id in rows
+    )
+    quality_scores = [
+        row.quality_score
+        for row in rows.values()
+        if row.status == ProcessingStatus.COMPLETED
+    ]
+    ratio = lambda count: count / input_count if input_count else 0.0
+
+    return {
+        "report_version": "ocr_report.v2",
+        "artifact_version": config.artifact_version,
+        "enrichment_version": config.enrichment_version,
+        "dataset_version": config.dataset_version,
+        "frame_store_id": frame_store_id,
+        "input_parquet_path": str(path),
+        "dataset_root": str(root),
+        "backend": config.backend,
+        "checkpoint": config.checkpoint,
+        "resolved_revision": revision,
+        "enabled": config.enabled,
+        "device": config.device,
+        "dtype": config.dtype,
+        "batch_size": config.batch_size,
+        "runtime_settings": asdict(config),
+        "total_frames": input_count,
+        "processed_frames": processed,
+        "completed_frames": complete,
+        "failed_frames": len(rows) - complete,
+        "skipped_frames": skipped,
+        "retried_frames": retried,
+        "disabled_frames": disabled,
+        "frames_with_raw_text": raw_text_count,
+        "frames_with_normalized_text": normalized_text_count,
+        "frames_with_regions": frames_with_regions,
+        "raw_region_count": raw_region_count,
+        "usable_region_count": usable_region_count,
+        "mean_quality_score": (
+            sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
+        ),
+        "raw_text_coverage_rate": ratio(raw_text_count),
+        "normalized_text_coverage_rate": ratio(normalized_text_count),
+        "region_coverage_rate": ratio(frames_with_regions),
+        "failure_rate": ratio(len(rows) - complete),
+        "error_counts": dict(
+            Counter(item["exception_category"] for item in failures.values())
+        ),
+        "raw_output_available": any(
+            item.get("raw_output") is not None for item in evidence.values()
+        ),
+        "raw_evidence": [evidence[key] for key in rows if key in evidence],
+        "normalization_policy": (
+            "Unicode NFC; collapse whitespace; confidence filter; require Unicode "
+            "alphanumeric; case-insensitive ordered deduplication; newline join."
+        ),
+        "start_time": started.isoformat(),
+        "end_time": datetime.now(timezone.utc).isoformat(),
+        "elapsed_time_sec": elapsed,
+        "manual_review": old.get(
+            "manual_review",
+            {"sample_count": 0, "status": "pending", "summary": "Human review pending."},
+        ),
+        "known_limitations": [
+            "Coverage and quality heuristics are not OCR accuracy.",
+            "Florence-2 has no calibrated OCR confidence.",
+        ],
+    }
+
+
 def _resume(
     frames: list[FrameRow],
     frames_path: Path,
@@ -104,7 +523,6 @@ def _resume(
     int,
 ]:
     """Reuse only valid frame rows whose structured region table is consistent."""
-
     old_frames: dict[str, list[FrameRow]] = {}
     for row in _read_rows(frames_path):
         old_frames.setdefault(str(row.get("frame_id")), []).append(row)
@@ -148,7 +566,6 @@ def _resume(
 
 def _load_ocr_image(frame: FrameRow, config: OCRConfig, root: Path) -> Any:
     """Load and thumbnail one frame's OCR image, or return the raised exception."""
-
     try:
         path = Path(str(frame["image_path"])).expanduser()
         image_path = path if path.is_absolute() else root / path
@@ -156,7 +573,7 @@ def _load_ocr_image(frame: FrameRow, config: OCRConfig, root: Path) -> Any:
         if config.image_size:
             image.thumbnail((config.image_size, config.image_size))
         return image
-    except Exception as error:  # noqa: BLE001 - surfaced as a per-frame failure row
+    except Exception as error:  # noqa: BLE001
         return error
 
 
@@ -174,12 +591,7 @@ def _process(
     model_revision: str | None,
     image_workers: int = 1,
 ) -> None:
-    """Process independent batches while containing per-frame failures.
-
-    ``image_workers`` only parallelizes local disk image decoding/thumbnailing;
-    it never changes image content, order, or the resulting OCR rows.
-    """
-
+    """Process independent batches while containing per-frame failures."""
     for start in tqdm(
         range(0, len(todo), config.batch_size),
         desc="Generating OCR",
@@ -255,6 +667,7 @@ def generate_ocr(
     image_workers: int = 1,
 ) -> dict[str, Any]:
     """Generate or resume deterministic structured OCR artifacts."""
+    from offline.artifact_readers import FrameArtifactReader
 
     started, began = datetime.now(timezone.utc), perf_counter()
     path, root = Path(frames_path), Path(dataset_root).expanduser().resolve()
@@ -270,7 +683,6 @@ def generate_ocr(
     output.mkdir(parents=True, exist_ok=True)
     report_path = output / "ocr_report.json"
     old = cast(dict[str, Any], read_json(report_path)) if report_path.exists() else {}
-    # Requested configuration is authoritative over stale report metadata.
     expected_revision = config.revision
     if engine is not None:
         expected_revision = (
@@ -321,8 +733,6 @@ def generate_ocr(
 
     revision = getattr(engine, "resolved_revision", None) or expected_revision
     if revision != expected_revision and skipped:
-        # A lazy runtime may resolve a different immutable revision only after
-        # the partial batch runs. Reprocess reused rows to prevent mixed lineage.
         assert engine is not None
         rows.clear()
         regions.clear()
@@ -385,3 +795,6 @@ def generate_ocr(
         manifest,
     )
     return report
+
+
+__all__ = ["build_ocr_report", "generate_ocr", "write_ocr_artifacts"]

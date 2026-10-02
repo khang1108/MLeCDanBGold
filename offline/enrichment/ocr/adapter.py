@@ -1,29 +1,21 @@
-"""Adapter cho mô hình OCR Florence-2.
-
-Giao tiếp trực tiếp với mô hình Florence-2 (Microsoft) cho nhiệm vụ OCR đa năng.
-
-Các tính năng chính:
-1. Tạo Task Prompt: Định dạng câu lệnh (VD: `<OCR>`) chuyên dụng cho Florence-2.
-2. Xử lý Tensor: Chuyển đổi ảnh PIL sang dạng tensor và chạy mô hình (hỗ trợ fp16 tối ưu RAM).
-3. Phân tích kết quả (Parsing): Tách chuỗi text trả về thành danh sách các cặp (Bounding Box, Text)."""
+"""OCR inference adapters for local Florence-2 and remote gateway."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 import math
-from typing import Any
+from typing import Any, Protocol
 
 from PIL import Image
 
-from offline.enrichment.ocr.config import OCRConfig
-from offline.enrichment.ocr.models.entities import OCRRegionResult, OCRResult
+from llm.contracts import InferenceReadiness, OCRResponse
+from offline.enrichment.ocr.models import OCRConfig, OCRRegionResult, OCRResult
 
 
 def _parse_regions(
     raw: object, *, image_size: tuple[int, int]
 ) -> tuple[OCRRegionResult, ...]:
     """Convert ordered Florence quadrilaterals to normalized axis-aligned boxes."""
-
     if not isinstance(raw, dict):
         return ()
     labels = raw.get("labels", [])
@@ -140,3 +132,63 @@ class FlorenceAdapter:
                 OCRResult(text=value, regions=parsed_regions, raw_output=raw)
             )
         return results
+
+
+class OCRClient(Protocol):
+    def readiness(self) -> InferenceReadiness: ...
+    def ocr(self, images: Sequence[Image.Image]) -> OCRResponse: ...
+
+
+class RemoteOCRAdapter:
+    """Invoke remote worker (via InferenceClientPool) to extract text from images.
+
+    Verifies checkpoint and revision matching.
+    """
+
+    def __init__(self, client: OCRClient, config: OCRConfig) -> None:
+        self.client = client
+        self.config = config
+        self.resolved_revision: str | None = None
+
+    def resolve_revision(self) -> str | None:
+        status = self.client.readiness().models.get("ocr")
+        if status is None or not status.loaded:
+            raise RuntimeError("remote OCR model is not ready")
+        if status.checkpoint != self.config.checkpoint:
+            raise ValueError("remote OCR checkpoint mismatch")
+        if self.config.revision is not None and status.revision != self.config.revision:
+            raise ValueError("remote OCR revision mismatch")
+        self.resolved_revision = status.revision
+        return status.revision
+
+    def recognize_batch(
+        self, images: Sequence[Image.Image]
+    ) -> Sequence[OCRResult]:
+        response = self.client.ocr(images)
+        if response.model != self.config.checkpoint:
+            raise ValueError("remote OCR checkpoint mismatch")
+        expected = self.resolved_revision or self.config.revision
+        if expected is not None and response.revision != expected:
+            raise ValueError("remote OCR revision changed")
+        self.resolved_revision = response.revision
+        return [
+            OCRResult(
+                text=item.text,
+                regions=tuple(
+                    OCRRegionResult(
+                        text=region.text,
+                        confidence=region.confidence,
+                        x_min=region.x_min,
+                        y_min=region.y_min,
+                        x_max=region.x_max,
+                        y_max=region.y_max,
+                    )
+                    for region in item.regions
+                ),
+                raw_output=item.raw_output,
+            )
+            for item in response.items
+        ]
+
+
+__all__ = ["FlorenceAdapter", "OCRClient", "RemoteOCRAdapter"]

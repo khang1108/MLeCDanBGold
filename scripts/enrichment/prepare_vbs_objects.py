@@ -14,7 +14,7 @@ from llm.pipeline import LLMService
 from offline.clients.endpoints import resolve_gpu_url
 from offline.config import VBSConfig
 from offline.artifact_readers import FrameAssetError, OfflineFrameAssetResolver
-from offline.enrichment.object_detection import (
+from offline.enrichment.objects import (
     materialize_object_artifacts,
     pending_frames,
     publish_raw_json,

@@ -1,8 +1,4 @@
-"""vLLM / OpenAI Vision API adapter for frame caption enrichment.
-
-This module formats keyframes into OpenAI-compatible multimodal chat completion
-requests for standalone vLLM serving, avoiding in-process PyTorch model loading.
-"""
+"""vLLM / OpenAI Vision API adapter for frame caption enrichment."""
 
 from __future__ import annotations
 
@@ -11,13 +7,44 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 import io
 import os
+import re
 from typing import Any
 
 from PIL import Image
 import requests
 
-from offline.enrichment.caption.adapters.qwen_vl import _QWEN_VL_PROMPT, _clean_caption
-from offline.enrichment.caption.models.contracts import CaptionModelConfig
+from offline.enrichment.caption.models import CaptionConfig
+
+_QWEN_VL_PROMPT = (
+    "Describe the visible contents of this video frame for visual retrieval.\n\n"
+    "Write exactly one concise, factual sentence describing the most important "
+    "visual information. Prioritize the main scene or setting; the main people "
+    "or subjects and their visible actions; important objects, products, or "
+    "visual elements; and short, clearly readable on-screen text when relevant.\n\n"
+    "Use only information directly visible in the frame. Do not infer identities, "
+    "locations, time, intentions, causes, emotions, occupations, roles, or events "
+    "outside the frame. Do not guess unclear details.\n\n"
+    "Use specific visual nouns and verbs rather than vague descriptions. Mention "
+    "only details useful for distinguishing or retrieving this frame. MANDATORY "
+    "text rule: do not transcribe on-screen text. You may mention one short, "
+    "clearly readable channel or logo label of at most three words when useful, "
+    "but never repeat words from a headline, subtitle, banner, slide, ticker, "
+    "product label, or sentence-length overlay, even when the text is clear. "
+    "For those overlays, use a generic description such as ‘a news headline’ or "
+    "‘an educational slide’, or omit the text. If text is partially visible, "
+    "blurry, or uncertain, omit it rather than guessing.\n\n"
+    "Output only the caption, with no labels, explanations, bullet points, or "
+    "additional text. Silently check that the result is one grammatical sentence "
+    "with a finished ending. Keep it concise and normally below roughly 100 words; "
+    "this is a soft ceiling, not a reason to cut off a sentence."
+)
+
+
+def _clean_caption(value: Any) -> str:
+    """Remove tokenizer artifacts while preserving the model's sentence."""
+    text = str(value).replace("<pad>", " ").strip()
+    text = re.sub(r"<\|[^|]+\|>", " ", text)
+    return " ".join(text.split())
 
 
 def _encode_image_to_base64(image: Image.Image, format: str = "JPEG") -> str:
@@ -121,10 +148,12 @@ class VLLMCaptionAdapter:
         if self.batch_fn is not None:
             return list(self.batch_fn(images))
 
-        # Run concurrent calls against vLLM server to utilize continuous batching
         workers = min(len(images), self.max_workers)
         if workers <= 1:
             return [self._caption_single_image(img) for img in images]
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             return list(executor.map(self._caption_single_image, images))
+
+
+__all__ = ["VLLMCaptionAdapter"]
