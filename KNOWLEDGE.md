@@ -96,3 +96,40 @@ citation that supports that exact clause. SHI implementation descriptions and
 explicitly labeled project hypotheses do not require external citations.
 Effectiveness still requires controlled comparisons of text-only reformulation,
 inspection without editing, and inspection with editing.
+
+## Critical Path Simplification & Motion-Aware Graph Decoding
+
+**Date:** 2026-10-02
+**Problem:** The previous KIS orchestration path carried significant overengineering:
+a 230-line `_resolve_operation` legacy state machine, generic DAG edge validation
+despite domain topology being strictly linear $E_1 \to E_2 \dots \to E_n$, and a
+`KISRetrievalPlan` that discarded edges before temporal decoding.
+
+### Sources
+- Repository critical path trace: `src/hcmai/orchestration/pipeline.py`, `src/hcmai/kis/models.py`, `src/hcmai/retrieval/plan.py`.
+- Dynamic programming temporal alignment: `src/hcmai/temporal/dp.py`.
+- Paper draft: *From Events to Transitions: Motion-Aware Graph Decoding for Multi-Event Video Retrieval*.
+
+### Findings
+**SOURCE:** The active UI workflow operates via `QueryHypothesis` sessions executing
+`search_only`, rendering legacy `initial_resolve`, `patch_events`, and `global_rewrite`
+operations obsolete on the critical search path.
+
+**SOURCE:** The retrieval plan previously only retained `events: tuple[KISRetrievalEvent, ...]`,
+dropping transition information. This created an architectural mismatch with the paper's
+mathematical formulation of transition-aware graph decoding.
+
+**PROPOSED:** Represent transitions directly as deterministically derived adjacent pairs
+$(E_i, E_{i+1})$ in both `KISIntent` (`QueryTransition`) and `KISRetrievalPlan` (`RetrievalTransition`).
+
+**PROPOSED:** Decouple algorithmic decoding into two clean modules:
+1. `src/hcmai/temporal/dp.py`: **[FROZEN BASELINE]** Static Temporal Baseline (Unary + temporal order + time gap penalty).
+2. `src/hcmai/temporal/transition_decoder.py`: **[PROPOSED]** Motion-Aware Graph Decoding incorporating pairwise transition edge compatibility $\psi(s, t; E_{i-1}, E_i)$.
+
+### Status
+VERIFIED (Architectural refactoring & baseline equivalence verified across all 571 tests).
+
+### Decision or Experiment
+1. Keep `dp.py` frozen as the authoritative baseline for all paper ablations.
+2. Evaluate `transition_decoder.py` on multi-event KIS video benchmark queries, measuring precision/recall gains when incorporating motion transition edge weights versus the unary baseline.
+
