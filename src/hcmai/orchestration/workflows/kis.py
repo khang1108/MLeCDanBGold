@@ -73,9 +73,9 @@ class KISPipeline:
         if self.temporal is None:
             raise RuntimeError("temporal search service is not loaded")
 
-        if retrieval_plan.event_ids != tuple(event.id for event in intent.events):
+        if len(retrieval_plan.events) != len(intent.events):
             raise InvalidQueryInputError(
-                "retrieval plan event IDs must match intent event order"
+                "retrieval plan event count must match intent event count"
             )
         if len(retrieval_plan.events) > self.max_temporal_event_count:
             raise ValueError(

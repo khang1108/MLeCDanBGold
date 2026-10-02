@@ -210,8 +210,8 @@ class KISIntentModelTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             KISIntent.model_validate(invalid)
 
-    def test_rejects_missing_adjacent_edge_in_multi_event_intent(self) -> None:
-        invalid = {
+    def test_auto_populates_sequential_edges_in_multi_event_intent(self) -> None:
+        raw = {
             **VALID,
             "events": [
                 {"id": "E1", "text": "first", "bindings": []},
@@ -219,8 +219,24 @@ class KISIntentModelTest(unittest.TestCase):
             ],
             "temporal_edges": [],
         }
+        intent = KISIntent.model_validate(raw)
+        self.assertEqual(len(intent.temporal_edges), 1)
+        self.assertEqual(intent.temporal_edges[0].source, "E1")
+        self.assertEqual(intent.temporal_edges[0].relation, "before")
+        self.assertEqual(intent.temporal_edges[0].target, "E2")
 
-        with self.assertRaisesRegex(ValidationError, "complete sequential adjacent"):
+    def test_rejects_invalid_adjacent_edge_in_multi_event_intent(self) -> None:
+        invalid = {
+            **VALID,
+            "events": [
+                {"id": "E1", "text": "first", "bindings": []},
+                {"id": "E2", "text": "second", "bindings": []},
+            ],
+            "temporal_edges": [
+                {"source": "E1", "relation": "before", "target": "E1"},
+            ],
+        }
+        with self.assertRaises(ValidationError):
             KISIntent.model_validate(invalid)
 
     def test_rejects_self_temporal_edge(self) -> None:

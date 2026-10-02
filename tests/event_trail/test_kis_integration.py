@@ -4,8 +4,10 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from hcmai.api.contracts.kis import InitialResolveOperation, KISSearchRequest
+from hcmai.api.contracts.kis import KISSearchRequest, SearchOnlyOperation
 from hcmai.api.contracts.search import SearchLatency, SearchResult, SearchResultMetadata
+
+
 from hcmai.corpus.models import Frame
 from hcmai.event_trail.decoding import TemporalConstraintDecoder
 from hcmai.event_trail.models import (
@@ -17,6 +19,16 @@ from hcmai.event_trail.models import (
 )
 from hcmai.event_trail.service import EventTrailService
 from hcmai.kis.models import KISEvent, KISIntent
+
+
+def make_intent(text: str = "woman enters") -> KISIntent:
+    return KISIntent(
+        revision=1,
+        query_text=text,
+        entities=[],
+        events=[KISEvent(id="E1", text=text, images=[], bindings=[])],
+        temporal_edges=[],
+    )
 from hcmai.orchestration.pipeline import SearchService
 from hcmai.orchestration.workflows.kis import KISSearchExecution
 from hcmai.orchestration.workflows.search.temporal import (
@@ -123,12 +135,9 @@ def test_search_kis_captures_snapshot_and_assigns_result_ids(corpus, mock_artifa
     service.kis.execute.return_value = mock_exec
 
     request = KISSearchRequest(
-        base_intent=None,
-        expected_revision=0,
-        operation=InitialResolveOperation(
-            kind="initial_resolve",
-            text="woman enters",
-        ),
+        base_intent=intent,
+        expected_revision=1,
+        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
         top_k=5,
@@ -203,9 +212,9 @@ def test_search_kis_multiple_results_share_same_video_evidence(corpus):
     service.kis.execute.return_value = mock_exec
 
     request = KISSearchRequest(
-        base_intent=None,
-        expected_revision=0,
-        operation=InitialResolveOperation(kind="initial_resolve", text="woman enters"),
+        base_intent=make_intent(),
+        expected_revision=1,
+        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
     )
@@ -257,9 +266,9 @@ def test_search_kis_degrades_gracefully_on_memory_error(corpus, mock_artifact, m
     monkeypatch.setattr("hcmai.orchestration.pipeline.freeze_video_scores", mock_freeze)
 
     request = KISSearchRequest(
-        base_intent=None,
-        expected_revision=0,
-        operation=InitialResolveOperation(kind="initial_resolve", text="woman enters"),
+        base_intent=intent,
+        expected_revision=1,
+        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
     )
@@ -325,9 +334,9 @@ def test_kis_snapshot_trail_lifecycle_with_scoring_call_counters(corpus, mock_ar
 
     # 1. KIS search -> one full-corpus scoring pass
     request = KISSearchRequest(
-        base_intent=None,
-        expected_revision=0,
-        operation=InitialResolveOperation(kind="initial_resolve", text="woman enters"),
+        base_intent=intent,
+        expected_revision=1,
+        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
     )
@@ -425,12 +434,9 @@ def test_REQ_008_kis_snapshot_uses_remote_scoring_revision(corpus, mock_artifact
     object.__setattr__(mock_artifact, "scoring_revision", "remote-v7")
 
     request = KISSearchRequest(
-        base_intent=None,
-        expected_revision=0,
-        operation=InitialResolveOperation(
-            kind="initial_resolve",
-            text="woman enters",
-        ),
+        base_intent=make_intent(),
+        expected_revision=1,
+        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
         top_k=5,
@@ -484,9 +490,9 @@ def test_search_kis_rejects_missing_scoring_revision(corpus, mock_artifact) -> N
     service.kis.execute.return_value = mock_exec
 
     request = KISSearchRequest(
-        base_intent=None,
-        expected_revision=0,
-        operation=InitialResolveOperation(kind="initial_resolve", text="woman enters"),
+        base_intent=intent,
+        expected_revision=1,
+        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
         top_k=5,

@@ -64,8 +64,13 @@ def test_REQ_003_fastapi_lifespan_with_unused_grpc_port(monkeypatch) -> None:
         kis_resp = client.post(
             "/api/v1/kis/search",
             json={
-                "operation": {"kind": "initial_resolve", "text": "a person walking"},
-                "expected_revision": 0,
+                "base_intent": {
+                    "revision": 1,
+                    "query_text": "a person walking",
+                    "events": [{"id": "E1", "text": "a person walking"}],
+                },
+                "operation": {"kind": "search_only"},
+                "expected_revision": 1,
             },
         )
         assert kis_resp.status_code in (503, 502)

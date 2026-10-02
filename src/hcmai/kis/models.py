@@ -176,14 +176,6 @@ class KISTemporalEdge(BaseModel):
     target: EventId
 
 
-@dataclass(frozen=True, slots=True)
-class QueryTransition:
-    """Pairwise transition between two adjacent chronological query events."""
-
-    source: str
-    target: str
-
-
 class KISIntent(BaseModel):
     """Semantic graph representing a resolved KIS multi-clue search intent."""
 
@@ -235,25 +227,23 @@ class KISIntent(BaseModel):
                         f"Event {event.id} references unknown entity: {binding.entity_id}"
                     )
 
-        # 5. Temporal edge validation: require complete sequential adjacent chain
+        # 5. Temporal edges: auto-populate sequential chain if omitted or empty
         expected_edges = [
             (f"E{i}", f"E{i+1}") for i in range(1, len(self.events))
         ]
-        actual_edges = [(edge.source, edge.target) for edge in self.temporal_edges]
-        if actual_edges != expected_edges:
-            raise ValueError(
-                f"Temporal edges must form complete sequential adjacent chain {expected_edges}, got: {actual_edges}"
-            )
+        if not self.temporal_edges and len(self.events) > 1:
+            self.temporal_edges = [
+                KISTemporalEdge(source=s, relation="before", target=t)
+                for s, t in expected_edges
+            ]
+        else:
+            actual_edges = [(edge.source, edge.target) for edge in self.temporal_edges]
+            if actual_edges != expected_edges:
+                raise ValueError(
+                    f"Temporal edges must form complete sequential adjacent chain {expected_edges}, got: {actual_edges}"
+                )
 
         return self
-
-    @property
-    def transitions(self) -> tuple[QueryTransition, ...]:
-        """Return the adjacent sequential transitions (E1->E2, E2->E3, ...)."""
-        return tuple(
-            QueryTransition(source=f"E{i}", target=f"E{i+1}")
-            for i in range(1, len(self.events))
-        )
 
 
 __all__ = [
@@ -266,8 +256,8 @@ __all__ = [
     "KISInitialResolutionEvent",
     "KISIntent",
     "KISTemporalEdge",
-    "QueryTransition",
     "SourceProvenance",
 ]
+
 
 

@@ -6,8 +6,8 @@ event IDs.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
 
+from hcmai.api.contracts.feedback import RetrievalOverride
 from hcmai.kis.models import KISImageRef, KISIntent
 
 
@@ -38,10 +38,18 @@ class KISRetrievalEvent:
 class RetrievalTransition:
     """Pairwise transition between two adjacent planned retrieval events."""
 
-    source_id: str
-    target_id: str
     previous_event: KISRetrievalEvent
     next_event: KISRetrievalEvent
+
+    @property
+    def source_id(self) -> str:
+        """Return the source event ID."""
+        return self.previous_event.event_id
+
+    @property
+    def target_id(self) -> str:
+        """Return the target event ID."""
+        return self.next_event.event_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +57,6 @@ class KISRetrievalPlan:
     """Preserve one immutable row per event in exactly E1..En order and adjacent transitions."""
 
     events: tuple[KISRetrievalEvent, ...]
-    transitions: tuple[RetrievalTransition, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject empty, mutable, or misaligned event collections."""
@@ -60,17 +67,16 @@ class KISRetrievalPlan:
         if self.event_ids != tuple(f"E{i}" for i in range(1, len(self.events) + 1)):
             raise ValueError("event IDs must be sequential E1..En")
 
-        if not self.transitions and len(self.events) > 1:
-            derived = tuple(
-                RetrievalTransition(
-                    source_id=self.events[i].event_id,
-                    target_id=self.events[i + 1].event_id,
-                    previous_event=self.events[i],
-                    next_event=self.events[i + 1],
-                )
-                for i in range(len(self.events) - 1)
+    @property
+    def transitions(self) -> tuple[RetrievalTransition, ...]:
+        """Return pairwise transitions between adjacent planned events."""
+        return tuple(
+            RetrievalTransition(
+                previous_event=self.events[i],
+                next_event=self.events[i + 1],
             )
-            object.__setattr__(self, "transitions", derived)
+            for i in range(len(self.events) - 1)
+        )
 
     @property
     def event_count(self) -> int:
@@ -140,7 +146,7 @@ class KISRetrievalPlan:
 
 def build_retrieval_plan(
     intent: KISIntent,
-    overrides: Mapping[str, Any] | None = None,
+    overrides: Mapping[str, RetrievalOverride] | None = None,
     *,
     dense_text_by_event: Mapping[str, str] | None = None,
     use_dense: bool = True,
@@ -156,20 +162,11 @@ def build_retrieval_plan(
     rows: list[KISRetrievalEvent] = []
     for event in intent.events:
         override = overrides.get(event.id) if overrides is not None else None
-        override_dense: str | None = None
-        override_bm25: str | None = None
-        if override is not None:
-            if isinstance(override, dict):
-                override_dense = override.get("dense_text")
-                override_bm25 = override.get("bm25_text")
-            else:
-                override_dense = getattr(override, "dense_text", None)
-                override_bm25 = getattr(override, "bm25_text", None)
 
         dense_text: str | None = None
         if use_dense:
-            if override_dense is not None:
-                dense_text = override_dense
+            if override is not None and override.dense_text is not None:
+                dense_text = override.dense_text
             elif dense_text_by_event is not None and event.id in dense_text_by_event:
                 dense_text = dense_text_by_event[event.id]
             else:
@@ -177,7 +174,10 @@ def build_retrieval_plan(
 
         bm25_text: str | None = None
         if use_bm25:
-            bm25_text = override_bm25 if override_bm25 is not None else event.text
+            if override is not None and override.bm25_text is not None:
+                bm25_text = override.bm25_text
+            else:
+                bm25_text = event.text
 
         rows.append(
             KISRetrievalEvent(
