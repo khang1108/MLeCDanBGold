@@ -1,1 +1,1 @@
-"""Offline C++ keyframe extraction project and related tooling."""
+"""Canonical keyframes package for HCMAI multimodal video retrieval."""
