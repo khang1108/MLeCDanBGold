@@ -700,8 +700,6 @@ class SearchService:
             use_dense=request.use_dense,
             use_bm25=request.use_bm25,
         )
-        if plan.event_ids != tuple(event.id for event in intent.events):
-            raise ValueError("retrieval plan event IDs must match intent event order")
 
         try:
             execution = self.kis.execute(

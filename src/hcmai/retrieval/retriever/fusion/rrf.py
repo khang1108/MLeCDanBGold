@@ -34,8 +34,6 @@ class RRFFusionRetriever:
     ) -> None:
         if len(retrievers) < 2:
             raise ValueError("RRF fusion requires at least two retrievers")
-        if config.method != "rrf":
-            raise ValueError(f"Unsupported fusion method {config.method!r}")
         self.retrievers: tuple[VectorRetriever, ...] = tuple(retrievers)
         self.config = config
         configured_sources = {
