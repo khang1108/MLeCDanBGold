@@ -1,0 +1,143 @@
+{
+  "queries": [
+    {
+      "query_id": "DIAG_001",
+      "video_id": "V_DIAG_01",
+      "query": "A person sitting on a chair and then standing up",
+      "category": "state_transition",
+      "events": [
+        {
+          "id": "E1",
+          "text": "a person sitting on a chair",
+          "start_ms": 1000,
+          "end_ms": 3000,
+          "target_frame_idxs": [10, 20]
+        },
+        {
+          "id": "E2",
+          "text": "the person standing up from the chair",
+          "start_ms": 4000,
+          "end_ms": 6000,
+          "target_frame_idxs": [40, 50]
+        }
+      ]
+    },
+    {
+      "query_id": "DIAG_002",
+      "video_id": "V_DIAG_02",
+      "query": "A person holding a cup and then placing the cup on a table",
+      "category": "object_manipulation",
+      "events": [
+        {
+          "id": "E1",
+          "text": "a person holding a coffee cup in hand",
+          "start_ms": 2000,
+          "end_ms": 4000,
+          "target_frame_idxs": [20, 30]
+        },
+        {
+          "id": "E2",
+          "text": "the person placing the cup down on the wooden table",
+          "start_ms": 5000,
+          "end_ms": 7000,
+          "target_frame_idxs": [50, 60]
+        }
+      ]
+    },
+    {
+      "query_id": "DIAG_003",
+      "video_id": "V_DIAG_03",
+      "query": "A car approaching the camera and then driving away into the distance",
+      "category": "direction_change",
+      "events": [
+        {
+          "id": "E1",
+          "text": "a red car approaching forward toward the camera",
+          "start_ms": 1000,
+          "end_ms": 3500,
+          "target_frame_idxs": [15, 25]
+        },
+        {
+          "id": "E2",
+          "text": "the car driving away into the distance",
+          "start_ms": 4500,
+          "end_ms": 7500,
+          "target_frame_idxs": [45, 65]
+        }
+      ]
+    },
+    {
+      "query_id": "DIAG_004",
+      "video_id": "V_DIAG_04",
+      "query": "A closed wooden door is pushed open",
+      "category": "object_state_change",
+      "events": [
+        {
+          "id": "E1",
+          "text": "a closed wooden door in a room",
+          "start_ms": 500,
+          "end_ms": 2000,
+          "target_frame_idxs": [5, 15]
+        },
+        {
+          "id": "E2",
+          "text": "the door opens wide into the hallway",
+          "start_ms": 3000,
+          "end_ms": 5000,
+          "target_frame_idxs": [30, 45]
+        }
+      ]
+    },
+    {
+      "query_id": "DIAG_005",
+      "video_id": "V_DIAG_05",
+      "query": "A worker picks up a box, carries it across the room, and places it on a shelf",
+      "category": "multi_step_interaction",
+      "events": [
+        {
+          "id": "E1",
+          "text": "a worker picking up a cardboard box from the floor",
+          "start_ms": 1000,
+          "end_ms": 2500,
+          "target_frame_idxs": [10, 20]
+        },
+        {
+          "id": "E2",
+          "text": "the worker carrying the box while walking",
+          "start_ms": 3500,
+          "end_ms": 5500,
+          "target_frame_idxs": [35, 50]
+        },
+        {
+          "id": "E3",
+          "text": "the worker placing the box onto a storage shelf",
+          "start_ms": 6500,
+          "end_ms": 8500,
+          "target_frame_idxs": [65, 80]
+        }
+      ]
+    },
+    {
+      "query_id": "DIAG_006",
+      "video_id": "V_DIAG_06",
+      "query": "A person enters the office and sits down at a desk",
+      "category": "order_permutation",
+      "events": [
+        {
+          "id": "E1",
+          "text": "a person walking into an office room",
+          "start_ms": 1000,
+          "end_ms": 3000,
+          "target_frame_idxs": [12, 24]
+        },
+        {
+          "id": "E2",
+          "text": "the person sitting down at the computer desk",
+          "start_ms": 4000,
+          "end_ms": 6500,
+          "target_frame_idxs": [42, 60]
+        }
+      ]
+    }
+  ]
+}
