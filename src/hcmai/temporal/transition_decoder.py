@@ -681,6 +681,105 @@ def decode_candidate_lattice(
     return results
 
 
+def decode_motion_graph_video(
+    video: VideoEventScores,
+    *,
+    frame_embeddings: FrameEmbeddingAccessor | Any,
+    event_embeddings: np.ndarray,
+    candidate_k: int = 32,
+    transition_weight: float = 1.0,
+    transition_scorer: EmbeddingDeltaTransitionScorer | None = None,
+    lambda_gap: float = 1e-5,
+    paths: int = 1,
+    event_power: float = 1.0,
+    cluster_delta: float = 0.0,
+    min_separation_ms: int = 0,
+    allowed: np.ndarray | None = None,
+) -> list[DPPath]:
+    """End-to-end motion-aware graph decoding for a single video.
+
+    Executes the 4-stage pipeline:
+        1. Select candidate layers C_1, ..., C_M via unary score and causal reachability.
+        2. Retrieve stored visual embeddings for all candidate frames.
+        3. Score query-conditioned directional transitions psi(s, t) across consecutive layers.
+        4. Decode the optimal chronological path through the sparse candidate lattice.
+
+    Args:
+        video: VideoEventScores holding per-event frame similarities and timestamps.
+        frame_embeddings: Source of visual embeddings (FrameEmbeddingAccessor, DenseIndex,
+            dict, or video embedding array of shape (N_frames, D)).
+        event_embeddings: Array of shape (M, D) with SigLIP query-event embeddings.
+        candidate_k: Maximum candidate frames per event layer.
+        transition_weight: Scaling weight beta for transition edges.
+        transition_scorer: Optional custom transition scorer (defaults to EmbeddingDeltaTransitionScorer()).
+        lambda_gap: Linear time gap penalty weight.
+        paths: Maximum number of ranked non-overlapping paths.
+        event_power: Power scaling applied to unary scores.
+        cluster_delta: Score drift threshold for frame clustering.
+        min_separation_ms: Minimum timestamp separation between returned paths.
+        allowed: Optional boolean admissibility mask.
+
+    Returns:
+        Ranked list of DPPath instances.
+    """
+    n_events, n_frames = video.scores.shape
+
+    # 1. Candidate Selection
+    candidates = select_event_candidates(
+        video,
+        candidate_k=candidate_k,
+        allowed=allowed,
+        event_power=event_power,
+        cluster_delta=cluster_delta,
+    )
+    if len(candidates) != n_events or any(len(c.frame_indices) == 0 for c in candidates):
+        return []
+
+    # 2. Fetch Candidate Embeddings
+    cand_embs: list[np.ndarray] = []
+    if isinstance(frame_embeddings, np.ndarray) and frame_embeddings.ndim == 2:
+        for layer in candidates:
+            cand_embs.append(frame_embeddings[layer.frame_indices])
+    else:
+        accessor = (
+            frame_embeddings
+            if isinstance(frame_embeddings, FrameEmbeddingAccessor)
+            else FrameEmbeddingAccessor(frame_embeddings)
+        )
+        for layer in candidates:
+            cand_embs.append(accessor(video.video_id, layer.frame_indices))
+
+    cand_timestamps = [video.timestamps_ms[layer.frame_indices] for layer in candidates]
+
+    # 3. Score Query-Conditioned Transitions
+    transitions: list[np.ndarray] | None = None
+    if transition_weight != 0.0:
+        scorer = (
+            transition_scorer
+            if transition_scorer is not None
+            else EmbeddingDeltaTransitionScorer()
+        )
+        transitions = scorer.score_all_transitions(
+            cand_embs,
+            event_embeddings,
+            candidate_timestamps_ms=cand_timestamps,
+        )
+
+    # 4. Decode Candidate Lattice
+    return decode_candidate_lattice(
+        video,
+        candidates=candidates,
+        transition_scores=transitions,
+        transition_weight=transition_weight,
+        lambda_gap=lambda_gap,
+        paths=paths,
+        event_power=event_power,
+        cluster_delta=cluster_delta,
+        min_separation_ms=min_separation_ms,
+        allowed=allowed,
+    )
+
+
 __all__ = [
     "AlignedPath",
     "ConditionedDPPath",
@@ -691,6 +790,7 @@ __all__ = [
     "MotionCosineTransitionScorer",
     "TransitionEdgeMatrix",
     "decode_candidate_lattice",
+    "decode_motion_graph_video",
     "decode_transition_graph",
     "encode_query_events",
     "select_event_candidates",
