@@ -247,6 +247,125 @@ class MotionCosineTransitionScorer:
         return psi
 
 
+@dataclass(frozen=True, slots=True)
+class EmbeddingDeltaTransitionScorer:
+    """Query-conditioned signed transition scorer based on embedding differences.
+
+    Evaluates directional semantic visual change aligned with the semantic transition
+    between consecutive textual events:
+    .. math::
+
+        \\psi_i(a, b) = \\frac{1}{4} (v_b - v_a)^T (q_{i+1} - q_i)
+
+    Computed efficiently in :math:`O((K_a + K_b)D + K_a K_b)` without materializing
+    intermediate 3D tensors:
+    .. math::
+
+        s_A = A \\cdot \\Delta q, \\quad s_B = B \\cdot \\Delta q
+        \\Psi = \\frac{1}{4} (s_B[None, :] - s_A[:, None])
+
+    Transition scores are strictly signed (never clamped to non-negative) so that
+    reversed semantic transitions receive negative penalties.
+    """
+
+    temporal_horizon_ms: float | None = None
+
+    def compute_transition_matrix(
+        self,
+        source_embeddings: np.ndarray,
+        target_embeddings: np.ndarray,
+        query_delta: np.ndarray,
+        source_timestamps_ms: np.ndarray | None = None,
+        target_timestamps_ms: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Compute (Ka, Kb) transition compatibility matrix.
+
+        Args:
+            source_embeddings: Array of shape (Ka, D) of visual embeddings for event i.
+            target_embeddings: Array of shape (Kb, D) of visual embeddings for event i+1.
+            query_delta: Vector of shape (D,) representing q_{i+1} - q_i.
+            source_timestamps_ms: Optional timestamps of source candidates.
+            target_timestamps_ms: Optional timestamps of target candidates.
+
+        Returns:
+            np.ndarray of shape (Ka, Kb) with signed transition affinity scores.
+        """
+        A = np.asarray(source_embeddings, dtype=np.float64)
+        B = np.asarray(target_embeddings, dtype=np.float64)
+        dQ = np.asarray(query_delta, dtype=np.float64).reshape(-1)
+
+        if A.ndim != 2 or B.ndim != 2:
+            raise ValueError(f"source ({A.shape}) and target ({B.shape}) embeddings must be 2D")
+        if A.shape[1] != B.shape[1] or A.shape[1] != len(dQ):
+            raise ValueError(
+                f"Dimension mismatch: source D={A.shape[1]}, target D={B.shape[1]}, query_delta D={len(dQ)}"
+            )
+
+        # Normalize visual vectors if not normalized
+        a_norms = np.linalg.norm(A, axis=-1, keepdims=True)
+        A_norm = A / np.maximum(a_norms, 1e-12)
+        b_norms = np.linalg.norm(B, axis=-1, keepdims=True)
+        B_norm = B / np.maximum(b_norms, 1e-12)
+
+        # Efficient O((Ka + Kb)D + Ka * Kb) matrix computation
+        s_A = A_norm @ dQ   # shape (Ka,)
+        s_B = B_norm @ dQ   # shape (Kb,)
+
+        # psi = 1/4 * (s_B[None, :] - s_A[:, None])
+        psi = 0.25 * (s_B[None, :] - s_A[:, None])
+
+        # Optional temporal horizon attenuation
+        if (
+            self.temporal_horizon_ms is not None
+            and self.temporal_horizon_ms > 0
+            and source_timestamps_ms is not None
+            and target_timestamps_ms is not None
+        ):
+            src_t = np.asarray(source_timestamps_ms, dtype=np.float64)[:, None]
+            tgt_t = np.asarray(target_timestamps_ms, dtype=np.float64)[None, :]
+            delta_t = tgt_t - src_t
+            in_horizon = (delta_t > 0) & (delta_t <= self.temporal_horizon_ms)
+            psi = np.where(in_horizon, psi, 0.0)
+
+        return psi
+
+    def score_all_transitions(
+        self,
+        candidate_embeddings: Sequence[np.ndarray],
+        query_embeddings: np.ndarray,
+        candidate_timestamps_ms: Sequence[np.ndarray] | None = None,
+    ) -> list[np.ndarray]:
+        """Compute transition matrices for all consecutive event pairs 0..M-2.
+
+        Args:
+            candidate_embeddings: Sequence of length M, each of shape (K_i, D).
+            query_embeddings: Array of shape (M, D) with SigLIP text embeddings.
+            candidate_timestamps_ms: Optional sequence of length M with candidate timestamps.
+
+        Returns:
+            List of M-1 transition matrices of shape (K_{i}, K_{i+1}).
+        """
+        n_events = len(candidate_embeddings)
+        if len(query_embeddings) != n_events:
+            raise ValueError(
+                f"Query embeddings ({len(query_embeddings)}) must match event count ({n_events})"
+            )
+        transitions: list[np.ndarray] = []
+        for i in range(n_events - 1):
+            dQ = query_embeddings[i + 1] - query_embeddings[i]
+            src_t = candidate_timestamps_ms[i] if candidate_timestamps_ms is not None else None
+            tgt_t = candidate_timestamps_ms[i + 1] if candidate_timestamps_ms is not None else None
+            mat = self.compute_transition_matrix(
+                candidate_embeddings[i],
+                candidate_embeddings[i + 1],
+                query_delta=dQ,
+                source_timestamps_ms=src_t,
+                target_timestamps_ms=tgt_t,
+            )
+            transitions.append(mat)
+        return transitions
+
+
 def _validate_and_extract_edge_matrix(
     spec: np.ndarray | TransitionEdgeMatrix | None,
     global_weight: float,
@@ -568,6 +687,7 @@ __all__ = [
     "DPPath",
     "EventCandidateLayer",
     "FrameEmbeddingAccessor",
+    "EmbeddingDeltaTransitionScorer",
     "MotionCosineTransitionScorer",
     "TransitionEdgeMatrix",
     "decode_candidate_lattice",
