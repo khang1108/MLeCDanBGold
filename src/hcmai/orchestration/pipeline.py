@@ -427,7 +427,14 @@ class SearchService:
             return None
 
     def search_kis(self, request: KISSearchRequest) -> KISSearchResponse:
-        """Execute a semantic KIS search via Query Hypothesis or base_intent search_only."""
+        if request.operation is not None:
+            op = request.operation
+            kind = op.get("kind") if isinstance(op, dict) else getattr(op, "kind", op)
+            if kind is not None and kind != "search_only":
+                raise InvalidQueryInputError(
+                    f"server-owned query hypotheses may only execute search_only through KIS search, got {kind}"
+                )
+
         if request.query_hypothesis_session_id:
             if self.query_hypotheses is None:
                 raise SearchServiceUnavailableError("Query Hypothesis service is unavailable")

@@ -28,10 +28,10 @@ from hcmai.temporal.metrics import (
     evaluate_path_grounding,
     evaluate_retrieval_ranking,
 )
+from hcmai.temporal.baselines import MotionCosineTransitionScorer
 from hcmai.temporal.transition_decoder import (
     EmbeddingDeltaTransitionScorer,
     FrameEmbeddingAccessor,
-    MotionCosineTransitionScorer,
     decode_candidate_lattice,
     decode_motion_graph_video,
     encode_query_events,

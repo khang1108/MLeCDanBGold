@@ -4,10 +4,11 @@ import numpy as np
 import pytest
 
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
+from hcmai.temporal.baselines import MotionCosineTransitionScorer
 from hcmai.temporal.dp import align_video
 from hcmai.temporal.transition_decoder import (
-    TransitionEdgeMatrix,
-    decode_transition_graph,
+    decode_candidate_lattice,
+    select_event_candidates,
 )
 
 
@@ -34,7 +35,9 @@ def test_transition_decoder_matches_baseline_when_transitions_none():
     video = make_sample_video_scores(scores)
 
     baseline_paths = align_video(video, lambda_gap=1e-5, paths=3)
-    decoded_paths = decode_transition_graph(video, transitions=None, lambda_gap=1e-5, paths=3)
+    decoded_paths = decode_candidate_lattice(
+        video, candidate_k=10, transition_scores=None, lambda_gap=1e-5, paths=3
+    )
 
     assert len(decoded_paths) == len(baseline_paths)
     for b_path, d_path in zip(baseline_paths, decoded_paths, strict=True):
@@ -51,9 +54,10 @@ def test_transition_decoder_matches_baseline_when_transition_weight_zero():
 
     random_edge = np.random.uniform(0.0, 1.0, size=(6, 6))
     baseline_paths = align_video(video, lambda_gap=1e-4, paths=1)
-    decoded_paths = decode_transition_graph(
+    decoded_paths = decode_candidate_lattice(
         video,
-        transitions=[random_edge],
+        candidate_k=6,
+        transition_scores=[random_edge],
         transition_weight=0.0,
         lambda_gap=1e-4,
         paths=1,
@@ -85,9 +89,10 @@ def test_transition_matrix_influences_path_selection():
     edge_matrix = np.zeros((4, 4), dtype=np.float64)
     edge_matrix[1, 2] = 2.0
 
-    decoded_paths = decode_transition_graph(
+    decoded_paths = decode_candidate_lattice(
         video,
-        transitions=[edge_matrix],
+        candidate_k=4,
+        transition_scores=[edge_matrix],
         transition_weight=1.0,
         lambda_gap=0.0,
         paths=1,
@@ -110,9 +115,10 @@ def test_transition_decoder_enforces_chronological_monotonicity():
     edge_matrix[1, 0] = 100.0  # backward transition
     edge_matrix[1, 1] = 100.0  # self transition
 
-    decoded_paths = decode_transition_graph(
+    decoded_paths = decode_candidate_lattice(
         video,
-        transitions=[edge_matrix],
+        candidate_k=2,
+        transition_scores=[edge_matrix],
         transition_weight=1.0,
         lambda_gap=0.0,
         paths=1,
@@ -121,8 +127,8 @@ def test_transition_decoder_enforces_chronological_monotonicity():
     assert decoded_paths[0].frame_idx == (0, 1)
 
 
-def test_transition_edge_matrix_dataclass_support():
-    """Verify TransitionEdgeMatrix wrapper object works as expected."""
+def test_multi_layer_transition_scoring():
+    """Verify multi-layer transition scoring across adjacent events."""
     scores = np.array([
         [0.8, 0.1, 0.1],
         [0.1, 0.8, 0.1],
@@ -130,22 +136,13 @@ def test_transition_edge_matrix_dataclass_support():
     ], dtype=np.float64)
     video = make_sample_video_scores(scores)
 
-    t1 = TransitionEdgeMatrix(
-        source_event_index=0,
-        target_event_index=1,
-        matrix=np.ones((3, 3)) * 0.5,
-        weight=1.0,
-    )
-    t2 = TransitionEdgeMatrix(
-        source_event_index=1,
-        target_event_index=2,
-        matrix=np.ones((3, 3)) * 0.5,
-        weight=1.0,
-    )
+    t1 = np.ones((3, 3)) * 0.5
+    t2 = np.ones((3, 3)) * 0.5
 
-    decoded = decode_transition_graph(
+    decoded = decode_candidate_lattice(
         video,
-        transitions=[t1, t2],
+        candidate_k=3,
+        transition_scores=[t1, t2],
         lambda_gap=0.0,
         paths=1,
     )
@@ -164,11 +161,11 @@ def test_transition_matrix_validation_rejects_nan_and_inf():
 
     nan_mat = np.array([[0.0, np.nan], [0.0, 0.0]])
     with pytest.raises(ValueError, match="non-finite"):
-        decode_transition_graph(video, transitions=[nan_mat])
+        decode_candidate_lattice(video, candidate_k=2, transition_scores=[nan_mat])
 
     inf_mat = np.array([[0.0, np.inf], [0.0, 0.0]])
     with pytest.raises(ValueError, match="non-finite"):
-        decode_transition_graph(video, transitions=[inf_mat])
+        decode_candidate_lattice(video, candidate_k=2, transition_scores=[inf_mat])
 
 
 def test_transition_matrix_validation_rejects_shape_mismatch():
@@ -179,16 +176,14 @@ def test_transition_matrix_validation_rejects_shape_mismatch():
     ], dtype=np.float64)
     video = make_sample_video_scores(scores)
 
-    # Video has 3 frames, but matrix is 2x2
+    # Candidate k is 3 (3 frames), but matrix is 2x2
     wrong_shape = np.ones((2, 2))
     with pytest.raises(ValueError, match="shape"):
-        decode_transition_graph(video, transitions=[wrong_shape])
+        decode_candidate_lattice(video, candidate_k=3, transition_scores=[wrong_shape])
 
 
 def test_candidate_lattice_decoding():
-    """Verify candidate lattice decoding with candidate_k parameter."""
-    from hcmai.temporal.transition_decoder import decode_candidate_lattice
-
+    """Verify candidate lattice decoding with candidate selection and sliced transitions."""
     # 3 events, 8 frames
     np.random.seed(123)
     scores = np.random.uniform(0.1, 0.5, size=(3, 8))
@@ -199,37 +194,37 @@ def test_candidate_lattice_decoding():
 
     video = make_sample_video_scores(scores)
 
-    # Full decode vs candidate lattice decode with K=4
-    edge1 = np.zeros((8, 8))
-    edge1[1, 4] = 0.5
-    edge2 = np.zeros((8, 8))
-    edge2[4, 7] = 0.5
+    cand_layers = select_event_candidates(video, candidate_k=4)
+    k0 = len(cand_layers[0].frame_indices)
+    k1 = len(cand_layers[1].frame_indices)
+    k2 = len(cand_layers[2].frame_indices)
 
-    full_paths = decode_transition_graph(
-        video,
-        transitions=[edge1, edge2],
-        lambda_gap=0.0,
-        paths=1,
-    )
+    # Find local index of frame 1 in layer 0, frame 4 in layer 1, frame 7 in layer 2
+    l0_pos = np.where(cand_layers[0].frame_indices == 1)[0][0]
+    l1_pos = np.where(cand_layers[1].frame_indices == 4)[0][0]
+    l2_pos = np.where(cand_layers[2].frame_indices == 7)[0][0]
+
+    edge1 = np.zeros((k0, k1))
+    edge1[l0_pos, l1_pos] = 0.5
+    edge2 = np.zeros((k1, k2))
+    edge2[l1_pos, l2_pos] = 0.5
+
     lattice_paths = decode_candidate_lattice(
         video,
-        candidate_k=4,
-        transitions=[edge1, edge2],
+        candidates=cand_layers,
+        transition_scores=[edge1, edge2],
         lambda_gap=0.0,
         paths=1,
     )
 
-    assert len(full_paths) == 1
     assert len(lattice_paths) == 1
-    assert full_paths[0].frame_idx == (1, 4, 7)
     assert lattice_paths[0].frame_idx == (1, 4, 7)
-    assert np.isclose(lattice_paths[0].score, full_paths[0].score)
+    expected_score = 0.95 + 0.95 + 0.95 + 0.5 + 0.5
+    assert np.isclose(lattice_paths[0].score, expected_score)
 
 
 def test_motion_cosine_transition_scorer():
     """Verify MotionCosineTransitionScorer computation and horizon attenuation."""
-    from hcmai.temporal.transition_decoder import MotionCosineTransitionScorer
-
     scorer = MotionCosineTransitionScorer(temporal_horizon_ms=10000.0)
 
     # 2 source frames, 2 target frames
@@ -256,4 +251,3 @@ def test_motion_cosine_transition_scorer():
     assert psi[0, 0] > 0.9
     # (src 0, tgt 1): dt = 14000 > 10000 horizon -> 0.0 or penalized
     assert psi[0, 1] == 0.0
-

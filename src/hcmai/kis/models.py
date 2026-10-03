@@ -187,6 +187,41 @@ class KISIntent(BaseModel):
     entities: list[KISEntity] = Field(default_factory=list)
     events: list[KISEvent] = Field(min_length=1)
 
+    @model_validator(mode="before")
+    @classmethod
+    def validate_raw_temporal_edges(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "temporal_edges" in data:
+            raw_edges = data.get("temporal_edges")
+            if raw_edges:
+                events = data.get("events") or []
+                event_ids = {
+                    e.get("id") if isinstance(e, dict) else getattr(e, "id", None)
+                    for e in events
+                }
+                for edge in raw_edges:
+                    if isinstance(edge, dict):
+                        src = edge.get("source")
+                        tgt = edge.get("target")
+                    else:
+                        src = getattr(edge, "source", None)
+                        tgt = getattr(edge, "target", None)
+                    if src not in event_ids or tgt not in event_ids:
+                        raise ValueError(f"Unknown event in temporal edge: {src} -> {tgt}")
+                    if src == tgt:
+                        raise ValueError("Self temporal edge is not allowed")
+                    try:
+                        src_idx = int(src[1:]) if str(src).startswith("E") else -1
+                        tgt_idx = int(tgt[1:]) if str(tgt).startswith("E") else -1
+                    except (ValueError, TypeError, IndexError):
+                        src_idx = -1
+                        tgt_idx = -1
+                    if src_idx >= 0 and tgt_idx >= 0:
+                        if src_idx >= tgt_idx:
+                            raise ValueError(f"Temporal edge from {src} to {tgt} violates canonical order")
+                        if tgt_idx != src_idx + 1:
+                            raise ValueError(f"Temporal edge from {src} to {tgt} is not adjacent")
+        return data
+
     @computed_field
     @property
     def temporal_edges(self) -> list[KISTemporalEdge]:
