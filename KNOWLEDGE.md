@@ -161,4 +161,31 @@ VERIFIED (Full test suite passing: 564 backend unit tests, 382 frontend tests).
    - VLM Captioner (Port 8001): Continuous batch keyframe caption enrichment.
 2. Default `--execution-backend` in `offline/enrichment/caption/generator.py` set to `vllm`.
 
+---
+
+## Motion-Aware Graph Decoding for Multi-Event Video Retrieval (SOICT Implementation)
+
+**Date:** 2026-10-03
+**Problem:** Multi-event temporal video retrieval fails when isolated keyframe unary scores match temporally disjoint or chronologically reversed frames. Full $T^M$ graph search is intractable on $10^4$-frame collections.
+
+### Sources
+- Implementation Plan: `docs/soict/soict_motion_graph_implementation_plan.md`
+- Core Modules: `src/hcmai/temporal/transition_decoder.py`, `src/hcmai/temporal/candidate_recall.py`, `src/hcmai/temporal/diagnostic.py`, `src/hcmai/temporal/metrics.py`.
+- Evaluators & Runners: `scripts/evaluation/evaluate_candidate_recall.py`, `scripts/evaluation/run_motion_graph_ablation.py`, `scripts/evaluation/run_counterfactuals.py`, `scripts/evaluation/summarize_motion_graph_results.py`.
+
+### Findings
+**SOURCE / VERIFIED:**
+1. **Candidate Lattice Sparsification (SP-01, SP-02, SP-11):** Pruning full frame lattices ($T \approx 10^3 - 10^4$) to causal event candidate layers ($K=32$) yields $O(M K^2)$ decoding complexity, dropping per-video latency to $\sim 12$\,ms while retaining high candidate recall.
+2. **Fast Signed Embedding-Delta Scorer (SP-06, SP-07):**
+   Formulating $\Psi = \frac{1}{4} (s_B[\text{None}, :] - s_A[:, \text{None}])$ with $s_A = A \cdot dQ$, $s_B = B \cdot dQ$ evaluates pairwise transition compatibility in $O((K_a+K_b)D + K_a K_b)$ without constructing 3D tensors, while penalizing reversed transitions.
+3. **Baseline Equivalence (SP-03):** Zero-weight transition decoding ($\beta = 0$) matches the frozen baseline DP in `src/hcmai/temporal/dp.py` across 121 randomized configurations.
+4. **Diagnostic & Counterfactual Framework (SP-12, SP-13, SP-14, SP-15):** Created diagnostic dataset with verified ground-truth intervals, evaluation metrics (EventHit, AllHit, R@K, MRR), and counterfactual runners (chronological reversal, shuffled edges) with automated LaTeX/CSV table generators.
+
+### Status
+VERIFIED (All 70 temporal tests pass, randomized equivalence verified).
+
+### Decision or Experiment
+Standardized on parallel runtime paths: `rank_motion_graph_paths` and `search_plan_motion_graph` configurable via `AlignmentConfig(decoder="motion_graph" | "static")`.
+
+
 
