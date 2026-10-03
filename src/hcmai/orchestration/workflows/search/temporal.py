@@ -22,6 +22,12 @@ from hcmai.retrieval.plan import KISRetrievalPlan
 from hcmai.retrieval.retriever.video_scores import VideoEventScores
 from hcmai.temporal.events import normalize_event_texts
 from hcmai.temporal.dp import AlignedPath, DPPath, align_video, align_video_conditioned, rank_paths
+from hcmai.temporal.transition_decoder import (
+    EmbeddingDeltaTransitionScorer,
+    FrameEmbeddingAccessor,
+    encode_query_events,
+    rank_motion_graph_paths,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +56,9 @@ class DecoderConfigSnapshot:
     event_power: float
     cluster_delta: float
     path_min_separation_ms: int
+    decoder: str = "static"
+    candidate_k: int = 32
+    transition_weight: float = 0.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +101,21 @@ class TemporalSearchGateway(Protocol):
         self,
         plan: KISRetrievalPlan,
         *,
+        image_component: TemporalScoreComponent | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+        top_k: int = 20,
+    ) -> TemporalSearchArtifact: ...
+
+    def search_plan_motion_graph(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        frame_embeddings: FrameEmbeddingAccessor | Any = None,
+        event_embeddings: np.ndarray | None = None,
+        candidate_k: int | None = None,
+        transition_weight: float | None = None,
+        transition_scorer: EmbeddingDeltaTransitionScorer | None = None,
         image_component: TemporalScoreComponent | None = None,
         use_dense: bool = True,
         use_bm25: bool = False,
@@ -223,6 +247,15 @@ class TemporalSearchService:
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero")
 
+        if self.config.decoder == "motion_graph":
+            return self.search_plan_motion_graph(
+                plan,
+                image_component=image_component,
+                use_dense=use_dense,
+                use_bm25=use_bm25,
+                top_k=top_k,
+            )
+
         scores, retrieval_ms = self.score_plan(
             plan,
             image_component=image_component,
@@ -255,6 +288,93 @@ class TemporalSearchService:
             result=result,
             video_scores=scores,
             decoder_config=self.snapshot_decoder_config(),
+        )
+
+    def search_plan_motion_graph(
+        self,
+        plan: KISRetrievalPlan,
+        *,
+        frame_embeddings: FrameEmbeddingAccessor | Any = None,
+        event_embeddings: np.ndarray | None = None,
+        candidate_k: int | None = None,
+        transition_weight: float | None = None,
+        transition_scorer: EmbeddingDeltaTransitionScorer | None = None,
+        image_component: TemporalScoreComponent | None = None,
+        use_dense: bool = True,
+        use_bm25: bool = False,
+        top_k: int = 20,
+    ) -> TemporalSearchArtifact:
+        """Return canonical aligned paths using motion-aware graph decoding.
+
+        Parallel experimental path to search_plan_artifact, executing sparse candidate
+        lattice decoding with query-conditioned transition scoring.
+        """
+        if top_k <= 0:
+            raise ValueError("top_k must be greater than zero")
+
+        k = candidate_k if candidate_k is not None else self.config.candidate_k
+        beta = transition_weight if transition_weight is not None else self.config.transition_weight
+
+        scores, retrieval_ms = self.score_plan(
+            plan,
+            image_component=image_component,
+            use_dense=use_dense,
+            use_bm25=use_bm25,
+        )
+        score_by_video = {video.video_id: video for video in scores}
+
+        visual_src = (
+            frame_embeddings
+            if frame_embeddings is not None
+            else getattr(self.evidence, "visual_index", None)
+        )
+        if visual_src is None:
+            raise RuntimeError("visual_index is required for motion-aware graph decoding")
+
+        if event_embeddings is None:
+            texts = plan.dense_texts or plan.canonical_texts
+            if texts is None:
+                raise ValueError("plan must contain text events to compute event embeddings")
+            event_embeddings = encode_query_events(texts)
+
+        alignment_started = perf_counter()
+        rows = rank_motion_graph_paths(
+            scores,
+            frame_embeddings=visual_src,
+            event_embeddings=event_embeddings,
+            candidate_k=k,
+            transition_weight=beta,
+            transition_scorer=transition_scorer,
+            lambda_gap=self.config.lambda_gap,
+            max_rows=top_k,
+            event_power=self.config.event_power,
+            cluster_delta=self.config.cluster_delta,
+            paths_per_video=self.config.paths_per_video,
+            path_min_separation_ms=self.config.path_min_separation_ms,
+        )
+
+        paths = tuple(
+            self._materialize_aligned_path(row, score_by_video[row.video_id]) for row in rows
+        )
+        alignment_ms = (perf_counter() - alignment_started) * 1_000
+        result = TemporalSearchResult(
+            paths=paths,
+            retrieval_ms=retrieval_ms,
+            alignment_ms=alignment_ms,
+        )
+        snapshot = DecoderConfigSnapshot(
+            lambda_gap=self.config.lambda_gap,
+            event_power=self.config.event_power,
+            cluster_delta=self.config.cluster_delta,
+            path_min_separation_ms=self.config.path_min_separation_ms,
+            decoder="motion_graph",
+            candidate_k=k,
+            transition_weight=beta,
+        )
+        return TemporalSearchArtifact(
+            result=result,
+            video_scores=scores,
+            decoder_config=snapshot,
         )
 
     def score_plan(
@@ -418,6 +538,9 @@ class TemporalSearchService:
             event_power=self.config.event_power,
             cluster_delta=self.config.cluster_delta,
             path_min_separation_ms=self.config.path_min_separation_ms,
+            decoder=self.config.decoder,
+            candidate_k=self.config.candidate_k,
+            transition_weight=self.config.transition_weight,
         )
 
     def _validate_video_scores(

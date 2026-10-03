@@ -1,0 +1,4 @@
+# Static Temporal Baseline DP (B2 Control)
+# Evaluates DP_i(t) = U_i(t) + max_{s < t} [ DP_{i-1}(s) - lambda * (t - s) ]
+temporal:
+  decoder: static

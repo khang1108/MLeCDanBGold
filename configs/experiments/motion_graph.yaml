@@ -1,0 +1,6 @@
+# Motion-Aware Graph Decoding Configuration
+# Evaluates DP_i(b) = U_i(b) + max_{a < b} [ DP_{i-1}(a) - lambda * (t_b - t_a) + beta * psi_i(a, b) ]
+temporal:
+  decoder: motion_graph
+  candidate_k: 32
+  transition_weight: 0.25

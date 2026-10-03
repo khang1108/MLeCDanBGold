@@ -66,6 +66,9 @@ search:
     cluster_delta: 0.0
     paths_per_video: 5
     path_min_separation_ms: 30000
+    decoder: static
+    candidate_k: 32
+    transition_weight: 0.25
 
   cache:
     enabled: true

@@ -780,6 +780,70 @@ def decode_motion_graph_video(
     )
 
 
+def rank_motion_graph_paths(
+    videos: Sequence[VideoEventScores],
+    *,
+    frame_embeddings: FrameEmbeddingAccessor | Any,
+    event_embeddings: np.ndarray,
+    candidate_k: int = 32,
+    transition_weight: float = 1.0,
+    transition_scorer: EmbeddingDeltaTransitionScorer | None = None,
+    lambda_gap: float = 1e-5,
+    max_rows: int = 100,
+    event_power: float = 1.0,
+    cluster_delta: float = 0.0,
+    paths_per_video: int = 1,
+    path_min_separation_ms: int = 0,
+) -> list[DPPath]:
+    """Rank bounded paths using motion-aware graph decoding with video-level diversification.
+
+    Executes decode_motion_graph_video per video and sorts results according to the
+    configured paths_per_video and level-wise diversification rule.
+    """
+    if not videos:
+        return []
+
+    import math
+
+    depth = max(paths_per_video, math.ceil(max_rows / len(videos)))
+    per_video = [
+        decode_motion_graph_video(
+            video,
+            frame_embeddings=frame_embeddings,
+            event_embeddings=event_embeddings,
+            candidate_k=candidate_k,
+            transition_weight=transition_weight,
+            transition_scorer=transition_scorer,
+            lambda_gap=lambda_gap,
+            paths=depth,
+            event_power=event_power,
+            cluster_delta=cluster_delta,
+            min_separation_ms=path_min_separation_ms,
+        )
+        for video in videos
+    ]
+
+    if paths_per_video > 1:
+        return sorted(
+            (path for paths in per_video for path in paths),
+            key=lambda path: path.score,
+            reverse=True,
+        )[:max_rows]
+
+    rows: list[DPPath] = []
+    for level in range(depth):
+        rows.extend(
+            sorted(
+                (paths[level] for paths in per_video if len(paths) > level),
+                key=lambda path: path.score,
+                reverse=True,
+            )
+        )
+        if len(rows) >= max_rows:
+            break
+    return rows[:max_rows]
+
+
 __all__ = [
     "AlignedPath",
     "ConditionedDPPath",
@@ -793,5 +857,6 @@ __all__ = [
     "decode_motion_graph_video",
     "decode_transition_graph",
     "encode_query_events",
+    "rank_motion_graph_paths",
     "select_event_candidates",
 ]

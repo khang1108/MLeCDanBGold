@@ -313,6 +313,9 @@ class AlignmentConfig(BaseModel):
     cluster_delta: float = Field(default=0.0, ge=0.0)
     paths_per_video: int = Field(default=1, ge=1)
     path_min_separation_ms: int = Field(default=0, ge=0)
+    decoder: Literal["static", "motion_graph"] = "static"
+    candidate_k: int = Field(default=32, ge=1)
+    transition_weight: float = Field(default=0.25, ge=0.0)
 
 
 class DenseTemporalWeights(BaseModel):
