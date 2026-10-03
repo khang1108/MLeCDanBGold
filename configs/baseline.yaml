@@ -83,10 +83,7 @@ search:
     thumbnail_max_entries: 1024
     thumbnail_max_bytes: 134217728
 
-    disk_enabled: false
-
   fusion:
-    method: "rrf"
     rrf_k: 60
     modality_max_workers: 4
     required_sources: [visual]

@@ -258,7 +258,6 @@ class IndexConfig(BaseModel):
 class FusionConfig(BaseModel):
     """Fusion configuration for multi-modal candidate merging."""
 
-    method: Literal["rrf"] = "rrf"
     rrf_k: int = Field(default=60, gt=0)
     modality_max_workers: int = Field(default=4, ge=1)
     required_sources: set[RetrievalSource] = Field(default_factory=lambda: {RetrievalSource.VISUAL})
@@ -294,7 +293,6 @@ class RetrievalCacheConfig(BaseModel):
     thumbnail_ttl_seconds: float = Field(default=3600, gt=0)
     thumbnail_max_entries: int = Field(default=1024, ge=1)
     thumbnail_max_bytes: int = Field(default=134_217_728, ge=1)
-    disk_enabled: Literal[False] = False
 
 
 class AlignmentConfig(BaseModel):
@@ -431,7 +429,6 @@ class AvsConfig(BaseModel):
     default_page_size: int = Field(default=80, ge=1)
     maximum_page_size: int = Field(default=100, ge=1)
     temporal_dedup_window_ms: int = Field(default=3000, ge=0)
-    coverage_policy_version: Literal["video-pass-v1"] = "video-pass-v1"
 
     @model_validator(mode="after")
     def validate_pool_bounds(self) -> "AvsConfig":
