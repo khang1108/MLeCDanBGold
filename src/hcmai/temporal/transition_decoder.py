@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -90,6 +91,59 @@ def select_event_candidates(
             )
         )
     return tuple(layers)
+
+
+class FrameEmbeddingAccessor:
+    """Provides visual embedding lookup for candidate frames of videos.
+
+    Wraps a DenseIndex, a per-video embedding dictionary, or an arbitrary callable,
+    guaranteeing that candidate frame indices always resolve to the exact stored
+    visual vectors in canonical order without decoding or re-encoding video.
+    """
+
+    def __init__(self, source: Any) -> None:
+        self._source = source
+
+    def get_frame_embeddings(
+        self,
+        video_id: str,
+        frame_indices: np.ndarray | Sequence[int],
+    ) -> np.ndarray:
+        """Retrieve stored visual embeddings for candidate frames of one video.
+
+        Args:
+            video_id: Canonical video identifier.
+            frame_indices: 0-based column/temporal indices within the video's
+                canonical frame order (as used in VideoEventScores and EventCandidateLayer).
+
+        Returns:
+            np.ndarray of shape (len(frame_indices), embedding_dim), dtype float32.
+        """
+        if hasattr(self._source, "get_frame_embeddings"):
+            return self._source.get_frame_embeddings(video_id, frame_indices)
+        if isinstance(self._source, dict):
+            if video_id not in self._source:
+                raise KeyError(f"Video {video_id!r} not found in visual embedding source")
+            video_mat = self._source[video_id]
+            indices = np.asarray(frame_indices, dtype=np.int64)
+            if len(indices) == 0:
+                dim = video_mat.shape[1] if video_mat.ndim > 1 else 0
+                return np.empty((0, dim), dtype=np.float32)
+            if np.any(indices < 0) or np.any(indices >= len(video_mat)):
+                raise IndexError(
+                    f"frame_indices out of bounds for video {video_id!r} with {len(video_mat)} frames"
+                )
+            return np.asarray(video_mat[indices], dtype=np.float32)
+        if callable(self._source):
+            return self._source(video_id, frame_indices)
+        raise TypeError(f"Unsupported visual embedding source type: {type(self._source)}")
+
+    def __call__(
+        self,
+        video_id: str,
+        frame_indices: np.ndarray | Sequence[int],
+    ) -> np.ndarray:
+        return self.get_frame_embeddings(video_id, frame_indices)
 
 
 @dataclass(frozen=True, slots=True)
@@ -467,6 +521,7 @@ __all__ = [
     "ConditionedDPPath",
     "DPPath",
     "EventCandidateLayer",
+    "FrameEmbeddingAccessor",
     "MotionCosineTransitionScorer",
     "TransitionEdgeMatrix",
     "decode_candidate_lattice",

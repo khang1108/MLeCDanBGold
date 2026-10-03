@@ -416,6 +416,35 @@ class DenseIndex:
         positions = self.posting_positions[self._video_slices[video_id]]
         return positions[np.argsort(self.frame_idx[positions], kind="stable")]
 
+    def get_frame_embeddings(
+        self,
+        video_id: str,
+        frame_indices: np.ndarray | Sequence[int],
+    ) -> np.ndarray:
+        """Retrieve stored visual embeddings for candidate frames of one video.
+
+        Preserves canonical frame ordering: frame_indices refers to 0-based
+        positions in the video's canonical sequence of frames (as in VideoEventScores).
+
+        Args:
+            video_id: Video identifier.
+            frame_indices: Indices in [0, N_frames - 1].
+
+        Returns:
+            np.ndarray of shape (len(frame_indices), embedding_dim) with float32 vectors.
+        """
+        positions = self.video_positions(video_id)
+        indices = np.asarray(frame_indices, dtype=np.int64)
+        if len(indices) == 0:
+            dim = self.metadata.embedding_dim if self.metadata else self.vectors.shape[1]
+            return np.empty((0, dim), dtype=np.float32)
+        if np.any(indices < 0) or np.any(indices >= len(positions)):
+            raise IndexError(
+                f"frame_indices out of bounds for video {video_id!r} with {len(positions)} frames"
+            )
+        cand_positions = positions[indices]
+        return np.asarray(self.vectors[cand_positions], dtype=np.float32)
+
     @cached_property
     def video_ids(self) -> np.ndarray:
         """Video of each index position, sharing the mapping's string objects."""
