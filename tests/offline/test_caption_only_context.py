@@ -9,7 +9,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from offline.corpus.models import FrameArtifact
+from offline.contracts import FrameArtifact
 from offline.enrichment.caption.models import CaptionEvidence
 from offline.enrichment.context.builder import build_frame_context
 from offline.enrichment.context.config import FrameContextConfig

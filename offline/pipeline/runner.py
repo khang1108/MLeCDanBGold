@@ -50,7 +50,7 @@ def _index_command(config_path: Path, config: VBSConfig, stage: str) -> list[str
 
 def command_for(stage: str, config_path: Path, config: VBSConfig) -> list[str]:
     if stage == "frames":
-        return [sys.executable, "-m", "scripts.corpus.prepare_vbs_frames", "--config", str(config_path)]
+        raise ValueError("The 'frames' stage is deprecated; BTC-provided keyframes are used directly.")
     if stage == "caption":
         return [
             sys.executable, "-m", "scripts.enrichment.generate_enrichment",

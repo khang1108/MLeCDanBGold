@@ -631,7 +631,7 @@ def project_staged_keyframes(
     configured root such as ``data/keyframes`` from being prepended twice.
     """
 
-    from offline.corpus.keyframe_map import project_keyframe_paths
+    from offline.keyframe_map import project_keyframe_paths
 
     root = Path(keyframes_root).expanduser().resolve()
     projected = project_keyframe_paths(frames, root)
@@ -707,7 +707,7 @@ def _apply_btc_mapping_authority(
     downloaded source artifact remains untouched and the mismatch is logged.
     """
 
-    from offline.corpus.keyframe_map import join_btc_mapping
+    from offline.keyframe_map import join_btc_mapping
 
     mapped = join_btc_mapping(frames, mapping)
     comparison = frames[
@@ -744,7 +744,7 @@ def _inspect_inputs(config: OfflineIndexConfig) -> PreflightResult:
     """Validate canonical identity, mapping, Context lineage, and transcripts."""
 
     from hcmai.common.utils.io import read_json
-    from offline.corpus.keyframe_map import (
+    from offline.keyframe_map import (
         load_btc_keyframe_map,
     )
     from hcmai.corpus.stores import FrameContextStore
@@ -914,7 +914,7 @@ def run_visual_preflight(config: OfflineIndexConfig) -> Path:
     """
 
     from hcmai.common.utils.io import atomic_write, read_json, write_parquet
-    from offline.corpus.keyframe_map import load_btc_keyframe_map
+    from offline.keyframe_map import load_btc_keyframe_map
 
     dataset = config.dataset
     frames_path = _require_file(dataset.frames_path, "Canonical frames")

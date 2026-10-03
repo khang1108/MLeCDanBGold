@@ -26,7 +26,7 @@ from offline.enrichment.objects.models import (
     ObjectDetectionConfig,
     ObjectEvidence,
 )
-from offline.corpus.models import FrameArtifact
+from offline.contracts import FrameArtifact
 
 logger = logging.getLogger(__name__)
 
