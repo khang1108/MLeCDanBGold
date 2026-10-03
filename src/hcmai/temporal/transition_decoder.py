@@ -146,6 +146,52 @@ class FrameEmbeddingAccessor:
         return self.get_frame_embeddings(video_id, frame_indices)
 
 
+def encode_query_events(
+    events: Sequence[str],
+    encoder: Any | None = None,
+) -> np.ndarray:
+    """Encode an ordered sequence of event query strings into shared vision-language space.
+
+    Encodes all event texts in a single batch once per query, returning an (M, D) matrix
+    of L2-normalized vectors.
+
+    Args:
+        events: Sequence of M event text queries.
+        encoder: An optional text encoder. If None, instantiates a SigLIPAdapter.
+
+    Returns:
+        np.ndarray of shape (M, D) with float32 L2-normalized embeddings.
+    """
+    if len(events) == 0:
+        return np.empty((0, 0), dtype=np.float32)
+
+    event_list = list(events)
+    if encoder is None:
+        from hcmai.common.config import EncoderConfig
+        from hcmai.retrieval.embedding.adapters.siglip import SigLIPAdapter
+
+        config = EncoderConfig(backend="siglip", model_name="google/siglip2-base-patch16-224")
+        encoder = SigLIPAdapter(config)
+
+    if hasattr(encoder, "encode_text"):
+        embeddings = encoder.encode_text(event_list)
+    elif hasattr(encoder, "encode"):
+        embeddings = encoder.encode(event_list)
+    elif callable(encoder):
+        embeddings = encoder(event_list)
+    else:
+        raise TypeError(f"Unsupported encoder type: {type(encoder)}")
+
+    embeddings = np.asarray(embeddings, dtype=np.float32)
+    if embeddings.ndim != 2 or embeddings.shape[0] != len(events):
+        raise ValueError(
+            f"Expected encoder to return shape ({len(events)}, D), got {embeddings.shape}"
+        )
+
+    norms = np.linalg.norm(embeddings, axis=-1, keepdims=True)
+    return embeddings / np.maximum(norms, 1e-12)
+
+
 @dataclass(frozen=True, slots=True)
 class TransitionEdgeMatrix:
     """Pairwise transition compatibility scores between frames for adjacent events."""
@@ -526,5 +572,6 @@ __all__ = [
     "TransitionEdgeMatrix",
     "decode_candidate_lattice",
     "decode_transition_graph",
+    "encode_query_events",
     "select_event_candidates",
 ]
