@@ -66,32 +66,22 @@ from hcmai.retrieval.serving.utils.errors import (
     RetrievalUnavailableError,
 )
 from hcmai.kis.models import (
-    DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
-    KISEvent,
     KISImageRef,
     KISIntent,
-    KISTemporalEdge,
 )
-from hcmai.retrieval.plan import KISRetrievalEvent, KISRetrievalPlan, build_retrieval_plan
+from hcmai.retrieval.plan import build_retrieval_plan
 from hcmai.retrieval.translation import EventTranslator
 
 if TYPE_CHECKING:
     from hcmai.kis.assets import KISImageAssetStore
-    from hcmai.kis.resolution import (
-        KISGlobalRewriter,
-        KISIntentResolver,
-        KISScopedResolver,
-    )
+    from hcmai.kis.resolution import KISIntentResolver
     from hcmai.retrieval.evidence.hybrid import TemporalEvidenceScorer
     from hcmai.retrieval.evidence.literal import LiteralTextIndex
     from hcmai.retrieval.embedding.models.contracts import ImageEmbeddingAdapter
     from hcmai.retrieval.retriever.models.contracts import VectorRetriever
     from hcmai.retrieval.retriever.pipeline import RetrievalService
     from hcmai.retrieval.serving.client import RetrievalHttpClient
-    from hcmai.retrieval.serving.remote import (
-        RemoteImageSearchService,
-        RemoteTemporalSearchService,
-    )
+    from hcmai.retrieval.serving.remote import RemoteImageSearchService
     from llm.pipeline import LLMService
 
 
@@ -112,8 +102,8 @@ class SearchService:
         api_config: ApiConfig | None = None,
         literal_text: LiteralTextIndex | None = None,
         intent_resolver: KISIntentResolver | None = None,
-        scoped_resolver: KISScopedResolver | None = None,
-        global_rewriter: KISGlobalRewriter | None = None,
+        scoped_resolver: Any | None = None,
+        global_rewriter: Any | None = None,
         feedback_resolver: Any | None = None,
         kis_image_assets: KISImageAssetStore | None = None,
         event_trail_settings: EventTrailSettings | None = None,
@@ -136,8 +126,6 @@ class SearchService:
         self.temporal_evidence = temporal_evidence
         self.api_config = api_config or ApiConfig()
         self.intent_resolver = intent_resolver
-        self.scoped_resolver = scoped_resolver
-        self.global_rewriter = global_rewriter
         self.feedback_resolver = feedback_resolver
         self.kis_image_assets = kis_image_assets
         self.event_translator = event_translator
@@ -448,14 +436,10 @@ class SearchService:
                 raise RevisionConflictError(
                     f"Expected revision {request.expected_revision} does not match query hypothesis {view.intent.revision}"
                 )
-            if request.operation.kind != "search_only":
-                raise InvalidQueryInputError("server-owned query hypotheses may only execute search_only through KIS search")
             intent = view.intent
             summary = KISOperationSummary(kind="search_only", affected_event_ids=[])
             intent_ms = 0.0
         elif request.base_intent is not None:
-            if request.operation.kind != "search_only":
-                raise InvalidQueryInputError("base_intent search requires search_only operation")
             if request.expected_revision != request.base_intent.revision:
                 raise RevisionConflictError(
                     f"Expected revision {request.expected_revision} does not match base {request.base_intent.revision}"
@@ -465,7 +449,7 @@ class SearchService:
             intent_ms = 0.0
         else:
             raise InvalidQueryInputError(
-                "KIS search requires an active query_hypothesis_session_id or base_intent with search_only"
+                "KIS search requires an active query_hypothesis_session_id or base_intent"
             )
 
         self._ensure_search_ready()

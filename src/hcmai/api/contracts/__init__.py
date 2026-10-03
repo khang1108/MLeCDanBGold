@@ -10,16 +10,10 @@ from .avs import (
 from .frames import CatalogTranscriptSegment, FrameCatalogEntry, FrameInspectionResponse
 from .filter import FilterMetadataFilters, FilterRequest, FilterResponse, FilterResult
 from .kis import (
-    EventPatch,
-    GlobalRewriteOperation,
-    InitialResolveOperation,
     KISIntent,
-    KISOperation,
     KISOperationSummary,
     KISSearchRequest,
     KISSearchResponse,
-    PatchEventsOperation,
-    SearchOnlyOperation,
 )
 from .latency import SearchLatency
 from .search import (
@@ -72,16 +66,10 @@ __all__ = [
     "FilterResponse",
     "FilterResult",
     "ImageSearchResponse",
-    "EventPatch",
-    "GlobalRewriteOperation",
-    "InitialResolveOperation",
     "KISIntent",
-    "KISOperation",
     "KISOperationSummary",
     "KISSearchRequest",
     "KISSearchResponse",
-    "PatchEventsOperation",
-    "SearchOnlyOperation",
     "SearchLatency",
     "SearchResult",
     "SearchResultMetadata",

@@ -21,11 +21,7 @@ from hcmai.common.utils.logging import get_logger
 from hcmai.inference import LLMClient, load_llm_endpoint
 from hcmai.kis.assets import KISImageAssetStore
 from hcmai.kis.feedback.resolver import FeedbackResolver
-from hcmai.kis.resolution import (
-    KISGlobalRewriter,
-    KISIntentResolver,
-    KISScopedResolver,
-)
+from hcmai.kis.resolution import KISIntentResolver
 from hcmai.orchestration.setup.corpus import load_configured_corpus, load_corpus
 from hcmai.orchestration.setup.retrieval import (
     load_image_encoder,
@@ -69,8 +65,6 @@ def load_search_service(messages: list[str]) -> SearchService:
     corpus = load_configured_corpus(settings, messages)
     llm_client = _load_llm_client(messages)
     intent_resolver = _load_intent_resolver(messages, llm=llm_client)
-    scoped_resolver = _load_scoped_resolver(messages, llm=llm_client)
-    global_rewriter = _load_global_rewriter(messages, llm=llm_client)
     feedback_resolver = _load_feedback_resolver(messages, llm=llm_client)
     event_translator = _load_event_translator(settings, llm_client)
     kis_image_assets = load_kis_image_assets(settings, messages)
@@ -112,8 +106,6 @@ def load_search_service(messages: list[str]) -> SearchService:
         api_config=settings.api,
         literal_text=literal_text,
         intent_resolver=intent_resolver,
-        scoped_resolver=scoped_resolver,
-        global_rewriter=global_rewriter,
         feedback_resolver=feedback_resolver,
         kis_image_assets=kis_image_assets,
         event_translator=event_translator,
@@ -128,18 +120,12 @@ def load_app_config() -> AppConfig:
     return AppConfig.from_yaml(path)
 
 
-_load_app_config = load_app_config
-
-
 def load_model_config() -> LLMServiceConfig:
     """Load the configuration for legacy remote model capabilities."""
     path = resolve_repository_path(os.getenv("HCMAI_LLM_CONFIG", "llm/config.yaml"))
     if not path.is_file():
         raise FileNotFoundError(f"Model config not found at {path}")
     return LLMServiceConfig.from_yaml(path)
-
-
-_load_model_config = load_model_config
 
 
 def load_remote_inference(
@@ -162,9 +148,6 @@ def load_remote_inference(
     return service
 
 
-_load_remote_llm = load_remote_inference
-
-
 
 def _load_llm_client(messages: list[str]) -> LLMClient | None:
     """Construct the shared LLM client for intent resolution and translation."""
@@ -184,28 +167,6 @@ def _load_intent_resolver(
         messages.append("KIS intent resolver unavailable: LLM client not configured")
         return None
     return KISIntentResolver(llm)
-
-
-def _load_scoped_resolver(
-    messages: list[str],
-    llm: LLMClient | None = None,
-) -> KISScopedResolver | None:
-    """Construct KIS scoped resolver using the shared LLM client."""
-    if llm is None:
-        messages.append("KIS scoped resolver unavailable: LLM client not configured")
-        return None
-    return KISScopedResolver(llm)
-
-
-def _load_global_rewriter(
-    messages: list[str],
-    llm: LLMClient | None = None,
-) -> KISGlobalRewriter | None:
-    """Construct KIS global rewriter using the shared LLM client."""
-    if llm is None:
-        messages.append("KIS global rewriter unavailable: LLM client not configured")
-        return None
-    return KISGlobalRewriter(llm)
 
 
 def _load_feedback_resolver(
@@ -249,5 +210,3 @@ def load_kis_image_assets(
     except Exception as error:
         messages.append(f"KIS image asset store unavailable ({error})")
         return None
-
-_load_kis_image_assets = load_kis_image_assets

@@ -10,7 +10,6 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
 from hcmai.api.contracts.kis import (
-    EventPatch,
     KISOperationSummary,
     KISSearchRequest,
     KISSearchResponse,
@@ -70,7 +69,7 @@ def _make_response(query_text: str | None = "A woman cooks in kitchen.") -> KISS
     return KISSearchResponse(
         intent=intent,
         operation_summary=KISOperationSummary(
-            kind="initial_resolve", affected_event_ids=["E1"]
+            kind="search_only", affected_event_ids=[]
         ),
         use_dense=True,
         use_bm25=True,
@@ -104,12 +103,8 @@ async def test_search_kis_success() -> None:
         resp = await client.post(
             "/api/v1/kis/search",
             json={
-                "base_intent": None,
+                "query_hypothesis_session_id": "sess_123",
                 "expected_revision": 0,
-                "operation": {
-                    "kind": "initial_resolve",
-                    "text": "A woman cooks in kitchen.",
-                },
                 "use_dense": True,
                 "use_bm25": True,
                 "top_k": 10,
@@ -119,7 +114,7 @@ async def test_search_kis_success() -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["intent"]["query_text"] == "A woman cooks in kitchen."
-    assert data["operation_summary"]["kind"] == "initial_resolve"
+    assert data["operation_summary"]["kind"] == "search_only"
     assert "exploration_seed" not in data
     assert "dense_events" not in data
     assert "bm25_events" not in data
@@ -146,12 +141,8 @@ async def test_search_kis_dres_logging_preserves_canonical_query_text() -> None:
             "/api/v1/kis/search",
             headers={"X-VBS-User-ID": "user-test"},
             json={
-                "base_intent": None,
+                "query_hypothesis_session_id": "sess_123",
                 "expected_revision": 0,
-                "operation": {
-                    "kind": "initial_resolve",
-                    "text": "A woman cooks in kitchen.",
-                },
                 "use_dense": True,
                 "use_bm25": True,
                 "top_k": 10,
@@ -185,12 +176,10 @@ async def test_search_kis_dres_logging_falls_back_to_image_only_label() -> None:
             "/api/v1/kis/search",
             headers={"X-VBS-User-ID": "user-test"},
             json={
-                "base_intent": None,
+                "query_hypothesis_session_id": "sess_123",
                 "expected_revision": 0,
-                "operation": {
-                    "kind": "initial_resolve",
-                    "image_refs": [{"asset_id": "sha256:abc", "content_type": "image/png"}],
-                },
+                "use_dense": True,
+                "use_bm25": True,
             },
         )
 
@@ -210,9 +199,9 @@ async def test_search_kis_error_mapping() -> None:
     app.include_router(create_kis_router(container))
 
     valid_payload = {
-        "base_intent": None,
+        "query_hypothesis_session_id": "sess_123",
         "expected_revision": 0,
-        "operation": {"kind": "initial_resolve", "text": "Clue"},
+        "use_dense": True,
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -234,7 +223,7 @@ async def test_search_kis_error_mapping() -> None:
         # A provider/schema ValidationError raised during service execution is
         # also an inference failure; request validation happens before the route.
         with pytest.raises(ValidationError) as validation_error:
-            EventPatch.model_validate({})
+            KISSearchRequest.model_validate({})
         service.search_kis.side_effect = validation_error.value
         resp = await client.post("/api/v1/kis/search", json=valid_payload)
         assert resp.status_code == 502
@@ -280,9 +269,9 @@ async def test_search_kis_maps_query_hypothesis_not_found_and_expired(monkeypatc
         kis_router_module, "run_in_threadpool", direct_run_in_threadpool
     )
     valid_payload = {
-        "base_intent": None,
+        "query_hypothesis_session_id": "sess_123",
         "expected_revision": 0,
-        "operation": {"kind": "initial_resolve", "text": "Clue"},
+        "use_dense": True,
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

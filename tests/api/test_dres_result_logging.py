@@ -49,7 +49,7 @@ class _SearchService:
         return KISSearchResponse(
             intent=intent,
             operation_summary=KISOperationSummary(
-                kind="initial_resolve", affected_event_ids=["E1"]
+                kind="search_only", affected_event_ids=[]
             ),
             use_dense=True,
             use_bm25=True,
@@ -173,12 +173,8 @@ def test_text_search_logs_full_ranked_results_and_trimmed_event(monkeypatch: pyt
                 "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-who-searched"},
                 json={
-                    "base_intent": None,
+                    "query_hypothesis_session_id": "sess_1",
                     "expected_revision": 0,
-                    "operation": {
-                        "kind": "initial_resolve",
-                        "text": "  person running  ",
-                    },
                     "use_dense": True,
                     "use_bm25": True,
                 },
@@ -305,9 +301,8 @@ def test_connected_user_logs_successful_search_even_when_legacy_toggle_is_false(
                 "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
                 json={
-                    "base_intent": None,
+                    "query_hypothesis_session_id": "sess_1",
                     "expected_revision": 0,
-                    "operation": {"kind": "initial_resolve", "text": "person running"},
                     "use_dense": True,
                     "use_bm25": True,
                 },
@@ -335,9 +330,8 @@ def test_logging_failure_does_not_change_retrieval_success_or_leak_error(
                 "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
                 json={
-                    "base_intent": None,
+                    "query_hypothesis_session_id": "sess_1",
                     "expected_revision": 0,
-                    "operation": {"kind": "initial_resolve", "text": "person running"},
                     "use_dense": True,
                     "use_bm25": True,
                 },
@@ -368,9 +362,8 @@ def test_unconfigured_or_unconnected_logging_is_skipped_without_blocking_search(
                 "/api/v1/kis/search",
                 headers=headers,
                 json={
-                    "base_intent": None,
+                    "query_hypothesis_session_id": "sess_1",
                     "expected_revision": 0,
-                    "operation": {"kind": "initial_resolve", "text": "person"},
                     "use_dense": True,
                     "use_bm25": True,
                 },
@@ -394,9 +387,8 @@ def test_absent_dres_service_skips_logging_and_returns_search_results() -> None:
                 "/api/v1/kis/search",
                 headers={"X-VBS-User-ID": "member-a"},
                 json={
-                    "base_intent": None,
+                    "query_hypothesis_session_id": "sess_1",
                     "expected_revision": 0,
-                    "operation": {"kind": "initial_resolve", "text": "person"},
                     "use_dense": True,
                     "use_bm25": True,
                 },

@@ -1,18 +1,14 @@
-"""Contract validation tests for stateless semantic KIS operations."""
+"""Contract validation tests for simplified KIS search contracts."""
 
 import unittest
 import pytest
 from pydantic import ValidationError
 
 from hcmai.api.contracts.kis import (
-    EventPatch,
-    GlobalRewriteOperation,
-    InitialResolveOperation,
     KISOperationSummary,
     KISSearchRequest,
     KISSearchResponse,
-    PatchEventsOperation,
-    SearchOnlyOperation,
+    KISSearchResult,
 )
 from hcmai.kis.models import (
     KISEvent,
@@ -22,13 +18,14 @@ from hcmai.kis.models import (
 )
 
 
-def _base_intent() -> KISIntent:
+def _base_intent(with_image: bool = False) -> KISIntent:
+    images = [KISImageRef(asset_id="img_123", content_type="image/jpeg")] if with_image else []
     return KISIntent(
         revision=2,
         query_text="woman enters, then talks",
         entities=[],
         events=[
-            KISEvent(id="E1", text="A woman enters.", images=[], bindings=[]),
+            KISEvent(id="E1", text="A woman enters.", images=images, bindings=[]),
             KISEvent(id="E2", text="The woman talks.", images=[], bindings=[]),
         ],
         temporal_edges=[KISTemporalEdge(source="E1", target="E2", relation="before")],
@@ -36,148 +33,62 @@ def _base_intent() -> KISIntent:
 
 
 class KISContractsTest(unittest.TestCase):
-    def test_initial_resolve_natural_text(self) -> None:
-        request = KISSearchRequest.model_validate({
-            "base_intent": None,
-            "expected_revision": 0,
-            "operation": {
-                "kind": "initial_resolve",
-                "text": "woman enters kitchen",
-                "image_refs": [],
-            },
-            "use_dense": True,
-            "use_bm25": True,
-            "top_k": 20,
-        })
-        self.assertIsNone(request.base_intent)
-        self.assertEqual(request.expected_revision, 0)
-        self.assertEqual(request.operation.kind, "initial_resolve")
-        self.assertEqual(request.operation.text, "woman enters kitchen")
-
-    def test_initial_resolve_rejects_both_natural_and_explicit_patches(self) -> None:
-        with self.assertRaises(ValidationError):
-            InitialResolveOperation(
-                kind="initial_resolve",
-                text="natural text",
-                patches=[EventPatch(event_id="E1", instruction="chef")],
-            )
-
-    def test_initial_resolve_rejects_neither_natural_nor_explicit(self) -> None:
-        with self.assertRaises(ValidationError):
-            InitialResolveOperation(kind="initial_resolve")
-
-    def test_search_only_operation(self) -> None:
+    def test_search_with_base_intent(self) -> None:
         base = _base_intent()
         request = KISSearchRequest.model_validate({
             "base_intent": base.model_dump(),
             "expected_revision": base.revision,
-            "operation": {"kind": "search_only"},
             "use_dense": True,
             "use_bm25": False,
-            "top_k": 100,
+            "top_k": 50,
         })
         self.assertIsNotNone(request.base_intent)
-        self.assertEqual(request.operation.kind, "search_only")
-        self.assertEqual(request.top_k, 100)
+        self.assertEqual(request.top_k, 50)
+        self.assertEqual(request.expected_revision, 2)
 
-    def test_patch_events_operation(self) -> None:
-        base = _base_intent()
+    def test_search_with_query_hypothesis_session(self) -> None:
         request = KISSearchRequest.model_validate({
-            "base_intent": base.model_dump(),
-            "expected_revision": base.revision,
-            "operation": {
-                "kind": "patch_events",
-                "patches": [
-                    {
-                        "event_id": "E2",
-                        "instruction": "The woman talks to a chef.",
-                        "add_image_ids": ["sha256:abc"],
-                        "remove_image_ids": [],
-                    }
-                ],
-            },
+            "query_hypothesis_session_id": "sess_abc123",
+            "expected_revision": 1,
             "use_dense": True,
             "use_bm25": True,
-            "top_k": 10,
         })
-        self.assertEqual(request.operation.kind, "patch_events")
-        self.assertEqual(len(request.operation.patches), 1)
-        self.assertEqual(request.operation.patches[0].event_id, "E2")
+        self.assertEqual(request.query_hypothesis_session_id, "sess_abc123")
+        self.assertIsNone(request.base_intent)
 
-    def test_patch_events_rejects_empty_patches(self) -> None:
-        with self.assertRaises(ValidationError):
-            PatchEventsOperation(kind="patch_events", patches=[])
-
-    def test_global_rewrite_operation(self) -> None:
-        base = _base_intent()
-        request = KISSearchRequest.model_validate({
-            "base_intent": base.model_dump(),
-            "expected_revision": base.revision,
-            "operation": {
-                "kind": "global_rewrite",
-                "instruction": "Resolve all pronouns explicitly.",
-            },
-        })
-        self.assertEqual(request.operation.kind, "global_rewrite")
-        self.assertEqual(
-            request.operation.instruction, "Resolve all pronouns explicitly."
-        )
-
-    def test_global_rewrite_rejects_blank_instruction(self) -> None:
-        with self.assertRaises(ValidationError):
-            GlobalRewriteOperation(kind="global_rewrite", instruction="   ")
-
-    def test_search_request_requires_at_least_one_retrieval_source(self) -> None:
+    def test_search_request_requires_target(self) -> None:
         with self.assertRaises(ValidationError):
             KISSearchRequest.model_validate({
                 "base_intent": None,
+                "query_hypothesis_session_id": None,
                 "expected_revision": 0,
-                "operation": {
-                    "kind": "initial_resolve",
-                    "text": "woman enters kitchen",
-                },
+                "use_dense": True,
+            })
+
+    def test_search_request_requires_at_least_one_retrieval_source(self) -> None:
+        base = _base_intent(with_image=False)
+        with self.assertRaises(ValidationError):
+            KISSearchRequest.model_validate({
+                "base_intent": base.model_dump(),
+                "expected_revision": 2,
                 "use_dense": False,
                 "use_bm25": False,
             })
 
-
-
-# ---- Task 1: evidence-aware source validation regressions ----
-
-def test_image_only_initial_request_allows_text_sources_disabled() -> None:
-    """Image-only initial resolve must be accepted even when both text toggles are false."""
-    request = KISSearchRequest.model_validate({
-        "base_intent": None,
-        "expected_revision": 0,
-        "operation": {
-            "kind": "initial_resolve",
-            "image_refs": [{"asset_id": "img_abc", "content_type": "image/png"}],
-        },
-        "use_dense": False,
-        "use_bm25": False,
-        "top_k": 20,
-    })
-    assert request.use_dense is False
-    assert request.use_bm25 is False
-
-
-def test_text_only_initial_request_rejects_all_text_sources_disabled() -> None:
-    """Text-only initial resolve must raise when both use_dense=False and use_bm25=False."""
-    try:
-        KISSearchRequest.model_validate({
-            "base_intent": None,
-            "expected_revision": 0,
-            "operation": {"kind": "initial_resolve", "text": "woman enters"},
+    def test_image_evidence_allows_text_sources_disabled(self) -> None:
+        base = _base_intent(with_image=True)
+        request = KISSearchRequest.model_validate({
+            "base_intent": base.model_dump(),
+            "expected_revision": 2,
             "use_dense": False,
             "use_bm25": False,
+            "top_k": 20,
         })
-    except ValueError as exc:
-        assert "retrieval source" in str(exc).lower()
-    else:
-        raise AssertionError("text-only request must require a text retrieval source")
+        self.assertFalse(request.use_dense)
+        self.assertFalse(request.use_bm25)
 
 
-def test_kis_search_response_has_no_exploration_seed() -> None:
+def test_kis_search_response_structure() -> None:
     from hcmai.api.contracts.latency import SearchLatency
 
     assert "dense_events" not in KISSearchResponse.model_fields
@@ -188,9 +99,6 @@ def test_kis_search_response_has_no_exploration_seed() -> None:
 
 
 def test_kis_search_result_requires_result_id() -> None:
-    from hcmai.api.contracts.kis import KISSearchResult
-    from hcmai.api.contracts.search import SearchResultMetadata
-
     with pytest.raises(ValidationError):
         KISSearchResult.model_validate({
             "frame_id": "v1_f1",

@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from hcmai.api.contracts.kis import KISSearchRequest, SearchOnlyOperation
+from hcmai.api.contracts.kis import KISSearchRequest
 from hcmai.api.contracts.search import SearchLatency, SearchResult, SearchResultMetadata
 
 
@@ -137,7 +137,6 @@ def test_search_kis_captures_snapshot_and_assigns_result_ids(corpus, mock_artifa
     request = KISSearchRequest(
         base_intent=intent,
         expected_revision=1,
-        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
         top_k=5,
@@ -214,7 +213,6 @@ def test_search_kis_multiple_results_share_same_video_evidence(corpus):
     request = KISSearchRequest(
         base_intent=make_intent(),
         expected_revision=1,
-        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
     )
@@ -268,7 +266,6 @@ def test_search_kis_degrades_gracefully_on_memory_error(corpus, mock_artifact, m
     request = KISSearchRequest(
         base_intent=intent,
         expected_revision=1,
-        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
     )
@@ -336,7 +333,6 @@ def test_kis_snapshot_trail_lifecycle_with_scoring_call_counters(corpus, mock_ar
     request = KISSearchRequest(
         base_intent=intent,
         expected_revision=1,
-        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
     )
@@ -436,7 +432,6 @@ def test_REQ_008_kis_snapshot_uses_remote_scoring_revision(corpus, mock_artifact
     request = KISSearchRequest(
         base_intent=make_intent(),
         expected_revision=1,
-        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
         top_k=5,
@@ -492,7 +487,6 @@ def test_search_kis_rejects_missing_scoring_revision(corpus, mock_artifact) -> N
     request = KISSearchRequest(
         base_intent=intent,
         expected_revision=1,
-        operation=SearchOnlyOperation(kind="search_only"),
         use_dense=True,
         use_bm25=False,
         top_k=5,
