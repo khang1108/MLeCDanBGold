@@ -63,3 +63,49 @@ def test_large_k_does_not_crash():
     assert len(layers[0].frame_indices) == 3
     # Event 1 can only be at frames that have a predecessor (frames 1 and 2)
     assert len(layers[1].frame_indices) == 2
+
+
+def test_decode_with_external_candidates_and_sliced_transitions():
+    """Verify decode_candidate_lattice consumes external candidate layers and sliced transitions."""
+    from hcmai.temporal.transition_decoder import decode_candidate_lattice
+
+    scores = np.array([
+        [1.0, 5.0, 1.0],
+        [1.0, 1.0, 5.0],
+    ])
+    video = make_sample_video(scores)
+
+    # External candidate layers
+    c0 = EventCandidateLayer(event_index=0, frame_indices=np.array([1]), scores=np.array([5.0]))
+    c1 = EventCandidateLayer(event_index=1, frame_indices=np.array([2]), scores=np.array([5.0]))
+
+    # Transition matrix sliced to candidate lattice shape (K_0, K_1) = (1, 1)
+    trans = np.array([[2.5]])
+
+    paths = decode_candidate_lattice(
+        video,
+        candidates=[c0, c1],
+        transition_scores=[trans],
+        transition_weight=1.0,
+        lambda_gap=0.0,
+    )
+
+    assert len(paths) == 1
+    assert paths[0].frame_idx == (1, 2)
+    # Score = U_0(1) + U_1(2) + trans(0,0) = 5.0 + 5.0 + 2.5 = 12.5
+    assert np.isclose(paths[0].score, 12.5)
+
+
+def test_decode_mismatched_candidate_layers_raises():
+    from hcmai.temporal.transition_decoder import decode_candidate_lattice
+
+    scores = np.array([
+        [1.0, 5.0, 1.0],
+        [1.0, 1.0, 5.0],
+    ])
+    video = make_sample_video(scores)
+    c0 = EventCandidateLayer(event_index=0, frame_indices=np.array([1]), scores=np.array([5.0]))
+
+    with pytest.raises(ValueError, match="must match number of events"):
+        decode_candidate_lattice(video, candidates=[c0])
+

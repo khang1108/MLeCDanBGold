@@ -1,23 +1,26 @@
 % !TeX root = ../main.tex
 \begin{abstract}
-Large language models can decompose complex video-search narratives into
-ordered events, but errors in event boundaries or temporal relations may
-affect downstream retrieval. In multi-event search, such errors are difficult
-to diagnose when both query interpretation and temporal alignment remain
-internal to the retrieval pipeline. We present SHI, an interactive
-video retrieval system with two interaction stages: pre-retrieval and
-post-retrieval. In the pre-retrieval stage, the Query Hypothesis
-exposes the LLM-generated decomposition as an editable ordered sequence of
-events, allowing users to inspect and revise the search structure before
-retrieval. In the post-retrieval stage, EventTrail exposes the decoded
-temporal alignment of a candidate video and presents alternative event
-occurrences as complete ordered paths rather than isolated frames. Users can
-anchor accepted occurrences or exclude incorrect temporal regions, after which
-the alignment is re-decoded under the resulting constraints. Because
-re-decoding operates on retained retrieval evidence, these corrections can be
-applied without repeating corpus-level multimodal retrieval. Together, the two
-stages make both semantic decomposition and temporal alignment explicit
-interaction objects in multi-event video search.
+In multi-event Known-Item Search (KIS) at the Video Browser Showdown,
+complex narrative queries typically describe sequences of temporally ordered
+visual events. While large language models (LLMs) can decompose such narratives
+into structured sub-queries, errors in event boundaries or temporal sequencing
+frequently cascade into downstream retrieval failures. Such errors remain
+opaque when query parsing and temporal alignment operate as internal,
+black-box processes. We present SHI (Structured Hypothesis Inspection), an
+interactive video retrieval system that externalizes intermediate
+representations into explicit interaction objects across two complementary
+stages. In the pre-retrieval stage, the Query Hypothesis exposes the
+LLM decomposition as an editable ordered sequence, enabling users to verify
+semantics, reorder events, and bind reference images before querying. In the
+post-retrieval stage, EventTrail visualizes the temporal alignment of candidate
+videos as coherent ordered paths rather than isolated keyframes. Users can
+anchor valid occurrences or exclude false-positive intervals via keep, use,
+and reject actions, triggering dynamic-programming path re-decoding over
+retained multimodal evidence snapshots without repeating corpus-level
+retrieval. In an exploratory evaluation on multi-event KIS tasks, SHI achieved
+a 90\% valid timestamp hit rate compared to 60\% for a standard baseline,
+demonstrating that structured hypothesis inspection effectively recovers from
+early-stage cascade errors.
 
 \keywords{
 Interactive video retrieval

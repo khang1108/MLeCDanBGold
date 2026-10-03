@@ -320,17 +320,22 @@ def decode_candidate_lattice(
     cluster_delta: float = 0.0,
     min_separation_ms: int = 0,
     *,
+    candidates: Sequence[EventCandidateLayer] | None = None,
+    transition_scores: Sequence[np.ndarray | TransitionEdgeMatrix] | None = None,
     allowed: np.ndarray | None = None,
 ) -> list[DPPath]:
-    """Decode optimal chronological paths through a Top-K candidate lattice per event.
+    """Decode optimal chronological paths through a candidate lattice per event.
 
     Reduces computational complexity from :math:`O(M \\cdot F^2)` to :math:`O(M \\cdot K^2)`,
     enabling millisecond-level motion-aware graph decoding over long videos with thousands
     of keyframes.
 
-    For each event :math:`i`, we select the top :math:`K` candidate frames by unary score.
-    Pairwise transition compatibility :math:`\\psi(s, t)` is evaluated strictly across
-    the candidate lattice.
+    When candidates are provided externally (e.g. from ``select_event_candidates``),
+    they define the layered graph nodes :math:`C_1 \\to C_2 \\to \\dots \\to C_M`.
+    Otherwise, candidates are automatically selected via ``select_event_candidates``.
+
+    Transition scores can be provided via ``transition_scores`` or the legacy alias ``transitions``,
+    as either full-frame :math:`(F, F)` matrices or candidate-sliced :math:`(K_{i-1}, K_i)` matrices.
     """
     prep = _prepare_dp_inputs(video, allowed, event_power, cluster_delta)
     if prep is None:
@@ -338,32 +343,47 @@ def decode_candidate_lattice(
     scores, frames, starts, source, reachable = prep
     n_events, n_frames = scores.shape
 
-    # Extract Top-K candidate frame indices per event (chronologically sorted)
-    candidates: list[np.ndarray] = []
-    for event in range(n_events):
-        ev_scores = scores[event]
-        valid_idx = np.where(reachable & np.isfinite(ev_scores))[0]
-        if len(valid_idx) == 0:
+    # Resolve candidates: external sequence or top-k selection
+    if candidates is None:
+        cand_layers = select_event_candidates(
+            video,
+            candidate_k=candidate_k,
+            allowed=allowed,
+            event_power=event_power,
+            cluster_delta=cluster_delta,
+        )
+        if len(cand_layers) == 0:
             return []
-        k = min(candidate_k, len(valid_idx))
-        top_k = valid_idx[np.argpartition(-ev_scores[valid_idx], k - 1)[:k]]
-        candidates.append(np.sort(top_k))
+        candidates_seq = cand_layers
+    else:
+        if len(candidates) != n_events:
+            raise ValueError(
+                f"Number of candidate layers ({len(candidates)}) must match number of events ({n_events})"
+            )
+        candidates_seq = candidates
+
+    # Ensure every layer has at least one candidate frame
+    for layer in candidates_seq:
+        if len(layer.frame_indices) == 0:
+            return []
+
+    effective_transitions = transition_scores if transition_scores is not None else transitions
 
     # Initialize DP on first event candidates
-    c0 = candidates[0]
+    c0 = np.asarray(candidates_seq[0].frame_indices, dtype=np.int64)
     dp_vals = scores[0, c0].copy()
     back_pointers: list[np.ndarray] = []
 
     for event in range(1, n_events):
         edge_idx = event - 1
-        c_prev = candidates[event - 1]
-        c_curr = candidates[event]
+        c_prev = np.asarray(candidates_seq[event - 1].frame_indices, dtype=np.int64)
+        c_curr = np.asarray(candidates_seq[event].frame_indices, dtype=np.int64)
 
         # Extract and slice transition matrix to candidate lattice
         edge_sub_mat: np.ndarray | None = None
-        if transitions is not None and edge_idx < len(transitions):
+        if effective_transitions is not None and edge_idx < len(effective_transitions):
             raw_mat, weight = _validate_and_extract_edge_matrix(
-                transitions[edge_idx],
+                effective_transitions[edge_idx],
                 transition_weight,
                 expected_shape=None,
             )
@@ -378,14 +398,16 @@ def decode_candidate_lattice(
                         f"full video ({n_frames}, {n_frames}) or candidate lattice ({len(c_prev)}, {len(c_curr)})"
                     )
 
-        # Chronological predecessor condition: s <= source[t]
-        s_indices = c_prev[:, None]        # shape (K_prev, 1)
-        t_sources = source[c_curr][None, :]  # shape (1, K_curr)
-        valid_pred = s_indices <= t_sources
+        # Chronological predecessor condition: frame s strictly precedes frame t
+        # (s <= source[t] requiring reachable[t] == True to prevent frame 0 self-reachability)
+        s_indices = c_prev[:, None]          # shape (K_prev, 1)
+        t_sources = source[c_curr][None, :]    # shape (1, K_curr)
+        t_reachable = reachable[c_curr][None, :]  # shape (1, K_curr)
+        valid_pred = t_reachable & (s_indices <= t_sources)
 
         # Time gap penalty: lambda_gap * (t_time - s_time)
-        s_times = video.timestamps_ms[c_prev][:, None]
-        t_times = video.timestamps_ms[c_curr][None, :]
+        s_times = np.asarray(video.timestamps_ms, dtype=np.float64)[c_prev][:, None]
+        t_times = np.asarray(video.timestamps_ms, dtype=np.float64)[c_curr][None, :]
         gap_penalty = lambda_gap * (t_times - s_times)
 
         # Transition affinity
@@ -401,7 +423,7 @@ def decode_candidate_lattice(
         back_pointers.append(best_s_local)
 
     # Reconstruct ranked paths from final candidate layer
-    c_last = candidates[-1]
+    c_last = np.asarray(candidates_seq[-1].frame_indices, dtype=np.int64)
     timestamps = np.asarray(video.timestamps_ms, dtype=np.int64)
     results: list[DPPath] = []
     accepted: list[int] = []
@@ -423,7 +445,7 @@ def decode_candidate_lattice(
         curr_local = int(local_endpoint)
         for event in range(n_events - 1, 0, -1):
             prev_local = int(back_pointers[event - 1][curr_local])
-            prev_global = int(candidates[event - 1][prev_local])
+            prev_global = int(candidates_seq[event - 1].frame_indices[prev_local])
             path.append(prev_global)
             curr_local = prev_local
 

@@ -29,6 +29,9 @@ yarn-error.log*
 pnpm-debug.log*
 frontend/node_modules/
 frontend/build/
+frontend_baseline/build/
+frontend_baseline/node_modules/
+frontend_baseline/node_modules
 frontend/dist/
 frontend/.cache/
 
