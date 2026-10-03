@@ -16,7 +16,6 @@ from hcmai.kis.models import (
     KISEntityBinding,
     KISEvent,
     KISIntent,
-    KISTemporalEdge,
     NonBlank,
 )
 from hcmai.kis.resolution.initial import KISResolutionError
@@ -90,17 +89,12 @@ class KISGlobalRewriter:
         if canonical_query_text(events) is None:
             query_text = None
 
-        temporal_edges = [
-            KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}")
-            for i in range(1, len(events))
-        ]
         try:
             return KISIntent(
                 revision=base.revision + 1,
                 query_text=query_text,
                 entities=resolved.entities,
                 events=events,
-                temporal_edges=temporal_edges,
             )
         except ValueError as exc:
             raise KISResolutionError(f"Canonical rewrite validation failed: {exc}") from exc

@@ -17,7 +17,6 @@ from hcmai.kis.models import (
     KISEntityBinding,
     KISEvent,
     KISIntent,
-    KISTemporalEdge,
     NonBlank,
 )
 from hcmai.kis.parser import EventPatchInstruction
@@ -45,14 +44,6 @@ def canonical_query_text(events: Sequence[KISEvent]) -> str | None:
     """Join non-empty event text in timeline order, or return ``None`` if absent."""
     text = " ".join(event.text for event in events if event.text)
     return text or None
-
-
-def _edges_for(events: Sequence[KISEvent]) -> list[KISTemporalEdge]:
-    """Build the complete adjacent temporal chain for an ordered event list."""
-    return [
-        KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}")
-        for i in range(1, len(events))
-    ]
 
 
 def apply_scoped_resolutions(
@@ -129,7 +120,6 @@ def apply_scoped_resolutions(
             query_text=query_text,
             entities=entities,
             events=events,
-            temporal_edges=_edges_for(events),
         )
     except ValueError as exc:
         raise KISResolutionError(f"Canonical scoped intent validation failed: {exc}") from exc

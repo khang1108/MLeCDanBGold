@@ -15,26 +15,20 @@ from hcmai.kis.hypothesis.models import (
 from hcmai.kis.models import (
     KISEvent,
     KISIntent,
-    KISTemporalEdge,
     SourceProvenance,
 )
 
 
 def _canonicalize(intent: KISIntent, events: list[KISEvent]) -> KISIntent:
-    """Re-canonicalize event IDs to E1..En, rebuild adjacent edges, and bump revision."""
+    """Re-canonicalize event IDs to E1..En and bump revision."""
     canonical = [
         event.model_copy(update={"id": f"E{i + 1}"})
         for i, event in enumerate(events)
-    ]
-    edges = [
-        KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}")
-        for i in range(1, len(canonical))
     ]
     return intent.model_copy(
         update={
             "revision": intent.revision + 1,
             "events": canonical,
-            "temporal_edges": edges,
         }
     )
 

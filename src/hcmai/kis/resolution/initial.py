@@ -22,7 +22,6 @@ from hcmai.kis.models import (
     KISEvent,
     KISInitialResolution,
     KISIntent,
-    KISTemporalEdge,
     SourceProvenance,
 )
 from hcmai.kis.resolution.prompts import build_kis_initial_messages
@@ -53,7 +52,6 @@ def _fallback_intent(query: str, revision: int) -> KISIntent:
                 bindings=[],
             )
         ],
-        temporal_edges=[],
     )
 
 
@@ -134,17 +132,12 @@ class KISIntentResolver:
                 )
                 for index, span in enumerate(spans)
             ]
-            edges = [
-                KISTemporalEdge(source=f"E{i}", target=f"E{i + 1}")
-                for i in range(1, len(events))
-            ]
             return KISIntent(
                 revision=revision,
                 query_text=canonical_query,
                 language=infer_query_language(canonical_query),
                 entities=[],
                 events=events,
-                temporal_edges=edges,
             )
         except (
             InferenceError,

@@ -8,7 +8,6 @@ on HTTP transport schemas.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
@@ -16,6 +15,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
+    computed_field,
     model_validator,
 )
 
@@ -179,18 +179,28 @@ class KISTemporalEdge(BaseModel):
 class KISIntent(BaseModel):
     """Semantic graph representing a resolved KIS multi-clue search intent."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     revision: int = Field(ge=1)
     query_text: NonBlank | None
     language: Literal["vi", "en", "mixed"] = "en"
     entities: list[KISEntity] = Field(default_factory=list)
     events: list[KISEvent] = Field(min_length=1)
-    temporal_edges: list[KISTemporalEdge] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def temporal_edges(self) -> list[KISTemporalEdge]:
+        """Derive sequential linear adjacent chain (E1 -> E2 -> ... -> En)."""
+        if len(self.events) <= 1:
+            return []
+        return [
+            KISTemporalEdge(source=f"E{i}", relation="before", target=f"E{i+1}")
+            for i in range(1, len(self.events))
+        ]
 
     @model_validator(mode="after")
     def validate_graph(self) -> Self:
-        """Validate identity uniqueness, referential integrity, and edge ordering."""
+        """Validate identity uniqueness, referential integrity, and event ordering."""
         has_text = any(event.text is not None for event in self.events)
         if has_text != (self.query_text is not None):
             raise ValueError(
@@ -217,7 +227,6 @@ class KISIntent(BaseModel):
             raise ValueError(
                 f"Event IDs must be sequentially ordered E1..En, got: {actual_ids}"
             )
-        event_indices = {event_id: idx for idx, event_id in enumerate(actual_ids)}
 
         # 4. Entity binding referential integrity
         for event in self.events:
@@ -226,22 +235,6 @@ class KISIntent(BaseModel):
                     raise ValueError(
                         f"Event {event.id} references unknown entity: {binding.entity_id}"
                     )
-
-        # 5. Temporal edges: auto-populate sequential chain if omitted or empty
-        expected_edges = [
-            (f"E{i}", f"E{i+1}") for i in range(1, len(self.events))
-        ]
-        if not self.temporal_edges and len(self.events) > 1:
-            self.temporal_edges = [
-                KISTemporalEdge(source=s, relation="before", target=t)
-                for s, t in expected_edges
-            ]
-        else:
-            actual_edges = [(edge.source, edge.target) for edge in self.temporal_edges]
-            if actual_edges != expected_edges:
-                raise ValueError(
-                    f"Temporal edges must form complete sequential adjacent chain {expected_edges}, got: {actual_edges}"
-                )
 
         return self
 
