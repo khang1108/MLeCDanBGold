@@ -27,6 +27,72 @@ from hcmai.temporal.dp import (
 
 
 @dataclass(frozen=True, slots=True)
+class EventCandidateLayer:
+    """Top-K candidate frame coordinate and unary score layer for one event."""
+
+    event_index: int
+    frame_indices: np.ndarray
+    scores: np.ndarray
+
+    def __post_init__(self) -> None:
+        idx = np.asarray(self.frame_indices, dtype=np.int64)
+        sc = np.asarray(self.scores, dtype=np.float64)
+        if idx.ndim != 1 or sc.ndim != 1:
+            raise ValueError("frame_indices and scores must be 1D arrays")
+        if len(idx) != len(sc):
+            raise ValueError("frame_indices and scores must have the same length")
+        idx.setflags(write=False)
+        sc.setflags(write=False)
+        object.__setattr__(self, "frame_indices", idx)
+        object.__setattr__(self, "scores", sc)
+
+
+def select_event_candidates(
+    video: VideoEventScores,
+    *,
+    candidate_k: int,
+    allowed: np.ndarray | None = None,
+    event_power: float = 1.0,
+    cluster_delta: float = 0.0,
+) -> tuple[EventCandidateLayer, ...]:
+    """Select top-K candidate frames per event with causal feasibility.
+
+    Event 0 does not require predecessor reachability (valid if finite).
+    Events i > 0 require predecessor reachability (source >= 0) and finite scores.
+    """
+    if candidate_k <= 0:
+        raise ValueError(f"candidate_k must be positive, got {candidate_k}")
+
+    prep = _prepare_dp_inputs(video, allowed, event_power, cluster_delta)
+    if prep is None:
+        return ()
+    scores, frames, starts, source, reachable = prep
+    n_events, n_frames = scores.shape
+
+    layers: list[EventCandidateLayer] = []
+    for event in range(n_events):
+        ev_scores = scores[event]
+        if event == 0:
+            valid_mask = np.isfinite(ev_scores)
+        else:
+            valid_mask = reachable & np.isfinite(ev_scores)
+        valid_idx = np.where(valid_mask)[0]
+        if len(valid_idx) == 0:
+            return ()
+        k = min(candidate_k, len(valid_idx))
+        top_k = valid_idx[np.argpartition(-ev_scores[valid_idx], k - 1)[:k]]
+        sorted_indices = np.sort(top_k)
+        layers.append(
+            EventCandidateLayer(
+                event_index=event,
+                frame_indices=sorted_indices,
+                scores=ev_scores[sorted_indices],
+            )
+        )
+    return tuple(layers)
+
+
+@dataclass(frozen=True, slots=True)
 class TransitionEdgeMatrix:
     """Pairwise transition compatibility scores between frames for adjacent events."""
 
@@ -378,8 +444,10 @@ __all__ = [
     "AlignedPath",
     "ConditionedDPPath",
     "DPPath",
+    "EventCandidateLayer",
     "MotionCosineTransitionScorer",
     "TransitionEdgeMatrix",
     "decode_candidate_lattice",
     "decode_transition_graph",
+    "select_event_candidates",
 ]
