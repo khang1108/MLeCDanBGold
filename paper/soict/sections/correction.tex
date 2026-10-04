@@ -2,32 +2,36 @@
 \label{sec:correction}
 
 When the video is right but some events are wrong, the user should not need to rewrite the query.
-We measure how quickly a user can repair the path by acting on one event at a time, with every action turned into a constraint on the same cached score matrix.
+We measure correction headroom under a limited number of oracle actions, each turned into a constraint on the same cached score matrix.
 
 \input{figures/correction}
 
 \paragraph{Actions and decoding.}
-For a selected event $E_i$ (Fig.~\ref{fig:trail}) the user sees its current frame and $k$ alternatives and takes one of three actions.
+For a selected event $E_i$ (Fig.~\ref{fig:trail}) the interface presents its current frame and a budget of $k$ candidate frames, then accepts one of three actions.
 \emph{Keep} fixes $E_i$ to its current frame.
 \emph{Use} fixes $E_i$ to one of the alternatives.
-\emph{Reject} removes from $E_i$'s admissible frames the cell around the current frame bounded by the midpoints to its neighboring timestamps, the same rejection unit as the EventTrail interface of SHI~\cite{nguyen2027shi}.
+\emph{Reject} removes the current frame's timestamp cell, as in SHI's EventTrail~\cite{nguyen2027shi}.
+For timestamp $t$, the nearest distinct timestamps $t_-$ and $t_+$ in the full video define the inclusive bounds $\lfloor(t_-+t)/2\rfloor+1$ and $\lfloor(t+t_+)/2\rfloor$ in milliseconds; boundary cells extend to the first or last timestamp.
 Fixed events and rejected cells form a mask on $S_v$, and the DP of Sect.~\ref{sec:benchmark} is re-run under the mask.
 Re-decoding never touches the corpus index, so the decoder latency per action is about one millisecond, against a median of 3.8\,s for a new search; this is computation time only and excludes the time a user needs to inspect frames and decide.
 
 \paragraph{Simulated user.}
 An oracle user who knows the annotated intervals repeatedly selects an event that is not yet fixed: if its frame is correct it keeps it; otherwise it uses a correct alternative if one is shown and rejects the current frame if not.
 We vary three factors.
-\emph{Proposals}: the $k$ alternatives are either the highest-scoring frames of $E_i$ at least 5\,s apart (\emph{local}), or the focus frames of the $k$ best complete paths through distinct frames of $E_i$, computed by forward--backward max-marginals (\emph{path}).
+\emph{Proposals}: admissible frames are ranked by unary event score (\emph{local}) or the best complete path through each focus frame, using forward--backward max-marginals (\emph{path}).
+Both greedily retain at most $k$ frames separated by at least 5\,s from previously retained frames.
 \emph{Order}: events are inspected left to right, in random order (10 seeds), or in increasing order of a per-event confidence, the score lost by forcing the event to its best distinct alternative.
 \emph{Propagation}: after an action the whole path is re-decoded (\emph{joint}), or only the touched event is re-decoded while the others stay where they are (\emph{frozen}).
-We report the fraction of queries whose path is entirely correct after at most $B$ actions, H@$B$, and the number of frames presented (the current frame plus $k$ alternatives per action).
+We report the fraction of queries with every event inside its interval after at most $B$ actions, H@$B$, and frame presentations.
 The simulation stops as soon as the whole path is correct, including events the user has not yet confirmed, so a query that is correct initially costs no presentations; presentation counts are therefore effort under oracle stopping, not measured human effort.
 As a baseline without the decoder (\emph{no DP}), each event starts at its highest-scoring frame and actions change only the touched event, without order constraints.
+Nominal proposal and action budgets are matched, but displays are not identical: ranked candidates in the joint simulation may include the current frame, whereas local baseline proposals exclude it and enforce separation from it.
+The decoder comparison therefore includes initialization, ordering, and proposal differences, rather than isolating propagation alone.
 Frozen re-decoding keeps the DP starting path and re-places the touched event between its fixed neighbors, but does not propagate to untouched events; if the user's choice falls outside the neighbors, it is applied anyway, as a local editor would (3 of 40 queries for each $k$, one of which ends solved with an out-of-order path).
 
 \begin{table}[t]
 \centering
-\caption{Whole-sequence correctness (\%) after at most $B$ actions on 40 queries with the correct video given and an oracle user, $k$ alternatives per action. The lower block uses joint re-decoding; random order averages 10 seeds over the same 40 queries. H@0 is 25.0 with DP and 10.0 without.}
+\caption{Whole-sequence correctness (\%) after at most $B$ actions on the frozen 40-query cohort, with the correct video and an oracle user; $k$ is the nominal candidate budget. The lower block uses joint re-decoding; random order averages 10 seeds over the same queries. H@0 is 25.0 with DP and 10.0 without.}
 \label{tab:correction}
 \begin{tabular}{llcccccccc}
 \toprule
@@ -57,15 +61,16 @@ path  & confidence     & 27.5 & 50.0 & 60.0 & 67.5 & 30.0 & 52.5 & 65.0 & 70.0 \
 \end{figure}
 
 \paragraph{Correction headroom under oracle feedback.}
-Table~\ref{tab:correction} and Fig.~\ref{fig:results}b show that, with the correct video given, five actions raise whole-sequence correctness from 25\% to 62.5--67.5\% with four alternatives and to 67.5--75.2\% with eight; the upper end is random order, whose 10 seeds are rollouts over the same 40 queries.
-The gain holds in every subset (path proposals, sequential order, $k=4$): from 23\% to 62\% on the first set, whose submissions name a single video, 14\% to 86\% on the second, 40\% to 67\% on the third, and 0\% to 40\% on the five TRAKE queries.
-The number of alternatives shown per action matters more than how they are chosen, but it is not free: with sequential order 14.1 frames per query are presented on average with $k=4$ and 24.3 with $k=8$.
+Table~\ref{tab:correction} and Fig.~\ref{fig:results}b show that, with the correct video given, five actions raise whole-sequence correctness from 25\% to 62.5--67.5\% with four candidate slots and to 67.5--75.2\% with eight; the upper end is random order, whose 10 seeds are rollouts over the same 40 queries, not additional independent queries.
+The observed gain is positive in each subset (path, sequential, $k=4$): 23\% to 62\% on the first set, 14\% to 86\% on the second, 40\% to 67\% on the third, and 0\% to 40\% on TRAKE; these estimates use few queries, including only five TRAKE queries.
+Random-order means are descriptive; without seed-level uncertainty, a consistent advantage is not established.
+Larger candidate budgets yield higher correctness in these runs, while proposal variants show no consistent advantage.
+Sequential order presents 14.1 frames per query on average with $k=4$ and 24.3 with $k=8$, including zero presentations for initially correct queries under oracle stopping.
 
 \paragraph{Where the decoder helps.}
-With the same proposal rule and action budget but no DP, H@5 is 37.5\% ($k=4$) and 47.5\% ($k=8$), against 62.5\% and 70.0\% with joint re-decoding, and more frames are presented (18.8 and 31.5).
+With matched nominal budgets but no DP, H@5 is 37.5\% ($k=4$) and 47.5\% ($k=8$), against 62.5\% and 70.0\% with joint re-decoding, and more frames are presented (18.8 and 31.5).
 The difference is paired and one-sided: DP solves 10 queries ($k=4$) and 9 ($k=8$) that the baseline does not, and the baseline solves none that DP misses (95\% bootstrap interval of the difference 12.5--40 points for $k=4$).
 Frozen re-decoding already reaches 60\% and 67.5\%, so most of the gap comes from the DP starting path (25\% against 10\% before any action) and from placing a re-decoded event between its neighbors (counting the out-of-order frozen path as a failure lowers frozen by 2.5 points); propagating a correction to untouched events adds one query for each $k$ (95\% interval 0--7.5 points).
-Because the proposals depend on the current frame, which differs between the settings, the user is not shown identical alternatives in all three.
 
 \paragraph{Where five actions suffice.}
 With two to four events per query, H@5 ($k=4$, local, sequential) is 80\% for two-event queries, 53\% for three, and 50\% for four.

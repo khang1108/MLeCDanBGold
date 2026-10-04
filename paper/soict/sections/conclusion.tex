@@ -1,6 +1,9 @@
 \section{Conclusion}
 \label{sec:conclusion}
 
-An event-by-event audit shows that, even with the correct video, only a quarter of queries are fully correct; within the variants studied, errors stem mainly from how frames inside a video are ranked.
-The margin between the top two videos separates correct from wrong first passes (AUROC 0.85), and, with the correct video and simulated oracle feedback, five event-level actions raise whole-sequence correctness from 25\% to 70\%, mostly owing to the DP starting path and order constraints.
-Annotations, cached score matrices, and scripts will be released upon publication.
+An audit of 40 queries (113 events) separates video-selection and event-alignment failures in an existing multimodal pipeline.
+Only a quarter of queries are fully correct even with the correct video, and within-video frame ranking remains a bottleneck in the variants studied.
+Video-score margins discriminate first-pass video errors, but an unflagged result is not safe to accept without inspection.
+Under correct-video oracle feedback, five event-level actions raise correctness from 25\% to 70\%, mostly through the DP starting path and order constraints; counting wrong videos as failures gives 10\% to 35\%.
+These results quantify correction headroom, while human effort and combined routing effectiveness remain open.
+The frozen query manifest, annotations, cached scores, and evaluation scripts will be released upon publication.

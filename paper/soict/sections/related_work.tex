@@ -2,21 +2,20 @@
 \label{sec:related_work}
 
 \paragraph{Temporal alignment for event retrieval.}
-Ordered multi-event search has been a central theme of recent Ho Chi Minh City AI Challenge systems.
-DANTE builds an event--keyframe similarity matrix and finds a monotone path per video with a gap penalty and a running maximum~\cite{luu2025dante}; TARS uses a prefix-maximum DP recurrence~\cite{do2025tars}; KPTER re-ranks with K pointers~\cite{dinh2025kpter}; the Cross Segment Coherence Scorer adds soft penalties for order reversals, long gaps, and shot jumps~\cite{nguyen2025cscs}; and agent-guided DP lets an LLM coordinate the optimization~\cite{nguyen2025agentdp}.
-MADTempo combines query decomposition with beam search~\cite{vu2025madtempo}, and Lucifer-TRACE complements DP with LVLM verification that explicitly does not alter retrieval scores~\cite{ho2025lucifertrace}.
-Outside this venue, training-free temporal grounding decomposes a query into sub-events and filters VLM proposals by their order~\cite{zheng2024tfvtg}.
-All of these works report end-task scores.
-We use the same family of pipeline and instead measure per-event correctness and the effect of each layer.
+DANTE and TARS use monotone DP with running or prefix maxima~\cite{luu2025dante,do2025tars}; KPTER uses K-pointer reranking~\cite{dinh2025kpter}; and Cross Segment Coherence Scoring penalizes order reversals, gaps, and shot jumps~\cite{nguyen2025cscs}.
+Other approaches combine DP and agents~\cite{nguyen2025agentdp}, use beam search~\cite{vu2025madtempo}, or add LVLM verification~\cite{ho2025lucifertrace}.
+Training-free temporal grounding also decomposes queries and filters VLM proposals by event order~\cite{zheng2024tfvtg}.
+Our evaluation separates video selection from event placement and measures correction under a limited budget, without claiming a universally better temporal model.
 
 \paragraph{Query performance prediction.}
-Predicting whether a query will succeed is well studied in text retrieval, from query clarity~\cite{cronen2002predicting} to post-retrieval predictors based on the score distribution, such as weighted information gain~\cite{zhou2007wig} and normalized query commitment~\cite{shtok2012nqc}; see~\cite{carmel2010difficulty} for a survey.
-For video search, Kofler et al.\ predicted query failure from search logs and visual features of the result list, with failure defined by the absence of clicks~\cite{kofler2012failure}; VQPP introduced a benchmark of single-sentence text-to-video queries and also measured query reformulation~\cite{lutu2026vqpp}.
-Unlike these settings, each ranked item here is a jointly decoded multi-event path, the target is whether the top video is correct, and no session history is available; we test how far the simplest post-retrieval signals carry over.
+Text-retrieval predictors include query clarity~\cite{cronen2002predicting}, weighted information gain~\cite{zhou2007wig}, and normalized query commitment~\cite{shtok2012nqc}; see~\cite{carmel2010difficulty} for a survey.
+In video search, Kofler et al.\ predict failure from logs and visual results~\cite{kofler2012failure}, while VQPP benchmarks text-to-video prediction and query reformulation~\cite{lutu2026vqpp}.
+We evaluate established score signals on jointly decoded event paths without session history, distinguishing correct video selection from correct placement of all events.
 
 \paragraph{Interaction and correction.}
 Interactive video search systems refine their results through relevance feedback, conversation, and query history~\cite{khan2024exquisitor,sharma2025exquisitor,ma2022ivcmr}.
 At SoICT 2025, interactive mechanisms refine the query: an LLM agent through dialogue~\cite{mai2025conversational}, composed-image textual feedback~\cite{to2025cirfeedback}, or Rocchio feedback~\cite{nguyen2025vortex}.
-Our correction acts on the decoded path rather than on the query.
-Constrained decoding with simulated user corrections, propagation to uncorrected fields, and confidence-ordered inspection was introduced for interactive information extraction~\cite{kristjansson2004constrained}; we apply the same idea to ordered video events and measure which of these components matter there.
-Building on the EventTrail component of our VBS system SHI~\cite{nguyen2027shi}, we isolate the contribution of the DP starting path, constrained re-decoding, proposal generation, inspection order, and propagation.
+Our correction edits the decoded path.
+Constrained decoding, propagation, and confidence-ordered simulated corrections predate this work in interactive information extraction~\cite{kristjansson2004constrained}.
+Keep/Use/Reject actions are inherited from SHI's EventTrail~\cite{nguyen2027shi}; our contribution is annotation and controlled analysis of initialization, ordering, proposals, and propagation.
+Section~\ref{sec:correction} specifies the protocol independently of that manuscript.

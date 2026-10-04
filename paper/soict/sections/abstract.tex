@@ -1,10 +1,12 @@
 \begin{abstract}
-Systems for multi-event video retrieval are usually reported with one competition score, which hides two failure modes: the first pass returns the wrong video, or it returns the right video but places some events at the wrong moments.
-We study both on the Ho Chi Minh City AI Challenge corpus (873 videos, 470{,}804 frames) with a pipeline that fuses SigLIP2, BGE-M3, and BM25 evidence and aligns ordered events with dynamic programming (DP).
-We annotate per-event intervals for 40 queries (113 events) and video-level answers for 70 queries.
-Even when the correct video is given, only 25\% of queries have every event placed correctly, and a correct frame is ranked first for only 35\% of events.
-The relative score margin between the top video and the next distinct video separates correct from wrong first passes with AUROC 0.85 overall, and nested leave-one-set-out signal selection gives held-out AUROCs of 0.78--0.85.
-With the correct video given, simulated oracle feedback that keeps, uses, or rejects one event at a time raises whole-sequence correctness from 25\% to 70\% within five actions with eight alternatives per event, against 47.5\% without DP; the gain comes mostly from the DP starting path and order constraints rather than from propagation to untouched events.
-These results suggest substantial headroom for failure-aware interaction without retraining, and identify within-video frame scoring as the primary bottleneck in the studied pipeline.
+Finding the correct video does not ensure that every event in a multi-event query is placed at the correct moment.
+We present an empirical reliability study that separates video-selection errors from within-video event-alignment errors in a training-free multimodal retrieval pipeline with ordered dynamic programming (DP).
+On the Ho Chi Minh City AI Challenge collection of 873 videos, we freeze per-event annotations for 40 queries (113 events) and use video-level answers for 70 queries.
+Even with the correct video given, only 25\% of queries have all events placed correctly.
+The relative margin between the top video and the next distinct video discriminates correct from wrong first passes with AUROC 0.85; selecting the signal on training query sets gives held-out AUROCs of 0.78--0.85.
+With the correct video given, simulated oracle feedback raises whole-sequence correctness from 25\% to 70\% within five actions with eight candidates per event, versus 47.5\% without DP.
+Most of this difference comes from the DP starting path and order constraints, while propagation to untouched events contributes little.
+When wrong first-pass videos count as failures, correctness rises from 10\% to 35\%.
+The study identifies within-video frame ranking as a bottleneck of this pipeline and quantifies correction headroom under oracle feedback; it does not establish the effectiveness of a combined routing policy or human interaction.
 \keywords{Multi-Event Video Retrieval \and Temporal Alignment \and Query Performance Prediction \and Interactive Correction}
 \end{abstract}

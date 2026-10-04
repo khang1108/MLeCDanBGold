@@ -11,9 +11,10 @@ Five of these seven belong to the cooking series, where the median rank of the c
 We then give the system the correct video and decode the path from its score matrix.
 Only 25\% of queries have every event placed correctly, and 43\% of events are correct (Table~\ref{tab:layers}).
 Choosing for each event its highest-scoring frame, without any temporal constraint, gives 35\% event accuracy; DP raises it to 43\%, fixing 18 events and breaking 9 (paired 95\% bootstrap interval over queries $-2$ to $+18$ points).
+This interval includes zero, so the observed gain is not evidence of a reliably positive effect across queries.
 Among the 448 frames of a median video, a correct frame is ranked first for 35\% of events, within the top 20 for 76\%, and within the top 50 for 86\%.
 Wrong frames are not near misses: the median distance between a wrongly selected frame and its interval is 45 seconds, and only 8\% lie within 5 seconds.
-The frame scorer confuses distinct scenes of the same video rather than adjacent frames.
+These distances indicate confusion between distinct moments rather than predominantly adjacent-frame errors.
 
 \begin{table}[t]
 \centering
@@ -39,10 +40,10 @@ Even an oracle that picks the best $\lambda$ for every query from a grid of nine
 This bound is specific to the penalty family: because $\sum_i (t_{f_{i+1}}-t_{f_i}) = t_{f_M}-t_{f_1}$, the penalty constrains only the total span of the path, not how the gaps between events are distributed, and richer temporal models are not covered by it.
 The value $10^{-5}$ was set during competition preparation; we report the sweep on the same queries as a sensitivity analysis, not as tuning.
 
-\paragraph{Interventions that did not help.}
-Because frame ranking is the weakest layer, we tried three training-free changes to the scores.
+\paragraph{Scoring ablations.}
+The low within-video frame ranks motivated three training-free score interventions.
 (i)~Normalizing each event row of $S_v$ (z-score, min--max), subtracting the best competing event at each frame, or smoothing over neighboring frames never exceeded the baseline 25\%.
-(ii)~For video ranking we tested whether studio-wide appearance drowns episode-specific content by centering frame embeddings on the corpus, series, or video mean, or by a cross-domain similarity local scaling correction computed from 500 captions.
+(ii)~For video ranking we tested whether studio-wide appearance drowns episode-specific content by centering frame embeddings on the corpus, series, or video mean, or by cross-domain similarity local scaling (CSLS)~\cite{conneau2018wordtranslation} computed from 500 captions.
 With SigLIP2 alone, raw scores give R@1 0.30 and R@10 0.50; every normalization was worse, and the cooking series degraded most (median rank 39 raw, 46--101 normalized).
 (iii)~We evaluated a variant that keeps the top-$K$ frames per event and adds a directional transition score $\beta\,(v_b-v_a)^\top(q_{i+1}-q_i)/4$ between consecutive candidates, where $v$ are frame embeddings and $q$ event embeddings.
 This term separates into $v_b^\top\Delta q$ and $-v_a^\top\Delta q$, so for a fixed event pair it is equivalent to reweighting the unary scores of the two frames; it is not a pairwise model of motion between them.

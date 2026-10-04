@@ -1,22 +1,25 @@
 \section{Introduction}
 \label{sec:introduction}
 
-Multi-event video retrieval asks a system to find a video that matches a description made of several ordered moments and to return the frame of each moment, as in the Known-Item Search (KIS) and Temporal Retrieval and Alignment of Key Events (TRAKE) tasks of the Ho Chi Minh City AI Challenge.
-The systems presented at SoICT 2025 share a common recipe: multimodal embeddings and lexical evidence score every frame for every event, and an order-preserving search, usually dynamic programming (DP) or beam search, links the per-event candidates into a path~\cite{luu2025dante,do2025tars,vu2025madtempo,nguyen2025cscs,dinh2025kpter,nguyen2025agentdp,ho2025lucifertrace,nguyen2025eventsspeak}.
-These systems are evaluated by the number of competition queries answered, often above 85 out of 88; this counts the final answer after interactive search by human operators, not the quality of the autonomous first pass, and so does not show how much correction was needed before submission.
+Multi-event video retrieval uses descriptions of ordered moments to find a video and localize the described events.
+In the Ho Chi Minh City AI Challenge, Known-Item Search (KIS) queries can describe several moments while requesting a single frame; Temporal Retrieval and Alignment of Key Events (TRAKE) explicitly requests an ordered sequence of event frames.
+Recent SoICT systems combine multimodal evidence with temporal search, including dynamic programming (DP), beam search, and coherence scoring~\cite{luu2025dante,do2025tars,vu2025madtempo,nguyen2025cscs,dinh2025kpter,nguyen2025agentdp,ho2025lucifertrace,nguyen2025eventsspeak}.
+Competition-level success, however, does not by itself isolate the quality of an autonomous first pass from subsequent interaction, or reveal whether every described event was localized correctly.
+For multi-moment KIS queries, auditing all events therefore goes beyond the competition's single-frame output.
 
-A single score of this kind does not say where a query fails or when a user should distrust the first answer.
-A multi-event query can fail in two different ways.
+We distinguish two failure modes.
 The first pass can return the wrong video, in which case no amount of temporal reasoning inside that video helps.
-Or the first pass can return the right video but place one or more events at the wrong moment, which is invisible when only one frame is submitted or when a human operator silently repairs it.
-Each failure mode calls for a different response: the first needs a better query, the second needs a local fix.
+Or it can return the right video but place one or more events at the wrong moment, which a single-frame submission cannot fully expose.
+The first failure requires reconsidering the video choice, for example through query reformulation or candidate inspection; the second may be addressed by repairing individual event placements.
 
-We treat multi-event retrieval as a two-stage reliability problem: whether the retrieved video can be trusted and whether its event alignment needs local repair, and study both stages on a running system with one lightweight mechanism for each.
+We study these failures in an existing training-free pipeline, asking three questions: where does its first pass fail, can its ranking scores reveal a wrong video, and which components help repair event placements under a small action budget?
+Our contribution is an empirical analysis of reliability and correction, using established score-based predictors and constrained DP rather than a new retrieval model.
 Our contributions are:
 \begin{enumerate}
-\item \textbf{A per-event audit.} We annotate ground-truth intervals for every event of 40 queries (113 events) and show that, even with the correct video given, only 25\% of queries have all events placed correctly. Within the scoring and decoding variants we study, errors are primarily associated with within-video frame ranking: a correct frame is ranked first for 35\% of events, while DP adds 8 points of event accuracy (95\% CI $-2$ to 18; Sect.~\ref{sec:diagnosis}).
-\item \textbf{First-pass failure prediction.} The relative score margin between the top video and the next distinct video separates correct from incorrect first passes with AUROC 0.85 on 70 queries, and nested leave-one-set-out signal selection gives held-out AUROCs of 0.78--0.85. It provides a lightweight trigger for deciding when the first pass should be reconsidered (Sect.~\ref{sec:failure_prediction}); Sect.~\ref{sec:discussion} discusses the untested downstream response.
-\item \textbf{Event-level correction.} With the correct video given and simulated oracle feedback that keeps, uses, or rejects one event at a time, whole-sequence correctness rises from 25\% to 62.5\% (4 alternatives) and 70\% (8) within five actions, against 37.5\% and 47.5\% without DP; most of the difference comes from the DP starting path and order constraints, while re-decoding untouched events adds one query. Counting wrong first-pass videos as failures, end-to-end correctness rises from 10\% to 35\% (Sect.~\ref{sec:correction}).
+\item \textbf{An event-level evaluation set and audit.} A frozen set of 40 queries (113 events) separates video ranking from within-video alignment; only 25\% of queries are fully correct even with the correct video given (Sects.~\ref{sec:benchmark}--\ref{sec:diagnosis}).
+\item \textbf{A study of first-pass failure signals.} On 70 queries, score margins discriminate correct from wrong videos, with held-out AUROCs of 0.78--0.85 when the signal is selected on training sets. We distinguish this discrimination from the reliability of a warning threshold (Sect.~\ref{sec:failure_prediction}).
+\item \textbf{A controlled oracle-correction study.} We compare starting paths, order constraints, proposals, inspection order, and propagation. With the correct video, five actions raise whole-sequence correctness from 25\% to 70\%; most of the decoder advantage comes from initialization and ordering, rather than propagation (Sect.~\ref{sec:correction}).
 \end{enumerate}
 
-Together, the two mechanisms motivate a failure-aware workflow that routes the user either to reformulate the query or to repair individual events; both require no training.
+Together, these results motivate a workflow that warns about an uncertain video choice and supports local repair after the video is confirmed.
+We evaluate the two mechanisms separately; their combination and its benefit to human users remain to be tested.
