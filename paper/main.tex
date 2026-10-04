@@ -8,9 +8,6 @@
 \usepackage{graphicx}
 \graphicspath{{figures/}}
 \raggedbottom
-\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
-\widowpenalty=1000
-\clubpenalty=1000
 
 \begin{document}
 
@@ -35,7 +32,6 @@ Ho Chi Minh City, Vietnam\\
 \input{sections/related_work}
 \input{sections/system_overview}
 \input{sections/interactive_hypothesis}
-\input{sections/evaluation}
 \input{sections/conclusion}
 % \input{sections/acknowledgements}
 
@@ -48,7 +44,7 @@ Ho Chi Minh City, Vietnam\\
            {\settowidth\labelwidth{\@biblabel{#1}}%
             \leftmargin\labelwidth
             \advance\leftmargin\labelsep
-            \setlength{\itemsep}{-2.5pt}%
+            \setlength{\itemsep}{-1.5pt}%
             \setlength{\parsep}{0pt}%
             \usecounter{enumiv}%
             \let\p@enumiv\@empty

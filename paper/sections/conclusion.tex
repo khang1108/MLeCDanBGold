@@ -1,11 +1,9 @@
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented SHI, an interactive multimodal video retrieval system for multi-event
-KIS at VBS 2027. Rather than treating narrative decomposition and temporal alignment
-as opaque black-box processes, SHI externalizes two intermediate interaction points:
-the pre-retrieval Query Hypothesis for editable narrative structuring, and the
-post-retrieval EventTrail for sub-second occurrence steering and path re-decoding via
-Evidence Snapshots. Empirical results show that dual-stage hypothesis intervention
-recovers from early cascade errors, boosting timestamp accuracy from 60\% to 90\%.
-Future work will evaluate operator dynamics in live competition at VBS 2027.
+We presented SHI, an interactive multimodal video retrieval system for
+multi-event KIS. The pre-retrieval Query Hypothesis makes the LLM-generated
+event decomposition editable, while the post-retrieval EventTrail re-decodes the
+temporal alignment of a candidate video under operator-supplied anchor and
+exclusion constraints. We will evaluate both mechanisms under live task
+conditions at VBS 2027.
