@@ -1,0 +1,78 @@
+{
+  "dataset": "custom-raw1fps-v1",
+  "source_frame_store": "artifacts/custom-raw1fps-v1/frame_store/frames.parquet",
+  "layout": "Schematic correction, not an observed decoder trace. E2 is fixed by Use at 182 s; illustrated old/new grid paths are ordered.",
+  "image_processing": "Original JPEG bytes copied unchanged and embedded directly in LaTeX; aspect-preserving scale only.",
+  "images": [
+    {
+      "frame_id": "L26_V422_raw1fps_000000172",
+      "video_id": "L26_V422",
+      "frame_idx": 4300,
+      "timestamp_ms": 172000,
+      "image_path": "published/L26_V422/images/000000172.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V422/images/000000172.jpg",
+      "figure_asset": "paper/soict/figures/correction-keyframes/L26_V422_172s.jpg",
+      "sha256": "91ef4f0a921bacd5582054da3745804794b1286beb25b589c0d8533947c00aa6"
+    },
+    {
+      "frame_id": "L26_V422_raw1fps_000000176",
+      "video_id": "L26_V422",
+      "frame_idx": 4400,
+      "timestamp_ms": 176000,
+      "image_path": "published/L26_V422/images/000000176.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V422/images/000000176.jpg",
+      "figure_asset": "paper/soict/figures/correction-keyframes/L26_V422_176s.jpg",
+      "sha256": "edc3f634de9dcfd1c3685051af7942c8d5875b2a03d1e13bf6b2f2d22d8c9da3"
+    },
+    {
+      "frame_id": "L26_V422_raw1fps_000000182",
+      "video_id": "L26_V422",
+      "frame_idx": 4550,
+      "timestamp_ms": 182000,
+      "image_path": "published/L26_V422/images/000000182.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V422/images/000000182.jpg",
+      "figure_asset": "paper/soict/figures/correction-keyframes/L26_V422_182s.jpg",
+      "sha256": "6711b9c319f9c6bf6b43500e5feff267b20bbb9d8952d73c62a7e565fb912a7b"
+    },
+    {
+      "frame_id": "L26_V422_raw1fps_000000186",
+      "video_id": "L26_V422",
+      "frame_idx": 4650,
+      "timestamp_ms": 186000,
+      "image_path": "published/L26_V422/images/000000186.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V422/images/000000186.jpg",
+      "figure_asset": "paper/soict/figures/correction-keyframes/L26_V422_186s.jpg",
+      "sha256": "2d15b37313257d0ab9b08e0334c56b2dba4ce4ad039955fd6ef407792fa6af3f"
+    },
+    {
+      "frame_id": "L26_V422_raw1fps_000000188",
+      "video_id": "L26_V422",
+      "frame_idx": 4700,
+      "timestamp_ms": 188000,
+      "image_path": "published/L26_V422/images/000000188.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V422/images/000000188.jpg",
+      "figure_asset": "paper/soict/figures/correction-keyframes/L26_V422_188s.jpg",
+      "sha256": "88416ec4e925dfc3f7814f77740f6fe76a078c5846ac788768234fa838c741bc"
+    }
+  ],
+  "inspection": {
+    "current_timestamp_ms": 172000,
+    "alternative_timestamps_ms": [
+      176000,
+      182000,
+      188000
+    ]
+  },
+  "updated_trail_timestamps_ms": [
+    172000,
+    182000,
+    186000
+  ],
+  "validation": {
+    "original_copies_sha256_match": true,
+    "pdf_extracted_jpeg_sha256_match": true,
+    "jpeg_placements_in_pdf": 7,
+    "distinct_original_jpegs": 5,
+    "manuscript_page": 9
+  }
+}

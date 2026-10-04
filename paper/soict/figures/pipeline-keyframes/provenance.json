@@ -1,0 +1,419 @@
+{
+  "dataset": "custom-raw1fps-v1",
+  "source_frame_store": "artifacts/custom-raw1fps-v1/frame_store/frames.parquet",
+  "annotation_example": {
+    "query_id": "s2-p2-13-kis",
+    "video_id": "L26_V422",
+    "timestamps_ms": [
+      172000,
+      182000,
+      186000
+    ]
+  },
+  "photos": "Original JPEG bytes copied unchanged; LaTeX uses aspect-preserving scaling and black letterboxing. Cursor and rear-strip occlusion are clipped in the vector composition.",
+  "layout": "Schematic arrangement, not recorded retrieval ranks or an observed correction trace.",
+  "images": [
+    {
+      "frame_id": "L26_V422_raw1fps_000000172",
+      "video_id": "L26_V422",
+      "frame_idx": 4300,
+      "timestamp_ms": 172000,
+      "image_path": "published/L26_V422/images/000000172.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V422/images/000000172.jpg",
+      "figure_asset": "paper/soict/figures/pipeline-keyframes/L26_V422_172s.jpg",
+      "sha256": "91ef4f0a921bacd5582054da3745804794b1286beb25b589c0d8533947c00aa6"
+    },
+    {
+      "frame_id": "L26_V422_raw1fps_000000182",
+      "video_id": "L26_V422",
+      "frame_idx": 4550,
+      "timestamp_ms": 182000,
+      "image_path": "published/L26_V422/images/000000182.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V422/images/000000182.jpg",
+      "figure_asset": "paper/soict/figures/pipeline-keyframes/L26_V422_182s.jpg",
+      "sha256": "6711b9c319f9c6bf6b43500e5feff267b20bbb9d8952d73c62a7e565fb912a7b"
+    },
+    {
+      "frame_id": "L26_V422_raw1fps_000000186",
+      "video_id": "L26_V422",
+      "frame_idx": 4650,
+      "timestamp_ms": 186000,
+      "image_path": "published/L26_V422/images/000000186.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V422/images/000000186.jpg",
+      "figure_asset": "paper/soict/figures/pipeline-keyframes/L26_V422_186s.jpg",
+      "sha256": "2d15b37313257d0ab9b08e0334c56b2dba4ce4ad039955fd6ef407792fa6af3f"
+    },
+    {
+      "frame_id": "L26_V305_raw1fps_000000076",
+      "video_id": "L26_V305",
+      "frame_idx": 1900,
+      "timestamp_ms": 76000,
+      "image_path": "published/L26_V305/images/000000076.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V305/images/000000076.jpg",
+      "figure_asset": "paper/soict/figures/pipeline-keyframes/L26_V305_076s.jpg",
+      "sha256": "5717623da8f3dcf2f490fdd7e9f1cb3e565b61fc65919692b91015b88efb89e8"
+    },
+    {
+      "frame_id": "L26_V305_raw1fps_000000151",
+      "video_id": "L26_V305",
+      "frame_idx": 3775,
+      "timestamp_ms": 151000,
+      "image_path": "published/L26_V305/images/000000151.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V305/images/000000151.jpg",
+      "figure_asset": "paper/soict/figures/pipeline-keyframes/L26_V305_151s.jpg",
+      "sha256": "8bfea7785ae1ed3d194ad4204a3141ab51b29af183d626158e5800dc6cea561b"
+    },
+    {
+      "frame_id": "L26_V305_raw1fps_000000225",
+      "video_id": "L26_V305",
+      "frame_idx": 5625,
+      "timestamp_ms": 225000,
+      "image_path": "published/L26_V305/images/000000225.jpg",
+      "source_path": "runs/custom-raw1fps-v1/published/L26_V305/images/000000225.jpg",
+      "figure_asset": "paper/soict/figures/pipeline-keyframes/L26_V305_225s.jpg",
+      "sha256": "035cfbcda5f420ac6230ab55d370db0978ba43a9b8d648af1ce627632ace8a26"
+    }
+  ],
+  "slots": [
+    {
+      "role": "corpus rear 1.1",
+      "rect_px": [
+        119,
+        128,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_076s.jpg",
+      "occluder_rect_px": [
+        93,
+        129,
+        254,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus rear 1.2",
+      "rect_px": [
+        200,
+        128,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_151s.jpg",
+      "occluder_rect_px": [
+        93,
+        129,
+        254,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus rear 1.3",
+      "rect_px": [
+        281,
+        128,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_225s.jpg",
+      "occluder_rect_px": [
+        93,
+        129,
+        254,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus rear 2.1",
+      "rect_px": [
+        108,
+        140,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_076s.jpg",
+      "occluder_rect_px": [
+        82,
+        141,
+        255,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus rear 2.2",
+      "rect_px": [
+        189,
+        140,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_151s.jpg",
+      "occluder_rect_px": [
+        82,
+        141,
+        255,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus rear 2.3",
+      "rect_px": [
+        270,
+        140,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_225s.jpg",
+      "occluder_rect_px": [
+        82,
+        141,
+        255,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus rear 3.1",
+      "rect_px": [
+        97,
+        152,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_076s.jpg",
+      "occluder_rect_px": [
+        70,
+        153,
+        258,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus rear 3.2",
+      "rect_px": [
+        178,
+        152,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_151s.jpg",
+      "occluder_rect_px": [
+        70,
+        153,
+        258,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus rear 3.3",
+      "rect_px": [
+        259,
+        152,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V305_225s.jpg",
+      "occluder_rect_px": [
+        70,
+        153,
+        258,
+        72
+      ],
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus front 1",
+      "rect_px": [
+        86,
+        164,
+        73,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V422_172s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus front 2",
+      "rect_px": [
+        169,
+        164,
+        71,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V422_182s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "corpus front 3",
+      "rect_px": [
+        250,
+        164,
+        73,
+        48
+      ],
+      "asset": "pipeline-keyframes/L26_V422_186s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "retrieval 1",
+      "rect_px": [
+        734,
+        199,
+        48,
+        34
+      ],
+      "asset": "pipeline-keyframes/L26_V422_172s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "retrieval 2",
+      "rect_px": [
+        789,
+        199,
+        46,
+        34
+      ],
+      "asset": "pipeline-keyframes/L26_V422_182s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "retrieval 3",
+      "rect_px": [
+        843,
+        199,
+        47,
+        34
+      ],
+      "asset": "pipeline-keyframes/L26_V422_186s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "candidate A 1",
+      "rect_px": [
+        1409,
+        199,
+        74,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V422_172s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "candidate A 2",
+      "rect_px": [
+        1497,
+        199,
+        77,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V422_182s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "candidate A 3",
+      "rect_px": [
+        1587,
+        199,
+        77,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V422_186s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "candidate B 1",
+      "rect_px": [
+        1409,
+        319,
+        75,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V305_076s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "candidate B 2",
+      "rect_px": [
+        1497,
+        319,
+        77,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V305_151s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "candidate B 3",
+      "rect_px": [
+        1587,
+        319,
+        77,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V305_225s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "correction 1",
+      "rect_px": [
+        915,
+        681,
+        78,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V422_172s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    },
+    {
+      "role": "correction 2",
+      "rect_px": [
+        1012,
+        681,
+        84,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V422_182s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": true
+    },
+    {
+      "role": "correction 3",
+      "rect_px": [
+        1119,
+        681,
+        78,
+        45
+      ],
+      "asset": "pipeline-keyframes/L26_V422_186s.jpg",
+      "occluder_rect_px": null,
+      "preserve_pointer": false
+    }
+  ],
+  "validation": {
+    "original_copies_sha256_match": true,
+    "pdf_extracted_jpeg_sha256_match": true,
+    "jpeg_placements_in_pdf": 24,
+    "distinct_original_jpegs": 6
+  },
+  "template_sha256": "38f7e34f928c644b5fa51888b07e3244771f14b774a1297dac5ef2ccacc1dc05"
+}

@@ -1,0 +1,7 @@
+% Imagegen supplies the schematic; original corpus JPEGs are embedded by LaTeX.
+\begin{figure}[t]
+\centering
+\resizebox{\textwidth}{!}{\input{figures/pipeline-artwork}}
+\caption{Pipeline overview. Offline evidence supplies the search indexes; retrieval combines visual, context, and lexical scores for each query event. Ordered DP aligns events and ranks candidate videos. Dashed arrows show the proposed margin-based routing to query rewriting or event correction and re-decoding from cached scores. The two feedback mechanisms are evaluated separately. Thumbnail strips use real corpus keyframes in a schematic arrangement.}
+\label{fig:pipeline}
+\end{figure}

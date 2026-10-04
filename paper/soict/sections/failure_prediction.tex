@@ -1,0 +1,50 @@
+\section{Predicting First-Pass Failure}
+\label{sec:failure_prediction}
+
+When the first pass returns the wrong video, correcting its events cannot help; the user needs a different query or a different video.
+We therefore ask whether the system can tell, from its own first-pass ranking, that the top video is probably wrong.
+
+\paragraph{Signals.}
+Let $s_1$ be the score of the best path and $s_2$ the score of the best path in a different video.
+We consider the absolute top score $s_1$; the margin $s_1-s_2$; the relative margin $(s_1-s_2)/|s_1|$; the standardized top score $(s_1-\mu)/\sigma$ over the top-100 paths; and the number of distinct videos among the top-10 paths.
+All signals come from scores the pipeline already computes and cost nothing to obtain.
+They are classic post-retrieval predictors~\cite{zhou2007wig,shtok2012nqc,carmel2010difficulty}; what changes here is that the ranked items are decoded multi-event paths and that the target is whether the top video is correct.
+
+\paragraph{Protocol.}
+We run the unchanged pipeline on all 70 queries with deterministic event splits (Sect.~\ref{sec:benchmark}) and record the top-100 paths; the median search time is 3.8\,s.
+The top video is correct for 25 of 70 queries.
+We report AUROC for separating correct from incorrect first passes, with a 95\% bootstrap interval over queries, and evaluate a decision rule whose threshold is chosen by leave-one-out to maximize balanced accuracy on the remaining queries.
+
+\begin{table}[t]
+\centering
+\caption{AUROC of first-pass signals for predicting that the top video is correct, on 70 queries. Columns give the number of correct first passes over queries. S1--S3 are the three query sets.}
+\label{tab:qpp}
+\begin{tabular}{lcccccc}
+\toprule
+Signal & All & 95\% CI & KIS & S1 & S2 & S3 \\
+ & 25/70 & & 23/65 & 9/21 & 7/21 & 9/28 \\
+\midrule
+Top score $s_1$ & 0.60 & [0.47, 0.75] & 0.60 & 0.51 & 0.58 & 0.67 \\
+Distinct videos in top-10 & 0.76 & [0.64, 0.87] & 0.75 & 0.61 & 0.71 & 0.92 \\
+Standardized top score & 0.81 & [0.69, 0.92] & 0.81 & 0.81 & 0.81 & 0.85 \\
+Margin $s_1-s_2$ & 0.85 & [0.73, 0.94] & 0.85 & 0.80 & 0.84 & 0.93 \\
+Relative margin & \textbf{0.85} & [0.73, 0.95] & \textbf{0.87} & 0.78 & \textbf{0.86} & 0.91 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Results.}
+Table~\ref{tab:qpp} shows that the absolute score is nearly uninformative (0.60), whereas the margin to the next video is substantially more informative overall (0.85) and remains informative across the three query sets (0.78--0.93; Fig.~\ref{fig:results}a), including the first set, whose submissions name a single video.
+With the leave-one-out threshold on the relative margin, the rule flags 40 of the 45 incorrect first passes and raises false alarms on 4 of the 25 correct ones.
+Because the signal was chosen after seeing all sets, we also fix the signal, learn the threshold on two query sets, and test on the third: the rule then flags 11 of 12, 12 of 14, and 17 of 19 incorrect first passes, 40 of 45 in total, with 4, 1, and 1 false alarms (6 of 25).
+Selecting the signal as well on the two training sets picks a margin in two folds and the standardized score, within 0.01 training AUROC, in the third; held-out AUROCs are 0.78, 0.84, and 0.85, and the rule flags 32 of 45 incorrect first passes with 9 of 25 false alarms.
+With the fixed signal, 5 of the 24 first passes that are not flagged are still wrong.
+Ten of the 70 queries have a single event; on the remaining 60 multi-event queries the AUROC is 0.84.
+On the 40 annotated queries, where events are the annotated texts, the same signal gives AUROC 0.86 (95\% CI 0.72--0.98), against 0.80 with the deterministic split on the same queries, so the margin remains informative with annotated event texts.
+
+\paragraph{What it cannot predict.}
+The margin concerns the choice of video.
+On the 40 annotated queries it does not predict whether all events in the top path are correct (AUROC 0.46), and a per-event confidence computed from max-marginal path scores separated wrong from correct events only weakly (AUROC 0.61).
+We also do not measure what happens after a warning: whether a rewritten query retrieves the correct video, or whether inspecting the videos ranked 2--5 would be cheaper.
+The AUROC shows that the margin separates correct from wrong videos; it does not show that rewriting is the best response to a low margin or that a high margin makes the video safe to accept.
+The signal is therefore a proposed trigger, not an evaluated policy, and it is not a substitute for checking events, which is the subject of the next section.

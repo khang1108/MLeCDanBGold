@@ -1,0 +1,14 @@
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+\paragraph{Implications.}
+The two mechanisms address different failures, and we propose chaining them, although we evaluate each separately.
+Below the learned margin threshold, the user could rephrase the query, e.g.\ by adding the dish name or on-screen text that distinguishes episodes of a series, or inspect the next-ranked videos; above it, the user could repair events locally, keeping in mind that about one in five unflagged first passes is still wrong.
+The audit suggests that better frame scoring within a video is the most direct route to further gains: a correct frame is in the top 20 for 76\% of events but ranked first for only 35\%, while none of the DP variants, normalizations, or the transition term we tried improves on the baseline.
+
+\paragraph{Limitations.}
+The study is small: 40 queries with per-event labels and 70 with video labels from one corpus, so confidence intervals are wide.
+The annotations were produced by the authors, and video answers come from our own submissions that the organizers scored as correct, with the answer video chosen among several candidates in two of the three sets.
+The correction study gives the correct video and uses an oracle user who never errs and always recognizes a correct frame, which bounds what a real user can achieve; the one-millisecond figure is decoder latency, and we do not measure the time a user spends inspecting frames, nor usability. We also do not measure whether a rewritten query recovers the correct video after a below-threshold warning.
+The gap penalty, the failure-prediction signal and threshold, and the number of alternatives were examined on the same queries we report; we mitigate this with held-out thresholds, a nested selection of the failure signal, and by presenting sweeps as sensitivity analyses.
+Event texts were annotated or split deterministically, which isolates retrieval from query decomposition but does not test an LLM planner.

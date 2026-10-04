@@ -1,0 +1,34 @@
+\section{Setting and Annotations}
+\label{sec:benchmark}
+
+\paragraph{Corpus and pipeline.}
+We use 873 videos from the Ho Chi Minh City AI Challenge collection, sampled at one frame per second into 470{,}804 frames.
+The collection is dominated by one cooking series that contributes 498 videos (57\%) recorded in the same studio.
+Each frame carries a SigLIP2 embedding~\cite{tschannen2025siglip2} (\texttt{siglip2-base-patch16-224}), a caption from Qwen3-VL-8B-Instruct~\cite{qwen2025qwen3vl}, OCR from Florence-2-base-ft, the organizer-provided detected objects, and timestamped Qwen3-ASR-1.7B transcripts.
+For a query split into ordered events $E_1,\dots,E_M$, the pipeline scores every frame $f$ for every event with a calibrated fusion of SigLIP2 image--text similarity, BGE-M3~\cite{chen2024bgem3} similarity over a per-frame context text built from caption, OCR, and objects, and BM25~\cite{robertson2009bm25} over captions, OCR, ASR, and titles.
+Each component $m$ is calibrated per event by clipping at its 5th percentile and rescaling to $[0,1]$, giving $\hat s_{im}$, and the components available at frame $f$ are combined as $S_v[i,f]=\sum_m w_{im} r_{im}\hat s_{im}(f)/\sum_m w_{im} r_{im}$, one score matrix $S_v\in\mathbb{R}^{M\times F_v}$ per video $v$.
+The reliability $r_{im}$ is 1 for BM25 with any match and $z/(1+z)$ for dense components, $z$ being the top-1\% mean minus the median over the interquartile range; the base weights $w_{im}$ are 0.35 for SigLIP2 and context similarity, 0.08 for dense ASR similarity, and 0.10, 0.04, 0.06, and 0.02 for BM25 over captions, OCR, ASR, and titles, multiplied by 1.4, 5, or 3 when the event text contains visual, speech, or on-screen-text cue words; they were set during competition development and not changed for this paper.
+A monotone DP selects frames $f_1<\dots<f_M$ maximizing $\sum_i S_v[i,f_i]-\lambda\sum_i (t_{f_{i+1}}-t_{f_i})$ with $\lambda=10^{-5}$ per millisecond, and videos are ranked by their best path score.
+All experiments use this configuration unchanged; Fig.~\ref{fig:pipeline} shows the pipeline and where the two additions of this paper attach to it.
+
+\input{figures/pipeline}
+
+\paragraph{Per-event intervals.}
+We annotated 40 queries from the three preliminary-round query sets with a ground-truth time interval for every event, 113 events in total: 13 KIS queries from the first set, 7 and 15 KIS queries from the second and third sets, and 5 TRAKE queries.
+Queries were selected by reading their text, before any experiment of this paper was run, as those describing at least two distinct visible moments; this is a judgment rather than a fixed rule, and the list of the 30 excluded queries will be released with the annotations; three multi-moment queries were left out for other reasons (one duplicates another query, one had no submitted video matching the description, and one was not inspected).
+Event texts are split from the original query wording so that each describes one visible moment.
+Intervals were drafted from 1-fps keyframes around the known answer and then reviewed by an author on a page showing the keyframe strip and a link to the source video; the review changed 74 of 113 intervals (median boundary shift 2\,s, 14 by more than 5\,s) and no event text.
+A predicted frame is correct if its timestamp lies within the interval widened by one second on each side, which absorbs the one-second sampling period.
+Annotated intervals have a median length of 3\,s (interquartile range 2--5\,s), so the tolerance is not negligible; with zero tolerance the initial whole-sequence correctness of Sect.~\ref{sec:diagnosis} drops from 25\% to 20\% and the H@5 of Sect.~\ref{sec:correction} from 62.5\% to 55\%, and with 2\,s and 3\,s it is 27.5\%/62.5\% and 30\%/65\%.
+We report whole-sequence correctness (all events correct) and event accuracy.
+
+\paragraph{Video-level answers.}
+For failure prediction we only need the correct video.
+We use all 70 KIS and TRAKE queries of the three sets (65 KIS, 5 TRAKE).
+Answers for all three sets come from our competition submissions that the organizers scored as correct.
+In the first set each submission names a single video; in the second and third sets a submission lists several candidate videos, so we take the first-ranked one and confirm visually that it matches the description, and these answers may still share errors with our own system.
+We therefore report every result per query set.
+
+\paragraph{Event texts.}
+For the 40 annotated queries, events are the annotated texts, so that the audit isolates retrieval and alignment from query decomposition.
+For the 70-query experiment we use a deterministic split without an LLM: the \texttt{E}$k$ lines of TRAKE queries and the sentences of KIS queries.

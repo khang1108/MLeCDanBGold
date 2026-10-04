@@ -1,0 +1,44 @@
+% Compile from paper/soict/: latexmk main.tex
+% SoICT 2026, Springer CCIS: max 12 pages excluding references, single-blind, no page numbers.
+\documentclass{llncs}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds,calc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\providecommand{\doi}[1]{\url{https://doi.org/#1}}
+\graphicspath{{figures/}}
+\raggedbottom
+
+\begin{document}
+
+% Authors copied from the VBS paper; confirm the SoICT author list before submission.
+\title{Finding the Right Video Is Not Enough: Diagnosing and Correcting Multi-Event Retrieval Failures}
+\author{Phuc Quang Vo\inst{1} \and
+Phuc-Khang Nguyen\inst{1} \and
+Nguyen-Huy Le-Huu\inst{1} \and
+Danh-Phuong Nguyen\inst{1} \and
+Huy Dinh Nhat Truong\inst{1}}
+\authorrunning{P. Q. Vo et al.}
+\institute{University of Science, Vietnam National University Ho Chi Minh City,\\
+Ho Chi Minh City, Vietnam\\
+\email{\{24120414,24120068,24120060,24120504,24120064\}@student.hcmus.edu.vn}}
+\maketitle
+
+\input{sections/abstract}
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/benchmark}
+\input{sections/diagnosis}
+\input{sections/failure_prediction}
+\input{sections/correction}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}

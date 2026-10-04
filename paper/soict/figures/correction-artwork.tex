@@ -1,0 +1,102 @@
+% Editable vector layout; photographs are original, unchanged corpus JPEGs.
+\begin{tikzpicture}[x=1mm,y=1mm,
+  font=\sffamily\fontsize{8}{9}\selectfont,
+  ink/.style={text=corrInk},
+  flow/.style={-{Stealth[length=1.7mm]},draw=corrSlate,line width=.7pt},
+  heading/.style={anchor=west,font=\sffamily\bfseries\fontsize{9}{10}\selectfont,text=corrInk},
+  small/.style={font=\sffamily\fontsize{7}{8}\selectfont,text=corrSlate},
+  button/.style={rounded corners=1.3mm,line width=.6pt,minimum width=34mm,minimum height=6mm,inner sep=0pt}
+]
+\definecolor{corrInk}{HTML}{172B48}
+\definecolor{corrSlate}{HTML}{61758A}
+\definecolor{corrBlue}{HTML}{4088BC}
+\definecolor{corrLine}{HTML}{BDD3E6}
+\definecolor{corrLav}{HTML}{A59ACC}
+\definecolor{corrAccent}{HTML}{CE6541}
+\definecolor{corrGreen}{HTML}{608B77}
+\path[use as bounding box] (0,0) rectangle (122,76);
+
+% Inspection occupies one band; all four frames come from the same video.
+\filldraw[fill=blue!2,draw=corrLine,rounded corners=2mm,line width=.7pt]
+  (0,34) rectangle (122,76);
+\node[heading] at (4,72) {1\quad Inspect one event};
+\node[small,anchor=east] at (118,72) {$E_2$: add lime zest and juice};
+\draw[corrLine,line width=.4pt] (4,68.5) -- (118,68.5);
+\node[ink,anchor=west] at (4,65) {Current frame};
+\node[ink,anchor=west] at (34,65) {Alternatives};
+\foreach \xx/\stamp in {4/172,34/176,64/182,94/188}{
+  \fill[corrInk,rounded corners=.65mm] (\xx,47.4) rectangle ++(24,15.2);
+  \foreach \p in {0,...,10}{
+    \fill[white!80!corrLine] (\xx+.8+2.1*\p,47.75) rectangle ++(1.1,.55);
+    \fill[white!80!corrLine] (\xx+.8+2.1*\p,61.7) rectangle ++(1.1,.55);
+  }
+  \node[inner sep=0pt,anchor=south west] at (\xx+.5,48.35)
+    {\includegraphics[width=23mm]{figures/correction-keyframes/L26_V422_\stamp s.jpg}};
+  \node[small] at (\xx+12,45) {\stamp\,s};
+}
+\draw[corrAccent,rounded corners=.9mm,line width=1pt] (63.5,46.9) rectangle (88.5,63.1);
+
+% The controls are mutually exclusive; Use is active in this example.
+\node[button,draw=corrGreen!60,fill=white,text=corrGreen] (keep) at (21,39) {\hspace{3mm}Keep};
+\draw[corrGreen,line width=.8pt,line cap=round,line join=round]
+  (11,39) -- (12.2,37.8) -- (14.3,40.2);
+\node[button,draw=corrAccent,fill=corrAccent!9,text=corrAccent,font=\sffamily\bfseries\fontsize{8}{9}\selectfont]
+  (use) at (61,39) {\hspace{3mm}Use 182\,s};
+\draw[corrAccent,line width=.75pt,line join=round]
+  (48.8,40.6) -- (48.8,37) -- (49.9,38) -- (50.8,36.8) -- (51.6,37.3) -- (50.7,38.5) -- (52,38.6) -- cycle;
+\node[button,draw=corrSlate!45,fill=white,text=corrSlate] (reject) at (101,39) {\hspace{3mm}Reject};
+\draw[corrSlate,line width=.7pt,line cap=round] (89.8,37.8) -- (92.2,40.2) (89.8,40.2) -- (92.2,37.8);
+
+\draw[flow,draw=corrAccent,dashed,rounded corners=1mm]
+  (use.south) -- (61,31.5) -- (25,31.5) -- (25,29);
+\filldraw[fill=corrLav!4,draw=corrLav!55,rounded corners=2mm,line width=.7pt]
+  (0,0) rectangle (122,29);
+\node[heading] at (4,25) {2\quad Constrain cached $S_v$};
+\node[heading] at (74,25) {Updated event trail};
+\node[small] at (25,20.6) {Video timeline $\rightarrow$};
+
+% Schematic scores: fixing E2 leaves just the selected column admissible.
+\foreach \row in {0,1,2}{
+  \foreach \col in {0,...,9}{
+    \pgfmathtruncatemacro{\shade}{mod(13*\col+23*\row+7*\row*\col,45)+12}
+    \fill[corrLav!\shade!white] (8+3.4*\col,8+3.5*\row) rectangle ++(3.4,3.5);
+  }
+}
+\foreach \col in {0,1,2,3,4,6,7,8,9}{
+  \fill[white,opacity=.9] (8+3.4*\col,11.5) rectangle ++(3.4,3.5);
+}
+\foreach \col in {0,...,10}{\draw[corrLine,line width=.25pt] (8+3.4*\col,8) -- ++(0,10.5);}
+\foreach \row in {0,...,3}{\draw[corrLine,line width=.25pt] (8,8+3.5*\row) -- ++(34,0);}
+\node[small,anchor=east] at (7,16.75) {$E_1$};
+\node[small,anchor=east,text=corrAccent] at (7,13.25) {$E_2$};
+\node[small,anchor=east] at (7,9.75) {$E_3$};
+\draw[corrSlate!70,densely dashed,line width=.7pt] (13.1,16.75) -- (16.5,13.25) -- (36.9,9.75);
+\draw[corrBlue,line width=1pt] (16.5,16.75) -- (26.7,13.25) -- (33.5,9.75);
+\foreach \xx/\yy in {16.5/16.75,33.5/9.75}{\fill[corrBlue] (\xx,\yy) circle (.65mm);}
+\draw[corrAccent,line width=.85pt] (25,11.5) rectangle ++(3.4,3.5);
+\fill[corrAccent] (26.7,13.25) circle (.7mm);
+\node[small,text=corrAccent] at (26.7,5.5) {182\,s};
+\draw[corrSlate!70,densely dashed,line width=.7pt] (4,2.5) -- (8,2.5);
+\node[small,anchor=west] at (9,2.5) {Old};
+\draw[corrBlue,line width=.9pt] (22,2.5) -- (26,2.5);
+\node[small,anchor=west] at (27,2.5) {New};
+
+\draw[flow] (43,13.5) -- (47,13.5);
+\filldraw[draw=corrLine,fill=white,rounded corners=1.5mm,line width=.65pt] (48,7.5) rectangle (67,20);
+\draw[corrBlue,line width=.8pt,line join=round] (52,16) -- (55,17) -- (59,18) -- (63,19);
+\foreach \xx/\yy in {52/16,55/17,59/18,63/19}{\fill[corrBlue] (\xx,\yy) circle (.5mm);}
+\node[ink,font=\sffamily\bfseries\fontsize{8}{9}\selectfont] at (57.5,11.2) {Re-run DP};
+\node[small] at (57.5,3.8) {No index access};
+\draw[flow] (68,13.5) -- (72,13.5);
+
+% Real photographs in a schematic sequence; orange identifies the fixed event.
+\foreach \xx/\stamp/\ev in {74/172/1,90/182/2,106/186/3}{
+  \node[small] at (\xx+7,21.8) {$E_{\ev}$};
+  \fill[corrInk,rounded corners=.5mm] (\xx,10.8) rectangle ++(14,9.1);
+  \node[inner sep=0pt,anchor=south west] at (\xx+.3,11.4)
+    {\includegraphics[width=13.4mm]{figures/correction-keyframes/L26_V422_\stamp s.jpg}};
+  \node[small] at (\xx+7,8.2) {\stamp\,s};
+}
+\draw[corrAccent,rounded corners=.6mm,line width=.85pt] (89.6,10.4) rectangle (104.4,20.3);
+\node[small,text=corrAccent] at (97,3.8) {$E_2$ fixed; others may move};
+\end{tikzpicture}

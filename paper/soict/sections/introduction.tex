@@ -1,0 +1,22 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Multi-event video retrieval asks a system to find a video that matches a description made of several ordered moments and to return the frame of each moment, as in the Known-Item Search (KIS) and Temporal Retrieval and Alignment of Key Events (TRAKE) tasks of the Ho Chi Minh City AI Challenge.
+The systems presented at SoICT 2025 share a common recipe: multimodal embeddings and lexical evidence score every frame for every event, and an order-preserving search, usually dynamic programming (DP) or beam search, links the per-event candidates into a path~\cite{luu2025dante,do2025tars,vu2025madtempo,nguyen2025cscs,dinh2025kpter,nguyen2025agentdp,ho2025lucifertrace,nguyen2025eventsspeak}.
+These systems are evaluated by the number of competition queries answered, often above 85 out of 88; this counts the final answer after interactive search by human operators, not the quality of the autonomous first pass, and so does not show how much correction was needed before submission.
+
+A single score of this kind does not say where a query fails or when a user should distrust the first answer.
+A multi-event query can fail in two different ways.
+The first pass can return the wrong video, in which case no amount of temporal reasoning inside that video helps.
+Or the first pass can return the right video but place one or more events at the wrong moment, which is invisible when only one frame is submitted or when a human operator silently repairs it.
+Each failure mode calls for a different response: the first needs a better query, the second needs a local fix.
+
+We treat multi-event retrieval as a two-stage reliability problem: whether the retrieved video can be trusted and whether its event alignment needs local repair, and study both stages on a running system with one lightweight mechanism for each.
+Our contributions are:
+\begin{enumerate}
+\item \textbf{A per-event audit.} We annotate ground-truth intervals for every event of 40 queries (113 events) and show that, even with the correct video given, only 25\% of queries have all events placed correctly. Within the scoring and decoding variants we study, errors are primarily associated with within-video frame ranking: a correct frame is ranked first for 35\% of events, while DP adds 8 points of event accuracy (95\% CI $-2$ to 18; Sect.~\ref{sec:diagnosis}).
+\item \textbf{First-pass failure prediction.} The relative score margin between the top video and the next distinct video separates correct from incorrect first passes with AUROC 0.85 on 70 queries, and nested leave-one-set-out signal selection gives held-out AUROCs of 0.78--0.85. It provides a lightweight trigger for deciding when the first pass should be reconsidered (Sect.~\ref{sec:failure_prediction}); Sect.~\ref{sec:discussion} discusses the untested downstream response.
+\item \textbf{Event-level correction.} With the correct video given and simulated oracle feedback that keeps, uses, or rejects one event at a time, whole-sequence correctness rises from 25\% to 62.5\% (4 alternatives) and 70\% (8) within five actions, against 37.5\% and 47.5\% without DP; most of the difference comes from the DP starting path and order constraints, while re-decoding untouched events adds one query. Counting wrong first-pass videos as failures, end-to-end correctness rises from 10\% to 35\% (Sect.~\ref{sec:correction}).
+\end{enumerate}
+
+Together, the two mechanisms motivate a failure-aware workflow that routes the user either to reformulate the query or to repair individual events; both require no training.
