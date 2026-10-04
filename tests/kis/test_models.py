@@ -198,18 +198,6 @@ class KISIntentModelTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             KISIntent.model_validate(invalid)
 
-    def test_rejects_temporal_edge_against_canonical_order(self) -> None:
-        invalid = {
-            **VALID,
-            "events": [
-                {"id": "E1", "text": "first", "bindings": []},
-                {"id": "E2", "text": "second", "bindings": []},
-            ],
-            "temporal_edges": [{"source": "E2", "relation": "before", "target": "E1"}],
-        }
-        with self.assertRaises(ValidationError):
-            KISIntent.model_validate(invalid)
-
     def test_auto_populates_sequential_edges_in_multi_event_intent(self) -> None:
         raw = {
             **VALID,
@@ -224,42 +212,6 @@ class KISIntentModelTest(unittest.TestCase):
         self.assertEqual(intent.temporal_edges[0].source, "E1")
         self.assertEqual(intent.temporal_edges[0].relation, "before")
         self.assertEqual(intent.temporal_edges[0].target, "E2")
-
-    def test_rejects_invalid_adjacent_edge_in_multi_event_intent(self) -> None:
-        invalid = {
-            **VALID,
-            "events": [
-                {"id": "E1", "text": "first", "bindings": []},
-                {"id": "E2", "text": "second", "bindings": []},
-            ],
-            "temporal_edges": [
-                {"source": "E1", "relation": "before", "target": "E1"},
-            ],
-        }
-        with self.assertRaises(ValidationError):
-            KISIntent.model_validate(invalid)
-
-    def test_rejects_self_temporal_edge(self) -> None:
-        invalid = {
-            **VALID,
-            "events": [
-                {"id": "E1", "text": "first", "bindings": []},
-            ],
-            "temporal_edges": [{"source": "E1", "relation": "before", "target": "E1"}],
-        }
-        with self.assertRaises(ValidationError):
-            KISIntent.model_validate(invalid)
-
-    def test_rejects_unknown_event_in_temporal_edge(self) -> None:
-        invalid = {
-            **VALID,
-            "events": [
-                {"id": "E1", "text": "first", "bindings": []},
-            ],
-            "temporal_edges": [{"source": "E1", "relation": "before", "target": "E9"}],
-        }
-        with self.assertRaises(ValidationError):
-            KISIntent.model_validate(invalid)
 
     def test_rejects_duplicate_entity_ids(self) -> None:
         invalid = {

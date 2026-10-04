@@ -53,21 +53,32 @@ def test_encode_query_events_empty():
     assert q.shape == (0, 0)
 
 
-def test_encode_query_events_callable():
-    """Verify encode_query_events supports plain callable."""
-    def simple_encoder(texts: list[str]) -> np.ndarray:
-        return np.ones((len(texts), 4), dtype=np.float32)
+def test_encode_query_events_text_embedding_source():
+    """Verify encode_query_events works with an object implementing TextEmbeddingSource."""
+    class SimpleTextEncoder:
+        def encode_text(self, texts: list[str]) -> np.ndarray:
+            return np.ones((len(texts), 4), dtype=np.float32)
 
-    q = encode_query_events(["e1", "e2"], encoder=simple_encoder)
+    q = encode_query_events(["e1", "e2"], encoder=SimpleTextEncoder())
     assert q.shape == (2, 4)
     # L2 normalized from [1, 1, 1, 1] is [0.5, 0.5, 0.5, 0.5]
     np.testing.assert_allclose(q, np.full((2, 4), 0.5))
 
 
+def test_encode_query_events_rejects_plain_callable():
+    """Verify plain callable without encode_text raises TypeError."""
+    def simple_fn(texts: list[str]) -> np.ndarray:
+        return np.ones((len(texts), 4), dtype=np.float32)
+
+    with pytest.raises(TypeError, match="encoder must implement TextEmbeddingSource"):
+        encode_query_events(["e1", "e2"], encoder=simple_fn)
+
+
 def test_encode_query_events_shape_mismatch_raises():
     """Verify invalid encoder output shape raises ValueError."""
-    def bad_encoder(texts: list[str]) -> np.ndarray:
-        return np.ones((len(texts) + 1, 4), dtype=np.float32)
+    class BadTextEncoder:
+        def encode_text(self, texts: list[str]) -> np.ndarray:
+            return np.ones((len(texts) + 1, 4), dtype=np.float32)
 
     with pytest.raises(ValueError, match="Expected encoder to return shape"):
-        encode_query_events(["e1"], encoder=bad_encoder)
+        encode_query_events(["e1"], encoder=BadTextEncoder())

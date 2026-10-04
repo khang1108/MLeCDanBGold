@@ -169,7 +169,6 @@ def test_search_kis_with_query_hypothesis_session_id(
         json={
             "query_hypothesis_session_id": session_id,
             "expected_revision": 1,
-            "operation": {"kind": "search_only"},
             "use_dense": True,
             "use_bm25": False,
             "top_k": 5,

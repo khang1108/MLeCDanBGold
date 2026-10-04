@@ -1,0 +1,19 @@
+{
+  "split": "002",
+  "task": "kis",
+  "selection": "random.sample of 19 KIS cases, seed 20260923, sorted by query number",
+  "test_set": "artifacts/evaluation/query_002_windows.json",
+  "source_sha256": "52621db90283fd54c8b89a870f93e0704090cb0470f04fd77e90d161815e75cb",
+  "query_ids": [
+    "query-p2-1-kis",
+    "query-p2-4-kis",
+    "query-p2-10-kis",
+    "query-p2-11-kis",
+    "query-p2-14-kis",
+    "query-p2-16-kis",
+    "query-p2-17-kis",
+    "query-p2-18-kis",
+    "query-p2-25-kis",
+    "query-p2-26-kis"
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "experiment": "shuffled_edge_counterfactual",
+  "num_queries": 6,
+  "shuffled_degradation_rate": 1.0,
+  "mean_original_score": 2.113011110538632,
+  "mean_shuffled_score": 1.9811516610783622,
+  "mean_margin": 0.13185944946027037,
+  "per_query_results": [
+    {
+      "query_id": "DIAG_001",
+      "video_id": "V_DIAG_01",
+      "original_score": 1.9366720176826906,
+      "counterfactual_score": 1.8263401024783241,
+      "margin": 0.11033191520436647,
+      "original_preferred": true
+    },
+    {
+      "query_id": "DIAG_002",
+      "video_id": "V_DIAG_02",
+      "original_score": 1.9661938874877054,
+      "counterfactual_score": 1.874924004863269,
+      "margin": 0.09126988262443647,
+      "original_preferred": true
+    },
+    {
+      "query_id": "DIAG_003",
+      "video_id": "V_DIAG_03",
+      "original_score": 1.92034098405151,
+      "counterfactual_score": 1.8263148216128289,
+      "margin": 0.09402616243868112,
+      "original_preferred": true
+    },
+    {
+      "query_id": "DIAG_004",
+      "video_id": "V_DIAG_04",
+      "original_score": 1.946217061837249,
+      "counterfactual_score": 1.8448286393244384,
+      "margin": 0.10138842251281055,
+      "original_preferred": true
+    },
+    {
+      "query_id": "DIAG_005",
+      "video_id": "V_DIAG_05",
+      "original_score": 2.9497952870262085,
+      "counterfactual_score": 2.7094496036626143,
+      "margin": 0.2403456833635942,
+      "original_preferred": true
+    },
+    {
+      "query_id": "DIAG_006",
+      "video_id": "V_DIAG_06",
+      "original_score": 1.9588474251464298,
+      "counterfactual_score": 1.8050527945286965,
+      "margin": 0.15379463061773335,
+      "original_preferred": true
+    }
+  ]
+}

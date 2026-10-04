@@ -102,8 +102,6 @@ class SearchService:
         api_config: ApiConfig | None = None,
         literal_text: LiteralTextIndex | None = None,
         intent_resolver: KISIntentResolver | None = None,
-        scoped_resolver: Any | None = None,
-        global_rewriter: Any | None = None,
         feedback_resolver: Any | None = None,
         kis_image_assets: KISImageAssetStore | None = None,
         event_trail_settings: EventTrailSettings | None = None,
@@ -427,14 +425,6 @@ class SearchService:
             return None
 
     def search_kis(self, request: KISSearchRequest) -> KISSearchResponse:
-        if request.operation is not None:
-            op = request.operation
-            kind = op.get("kind") if isinstance(op, dict) else getattr(op, "kind", op)
-            if kind is not None and kind != "search_only":
-                raise InvalidQueryInputError(
-                    f"server-owned query hypotheses may only execute search_only through KIS search, got {kind}"
-                )
-
         if request.query_hypothesis_session_id:
             if self.query_hypotheses is None:
                 raise SearchServiceUnavailableError("Query Hypothesis service is unavailable")

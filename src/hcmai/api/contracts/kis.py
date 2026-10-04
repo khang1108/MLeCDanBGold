@@ -33,11 +33,10 @@ class KISOperationSummary(BaseModel):
 class KISSearchRequest(BaseModel):
     """Stateless search request with explicit base intent or query hypothesis session."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
     query_hypothesis_session_id: str | None = None
     base_intent: KISIntent | None = None
     expected_revision: int = Field(default=0, ge=0)
-    operation: Any | None = None
     use_dense: bool = True
     use_bm25: bool = True
     top_k: int = Field(default=20, ge=1)

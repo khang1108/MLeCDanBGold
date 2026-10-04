@@ -65,10 +65,10 @@ def synthetic_diagnostic_setup():
     norms[norms == 0] = 1.0
     embeddings_map["video_001"] = embeddings_map["video_001"] / norms
 
-    def frame_accessor(vid: str, idxs: np.ndarray) -> np.ndarray:
-        return embeddings_map[vid][idxs]
+    from hcmai.temporal.transition_decoder import DictFrameEmbeddingSource
+    frame_source = DictFrameEmbeddingSource(embeddings_map)
 
-    return dataset, video_scores, frame_accessor
+    return dataset, video_scores, frame_source
 
 
 def test_evaluate_reverse_counterfactuals(synthetic_diagnostic_setup):
@@ -78,7 +78,7 @@ def test_evaluate_reverse_counterfactuals(synthetic_diagnostic_setup):
         # Mock query event embeddings (2 events, 4D)
         # Event 0: [0, 1, 0, 0], Event 1: [1, 0, 0, 0]
         # Transition dQ = [1, -1, 0, 0]
-        mock_encode.side_effect = lambda texts: (
+        mock_encode.side_effect = lambda texts, *args, **kwargs: (
             np.array([[0.0, 1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]], dtype=np.float32)
             if texts[0] == "person sitting"
             else np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]], dtype=np.float32)

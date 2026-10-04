@@ -1,0 +1,13 @@
+{
+  "method_name": "visual_continuity",
+  "num_queries": 6,
+  "r1": 0.3333333333333333,
+  "r5": 0.8333333333333334,
+  "r10": 1.0,
+  "mrr": 0.5194444444444445,
+  "event_hit": 1.0,
+  "all_hit": 1.0,
+  "reverse_acc": 0.0,
+  "avg_edges_per_video": 1194.6666666666667,
+  "avg_latency_ms": 3.2448583224322647
+}

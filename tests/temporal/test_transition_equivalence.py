@@ -59,10 +59,11 @@ def test_randomized_baseline_equivalence(n_events: int):
             min_separation_ms=min_sep,
         )
 
-        # 1. Full candidate decode via candidate_k = n_frames
+        # 1. Full candidate decode via select_event_candidates(video, candidate_k=n_frames)
+        cands = select_event_candidates(video, candidate_k=n_frames)
         lattice_paths_k = decode_candidate_lattice(
             video,
-            candidate_k=n_frames,
+            candidates=cands,
             transition_weight=0.0,
             lambda_gap=lambda_gap,
             paths=paths,
@@ -85,22 +86,6 @@ def test_randomized_baseline_equivalence(n_events: int):
                 f"score mismatch {b_p.score} vs {l_p.score}"
             )
 
-        # 2. Decode with external candidate layers from select_event_candidates
-        ext_candidates = select_event_candidates(video, candidate_k=n_frames)
-        lattice_paths_ext = decode_candidate_lattice(
-            video,
-            candidates=ext_candidates,
-            transition_weight=0.0,
-            lambda_gap=lambda_gap,
-            paths=paths,
-            min_separation_ms=min_sep,
-        )
-
-        assert len(baseline_paths) == len(lattice_paths_ext)
-        for b_p, l_p in zip(baseline_paths, lattice_paths_ext, strict=True):
-            assert b_p.frame_idx == l_p.frame_idx
-            assert np.isclose(b_p.score, l_p.score, atol=1e-7)
-
 
 def test_baseline_equivalence_with_dummy_transitions_weight_zero():
     """Verify that random transition matrices with transition_weight=0.0 match baseline DP."""
@@ -109,17 +94,17 @@ def test_baseline_equivalence_with_dummy_transitions_weight_zero():
     n_frames = 12
     video = _make_random_video(rng, n_events, n_frames)
 
-    # Supply random dummy transitions of full shape (12, 12)
+    candidates = select_event_candidates(video, candidate_k=n_frames)
     dummy_transitions = [
-        rng.uniform(-1.0, 1.0, size=(n_frames, n_frames)),
-        rng.uniform(-1.0, 1.0, size=(n_frames, n_frames)),
+        rng.uniform(-1.0, 1.0, size=(len(candidates[i].frame_indices), len(candidates[i + 1].frame_indices)))
+        for i in range(n_events - 1)
     ]
 
     baseline_paths = align_video(video, lambda_gap=1e-5, paths=2)
     lattice_paths = decode_candidate_lattice(
         video,
-        candidate_k=n_frames,
-        transitions=dummy_transitions,
+        candidates=candidates,
+        transition_scores=dummy_transitions,
         transition_weight=0.0,
         lambda_gap=1e-5,
         paths=2,

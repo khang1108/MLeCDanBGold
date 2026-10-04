@@ -154,7 +154,16 @@ def build_efficiency_table_rows(
 ) -> list[dict[str, Any]]:
     """Build structured rows for Candidate / Efficiency Table (Table 2)."""
     rdir = Path(results_dir)
-    recalls = candidate_recalls or {16: 0.842, 32: 0.915, 64: 0.963}
+    if candidate_recalls is None:
+        rec_data = load_result_json(rdir / "candidate_recall.json")
+        if rec_data and "recalls" in rec_data:
+            recalls = {int(k): float(v) for k, v in rec_data["recalls"].items()}
+        elif rec_data and isinstance(rec_data, list):
+            recalls = {int(item["k"]): float(item["recall"]) for item in rec_data if "k" in item and "recall" in item}
+        else:
+            recalls = {}
+    else:
+        recalls = candidate_recalls
 
     rows: list[dict[str, Any]] = []
 

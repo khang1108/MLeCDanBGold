@@ -123,7 +123,6 @@ def test_search_uses_server_hypothesis_not_client_replacement(service, opened_se
         query_hypothesis_session_id=opened_session.session_id,
         base_intent=None,
         expected_revision=opened_session.intent.revision,
-        operation={"kind": "search_only"},
         use_dense=True,
         use_bm25=False,
         top_k=5,
@@ -210,7 +209,6 @@ def test_search_binds_evidence_snapshot_to_hypothesis_revision(service, opened_s
         query_hypothesis_session_id=opened_session.session_id,
         base_intent=None,
         expected_revision=opened_session.intent.revision,
-        operation={"kind": "search_only"},
         use_dense=True,
         use_bm25=False,
         top_k=5,
@@ -240,7 +238,6 @@ def test_search_rejects_hypothesis_revision_conflict(service, opened_session):
         query_hypothesis_session_id=opened_session.session_id,
         base_intent=None,
         expected_revision=999,
-        operation={"kind": "search_only"},
         use_dense=True,
         use_bm25=False,
         top_k=5,
@@ -250,30 +247,19 @@ def test_search_rejects_hypothesis_revision_conflict(service, opened_session):
 
 
 def test_search_rejects_non_search_only_operation_with_hypothesis_session(service, opened_session):
-    from unittest.mock import Mock
+    from pydantic import ValidationError
     from hcmai.api.contracts.kis import KISSearchRequest
-    from hcmai.orchestration.utils.errors import InvalidQueryInputError
-    from hcmai.orchestration.pipeline import SearchService
 
-    search_service = SearchService(
-        corpus=Mock(),
-        retrieval=Mock(),
-        temporal_evidence=Mock(),
-        intent_resolver=FakeResolver(),
-        query_hypotheses=service,
-    )
-
-    request = KISSearchRequest(
-        query_hypothesis_session_id=opened_session.session_id,
-        base_intent=None,
-        expected_revision=opened_session.intent.revision,
-        operation={"kind": "global_rewrite", "instruction": "something"},
-        use_dense=True,
-        use_bm25=False,
-        top_k=5,
-    )
-    with pytest.raises(InvalidQueryInputError):
-        search_service.search_kis(request)
+    with pytest.raises(ValidationError):
+        KISSearchRequest(
+            query_hypothesis_session_id=opened_session.session_id,
+            base_intent=None,
+            expected_revision=opened_session.intent.revision,
+            operation={"kind": "global_rewrite", "instruction": "something"},
+            use_dense=True,
+            use_bm25=False,
+            top_k=5,
+        )
 
 
 def test_query_commit_log_contains_revisions(caplog, service, opened_session):

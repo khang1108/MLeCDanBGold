@@ -69,7 +69,6 @@ def test_REQ_003_fastapi_lifespan_with_unused_grpc_port(monkeypatch) -> None:
                     "query_text": "a person walking",
                     "events": [{"id": "E1", "text": "a person walking"}],
                 },
-                "operation": {"kind": "search_only"},
                 "expected_revision": 1,
             },
         )

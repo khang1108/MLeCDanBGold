@@ -6,7 +6,6 @@ Verifies Phase 4 (Tasks 4.1, 4.2, 4.3):
 - Static pair: psi = 0
 - Fast matrix formulation matches exact pairwise loop (1/4 * (v_b - v_a)^T dQ)
 - Shuffled transitions degrade score
-- Temporal horizon attenuation
 """
 
 import numpy as np
@@ -142,29 +141,3 @@ def test_score_all_transitions():
     assert matrices[0].shape == (4, 5)
     assert matrices[1].shape == (5, 3)
 
-
-def test_temporal_horizon_attenuation():
-    """Verify transitions outside temporal_horizon_ms are zeroed."""
-    scorer = EmbeddingDeltaTransitionScorer(temporal_horizon_ms=5000.0)
-
-    dQ = np.array([-1.0, 1.0])
-    vA = np.array([[1.0, 0.0], [1.0, 0.0]])
-    vB = np.array([[0.0, 1.0], [0.0, 1.0]])
-
-    # source timestamps: 1000, 2000
-    src_t = np.array([1000, 2000])
-    # target timestamps: 3000 (within 5s), 10000 (beyond 5s)
-    tgt_t = np.array([3000, 10000])
-
-    psi = scorer.compute_transition_matrix(
-        vA, vB, query_delta=dQ,
-        source_timestamps_ms=src_t,
-        target_timestamps_ms=tgt_t,
-    )
-
-    # Pair (src=1000, tgt=3000): delta=2000 <= 5000 -> active (> 0)
-    assert psi[0, 0] > 0.0
-    # Pair (src=1000, tgt=10000): delta=9000 > 5000 -> zeroed
-    assert psi[0, 1] == 0.0
-    # Pair (src=2000, tgt=10000): delta=8000 > 5000 -> zeroed
-    assert psi[1, 1] == 0.0

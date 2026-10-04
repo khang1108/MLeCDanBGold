@@ -25,6 +25,7 @@ from hcmai.temporal.dp import AlignedPath, DPPath, align_video, align_video_cond
 from hcmai.temporal.transition_decoder import (
     EmbeddingDeltaTransitionScorer,
     FrameEmbeddingAccessor,
+    TextEmbeddingSource,
     encode_query_events,
     rank_motion_graph_paths,
 )
@@ -162,6 +163,7 @@ class TemporalSearchService:
         evidence: TemporalEvidenceScorer,
         config: AlignmentConfig,
         max_temporal_event_count: int = DEFAULT_MAX_TEMPORAL_EVENT_COUNT,
+        transition_text_encoder: TextEmbeddingSource | None = None,
     ) -> None:
         """Bind canonical data access, retrieval scoring, and DP settings."""
 
@@ -170,6 +172,10 @@ class TemporalSearchService:
         self.evidence = evidence
         self.config = config
         self.max_temporal_event_count = max_temporal_event_count
+        self.transition_text_encoder = (
+            transition_text_encoder
+            or getattr(getattr(self.evidence, "dense", None), "visual_encoder", None)
+        )
 
     def search(
         self,
@@ -246,15 +252,6 @@ class TemporalSearchService:
         """Return canonical aligned paths and the exact score matrix artifact."""
         if top_k <= 0:
             raise ValueError("top_k must be greater than zero")
-
-        if self.config.decoder == "motion_graph":
-            return self.search_plan_motion_graph(
-                plan,
-                image_component=image_component,
-                use_dense=use_dense,
-                use_bm25=use_bm25,
-                top_k=top_k,
-            )
 
         scores, retrieval_ms = self.score_plan(
             plan,
@@ -335,7 +332,11 @@ class TemporalSearchService:
             texts = plan.dense_texts or plan.canonical_texts
             if texts is None:
                 raise ValueError("plan must contain text events to compute event embeddings")
-            event_embeddings = encode_query_events(texts)
+            if self.transition_text_encoder is None:
+                raise RuntimeError(
+                    "transition_text_encoder (SigLIP visual-language text encoder) is required for motion graph query encoding"
+                )
+            event_embeddings = encode_query_events(texts, encoder=self.transition_text_encoder)
 
         alignment_started = perf_counter()
         rows = rank_motion_graph_paths(

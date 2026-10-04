@@ -10,7 +10,7 @@ decoding optimal chronological paths in :math:`O(M \\cdot K^2)` complexity.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -130,61 +130,62 @@ def select_event_candidates(
     return tuple(layers)
 
 
-class FrameEmbeddingAccessor:
-    """Provides visual embedding lookup for candidate frames of videos.
+class DictFrameEmbeddingSource:
+    """In-memory dictionary visual embedding source conforming to FrameEmbeddingSource."""
 
-    Guarantees candidate frame indices always resolve to exact stored visual
-    vectors in canonical order without decoding or re-encoding video.
-    """
-
-    def __init__(self, source: FrameEmbeddingSource | dict[str, np.ndarray] | np.ndarray | Any) -> None:
-        self._source = source
+    def __init__(self, embeddings: Mapping[str, np.ndarray]) -> None:
+        self._embeddings = embeddings
 
     def get_frame_embeddings(
         self,
         video_id: str,
         frame_indices: np.ndarray | Sequence[int],
     ) -> np.ndarray:
-        """Retrieve stored visual embeddings for candidate frames of one video.
+        """Retrieve stored visual embeddings for candidate frames of one video."""
+        if video_id not in self._embeddings:
+            raise KeyError(f"Video {video_id!r} not found in visual embedding source")
+        video_mat = self._embeddings[video_id]
+        indices = np.asarray(frame_indices, dtype=np.int64)
+        if len(indices) == 0:
+            dim = video_mat.shape[1] if video_mat.ndim > 1 else 0
+            return np.empty((0, dim), dtype=np.float32)
+        if np.any(indices < 0) or np.any(indices >= len(video_mat)):
+            raise IndexError(
+                f"frame_indices out of bounds for video {video_id!r} with {len(video_mat)} frames"
+            )
+        return np.asarray(video_mat[indices], dtype=np.float32)
 
-        Args:
-            video_id: Canonical video identifier.
-            frame_indices: 0-based column/temporal indices within the video's
-                canonical frame order.
+    def __call__(
+        self,
+        video_id: str,
+        frame_indices: np.ndarray | Sequence[int],
+    ) -> np.ndarray:
+        return self.get_frame_embeddings(video_id, frame_indices)
 
-        Returns:
-            np.ndarray of shape (len(frame_indices), embedding_dim), dtype float32.
-        """
-        if isinstance(self._source, FrameEmbeddingSource) and not isinstance(self._source, FrameEmbeddingAccessor):
-            return self._source.get_frame_embeddings(video_id, frame_indices)
-        if hasattr(self._source, "get_frame_embeddings"):
-            return self._source.get_frame_embeddings(video_id, frame_indices)
-        if isinstance(self._source, dict):
-            if video_id not in self._source:
-                raise KeyError(f"Video {video_id!r} not found in visual embedding source")
-            video_mat = self._source[video_id]
+
+class FrameEmbeddingAccessor:
+    """Provides visual embedding lookup conforming to FrameEmbeddingSource."""
+
+    def __init__(self, source: FrameEmbeddingSource | Mapping[str, np.ndarray] | np.ndarray) -> None:
+        if isinstance(source, np.ndarray):
+            self._source: FrameEmbeddingSource = DictFrameEmbeddingSource({"": source})
+            self._single_mat: np.ndarray | None = source
+        elif isinstance(source, Mapping):
+            self._source = DictFrameEmbeddingSource(source)
+            self._single_mat = None
+        else:
+            self._source = source
+            self._single_mat = None
+
+    def get_frame_embeddings(
+        self,
+        video_id: str,
+        frame_indices: np.ndarray | Sequence[int],
+    ) -> np.ndarray:
+        if self._single_mat is not None:
             indices = np.asarray(frame_indices, dtype=np.int64)
-            if len(indices) == 0:
-                dim = video_mat.shape[1] if video_mat.ndim > 1 else 0
-                return np.empty((0, dim), dtype=np.float32)
-            if np.any(indices < 0) or np.any(indices >= len(video_mat)):
-                raise IndexError(
-                    f"frame_indices out of bounds for video {video_id!r} with {len(video_mat)} frames"
-                )
-            return np.asarray(video_mat[indices], dtype=np.float32)
-        if isinstance(self._source, np.ndarray):
-            indices = np.asarray(frame_indices, dtype=np.int64)
-            if len(indices) == 0:
-                dim = self._source.shape[1] if self._source.ndim > 1 else 0
-                return np.empty((0, dim), dtype=np.float32)
-            if np.any(indices < 0) or np.any(indices >= len(self._source)):
-                raise IndexError(
-                    f"frame_indices out of bounds for video {video_id!r} with {len(self._source)} frames"
-                )
-            return np.asarray(self._source[indices], dtype=np.float32)
-        if callable(self._source):
-            return self._source(video_id, frame_indices)
-        raise TypeError(f"Unsupported visual embedding source type: {type(self._source)}")
+            return np.asarray(self._single_mat[indices], dtype=np.float32)
+        return self._source.get_frame_embeddings(video_id, frame_indices)
 
     def __call__(
         self,
@@ -196,7 +197,7 @@ class FrameEmbeddingAccessor:
 
 def encode_query_events(
     events: Sequence[str],
-    encoder: TextEmbeddingSource | Callable[[list[str]], np.ndarray] | None = None,
+    encoder: TextEmbeddingSource | None = None,
 ) -> np.ndarray:
     """Encode an ordered sequence of event query strings into shared vision-language space.
 
@@ -205,7 +206,7 @@ def encode_query_events(
 
     Args:
         events: Sequence of M event text queries.
-        encoder: A text encoder implementing TextEmbeddingSource or a plain callable.
+        encoder: A text encoder implementing TextEmbeddingSource.
 
     Returns:
         np.ndarray of shape (M, D) with float32 L2-normalized embeddings.
@@ -216,15 +217,10 @@ def encode_query_events(
     if encoder is None:
         raise ValueError("encoder must be provided to encode_query_events")
 
-    event_list = list(events)
-    if hasattr(encoder, "encode_text"):
-        embeddings = encoder.encode_text(event_list)
-    elif callable(encoder):
-        embeddings = encoder(event_list)
-    else:
-        raise TypeError(f"encoder must implement TextEmbeddingSource or be callable, got {type(encoder)}")
+    if not hasattr(encoder, "encode_text"):
+        raise TypeError(f"encoder must implement TextEmbeddingSource with encode_text(), got {type(encoder)}")
 
-    embeddings = np.asarray(embeddings, dtype=np.float32)
+    embeddings = np.asarray(encoder.encode_text(list(events)), dtype=np.float32)
     if embeddings.ndim != 2 or embeddings.shape[0] != len(events):
         raise ValueError(
             f"Expected encoder to return shape ({len(events)}, D), got {embeddings.shape}"
@@ -236,34 +232,30 @@ def encode_query_events(
 
 @dataclass(frozen=True, slots=True)
 class EmbeddingDeltaTransitionScorer:
-    """Query-conditioned signed transition scorer based on embedding differences.
+    r"""Query-conditioned signed transition scorer based on embedding differences.
 
     Evaluates directional semantic visual change aligned with the semantic transition
     between consecutive textual events:
     .. math::
 
-        \\psi_i(a, b) = \\frac{1}{4} (v_b - v_a)^T (q_{i+1} - q_i)
+        \psi_i(a, b) = \frac{1}{4} (v_b - v_a)^T (q_{i+1} - q_i)
 
     Computed efficiently in :math:`O((K_a + K_b)D + K_a K_b)` without materializing
     intermediate 3D tensors:
     .. math::
 
-        s_A = A \\cdot \\Delta q, \\quad s_B = B \\cdot \\Delta q
-        \\Psi = \\frac{1}{4} (s_B[None, :] - s_A[:, None])
+        s_A = A \cdot \Delta q, \quad s_B = B \cdot \Delta q
+        \Psi = \frac{1}{4} (s_B[None, :] - s_A[:, None])
 
     Transition scores are strictly signed (never clamped to non-negative) so that
     reversed semantic transitions receive negative penalties.
     """
-
-    temporal_horizon_ms: float | None = None
 
     def compute_transition_matrix(
         self,
         source_embeddings: np.ndarray,
         target_embeddings: np.ndarray,
         query_delta: np.ndarray,
-        source_timestamps_ms: np.ndarray | None = None,
-        target_timestamps_ms: np.ndarray | None = None,
     ) -> np.ndarray:
         """Compute (Ka, Kb) transition compatibility matrix.
 
@@ -271,8 +263,6 @@ class EmbeddingDeltaTransitionScorer:
             source_embeddings: Array of shape (Ka, D) of visual embeddings for event i.
             target_embeddings: Array of shape (Kb, D) of visual embeddings for event i+1.
             query_delta: Vector of shape (D,) representing q_{i+1} - q_i.
-            source_timestamps_ms: Optional timestamps of source candidates.
-            target_timestamps_ms: Optional timestamps of target candidates.
 
         Returns:
             np.ndarray of shape (Ka, Kb) with signed transition affinity scores.
@@ -299,35 +289,18 @@ class EmbeddingDeltaTransitionScorer:
         s_B = B_norm @ dQ   # shape (Kb,)
 
         # psi = 1/4 * (s_B[None, :] - s_A[:, None])
-        psi = 0.25 * (s_B[None, :] - s_A[:, None])
-
-        # Optional temporal horizon attenuation
-        if (
-            self.temporal_horizon_ms is not None
-            and self.temporal_horizon_ms > 0
-            and source_timestamps_ms is not None
-            and target_timestamps_ms is not None
-        ):
-            src_t = np.asarray(source_timestamps_ms, dtype=np.float64)[:, None]
-            tgt_t = np.asarray(target_timestamps_ms, dtype=np.float64)[None, :]
-            delta_t = tgt_t - src_t
-            in_horizon = (delta_t > 0) & (delta_t <= self.temporal_horizon_ms)
-            psi = np.where(in_horizon, psi, 0.0)
-
-        return psi
+        return 0.25 * (s_B[None, :] - s_A[:, None])
 
     def score_all_transitions(
         self,
         candidate_embeddings: Sequence[np.ndarray],
         query_embeddings: np.ndarray,
-        candidate_timestamps_ms: Sequence[np.ndarray] | None = None,
     ) -> list[np.ndarray]:
         """Compute transition matrices for all consecutive event pairs 0..M-2.
 
         Args:
             candidate_embeddings: Sequence of length M, each of shape (K_i, D).
             query_embeddings: Array of shape (M, D) with SigLIP text embeddings.
-            candidate_timestamps_ms: Optional sequence of length M with candidate timestamps.
 
         Returns:
             List of M-1 transition matrices of shape (K_{i}, K_{i+1}).
@@ -340,14 +313,10 @@ class EmbeddingDeltaTransitionScorer:
         transitions: list[np.ndarray] = []
         for i in range(n_events - 1):
             dQ = query_embeddings[i + 1] - query_embeddings[i]
-            src_t = candidate_timestamps_ms[i] if candidate_timestamps_ms is not None else None
-            tgt_t = candidate_timestamps_ms[i + 1] if candidate_timestamps_ms is not None else None
             mat = self.compute_transition_matrix(
                 candidate_embeddings[i],
                 candidate_embeddings[i + 1],
                 query_delta=dQ,
-                source_timestamps_ms=src_t,
-                target_timestamps_ms=tgt_t,
             )
             transitions.append(mat)
         return transitions
@@ -355,12 +324,11 @@ class EmbeddingDeltaTransitionScorer:
 
 def _validate_and_extract_lattice_edge(
     matrix: np.ndarray | None,
-    prev_indices: np.ndarray,
-    curr_indices: np.ndarray,
-    n_frames: int,
+    k_prev: int,
+    k_curr: int,
     weight: float,
 ) -> np.ndarray | None:
-    """Validate 2D transition matrix and extract candidate-lattice submatrix."""
+    """Validate 2D transition matrix and apply transition weight."""
     if matrix is None:
         return None
     mat = np.asarray(matrix, dtype=np.float64)
@@ -368,21 +336,17 @@ def _validate_and_extract_lattice_edge(
         raise ValueError(f"Transition matrix must be 2D, got shape {mat.shape}")
     if not np.all(np.isfinite(mat)):
         raise ValueError("Transition matrix contains non-finite values (NaN or Inf)")
-
-    k_prev = len(prev_indices)
-    k_curr = len(curr_indices)
-    if mat.shape == (k_prev, k_curr):
-        return mat * weight
-    if mat.shape == (n_frames, n_frames):
-        return mat[np.ix_(prev_indices, curr_indices)] * weight
-    raise ValueError(
-        f"Expected transition matrix of shape ({k_prev}, {k_curr}) or ({n_frames}, {n_frames}), got {mat.shape}"
-    )
+    if mat.shape != (k_prev, k_curr):
+        raise ValueError(
+            f"Expected transition matrix of shape ({k_prev}, {k_curr}), got {mat.shape}"
+        )
+    return mat * weight
 
 
 def decode_candidate_lattice(
     video: VideoEventScores,
-    candidate_k: int = 32,
+    *,
+    candidates: Sequence[EventCandidateLayer],
     transition_scores: Sequence[np.ndarray] | None = None,
     transition_weight: float = 1.0,
     lambda_gap: float = 1e-5,
@@ -390,9 +354,6 @@ def decode_candidate_lattice(
     event_power: float = 1.0,
     cluster_delta: float = 0.0,
     min_separation_ms: int = 0,
-    *,
-    candidates: Sequence[EventCandidateLayer] | None = None,
-    transitions: Sequence[np.ndarray] | None = None,
     allowed: np.ndarray | None = None,
 ) -> list[DPPath]:
     """Decode optimal chronological paths through a candidate lattice per event.
@@ -401,12 +362,8 @@ def decode_candidate_lattice(
     enabling millisecond-level motion-aware graph decoding over long videos with thousands
     of keyframes.
 
-    When candidates are provided externally (e.g. from ``select_event_candidates``),
-    they define the layered graph nodes :math:`C_1 \\to C_2 \\to \\dots \\to C_M`.
-    Otherwise, candidates are automatically selected via ``select_event_candidates``.
-
-    Transition scores can be provided via ``transition_scores`` or the legacy alias ``transitions``,
-    as either candidate-sliced :math:`(K_{i-1}, K_i)` matrices or full video :math:`(F, F)` matrices.
+    Requires explicit candidate layers :math:`C_1 \\to C_2 \\to \\dots \\to C_M` (e.g. from
+    ``select_event_candidates``) and optional :math:`(K_{i-1}, K_i)` transition matrices.
     """
     prep = _prepare_dp_inputs(video, allowed, event_power, cluster_delta)
     if prep is None:
@@ -414,50 +371,33 @@ def decode_candidate_lattice(
     scores, frames, starts, source, reachable = prep
     n_events, n_frames = scores.shape
 
-    # Resolve candidates: external sequence or top-k selection
-    if candidates is None:
-        cand_layers = select_event_candidates(
-            video,
-            candidate_k=candidate_k,
-            allowed=allowed,
-            event_power=event_power,
-            cluster_delta=cluster_delta,
+    if len(candidates) != n_events:
+        raise ValueError(
+            f"Number of candidate layers ({len(candidates)}) must match number of events ({n_events})"
         )
-        if len(cand_layers) == 0:
-            return []
-        candidates_seq = cand_layers
-    else:
-        if len(candidates) != n_events:
-            raise ValueError(
-                f"Number of candidate layers ({len(candidates)}) must match number of events ({n_events})"
-            )
-        candidates_seq = candidates
 
     # Ensure every layer has at least one candidate frame
-    for layer in candidates_seq:
+    for layer in candidates:
         if len(layer.frame_indices) == 0:
             return []
 
-    effective_transitions = transition_scores if transition_scores is not None else transitions
-
     # Initialize DP on first event candidates
-    c0 = np.asarray(candidates_seq[0].frame_indices, dtype=np.int64)
+    c0 = np.asarray(candidates[0].frame_indices, dtype=np.int64)
     dp_vals = scores[0, c0].copy()
     back_pointers: list[np.ndarray] = []
 
     for event in range(1, n_events):
         edge_idx = event - 1
-        c_prev = np.asarray(candidates_seq[event - 1].frame_indices, dtype=np.int64)
-        c_curr = np.asarray(candidates_seq[event].frame_indices, dtype=np.int64)
+        c_prev = np.asarray(candidates[event - 1].frame_indices, dtype=np.int64)
+        c_curr = np.asarray(candidates[event].frame_indices, dtype=np.int64)
 
-        # Validate transition matrix and slice to candidate layer dimensions (K_{i-1}, K_i)
+        # Validate transition matrix with exact (K_{i-1}, K_i) shape
         edge_sub_mat: np.ndarray | None = None
-        if effective_transitions is not None and edge_idx < len(effective_transitions):
+        if transition_scores is not None and edge_idx < len(transition_scores):
             edge_sub_mat = _validate_and_extract_lattice_edge(
-                effective_transitions[edge_idx],
-                prev_indices=c_prev,
-                curr_indices=c_curr,
-                n_frames=n_frames,
+                transition_scores[edge_idx],
+                k_prev=len(c_prev),
+                k_curr=len(c_curr),
                 weight=transition_weight,
             )
 
@@ -485,7 +425,7 @@ def decode_candidate_lattice(
         back_pointers.append(best_s_local)
 
     # Reconstruct ranked paths from final candidate layer
-    c_last = np.asarray(candidates_seq[-1].frame_indices, dtype=np.int64)
+    c_last = np.asarray(candidates[-1].frame_indices, dtype=np.int64)
     timestamps = np.asarray(video.timestamps_ms, dtype=np.int64)
     results: list[DPPath] = []
     accepted: list[int] = []
@@ -507,7 +447,7 @@ def decode_candidate_lattice(
         curr_local = int(local_endpoint)
         for event in range(n_events - 1, 0, -1):
             prev_local = int(back_pointers[event - 1][curr_local])
-            prev_global = int(candidates_seq[event - 1].frame_indices[prev_local])
+            prev_global = int(candidates[event - 1].frame_indices[prev_local])
             path.append(prev_global)
             curr_local = prev_local
 
@@ -550,7 +490,7 @@ def decode_motion_graph_video(
     Args:
         video: VideoEventScores holding per-event frame similarities and timestamps.
         frame_embeddings: Source conforming to FrameEmbeddingSource (DenseIndex,
-            FrameEmbeddingAccessor, dict, or ndarray).
+            DictFrameEmbeddingSource, FrameEmbeddingAccessor, or dict).
         event_embeddings: Array of shape (M, D) with SigLIP query-event embeddings.
         candidate_k: Maximum candidate frames per event layer.
         transition_weight: Scaling weight beta for transition edges.
@@ -579,16 +519,21 @@ def decode_motion_graph_video(
         return []
 
     # 2. Fetch Candidate Embeddings
-    accessor = (
-        frame_embeddings
-        if isinstance(frame_embeddings, FrameEmbeddingAccessor)
-        else FrameEmbeddingAccessor(frame_embeddings)
-    )
+    if isinstance(frame_embeddings, np.ndarray):
+        source: FrameEmbeddingSource = DictFrameEmbeddingSource({video.video_id: frame_embeddings})
+    elif isinstance(frame_embeddings, Mapping):
+        source = DictFrameEmbeddingSource(frame_embeddings)
+    elif hasattr(frame_embeddings, "get_frame_embeddings"):
+        source = frame_embeddings
+    else:
+        raise TypeError(
+            f"frame_embeddings must implement FrameEmbeddingSource, got {type(frame_embeddings)}"
+        )
+
     cand_embs = [
-        accessor.get_frame_embeddings(video.video_id, layer.frame_indices)
+        source.get_frame_embeddings(video.video_id, layer.frame_indices)
         for layer in candidates
     ]
-    cand_timestamps = [video.timestamps_ms[layer.frame_indices] for layer in candidates]
 
     # 3. Score Query-Conditioned Transitions
     transitions: list[np.ndarray] | None = None
@@ -601,7 +546,6 @@ def decode_motion_graph_video(
         transitions = scorer.score_all_transitions(
             cand_embs,
             event_embeddings,
-            candidate_timestamps_ms=cand_timestamps,
         )
 
     # 4. Decode Candidate Lattice
@@ -685,6 +629,7 @@ def rank_motion_graph_paths(
 
 __all__ = [
     "DPPath",
+    "DictFrameEmbeddingSource",
     "EmbeddingDeltaTransitionScorer",
     "EventCandidateLayer",
     "FrameEmbeddingAccessor",

@@ -123,12 +123,9 @@ class TemporalEvidenceScorer:
             if self.dense is None:
                 raise RuntimeError("Dense temporal evidence is unavailable")
             interval_proj = getattr(self.config.adaptive, "asr_interval_projection", True)
-            try:
-                dense_bundle = self.dense.score_components(
-                    retrieval_events, asr_interval_projection=interval_proj
-                )
-            except TypeError:
-                dense_bundle = self.dense.score_components(retrieval_events)
+            dense_bundle = self.dense.score_components(
+                retrieval_events, asr_interval_projection=interval_proj
+            )
             components.update(dense_bundle.components)
         if use_bm25:
             if self.bm25 is None:

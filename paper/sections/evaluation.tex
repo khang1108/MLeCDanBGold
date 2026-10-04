@@ -1,0 +1,42 @@
+% !TeX root = ../main.tex
+\section{Exploratory Evaluation}
+\label{sec:evaluation}
+
+\paragraph{Experimental Setup.}
+We evaluated SHI against a baseline control interface over identical indexed video
+collections, models, and retrieval settings. The control reflects standard competition
+systems: supporting narrative search, multimodal ranking, and keyframe browsing, but
+treating decomposition and temporal alignment as internal black-box procedures. In
+contrast, SHI enables pre-retrieval Query Hypothesis revision and post-retrieval
+EventTrail steering. We evaluated ten multi-event KIS queries with verified target
+videos and intervals; a hit requires submitting within the ground-truth interval.
+
+\begin{table}[!t]
+  \centering
+  \caption{Evaluation results on ten multi-event KIS queries. Hits require a
+  timestamp within the verified interval of the target video.}
+  \label{tab:kis-benchmark}
+  \begin{tabular}{lcc}
+    \hline
+    Metric & Control & SHI \\
+    \hline
+    Target video in top-5 (first-pass) & 7/10 (70\%) & 7/10 (70\%) \\
+    Valid timestamp hits (final) & 6/10 (60\%) & 9/10 (90\%) \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\paragraph{Results and Analysis.}
+As shown in Table~\ref{tab:kis-benchmark}, both interfaces produced identical
+first-pass rankings (7/10 target videos in top-5, 60\% hit rate). Subsequent
+interaction resolved two failure modes. First, for one query retrieved at rank 3,
+visual ambiguity caused the initial decoder to select a false-positive frame;
+EventTrail allowed the operator to anchor the true occurrence, re-decoding the
+path in under 100\,ms from the Evidence Snapshot without corpus re-querying.
+Second, for two queries initially outside the top-20 due to suboptimal LLM
+segmentation, restructuring the Query Hypothesis elevated the target video into
+top ranks. One query failed due to severe visual occlusion and absent speech cues.
+Overall, dual-stage steering increased timestamp accuracy from 60\% to 90\%,
+confirming that intermediate hypothesis intervention mitigates cascade errors.
+
+

@@ -145,12 +145,17 @@ def test_temporal_search_service_parallel_paths(monkeypatch):
     assert mg_art.decoder_config.transition_weight == 0.25
     assert len(mg_art.result.paths) == 1
 
-    # 3. Service configured with decoder: motion_graph routes automatically
-    monkeypatch.setattr(
-        "hcmai.orchestration.workflows.search.temporal.encode_query_events",
-        lambda texts: np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+    # 3. Explicit motion graph call with injected transition_text_encoder
+    class MockEncoder:
+        def encode_text(self, texts: list[str]) -> np.ndarray:
+            return np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+
+    mg_service = TemporalSearchService(
+        corpus,
+        evidence,
+        AlignmentConfig(candidate_k=2),
+        transition_text_encoder=MockEncoder(),
     )
-    mg_service = TemporalSearchService(corpus, evidence, AlignmentConfig(decoder="motion_graph", candidate_k=2))
-    auto_art = mg_service.search_plan_artifact(plan, top_k=1)
+    auto_art = mg_service.search_plan_motion_graph(plan, top_k=1)
     assert auto_art.decoder_config.decoder == "motion_graph"
     assert len(auto_art.result.paths) == 1

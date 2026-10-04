@@ -58,7 +58,7 @@ def test_evaluate_method_on_dataset(method_name: str, monkeypatch):
     # Mock query encoding to avoid remote SigLIP download
     monkeypatch.setattr(
         "scripts.evaluation.run_motion_graph_ablation.encode_query_events",
-        lambda texts: np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+        lambda texts, *args, **kwargs: np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
     )
 
     summary = evaluate_method_on_dataset(
@@ -86,7 +86,7 @@ def test_save_summary_result(tmp_path: Path, monkeypatch):
     dataset, video_scores, frame_embs = _make_sample_dataset_and_video()
     monkeypatch.setattr(
         "scripts.evaluation.run_motion_graph_ablation.encode_query_events",
-        lambda texts: np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+        lambda texts, *args, **kwargs: np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
     )
 
     summary = evaluate_method_on_dataset(
