@@ -24,14 +24,14 @@ family-name order. All text uses the template's font setup.
 From the repository root:
 
 ```sh
-make -C paper
+make -C paper/vbs
 ```
 
-Open `paper/build/main.pdf`. For automatic rebuilds, run `make -C paper watch`;
-stop with Ctrl+C. Clean generated output with `make -C paper clean`.
-Without Make, run `cd paper` and then `latexmk main.tex`.
+Open `paper/vbs/build/main.pdf`. For automatic rebuilds, run `make -C paper/vbs watch`;
+stop with Ctrl+C. Clean generated output with `make -C paper/vbs clean`.
+Without Make, run `cd paper/vbs` and then `latexmk main.tex`.
 
-For Overleaf, upload the contents of `paper/` without `build/`, select `main.tex`
+For Overleaf, upload the contents of `paper/vbs/` without `build/`, select `main.tex`
 as the main document, and use pdfLaTeX with a recent TeX Live version.
 The local build is verified; Overleaf has not been tested in this session.
 
@@ -40,12 +40,12 @@ The local build is verified; Overleaf has not been tested in this session.
 The relevant validation is a clean LaTeX and BibTeX build:
 
 ```sh
-make -C paper clean
-make -C paper
+make -C paper/vbs clean
+make -C paper/vbs
 ```
 
-A healthy result exits successfully and produces `paper/build/main.pdf` with
-resolved citations and figure references. Inspect `paper/build/main.log` for
+A healthy result exits successfully and produces `paper/vbs/build/main.pdf` with
+resolved citations and figure references. Inspect `paper/vbs/build/main.log` for
 undefined references and overfull boxes, and inspect the PDF after layout changes.
 The initial skeleton is two pages; this is not a final submission compliance check.
 The verified build has two non-fatal warnings: an `amsmath` warning about

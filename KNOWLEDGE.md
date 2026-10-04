@@ -48,7 +48,7 @@ Measure task success, time, and correction actions. These are proposed ablations
 not an approved experiment plan or measured results.
 
 The ten-paper editorial comparison is stored in
-`paper/notes/introduction-style-benchmark.md`. The manuscript remains unchanged.
+`paper/vbs/notes/introduction-style-benchmark.md`. The manuscript remains unchanged.
 
 ## Related-work positioning for Query Hypothesis and EventTrail
 
@@ -212,5 +212,3 @@ Standardized on parallel runtime paths: `rank_motion_graph_paths` and `search_pl
 
 ### Status
 VERIFIED (All 603 tests pass; all 3 evaluation scripts execute standalone with deterministic synthetic benchmark).
-
-
