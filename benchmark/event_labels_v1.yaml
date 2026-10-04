@@ -1,0 +1,751 @@
+# Per-event ground truth for the path-correction study.
+# Drafted from keyframes, then reviewed in the label review page.
+# interval_ms is closed [start, end] on the target video's timeline.
+# subset: verified = SOTUYEN1 (organizer-verified video); sotuyen2/sotuyen3 = video from the
+# first submission row, visually confirmed; trake = TRAKE queries.
+
+- query_id: p1-2-kis
+  subset: verified
+  video_id: L28_V018
+  events:
+  - text: Bản đồ, trên đó một loại công trình thủy lợi lần lượt xuất hiện bốn lần
+    interval_ms:
+    - 106000
+    - 128000
+    confidence: reviewed
+  - text: Một con đập được quay từ trên cao
+    interval_ms:
+    - 129000
+    - 134000
+    confidence: reviewed
+  - text: Cảnh cận con đập dưới trời mưa
+    interval_ms:
+    - 135000
+    - 149000
+    confidence: reviewed
+- query_id: p1-4-kis
+  subset: verified
+  video_id: L22_V021
+  events:
+  - text: Đàn sư tử nghỉ ngơi, leo trèo trên bục gỗ, phía trước có bảng London Zoo
+    interval_ms:
+    - 655000
+    - 667000
+    confidence: reviewed
+  - text: Hai nhân viên áo xanh lá đang cân và ghi số liệu một con vật
+    interval_ms:
+    - 694000
+    - 706000
+    confidence: reviewed
+- query_id: p1-5-kis
+  subset: verified
+  video_id: L26_V035
+  events:
+  - text: Đậu hà lan được bỏ vào chảo mực đang xào, bên cạnh đĩa hành tây và ớt đỏ thái lát
+    interval_ms:
+    - 201000
+    - 205000
+    confidence: reviewed
+  - text: Quay chậm cảnh lắc chảo trên bếp lửa
+    interval_ms:
+    - 225000
+    - 228000
+    confidence: reviewed
+- query_id: p1-6-kis
+  subset: verified
+  video_id: L22_V023
+  events:
+  - text: Người đàn ông mặc vest cầm khối đá quý thô lên gần mặt, bên phải là phụ nữ khăn trùm đầu hồng tím
+    interval_ms:
+    - 726000
+    - 731000
+    confidence: reviewed
+  - text: Toàn cảnh từ trên cao của một mỏ đá quý lộ thiên nhiều tầng
+    interval_ms:
+    - 747000
+    - 751000
+    confidence: reviewed
+    note: the submission CSV also contains a stray row at 27 s; ignored
+- query_id: p1-7-kis
+  subset: verified
+  video_id: L26_V041
+  events:
+  - text: Cà rốt cắt hình ngôi sao được luộc trong rổ lưới kim loại, đảo bằng đũa gỗ
+    interval_ms:
+    - 145000
+    - 147000
+    confidence: reviewed
+  - text: Đĩa rau củ luộc và đồ chiên trình bày đẹp, chén nước chấm hồng ở giữa, đũa hồng bên phải
+    interval_ms:
+    - 272000
+    - 274000
+    confidence: reviewed
+- query_id: p1-12-kis
+  subset: verified
+  video_id: L22_V001
+  events:
+  - text: Một người đậy nắp bình xăng xe máy
+    interval_ms:
+    - 102000
+    - 104000
+    confidence: reviewed
+  - text: 4 tài xế xe ôm công nghệ trong trạm xăng, có thông tin giá dầu mazut trên khung hình
+    interval_ms:
+    - 105000
+    - 106000
+    confidence: reviewed
+- query_id: p1-13-kis
+  subset: verified
+  video_id: L29_V021
+  events:
+  - text: Một người đứng dưới nước và rọi đèn
+    interval_ms:
+    - 201000
+    - 209000
+    confidence: reviewed
+  - text: Người này kéo lưới cá lúc bình minh
+    interval_ms:
+    - 274000
+    - 295000
+    confidence: reviewed
+  - text: Một nhóm người khác tiến đến dùng máy quay ghi hình
+    interval_ms:
+    - 352000
+    - 353000
+    confidence: reviewed
+- query_id: p1-14-kis
+  subset: verified
+  video_id: L26_V171
+  events:
+  - text: Đầu bếp dùng đũa xếp miếng dạng thanh và lát cắt hình hoa vào đĩa đang hấp trong nồi
+    interval_ms:
+    - 216000
+    - 223000
+    confidence: reviewed
+  - text: Đầu bếp dùng muỗng lấy nguyên liệu mềm từ tô thủy tinh đặt vào giữa đĩa
+    interval_ms:
+    - 224000
+    - 233000
+    confidence: reviewed
+- query_id: p1-18-kis
+  subset: verified
+  video_id: L26_V389
+  events:
+  - text: Bún được cho vào một chén rỗng
+    interval_ms:
+    - 230000
+    - 232000
+    confidence: reviewed
+  - text: Đầu bếp lần lượt cho từng vá nước dùng cùng thịt gà, cà rốt, sả, nấm mèo vào chén
+    interval_ms:
+    - 234000
+    - 250000
+    confidence: reviewed
+  - text: Thả một cọng ngò lên trên cùng
+    interval_ms:
+    - 251000
+    - 253000
+    confidence: reviewed
+  - text: Zoom xa dần chén bún, bên cạnh có chén nước chấm nhỏ với 2 miếng ớt
+    interval_ms:
+    - 254000
+    - 257000
+    confidence: reviewed
+- query_id: p1-19-kis
+  subset: verified
+  video_id: L24_V035
+  events:
+  - text: Con lân đứng thẳng và xoay vòng trên đỉnh cột
+    interval_ms:
+    - 459000
+    - 461000
+    confidence: reviewed
+  - text: Con lân nhảy qua hai cột kế bên, chúi đầu ngoạm quả bí đỏ kèm bông hoa vàng
+    interval_ms:
+    - 488000
+    - 493000
+    confidence: reviewed
+  - text: Con lân tiếp tục nhảy sang các cột tiếp theo
+    interval_ms:
+    - 496000
+    - 503000
+    confidence: reviewed
+- query_id: p1-20-kis
+  subset: verified
+  video_id: L21_V026
+  events:
+  - text: Ba người đi bộ xuống dốc trong mưa, hai người cầm dù, người sau mặc áo mưa in hình con gấu
+    interval_ms:
+    - 248000
+    - 250000
+    confidence: reviewed
+  - text: Nhiều người cùng bước về một căn nhà qua con đường đất, bên cạnh là cái ao
+    interval_ms:
+    - 255000
+    - 257000
+    confidence: reviewed
+- query_id: p1-21-kis
+  subset: verified
+  video_id: L22_V011
+  events:
+  - text: Tôm lột vỏ nấu chín nằm trên dĩa, phía sau đầu bếp đặt 3 ổ bánh mì lên bàn
+    interval_ms:
+    - 507000
+    - 508000
+    confidence: reviewed
+  - text: Các đầu bếp, người trang trí món ăn, người chế biến món ăn
+    interval_ms:
+    - 512000
+    - 517000
+    confidence: reviewed
+  - text: Những con tôm được cắt làm đôi và nướng trên bếp
+    interval_ms:
+    - 521000
+    - 523000
+    confidence: reviewed
+- query_id: p1-24-kis
+  subset: verified
+  video_id: L29_V001
+  events:
+  - text: 'Lia cam từ trái sang phải qua 4 sản phẩm: túi xách, chậu hoa, bộ ấm tách trà, túi xách'
+    interval_ms:
+    - 354000
+    - 367000
+    confidence: reviewed
+  - text: Người phụ nữ bên trái lấy một tách trà nâng niu trong khi nghe người bên phải trò chuyện
+    interval_ms:
+    - 368000
+    - 374000
+    confidence: reviewed
+- query_id: p1-16-trake
+  subset: trake
+  video_id: L24_V024
+  events:
+  - text: Khoảnh khắc đầu tiên xuất hiện đầy đủ hai con rồng vàng đang xoay vòng
+    interval_ms:
+    - 326000
+    - 329000
+    confidence: reviewed
+  - text: Khoảnh khắc đầu tiên con lân hoàn tất cú xoay người trên các thanh trụ
+    interval_ms:
+    - 338000
+    - 338000
+    confidence: reviewed
+  - text: Khoảnh khắc đầu tiên dùi chạm vào kẻng đồng múa lân
+    interval_ms:
+    - 340000
+    - 340000
+    confidence: reviewed
+- query_id: s2-p2-2-kis
+  subset: sotuyen2
+  video_id: L21_V013
+  events:
+  - text: Một người dùng điện thoại chụp ảnh bức tranh hình tê giác trên tường
+    interval_ms:
+    - 745000
+    - 748000
+    confidence: reviewed
+  - text: Một người chụp ảnh các hình graffiti 3 chú khỉ trên một cây cầu
+    interval_ms:
+    - 763000
+    - 766000
+    confidence: reviewed
+- query_id: s2-p2-10-kis
+  subset: sotuyen2
+  video_id: L26_V120
+  events:
+  - text: Đầu bếp cho bông hẹ vào chảo
+    interval_ms:
+    - 193000
+    - 195000
+    confidence: reviewed
+  - text: Bông hẹ được đảo trộn cùng những miếng dồi trường trắng trong chảo
+    interval_ms:
+    - 213000
+    - 214000
+    confidence: reviewed
+  - text: Cận cảnh chảo khi đầu bếp tiếp tục xào và trộn hai nguyên liệu
+    interval_ms:
+    - 234000
+    - 235000
+    confidence: reviewed
+- query_id: s2-p2-11-kis
+  subset: sotuyen2
+  video_id: L26_V392
+  events:
+  - text: Đầu bếp lăn nguyên liệu xiên que qua hỗn hợp xanh lá và đỏ băm nhỏ
+    interval_ms:
+    - 145000
+    - 147000
+    confidence: reviewed
+  - text: Nguyên liệu được chuyển sang đĩa bột trắng, xoay qua lại để phủ bột
+    interval_ms:
+    - 149000
+    - 152000
+    confidence: reviewed
+  - text: Nguyên liệu phủ kín bột được đặt riêng sang một chiếc đĩa
+    interval_ms:
+    - 170000
+    - 171000
+    confidence: reviewed
+- query_id: s2-p2-13-kis
+  subset: sotuyen2
+  video_id: L26_V422
+  events:
+  - text: Đầu bếp đảo hỗn hợp thịt gà, ớt đỏ, ớt xanh, đậu phộng, hành tím trong chảo
+    interval_ms:
+    - 170000
+    - 175000
+    confidence: reviewed
+  - text: Cho vỏ chanh và nước cốt chanh vào chảo
+    interval_ms:
+    - 180000
+    - 184000
+    confidence: reviewed
+  - text: Trút hỗn hợp thức ăn ra đĩa
+    interval_ms:
+    - 185000
+    - 187000
+    confidence: reviewed
+- query_id: s2-p2-15-kis
+  subset: sotuyen2
+  video_id: L26_V074
+  events:
+  - text: Máy quay chéo lên và kết thúc ở nguyên liệu hải sản đầu tiên
+    interval_ms:
+    - 19000
+    - 23000
+    confidence: reviewed
+  - text: Quay từ trên xuống nguyên liệu hải sản thứ hai rồi sang các nguyên liệu nhiều màu
+    interval_ms:
+    - 24000
+    - 28000
+    confidence: reviewed
+  - text: Cú máy tĩnh toàn cảnh toàn bộ nguyên liệu
+    interval_ms:
+    - 35000
+    - 39000
+    confidence: reviewed
+- query_id: s2-p2-22-kis
+  subset: sotuyen2
+  video_id: L26_V470
+  events:
+  - text: Mực trắng được khứa theo các đường vuông góc trên cả hai mặt
+    interval_ms:
+    - 80000
+    - 84000
+    confidence: reviewed
+  - text: Mực được cắt thành từng que và cho vào tô
+    interval_ms:
+    - 94000
+    - 97000
+    confidence: reviewed
+  - text: Trộn đều với rượu, tiêu và hạt nêm
+    interval_ms:
+    - 125000
+    - 131000
+    confidence: reviewed
+- query_id: s2-p2-24-kis
+  subset: sotuyen2
+  video_id: L23_V013
+  events:
+  - text: Vận động viên áo xanh dẫn đầu đoàn khi gần về đích
+    interval_ms:
+    - 282000
+    - 286000
+    confidence: reviewed
+  - text: Buông hai tay khỏi ghi-đông, giang tay ăn mừng, phía sau là áo vàng
+    interval_ms:
+    - 288000
+    - 292000
+    confidence: reviewed
+- query_id: s2-p2-1-kis
+  subset: sotuyen2
+  video_id: L24_V035
+  events:
+  - text: Nhóm 5 người đang chơi đùa bên cạnh một con vật màu vàng
+    interval_ms:
+    - 0
+    - 20000
+    confidence: reviewed
+  - text: Một trong số đó mang một vật trông như trái bí đỏ đi giấu
+    interval_ms:
+    - 22000
+    - 35000
+    confidence: reviewed
+  - text: Người đàn ông thức dậy không thấy quả bí đỏ nên đánh thức con vật dậy
+    interval_ms:
+    - 56000
+    - 62000
+    confidence: reviewed
+- query_id: s2-p2-8-trake
+  subset: trake
+  video_id: L27_V011
+  events:
+  - text: Cảnh đầu tiên có trái sầu riêng
+    confidence: reviewed
+    interval_ms:
+    - 152000
+    - 152000
+  - text: Cảnh đầu tiên có trái măng cụt
+    confidence: reviewed
+    interval_ms:
+    - 155000
+    - 155000
+  - text: Cảnh đầu tiên có trái bưởi
+    confidence: reviewed
+    interval_ms:
+    - 161000
+    - 163000
+  - text: Cảnh đầu tiên có trái dâu bòn bon
+    confidence: reviewed
+    interval_ms:
+    - 164000
+    - 165000
+- query_id: s2-p2-21-trake
+  subset: trake
+  video_id: L30_V031
+  events:
+  - text: Hai người phụ nữ cùng nhau dán niêm phong một thùng carton
+    confidence: reviewed
+    interval_ms:
+    - 83000
+    - 85000
+  - text: Các thùng mì tôm và bọc bánh mì được sắp xếp ngay ngắn
+    confidence: reviewed
+    interval_ms:
+    - 86000
+    - 86000
+  - text: Một người đàn ông nhấc thùng mì tôm lên xếp lên chồng thùng
+    confidence: reviewed
+    interval_ms:
+    - 87000
+    - 89000
+  - text: Cận cảnh các thùng mì được xếp chồng trên xe tải
+    confidence: reviewed
+    interval_ms:
+    - 90000
+    - 90000
+- query_id: s3-p2-1-kis
+  subset: sotuyen3
+  video_id: L26_V424
+  events:
+  - text: Chén trứng gà đánh tan được đổ vào nồi súp có nấm và măng
+    interval_ms:
+    - 203000
+    - 206000
+    confidence: reviewed
+  - text: Đầu bếp dùng dao cắt đậu hũ thành miếng nhỏ ngay trên nồi
+    interval_ms:
+    - 220000
+    - 227000
+    confidence: reviewed
+  - text: Đậu hũ được cho vào nồi rồi khuấy đều
+    interval_ms:
+    - 228000
+    - 230000
+    confidence: reviewed
+- query_id: s3-p2-2-kis
+  subset: sotuyen3
+  video_id: L22_V026
+  events:
+  - text: Học sinh tập trung thành nhiều hàng, phía trước có người cầm bảng số lớp
+    interval_ms:
+    - 49000
+    - 51000
+    confidence: reviewed
+  - text: Các hàng học sinh lần lượt di chuyển vào khuôn viên trường
+    interval_ms:
+    - 55000
+    - 58000
+    confidence: reviewed
+  - text: Học sinh nối thành hàng dài đi qua hành lang và lên cầu thang
+    interval_ms:
+    - 59000
+    - 60000
+    confidence: reviewed
+- query_id: s3-p2-3-kis
+  subset: sotuyen3
+  video_id: L26_V390
+  events:
+  - text: Một loại rau củ màu cam được cho vào nồi nước dùng
+    interval_ms:
+    - 220000
+    - 221000
+    confidence: reviewed
+  - text: Nguyên liệu dạng ống nhỏ được đổ từ đĩa vào nồi
+    interval_ms:
+    - 224000
+    - 226000
+    confidence: reviewed
+  - text: Rau củ xanh và lát nấm nâu được cho vào
+    interval_ms:
+    - 230000
+    - 233000
+    confidence: reviewed
+  - text: Đĩa thịt cắt mỏng được đổ vào nồi
+    interval_ms:
+    - 239000
+    - 241000
+    confidence: reviewed
+- query_id: s3-p2-4-kis
+  subset: sotuyen3
+  video_id: L25_V075
+  events:
+  - text: Trên bảng lần lượt xuất hiện hai câu ví dụ (bảo tàng tuần trước, chơi bóng đá khi còn trẻ)
+    interval_ms:
+    - 40000
+    - 61000
+    confidence: reviewed
+  - text: Bảng bổ sung phần giải thích chức năng của hai ví dụ
+    interval_ms:
+    - 62000
+    - 87000
+    confidence: reviewed
+  - text: Xuất hiện công thức ngữ pháp tương ứng
+    interval_ms:
+    - 88000
+    - 103000
+    confidence: reviewed
+- query_id: s3-p2-12-kis
+  subset: sotuyen3
+  video_id: L26_V484
+  events:
+  - text: Đổ chất lỏng từ bát trắng vào chảo đỏ, bốc lên hiện tượng màu hồng
+    interval_ms:
+    - 236000
+    - 241000
+    confidence: reviewed
+  - text: Chuyển sang nồi nhỏ hơn, chất lỏng tiếp xúc lửa tạo cùng hiện tượng
+    interval_ms:
+    - 251000
+    - 256000
+    confidence: reviewed
+- query_id: s3-p2-15-kis
+  subset: sotuyen3
+  video_id: L26_V480
+  events:
+  - text: Đầu bếp sơ chế thực phẩm với nước lạnh và để ráo
+    interval_ms:
+    - 91000
+    - 104000
+    confidence: reviewed
+  - text: Dùng bột nhào chung với thực phẩm
+    interval_ms:
+    - 108000
+    - 113000
+    confidence: reviewed
+  - text: Chuẩn bị các loại gia vị khác
+    interval_ms:
+    - 117000
+    - 164000
+    confidence: reviewed
+  - text: Cho miếng xanh lá cùng 2 miếng vàng vào chảo đỏ đã có dầu
+    interval_ms:
+    - 185000
+    - 188000
+    confidence: reviewed
+- query_id: s3-p2-16-kis
+  subset: sotuyen3
+  video_id: L26_V481
+  events:
+  - text: Đổ nguyên liệu vào nồi thủy tinh, dùng đũa đảo nguyên liệu đỏ có chút xanh
+    interval_ms:
+    - 198000
+    - 205000
+    confidence: reviewed
+  - text: Đổ thêm 1.5L nước
+    interval_ms:
+    - 207000
+    - 209000
+    confidence: reviewed
+  - text: Cho muối, đường, hạt nêm
+    interval_ms:
+    - 216000
+    - 221000
+    confidence: reviewed
+- query_id: s3-p2-17-kis
+  subset: sotuyen3
+  video_id: L26_V482
+  events:
+  - text: Nguyên liệu chiên sơ được cắt làm 2 nửa (không tách rời)
+    interval_ms:
+    - 79000
+    - 83000
+    confidence: reviewed
+  - text: Dùng công cụ tách phần lõi và lớp vỏ
+    interval_ms:
+    - 84000
+    - 90000
+    confidence: reviewed
+  - text: Đặt phần nguyên liệu vừa sơ chế lên công cụ màu trắng
+    interval_ms:
+    - 91000
+    - 92000
+    confidence: reviewed
+- query_id: s3-p2-19-kis
+  subset: sotuyen3
+  video_id: L24_V032
+  events:
+  - text: Lân vàng đứng ba chân trên ba trụ rồi đặt nốt chân thứ tư
+    interval_ms:
+    - 544000
+    - 547000
+    confidence: reviewed
+  - text: Lân cúi đầu ngoạm cành hoa tím rồi xoay người
+    interval_ms:
+    - 552000
+    - 560000
+    confidence: reviewed
+  - text: Lân mở đóng hàm 4 nhịp rồi nhả cành hoa
+    interval_ms:
+    - 562000
+    - 566000
+    confidence: reviewed
+- query_id: s3-p2-23-kis
+  subset: sotuyen3
+  video_id: L21_V005
+  events:
+  - text: 3 cặp trâu nước được điều khiển chạy đua trên ruộng bùn
+    interval_ms:
+    - 769000
+    - 774000
+    confidence: reviewed
+  - text: Một cặp trâu màu trắng chạy đua
+    interval_ms:
+    - 811000
+    - 819000
+    confidence: reviewed
+- query_id: s3-p2-25-kis
+  subset: sotuyen3
+  video_id: L26_V155
+  events:
+  - text: Dùng vá nhúng lát thịt mỏng vào nồi nước sôi
+    interval_ms:
+    - 237000
+    - 242000
+    confidence: reviewed
+  - text: Thịt được cho vào tô có sợi trắng cùng cà chua
+    interval_ms:
+    - 243000
+    - 248000
+    confidence: reviewed
+  - text: Chan nước dùng nóng vào tô
+    interval_ms:
+    - 249000
+    - 251000
+    confidence: reviewed
+- query_id: s3-p2-26-kis
+  subset: sotuyen3
+  video_id: L25_V043
+  events:
+  - text: Sơ đồ đường xiên đi qua một mặt phẳng
+    interval_ms:
+    - 90991
+    - 118986
+    confidence: reviewed
+  - text: Sơ đồ hai mặt phẳng giao nhau
+    interval_ms:
+    - 119987
+    - 161000
+    confidence: reviewed
+  - text: Một điểm phía trên mặt phẳng có đoạn vuông góc xuống
+    interval_ms:
+    - 162996
+    - 182015
+    confidence: reviewed
+  - text: Khối bốn đỉnh, sau đó bổ sung nét đứt, điểm và ký hiệu vuông góc
+    interval_ms:
+    - 183016
+    - 268001
+    confidence: reviewed
+- query_id: s3-p2-30-kis
+  subset: sotuyen3
+  video_id: L23_V005
+  events:
+  - text: Một người phất cờ về đích trong chặng đua xe đạp quanh hồ
+    interval_ms:
+    - 87000
+    - 89000
+    confidence: reviewed
+  - text: Đoàn đông vận động viên vào cua giữa đường phố rợp cây
+    interval_ms:
+    - 90000
+    - 94000
+    confidence: reviewed
+- query_id: s3-p2-32-kis
+  subset: sotuyen3
+  video_id: L21_V010
+  events:
+  - text: Hai mẹ con cầm điện thoại trò chuyện
+    interval_ms:
+    - 934000
+    - 936000
+    confidence: reviewed
+  - text: Người con trả lời phỏng vấn, phía sau có phụ nữ da đen bước qua
+    interval_ms:
+    - 938000
+    - 940000
+    confidence: reviewed
+- query_id: s3-p2-36-kis
+  subset: sotuyen3
+  video_id: L28_V010
+  events:
+  - text: Camera lia trên bàn bắt đầu từ bức ảnh người bắt tay Bác Hồ
+    interval_ms:
+    - 591000
+    - 593000
+    confidence: reviewed
+  - text: Chuyển sang tay nghệ nhân đang vẽ lại chân dung bằng bút đặc biệt
+    interval_ms:
+    - 594000
+    - 598000
+    confidence: reviewed
+- query_id: s3-p2-21-trake
+  subset: trake
+  video_id: L26_V156
+  events:
+  - text: Người đầu bếp bắt đầu trộn nước xốt có nước cam và vỏ cam
+    confidence: reviewed
+    interval_ms:
+    - 131000
+    - 135000
+  - text: Người đầu bếp bắt đầu cắt bỏ đầu tôm
+    confidence: reviewed
+    interval_ms:
+    - 151000
+    - 153000
+  - text: Con tôm đầu tiên chạm vào dĩa
+    confidence: reviewed
+    interval_ms:
+    - 192000
+    - 192000
+  - text: Tép cam thứ 4 được xếp lên dĩa khi trang trí
+    confidence: reviewed
+    interval_ms:
+    - 269000
+    - 269000
+- query_id: s3-p2-34-trake
+  subset: trake
+  video_id: L24_V013
+  events:
+  - text: Lân treo hai chân trước vào phần dưới thân hai trụ gần cuối
+    confidence: reviewed
+    interval_ms:
+    - 394000
+    - 397000
+  - text: Lân đứng thẳng trên hai trụ, một chân trước co lên
+    confidence: reviewed
+    interval_ms:
+    - 409000
+    - 411000
+  - text: Lân hoàn tất động tác ngoảnh mặt theo hướng ngược lại
+    confidence: reviewed
+    interval_ms:
+    - 414000
+    - 415000
+  - text: Khoảnh khắc đầu tiên lân ngậm một thanh trụ
+    confidence: reviewed
+    interval_ms:
+    - 423000
+    - 424000
