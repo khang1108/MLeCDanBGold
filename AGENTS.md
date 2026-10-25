@@ -876,12 +876,11 @@ Report concisely:
 4. **Preserve specialist evidence and provenance.**
 5. **Retrieve/localize evidence before expensive reasoning.**
 6. **Research meaningful algorithmic decisions before committing to them.**
-7. **Record useful research knowledge in `KNOWLEDGE.md`.**
-8. **Treat papers as evidence for hypotheses, not proof for HCMAI.**
-9. **Use experiments and ablations to validate optimization ideas.**
-10. **Surface potentially publishable ideas instead of silently burying them in code.**
-11. **Reuse before creating abstractions.**
-12. **Write code that another teammate can understand and debug quickly.**
+7. **Treat papers as evidence for hypotheses, not proof for HCMAI.**
+8. **Use experiments and ablations to validate optimization ideas.**
+9. **Surface potentially publishable ideas instead of silently burying them in code.**
+10. **Reuse before creating abstractions.**
+11. **Write code that another teammate can understand and debug quickly.**
 
 The goal is not to build the most abstract or production-like architecture.
 
