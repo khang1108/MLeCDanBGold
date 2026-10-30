@@ -1,0 +1,1 @@
+Một bài giảng chuyển qua nhiều sơ đồ hình học không gian. Các hình ban đầu gồm một đường xiên đi qua một hình phẳng và hai hình phẳng giao nhau. Tiếp đó xuất hiện một điểm phía trên một hình phẳng có đoạn thẳng nối vuông góc xuống dưới. Cuối cùng là một khối gồm bốn đỉnh, sau đó được bổ sung thêm các đường nét đứt, điểm và ký hiệu vuông góc.

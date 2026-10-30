@@ -1,0 +1,4 @@
+Một nhóm đông học sinh mặc đồng phục tập trung thành nhiều hàng trước khu vực trường học.
+Phía trước mỗi hàng có người cầm bảng ghi số lớp để phân chia các nhóm học sinh.
+Sau đó, các hàng học sinh lần lượt di chuyển vào bên trong khuôn viên trường dưới sự hướng dẫn của giáo viên.
+Cuối đoạn, học sinh nối thành hàng dài, đi qua hành lang và lên cầu thang của tòa nhà.

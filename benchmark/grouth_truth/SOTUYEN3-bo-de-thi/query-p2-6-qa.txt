@@ -1,0 +1,5 @@
+Một giáo viên nam đứng bên trái màn hình và giảng bài trước một máy tính.
+Trên màn hình lớn hiển thị hướng dẫn chấm điểm, trong đó phần a đề cập đến cấu trúc của bài nghị luận văn học gồm mở bài, thân bài và kết bài.
+Nội dung bài giảng liên quan đến một tác phẩm văn học và yêu cầu phân tích nhân vật.
+Phía dưới màn hình xuất hiện dòng chữ giới thiệu chương trình ôn thi môn Ngữ văn.
+Tác giả được giới thiệu là người có duyên nợ gắn bó với đề tài miền núi nào?

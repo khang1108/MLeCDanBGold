@@ -1,0 +1,5 @@
+Một món ăn làm từ tôm và các loại gia vị.
+E1: Khoảnh khắc người đầu bếp bắt đầu trộn hỗn hợp nước xốt, trong nước xốt này có 2 thành phần là nước cam và vỏ cam.
+E2: Khoảnh khắc người đầu bếp bắt đầu cắt bỏ đầu tôm.
+E3: Người đầu bếp cho tôm ra dĩa. Hãy chọn khoảnh khắc con tôm đầu tiên chạm vào dĩa.
+E4: Khoảnh khắc tép cam thứ 4 được xếp lên dĩa khi trang trí món ăn.

@@ -1,0 +1,6 @@
+Con lân màu đỏ đang biểu diễn trên các cột trụ.
+
+E1: Con lân treo hai chân trước vào phần dưới thân của hai trụ gần cuối (gần trụ cuối cùng cao nhất).
+E2: Con lân đứng thẳng sau khi di chuyển từ cuối dãy trụ về, hai chân đứng trên hai trụ khác nhau và một chân trước co lên.
+E3: Khoảnh khắc con lân hoàn tất động tác ngoảnh mặt theo hướng ngược lại.
+E4: Khoảnh khắc đầu tiên con lân ngậm một thanh trụ.
